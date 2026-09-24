@@ -14,6 +14,11 @@ import {
   submitPayApplication,
   voidPayApplication,
 } from "@openbooks/engine/src/projects/construction-billing.ts";
+import {
+  ScopeNotFoundError,
+  lockProjectForScope,
+  withScopeSnapshot,
+} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
 import { projectCostSummary } from "../../../lib/project-costing";
@@ -50,63 +55,81 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "This project's billing profile does not use applications for payment" }, { status: 422 });
   }
 
-  const retAcct = (await db.execute<{ acct: string | null }>(sql`
-    select a.id as acct
-      from orgs o
-      join accounts a on a.id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
-                     and a.org_id = o.id
-     where o.id = ${orgId}
-  `));
-  const retainageAccountId = retAcct.rows[0]?.acct ?? null;
+  // Committed cost opens its own repeatable-read snapshot on the pool (its
+  // fan-out issues concurrent queries, which a single snapshot connection
+  // cannot serve), so resolve it before pinning the page snapshot below. It
+  // is already scope-filtered, and the locked recheck gates the response: a
+  // rehome landing anywhere around this read still ends in a uniform 404.
+  // A failed cost summary must fail the request, never render as a fake
+  // zero committed cost beside real contract figures.
+  const committed = await projectCostSummary(orgId, projectId, authz.allowedSubsidiaryIds);
 
-  // The org project-revenue default backing the CO income picker (F-t03-002
-  // residual); resolved alongside the page reads, not inside a write tx.
-  const defaultIncomeAccount = projectDefaultIncomeAccount(db, orgId);
-  const [sov, cos, apps, held, committed] = await Promise.all([
-    db.execute(sql`
-      select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
-             l.retainage_percent as "retainagePercent", l.income_account_id as "incomeAccountId",
-             l.sort_order as "sortOrder", l.change_order_id as "changeOrderId",
-             exists(select 1 from pay_application_lines pal where pal.org_id = ${orgId} and pal.sov_line_id = l.id) as "usedByApplication"
-        from sov_lines l where l.org_id = ${orgId} and l.project_id = ${projectId} order by l.sort_order
-    `),
-    db.execute(sql`
-      select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
-             co.target_sov_line_id as "targetSovLineId", sl.description as "targetSovLineDescription",
-             co.income_account_id as "incomeAccountId",
-             co.created_by <> ${authz.user.id} as "independentApprovalAllowed"
-        from change_orders co
-        left join sov_lines sl on sl.id = co.target_sov_line_id and sl.org_id = co.org_id
-       where co.org_id = ${orgId} and co.project_id = ${projectId} order by co.number
-    `),
-    db.execute(sql`
-      select pa.id, pa.application_number as "applicationNumber", pa.period_end as "periodEnd", pa.kind,
-             pa.status, pa.retainage_percent as "retainagePercent", pa.invoice_document_id as "invoiceDocumentId",
-             d.document_number as "invoiceNumber", d.total as "invoiceTotal", d.status as "invoiceStatus",
-             coalesce(pa.submitted_by, pa.created_by) <> ${authz.user.id} as "independentApprovalAllowed"
-        from pay_applications pa
-        left join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
-       where pa.org_id = ${orgId} and pa.project_id = ${projectId} order by pa.application_number
-    `),
-    retainageAccountId
-      ? db.execute<{ held: string }>(projectRetainageHeldSql(orgId, projectId, retainageAccountId))
-      : Promise.resolve({ rows: [{ held: "0" }] }),
-    // A failed cost summary must fail the request, never render as a fake
-    // zero committed cost beside real contract figures.
-    projectCostSummary(orgId, projectId, authz.allowedSubsidiaryIds),
-  ]);
+  // The page reads run in ONE repeatable-read snapshot with the project
+  // locked for share and the scope rechecked under that lock, so a
+  // concurrent A→B rehome cannot move the project between two reads of one
+  // response and disclose B's financials. Reads run sequentially: the
+  // snapshot holds a single connection, which cannot serve concurrent
+  // queries. A rehomed-out project answers like a missing one.
+  try {
+    return await withScopeSnapshot(orgId, async () => {
+      await lockProjectForScope(db, orgId, projectId, authz.allowedSubsidiaryIds, "share");
+      const retAcct = (await db.execute<{ acct: string | null }>(sql`
+        select a.id as acct
+          from orgs o
+          join accounts a on a.id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
+                         and a.org_id = o.id
+         where o.id = ${orgId}
+      `));
+      const retainageAccountId = retAcct.rows[0]?.acct ?? null;
 
-  const contractSum = sum(sov.rows.map((line) => String(line.scheduledValue ?? "0")));
-  return NextResponse.json({
-    sovLines: sov.rows,
-    changeOrders: cos.rows,
-    defaultIncomeAccountId: await defaultIncomeAccount,
-    payApplications: apps.rows,
-    contractSum,
-    retainageHeld: String(held.rows[0]?.held ?? "0"),
-    committedCost: committed.committed.cost,
-    retainageConfigured: Boolean(retainageAccountId),
-  });
+      // The org project-revenue default backing the CO income picker (F-t03-002
+      // residual); resolved alongside the page reads, not inside a write tx.
+      const defaultIncomeAccount = await projectDefaultIncomeAccount(db, orgId);
+      const sov = await db.execute(sql`
+        select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
+               l.retainage_percent as "retainagePercent", l.income_account_id as "incomeAccountId",
+               l.sort_order as "sortOrder", l.change_order_id as "changeOrderId",
+               exists(select 1 from pay_application_lines pal where pal.org_id = ${orgId} and pal.sov_line_id = l.id) as "usedByApplication"
+          from sov_lines l where l.org_id = ${orgId} and l.project_id = ${projectId} order by l.sort_order
+      `);
+      const cos = await db.execute(sql`
+        select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
+               co.target_sov_line_id as "targetSovLineId", sl.description as "targetSovLineDescription",
+               co.income_account_id as "incomeAccountId",
+               co.created_by <> ${authz.user.id} as "independentApprovalAllowed"
+          from change_orders co
+          left join sov_lines sl on sl.id = co.target_sov_line_id and sl.org_id = co.org_id
+         where co.org_id = ${orgId} and co.project_id = ${projectId} order by co.number
+      `);
+      const apps = await db.execute(sql`
+        select pa.id, pa.application_number as "applicationNumber", pa.period_end as "periodEnd", pa.kind,
+               pa.status, pa.retainage_percent as "retainagePercent", pa.invoice_document_id as "invoiceDocumentId",
+               d.document_number as "invoiceNumber", d.total as "invoiceTotal", d.status as "invoiceStatus",
+               coalesce(pa.submitted_by, pa.created_by) <> ${authz.user.id} as "independentApprovalAllowed"
+          from pay_applications pa
+          left join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
+         where pa.org_id = ${orgId} and pa.project_id = ${projectId} order by pa.application_number
+      `);
+      const held = retainageAccountId
+        ? await db.execute<{ held: string }>(projectRetainageHeldSql(orgId, projectId, retainageAccountId))
+        : { rows: [{ held: "0" }] };
+
+      const contractSum = sum(sov.rows.map((line) => String(line.scheduledValue ?? "0")));
+      return NextResponse.json({
+        sovLines: sov.rows,
+        changeOrders: cos.rows,
+        defaultIncomeAccountId: defaultIncomeAccount,
+        payApplications: apps.rows,
+        contractSum,
+        retainageHeld: String(held.rows[0]?.held ?? "0"),
+        committedCost: committed.committed.cost,
+        retainageConfigured: Boolean(retainageAccountId),
+      });
+    });
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    throw error;
+  }
 }
 
 /** Whole-digit width of a canonical decimal, for column-range guards. */
@@ -254,16 +277,29 @@ export async function POST(req: Request) {
   if (feature) return feature;
   const userId = authz.user.id;
   const projectActions = new Set(["addSov", "updateSov", "deleteSov", "addChangeOrder", "approveChangeOrder", "voidChangeOrder", "createPayApp", "submitPayApp", "approvePayApp", "voidPayApp", "billPayApp", "releaseRetainage"]);
+  // The entry scope resolution, rechecked under the project lock inside every
+  // write transaction below (the child→project link never moves, so this id
+  // stays the right row to lock even if the entry read races a rehome).
+  let scope: ProjectScope | null = null;
   if (projectActions.has(action)) {
-    const scope = await actionProjectScope(orgId, action, body);
-    if (!scope) return NextResponse.json({ error: "not found" }, { status: 404 });
+    const resolved = await actionProjectScope(orgId, action, body);
+    if (!resolved) return NextResponse.json({ error: "not found" }, { status: 404 });
     // Out of the caller's subsidiary scope ⇒ indistinguishable from missing.
-    const denied = guardSubsidiaryScope(authz, scope.subsidiaryId);
+    const denied = guardSubsidiaryScope(authz, resolved.subsidiaryId);
     if (denied) return denied;
-    if (!(await supportsApplicationsForPayment(orgId, scope.projectId))) {
+    if (!(await supportsApplicationsForPayment(orgId, resolved.projectId))) {
       return NextResponse.json({ error: "This project's billing profile does not use applications for payment" }, { status: 422 });
     }
+    scope = resolved;
   }
+  // Recheck the entry scope under the project row lock inside a write
+  // transaction. The child→project link never moves, so the entry project's
+  // id stays the right row to lock; a null here (non-project actions) fails
+  // closed like a missing project.
+  const lockEntryProject = (tx: SqlExecutor): Promise<{ id: string; subsidiaryId: string | null }> => {
+    if (!scope) throw new ScopeNotFoundError();
+    return lockProjectForScope(tx, orgId, scope.projectId, authz.allowedSubsidiaryIds);
+  };
 
   try {
     switch (action) {
@@ -297,6 +333,10 @@ export async function POST(req: Request) {
           if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
             throw new ConstructionBillingError("Projects feature is disabled");
           }
+          // The entry scope check is unlocked: recheck under the project
+          // lock, so a rehome racing this insert refuses instead of
+          // billing B's project. Missing and out-of-scope share one 404.
+          await lockEntryProject(tx);
           const prior = (await tx.execute(sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${body.projectId} limit 1`));
           if (prior.rows.length) throw new ConstructionBillingError("After billing begins, contract value must change through an approved change order");
           const created = (await tx.execute<{ id: string }>(sql`
@@ -315,6 +355,11 @@ export async function POST(req: Request) {
       }
       case "updateSov": {
         await db.transaction(async (tx) => {
+          // Lock the project before its lines: the entry check is unlocked,
+          // and a rehome racing this update must refuse before any line
+          // moves. The child→project link never moves, so the entry
+          // project's id stays the right row to lock.
+          await lockEntryProject(tx);
           const before = (await tx.execute(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
           if (!before.rows[0]) throw new ConstructionBillingError("Schedule line not found");
           const stored = before.rows[0];
@@ -378,6 +423,9 @@ export async function POST(req: Request) {
       }
       case "deleteSov": {
         await db.transaction(async (tx) => {
+          // Same rehome race as updateSov: lock the project first, then the
+          // line, so a concurrent A→B move refuses before anything deletes.
+          await lockEntryProject(tx);
           const before = (await tx.execute(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
           if (!before.rows[0]) throw new ConstructionBillingError("Schedule line not found");
           const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`));
@@ -415,6 +463,9 @@ export async function POST(req: Request) {
           if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
             throw new ConstructionBillingError("Projects feature is disabled");
           }
+          // Recheck scope under the project lock: a rehome racing this
+          // insert must refuse before the change order lands on B's project.
+          await lockEntryProject(tx);
           // Numbers are unique per project in storage: fail closed with the
           // domain error here so a double submit or retry never escapes as
           // a unique violation (the route maps the residual race below).
@@ -458,6 +509,10 @@ export async function POST(req: Request) {
           if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
             throw new ConstructionBillingError("Projects feature is disabled");
           }
+          // Lock the project before its change order: approval moves contract
+          // value and lands SOV lines, so a rehome racing this commit must
+          // refuse before anything posts to B's project.
+          await lockEntryProject(tx);
           const co = (await tx.execute<{ project_id: string; number: string; description: string | null; amount: string; target_sov_line_id: string | null; income_account_id: string | null; created_by: string | null }>(sql`
             select project_id, number, description, amount, target_sov_line_id, income_account_id, created_by from change_orders
              where id = ${body.id} and org_id = ${orgId} and status = 'draft' for update
@@ -568,6 +623,9 @@ export async function POST(req: Request) {
       }
       case "voidChangeOrder": {
         await db.transaction(async (tx) => {
+          // Lock the project before its change order, like the approval
+          // above: a rehome racing this void must refuse first.
+          await lockEntryProject(tx);
           const before = (await tx.execute(sql`
             select * from change_orders where id = ${body.id} and org_id = ${orgId} for update
           `));
@@ -590,7 +648,7 @@ export async function POST(req: Request) {
         if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const retainageRaw = canonicalDecimal(body.retainagePercent ?? "10", 4);
         if (retainageRaw === null) throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
-        const r = await createPayApplication(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(retainageRaw));
+        const r = await createPayApplication(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(retainageRaw), authz.allowedSubsidiaryIds);
         return NextResponse.json(r, { status: 201 });
       }
       case "submitPayApp": {
@@ -613,32 +671,35 @@ export async function POST(req: Request) {
             });
           }
         }
-        const result = await submitPayApplication(orgId, userId, body.payApplicationId as string, lines);
+        const result = await submitPayApplication(orgId, userId, body.payApplicationId as string, lines, authz.allowedSubsidiaryIds);
         return NextResponse.json(result);
       }
       case "approvePayApp": {
-        await approvePayApplication(orgId, userId, body.payApplicationId as string);
+        await approvePayApplication(orgId, userId, body.payApplicationId as string, authz.allowedSubsidiaryIds);
         return NextResponse.json({ ok: true });
       }
       case "voidPayApp": {
-        await voidPayApplication(orgId, userId, body.payApplicationId as string);
+        await voidPayApplication(orgId, userId, body.payApplicationId as string, authz.allowedSubsidiaryIds);
         return NextResponse.json({ ok: true });
       }
       case "billPayApp": {
-        const r = await generatePayApplicationInvoice(orgId, userId, body.payApplicationId as string);
+        const r = await generatePayApplicationInvoice(orgId, userId, body.payApplicationId as string, authz.allowedSubsidiaryIds);
         return NextResponse.json(r);
       }
       case "releaseRetainage": {
         if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
         if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
-        const r = await releaseRetainage(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(amountRaw));
+        const r = await releaseRetainage(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(amountRaw), authz.allowedSubsidiaryIds);
         return NextResponse.json(r);
       }
       default:
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
+    // A locked scope recheck that fails (missing, cross-org, or moved out of
+    // the caller's subsidiaries) is indistinguishable from a missing record.
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
     if (e instanceof ConstructionBillingError) return NextResponse.json({ error: e.message }, { status: 422 });
     // Residual simultaneous-insert race against change_orders_project_number:
     // the pre-check above already answered, so report its verdict.

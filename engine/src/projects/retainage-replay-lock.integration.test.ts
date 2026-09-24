@@ -105,20 +105,20 @@ test("concurrent customer draws serialize on the project lock during replay", en
     // posted): the domain refuses a second open draw, so the race under test
     // is a later submit replaying settled history while another transaction
     // holds the project.
-    const prior = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10"));
+    const prior = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null));
     await withOrgTransaction(org.orgId, () =>
-      submitPayApplication(org.orgId, actor, prior.id, [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }]));
-    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, prior.id));
-    const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, prior.id));
+      submitPayApplication(org.orgId, actor, prior.id, [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }], null));
+    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, prior.id, null));
+    const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, prior.id, null));
     await postInvoice(org, actor, approver, "customer_invoice", generated.invoiceId);
-    const draft = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, nextDay(org.date), "10"));
+    const draft = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, nextDay(org.date), "10", null));
 
     let held = false;
     const holder = holdRowLock(org.orgId, "projects", project, () => { held = true; }, released);
     while (!held) await sleep(50);
 
     const submit = withOrgTransaction(org.orgId, () =>
-      submitPayApplication(org.orgId, actor, draft.id, [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }]));
+      submitPayApplication(org.orgId, actor, draft.id, [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }], null));
     const verdict = await Promise.race([submit.then(() => "finished" as const), sleep(3000)]);
     try {
       assert.equal(verdict, "blocked", "the second submit must wait on the project lock while the replay reads settled history");

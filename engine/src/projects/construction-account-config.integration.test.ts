@@ -28,9 +28,9 @@ async function fixture(run: (f: Fixture) => Promise<void>) {
     await db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order,income_account_id)
       values(${sov},${org.orgId},${project},'Configured work','4000',1,${org.accounts.revenue}),
       (${idleSov},${org.orgId},${project},'Unbilled work','1000',2,null)`);
-    const app = (await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "0"))).id;
-    await withOrgTransaction(org.orgId, () => submitPayApplication(org.orgId, actor, app, [{ sovLineId: sov, thisPeriodCompleted: "1000.1234", materialsStored: "0" }]));
-    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app));
+    const app = (await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "0", null))).id;
+    await withOrgTransaction(org.orgId, () => submitPayApplication(org.orgId, actor, app, [{ sovLineId: sov, thisPeriodCompleted: "1000.1234", materialsStored: "0" }], null));
+    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app, null));
     await run({ org, actor, approver, sov, idleSov, app });
   } finally { await dropScratchOrgReporting(org.orgId); }
 }
@@ -50,13 +50,13 @@ async function snapshot(f: Fixture) {
 
 async function refusedWithoutWrites(f: Fixture, message: RegExp) {
   const before = await snapshot(f);
-  await assert.rejects(withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, f.app)),
+  await assert.rejects(withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, f.app, null)),
     (error: unknown) => error instanceof ConstructionBillingError && message.test(error.message));
   assert.deepEqual(await snapshot(f), before, "refusal preserves source, invoice, numbering, and audit evidence exactly");
 }
 
 async function generatedWithAccount(f: Fixture, accountId: string) {
-  const generated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, f.app));
+  const generated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, f.app, null));
   const lines = (await db.execute(sql`select account_id, amount::text, unit_price::text from document_lines where org_id=${f.org.orgId} and document_id=${generated.invoiceId} order by line_number`)).rows;
   assert.deepEqual(lines, [{ account_id: accountId, amount: "1000.1234", unit_price: "1000.12340000" }]);
   assert.equal(generated.currentDue, "1000.1234");
@@ -91,8 +91,8 @@ test("construction invoice skips unconfigured unchanged stored materials with ze
   await db.execute(sql`update pay_applications set status='draft' where org_id=${f.org.orgId} and id=${f.app}`);
   await db.execute(sql`update pay_application_lines set previous_completed='125.4321', previous_materials_stored='125.4321'
     where org_id=${f.org.orgId} and pay_application_id=${f.app} and sov_line_id=${f.idleSov}`);
-  await withOrgTransaction(f.org.orgId, () => submitPayApplication(f.org.orgId, f.actor, f.app, [{ sovLineId: f.idleSov, thisPeriodCompleted: "0", materialsStored: "125.4321" }]));
-  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, f.app));
+  await withOrgTransaction(f.org.orgId, () => submitPayApplication(f.org.orgId, f.actor, f.app, [{ sovLineId: f.idleSov, thisPeriodCompleted: "0", materialsStored: "125.4321" }], null));
+  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, f.app, null));
   await generatedWithAccount(f, f.org.accounts.revenue);
 }));
 

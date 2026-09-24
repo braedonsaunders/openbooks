@@ -44,7 +44,7 @@ async function fixture(run: (f: {
       });
       return entry;
     };
-    await run({ org, actor, project, hold, release: amount => withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, amount)) });
+    await run({ org, actor, project, hold, release: amount => withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, amount, null)) });
   } finally { await dropScratchOrgReporting(org.orgId); }
 }
 
@@ -126,13 +126,13 @@ test("controlled void cancels a release reservation and permits replacement", en
 }));
 
 test("ordinary progress applications preserve their lines and regenerate after deletion", enabled, async () => fixture(async ({ org, actor, project }) => {
-  const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date));
+  const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null));
   await db.execute(sql`update pay_application_lines set this_period_completed=100 where org_id=${org.orgId} and pay_application_id=${app.id}`);
   await db.execute(sql`update pay_applications set status='approved' where org_id=${org.orgId} and id=${app.id}`);
-  const first = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id));
+  const first = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
   await withOrgTransaction(org.orgId, () => deleteDocument(first.invoiceId, actor, org.orgId, { reason: "Correct progress invoice" }));
   assert.equal((await db.execute(sql`select status from pay_applications where org_id=${org.orgId} and id=${app.id}`)).rows[0]!.status, "approved");
-  const replacement = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id));
+  const replacement = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
   assert.notEqual(replacement.invoiceId, first.invoiceId);
   assert.equal(replacement.currentDue, first.currentDue);
   assert.equal(replacement.retainage, first.retainage);
@@ -177,7 +177,7 @@ test("deleting a release invoice cancels its application with evidence and permi
   const replacement = await release("75");
   assert.notEqual(replacement.invoiceId, first.invoiceId);
   await assert.rejects(release("26"), /exceeds available retained funds/);
-  const progress = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, "2026-07-31"));
+  const progress = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, "2026-07-31", "10", null));
   assert.equal(progress.applicationNumber, 3);
 }));
 
@@ -185,7 +185,7 @@ test("legacy stranded release applications get an actionable recovery error and 
   const app = randomUUID();
   await db.execute(sql`insert into pay_applications(id,org_id,project_id,application_number,period_end,kind,status,retainage_percent)
     values(${app},${org.orgId},${project},1,${org.date},'retainage_release','approved',0)`);
-  await assert.rejects(withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app)), /Void this release application.*new retainage release/);
-  await withOrgTransaction(org.orgId, () => voidPayApplication(org.orgId, actor, app));
-  assert.equal((await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date))).applicationNumber, 2);
+  await assert.rejects(withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app, null)), /Void this release application.*new retainage release/);
+  await withOrgTransaction(org.orgId, () => voidPayApplication(org.orgId, actor, app, null));
+  assert.equal((await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null))).applicationNumber, 2);
 }));

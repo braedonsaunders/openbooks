@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockProjectForScope } from "../organization/subsidiary-scope.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { roundCurrencyMoney, settleCumulativeRetainage } from "../fx/currencies.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
@@ -393,7 +394,9 @@ export async function createPayApplication(
   userId: string,
   projectId: string,
   periodEnd: string,
-  retainagePercent = "10",
+  retainagePercent: string,
+  /** Null = unrestricted; any other value must contain the project. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ id: string; applicationNumber: number }> {
   requireIsoDate(periodEnd, "Period ending");
   const exactRetainage = persistRetainagePercent(retainagePercent);
@@ -403,11 +406,12 @@ export async function createPayApplication(
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
     await assertApplicationProcedure(tx, orgId, projectId);
-    // Serialize application numbering and cumulative snapshots per project.
-    const owned = (await tx.execute(sql`
-      select 1 from projects where org_id = ${orgId} and id = ${projectId} for update
-    `));
-    if (!owned.rows.length) throw new ConstructionBillingError("Project not found");
+    // Serialize application numbering and cumulative snapshots per project,
+    // and recheck the caller's scope under that same row lock: the route's
+    // entry check is unlocked, so a concurrent A→B rehome between that check
+    // and this insert refuses here instead of billing B's project. Missing,
+    // cross-org, and out-of-scope projects share one not-found shape.
+    await lockProjectForScope(tx, orgId, projectId, allowedSubsidiaryIds);
     const lifecycle = (await tx.execute<{ has_open: boolean; last_period: string | Date | null }>(sql`
       select
         exists(select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId}
@@ -485,6 +489,8 @@ export async function submitPayApplication(
   userId: string,
   payAppId: string,
   updates: PayApplicationLineUpdate[],
+  /** Null = unrestricted; any other value must contain the application’s project. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ComputedApplication> {
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
@@ -495,6 +501,9 @@ export async function submitPayApplication(
     const app = appRes.rows[0];
     if (!app) throw new ConstructionBillingError("Application not found");
     if (app.status !== "draft") throw new ConstructionBillingError("Only a draft application can be submitted");
+    // The child→project link never moves, but the project's subsidiary can:
+    // recheck scope under the project lock before touching B's draws.
+    await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
     await assertApplicationProcedure(tx, orgId, app.project_id);
 
     const seen = new Set<string>();
@@ -561,7 +570,13 @@ export async function submitPayApplication(
 }
 
 /** Approve a submitted application under segregation of duties. */
-export async function approvePayApplication(orgId: string, userId: string, payAppId: string): Promise<void> {
+export async function approvePayApplication(
+  orgId: string,
+  userId: string,
+  payAppId: string,
+  /** Null = unrestricted; any other value must contain the application’s project. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<void> {
   await db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
     const appRes = (await tx.execute<{ project_id: string; status: string; submitted_by: string | null; created_by: string | null }>(sql`
@@ -574,6 +589,7 @@ export async function approvePayApplication(orgId: string, userId: string, payAp
     if ((app.submitted_by ?? app.created_by) === userId) {
       throw new ConstructionBillingError("The submitter cannot approve the same application");
     }
+    await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
     await assertApplicationProcedure(tx, orgId, app.project_id);
     await tx.execute(sql`
       update pay_applications
@@ -592,7 +608,13 @@ export async function approvePayApplication(orgId: string, userId: string, payAp
 
 /** Void an application before invoicing. The row and draw evidence are kept;
  * voiding never deletes or rewrites financial history. */
-export async function voidPayApplication(orgId: string, userId: string, payAppId: string): Promise<void> {
+export async function voidPayApplication(
+  orgId: string,
+  userId: string,
+  payAppId: string,
+  /** Null = unrestricted; any other value must contain the application’s project. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<void> {
   await db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
     const result = (await tx.execute<{ project_id: string; status: string; invoice_document_id: string | null }>(sql`
@@ -604,6 +626,7 @@ export async function voidPayApplication(orgId: string, userId: string, payAppId
     if (!["draft", "submitted", "approved"].includes(app.status) || app.invoice_document_id) {
       throw new ConstructionBillingError("Only an application that has not been invoiced can be voided");
     }
+    await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
     await assertApplicationProcedure(tx, orgId, app.project_id);
     await tx.execute(sql`
       update pay_applications
@@ -629,6 +652,8 @@ export async function generatePayApplicationInvoice(
   orgId: string,
   userId: string,
   payAppId: string,
+  /** Null = unrestricted; any other value must contain the application’s project. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ invoiceId: string; documentNumber: string; currentDue: string; retainage: string }> {
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
@@ -648,6 +673,7 @@ export async function generatePayApplicationInvoice(
     if (app.kind === "retainage_release") {
       throw new ConstructionBillingError("Void this release application and create a new retainage release to recalculate available funds");
     }
+    await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
     await assertApplicationProcedure(tx, orgId, app.project_id);
 
     const projRes = (await tx.execute<{
@@ -804,6 +830,8 @@ export async function releaseRetainage(
   projectId: string,
   periodEnd: string,
   amount: string,
+  /** Null = unrestricted; any other value must contain the project. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ invoiceId: string; documentNumber: string; amount: string }> {
   requireIsoDate(periodEnd, "Period ending");
   return db.transaction(async (tx) => {
@@ -812,6 +840,10 @@ export async function releaseRetainage(
     await assertProjectsEnabled(tx, orgId);
     const exactAmount = persistRetainageReleaseAmount(amount);
     if (cmp(exactAmount, "0") <= 0) throw new ConstructionBillingError("Release amount must be positive");
+    // Recheck the caller's scope under the project lock before reading the
+    // entity/customer: a rehome racing the route's unlocked entry check must
+    // refuse here. Missing, cross-org, and out-of-scope share one shape.
+    await lockProjectForScope(tx, orgId, projectId, allowedSubsidiaryIds);
     // This is also the serialization point for numbering and pending releases.
     // Read the entity/customer only after acquiring the project lock.
     const projRes = (await tx.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null }>(sql`

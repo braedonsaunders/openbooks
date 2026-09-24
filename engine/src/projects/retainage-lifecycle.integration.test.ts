@@ -84,16 +84,16 @@ async function customerSetup(): Promise<{
   ).rows[0]!.id;
   void sov;
   const draw = async (work: string, date: string, retainage = "10") => {
-    const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, date, retainage));
+    const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, date, retainage, null));
     await withOrgTransaction(org.orgId, () =>
-      submitPayApplication(org.orgId, actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: work, materialsStored: "0" }]));
-    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app.id));
-    const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id));
+      submitPayApplication(org.orgId, actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: work, materialsStored: "0" }], null));
+    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app.id, null));
+    const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
     await postCustomerInvoice(org, actor, approver, generated.invoiceId);
     return { invoiceId: generated.invoiceId, retained: generated.retainage };
   };
   const release = async (amount: string, date?: string) =>
-    withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, date ?? org.date, amount));
+    withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, date ?? org.date, amount, null));
   return { org, actor, approver, project, release, draw };
 }
 
@@ -143,7 +143,7 @@ test("customer draw void refuses while a draft release depends on it, then succe
     // The draw application reopens for regeneration and capacity is restored.
     const reopened = (await db.execute<{ id: string; status: string }>(sql`select id, status from pay_applications where org_id=${f.org.orgId} and kind = 'progress'`)).rows[0]!;
     assert.equal(reopened.status, "approved");
-    const regenerated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, reopened.id));
+    const regenerated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, reopened.id, null));
     assert.equal(regenerated.retainage, "100.0000");
     await postCustomerInvoice(f.org, f.actor, f.approver, regenerated.invoiceId);
     const replacement = await f.release("100");
@@ -260,16 +260,16 @@ test("customer multi-currency draw void refuses while a release depends on it", 
     await db.execute(sql`insert into sov_lines(org_id,project_id,description,scheduled_value,sort_order,income_account_id)
       values(${f.org.orgId},${project},'Work','10000',1,${f.org.accounts.revenue})`);
     const sovId = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${f.org.orgId} and project_id=${project}`)).rows[0]!.id;
-    const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, project, f.org.date, "10"));
+    const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, project, f.org.date, "10", null));
     await withOrgTransaction(f.org.orgId, () =>
-      submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: "1000", materialsStored: "0" }]));
-    await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id));
-    const generated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id));
+      submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: "1000", materialsStored: "0" }], null));
+    await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id, null));
+    const generated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null));
     assert.equal(generated.retainage, "100.0000");
     await postCustomerInvoice(f.org, f.actor, f.approver, generated.invoiceId);
     const currency = (await db.execute<{ currency: string }>(sql`select currency from documents where org_id=${f.org.orgId} and id=${generated.invoiceId}`)).rows[0]!.currency;
     assert.equal(currency, "USD");
-    const rel = await withOrgTransaction(f.org.orgId, () => releaseRetainage(f.org.orgId, f.actor, project, f.org.date, "60"));
+    const rel = await withOrgTransaction(f.org.orgId, () => releaseRetainage(f.org.orgId, f.actor, project, f.org.date, "60", null));
     await assert.rejects(voidDoc(f.org.orgId, f.actor, generated.invoiceId, f.org.date), /retainage release/);
     await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.invoiceId, f.actor, f.org.orgId, { reason: "Discard USD release" }));
     await voidDoc(f.org.orgId, f.actor, generated.invoiceId, f.org.date);

@@ -240,13 +240,13 @@ test("createPayApplication rejects a period before the previous invoiced Date", 
   );
 
   await assert.rejects(
-    createPayApplication("org-1", "user-1", projectId, "2026-07-30"),
+    createPayApplication("org-1", "user-1", projectId, "2026-07-30", "10", null),
     /period ending must be after the previous invoiced application/,
   );
 
   responseIndex = 0;
   assert.deepEqual(
-    await createPayApplication("org-1", "user-1", projectId, "2026-08-01"),
+    await createPayApplication("org-1", "user-1", projectId, "2026-08-01", "10", null),
     { id: "app-1", applicationNumber: 1 },
   );
 });
@@ -286,7 +286,7 @@ test("createPayApplication takes the feature-gate fence and rechecks Projects un
   // The refusal names the gate. A concurrent disable commits first, so the
   // new application must be refused, never committed hidden behind the gate.
   await assert.rejects(
-    createPayApplication("org-1", "user-1", "project-1", "2026-08-31"),
+    createPayApplication("org-1", "user-1", "project-1", "2026-08-31", "10", null),
     (error: unknown) =>
       error instanceof ConstructionBillingError && error.message === "Projects feature is disabled",
   );
@@ -320,7 +320,7 @@ test("createPayApplication proceeds past an enabled gate to the procedure check"
   );
 
   // An enabled gate must not refuse: the flow continues to the next check.
-  await assert.rejects(createPayApplication("org-1", "user-1", "project-1", "2026-08-31"), /beyond-gate/);
+  await assert.rejects(createPayApplication("org-1", "user-1", "project-1", "2026-08-31", "10", null), /beyond-gate/);
 });
 
 test("period-ending dates are validated as calendar days before any database work", async (t) => {
@@ -331,8 +331,8 @@ test("period-ending dates are validated as calendar days before any database wor
   const isDateError = (error: unknown) =>
     error instanceof ConstructionBillingError && /valid calendar date/.test(error.message);
   for (const bad of ["undefined", "", "2026-02-30", "07/31/2026", "2026-7-1", "2026-07-01T00:00:00Z"]) {
-    await assert.rejects(releaseRetainage("org-1", "user-1", "project-1", bad, "100"), isDateError, `releaseRetainage(${bad})`);
-    await assert.rejects(createPayApplication("org-1", "user-1", "project-1", bad), isDateError, `createPayApplication(${bad})`);
+    await assert.rejects(releaseRetainage("org-1", "user-1", "project-1", bad, "100", null), isDateError, `releaseRetainage(${bad})`);
+    await assert.rejects(createPayApplication("org-1", "user-1", "project-1", bad, "10", null), isDateError, `createPayApplication(${bad})`);
   }
   assert.equal(requireIsoDate("2026-07-31", "Period ending"), "2026-07-31");
 });

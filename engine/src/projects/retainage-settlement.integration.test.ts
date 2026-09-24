@@ -61,11 +61,11 @@ async function customerProject(org: Org, subsidiaryId: string, code: string): Pr
 async function customerDraw(
   org: Org, actor: string, approver: string, project: string, sov: string, work: string, date: string,
 ): Promise<{ invoiceId: string; retainage: string; currentDue: string }> {
-  const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, date, "10"));
+  const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, date, "10", null));
   await withOrgTransaction(org.orgId, () =>
-    submitPayApplication(org.orgId, actor, app.id, [{ sovLineId: sov, thisPeriodCompleted: work, materialsStored: "0" }]));
-  await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app.id));
-  const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id));
+    submitPayApplication(org.orgId, actor, app.id, [{ sovLineId: sov, thisPeriodCompleted: work, materialsStored: "0" }], null));
+  await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app.id, null));
+  const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
   await postInvoice(org, actor, approver, "customer_invoice", generated.invoiceId);
   return { invoiceId: generated.invoiceId, retainage: generated.retainage, currentDue: generated.currentDue };
 }
@@ -91,7 +91,7 @@ test("customer consecutive draws settle cumulative cents with the residual carri
     assert.equal(second.retainage, "33.3400");
     assert.equal(cmp(await customerHeld(org, project), "66.67"), 0);
     // Releases sum to the settled total exactly, in whole cents.
-    const rel = await withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, "2026-07-17", "66.67"));
+    const rel = await withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, "2026-07-17", "66.67", null));
     await postInvoice(org, actor, approver, "customer_invoice", rel.invoiceId);
   } finally { await dropScratchOrgReporting(org.orgId); }
 });
@@ -127,10 +127,10 @@ test("customer fractional-cent releases are refused while whole-cent releases po
     const { project, sov } = await customerProject(org, org.subsidiaryId, "SET-REL");
     await customerDraw(org, actor, approver, project, sov, "1000", org.date);
     await assert.rejects(
-      withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, "10.005")),
+      withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, "10.005", null)),
       /whole minor units of CAD/,
     );
-    const rel = await withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, "10"));
+    const rel = await withOrgTransaction(org.orgId, () => releaseRetainage(org.orgId, actor, project, org.date, "10", null));
     await postInvoice(org, actor, approver, "customer_invoice", rel.invoiceId);
   } finally { await dropScratchOrgReporting(org.orgId); }
 });

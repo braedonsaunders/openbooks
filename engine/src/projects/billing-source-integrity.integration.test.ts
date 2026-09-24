@@ -134,10 +134,10 @@ async function vendorRelease(f: Fixture) {
 async function customerProgress(f: Fixture, retainage = "10") {
   const sov = randomUUID();
   await withBypassContext(() => db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order,income_account_id) values(${sov},${f.org.orgId},${f.project},'Customer work','1000',1,${f.org.accounts.revenue})`));
-  const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, f.org.date, retainage));
-  await withOrgTransaction(f.org.orgId, () => submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sov, thisPeriodCompleted: "500", materialsStored: "0" }]));
-  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id));
-  return (await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id))).invoiceId;
+  const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, f.org.date, retainage, null));
+  await withOrgTransaction(f.org.orgId, () => submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sov, thisPeriodCompleted: "500", materialsStored: "0" }], null));
+  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id, null));
+  return (await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null))).invoiceId;
 }
 
 async function beforePostScript(f: Fixture, kind: string, values: Record<string, string>) {
@@ -206,7 +206,7 @@ for (const scenario of ["vendor release", "vendor application", "customer progre
       id = await customerProgress(f);
       if (scenario === "customer release") {
         await post(f, id, "customer_invoice");
-        id = (await withOrgTransaction(f.org.orgId, () => releaseRetainage(f.org.orgId, f.actor, f.project, f.org.date, "50"))).invoiceId;
+        id = (await withOrgTransaction(f.org.orgId, () => releaseRetainage(f.org.orgId, f.actor, f.project, f.org.date, "50", null))).invoiceId;
       }
     }
     await withBypassContext(async () => {
@@ -273,7 +273,7 @@ for (const scenario of ["vendor release", "vendor application", "customer progre
       id = await customerProgress(f);
       if (scenario === "customer release") {
         await post(f, id, "customer_invoice");
-        id = (await withOrgTransaction(f.org.orgId, () => releaseRetainage(f.org.orgId, f.actor, f.project, f.org.date, "50"))).invoiceId;
+        id = (await withOrgTransaction(f.org.orgId, () => releaseRetainage(f.org.orgId, f.actor, f.project, f.org.date, "50", null))).invoiceId;
       }
     }
     // Deliberate legacy corruption of the seeded draft, under bypass so the
@@ -323,13 +323,13 @@ test("full retainage and multiple gross lines preserve exact source allocation",
   await withBypassContext(() => db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order,income_account_id)
     values(${first},${f.org.orgId},${f.project},'First','1000',1,${f.org.accounts.revenue}),
           (${second},${f.org.orgId},${f.project},'Second','1000',2,${f.org.accounts.recognized})`));
-  const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, f.org.date, "100"));
+  const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, f.org.date, "100", null));
   await withOrgTransaction(f.org.orgId, () => submitPayApplication(f.org.orgId, f.actor, app.id, [
     { sovLineId: first, thisPeriodCompleted: "200", materialsStored: "0" },
     { sovLineId: second, thisPeriodCompleted: "300", materialsStored: "0" },
-  ]));
-  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id));
-  const id = (await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id))).invoiceId;
+  ], null));
+  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id, null));
+  const id = (await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null))).invoiceId;
   const original = await lines(f, id);
   assert.equal(original.length, 3);
   await refuseEdit(f, id, { lines: original.map((l, i) => ({ ...l, amount: i === 0 ? "201" : i === 1 ? "299" : l.amount })) });
