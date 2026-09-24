@@ -2527,6 +2527,28 @@ export async function discardReconciliation(reconciliationId: string, ctx: Banki
     await tx.execute(sql`
       delete from reconciliations where id = ${recon.id} and org_id = ${ctx.orgId}
     `);
+    // The session row is gone after this delete, so its evidence must land
+    // in the same transaction: match count, session summary, and actor —
+    // like every other reconciliation lifecycle write.
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'reconciliations', ${recon.id}, 'discard',
+         ${JSON.stringify({
+           operation: "discard",
+           releasedMatches: released.rows.length,
+           releasedStatementLines: stmtIds.length,
+           before: {
+             accountId: recon.account_id,
+             throughDate: recon.through_date,
+             statementBalance: fromUnits(toUnits(recon.statement_balance)),
+             currency: recon.currency,
+             status: recon.status,
+           },
+         })}::jsonb,
+         ${ctx.userId})
+    `);
   });
 }
 

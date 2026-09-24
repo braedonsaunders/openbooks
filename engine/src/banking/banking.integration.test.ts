@@ -910,6 +910,94 @@ test("parser-skipped rows are reported in the preview and the import", async () 
 });
 
 test(
+  "discarding a session writes one audit row with the match count and session summary",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      const [bankLineId] = await postBankJournal(org, actor, ["100.0000"], "discard-deposit");
+      await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "100",
+          currency: "CAD",
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "100",
+              description: "Customer deposit",
+              bankTransactionId: "discard-deposit-100",
+            },
+          ],
+        },
+        ctx,
+      );
+      const lineId = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and bank_transaction_id = 'discard-deposit-100'
+      `)).rows[0]!.id;
+      const { id: reconciliationId } = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
+        ctx,
+      );
+      await createMatch(
+        { reconciliationId, statementLineId: lineId, journalLineIds: [bankLineId!] },
+        ctx,
+      );
+
+      await discardReconciliation(reconciliationId, ctx);
+
+      // The session is gone and its line is released — and the delete left
+      // evidence instead of silence, atomically with the delete above.
+      const gone = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from reconciliations
+         where id = ${reconciliationId} and org_id = ${org.orgId}
+      `));
+      assert.equal(gone.rows[0]!.n, 0);
+      const line = (await db.execute<{ match_status: string }>(sql`
+        select match_status from bank_statement_lines where id = ${lineId}
+      `));
+      assert.equal(line.rows[0]!.match_status, "unmatched");
+      const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
+        select changes, actor_id from audit_log
+         where org_id = ${org.orgId}
+           and table_name = 'reconciliations'
+           and row_id = ${reconciliationId}
+           and action = 'discard'
+      `));
+      assert.equal(audits.rows.length, 1);
+      assert.deepEqual(audits.rows[0]!.changes, {
+        operation: "discard",
+        releasedMatches: 1,
+        releasedStatementLines: 1,
+        before: {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "100.0000",
+          currency: "CAD",
+          // Balanced, not in_progress: the match above zeroed the difference
+          // before the discard, and the audit records the session as found.
+          status: "balanced",
+        },
+      });
+      assert.equal(audits.rows[0]!.actor_id, actor);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "a re-exported ID-less file with different bytes imports flagged, never skips",
   async () => {
     const org = await createScratchOrg();
