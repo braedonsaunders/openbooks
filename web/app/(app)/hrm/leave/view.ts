@@ -169,6 +169,7 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
                 {
                   requestId: f('dialogRequestId'),
                   closeHref: f('dialogCloseHref'),
+                  canWithdrawCancel: f('canWithdrawCancel'),
                 },
                 f('dialogOpen'),
               ),

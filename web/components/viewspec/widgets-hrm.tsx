@@ -202,7 +202,11 @@ export const HRM_WIDGETS = {
    *  request id (detail) or null (filing), closing by navigating the search
    *  params away. */
   'hrm-leave-dialog': (props) => (
-    <LeaveDialog requestId={str(props, 'requestId') ?? null} closeHref={str(props, 'closeHref') ?? '/hrm/leave'} />
+    <LeaveDialog
+      requestId={str(props, 'requestId') ?? null}
+      closeHref={str(props, 'closeHref') ?? '/hrm/leave'}
+      canWithdrawCancel={props.canWithdrawCancel === true}
+    />
   ),
   // HR-14 begin: qualification record/detail entry point over a
   // qualification id (detail) or the record flag (blank form), closing

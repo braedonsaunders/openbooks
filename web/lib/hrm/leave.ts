@@ -88,6 +88,7 @@ export interface LeaveQueueData {
   emptyDescription: string
   canFile: boolean
   canRecord: boolean
+  canWithdrawCancel: boolean
   fileTitle: string
   fileButton: string
   recordTitle: string
@@ -182,6 +183,10 @@ export async function loadLeaveQueue(
     truncatedNote: t('leave.truncatedNote', { limit: QUEUE_LIMIT }),
     canFile: can(authz, 'hrm.leave.request') || can(authz, 'hrm.leave.manage'),
     canRecord: can(authz, 'hrm.leave.manage'),
+    // Withdraw/cancel routes require hrm.leave.request exactly (manage does
+    // not substitute), so the drawer gate mirrors the route guard — never
+    // the broader canFile.
+    canWithdrawCancel: can(authz, 'hrm.leave.request'),
     fileTitle: t('leave.fileTitle'),
     fileButton: t('leave.fileButton'),
     recordTitle: t('leave.recordTitle'),

@@ -16,15 +16,18 @@ import { LeaveDrawer } from './LeaveDrawer'
 export function LeaveDialog({
   requestId,
   closeHref,
+  canWithdrawCancel,
 }: {
   requestId: string | null
   closeHref: string
+  canWithdrawCancel: boolean
 }) {
   const router = useRouter()
   return (
     <LeaveDrawer
       key={requestId ?? 'file'}
       requestId={requestId}
+      canWithdrawCancel={canWithdrawCancel}
       onClose={() => {
         router.push(closeHref as never)
         router.refresh()
