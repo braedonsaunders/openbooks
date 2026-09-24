@@ -8,12 +8,10 @@ import {
   createScratchUser,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
-import { HrmAuthorizationError } from "./authorization.ts";
 import {
   createProcessTemplate,
   deleteProcessTemplate,
   deleteProcessTemplateStep,
-  HrmProcessError,
   updateProcessTemplate,
   upsertProcessTemplateStep,
 } from "./processes.ts";
