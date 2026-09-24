@@ -18,9 +18,9 @@ const { fixedAssetsResource, FIXED_ASSETS_DESCRIPTOR } = (await import(
 )) as typeof import('./fixed-asset-resources.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
 const { runDepreciation } = await import('@openbooks/engine/src/assets/depreciation.ts')
-const { createScratchOrg, dropScratchOrgReporting } = await import(
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
 
@@ -85,7 +85,7 @@ test('descriptor exposes the asset register as an importable resource', async ()
 test('a mid-life row imports, continues its schedule, and round-trips verbatim', { skip: !DB }, async () => {
   const org = await fixture()
   try {
-    const actorId = randomUUID()
+    const actorId = await createScratchUser(org.orgId, 'Asset importer', 'admin')
     const resource = fixedAssetsResource(org.orgId)
     const first = await resource.write([{ ...MID_LIFE_ROW }], 'insert', {
       orgId: org.orgId,
@@ -96,6 +96,31 @@ test('a mid-life row imports, continues its schedule, and round-trips verbatim',
       { created: first.created, failed: first.failed, errors: first.errors },
       { created: 1, failed: 0, errors: [] },
     )
+    const asset = (await db.execute<{ id: string }>(sql`
+      select id from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-9001'`)).rows[0]!
+    const createAudit = (await db.execute<{ actor_id: string; action: string; changes: unknown }>(sql`
+      select actor_id, action, changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'fixed_assets' and row_id = ${asset.id}
+         and changes->>'source' = 'import'`)).rows[0]!
+    assert.equal(createAudit.actor_id, actorId)
+    assert.equal(createAudit.action, 'insert')
+    assert.deepEqual(createAudit.changes, {
+      source: 'import',
+      before: null,
+      after: {
+        assetNumber: 'FA-9001', name: 'Imported press', description: null,
+        subsidiaryId: org.subsidiaryId, categoryId: (await db.execute<{ id: string }>(sql`
+          select id from asset_categories where org_id = ${org.orgId} and name = 'Import Equipment'`)).rows[0]!.id,
+        status: 'in_service', acquisitionCost: '120000.0000', salvageValue: '0.0000',
+        acquiredOn: null, inServiceOn: '2021-06-15', depreciationMethod: 'straight_line',
+        usefulLifeMonths: 120, depreciationRatePercent: null, depreciationConvention: 'full_month',
+        depreciationUnitsTotal: null, assetAccountId: org.accounts.invAsset,
+        accumulatedDepreciationAccountId: org.accounts.clearing,
+        depreciationExpenseAccountId: org.accounts.adjustment,
+        openingAccumulatedDepreciation: '55000.0000', openingAccumulatedAsOf: '2025-12-31',
+        serialNumber: null,
+      },
+    })
 
     // The continuation is real on import: the first scheduled month is one
     // month, and the opening figure sits on the row.
@@ -133,6 +158,14 @@ test('a mid-life row imports, continues its schedule, and round-trips verbatim',
       (r) => (r as Record<string, unknown>).assetNumber === 'FA-9001',
     )
     assert.deepEqual(reread, row)
+    const importAudits = (await db.execute<{ action: string; changes: unknown }>(sql`
+      select action, changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'fixed_assets' and row_id = ${asset.id}
+         and changes->>'source' = 'import' order by at, id`)).rows
+    assert.equal(importAudits.length, 2)
+    assert.equal(importAudits[1]!.action, 'update')
+    assert.equal((importAudits[1]!.changes as { before: { name: string } }).before.name, 'Imported press')
+    assert.equal((importAudits[1]!.changes as { after: { name: string } }).after.name, 'Imported press')
   } finally {
     await dropScratchOrgReporting(org.orgId)
   }
@@ -141,7 +174,7 @@ test('a mid-life row imports, continues its schedule, and round-trips verbatim',
 test('insert twice fails the duplicate; post-history opening edits lock', { skip: !DB }, async () => {
   const org = await fixture()
   try {
-    const actorId = randomUUID()
+    const actorId = await createScratchUser(org.orgId, 'Asset importer', 'admin')
     const resource = fixedAssetsResource(org.orgId)
     const first = await resource.write([{ ...MID_LIFE_ROW }], 'insert', {
       orgId: org.orgId,
@@ -189,7 +222,7 @@ test('insert twice fails the duplicate; post-history opening edits lock', { skip
 test('dry-run previews without writing; bad rows fail with field messages', { skip: !DB }, async () => {
   const org = await fixture()
   try {
-    const actorId = randomUUID()
+    const actorId = await createScratchUser(org.orgId, 'Asset importer', 'admin')
     const resource = fixedAssetsResource(org.orgId)
     const preview = await resource.write([{ ...MID_LIFE_ROW }], 'insert', {
       orgId: org.orgId,
@@ -209,18 +242,136 @@ test('dry-run previews without writing; bad rows fail with field messages', { sk
         { ...MID_LIFE_ROW, assetNumber: 'FA-9002', category: 'No Such Category' },
         { ...MID_LIFE_ROW, assetNumber: 'FA-9003', openingAccumulated: '1000', openingAsOf: '' },
         { ...MID_LIFE_ROW, assetNumber: 'FA-9004', salvageValue: '999999' },
+        { ...MID_LIFE_ROW, assetNumber: 'FA-9005', acquisitionCost: '12,34' },
       ],
       'insert',
       { orgId: org.orgId, actorId, dryRun: false },
     )
     assert.deepEqual(
       { created: bad.created, failed: bad.failed },
-      { created: 0, failed: 3 },
+      { created: 0, failed: 4 },
     )
     assert.match(bad.errors[0]!.message, /unknown asset category/)
     assert.match(bad.errors[1]!.message, /set together/)
     assert.match(bad.errors[2]!.message, /Salvage value cannot exceed/)
+    assert.match(bad.errors[3]!.message, /must use "\." as the decimal point/)
+    assert.match(bad.errors[3]!.message, /12\.34/)
   } finally {
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
+
+test('restricted imports lock only in-scope natural-key matches across a rehome', { skip: !DB }, async () => {
+  const org = await fixture()
+  try {
+    const actorId = await createScratchUser(org.orgId, 'Scoped asset importer', 'admin')
+    const otherSubsidiaryId = randomUUID()
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, is_active)
+      values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Asset importer B', 'USD', 'US', true)`)
+    const resource = fixedAssetsResource(org.orgId)
+    const hidden = await resource.write([
+      { ...MID_LIFE_ROW, assetNumber: 'FA-SCOPE-RACE', status: 'draft' },
+    ], 'insert', { orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: null })
+    assert.equal(hidden.created, 1)
+
+    let unlock!: () => void
+    let locked!: () => void
+    const lockReady = new Promise<void>((resolve) => { locked = resolve })
+    const moveReady = new Promise<void>((resolve) => { unlock = resolve })
+    const holder = withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`select id from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-SCOPE-RACE' for update`)
+      locked()
+      await moveReady
+      await db.execute(sql`select set_config('openbooks.amend', 'on', true)`)
+      await db.execute(sql`update fixed_assets set subsidiary_id = ${otherSubsidiaryId}
+        where org_id = ${org.orgId} and asset_number = 'FA-SCOPE-RACE'`)
+    })
+    await lockReady
+
+    let settled = false
+    const importer = resource.write([
+      { ...MID_LIFE_ROW, assetNumber: 'FA-SCOPE-RACE', name: 'Must not move B asset', status: 'draft' },
+    ], 'upsert', {
+      orgId: org.orgId,
+      actorId,
+      dryRun: false,
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    }).finally(() => { settled = true })
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      assert.equal(settled, false, 'the importer must wait on the selected asset row lock')
+    } finally {
+      unlock()
+      await holder
+    }
+    const outcome = await importer
+    assert.equal(outcome.updated, 0)
+    assert.equal(outcome.failed, 1, 'the moved row is rechecked against the scope predicate after the lock wait')
+    const stillHidden = (await db.execute<{ subsidiary_id: string; name: string }>(sql`
+      select subsidiary_id, name from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-SCOPE-RACE'`)).rows[0]!
+    assert.equal(stillHidden.subsidiary_id, otherSubsidiaryId)
+    assert.equal(stillHidden.name, 'Imported press')
+
+    const preview = await resource.write([
+      { ...MID_LIFE_ROW, assetNumber: 'FA-SCOPE-RACE', status: 'draft' },
+    ], 'upsert', {
+      orgId: org.orgId,
+      actorId,
+      dryRun: true,
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    })
+    assert.equal(preview.created, 1, 'an out-of-scope natural-key match is not exposed in preview')
+    assert.equal(preview.updated, 0)
+  } finally {
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
+
+test('a caught schedule refusal rolls back each asset import row to its savepoint', { skip: !DB }, async () => {
+  const org = await fixture()
+  const triggerName = `asset_import_fail_${randomUUID().replaceAll('-', '')}`
+  const functionName = `${triggerName}_fn`
+  let triggerInstalled = false
+  try {
+    const actorId = await createScratchUser(org.orgId, 'Asset importer', 'admin')
+    const resource = fixedAssetsResource(org.orgId)
+    const draft = await resource.write([
+      { ...MID_LIFE_ROW, assetNumber: 'FA-IMPORT-UPDATE-ROLLBACK', status: 'draft', inServiceOn: '' },
+    ], 'insert', { orgId: org.orgId, actorId, dryRun: false })
+    assert.equal(draft.created, 1)
+
+    await db.execute(sql.raw(`create function public."${functionName}"() returns trigger language plpgsql as $$
+      begin raise exception 'injected depreciation schedule refusal' using errcode = '23514'; end
+      $$`))
+    await db.execute(sql.raw(`create trigger "${triggerName}" before insert on public.depreciation_schedules
+      for each row execute function public."${functionName}"()`))
+    triggerInstalled = true
+
+    const outcome = await resource.write([
+      { ...MID_LIFE_ROW, assetNumber: 'FA-IMPORT-INSERT-ROLLBACK' },
+      { ...MID_LIFE_ROW, assetNumber: 'FA-IMPORT-UPDATE-ROLLBACK', status: 'in_service', acquisitionCost: '130000' },
+      { ...MID_LIFE_ROW, assetNumber: 'FA-IMPORT-SURVIVOR', status: 'draft', inServiceOn: '' },
+    ], 'upsert', { orgId: org.orgId, actorId, dryRun: false })
+    assert.equal(outcome.created, 1, 'a later row can commit after the failed rows roll back to their savepoints')
+    assert.equal(outcome.updated, 0)
+    assert.equal(outcome.failed, 2)
+    assert.ok(outcome.errors.every((error) => /schedule build failed/.test(error.message)))
+
+    const persisted = await db.execute<{ asset_number: string; status: string; acquisition_cost: string }>(sql`
+      select asset_number, status, acquisition_cost::text from fixed_assets
+       where org_id = ${org.orgId} and asset_number in (
+         'FA-IMPORT-INSERT-ROLLBACK', 'FA-IMPORT-UPDATE-ROLLBACK', 'FA-IMPORT-SURVIVOR')
+       order by asset_number`)
+    assert.deepEqual(persisted.rows, [
+      { asset_number: 'FA-IMPORT-SURVIVOR', status: 'draft', acquisition_cost: '120000.0000' },
+      { asset_number: 'FA-IMPORT-UPDATE-ROLLBACK', status: 'draft', acquisition_cost: '120000.0000' },
+    ], 'failed schedule creation must roll back its new asset and prior draft update without aborting later rows')
+  } finally {
+    if (triggerInstalled) {
+      await db.execute(sql.raw(`drop trigger "${triggerName}" on public.depreciation_schedules`))
+      await db.execute(sql.raw(`drop function public."${functionName}"()`))
+    }
     await dropScratchOrgReporting(org.orgId)
   }
 })
