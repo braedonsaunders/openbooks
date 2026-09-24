@@ -40,16 +40,7 @@ function applyRequest(postingId: string, displayName: string): Request {
 
 const POSTING_ID = "00000000-0000-4000-8000-000000000051";
 
-if (isVitest) {
-  test("apply rate limiting and the honeypot read from the route source", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /MAX_PER_WINDOW = 5/);
-    assert.match(source, /too many applications from this address/);
-    assert.match(source, /website/);
-  });
-} else {
-  test("an unreadable body 400s before the limiter runs", async () => {
+test("an unreadable body 400s before the limiter runs", async () => {
     __resetApplyRateLimitForTests();
     const response = await POST(
       new Request("http://openbooks.test/api/recruiting/apply", {
@@ -59,9 +50,9 @@ if (isVitest) {
       }),
     );
     assert.equal(response.status, 400);
-  });
+});
 
-  test("the sixth apply inside the window 429s with the remedy", async () => {
+test("the sixth apply inside the window 429s with the remedy", async () => {
     __resetApplyRateLimitForTests();
     const statuses: number[] = [];
     for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -69,13 +60,13 @@ if (isVitest) {
       statuses.push(response.status);
     }
     assert.deepEqual(statuses.slice(0, 5).every((status) => status !== 429), true, "the first five reach the service");
-    assert.equal(statuses[5], 429, "the sixth attempt is rate limited");
+  assert.equal(statuses[5], 429, "the sixth attempt is rate limited");
     const sixth = await POST(applyRequest(POSTING_ID, "Applicant late"));
     assert.equal(sixth.status, 429);
     assert.match(String((await sixth.json()).error), /wait a minute/);
-  });
+});
 
-  test("a filled honeypot shapes success and writes nothing", async () => {
+test("a filled honeypot shapes success and writes nothing", async () => {
     __resetApplyRateLimitForTests();
     const response = await POST(
       new Request("http://openbooks.test/api/recruiting/apply", {
@@ -86,5 +77,4 @@ if (isVitest) {
     );
     assert.equal(response.status, 201);
     assert.deepEqual(await response.json(), { received: true });
-  });
-}
+});
