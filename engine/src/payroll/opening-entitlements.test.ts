@@ -473,6 +473,44 @@ test(
 );
 
 test(
+  "a non-strict bank load warns by name about the locked bank while the others apply",
+  { skip: !DB },
+  async () => {
+    // The same silent-skip shape as the statutory loader: with
+    // strictLocks=false a locked bank hit a bare `continue`, and the result
+    // read as applied while the bank stood unchanged.
+    const fx = await seedBanks();
+    try {
+      // Only VAC has an opening row, so only VAC locks when the run commits.
+      // The second load is dated after the committed stub, so BANK is a
+      // legitimate new carry-in rather than history behind a paid run.
+      await saveEntitlementOpenings({
+        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6200" } }],
+      });
+      await seedCommittedStub(fx, "2026-07-21");
+
+      const result = await saveEntitlementOpenings({
+        orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-08-01",
+        strictLocks: false,
+        rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "1", BANK: "200" } }],
+      });
+      assert.equal(result.errors.length, 0, "a skip is not a failure");
+      assert.equal(result.warnings.length, 1, "the locked bank is reported, not absorbed");
+      assert.equal(result.warnings[0]!.employeePartyId, fx.employeeId);
+      assert.equal(result.warnings[0]!.employeeName, fx.employeeName);
+      assert.match(result.warnings[0]!.message, /VAC carry-in consumed by committed run/);
+
+      const after = await entitlementOpenings(fx.orgId);
+      assert.equal(after.rows[0]!.amounts[fx.vacationPlanId], "6200.0000");
+      assert.equal(after.rows[0]!.amounts[fx.bankedPlanId], "200.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
   "a NEW carry-in dated on or before a committed pay run is refused, not silently backdated",
   { skip: !DB },
   async () => {
