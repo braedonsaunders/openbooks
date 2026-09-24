@@ -1,63 +1,107 @@
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-/**
- * Contract coverage for /me/compensation without booting Next: a linked
- * person with no band and no statement reads the page with its explicit
- * empty state (the pay-information request below is the next step), a
- * login with no employment reads the named no-link refusal — neither is
- * an ambiguous 404 — and content renders unchanged through the shared
- * primitives plus the two compensation widgets.
- */
-
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const loader = readFileSync(new URL("../../../../lib/hrm/compensation.ts", import.meta.url), "utf8");
-
-test("linked with no content reads the empty state plus a next step, never a 404", () => {
-  assert.doesNotMatch(view, /!data \|\| !data\.hasContent/, "no band and no statement must not 404");
-  assert.match(view, /if \(!data\) return myCompRefusal\(authz\)/, "the loader's null converts to the named refusal");
-  assert.match(view, /widgetBlock\(\s*'empty-state'/, "the states render through the house empty-state block");
-  assert.match(view, /f\('showEmpty'\)/, "the no-content block shows exactly for linked-but-empty");
-  assert.match(
-    view,
-    /widgetBlock\('hrm-pay-info-request', \{[\s\S]*?\}, f\('canRequest'\)\)/,
-    "the pay-information request stays the next step while an employment resolves",
-  );
-  assert.match(view, /when: f\('hasContent'\)/, "the content panels hide without content");
-  assert.match(loader, /showEmpty: !hasContent/, "the loader derives the empty flag from content");
-  assert.match(
-    loader,
-    /canRequest: true/,
-    "the loader marks the request applicable while an employment resolves",
-  );
-  assert.match(loader, /refusal: null/, "content rows carry no refusal");
+// Behaviour contract for the compensation page (/me/compensation). The
+// spec builder runs over hand-built data: a refused read renders its
+// title and remedy, the linked-but-empty state carries its next step,
+// and both content panels gate on the content resolver. Band placement
+// and statement reads stay covered by the engine compensation tests,
+// which own the service shapes.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("an unlinked login reads the named no-link refusal, never a 404", () => {
-  assert.match(
-    view,
-    /if \(!authz\) notFound\(\)/,
-    "only a missing session 404s — the route genuinely does not exist there",
-  );
-  assert.match(loader, /if \(!person\.partyId\) return null/, "only an unlinked login reports null");
-  assert.match(loader, /return myCompRefusal\(authz, 'no-employment'\)/, "a linked login with no employment gets its own refusal");
-  assert.match(loader, /myComp\.noEmployment/, "the refusal names the create-employment remedy");
-  assert.match(loader, /myComp\.notLinked/, "the refusal names the link-person remedy");
-  assert.match(loader, /me\.refusedTitle/, "the refusal carries the shared self-service title");
-  assert.match(loader, /canRequest: false/, "the refusal carries no employment to file against");
-  assert.match(view, /f\('refusal'\)/, "the spec shows the refusal block exactly when the refusal is set");
+const { myCompSpec } = await import("./view.ts");
+
+function specJson(data: Record<string, unknown>): string {
+  return JSON.stringify(myCompSpec(data as never));
+}
+
+const TABS = [{ label: "Compensation", href: "/me/compensation" }];
+
+function baseData(): Record<string, unknown> {
+  return {
+    tabs: TABS,
+    refusal: null,
+    emptyTitle: "No compensation on file",
+    emptyDescription: "Ask HR to place you in a band",
+  } as unknown as Record<string, unknown>;
+}
+
+test("a refused compensation read renders the remedy", () => {
+  const data = baseData();
+  data.refusal = { title: "No compensation", message: "ask an administrator for a linked employment" };
+  const json = specJson(data);
+  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes("No compensation"), "the refusal title reaches the page");
+  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
 });
 
-test("my compensation composes the statements table and the request widget", () => {
-  assert.match(view, /loadMyCompensation\(authz\)/, "the page resolves through the scoped loader");
-  assert.match(view, /route: '\/me\/compensation'/, "the spec names its own route for the registry");
-  assert.match(view, /table\(\{/, "statements render through the shared table block");
-  assert.match(view, /variant: 'app'/, "the table uses the shared app table primitives");
-  assert.match(view, /widgetBlock\('hrm-placement-summary'/, "placement renders through the shared widget");
-  assert.match(view, /widgetBlock\('hrm-pay-info-request'/, "the request action renders through the shared widget");
-  assert.match(view, /module-home-tabs/, "the header carries the Me strip");
-  assert.match(page, /trusted \/>/, "the view spec is trusted output, never raw user input");
-  assert.match(page, /generateMetadata/, "tab metadata resolves the translated title");
+test("the empty state carries its next step with content gated on its resolver", () => {
+  const json = specJson(baseData());
+  assert.ok(json.includes("No compensation on file"), "the empty state names the situation");
+  assert.ok(json.includes("Ask HR to place you in a band"), "the empty state names the next step");
+  assert.ok(json.includes("\"hasContent\""), "the placement panel gates on the content resolver");
+  assert.ok(json.includes("\"hrm-placement-summary\""), "the placement widget renders");
+  assert.ok(json.includes("\"hrm-pay-info-request\""), "the pay-information request renders as the next step");
+});
+
+// The no-link refusal is one remedy shared with the engine: the catalog
+// copy a locale renders when the login has no linked person must stay
+// word-for-word identical to the SelfServiceError NO_LINK message the
+// engine throws, or the two renderings drift.
+const LOCALES = ["en", "fr", "es", "de", "ja", "zh", "pt-BR"] as const;
+const REFUSAL_KEYS = ["myComp.emptyTitle", "myComp.emptyDescription", "myComp.notLinked"] as const;
+
+function catalogAt(catalog: Record<string, unknown>, path: string): unknown {
+  let node: unknown = catalog;
+  for (const part of path.split(".")) {
+    if (typeof node !== "object" || node === null || !(part in node)) return undefined;
+    node = (node as Record<string, unknown>)[part];
+  }
+  return node;
+}
+
+test("every locale carries the empty and refusal copy translated", () => {
+  const en = JSON.parse(readFileSync(new URL("../../../../../web/messages/en/hrm.json", import.meta.url), "utf8")) as Record<string, unknown>;
+  for (const locale of LOCALES) {
+    const catalog = JSON.parse(
+      readFileSync(new URL(`../../../../../web/messages/${locale}/hrm.json`, import.meta.url), "utf8"),
+    ) as Record<string, unknown>;
+    for (const key of REFUSAL_KEYS) {
+      const value = catalogAt(catalog, key);
+      assert.equal(typeof value, "string", `${locale} hrm.json lacks "${key}" — /me/compensation renders the key path`);
+      assert.ok((value as string).trim().length > 0, `${locale} hrm.json "${key}" is blank — /me/compensation renders nothing`);
+      if (locale !== "en") {
+        assert.notEqual(value, catalogAt(en, key), `${locale} hrm.json "${key}" copies English — translate it`);
+      }
+    }
+  }
+});
+
+test("the English no-link remedy matches the engine refusal word for word", async () => {
+  const { actorPartyOf, SelfServiceError } = await import("../../../../../engine/src/hrm/self-service/actor.ts");
+  type Executor = Pick<import("../../../../../engine/src/platform/db.ts").SqlExecutor, "execute">;
+  const exec = {
+    execute: async () => ({ rows: [] as { partyId: string | null }[] }),
+  } as unknown as Executor;
+  const thrown: unknown = await actorPartyOf(exec, "org-1", "user-1").then(
+    () => null,
+    (error: unknown) => error,
+  );
+  assert.ok(thrown instanceof SelfServiceError, "an unlinked login must throw SelfServiceError");
+  assert.equal((thrown as { code: string }).code, "NO_LINK", "the refusal carries the NO_LINK code");
+  const en = JSON.parse(readFileSync(new URL("../../../../../web/messages/en/hrm.json", import.meta.url), "utf8")) as Record<string, unknown>;
+  assert.equal(
+    catalogAt(en, "myComp.notLinked"),
+    (thrown as Error).message,
+    "en myComp.notLinked drifted from the engine NO_LINK remedy — one remedy, keep them identical",
+  );
 });
