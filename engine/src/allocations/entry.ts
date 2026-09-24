@@ -750,21 +750,21 @@ export function planEntryDistributions(
       output.push(plainLine(line));
       return;
     }
-    try {
-      const result = explodeDocumentLine(line, rule, {
-        driverVector: opts.driverVectors?.get(rule.rule.id),
-        driverDimension: opts.driverDimensions?.get(rule.rule.id),
-        resolveDynamicTargets: opts.resolveDynamicTargets,
-        groupId: mintGroupId(),
-      });
-      const base = output.length;
-      output.push(...result.children);
-      lineage.push(...toLineage(rule, result, base, null));
-      exploded = true;
-    } catch (error) {
-      if (!(error instanceof EntryAllocationError)) throw error;
-      output.push(plainLine(line));
-    }
+    // A matched automatic rule that cannot explode (bad weights, a driver
+    // with no measurement) refuses the save exactly like the explicit path:
+    // posting the line whole would tell the operator distributions applied
+    // when they did not. Only a genuine no-match (rule === null above)
+    // posts whole.
+    const result = explodeDocumentLine(line, rule, {
+      driverVector: opts.driverVectors?.get(rule.rule.id),
+      driverDimension: opts.driverDimensions?.get(rule.rule.id),
+      resolveDynamicTargets: opts.resolveDynamicTargets,
+      groupId: mintGroupId(),
+    });
+    const base = output.length;
+    output.push(...result.children);
+    lineage.push(...toLineage(rule, result, base, null));
+    exploded = true;
   });
 
   return { lines: output, lineage, exploded };

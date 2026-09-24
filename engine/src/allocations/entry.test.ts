@@ -453,11 +453,26 @@ test("plan rejects an explicit key with no resolved rule", () => {
   );
 });
 
-test("plan keeps the line plain when an automatic rule is misconfigured", () => {
+test("plan refuses a matched-but-misconfigured automatic rule instead of posting whole", () => {
   const broken = rule("broken", [target({ departmentId: "d1" })], {
     applyPolicy: "automatic",
   });
-  const plan = planEntryDistributions(doc(), [entryLine({ amount: "10.0000" })], [broken]);
+  // The refusal is the product: only a genuine no-match posts whole. A
+  // matched rule that cannot explode names its fault like the explicit path.
+  assert.throws(
+    () => planEntryDistributions(doc(), [entryLine({ amount: "10.0000" })], [broken]),
+    (error: unknown) => error instanceof EntryAllocationError,
+  );
+});
+
+test("plan still posts whole when no automatic rule matches", () => {
+  // Scope-matching is on the version, not the targets: this rule scopes a
+  // different account, so the line genuinely matches nothing.
+  const other = rule("other", [target({ departmentId: "d1" })], {
+    applyPolicy: "automatic",
+    accountScope: { kind: "accounts", accountIds: ["other-account"] },
+  });
+  const plan = planEntryDistributions(doc(), [entryLine({ amount: "10.0000" })], [other]);
   assert.equal(plan.exploded, false);
   assert.equal(plan.lines.length, 1);
   assert.deepEqual(plan.lineage, []);
