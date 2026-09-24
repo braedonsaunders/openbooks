@@ -18,6 +18,7 @@ import {
 import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
 import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { useMoney } from '../../../../components/money-provider'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'
 import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-html'
@@ -124,6 +125,74 @@ export function FilingStatusBadge({ status }: { status: FilingRowStatus }) {
   return <Badge variant={meta.variant}>{text(`lifecycle.status.${status}`, meta.english)}</Badge>
 }
 
+/**
+ * One filing-year's lifecycle. The status is checked before the body is
+ * parsed: a non-JSON error body (a proxy page, an empty 502) must surface
+ * the fallback with the status, never a SyntaxError from `res.json()`.
+ */
+export async function fetchFilingLifecycle(
+  country: string,
+  filing: string,
+  year: number,
+): Promise<FilingLifecycle> {
+  const res = await fetch(
+    `/api/payroll/year-end/amendments?country=${encodeURIComponent(country)}`
+    + `&filing=${encodeURIComponent(filing)}&year=${year}`,
+  )
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the filing history could not be loaded'))
+  return (await res.json()) as FilingLifecycle
+}
+
+/** One population row's statutory slip, fetched for a drawer or a preview. */
+export interface FilingSlipResult {
+  slip: PayrollFilingSlipData
+  orgName: string
+  currency: string
+}
+
+/**
+ * Fetch one slip by href. The status is checked before the body is parsed
+ * (see fetchFilingLifecycle above); a ready slip without a currency is
+ * refused by name rather than rendered into a facsimile with unknown money.
+ */
+export async function fetchFilingSlip(href: string): Promise<FilingSlipResult> {
+  const res = await fetch(href)
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the slip could not be loaded'))
+  const body = (await res.json()) as {
+    slip?: PayrollFilingSlipData
+    orgName?: string
+    currency?: string
+    error?: string
+  }
+  if (!body.slip) throw new Error(body.error ?? res.statusText)
+  if (!body.currency) throw new Error('slip response is missing its currency')
+  return { slip: body.slip, orgName: body.orgName ?? '', currency: body.currency }
+}
+
+/**
+ * Issue an amended or cancelled correction. Returns the pack's file refusal
+ * when the correction recorded without an electronic file — legitimately
+ * issued, with its reason surfaced, never swallowed.
+ */
+export async function postFilingCorrection(input: {
+  country: string
+  filing: string
+  year: number
+  revision: 'amended' | 'cancelled'
+  rowIds: string[]
+  reason?: string
+  confirmedCancellation?: boolean
+}): Promise<string | null> {
+  const res = await fetch('/api/payroll/year-end/amendments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the correction could not be issued'))
+  const responseBody = (await res.json()) as { fileRefusal?: string | null }
+  return responseBody.fileRefusal ?? null
+}
+
 /** Fetches and caches one filing-year's lifecycle. */
 export function useFilingLifecycle(section: YearEndFilingSection | null, year: number, enabled: boolean) {
   const [state, setState] = useState<
@@ -148,18 +217,10 @@ export function useFilingLifecycle(section: YearEndFilingSection | null, year: n
   useEffect(() => {
     if (!enabled || !country || !key) return
     let alive = true
-    void fetch(
-      `/api/payroll/year-end/amendments?country=${encodeURIComponent(country)}`
-      + `&filing=${encodeURIComponent(key)}&year=${year}`,
-    )
-      .then(async (res) => {
-        const body = (await res.json()) as FilingLifecycle & { error?: string }
+    void fetchFilingLifecycle(country, key, year)
+      .then((lifecycle) => {
         if (!alive) return
-        if (!res.ok) {
-          setState({ status: 'error', message: body.error ?? res.statusText })
-          return
-        }
-        setState({ status: 'ready', lifecycle: body })
+        setState({ status: 'ready', lifecycle })
       })
       .catch((e: Error) => {
         if (alive) setState({ status: 'error', message: e.message })
@@ -486,19 +547,9 @@ function FilingCorrectionSectionBody({
     // previous cancellation preview.
     setCancellationReason('')
     try {
-      const res = await fetch(correctionHref(revision, 'json'))
-      const body = (await res.json()) as { slip?: PayrollFilingSlipData; orgName?: string; currency?: string; error?: string }
-      if (!res.ok || !body.slip) throw new Error(body.error ?? res.statusText)
-      if (!body.currency) throw new Error('slip response is missing its currency')
+      const result = await fetchFilingSlip(correctionHref(revision, 'json'))
       if (request !== previewRequest.current) return
-      setPreview({
-        status: 'ready',
-        slip: body.slip,
-        orgName: body.orgName ?? '',
-        currency: body.currency,
-        revision,
-        rowId,
-      })
+      setPreview({ status: 'ready', ...result, revision, rowId })
     } catch (e) {
       if (request !== previewRequest.current) return
       setPreview({ status: 'error', message: (e as Error).message })
@@ -541,25 +592,17 @@ function FilingCorrectionSectionBody({
 
     setBusy(revision)
     try {
-      const payload: Record<string, unknown> = {
+      const fileRefusal = await postFilingCorrection({
         country: section.country,
         filing: section.key,
         year,
         revision,
         rowIds: [review.rowId],
-      }
-      if (revision === 'cancelled') {
-        payload.confirmedCancellation = true
-        payload.reason = reason
-      }
-      const res = await fetch('/api/payroll/year-end/amendments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        ...(revision === 'cancelled'
+          ? { confirmedCancellation: true as const, reason }
+          : {}),
       })
-      const responseBody = (await res.json()) as { error?: string; fileRefusal?: string | null }
-      if (!res.ok) throw new Error(responseBody.error ?? res.statusText)
-      if (responseBody.fileRefusal) setError(responseBody.fileRefusal)
+      if (fileRefusal) setError(fileRefusal)
       setPreview({ status: 'idle' })
       if (revision === 'cancelled') setCancellationReason('')
       onIssued()

@@ -9,6 +9,7 @@ import { Badge, Button, Drawer, Label, Select, cn } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /* ------------------------------------------------------------------ */
 /* Shapes (mirror engine/src/payroll/retro-store.ts)                   */
@@ -69,6 +70,24 @@ export type RetroSchedule = {
   name: string
 };
 
+/**
+ * One retro call. The status is checked before the body is parsed: a
+ * non-JSON error body (a proxy page, an empty 502) must surface the
+ * fallback with the status, never a SyntaxError from `res.json()`.
+ */
+export async function postRetroAction(
+  action: 'propose' | 'create',
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const res = await fetch('/api/payroll/retro', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...body }),
+  })
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the retro request failed'))
+  return (await res.json()) as Record<string, unknown>
+}
+
 
 /**
  * Retroactive pay — detect, quantify, review, pay.
@@ -107,17 +126,11 @@ export function RetroWorkspace({
   const [open, setOpen] = useState<RetroPeriod | null>(null)
 
   async function call(action: 'propose' | 'create'): Promise<Record<string, unknown>> {
-    const res = await fetch('/api/payroll/retro', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action, payScheduleId: scheduleId, payDate,
-        excludeSourcePayRunDocumentIds: excluded,
-      }),
+    return postRetroAction(action, {
+      payScheduleId: scheduleId,
+      payDate,
+      excludeSourcePayRunDocumentIds: excluded,
     })
-    const json = (await res.json()) as Record<string, unknown>
-    if (!res.ok) throw new Error(String(json.error ?? 'failed'))
-    return json
   }
 
   async function find() {

@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Play, Plus } from 'lucide-react'
 import { Button, Drawer, Label, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 export interface FinalPayCandidate {
   id: string
@@ -56,15 +57,23 @@ export function runPayload(
   }
 }
 
-async function postRun(body: Record<string, unknown>): Promise<string> {
+/**
+ * Create a pay run. The status is checked before the body is parsed: a
+ * non-JSON error body (a proxy page, an empty 502) must surface the
+ * fallback with the status, never a SyntaxError from `res.json()`.
+ */
+export async function postRun(body: Record<string, unknown>): Promise<string> {
   const res = await fetch('/api/payroll/runs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const j = await res.json()
-  if (!res.ok) throw new Error(j.error ?? 'failed')
-  return j.documentId as string
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to create the pay run'))
+  const j = (await res.json()) as { documentId?: string }
+  if (typeof j.documentId !== 'string' || j.documentId === '') {
+    throw new Error('failed to create the pay run (status 200)')
+  }
+  return j.documentId
 }
 
 /** One-click run for a known schedule, using its derived next period. */

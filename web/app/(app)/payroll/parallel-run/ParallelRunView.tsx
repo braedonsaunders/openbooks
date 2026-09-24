@@ -69,6 +69,23 @@ interface Tolerance {
   reason: string
 }
 
+/**
+ * Discard an imported prior-system register. The status is checked before
+ * the body is parsed: a non-JSON error body (a proxy page, an empty 502)
+ * must surface the fallback with the status, never a SyntaxError from
+ * `response.json()`.
+ */
+export async function discardParallelRegister(registerId: string): Promise<Tolerance[]> {
+  const response = await fetch(`/api/payroll/parallel-run/registers/${registerId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, 'could not discard the register'))
+  }
+  const body = (await response.json()) as { tolerances?: Tolerance[]; error?: string }
+  return body.tolerances ?? []
+}
+
 interface Comparison {
   id: string
   registerId: string
@@ -283,12 +300,10 @@ export function ParallelRunView({
   }
 
   const discardRegister = async (row: Register) => {
-    const response = await fetch(`/api/payroll/parallel-run/registers/${row.id}`, {
-      method: 'DELETE',
-    })
-    if (!response.ok) {
-      const body = (await response.json()) as { error?: string }
-      toast.error(body.error ?? 'could not discard the register')
+    try {
+      await discardParallelRegister(row.id)
+    } catch (e) {
+      toast.error((e as Error).message)
       return
     }
     toast.success(text('registerDiscarded', 'The imported register was discarded.'))
