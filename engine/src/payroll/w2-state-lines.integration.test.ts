@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { yearEndFiling } from "./filing-registry.ts";
+import { w2Slips } from "./yearend.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -282,6 +283,75 @@ test(
 
       const slip = await w2SlipFor(fx, "Lone Star Lou");
       assert.deepEqual(slip.boxes.map((box) => box.code), ["1", "2", "3", "4", "5", "6"]);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "a stub that withheld state tax but carries no work state refuses the W-2 by name",
+  { skip: !DB },
+  async () => {
+    // A legacy stub can withhold state income tax while its work state was
+    // never recorded (province allows blank). The state-line builder drops
+    // blank-province groups before the tax check, so without this refusal the
+    // withheld tax appears in no state entry and box 17 understates against
+    // GL withholdings. The refusal names the employee and the stubs, with
+    // the correction the operator can actually run.
+    const fx = await usPayrollOrg();
+    try {
+      await suiAccount(fx, "CA", "CA-0011223");
+      const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
+        .subsidiary_id;
+      await usEmployee(fx, subsidiary, "Stateless Sam", { state: "CA" });
+      await runAndCommit(fx, "2026-07-05", "2026-07-18");
+      const stateLines = await committedDeductions(fx, "state_income_tax");
+      assert.equal(stateLines.length, 1);
+      assert.ok(Number(stateLines[0]!.amount) > 0, "California tax is withheld on the stub");
+      const stubId = (await db.execute<{ id: string }>(sql`
+        select id from pay_stubs where org_id = ${fx.orgId}`)).rows[0]!.id;
+      await db.execute(sql`update pay_stubs set province = '' where id = ${stubId}`);
+
+      await assert.rejects(
+        w2Slips(fx.orgId, 2026),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /Stateless Sam/);
+          assert.match(error.message, new RegExp(String(stubId)));
+          assert.match(error.message, /no work state/);
+          return true;
+        },
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "a stub with no work state and no withholding stays federal-only",
+  { skip: !DB },
+  async () => {
+    // The refusal above fires on unattributable TAX, not on an unattributable
+    // stub: Texas withholds nothing, so blanking the work state leaves wages
+    // that are genuinely federal-only.
+    const fx = await usPayrollOrg();
+    try {
+      const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
+        .subsidiary_id;
+      await usEmployee(fx, subsidiary, "Nowhere Nora", { state: "TX" });
+      await runAndCommit(fx, "2026-07-05", "2026-07-18");
+      assert.equal((await committedDeductions(fx, "state_income_tax")).length, 0);
+      await db.execute(sql`update pay_stubs set province = '' where org_id = ${fx.orgId}`);
+
+      const slips = await w2Slips(fx.orgId, 2026);
+      assert.equal(slips.length, 1);
+      assert.equal(slips[0]!.employeeName, "Nowhere Nora");
+      assert.ok(Number(slips[0]!.box1Wages) > 0, "wages stay in the federal boxes");
+      assert.deepEqual(slips[0]!.stateLines, []);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
