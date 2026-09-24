@@ -70,10 +70,46 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
-const { RunRulesButton } = await import('./RuleDrawer')
+const { MoneyProvider } = await import('../../../../components/money-provider')
+const { RuleDrawer, RunRulesButton } = await import('./RuleDrawer')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 const ACCOUNTS = [{ id: 'acc-1', label: 'Operating' }]
+
+test('bank rule name, priority, payee, and memo are associated with their labels', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="CAD">
+          <RuleDrawer
+            rule={null}
+            accounts={[{ value: 'expense', label: 'Expense' }]}
+            reconAccounts={[{ id: 'bank-1', label: 'Operating' }]}
+            departments={[]}
+            locations={[]}
+            classes={[]}
+            taxCodes={[]}
+            parties={[{ value: 'party-1', label: 'Supplier' }]}
+          />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    )
+    await tick()
+    await tick()
+  })
+  for (const name of ['Name', 'Priority', 'Assign payee', 'Memo']) {
+    const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === name)
+    assert.ok(label, `${name} label renders`)
+    assert.ok(label.control, `${name} label controls its input`)
+  }
+})
 
 async function mount(t: TestContext, responder: () => Response): Promise<void> {
   script.errors = []

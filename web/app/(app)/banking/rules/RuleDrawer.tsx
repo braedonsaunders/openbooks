@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Ban, Bolt, Eye, Plus, Trash2, Wand2, Workflow } from 'lucide-react'
@@ -55,6 +55,7 @@ export function RunRulesButton({ accounts }: { accounts: AccountOpt[] }) {
   const t = useTranslations('banking.rules')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const accountSelectId = useId()
   const [open, setOpen] = useState(false)
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '')
   const [busy, setBusy] = useState(false)
@@ -112,8 +113,8 @@ export function RunRulesButton({ accounts }: { accounts: AccountOpt[] }) {
         }
       >
         <div className="space-y-1.5 p-1">
-          <Label>{tCommon('labels.account')}</Label>
-          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+          <Label htmlFor={accountSelectId}>{tCommon('labels.account')}</Label>
+          <Select id={accountSelectId} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>{a.label}</option>
             ))}
@@ -164,6 +165,7 @@ export function RuleDrawer({
   const t = useTranslations('banking.rules')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const fieldId = useId()
   const creating = !rule
 
   // Field catalog for the condition builder (localized).
@@ -330,18 +332,18 @@ export function RuleDrawer({
         <div className="min-w-0 space-y-5">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>{tCommon('labels.name')}</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('namePlaceholder')} />
+              <Label htmlFor={`${fieldId}-name`}>{tCommon('labels.name')}</Label>
+              <Input id={`${fieldId}-name`} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('namePlaceholder')} />
             </div>
             <div className="space-y-1.5">
-              <Label>{t('priority')}</Label>
-              <Input inputMode="numeric" value={priority} onChange={(e) => setPriority(e.target.value)} />
+              <Label htmlFor={`${fieldId}-priority`}>{t('priority')}</Label>
+              <Input id={`${fieldId}-priority`} inputMode="numeric" value={priority} onChange={(e) => setPriority(e.target.value)} />
             </div>
           </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <Label className="mb-0">{t('scope.label')}</Label>
+              <Label htmlFor={`${fieldId}-scope-search`} className="mb-0">{t('scope.label')}</Label>
               <button
                 type="button"
                 onClick={() => {
@@ -359,6 +361,7 @@ export function RuleDrawer({
               <div className="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
                 <div className="flex items-center gap-2">
                   <Input
+                    id={`${fieldId}-scope-search`}
                     className="h-8 flex-1"
                     value={scopeFilter}
                     onChange={(e) => setScopeFilter(e.target.value)}
@@ -457,12 +460,12 @@ export function RuleDrawer({
                 />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label>{t('assignPayee')}</Label>
-                    <SearchSelect options={parties} value={partyId} onChange={(v) => setPartyId(v ?? '')} placeholder={t('payeePlaceholder')} clearable emptyLabel={t('noPayee')} />
+                    <Label htmlFor={`${fieldId}-payee`}>{t('assignPayee')}</Label>
+                    <SearchSelect id={`${fieldId}-payee`} ariaLabel={t('assignPayee')} options={parties} value={partyId} onChange={(v) => setPartyId(v ?? '')} placeholder={t('payeePlaceholder')} clearable emptyLabel={t('noPayee')} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>{t('memoLabel')}</Label>
-                    <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('memoPlaceholder')} />
+                    <Label htmlFor={`${fieldId}-memo`}>{t('memoLabel')}</Label>
+                    <Input id={`${fieldId}-memo`} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('memoPlaceholder')} />
                   </div>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{mode === 'suggest' ? t('suggestHint') : t('autoHint')}</p>
@@ -481,6 +484,7 @@ export function RuleDrawer({
               <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('preview.title')}</span>
               <div className="ml-auto min-w-[9rem]">
                 <SearchSelect
+                  ariaLabel={t('preview.pickAccount')}
                   options={reconAccounts.map((a) => ({ value: a.id, label: a.label }))}
                   value={previewAccount}
                   onChange={(v) => setPreviewAccount(v ?? '')}
