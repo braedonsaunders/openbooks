@@ -383,7 +383,7 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
     const derivedAggregates = new Set(["gl_month_activity", "party_payment_stats"]);
     const comparableCounts = (counts: Record<string, number>): Record<string, number> =>
       Object.fromEntries(Object.entries(counts).filter(([name]) => !derivedAggregates.has(name)));
-    const beforeCounts = await orgRowCounts(source.orgId);
+    await db.execute(sql`update documents set open_balance = 999 where id = ${invoiceId}`); const beforeCounts = await orgRowCounts(source.orgId);
     const trialBalance = async () => (await db.execute<{ book: string; entries: number; balance: string; lines: number }>(sql`
       select e.book_id as book, count(distinct e.id)::int as entries,
              coalesce(sum(l.amount), 0)::text as balance, count(l.*)::int as lines
@@ -428,7 +428,7 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
       // empty-target gate cannot pass in a bootstrapped database.
       testOnlyAllowNonemptyTarget: true,
     });
-    assert.equal(report.validation.postedLedgerBalance, "passed");
+    assert.equal(report.validation.postedLedgerBalance, "passed"); assert.equal((await db.execute<{ open_balance: string }>(sql`select open_balance from documents where id = ${invoiceId}`)).rows[0]!.open_balance, "500.0000");
 
     // The restored tenant must match the independent totals exactly, with
     // nonzero counts everywhere the seeded ledger wrote. Rebuilt aggregates

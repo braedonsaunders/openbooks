@@ -716,6 +716,18 @@ export async function restoreOrgBackup(args: {
         for (const tableName of [...targetTables].sort()) {
           await client.query(`alter table public."${tableName}" enable trigger user`);
         }
+        await client.query("select public.recompute_document_open_balances($1)", [args.expectedOrgId]);
+        const openBalanceDrift = await client.query<{ count: string }>(
+          `select count(*)::text as count from public.documents d
+            where d.org_id = $1
+              and (d.posted_entry_id is not null or d.open_balance is not null)
+              and d.open_balance is distinct from public.document_open_balance_amount(
+                d.org_id, d.posted_entry_id, d.currency, d.status::text)`,
+          [args.expectedOrgId],
+        );
+        if (openBalanceDrift.rows[0]?.count !== "0") {
+          throw new Error("restore left document open-balance caches inconsistent with the restored ledger");
+        }
         // The row triggers that maintain gl_month_activity and
         // party_payment_stats were intentionally disabled during the bulk copy,
         // and those derived tables are deliberately excluded from archives in
