@@ -105,6 +105,41 @@ export interface OverheadApplyResult {
   total: string;
   entries: number;
   projects: number;
+  /** Rate-covered entries whose rounded amount was zero, stamped as
+   * applied-with-zero (no journal) in this call. */
+  dust: number;
+}
+
+/**
+ * Named dust marker (time_entries.custom): hours × rate rounded to 0.0000.
+ * Overhead is statistical — a zero share needs no journal — but the entry
+ * must be stamped so the unapplied counter and the backfill stop counting
+ * it. overhead_journal_entry_id cannot hold the marker (it is a uuid FK to
+ * journal_entries), so the stamp lives in custom, merged (never overwritten).
+ * Readers exclude `(custom->>'overheadZeroApplied') = 'true'`.
+ */
+export const OVERHEAD_ZERO_APPLIED_MARKER = "overheadZeroApplied";
+
+function dustExclusion(entryAlias: string): SQL {
+  return sql`(${sql.raw(entryAlias)}.custom->>${OVERHEAD_ZERO_APPLIED_MARKER}) is distinct from 'true'`;
+}
+
+async function stampOverheadDust(
+  tx: OverheadExecutor,
+  orgId: string,
+  actorId: string,
+  dustIds: string[],
+): Promise<void> {
+  if (dustIds.length === 0) return;
+  await tx.execute(sql`
+    update time_entries
+       set custom = coalesce(custom, '{}'::jsonb) || '{"overheadZeroApplied": true}'::jsonb,
+           updated_at = now(),
+           updated_by = ${actorId}
+     where org_id = ${orgId}
+       and id = any(${`{${dustIds.join(",")}}`}::uuid[])
+       and overhead_journal_entry_id is null
+       and ${dustExclusion("time_entries")}`);
 }
 
 /**
@@ -137,7 +172,7 @@ async function ensureOverheadKernelRule(
  * method 'none'), and whose worked day has a published rate participate.
  */
 export async function applyOverheadForTime(orgId: string, actorId: string, timeEntryIds: string[]): Promise<OverheadApplyResult> {
-  const none: OverheadApplyResult = { entryId: null, total: "0", entries: 0, projects: 0 };
+  const none: OverheadApplyResult = { entryId: null, total: "0", entries: 0, projects: 0, dust: 0 };
   if (timeEntryIds.length === 0) return none;
   // Advisory pre-read: provision the kernel rule outside the posting
   // transaction (its sync owns its transactions) when the policy looks
@@ -166,6 +201,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
            and te.status = 'approved' and te.project_id is not null
            and te.costing_basis = 'actual'
            and te.overhead_journal_entry_id is null
+           and ${dustExclusion("te")}
            and not exists (
              select 1 from projects p
              join project_types pt on pt.id = p.project_type_id and pt.org_id = te.org_id
@@ -200,11 +236,18 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     const byProject = new Map<string, string>();
     const entriesByProject = new Map<string, Array<{ id: string; amount: string }>>();
     const carried: string[] = [];
+    const dust: string[] = [];
     let total = "0";
     let maxDate = "";
     for (const r of rows.rows) {
       const amt = normalizeMoney(String(r.amount));
-      if (isZero(amt)) continue;
+      // Hours × rate rounded to 0.0000: no journal leg, but the entry must
+      // still be stamped applied-with-zero, or the unapplied counter counts
+      // it forever and the backfill breaks on the first all-zero batch.
+      if (isZero(amt)) {
+        dust.push(r.id);
+        continue;
+      }
       byProject.set(r.project_id, add(byProject.get(r.project_id) ?? "0", amt));
       const legEntries = entriesByProject.get(r.project_id);
       if (legEntries) legEntries.push({ id: r.id, amount: amt });
@@ -213,7 +256,13 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
       carried.push(r.id);
       if (r.worked_on > maxDate) maxDate = r.worked_on;
     }
-    if (isZero(total) || carried.length === 0) return none;
+    if (carried.length === 0) {
+      if (dust.length > 0) {
+        await stampOverheadDust(tx, orgId, actorId, dust);
+        return { entryId: null, total: "0", entries: 0, projects: 0, dust: dust.length };
+      }
+      return none;
+    }
 
     // The kernel owns the pair from here: line-building, contributor
     // stamping and lineage come from the system rule in force on the posting
@@ -284,6 +333,9 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     if (stamped.rows.length !== carried.length) {
       throw new Error("overhead posting source claim changed before journal stamping");
     }
+    // Dust in a mixed batch stamps alongside the carried entries, in the
+    // same unit: a crash between the two would strand the backlog again.
+    await stampOverheadDust(tx, orgId, actorId, dust);
     // Lineage: one row per carried entry against its project leg (the offset
     // leg is the deterministic mirror — neg(total) of the same rule version —
     // so it carries no row of its own). Legs post in order, so line numbers
@@ -308,13 +360,14 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
             ${draft.share}, ${draft.amount}, ${draft.residual ?? "0"})`);
       }
     }
-    return { entryId, total, entries: carried.length, projects: byProject.size };
+    return { entryId, total, entries: carried.length, projects: byProject.size, dust: dust.length };
   });
 }
 
 /** How many approved project hours aren't carrying overhead yet (for the
  * workspace's backfill affordance). Counts only entries a backfill could
- * actually carry — a published rate must cover the worked day. */
+ * actually carry — a published rate must cover the worked day, and dust
+ * stamped applied-with-zero is done (it carries no journal by design). */
 export async function countUnappliedOverheadTime(orgId: string): Promise<{ entries: number; hours: string }> {
   const r = (await db.execute<{ entries: number; hours: string }>(sql`
     select count(*)::int as entries, coalesce(sum(te.hours), 0) as hours
@@ -322,6 +375,7 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
      where te.org_id = ${orgId} and te.status = 'approved' and te.project_id is not null
        and te.costing_basis = 'actual'
        and te.overhead_journal_entry_id is null
+       and ${dustExclusion("te")}
        and exists (
          select 1 from overhead_rates r
           where r.rate_kind = 'per_hour' and ${overheadRateAppliesToTimeEntry("r", "te")}
@@ -349,11 +403,13 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
  * the mode being enabled (or arrived via import). Batched so a decade of
  * history doesn't build one giant journal.
  */
-export async function backfillOverhead(orgId: string, actorId: string): Promise<{ entries: number; total: string; journals: number }> {
+export async function backfillOverhead(orgId: string, actorId: string): Promise<{ entries: number; total: string; journals: number; dust: number }> {
   let entries = 0;
   let total = "0";
   let journals = 0;
-  // Loop until no eligible ids remain (each pass stamps what it carries).
+  let dust = 0;
+  // Loop until no eligible ids remain (each pass stamps what it carries —
+  // journals for carried entries, the applied-with-zero marker for dust).
   for (let guard = 0; guard < 200; guard++) {
     const ids = (await db.execute<{ id: string }>(sql`
       select te.id
@@ -361,6 +417,7 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
        where te.org_id = ${orgId} and te.status = 'approved' and te.project_id is not null
          and te.costing_basis = 'actual'
          and te.overhead_journal_entry_id is null
+         and ${dustExclusion("te")}
          and exists (
            select 1 from overhead_rates r
             where r.rate_kind = 'per_hour' and ${overheadRateAppliesToTimeEntry("r", "te")}
@@ -384,12 +441,16 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
        limit 2000`));
     if (ids.rows.length === 0) break;
     const res = await applyOverheadForTime(orgId, actorId, ids.rows.map((r) => r.id));
-    if (!res.entryId) break; // nothing carriable in this batch → stop
+    // An all-dust batch posts no journal but still stamps progress: only
+    // stop when a batch neither carries nor stamps, while unstamped rows
+    // remain the loop must continue past zero batches.
+    if (!res.entryId && res.dust === 0) break;
     entries += res.entries;
+    dust += res.dust;
     total = add(total, res.total);
-    journals++;
+    if (res.entryId) journals++;
   }
-  return { entries, total, journals };
+  return { entries, total, journals, dust };
 }
 
 /** Reverse the overhead pairs carrying these entries (mirror of
