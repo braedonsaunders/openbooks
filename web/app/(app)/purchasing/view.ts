@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import {
   grid,
   page,
@@ -20,6 +20,7 @@ import { resolveAsOf } from '../../../lib/cash/core'
 import { purchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { trendWeekLabel } from '../../../lib/format'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
 import type { AttentionItem } from './sections'
@@ -116,6 +117,7 @@ export async function loadPurchasing(
   if (!authz) redirect('/login')
   if (!['ap.read', 'parties.read'].some((p) => can(authz, p))) assertCan(authz, 'ap.read')
   const t = await getTranslations('purchasing')
+  const locale = await getLocale()
   const tNav = await getTranslations('nav')
   const tr = await getTranslations('reports')
 
@@ -269,7 +271,7 @@ export async function loadPurchasing(
     apHref: `/ap${subQs}`,
     trendTitle: t('home.trend.title'),
     trendHint: t('home.trend.hint'),
-    trendLabels: data.trend.map((w) => weekLabel(w.weekStart)),
+    trendLabels: data.trend.map((w) => trendWeekLabel(w.weekStart, locale)),
     trendSeries: [{ name: t('home.trend.series'), data: data.trend.map((w) => w.spend), color: '#ef4444' }],
     directoryTitle: t('home.directory.title'),
     directory,
@@ -301,14 +303,6 @@ export function needsAttention(
     items.push({ tone: 'warning', text: t('home.attention.unpostedExpenses', { count: unpostedExpenses }), href: '/expenses/reports' })
   }
   return items.slice(0, 6)
-}
-
-export function weekLabel(weekStart: string): string {
-  return new Date(weekStart + 'T00:00:00Z').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
 }
 
 const f = ref<PurchasingData>()
