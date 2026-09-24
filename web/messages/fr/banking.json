@@ -432,6 +432,8 @@
     "detectColumns": "Détecter les colonnes",
     "optionalPlaceholder": "facultatif",
     "nothingNew": "Chaque ligne analysée existe déjà dans ce compte — rien de nouveau à importer.",
+    "skippedNotice": "{count, plural, one {# ligne source écartée sans importation} other {# lignes sources écartées sans importation}}",
+    "skippedRow": "Ligne {line} : {reason}",
     "moreLines": "…et {count, plural, one {# autre ligne} other {# autres lignes}}",
     "totalBadge": "{count, number} au total",
     "possibleDuplicateBadge": "Doublon possible"

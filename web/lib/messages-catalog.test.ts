@@ -688,6 +688,27 @@ test('psp settlement import copy ships localized in every locale', () => {
   }
 })
 
+test('statement skipped-row copy ships localized in every locale', () => {
+  // A-S15: a skipped source row is a visible fact in the import preview —
+  // absent outside en the operator reads English inside an otherwise
+  // translated import dialog. Every leaf must exist and be localized.
+  const source = flattenCatalog('en')
+  const keys = [
+    'banking.import.skippedNotice',
+    'banking.import.skippedRow',
+  ]
+  for (const key of keys) assert.ok(source.get(key), `en is missing ${key}`)
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
+
 test('sample-company failure copy ships localized in every locale', () => {
   // SC-RESUME: the provisioning API reports failures by pipeline stage and
   // the wizard renders the matching localized copy — absent outside en the

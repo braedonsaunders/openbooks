@@ -53,6 +53,36 @@ test("human statement amounts refuse a lone comma two locales could read differe
   }
 });
 
+test("a leading disclaimer row is reported as skipped, never silently dropped", () => {
+  // A bank CSV with a metadata row on top used to lose that row silently:
+  // its date failed, so it was sliced off as the header and the import
+  // agreed with the loss. The row is now reported by line number.
+  const parsed = parseCsv(
+    "Bank export - confidential\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n",
+    { date: 0, amount: 1, description: 2 },
+  );
+  assert.deepEqual(
+    parsed.lines.map((line) => line.amount),
+    ["12.5000", "-5.0000"],
+  );
+  assert.equal(parsed.skipped.length, 1);
+  assert.equal(parsed.skipped[0]!.line, 1);
+  assert.match(parsed.skipped[0]!.reason, /header row/);
+});
+
+test("a transaction-looking first row with a bad date refuses by name", () => {
+  // A parseable amount plus a description reads as a transaction: dropping
+  // the row would lose real money, so the parse refuses with the row number
+  // and the remedy instead of skipping it.
+  assert.throws(
+    () => parseCsv("oops,12.50,salary\n2026-07-01,5.00,coffee\n", { date: 0, amount: 1, description: 2 }),
+    (error: unknown) =>
+      error instanceof BankingError &&
+      /CSV row 1 looks like a transaction/.test(error.message) &&
+      /remove the row|fix the date/.test(error.message),
+  );
+});
+
 test("human statement amounts still accept the unambiguous comma readings", () => {
   // A decimal comma with a one- or two-digit tail ("123,45") is correct in
   // every decimal-comma locale; repeated three-digit groups settle the
@@ -61,7 +91,7 @@ test("human statement amounts still accept the unambiguous comma readings", () =
     'date,amount,description\n2026-07-01,"123,45",salary\n2026-07-02,"1,234,567",refund\n',
     { date: 0, amount: 1, description: 2 },
   );
-  assert.deepEqual(parsed.map((line) => line.amount), ["123.4500", "1234567.0000"]);
+  assert.deepEqual(parsed.lines.map((line) => line.amount), ["123.4500", "1234567.0000"]);
 });
 
 test("statement amounts wider than numeric(19,4) fail closed at parse time", () => {
@@ -78,7 +108,7 @@ test("statement amounts wider than numeric(19,4) fail closed at parse time", () 
   );
   // The column maximum itself still parses in both spellings.
   const csv = parseCsv("date,amount,description\n2026-07-01,999999999999999.9999,salary\n", { date: 0, amount: 1, description: 2 });
-  assert.equal(csv[0]!.amount, "999999999999999.9999");
+  assert.equal(csv.lines[0]!.amount, "999999999999999.9999");
   const bai = parseBai2([baiHeader, "16,165,99999999999999999,S,REF,,deposit/"].join("\n"));
   assert.equal(bai.lines[0]!.amount, "999999999999999.9900");
 });

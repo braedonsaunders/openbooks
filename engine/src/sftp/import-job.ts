@@ -15,6 +15,7 @@ import {
   type CsvMapping,
   type ParsedStatement,
   type ParsedStatementLine,
+  type SkippedStatementRow,
   type StatementSourceContent,
 } from "../banking/banking.ts";
 import { claimPaymentFileDelivery, generatePaymentFileArtifact, markDeliveryUncertain, reclaimExpiredDeliveryClaims, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery, releaseDeliveryClaim } from "../payments/operations.ts";
@@ -87,16 +88,17 @@ function detectFormat(name: string, text: string): Exclude<Fmt, "auto" | "csv"> 
   return null;
 }
 
-function parse(format: Exclude<Fmt, "auto">, content: StatementSourceContent, mapping: CsvMapping | null): { lines: ParsedStatementLine[]; meta: Omit<ParsedStatement, "lines"> } {
+function parse(format: Exclude<Fmt, "auto">, content: StatementSourceContent, mapping: CsvMapping | null): { lines: ParsedStatementLine[]; skipped: SkippedStatementRow[]; meta: Omit<ParsedStatement, "lines"> } {
   // The file's account identifier rides through meta on every format that
   // carries one; CSV has none (its meta stays empty) and relies on
   // watch-folder isolation instead.
-  if (format === "ofx") { const p = parseOfx(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
-  if (format === "camt053") { const p = parseCamt053(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
-  if (format === "bai2") { const p = parseBai2(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
-  if (format === "mt940") { const p = parseMt940(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
+  if (format === "ofx") { const p = parseOfx(content); return { lines: p.lines, skipped: [], meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
+  if (format === "camt053") { const p = parseCamt053(content); return { lines: p.lines, skipped: [], meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
+  if (format === "bai2") { const p = parseBai2(content); return { lines: p.lines, skipped: [], meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
+  if (format === "mt940") { const p = parseMt940(content); return { lines: p.lines, skipped: [], meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
   if (!mapping) throw new Error("CSV import needs a column mapping on the schedule");
-  return { lines: parseCsv(content, mapping), meta: {} };
+  const csvParsed = parseCsv(content, mapping);
+  return { lines: csvParsed.lines, skipped: csvParsed.skipped, meta: {} };
 }
 
 /**
@@ -147,6 +149,8 @@ export interface ScheduleFileOutcome {
   file: string;
   imported: number;
   duplicates: number;
+  /** Source rows the parser set aside (see SkippedStatementRow). */
+  skipped: SkippedStatementRow[];
   /** Statement ids created for this file (empty when deduped or failed). */
   statementIds: string[];
   error?: string;
@@ -255,7 +259,7 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
     if (e.isDir || e.name.startsWith(".")) continue;
     result.filesSeen++;
     const filePath = `${s.folder}/${e.name}`;
-    const outcome: ScheduleFileOutcome = { file: e.name, imported: 0, duplicates: 0, statementIds: [] };
+    const outcome: ScheduleFileOutcome = { file: e.name, imported: 0, duplicates: 0, skipped: [], statementIds: [] };
     result.files.push(outcome);
     try {
       const sourceBytes = await backend.read(filePath);
@@ -265,7 +269,7 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
       // bank exports) before the parser runs.
       const fmt = s.format === "auto" ? detectFormat(e.name, sourceBytes.toString("utf8")) : s.format;
       if (!fmt) throw new Error(`could not detect a statement format for ${e.name}`);
-      const { lines, meta } = parse(fmt, sourceBytes, s.csv_mapping);
+      const { lines, skipped, meta } = parse(fmt, sourceBytes, s.csv_mapping);
       // Identity before import: a stranger file refuses here (recorded on
       // the outcome, left in the folder) instead of becoming this
       // account's lines and balance evidence.
@@ -280,6 +284,7 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
           accountId: s.account_id,
           source: fmt === "csv" ? "csv" : fmt,
           lines,
+          skippedLines: skipped,
           statementDate: meta.statementDate ?? null,
           openingBalance: null,
           closingBalance: meta.closingBalance ?? null,
@@ -298,6 +303,7 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
       result.duplicates += res.duplicates;
       outcome.imported = res.imported;
       outcome.duplicates = res.duplicates;
+      outcome.skipped = res.skipped;
       if (res.statementId) outcome.statementIds.push(res.statementId);
       // Archive the consumed file so it isn't re-imported: a unique dated,
       // content-hashed generation that never overwrites a previous archive

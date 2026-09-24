@@ -432,6 +432,8 @@
     "detectColumns": "Detectar columnas",
     "optionalPlaceholder": "opcional",
     "nothingNew": "Todas las líneas analizadas ya existen en esta cuenta — no hay nada nuevo que importar.",
+    "skippedNotice": "{count, plural, one {# fila de origen apartada sin importar} other {# filas de origen apartadas sin importar}}",
+    "skippedRow": "Fila {line}: {reason}",
     "moreLines": "…y {count, plural, one {# línea más} other {# líneas más}}",
     "totalBadge": "{count, number} en total",
     "possibleDuplicateBadge": "Posible duplicado"

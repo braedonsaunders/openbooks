@@ -91,7 +91,7 @@ test("CAMT.053 carries its statement IBAN and refuses a second one", () => {
 });
 
 test("CSV carries no account identity", () => {
-  assert.equal(parseCsv("date,amount,description\n2026-07-01,12.50,salary\n", { date: 0, amount: 1, description: 2 })[0]?.amount, "12.5000");
+  assert.equal(parseCsv("date,amount,description\n2026-07-01,12.50,salary\n", { date: 0, amount: 1, description: 2 }).lines[0]?.amount, "12.5000");
 });
 
 test("identifier comparison is whitespace-blind and case-blind, never silent", () => {

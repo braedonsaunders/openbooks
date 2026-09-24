@@ -15,11 +15,17 @@ interface PreviewLine {
   possibleDuplicateOf?: string | null
 }
 
+interface SkippedRow {
+  line: number
+  reason: string
+}
+
 interface StatementPreview {
   lines: PreviewLine[]
   imported: number
   duplicates: number
   possibleDuplicates: number
+  skipped: SkippedRow[]
   sourceRevision: number
 }
 
@@ -203,6 +209,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     imported?: number
     duplicates?: number
     possibleDuplicates?: number
+    skipped?: SkippedRow[]
     statementDate?: string
     closingBalance?: string
   }
@@ -283,6 +290,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         imported: data.imported ?? 0,
         duplicates: data.duplicates ?? 0,
         possibleDuplicates: data.possibleDuplicates ?? 0,
+        skipped: data.skipped ?? [],
         sourceRevision: requestRevision,
       })
       const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data
@@ -514,6 +522,19 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 </div>
               </div>
 
+              {preview.skipped.length > 0 ? (
+                <div
+                  role="note"
+                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
+                >
+                  <p>{t('skippedNotice', { count: preview.skipped.length })}</p>
+                  <ul className="mt-1 list-disc pl-5">
+                    {preview.skipped.map((row) => (
+                      <li key={row.line}>{t('skippedRow', { line: row.line, reason: row.reason })}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {preview.imported === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
                   {t('nothingNew')}

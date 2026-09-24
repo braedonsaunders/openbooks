@@ -126,6 +126,7 @@ export async function POST(req: Request) {
     }
 
     let lines: ParsedStatementLine[]
+    let skippedLines: { line: number; reason: string }[] = []
     let meta: Omit<ParsedStatement, 'lines'> = {}
     if (body.source === 'ofx') {
       const parsed = parseOfx(sourceContent)
@@ -135,7 +136,9 @@ export async function POST(req: Request) {
       if (!body.mapping || body.mapping.date == null || body.mapping.amount == null || body.mapping.description == null) {
         return NextResponse.json({ error: 'CSV column mapping (date, amount, description) required' }, { status: 400 })
       }
-      lines = parseCsv(sourceContent, body.mapping)
+      const csvParsed = parseCsv(sourceContent, body.mapping)
+      lines = csvParsed.lines
+      skippedLines = csvParsed.skipped
     } else if (body.source === 'camt053' || body.source === 'bai2' || body.source === 'mt940') {
       const parsed =
         body.source === 'camt053' ? parseCamt053(sourceContent)
@@ -161,6 +164,7 @@ export async function POST(req: Request) {
         accountId: body.accountId,
         source: body.source,
         lines,
+        skippedLines,
         statementDate: body.statementDate ?? meta.statementDate ?? null,
         openingBalance,
         closingBalance: closingFromRequest ?? meta.closingBalance ?? null,
@@ -189,6 +193,7 @@ export async function POST(req: Request) {
       imported: result.imported,
       duplicates: result.duplicates,
       possibleDuplicates: result.possibleDuplicates,
+      skipped: result.skipped,
       statementDate: meta.statementDate ?? null,
       closingBalance: meta.closingBalance ?? null,
       currency: meta.currency ?? null,

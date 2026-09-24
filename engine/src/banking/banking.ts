@@ -654,19 +654,64 @@ function canonicalCsvMapping(mapping: CsvMapping): CsvMapping {
 }
 
 /**
- * Parse CSV text into normalized statement lines using a column mapping.
- * The header row is skipped automatically when the mapped date column of the
- * first row does not parse as a date.
+ * A first row carries a parseable amount plus a description: it reads as a
+ * transaction, so an unparseable date refuses the import rather than
+ * silently dropping the row.
  */
-export function parseCsv(source: StatementSourceContent, mapping: CsvMapping): ParsedStatementLine[] {
+function csvFirstRowLooksLikeTransaction(cols: string[], mapping: CsvMapping): boolean {
+  const description = (cols[mapping.description] ?? "").trim();
+  if (!description) return false;
+  const rawAmount = (cols[mapping.amount] ?? "").trim();
+  try {
+    if (mapping.debitAmount !== undefined) {
+      const rawDebit = (cols[mapping.debitAmount] ?? "").trim();
+      if (rawAmount && rawDebit) return true;
+      if (rawAmount) normalizeAmount(rawAmount, "CSV row 1");
+      else if (rawDebit) normalizeAmount(rawDebit, "CSV row 1");
+      else return false;
+    } else {
+      if (!rawAmount) return false;
+      normalizeAmount(rawAmount, "CSV row 1");
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Parse CSV text into normalized statement lines using a column mapping.
+ * The first row is skipped as a header only when its mapped date column
+ * does not parse as a date AND the row carries no transaction (no parseable
+ * amount with a description) — a leading disclaimer or metadata row is
+ * reported in `skipped`, never silently discarded. A first row that looks
+ * like a transaction but whose date fails refuses the import by row number:
+ * dropping it would lose a real transaction, and guessing is not an option.
+ */
+export function parseCsv(
+  source: StatementSourceContent,
+  mapping: CsvMapping,
+): { lines: ParsedStatementLine[]; skipped: SkippedStatementRow[] } {
   mapping = canonicalCsvMapping(mapping);
   const rows = parseCsvRows(source);
   let start = 0;
-  if (rows[0] && parseCsvDate(rows[0][mapping.date] ?? "") === null) start = 1;
+  const skipped: SkippedStatementRow[] = [];
+  if (rows[0] && parseCsvDate(rows[0][mapping.date] ?? "") === null) {
+    if (csvFirstRowLooksLikeTransaction(rows[0], mapping)) {
+      throw new BankingError(
+        `CSV row 1 looks like a transaction (a parseable amount with a description) but its date "${(rows[0][mapping.date] ?? "").trim()}" does not parse — remove the row if it is a summary or metadata row, otherwise fix the date`,
+      );
+    }
+    start = 1;
+    skipped.push({
+      line: 1,
+      reason: `skipped as a header row: date "${(rows[0][mapping.date] ?? "").trim()}" does not parse and the row carries no transaction amount with a description`,
+    });
+  }
   const dataRows = rows.slice(start);
   if (dataRows.length === 0) throw new BankingError("CSV has a header but no data rows");
 
-  return dataRows.map((cols, i) => {
+  const lines = dataRows.map((cols, i) => {
     const rowNo = start + i + 1;
     const rawDate = (cols[mapping.date] ?? "").trim();
     const postedOn = parseCsvDate(rawDate);
@@ -701,6 +746,7 @@ export function parseCsv(source: StatementSourceContent, mapping: CsvMapping): P
         : null;
     return { postedOn, amount, description, counterpartyRef, bankTransactionId };
   });
+  return { lines, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -1134,6 +1180,18 @@ async function partitionIdlessLines(
   return { lines: fresh, duplicates, possibleDuplicates };
 }
 
+/**
+ * A source row the parser set aside without importing: the 1-based file
+ * line plus the human reason (today: a leading header row). Reported in the
+ * import result and the dry-run preview — a skipped row is a visible fact,
+ * never a silent loss. A row that looks like a transaction is never
+ * skipped: the parse refuses instead (see parseCsv).
+ */
+export interface SkippedStatementRow {
+  line: number;
+  reason: string;
+}
+
 export interface ImportResult {
   /** Null when every line was a duplicate (nothing was written). */
   statementId: string | null;
@@ -1141,6 +1199,8 @@ export interface ImportResult {
   sourceEvidenceRef: string | null;
   imported: number;
   duplicates: number;
+  /** Source rows set aside at parse time (see SkippedStatementRow). */
+  skipped: SkippedStatementRow[];
   /**
    * ID-less lines imported on unproven content overlap, flagged as possible
    * duplicates of an earlier line for review. The reviewer clears the flag
@@ -1281,6 +1341,12 @@ export async function importStatement(
     accountId: string;
     source: StatementSource;
     lines: ParsedStatementLine[];
+    /**
+     * Rows the parser set aside (see SkippedStatementRow): echoed in the
+     * result so the import and the dry-run preview report them. Never
+     * written, never deduped against.
+     */
+    skippedLines?: SkippedStatementRow[];
     statementDate?: string | null;
     openingBalance?: string | null;
     closingBalance?: string | null;
@@ -1290,6 +1356,7 @@ export async function importStatement(
   },
   ctx: BankingContext,
 ): Promise<ImportResult> {
+  const skipped = opts.skippedLines ?? [];
   if (opts.lines.length === 0) throw new BankingError("No statement lines to import");
   // Provenance gate: every persisted statement/line/audit actor comes from
   // ctx.userId, so a no-actor placeholder arriving here would sink into all
@@ -1412,6 +1479,7 @@ export async function importStatement(
         imported: opts.dryRun ? fresh.length : 0,
         duplicates,
         possibleDuplicates,
+        skipped,
         lines: fresh,
       };
     }
@@ -1480,6 +1548,7 @@ export async function importStatement(
       imported: fresh.length,
       duplicates,
       possibleDuplicates,
+      skipped,
       lines: fresh,
     };
   });
