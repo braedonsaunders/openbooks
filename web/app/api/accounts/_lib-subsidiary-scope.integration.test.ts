@@ -53,3 +53,34 @@ test('URL drawer account reads hide out-of-scope subsidiaries and retain shared 
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
 })
+
+test('shared account drawer child counts omit subsidiary-owned children outside the caller scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const hiddenSubsidiary = randomUUID()
+    const sharedParent = randomUUID()
+    const visibleChild = randomUUID()
+    const hiddenChild = randomUUID()
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden child entity', 'CAD', 'CA')
+      `)
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, subsidiary_id, parent_id, is_summary, is_active)
+        values (${sharedParent}, ${scratch.orgId}, '1094', 'Shared summary', 'asset_other', null, null, true, true),
+               (${visibleChild}, ${scratch.orgId}, '1095', 'Visible child account', 'asset_other', ${scratch.subsidiaryId}, ${sharedParent}, false, true),
+               (${hiddenChild}, ${scratch.orgId}, '1093', 'Hidden child account', 'asset_other', ${hiddenSubsidiary}, ${sharedParent}, false, true)
+      `)
+    })
+
+    const unrestricted = await loadAccount(sharedParent, scratch.orgId, null)
+    const restricted = await loadAccount(sharedParent, scratch.orgId, new Set([scratch.subsidiaryId]))
+    assert.equal(unrestricted?.childCount, 2)
+    assert.equal(unrestricted?.activeChildCount, 2)
+    assert.equal(restricted?.childCount, 1)
+    assert.equal(restricted?.activeChildCount, 1)
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
