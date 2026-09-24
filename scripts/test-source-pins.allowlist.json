@@ -61,8 +61,6 @@
     "engine/src/worker/overhead-scheduler.test.ts": 1,
     "web/app/(app)/accounting/changes/accounting-events-ui.test.ts": 2,
     "web/app/(app)/accounts/AccountDrawer.test.ts": 6,
-    "web/app/(app)/admin/pdf-templates/[id]/PdfBuilder.test.ts": 1,
-    "web/app/(app)/admin/settings/SettingsForm.test.ts": 4,
     "web/app/(app)/admin/setup/[entity]/CloseSetupWorkspace.test.ts": 3,
     "web/app/(app)/admin/setup/[entity]/SetupDrawer.test.ts": 10,
     "web/app/(app)/admin/setup/alias-redirects.test.ts": 3,
