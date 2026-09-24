@@ -186,7 +186,9 @@
     },
     "errors": {
       "actionFailed": "Action failed",
-      "couldNotCreate": "Could not create"
+      "couldNotCreate": "Could not create",
+      "couldNotLoad": "Could not load dunning policies",
+      "couldNotDelete": "Could not delete the policy"
     },
     "subscriptions": {
       "mrr": "Monthly recurring revenue",

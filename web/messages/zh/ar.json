@@ -186,7 +186,9 @@
     },
     "errors": {
       "actionFailed": "操作失败",
-      "couldNotCreate": "无法创建"
+      "couldNotCreate": "无法创建",
+      "couldNotLoad": "无法加载催收政策",
+      "couldNotDelete": "无法删除该政策"
     },
     "subscriptions": {
       "mrr": "每月经常性收入",

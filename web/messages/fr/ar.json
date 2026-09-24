@@ -186,7 +186,9 @@
     },
     "errors": {
       "actionFailed": "L’action a échoué",
-      "couldNotCreate": "Création impossible"
+      "couldNotCreate": "Création impossible",
+      "couldNotLoad": "Chargement des relances impossible",
+      "couldNotDelete": "Suppression de la relance impossible"
     },
     "subscriptions": {
       "mrr": "Revenus récurrents mensuels",

@@ -7,11 +7,12 @@
  * status. The body is parsed only to extract a server `{ error }` message,
  * and a body that is not JSON keeps the fallback.
  *
- * Server envelopes carry the refusal in `error` (house clients) and
- * sometimes in `message` (routes shared with non-browser callers); an
- * optional `remedy` names the operator's next step and is appended so the
- * toast carries both the refusal and what to do about it. All three fields
- * are read defensively: a blank or non-string value falls through to the
+ * Server envelopes carry the refusal in `error` (house clients), in
+ * `message` (routes shared with non-browser callers), and in `detail`
+ * (provider ping routes answering `{ ok: false, detail }`); an optional
+ * `remedy` names the operator's next step and is appended so the toast
+ * carries both the refusal and what to do about it. All four fields are
+ * read defensively: a blank or non-string value falls through to the
  * fallback, so the caller can never toast `undefined` or an empty string.
  */
 export async function readApiErrorMessage(res: Response, fallback: string): Promise<string> {
@@ -29,13 +30,11 @@ export async function readApiErrorMessage(res: Response, fallback: string): Prom
 
 function readNamedRefusal(body: unknown): string | null {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) return null
-  const record = body as { error?: unknown; message?: unknown; remedy?: unknown }
+  const record = body as { error?: unknown; message?: unknown; detail?: unknown; remedy?: unknown }
+  const fields = [record.error, record.message, record.detail]
   const refusal =
-    typeof record.error === 'string' && record.error.trim() !== ''
-      ? record.error.trim()
-      : typeof record.message === 'string' && record.message.trim() !== ''
-        ? record.message.trim()
-        : null
+    fields.find((field): field is string => typeof field === 'string' && field.trim() !== '')?.trim() ??
+    null
   if (!refusal) return null
   const remedy =
     typeof record.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null

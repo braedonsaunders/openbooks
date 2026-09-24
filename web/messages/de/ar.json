@@ -186,7 +186,9 @@
     },
     "errors": {
       "actionFailed": "Aktion fehlgeschlagen",
-      "couldNotCreate": "Konnte nicht erstellt werden"
+      "couldNotCreate": "Konnte nicht erstellt werden",
+      "couldNotLoad": "Mahnrichtlinien konnten nicht geladen werden",
+      "couldNotDelete": "Richtlinie konnte nicht gelöscht werden"
     },
     "subscriptions": {
       "mrr": "Monatlich wiederkehrender Umsatz",

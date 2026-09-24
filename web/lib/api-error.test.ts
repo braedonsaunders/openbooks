@@ -63,6 +63,14 @@ test('blank and non-string error fields fall through to the fallback, never an e
   }
 })
 
+test('a detail-only ping refusal surfaces the provider reason', async () => {
+  const res = new Response(JSON.stringify({ ok: false, detail: 'connection timed out after 10s' }), {
+    status: 422,
+    headers: { 'content-type': 'application/json' },
+  })
+  assert.equal(await readApiErrorMessage(res, 'failed'), 'connection timed out after 10s')
+})
+
 test('a blank fallback can never produce an empty message', async () => {
   const res = new Response('<html>proxy page</html>', {
     status: 502,

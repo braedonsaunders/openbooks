@@ -186,7 +186,9 @@
     },
     "errors": {
       "actionFailed": "アクションに失敗しました",
-      "couldNotCreate": "作成できませんでした"
+      "couldNotCreate": "作成できませんでした",
+      "couldNotLoad": "督促ポリシーを読み込めませんでした",
+      "couldNotDelete": "ポリシーを削除できませんでした"
     },
     "subscriptions": {
       "mrr": "月次経常収益",
