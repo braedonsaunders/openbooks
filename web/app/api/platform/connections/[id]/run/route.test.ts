@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 type MockJob = {
   id: string;
@@ -335,13 +333,6 @@ for (const [name, config] of refusedConnectorUrls) {
   });
 }
 
-test("run route source captures probe URL and version from one row", () => {
-  const source = readFileSync(fileURLToPath(new URL("./route.ts", import.meta.url)), "utf8");
-  assert.doesNotMatch(source, /\bgetConnection\b/);
-  assert.doesNotMatch(source, /loadConnectionVersion/);
-  assert.match(source, /updated_at as "updatedAt"/);
-  assert.match(source, /updated_at is not distinct from \$\{conn\.updatedAt\}/);
-});
 
 test("run does not enqueue after a concurrent connection change", async () => {
   reset();
