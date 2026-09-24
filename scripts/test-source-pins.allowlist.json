@@ -49,7 +49,6 @@
     "web/lib/cash/open-items-current-projection.test.ts": 2,
     "web/lib/crm-status-display.test.ts": 2,
     "web/lib/customization/entity-list-query/employment-directory.test.ts": 1,
-    "web/lib/customization/list-view-default-refusal.test.tsx": 2,
-    "web/lib/list/project-type-options.test.ts": 1
+    "web/lib/customization/list-view-default-refusal.test.tsx": 2
   }
 }
