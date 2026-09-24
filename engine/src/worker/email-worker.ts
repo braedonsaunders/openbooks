@@ -123,6 +123,20 @@ export function createEmailWorker(): Worker<EmailJobData> {
         deleteStoredEmailAttachments(d.attachments).catch((error) => {
           console.error("[worker] email attachment cleanup failed:", error instanceof Error ? error.message : error);
         });
+      const deferEmailForReconciliation = async (logId: string, reason: string): Promise<never> => {
+        await appendEmailAttemptEvent(d.orgId, logId, { outcome: "blocked", detail: reason });
+        if (paymentRemittanceId) {
+          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, reason, queueAttempt, true);
+        }
+        if (reportDeliveryId) {
+          const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+          await markReportDeliveryFailed(d.orgId, reportDeliveryId, logId, `delivery pending reconciliation: ${reason}`, finalQueueAttempt);
+        }
+        // Acceptance remains unresolved, so preserve the canonical log as the
+        // authority and prevent a later worker attempt from transmitting again.
+        await dropStagedAttachments();
+        throw new Error(`email delivery deferred by reconciliation: ${reason}`);
+      };
       // The start mark is the worker's lease on this delivery: when the fence
       // rejects it (a racing callback or rebuild sweep already moved the row
       // on), this job is stale and must not transmit — the owning transition
@@ -150,91 +164,15 @@ export function createEmailWorker(): Worker<EmailJobData> {
       // canonical log row) instead of minting new mail.
       const deliveryKey = resolveEmailDeliveryKey(d);
 
-      // Hard sandbox block: a sandbox never sends email, regardless of any
-      // provider config that survived the clone. Recorded as suppressed + acked.
-      if (await isSandboxOrg(d.orgId)) {
-        const claimed = await claimEmailDeliveryLog({
-          orgId: d.orgId,
-          jobId: job.id ?? null,
-          deliveryKey,
-          recipients: [d.to],
-          subject: d.subject,
-          categoryKey: d.meta?.category ?? null,
-          meta: { ...d.meta, reason: "sandbox environment — email egress blocked" },
-          status: "suppressed",
-          errorMessage: "sandbox environment — email egress blocked",
-        });
-        await appendEmailAttemptEvent(d.orgId, claimed.id, {
-          outcome: "suppressed",
-          detail: "sandbox environment — email egress blocked",
-        });
-        await markEmailSuppressed(d.orgId, claimed.id, "sandbox environment — email egress blocked");
-        await dropStagedAttachments();
-        if (paymentRemittanceId) {
-          await markPaymentRemittanceFailed(
-            d.orgId,
-            paymentRemittanceId,
-            "sandbox environment — email egress blocked",
-            queueAttempt,
-            true,
-          );
-        }
-        if (reportDeliveryId) {
-          if (!(await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "sandbox environment — email egress blocked"))) {
-            console.error(
-              `[worker] report delivery ${reportDeliveryId} suppression not applied — ` +
-                `the row moved on under a racing transition; the sandbox suppression stands in email_log ${claimed.id}`,
-            );
-          }
-        }
-        // A dunning claim stays staged here: the letter was never attempted,
-        // so there is no verdict to settle — the evidence names the sandbox
-        // block on the email_log row above, and the runner re-arms the claim
-        // once delivery can really be attempted.
-        return { suppressed: true, sandbox: true };
-      }
-
-      // E05: an UNCONFIGURED org (no provider, delivery disabled) suppresses
-      // and acks below; a CONFIGURED-BUT-UNUSABLE org (rotated session
-      // secret, corrupt credential) must fail and retry with its named
-      // reason — acking it as "not configured" would drop every mail
-      // forever with no alarm.
-      const resolution = await resolveOrgEmailTransportDetailed(d.orgId);
-      if (resolution.state === "unconfigured") {
-        const claimed = await claimEmailDeliveryLog({
-          orgId: d.orgId,
-          jobId: job.id ?? null,
-          deliveryKey,
-          recipients: [d.to],
-          subject: d.subject,
-          categoryKey: d.meta?.category ?? null,
-          meta: { ...d.meta, reason: "email provider not configured" },
-          status: "suppressed",
-          errorMessage: "email provider not configured",
-        });
-        await appendEmailAttemptEvent(d.orgId, claimed.id, {
-          outcome: "suppressed",
-          detail: "email provider not configured",
-        });
-        await markEmailSuppressed(d.orgId, claimed.id, "email provider not configured");
-        await dropStagedAttachments();
-        if (paymentRemittanceId) {
-          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, "email provider not configured", queueAttempt, true);
-        }
-        if (reportDeliveryId) {
-          if (!(await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "email provider not configured"))) {
-            console.error(
-              `[worker] report delivery ${reportDeliveryId} suppression not applied — ` +
-                `the row moved on under a racing transition; the unconfigured-provider suppression stands in email_log ${claimed.id}`,
-            );
-          }
-        }
-        // As above: never attempted, so the dunning claim stays staged with
-        // the cause named on the email_log row, not settled as a verdict.
-        return { suppressed: true };
-      }
-
-      const resolvedTransport = resolution.state === "ready" ? resolution.transport : null;
+      // Resolve and claim before any terminal suppression branch. A retry can
+      // arrive after its prior provider attempt became uncertain and the org
+      // was disabled; that unresolved acceptance must be reconciled first.
+      const sandbox = await isSandboxOrg(d.orgId);
+      const resolution = sandbox ? null : await resolveOrgEmailTransportDetailed(d.orgId);
+      const resolvedTransport = resolution?.state === "ready" ? resolution.transport : null;
+      const suppressionReason = sandbox
+        ? "sandbox environment — email egress blocked"
+        : resolution?.state === "unconfigured" ? "email provider not configured" : null;
       const canonical = await claimEmailDeliveryLog({
         orgId: d.orgId,
         deliveryKey,
@@ -245,12 +183,15 @@ export function createEmailWorker(): Worker<EmailJobData> {
         replyToAddr: resolvedTransport?.replyTo ?? null,
         subject: d.subject,
         categoryKey: d.meta?.category ?? null,
-        meta: d.meta ?? {},
+        meta: suppressionReason ? { ...d.meta, reason: suppressionReason } : d.meta ?? {},
+        ...(suppressionReason ? { status: "suppressed" as const, errorMessage: suppressionReason } : {}),
       });
       const nextAttemptNo = canonical.attempts.length + 1;
 
       // Reconciliation gate BEFORE any transmission: earlier attempts decide.
-      const decision = reconcileDeliveryAttempts(canonical.attempts);
+      const decision = canonical.status === "uncertain"
+        ? { action: "suppress" as const, reason: canonical.attempts.at(-1)?.detail ?? "a previous provider attempt remains uncertain" }
+        : reconcileDeliveryAttempts(canonical.attempts);
       if (decision.action === "complete") {
         // An earlier attempt was accepted by the provider; finish bookkeeping
         // without sending anything again.
@@ -277,23 +218,26 @@ export function createEmailWorker(): Worker<EmailJobData> {
         return { id: decision.providerMessageId, reconciled: true };
       }
       if (decision.action === "suppress") {
-        await appendEmailAttemptEvent(d.orgId, canonical.id, {
-          outcome: "blocked",
-          detail: decision.reason,
-        });
-        if (paymentRemittanceId) {
-          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, decision.reason, queueAttempt, true);
+        await deferEmailForReconciliation(canonical.id, decision.reason);
+      }
+
+      if (suppressionReason) {
+        // A concurrent uncertain transition after the read fence must also
+        // stand down. Do not record a suppression verdict or settle dependants
+        // unless the canonical email row actually reached that terminal state.
+        if (!(await markEmailSuppressed(d.orgId, canonical.id, suppressionReason))) {
+          await deferEmailForReconciliation(canonical.id, "a previous provider attempt remains uncertain");
         }
-        if (reportDeliveryId) {
-          const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-          await markReportDeliveryFailed(d.orgId, reportDeliveryId, canonical.id, `delivery pending reconciliation: ${decision.reason}`, finalQueueAttempt);
-        }
-        // Terminal for this job's lifetime: the gate suppresses every later
-        // retry of this delivery key, so the staged bytes can never be
-        // fetched again — drop them now that the blocked evidence above is
-        // durable on the log lineage. The no-resend gate itself is untouched.
+        await appendEmailAttemptEvent(d.orgId, canonical.id, { outcome: "suppressed", detail: suppressionReason });
         await dropStagedAttachments();
-        throw new Error(`email delivery deferred by reconciliation: ${decision.reason}`);
+        if (paymentRemittanceId) {
+          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, suppressionReason, queueAttempt, true);
+        }
+        if (reportDeliveryId && !(await markReportDeliverySuppressed(d.orgId, reportDeliveryId, canonical.id, suppressionReason))) {
+          console.error(`[worker] report delivery ${reportDeliveryId} suppression not applied — row moved on under a racing transition; the suppression stands in email_log ${canonical.id}`);
+        }
+        // Dunning remains staged: no provider attempt was made.
+        return { suppressed: true, ...(sandbox ? { sandbox: true } : {}) };
       }
 
       const transport = resolvedTransport;
@@ -312,7 +256,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
         // configured" forever. The mail was never transmitted.
         if (!transport) {
           throw new Error(
-            `email provider is configured but unusable: ${resolution.state === "unusable" ? resolution.reason : "unknown transport fault"} — ` +
+            `email provider is configured but unusable: ${resolution?.state === "unusable" ? resolution.reason : "unknown transport fault"} — ` +
               `fix the provider credential, then the queued retry sends`,
           );
         }
