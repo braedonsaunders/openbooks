@@ -3018,7 +3018,7 @@ export async function setPackSlotAccount(
 ): Promise<void> {
   const pack = PAYROLL_COUNTRY_PACKS[country];
   const slot = pack?.statutorySlots.find((s) => s.key === slotKey);
-  if (!slot) throw new Error(`unknown payroll pack slot ${country}/${slotKey}`);
+  if (!slot) throw new PayrollPackError(`unknown payroll pack slot ${country}/${slotKey}`);
   if (slot.components.length === 0) return;
   const updated = await db.execute(sql`
     update pay_components

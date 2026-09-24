@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { AU_PACK_RATES } from "./au/rates.ts";
 import { CA_PACK_RATES } from "./canada/rates.ts";
-import { declaredPackRates, packSlotAppliesToPopulation, payrollPack } from "./packs.ts";
+import {
+  declaredPackRates, packSlotAppliesToPopulation, payrollPack, setPackSlotAccount,
+} from "./packs.ts";
+import { PayrollPackError } from "./payroll-error.ts";
 import {
   assertConfiguredStatutoryRates,
   buildResolution,
@@ -217,6 +220,21 @@ test("account slots demand when the population's region is undeclared", () => {
   assert.equal(
     packSlotAppliesToPopulation(slot("hsf"), "CA", new Map([["CA", new Set(["AB"])]])),
     false, "HSF inert for declared-but-inapplicable AB",
+  );
+});
+
+test("mapping an unknown slot refuses as a pack error, not a bare Error", async () => {
+  // The settings surface maps PayrollPackError to a client refusal and lets
+  // a bare Error escape as a 500: an unknown slot key is a client mistake,
+  // not a server failure. The lookup throws before any database write, so no
+  // fixture is needed — and the sweep holds: packs.ts throws no bare Errors.
+  await assert.rejects(
+    setPackSlotAccount("org", "actor", "CA", "NOPE", null),
+    (error: unknown) => {
+      assert.ok(error instanceof PayrollPackError, `threw ${(error as Error)?.constructor?.name}`);
+      assert.match((error as Error).message, /unknown payroll pack slot CA\/NOPE/);
+      return true;
+    },
   );
 });
 
