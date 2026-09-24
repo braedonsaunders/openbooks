@@ -1,17 +1,17 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { TENANT_TABLE_POLICIES, type TenantTablePolicy } from "./tenant-table-policies.ts";
 
 /**
- * Catalog introspection for the clone engine. Rather than hardcode 119 tables,
- * we read the live Postgres catalog: the set of tenant tables is "every base
- * table with an org_id column", and the FK graph comes from pg_constraint. This
- * makes the clone engine self-maintaining — new tables that follow the orgRef
- * convention are cloned automatically.
+ * Catalog introspection for the clone engine. The live Postgres catalog
+ * supplies tenant tables and FK dependencies; tenant-table-policies.ts requires
+ * each discovered tenant table to be explicitly classified for copy/skip and
+ * identifier rebasing before a clone may proceed.
  */
 
 /** org-less child tables that still belong to a tenant via a parent, so they
  * must be rebased too. Each needs a bespoke source filter (see PARENT_FILTER). */
-const EXTRA_REBASE = ["file_versions", "file_blobs", "tax_group_members"] as const;
+export const EXTRA_REBASE = ["file_versions", "file_blobs", "tax_group_members"] as const;
 
 /** Nullable back-links cleared only inside the guarded sandbox-wipe transaction
  * to break genuine NO ACTION cycles before immediate FK-ordered deletion. */
@@ -35,7 +35,7 @@ const TRIGGER_INSERT_PARENTS: Readonly<Record<string, string>> = {
 /** Tables never copied into a sandbox: sandbox-management tables, real-world
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
-const EXCLUDE = new Set([
+export const EXCLUDE = new Set([
   "orgs",
   "sandboxes",
   "masking_policies",
@@ -267,8 +267,30 @@ export async function loadCatalog(): Promise<Catalog> {
   const tenantSet = new Set<string>();
   for (const t of byTable.values()) if (t.hasOrgId) tenantSet.add(t.name);
   for (const e of EXTRA_REBASE) if (byTable.has(e)) tenantSet.add(e);
-  const rebaseSet = new Set(tenantSet);
-  for (const e of EXCLUDE) rebaseSet.delete(e);
+  const policies = TENANT_TABLE_POLICIES as Record<string, TenantTablePolicy>;
+  const unclassified = [...tenantSet].filter((name) => !policies[name]);
+  const stale = Object.keys(policies).filter((name) => !tenantSet.has(name));
+  if (unclassified.length || stale.length) {
+    throw new Error(
+      `sandbox clone table policy is out of date; classify new tenant tables (${unclassified.join(", ") || "none"}) ` +
+      `and remove retired tables (${stale.join(", ") || "none"})`,
+    );
+  }
+  const policySkips = new Set(Object.entries(policies)
+    .filter(([, policy]) => policy === "skip:no-copy")
+    .map(([name]) => name));
+  const tenantExclusions = new Set([...EXCLUDE].filter((name) => tenantSet.has(name)));
+  const exclusionDrift = [...new Set([...tenantExclusions, ...policySkips])]
+    .filter((name) => tenantExclusions.has(name) !== policySkips.has(name));
+  if (exclusionDrift.length) {
+    throw new Error(`sandbox clone skip policies disagree with exclusion rationale for: ${exclusionDrift.join(", ")}`);
+  }
+  const parentFilterDrift = [...tenantSet].filter((name) =>
+    (policies[name] === "clone:parent-filter") !== (name in PARENT_FILTER));
+  if (parentFilterDrift.length) {
+    throw new Error(`sandbox clone parent-filter policies disagree for: ${parentFilterDrift.join(", ")}`);
+  }
+  const rebaseSet = new Set([...tenantSet].filter((name) => policies[name] !== "skip:no-copy"));
 
   // Infer references for uuid `<name>_id` columns that carry NO foreign-key
   // constraint (schema drift left many internal references unconstrained — e.g.
