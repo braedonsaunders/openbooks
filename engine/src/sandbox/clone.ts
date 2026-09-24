@@ -16,6 +16,11 @@ import { copyS3Blob, deleteS3Blobs, MASKED_STORAGE_KIND } from "../platform/file
 
 export type SandboxTier = "dev" | "masked" | "full" | "as_of";
 
+export function validateSandboxTier(value: unknown): SandboxTier {
+  if (value === "dev" || value === "masked" || value === "full" || value === "as_of") return value;
+  throw new Error(`invalid sandbox tier ${JSON.stringify(value)}; choose dev, masked, full, or as_of`);
+}
+
 export interface CloneOptions {
   productionOrgId: string;
   sandboxOrgId: string;
@@ -335,6 +340,7 @@ export function selectCloneTables(
   tier: SandboxTier,
   onlyTables?: Set<string>,
 ): TableInfo[] {
+  tier = validateSandboxTier(tier);
   // Dev also needs the legal-entity tree so copied roles have real scope
   // targets. Keep it outside CUSTOMIZATION_LAYER: refresh must refresh that
   // reference data even when preserving role customizations.
@@ -345,6 +351,7 @@ export function selectCloneTables(
 }
 
 export async function runClone(opts: CloneOptions): Promise<CloneResult> {
+  validateSandboxTier(opts.tier);
   const cat = await loadCatalog();
   const { tables, rebaseSet } = cat;
   const retainedTenantTables = new Set(
