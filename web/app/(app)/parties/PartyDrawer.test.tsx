@@ -247,6 +247,8 @@ async function renderDrawer(options: {
   payload?: Record<string, unknown>;
   role?: "customer" | "vendor" | "employee";
   recordType?: "customer" | "vendor" | "employee";
+  /** Unified /parties directory scope: no role or record type is forced. */
+  generic?: boolean;
   initialMode?: "view" | "edit";
   initialTab?: string;
   grants?: Record<string, unknown>;
@@ -279,8 +281,8 @@ async function renderDrawer(options: {
               fieldDefs={[]}
               subsidiaries={[]}
               canManage
-              role={options.role ?? "vendor"}
-              recordType={options.recordType ?? "vendor"}
+              role={options.generic ? undefined : (options.role ?? "vendor")}
+              recordType={options.generic ? undefined : (options.recordType ?? "vendor")}
               initialMode={(options.initialMode ?? "view") as never}
               initialTab={(options.initialTab ?? "overview") as never}
               {...(options.grants ?? {})}
@@ -872,4 +874,87 @@ test("compliance class selection survives a tab round-trip", async (t) => {
     .find((section) => section.textContent?.includes(en("parties.drawer.compliance.heading")))
     ?.querySelector("select") as HTMLSelectElement | null;
   assert.equal(revived?.value, "c1", "the chosen class must survive the tab round-trip");
+});
+
+// OM-16c: a stored company-kind party with no role rows is repaired by
+// choosing a role-bearing kind. The server refuses an unbacked kind by name
+// ("turn on the role"), and the overview tab offers no role control — so the
+// kind choice itself must carry the role enablement in the same save.
+// Each test picks the kind, clicks Save, and reads the PATCH body the drawer
+// sends: without the echo the server 422s and the party stays stranded.
+const ORPHAN_PAYLOAD = {
+  ...VENDOR_PAYLOAD,
+  party: { ...VENDOR_PAYLOAD.party, display_name: "Acme Industrial Supply", kind: "company" },
+  customer: null,
+  vendor: null,
+  employee: null,
+};
+
+async function saveWithKind(kind: "customer" | "vendor" | "employee"): Promise<Record<string, unknown>> {
+  const bodies: Record<string, unknown>[] = [];
+  const { done } = await renderDrawer({
+    generic: true,
+    payload: ORPHAN_PAYLOAD,
+    initialMode: "edit",
+    fetchHandler: (url, init) => {
+      if (url.includes("/api/parties/") && init?.method === "PATCH") {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return Response.json({ party: { is_active: true } });
+      }
+      return null;
+    },
+  });
+  try {
+    const select = kindSelect();
+    assert.ok(select, "edit mode must offer a kind control");
+    await act(async () => {
+      setSelectValue(select, kind);
+      await tick();
+    });
+    await tick();
+    const save = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === en("common.actions.save"),
+    ) as HTMLButtonElement | undefined;
+    assert.ok(save, "edit mode must offer a save control");
+    await act(async () => {
+      save.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+    });
+    await tick();
+    await tick();
+    assert.equal(bodies.length, 1, "one PATCH must carry the repair");
+    return bodies[0]!;
+  } finally {
+    await done();
+  }
+}
+
+test("choosing kind vendor in the generic edit drawer enables the vendor role in the save", async () => {
+  const body = await saveWithKind("vendor");
+  assert.equal(body.kind, "vendor");
+  assert.equal(
+    ((body.roles as Record<string, { enabled: boolean }>).vendor ?? {}).enabled,
+    true,
+    "the kind choice must carry roles.vendor.enabled so the audited save backs the claim",
+  );
+});
+
+test("choosing kind customer in the generic edit drawer enables the customer role in the save", async () => {
+  const body = await saveWithKind("customer");
+  assert.equal(body.kind, "customer");
+  assert.equal(
+    ((body.roles as Record<string, { enabled: boolean }>).customer ?? {}).enabled,
+    true,
+    "the kind choice must carry roles.customer.enabled so the audited save backs the claim",
+  );
+});
+
+test("choosing kind employee in the generic edit drawer enables the employee role in the save", async () => {
+  const body = await saveWithKind("employee");
+  assert.equal(body.kind, "employee");
+  assert.equal(
+    ((body.roles as Record<string, { enabled: boolean }>).employee ?? {}).enabled,
+    true,
+    "the kind choice must carry roles.employee.enabled so the audited save backs the claim",
+  );
 });

@@ -608,7 +608,9 @@ export function PartyDrawer({
         : undefined,
       roles: {
         customer: {
-          enabled: forcesCustomerRole ? true : customer.enabled,
+          // Same kind-echo as vendor below: choosing Kind Customer in the
+          // generic drawer repairs the orphan in the same audited save.
+          enabled: forcesCustomerRole || kind === 'customer' ? true : customer.enabled,
           paymentTermsId: customer.paymentTermsId || null,
           creditLimit: customer.creditLimit || null,
           ...(multiCurrency ? { currency: customer.currency || null } : {}),
@@ -620,12 +622,16 @@ export function PartyDrawer({
         },
         vendor: {
           // OM-16: choosing Kind Vendor means the vendor role. A role-scoped
-          // drawer forces its own role (first clause); in unsaved-create the
-          // drawer writes kind+role atomically through this same payload —
-          // the server refuses an unbacked role-kind by name — so an explicit
+          // drawer forces its own role (first clause); otherwise the drawer
+          // writes kind+role atomically through this same payload — the
+          // server refuses an unbacked role-kind by name — so an explicit
           // kind choice enables its role instead of stranding Save on a
-          // remedy the overview tab cannot reach.
-          enabled: role === 'vendor' || (createMode && kind === 'vendor') ? true : vendor.enabled,
+          // remedy the overview tab cannot reach. In create mode the choice
+          // creates the backing row; in edit mode it repairs an orphan (a
+          // legacy row whose kind outlived its role). An unchecked role box
+          // beside a role-kind kind still sends enabled — kind is the master
+          // switch, and the server forbids the split pairing anyway.
+          enabled: role === 'vendor' || kind === 'vendor' ? true : vendor.enabled,
           paymentMethod: vendor.paymentMethod || null,
           eftNotificationEmail: vendor.eftNotificationEmail || null,
           paymentTermsId: vendor.paymentTermsId || null,
@@ -638,7 +644,9 @@ export function PartyDrawer({
           holdReason: vendor.isOnHold ? vendor.holdReason : null,
         },
         employee: {
-          enabled: role === 'employee' ? true : employee.enabled,
+          // Same kind-echo as vendor: choosing Kind Employee in the generic
+          // drawer repairs the orphan in the same audited save.
+          enabled: role === 'employee' || kind === 'employee' ? true : employee.enabled,
           employeeNumber: employee.employeeNumber || null,
           jobTitle: employee.jobTitle || null,
           departmentId: employee.departmentId || null,
@@ -651,7 +659,7 @@ export function PartyDrawer({
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at, placeholderName, forcesCustomerRole, createMode],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at, placeholderName, forcesCustomerRole],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `skipDirty` is a
