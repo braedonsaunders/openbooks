@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
 import {
   checkApprovalIdentitySeparation,
   HrmAuthorizationError,
@@ -1026,9 +1028,9 @@ export interface ListChangeRequestsQuery {
 const LIST_STATUSES = ["draft", "pending_approval", "approved", "rejected", "withdrawn", "applied"] as const;
 
 /**
- * List requests in this org (newest first). Every returned row passes the
- * kind-aware read gate, so a caller sees only employments in their
- * organization and legal-entity scope — plus their own profile proposals.
+ * List requests newest-first with access predicates applied before the
+ * limit. Restricted HR sees only its legal entities, plus its own profile
+ * proposals when self-service read is granted.
  */
 export async function listChangeRequests(query: ListChangeRequestsQuery): Promise<ChangeRequestDTO[]> {
   const orgId = requireOrgId(query.orgId);
@@ -1044,20 +1046,42 @@ export async function listChangeRequests(query: ListChangeRequestsQuery): Promis
     throw new HrmChangeRequestError("INVALID_PAYLOAD", "limit must be an integer from 1 to 500");
   }
   return withOrgTransaction(orgId, async () => {
+    const canReadEmployment = await actorHasPermission(db, orgId, actorId, "hrm.employment.read");
+    const canReadOwnProfile = await actorHasPermission(db, orgId, actorId, "hrm.self.read");
+    if (!canReadEmployment && !canReadOwnProfile) {
+      throw new HrmAuthorizationError(
+        "Employment access requires the hrm.employment.read permission — ask an administrator to grant it in /admin/roles.",
+      );
+    }
+    const allowedSubsidiaries = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    const partyId = canReadOwnProfile
+      ? (await db.execute<{ party_id: string | null }>(sql`
+          select party_id::text as party_id from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.party_id ?? null
+      : null;
+    const employerFilter = allowedSubsidiaries === null
+      ? sql`true`
+      : allowedSubsidiaries.size === 0
+        ? sql`false`
+        : sql`e.employer_subsidiary_id = any(${`{${[...allowedSubsidiaries].join(",")}}`}::uuid[])`;
+    const subsidiaryFilter = canReadEmployment ? employerFilter : sql`false`;
+    const ownProfileFilter = partyId === null
+      ? sql`false`
+      : sql`(r.payload ->> 'kind' = 'profile_change'
+             and e.worker_party_id = ${partyId}::uuid and ${employerFilter})`;
     const rows = (await db.execute<RequestRow>(sql`
-      select ${REQUEST_COLUMNS} from hrm_employment_change_requests
-       where org_id = ${orgId}
-         ${query.employmentId ? sql`and employment_id = ${query.employmentId}` : sql``}
-         ${query.status ? sql`and status = ${query.status}` : sql``}
-       order by created_at desc, id desc
+      select ${REQUEST_COLUMNS} from hrm_employment_change_requests r
+       where r.org_id = ${orgId}
+         ${query.employmentId ? sql`and r.employment_id = ${query.employmentId}` : sql``}
+         ${query.status ? sql`and r.status = ${query.status}` : sql``}
+         and exists (
+           select 1 from worker_employments e
+            where e.org_id = r.org_id and e.id = r.employment_id
+              and (${subsidiaryFilter} or ${ownProfileFilter})
+         )
+       order by r.created_at desc, r.id desc
        limit ${limit}
     `)).rows;
-    const visible: ChangeRequestDTO[] = [];
-    for (const row of rows) {
-      await requireRequestReadAccess(db, orgId, actorId, row.employment_id, row.payload);
-      visible.push(toDTO(row));
-    }
-    return visible;
+    return rows.map(toDTO);
   });
 }
 
@@ -2677,6 +2701,3 @@ async function bumpGraphRevision(exec: SqlExecutor, orgId: string): Promise<void
     on conflict (org_id) do update set rev = hrm_graph_revisions.rev + 1, updated_at = now()
   `);
 }
-
-
-
