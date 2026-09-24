@@ -262,7 +262,7 @@ test("restricted save-rate refuses org-wide job-title, trade, and default rates 
     for (const scope of [
       { jobTitle: "Field technician" },
       { tradeId: "00000000-0000-7000-8000-000000000001" },
-      {},
+      { employeePartyId: await seedEmployee(f.orgId, null) },
     ]) {
       const response = await POST(postRequest(saveRateBody(scope)));
       assert.equal(response.status, 403);
