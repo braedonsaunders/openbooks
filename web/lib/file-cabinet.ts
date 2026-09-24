@@ -348,10 +348,14 @@ function recordScopeFilePredicate(
   ))`
 }
 
-/** A live file belongs to the org and is not in the trash. Shared by metadata,
- * byte, list, and export readers so a stale manifest cannot revive a trashed row. */
+/** A live file belongs to the org, is not in trash, and is not a DSAR export
+ * reserved for its HR permission-gated delivery route. */
 export function liveFilePredicate(orgId: string): SQL {
-  return sql`fi.org_id = ${orgId} and not fi.is_inactive`
+  return sql`fi.org_id = ${orgId} and not fi.is_inactive
+    and not exists (
+      select 1 from hrm_data_subject_exports ds
+       where ds.org_id = fi.org_id and ds.file_id = fi.id
+    )`
 }
 
 /** The shared file-row fence used by lists and every folder file-count projection. */

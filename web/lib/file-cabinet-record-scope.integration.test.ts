@@ -189,16 +189,17 @@ test('generic cabinet readers require AP read for AP capture even with a file gr
     assert.equal(await getFolder(org.orgId, folderId, noApPermission), null)
     assert.ok(await getFile(org.orgId, fileId, withApPermission))
     assert.ok(await getFileBlob(org.orgId, fileId, withApPermission))
+    await db.execute(sql`insert into hrm_data_subject_exports(org_id, party_id, requested_by, file_id, scope)
+      values (${org.orgId}, ${org.customerId}, ${actorId}, ${fileId}, '[]'::jsonb)`)
+    assert.equal(await getFile(org.orgId, fileId, withApPermission), null)
+    assert.equal(await getFileBlob(org.orgId, fileId, withApPermission), null)
   } finally {
     await dropScratchOrg(org.orgId)
   }
 })
 
 /**
- * Attachment-target fence: a file evidences every record it is attached to,
- * its links — must stay invisible (metadata and bytes) to viewers outside the
- * targets' subsidiaries. Every target must be in-fence; an explicit file
- * grant re-opens exactly its file.
+ * Attachment-target fence: every attachment target must be in-fence.
  */
 test('cabinet reads hide files attached to out-of-fence records', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -235,12 +236,10 @@ test('cabinet reads hide files attached to out-of-fence records', { skip: !proce
       await db.execute(sql`update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${org.orgId}`)
       return fileId
     }
-    // Common-folder files linked across the fence, one multi-attached, one free.
     const onlyA = await mkFile('s19-only-a.txt', commonId)
     const onlyB = await mkFile('s19-only-b.txt', commonId)
     const bothAB = await mkFile('s19-both-ab.txt', commonId)
     const free = await mkFile('s19-free.txt', commonId)
-    // A scoped-leaf file carrying its own attachment link (the move scenario).
     const leafFile = await mkFile('s19-leaf.txt', leafAId)
     assert.ok(await attachExisting({ orgId: org.orgId, fileId: onlyA, targetTable: 'documents', targetId: docA, createdBy: actorId }))
     assert.ok(await attachExisting({ orgId: org.orgId, fileId: onlyB, targetTable: 'documents', targetId: docB, createdBy: actorId }))
