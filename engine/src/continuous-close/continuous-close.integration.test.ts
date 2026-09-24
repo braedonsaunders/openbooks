@@ -496,6 +496,65 @@ test(
 );
 
 test(
+  "a balanced stale reconciliation persists its sign-off recommendation for review",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    const reconciliationId = randomUUID();
+    try {
+      const detectorSettings = Object.fromEntries(
+        defaultContinuousCloseDetectors("reconciliation").map((detector) => [
+          detector.detectorKey,
+          { enabled: detector.detectorKey === "stale_reconciliation" },
+        ]),
+      );
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          insert into ai_agent_policies
+            (id, org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
+             detector_settings, analysis_settings, next_run_at)
+          values (${randomUUID()}, ${org.orgId}, 'reconciliation', true, false, 'daily', '1000',
+                  ${JSON.stringify(detectorSettings)}::jsonb,
+                  ${JSON.stringify({ rootCauseAnalysis: false, recommendations: false, narrative: false })}::jsonb,
+                  null)
+        `);
+        await db.execute(sql`
+          insert into reconciliations
+            (id, org_id, account_id, through_date, statement_balance, status, currency)
+          values (${reconciliationId}, ${org.orgId}, ${org.accounts.bank}, ${org.date}, '0', 'in_progress', 'CAD')
+        `);
+        await db.execute(sql`
+          update reconciliations set updated_at = now() - interval '10 days'
+           where id = ${reconciliationId} and org_id = ${org.orgId}
+        `);
+      });
+
+      const result = await runContinuousCloseAgent({
+        orgId: org.orgId,
+        agentKey: "reconciliation",
+        trigger: "manual",
+        allowedSubsidiaryIds: null,
+      });
+      assert.equal(result.status, "completed");
+      assert.equal(result.detected, 1);
+      const item = (await withBypassContext(() => db.execute<{ summary: Record<string, unknown> }>(sql`
+        select summary from ai_work_items
+         where org_id = ${org.orgId} and subject_id = ${reconciliationId}
+           and finding_type = 'stale_reconciliation'
+      `))).rows[0];
+      assert.ok(item, "the scan persists its stale reconciliation finding");
+      assert.deepEqual(item.summary.proposedCommand, {
+        tool: "sign_off_reconciliation",
+        input: { reconciliationId },
+        label: `Sign off Cash through ${org.date}`,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
   "a subsidiary-restricted manual scan is refused before any run, finding, or auto-resolution",
   { skip: !DB },
   async () => {

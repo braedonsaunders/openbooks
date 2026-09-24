@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { findingSummaryWithProposal } from "./continuous-close.ts";
 
 // A pack's proposed command travels inside the persisted summary so the Agent
@@ -29,11 +28,4 @@ test("absent proposal leaves the summary identical", () => {
   const summary = { count: 3 };
   assert.equal(findingSummaryWithProposal(summary, null), summary);
   assert.equal(findingSummaryWithProposal(summary, undefined), summary);
-});
-
-test("persistFinding stores the merged summary", () => {
-  const source = readFileSync(new URL("./continuous-close.ts", import.meta.url), "utf8");
-  const body = source.slice(source.indexOf("async function persistFinding"));
-  assert.match(body, /findingSummaryWithProposal\(finding\.summary, finding\.proposal\)/);
-  assert.match(body, /\$\{JSON\.stringify\(summary\)\}::jsonb/);
 });
