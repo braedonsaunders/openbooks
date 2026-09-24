@@ -165,7 +165,7 @@ export async function loadProjectProfitability(
       orgId: authz.user.orgId,
     }),
     dimensionOptions(authz.user.orgId, undefined, dims.subsidiaryIds),
-    projectProfitabilityCustomerOptions(authz.user.orgId),
+    projectProfitabilityCustomerOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
     orgBranding(authz.user.orgId),
   ])
 
