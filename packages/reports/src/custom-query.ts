@@ -721,9 +721,8 @@ function dimExpr(entity: ReportEntity, b: ReportBreakout, startMonth = 1): strin
   const ref = columnRef(entity, b.column)!
   const bin = b.bin && REPORT_TEMPORAL_BINS.includes(b.bin) ? b.bin : null
   if (!bin) return ref
-  if (bin === 'fiscal_period') return `date_trunc('month', ${ref})`
-  if (bin === 'fiscal_quarter' || bin === 'fiscal_year') {
-    const unit = bin === 'fiscal_year' ? 'year' : 'quarter'
+  if (bin === 'fiscal_period' || bin === 'fiscal_quarter' || bin === 'fiscal_year') {
+    const unit = bin === 'fiscal_period' ? 'month' : bin === 'fiscal_year' ? 'year' : 'quarter'
     const shift = startMonth - 1
     if (shift === 0) return `date_trunc('${unit}', ${ref})`
     return `(date_trunc('${unit}', (${ref})::timestamp - interval '${shift} months') + interval '${shift} months')`
