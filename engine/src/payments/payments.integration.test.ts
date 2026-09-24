@@ -2696,6 +2696,8 @@ test("an in-flight automatic remittance decision holds the run against a concurr
         instruction_status: string;
         claim_token: boolean;
         remittances: number;
+        remittance_status: string;
+        remittance_stamp_missing: boolean;
       }>(sql`
         select run.status as run_status,
                (select status from payment_instructions
@@ -2703,16 +2705,25 @@ test("an in-flight automatic remittance decision holds the run against a concurr
                run.posting_claim_token is not null as claim_token,
                (select count(*)::int from payment_remittances remittance
                   where remittance.payment_instruction_id = ${seeded.instructionIds[0]!}
-                    and remittance.org_id = ${org.orgId}) as remittances
+                    and remittance.org_id = ${org.orgId}) as remittances,
+               (select status from payment_remittances remittance
+                  where remittance.payment_instruction_id = ${seeded.instructionIds[0]!}
+                    and remittance.org_id = ${org.orgId}) as remittance_status,
+               (select remittance_email_sent_at is null from payment_instructions
+                  where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}) as remittance_stamp_missing
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
       `)).rows[0]);
-    assert.deepEqual(final, {
-      run_status: "confirmed",
-      instruction_status: "sent",
-      claim_token: false,
-      remittances: 1,
-    });
+    assert.ok(final, "the posting run and staged remittance must remain observable");
+    assert.equal(final.run_status, "confirmed");
+    assert.equal(final.instruction_status, "sent");
+    assert.equal(final.claim_token, false);
+    assert.equal(final.remittances, 1);
+    assert.ok(
+      final.remittance_status === "pending" || final.remittance_status === "failed",
+      `queueing must leave delivery unconfirmed; observed ${final.remittance_status}`,
+    );
+    assert.equal(final.remittance_stamp_missing, true, "posting cannot stamp delivery before the email worker confirms it");
   } finally {
     releaseProfileTable?.();
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -2769,6 +2780,54 @@ test("posting completion reconciles a worker-confirmed remittance onto its instr
       run_status: "confirmed",
       remittance_status: "sent",
       stamp_missing: false,
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("posting completion leaves a queued remittance unstamped until delivery confirmation", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Pending remittance", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1, { autoRemittance: false }));
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`
+        update payment_instructions
+           set status = 'sent', updated_at = now(), updated_by = ${actorId}
+         where id = ${seeded.instructionId} and org_id = ${org.orgId}
+      `);
+      await db.execute(sql`
+        insert into payment_remittances
+          (org_id, payment_instruction_id, recipients, status, attempt_count, created_by, updated_by)
+        values
+          (${org.orgId}, ${seeded.instructionId}, '["ap@example.test"]'::jsonb,
+           'pending', 0, ${actorId}, ${actorId})
+      `);
+    });
+
+    await postPaymentRun(seeded.runId, org.orgId, actorId);
+
+    const after = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{
+        run_status: string;
+        remittance_status: string;
+        stamp_missing: boolean;
+      }>(sql`
+        select run.status as run_status,
+               remittance.status as remittance_status,
+               instruction.remittance_email_sent_at is null as stamp_missing
+          from payment_runs run
+          join payment_instructions instruction
+            on instruction.payment_run_id = run.id and instruction.org_id = run.org_id
+          join payment_remittances remittance
+            on remittance.payment_instruction_id = instruction.id and remittance.org_id = instruction.org_id
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(after, {
+      run_status: "confirmed",
+      remittance_status: "pending",
+      stamp_missing: true,
     });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -3071,4 +3130,3 @@ test(
     }
   },
 );
-
