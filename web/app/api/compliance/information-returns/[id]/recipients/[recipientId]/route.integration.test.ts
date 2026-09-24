@@ -1,3 +1,4 @@
+// source-pin-contract: no caller outside the owning engine service writes the information-return tables; writers derived by walking engine/ and web/
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";

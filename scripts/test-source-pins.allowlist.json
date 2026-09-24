@@ -98,7 +98,6 @@
     "web/app/api/ap-capture/item-api-scope.test.ts": 1,
     "web/app/api/ap-capture/route-config-refusal.test.ts": 1,
     "web/app/api/apps/http-surfaces.route.test.ts": 4,
-    "web/app/api/compliance/information-returns/route.test.ts": 4,
     "web/app/api/compliance/lien-waivers/route.test.ts": 3,
     "web/app/api/compliance/vendors/[partyId]/route.test.ts": 2,
     "web/app/api/consolidation/route.test.ts": 1,
