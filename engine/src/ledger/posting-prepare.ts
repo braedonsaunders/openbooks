@@ -5,6 +5,7 @@ import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../
 import { PayrollError as PayrollRemittanceError } from "../payroll/error.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { isZero, sum } from "../money/money.ts";
+import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { CustomGlLinesError, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import type { ContributedLine } from "../allocations/types.ts";
 import { assertContributorBalance, collectPostContributions, PostAllocationError, type PostContributionResult } from "../allocations/post.ts";
@@ -354,6 +355,18 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     await assertExpenseSettlement(db, effectiveDoc);
   } catch (error) {
     throw new PostingError((error as Error).message);
+  }
+
+  // The ledger boundary shares capture's ISO 4217 gate: no path posts a
+  // non-ISO currency, whatever wrote the header (capture, API, sync, a
+  // before_post script or flow — all merged into effectiveDoc above). Shape
+  // is not membership: "ZZZ" is three uppercase letters and denominates
+  // nothing, so it refuses here instead of posting untranslatable units.
+  if (!isIso4217CurrencyCode(effectiveDoc.currency)) {
+    throw new PostingError(
+      `document ${effectiveDoc.documentNumber} has currency ${JSON.stringify(effectiveDoc.currency)} ` +
+        `which is not an ISO 4217 code — correct the document currency to the 3-letter code before posting`,
+    );
   }
 
   // -- build + validate kernel lines --------------------------------------

@@ -261,6 +261,22 @@ export const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
 ];
 
 /**
+ * The single shared ISO 4217 gate: every capture boundary and the ledger
+ * posting boundary refuse through this predicate, so the registry above is
+ * the one source of truth for which codes may denominate money. A code that
+ * merely looks like one (three uppercase letters, e.g. "ZZZ") fails — shape
+ * is not membership. Matching is exact and case-sensitive: ISO codes are
+ * uppercase, and lowercasing an OCR misread would invent a code nobody typed.
+ */
+const ISO_4217_CODES: ReadonlySet<string> = new Set(
+  SUPPORTED_CURRENCIES.map((currency) => currency.code),
+);
+
+export function isIso4217CurrencyCode(code: unknown): code is string {
+  return typeof code === "string" && ISO_4217_CODES.has(code);
+}
+
+/**
  * Active ISO 4217 entries with NO defined minor unit (supranational units,
  * bond-market units, test codes, XXX). No quantum exists to round them with,
  * so they stay out of the registry and fail closed wherever a currency row is

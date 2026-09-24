@@ -219,6 +219,28 @@ test("validation rejects impossible dates, currencies and numeric overflow", () 
   assert.ok(codes.includes("amount_out_of_range"));
 });
 
+test("validation refuses a well-formed but non-ISO currency by name", () => {
+  // A-S29: "ZZZ" passes a three-letter shape check but denominates nothing —
+  // the shared ISO gate must refuse it at capture, not at post.
+  const result = normalizeAzureInvoice(raw).normalized;
+  result.currency = "ZZZ";
+  const issues = validateNormalizedCapture(result);
+  const refusal = issues.find((issue) => issue.code === "invalid_currency");
+  assert.ok(refusal, `expected an invalid_currency issue, got ${JSON.stringify(issues)}`);
+  assert.equal(refusal.severity, "blocking");
+  assert.equal(refusal.field, "currency");
+  assert.equal(refusal.actual, "ZZZ");
+  assert.match(refusal.message ?? "", /"ZZZ" is not an ISO 4217 code/);
+  assert.match(refusal.message ?? "", /correct it to the 3-letter code/);
+});
+
+test("validation accepts a registered ISO currency", () => {
+  const result = normalizeAzureInvoice(raw).normalized;
+  result.currency = "EUR";
+  const codes = validateNormalizedCapture(result).map((issue) => issue.code);
+  assert.ok(!codes.includes("invalid_currency"));
+});
+
 test("Azure adapter submits bytes and polls the provider operation", async () => {
   const calls: string[] = [];
   const fakeFetch: typeof fetch = async (request, init) => {

@@ -1,6 +1,7 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, sum, toUnits } from "../money/money.ts";
 import { decimalNullCause, decimalNullRefusal } from "../money/decimal-refusal.ts";
+import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
 
 export type { AddressLookup };
@@ -387,8 +388,21 @@ export function validateNormalizedCapture(
   if (capture.dueDate && !validIsoDate(capture.dueDate)) {
     issues.push({ code: "invalid_date", severity: "blocking", field: "dueDate" });
   }
-  if (capture.currency && !/^[A-Z]{3}$/.test(capture.currency)) {
-    issues.push({ code: "invalid_currency", severity: "blocking", field: "currency" });
+  // Membership in the shared ISO 4217 registry, not shape: an OCR misread
+  // like "ZZZ" passes a three-letter check but denominates nothing, and the
+  // ledger boundary refuses it at post — so capture refuses it here, naming
+  // the supplied code and the correction, instead of parking it for review
+  // purgatory or letting it through to a doomed draft.
+  if (capture.currency && !isIso4217CurrencyCode(capture.currency)) {
+    issues.push({
+      code: "invalid_currency",
+      severity: "blocking",
+      field: "currency",
+      actual: capture.currency,
+      message:
+        `Capture currency ${JSON.stringify(capture.currency)} is not an ISO 4217 code — ` +
+        `correct it to the 3-letter code on the invoice before resubmitting`,
+    });
   }
   // Refused OCR text is preserved verbatim in the capture, so validation must
   // name it as a blocking refusal — never throw on it and never read it as math.
