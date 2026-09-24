@@ -3,6 +3,7 @@ import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import {
+  HrmAuthorizationError,
   loadApprovalPerson,
   loadManagedEmploymentIds,
   requireAggregatePerformanceManage,
@@ -104,6 +105,46 @@ async function requireCompetenciesRead(
   return scope;
 }
 
+function assertFrameworkManageScope(appliesTo: unknown, allowed: Set<string> | null): void {
+  if (allowed === null) return;
+  const scope = mathRefusal("REFUSED", () => parseAppliesScope(appliesTo));
+  if (scope.employerSubsidiaryId === null || !allowed.has(scope.employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "competency framework is not visible in this organization and legal-entity scope — ask an HR administrator covering its subsidiary to configure it",
+    );
+  }
+}
+
+async function requireFrameworkInManageScope(
+  exec: SqlExecutor,
+  orgId: string,
+  frameworkId: string,
+  allowed: Set<string> | null,
+): Promise<void> {
+  const framework = (await exec.execute<{ applies_to: unknown }>(sql`
+    select applies_to from hrm_competency_frameworks where org_id = ${orgId} and id = ${frameworkId}
+  `)).rows[0];
+  if (!framework) {
+    throw new HrmPerformanceError("NOT_FOUND", "competency framework was not found — choose a framework in this organization");
+  }
+  assertFrameworkManageScope(framework.applies_to, allowed);
+}
+
+async function requireCompetencyFrameworkInManageScope(
+  exec: SqlExecutor,
+  orgId: string,
+  competencyId: string,
+  allowed: Set<string> | null,
+): Promise<void> {
+  const competency = (await exec.execute<{ framework_id: string }>(sql`
+    select framework_id from hrm_competencies where org_id = ${orgId} and id = ${competencyId}
+  `)).rows[0];
+  if (!competency) {
+    throw new HrmPerformanceError("NOT_FOUND", "competency was not found — choose a competency in this organization");
+  }
+  await requireFrameworkInManageScope(exec, orgId, competency.framework_id, allowed);
+}
+
 export interface CompetencyLevelDTO {
   readonly id: string;
   readonly levelRank: number;
@@ -144,7 +185,8 @@ export async function createFramework(args: {
   const appliesTo = mathRefusal("INVALID_INPUT", () => parseAppliesScope(args.appliesTo ?? {}));
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    assertFrameworkManageScope({ employer_subsidiary_id: appliesTo.employerSubsidiaryId }, allowed);
     const references = (await db.execute<{
       subsidiaryExists: boolean;
       departmentSubsidiaryId: string | null;
@@ -200,7 +242,8 @@ export async function setFrameworkActive(args: {
   const id = requireId("id", args.id);
   await withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    await requireFrameworkInManageScope(db, orgId, id, allowed);
     const updated = (await db.execute<{ id: string }>(sql`
       update hrm_competency_frameworks set is_active = ${args.isActive}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id}
@@ -222,12 +265,16 @@ export async function getFramework(args: {
   const id = requireId("id", args.id);
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireCompetenciesRead(db, orgId, actorId);
+    const allowed = await requireCompetenciesRead(db, orgId, actorId);
     const frameworks = (await db.execute<{ id: string; name: string; applies_to: unknown; is_active: boolean }>(sql`
       select id, name, applies_to, is_active from hrm_competency_frameworks where org_id = ${orgId} and id = ${id}
     `)).rows;
     const framework = frameworks[0];
     if (!framework) return null;
+    if (allowed !== null) {
+      const scope = mathRefusal("REFUSED", () => parseAppliesScope(framework.applies_to));
+      if (scope.employerSubsidiaryId !== null && !allowed.has(scope.employerSubsidiaryId)) return null;
+    }
     return {
       id: framework.id,
       name: framework.name,
@@ -243,12 +290,16 @@ export async function listFrameworks(args: { orgId: string; actorId: string }): 
   const actorId = requireId("actorId", args.actorId);
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireCompetenciesRead(db, orgId, actorId);
+    const allowed = await requireCompetenciesRead(db, orgId, actorId);
     const frameworks = (await db.execute<{ id: string; name: string; applies_to: unknown; is_active: boolean }>(sql`
       select id, name, applies_to, is_active from hrm_competency_frameworks where org_id = ${orgId} order by name
     `)).rows;
     const out: CompetencyFrameworkDTO[] = [];
     for (const framework of frameworks) {
+      if (allowed !== null) {
+        const scope = mathRefusal("REFUSED", () => parseAppliesScope(framework.applies_to));
+        if (scope.employerSubsidiaryId !== null && !allowed.has(scope.employerSubsidiaryId)) continue;
+      }
       out.push({
         id: framework.id,
         name: framework.name,
@@ -305,7 +356,8 @@ export async function createCompetency(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    await requireFrameworkInManageScope(db, orgId, frameworkId, allowed);
     const framework = (await db.execute<{ id: string }>(sql`
       select id from hrm_competency_frameworks where org_id = ${orgId} and id = ${frameworkId}
     `)).rows[0];
@@ -358,7 +410,8 @@ export async function addCompetencyLevel(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    await requireCompetencyFrameworkInManageScope(db, orgId, competencyId, allowed);
     const competency = (await db.execute<{ id: string }>(sql`
       select id from hrm_competencies where org_id = ${orgId} and id = ${competencyId}
     `)).rows[0];
@@ -401,7 +454,8 @@ export async function linkCompetency(args: {
   }
   await withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    await requireCompetencyFrameworkInManageScope(db, orgId, competencyId, allowed);
     const competency = (await db.execute<{ id: string }>(sql`
       select id from hrm_competencies where org_id = ${orgId} and id = ${competencyId}
     `)).rows[0];
@@ -458,7 +512,10 @@ export async function setSectionCompetency(args: {
   if (args.competencyId !== null) requireId("competencyId", args.competencyId);
   await withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    if (args.competencyId !== null) {
+      await requireCompetencyFrameworkInManageScope(db, orgId, args.competencyId, allowed);
+    }
     const section = (await db.execute<{ id: string }>(sql`
       select id from hrm_review_template_sections where org_id = ${orgId} and id = ${sectionId}
     `)).rows[0];

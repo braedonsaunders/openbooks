@@ -18,6 +18,9 @@ import {
   competencyProfileForEmployment,
   createCompetency,
   createFramework,
+  getFramework,
+  listFrameworks,
+  setFrameworkActive,
   setSectionCompetency,
 } from "./competencies.ts";
 import { createGoal } from "./goals.ts";
@@ -1049,6 +1052,56 @@ test("a restricted HR reads only the competency profiles they cover", { skip: !D
         assert.equal(e.code, "FORBIDDEN");
         return true;
       },
+    );
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("competency framework reads and writes obey the subsidiary applicability", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const frameworkA = await createFramework({
+      orgId: h.org.orgId, actorId: h.hrFull, name: "A framework",
+      appliesTo: { employer_subsidiary_id: h.org.subsidiaryId, department_id: null },
+    });
+    const frameworkB = await createFramework({
+      orgId: h.org.orgId, actorId: h.hrFull, name: "B framework",
+      appliesTo: { employer_subsidiary_id: h.subB, department_id: null },
+    });
+    const competencyB = await createCompetency({
+      orgId: h.org.orgId, actorId: h.hrFull, frameworkId: frameworkB.id,
+      code: "B-SKILL", name: "B-only skill",
+    });
+    const listed = await listFrameworks({ orgId: h.org.orgId, actorId: h.hrA });
+    assert.deepEqual(listed.map((framework) => framework.id), [frameworkA.id]);
+    assert.equal(await getFramework({ orgId: h.org.orgId, actorId: h.hrA, id: frameworkB.id }), null);
+    const refuseConfig = (error: unknown) => {
+      assert.ok(error instanceof HrmAuthorizationError);
+      assert.match(error.message, /not visible in this organization and legal-entity scope/);
+      return true;
+    };
+    await assert.rejects(
+      createFramework({ orgId: h.org.orgId, actorId: h.hrA, name: "Unrestricted framework" }),
+      refuseConfig,
+    );
+    await assert.rejects(
+      setFrameworkActive({ orgId: h.org.orgId, actorId: h.hrA, id: frameworkB.id, isActive: false }),
+      refuseConfig,
+    );
+    await assert.rejects(
+      createCompetency({
+        orgId: h.org.orgId, actorId: h.hrA, frameworkId: frameworkB.id,
+        code: "A-CANNOT-ADD", name: "Out-of-scope skill",
+      }),
+      refuseConfig,
+    );
+    await assert.rejects(
+      addCompetencyLevel({
+        orgId: h.org.orgId, actorId: h.hrA, competencyId: competencyB.id,
+        levelRank: 1, label: "Entry", expectation: "A B-only expectation",
+      }),
+      refuseConfig,
     );
   } finally {
     await dropScratchOrg(h.org.orgId);
