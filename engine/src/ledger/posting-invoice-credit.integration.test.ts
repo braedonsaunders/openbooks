@@ -289,7 +289,7 @@ test(
 );
 
 test(
-  "an invoice in a foreign currency posts without a credit decision",
+  "every mismatched invoice and customer-limit currency pair refuses before posting",
   { skip: !DB },
   async () => {
     const org = await withBypass(() => createScratchOrg());
@@ -298,13 +298,21 @@ test(
         createScratchUser(org.orgId, "Posting foreign clerk", "posting_foreign_clerk"),
       );
       await seedCustomerRole(org, actorId, org.customerId, { creditLimit: "10000", currency: "USD" });
-
-      // The limit is managed in USD; a CAD invoice cannot be evaluated
-      // without FX, so the gate leaves it alone — the order-side
-      // mixed-currency probe stays the backstop for the exposure itself.
-      const invoiceId = await seedDirectInvoice(org, actorId, "INV-POST-FX-1", "50000", "CAD");
-      await post(org, invoiceId);
-      assert.equal((await invoiceState(org, invoiceId)).status, "posted");
+      for (const [index, limitCurrency] of ["USD", "EUR", "GBP"].entries()) {
+        const invoiceCurrency = "CAD";
+        await withBypass(() => db.execute(sql`
+          update customer_roles set currency = ${limitCurrency}
+           where org_id = ${org.orgId} and party_id = ${org.customerId}
+        `));
+        const number = `INV-POST-FX-${index + 1}`;
+        const invoiceId = await seedDirectInvoice(org, actorId, number, "50000", invoiceCurrency);
+        await expectPostingRefusal(
+          post(org, invoiceId),
+          new RegExp(`customer credit limit is configured in ${limitCurrency}, but invoice ${number} is in ${invoiceCurrency}`),
+          new RegExp(`update the customer credit-limit currency and amount to ${invoiceCurrency} before posting`),
+        );
+        assert.equal((await invoiceState(org, invoiceId)).status, "approved");
+      }
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
