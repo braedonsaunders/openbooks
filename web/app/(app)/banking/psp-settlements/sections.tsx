@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { dateLabel } from '@/lib/format'
@@ -193,6 +193,8 @@ export function PspSettlementsWorkspace({
    *  stored import value stays the UUID — only the affordance changes. */
   initialAccounts?: PspAccountOption[] | null
 }) {
+  const reversalDateId = useId()
+  const reversalReasonId = useId()
   const t = useTranslations('banking.pspSettlements')
   // Client-fetched rows (native path, and spec-path reloads after a mutation)
   // format through the same hooks the native page has always used.
@@ -517,12 +519,13 @@ export function PspSettlementsWorkspace({
         <h3 className="mb-3 text-sm font-semibold">{strings.recentBatches}</h3>
         <div className="mb-4 grid gap-3 sm:grid-cols-[12rem_1fr]">
           <div>
-            <Label>{strings.reversalDate}</Label>
-            <Input type="date" value={reversalDate} onChange={(e) => setReversalDate(e.target.value)} />
+            <Label htmlFor={reversalDateId}>{strings.reversalDate}</Label>
+            <Input id={reversalDateId} type="date" value={reversalDate} onChange={(e) => setReversalDate(e.target.value)} />
           </div>
           <div>
-            <Label>{strings.reversalReason}</Label>
+            <Label htmlFor={reversalReasonId}>{strings.reversalReason}</Label>
             <Input
+              id={reversalReasonId}
               value={reversalReason}
               onChange={(e) => setReversalReason(e.target.value)}
               placeholder={strings.reversalPlaceholder}
