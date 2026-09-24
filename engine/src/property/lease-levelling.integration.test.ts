@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
-import { PropertyManagementError, levelLeaseRentStraightLine } from "./management.ts";
+import { PropertyManagementError, levelLeaseRentStraightLine, runDuePropertyBilling } from "./management.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -248,6 +248,37 @@ test("rent levelling rechecks contractual amounts after waiting for a lease edit
     await writer.query("rollback");
     writer.release();
     await pending;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * B-PRP-002: the production scheduler run is the trigger that levels
+ * escalating leases. Before the wiring, runDuePropertyBilling billed and
+ * assessed fees but never levelled, so the year-one 2,000 accrual never
+ * posted in production. The rerun must be idempotent through the same
+ * entry-count the scheduler reports.
+ */
+test("the production scheduler run levels an escalating lease idempotently", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const slAccountId = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable,
+                            required_dimensions, custom, subsidiary_include_children)
+      values (${slAccountId}, ${org.orgId}, '1162', 'Scheduler Straight-Line Rent Receivable', 'asset_current_other',
+              false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+    await seedLease(org, slAccountId);
+
+    const first = await runDuePropertyBilling("2026-07-15");
+    assert.equal(first.levelled, 1, "the scheduler run posts the year-one accrual");
+    assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
+    assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
+
+    const second = await runDuePropertyBilling("2026-07-15");
+    assert.equal(second.levelled, 0, "rerunning the scheduler posts nothing further");
+    assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
+  } finally {
     await dropScratchOrg(org.orgId);
   }
 });

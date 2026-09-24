@@ -2642,17 +2642,18 @@ export async function propertyManagementWorkspace(orgId: string, asOf?: string) 
 
 /**
  * Scheduler entry point. Each org/lease is idempotent through invoice billing
- * keys and schedule status.
+ * keys, schedule status, and the levelling true-up (a rerun with no change
+ * posts nothing).
  *
  * The run is engine-initiated: every write it makes — schedule lines, rent
- * invoices, auto-posting, late fees — carries system provenance (null actor)
- * plus durable per-run/per-lease markers, never a historical lease author and
- * never an org-wide first actor. Interactive callers attribute their own
- * authenticated user instead.
+ * invoices, auto-posting, late fees, straight-line rent accruals — carries
+ * system provenance (null actor) plus durable per-run/per-lease markers,
+ * never a historical lease author and never an org-wide first actor.
+ * Interactive callers attribute their own authenticated user instead.
  */
-export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: number; invoices: number; lateFees: number; orgErrors: { orgId: string; error: string }[] }> {
-  const result: { billed: number; invoices: number; lateFees: number; orgErrors: { orgId: string; error: string }[] } =
-    { billed: 0, invoices: 0, lateFees: 0, orgErrors: [] };
+export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: number; invoices: number; lateFees: number; levelled: number; orgErrors: { orgId: string; error: string }[] }> {
+  const result: { billed: number; invoices: number; lateFees: number; levelled: number; orgErrors: { orgId: string; error: string }[] } =
+    { billed: 0, invoices: 0, lateFees: 0, levelled: 0, orgErrors: [] };
   // Registry fallback shape: a non-boolean stored value falls back to the
   // default instead of throwing 22P02 like the previous ::boolean cast.
   const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where case (settings->'features'->>'propertyManagement') when 'true' then true when 'false' then false else false end`)));
@@ -2669,6 +2670,14 @@ export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: nu
         const fees = await assessLeaseLateFees(org.id, null, date);
         const billed = await billDueLeaseCharges(org.id, null, date);
         result.billed += billed.billed; result.invoices += billed.invoices.length; result.lateFees += fees.created;
+        // Level escalating operating leases after billing, like every other
+        // scheduler step: the true-up is idempotent per lease per period, and a
+        // misconfigured lease (no straight-line account, currency mismatch,
+        // closed period) fails this org's run visibly (recorded in orgErrors)
+        // instead of silently skipping the accrual. Flat and open-ended leases
+        // return a zero delta and post nothing.
+        const levelling = await levelLeaseRentStraightLine(org.id, null, { asOf: date });
+        result.levelled += levelling.filter((row) => row.entryId !== null).length;
       });
     } catch (e) {
       // Per-org isolation, same shape as dunning and subscription billing:

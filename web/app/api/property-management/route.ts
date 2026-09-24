@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import {
   PropertyManagementError,
   activatePropertyLease,
@@ -13,6 +14,7 @@ import {
   assessLeaseLateFees,
   billCamReconciliation,
   billDueLeaseCharges,
+  levelLeaseRentStraightLine,
   cancelCamPool,
   cancelPropertyLease,
   createCamPool,
@@ -136,7 +138,7 @@ export async function GET() {
   });
 }
 
-const glActions = new Set(["recordDeposit", "reverseDeposit", "finalizeCam"]);
+const glActions = new Set(["recordDeposit", "reverseDeposit", "finalizeCam", "levelRent"]);
 const billingActions = new Set(["billRent", "billCam", "assessLateFees"]);
 const knownActions = new Set([
   "createProperty",
@@ -156,6 +158,7 @@ const knownActions = new Set([
   "scheduleLease",
   "billRent",
   "assessLateFees",
+  "levelRent",
   "recordDeposit",
   "reverseDeposit",
   "createCamPool",
@@ -198,7 +201,7 @@ async function guardSubsidiaryAccess(
   const allowed = authz.allowedSubsidiaryIds;
   if (!allowed) return null;
   if (
-    ((action === "billRent" || action === "assessLateFees") &&
+    ((action === "billRent" || action === "assessLateFees" || action === "levelRent") &&
       !body.leaseId &&
       !body.propertyId)
   ) {
@@ -248,6 +251,7 @@ async function guardSubsidiaryAccess(
       "createCamPool",
       "billRent",
       "assessLateFees",
+      "levelRent",
     ].includes(action) && body.propertyId
   ) {
     const result = (await db.execute<{ subsidiaryId: string | null }>(
@@ -275,6 +279,7 @@ async function guardSubsidiaryAccess(
       "scheduleLease",
       "billRent",
       "assessLateFees",
+      "levelRent",
       "recordDeposit",
     ].includes(action)
   ) {
@@ -614,6 +619,24 @@ export async function POST(request: Request) {
           body.propertyId == null ? undefined : String(body.propertyId),
         );
         break;
+      case "levelRent": {
+        // Levelling scopes by lease only: a propertyId without a leaseId
+        // would silently widen to the whole portfolio, so it is refused.
+        if (body.propertyId != null && body.leaseId == null)
+          return NextResponse.json(
+            { error: "levelRent scopes by lease; pass leaseId without propertyId" },
+            { status: 400 },
+          );
+        result = await levelLeaseRentStraightLine(
+          common.orgId,
+          common.actorId,
+          {
+            asOf: dateOrUndefined(body.asOf) ?? (await businessToday(common.orgId)),
+            ...(body.leaseId == null ? {} : { onlyLeaseId: String(body.leaseId) }),
+          },
+        );
+        break;
+      }
       case "recordDeposit":
         result = await recordSecurityDeposit({
           ...body,
