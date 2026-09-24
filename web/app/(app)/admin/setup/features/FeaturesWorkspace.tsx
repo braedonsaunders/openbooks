@@ -211,6 +211,7 @@ export function FeaturesWorkspace({
         busy={pending === f.key}
         disabled={dependencyLocked || (pending !== null && pending !== f.key)}
         onToggle={() => toggle(f.key)}
+        depth={node.depth}
       />
     )
   }
@@ -287,6 +288,7 @@ function FeatureRow({
   disabled,
   onToggle,
   compact = false,
+  depth = 0,
 }: {
   icon: LucideIcon
   title: string
@@ -300,9 +302,13 @@ function FeatureRow({
   onToggle: () => void
   /** Nested child row: no icon square, tighter padding, secondary type. */
   compact?: boolean
+  depth?: number
 }) {
   return (
-    <div className={cn('flex items-start', compact ? 'gap-3 py-3 pl-4 pr-4' : 'gap-4 p-4')}>
+    <div
+      className={cn('flex items-start', compact ? 'gap-3 py-3 pr-4' : 'gap-4 p-4')}
+      style={compact ? { paddingLeft: `${16 + Math.max(0, depth - 1) * 24}px` } : undefined}
+    >
       {compact ? null : (
         <div
           className={cn(
