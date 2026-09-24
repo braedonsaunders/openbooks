@@ -723,6 +723,21 @@ export interface SubscriptionRunResult {
 }
 
 /**
+ * Surface one subscription's tick failure through last_error (the operator's
+ * signal). Recording the failure must never itself abort the tick: if the
+ * write fails, the failure is logged and the loop continues.
+ */
+async function recordSubscriptionTickFailure(orgId: string, subscriptionId: string, message: string): Promise<void> {
+  try {
+    await withBypass(async () => db.execute(sql`
+      update subscriptions set last_error = ${message} where id = ${subscriptionId} and org_id = ${orgId}
+    `));
+  } catch (recordError) {
+    console.error(`[subscriptions] failure recording failed for subscription ${subscriptionId}:`, recordError);
+  }
+}
+
+/**
  * Bill every active subscription that is due as of `asOf` — but only for orgs
  * that have the subscriptionBilling feature on.
  */
@@ -772,11 +787,30 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     `)),
   );
 
+  // Orgs whose business day cannot be read (a misconfigured calendar) fail
+  // per org, not per tick: their subscriptions surface the failure through
+  // last_error and the loop continues with the next tenant.
+  const orgDateFailures = new Map<string, string>();
   for (const row of due.rows) {
     let today = asOf ?? orgBusinessDates.get(row.orgId);
     if (!today) {
-      today = await withOrg(row.orgId, () => businessToday(row.orgId));
-      orgBusinessDates.set(row.orgId, today);
+      const dateFailure = orgDateFailures.get(row.orgId);
+      if (dateFailure !== undefined) {
+        result.failed += 1;
+        await recordSubscriptionTickFailure(row.orgId, row.id, `business day unavailable: ${dateFailure}`);
+        continue;
+      }
+      try {
+        today = await withOrg(row.orgId, () => businessToday(row.orgId));
+        orgBusinessDates.set(row.orgId, today);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        orgDateFailures.set(row.orgId, message);
+        console.error(`[subscriptions] org ${row.orgId} business day failed:`, e);
+        result.failed += 1;
+        await recordSubscriptionTickFailure(row.orgId, row.id, `business day unavailable: ${message}`);
+        continue;
+      }
     }
     if (row.nextBillOn > today) continue;
 
@@ -800,7 +834,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     } catch (e) {
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
-      await withBypass(async () => db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id} and org_id = ${row.orgId}`));
+      await recordSubscriptionTickFailure(row.orgId, row.id, message);
       continue;
     }
     // Claim the occurrence INSIDE the billing transaction: the tick that flips
@@ -837,9 +871,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       // which is what a durable claim without an invoice would do.
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
-      await withBypass(async () => {
-        await db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id} and org_id = ${row.orgId}`);
-      });
+      await recordSubscriptionTickFailure(row.orgId, row.id, message);
       continue;
     }
     if (!sub) continue; // another tick won it

@@ -332,8 +332,16 @@ test("a failed claim write rolls the accepted mail job back with it and the retr
           execute function dun_claim_fault()`),
       );
 
-      await assert.rejects(() => runDunning("2026-07-10"), (error: unknown) =>
-        errorChainMatches(error, /injected dunning claim failure/),
+      // The tick isolates per org: an org-wholesale storage failure is
+      // recorded by name in the tick summary instead of rejecting the whole
+      // run, so later orgs still get their collections.
+      const failed = await runDunning("2026-07-10");
+      assert.equal(failed.orgErrors.length, 1);
+      assert.equal(failed.orgErrors[0]!.orgId, org.orgId);
+      assert.match(
+        failed.orgErrors[0]!.error,
+        /injected dunning claim failure/,
+        "the recorded org failure names the storage fault",
       );
 
       // The accepted job must not survive the rolled-back transaction: nothing
@@ -1354,5 +1362,43 @@ test("a dunning reminder escapes party-controlled values in its HTML part", { sk
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
+  }
+});
+
+test("one org's misconfigured calendar names that org and still serves the next org", { skip: !DB }, async () => {
+  // A stored business time zone no IANA database knows makes businessToday
+  // throw for exactly one tenant. The tick must record that org by name,
+  // continue the scan, and still stage the healthy org's letter.
+  const poisoned = await createScratchOrg();
+  const healthy = await createScratchOrg();
+  try {
+    await seedDunnableInvoice(poisoned, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{timeZone}', '"Not/AZone"')
+       where id = ${poisoned.orgId}
+    `);
+    const { invoiceId } = await seedDunnableInvoice(healthy, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    // No asOf: the runner must read each org's own business day, which is
+    // where the poisoned org throws. The seeded invoice (due 2026-06-01) is
+    // overdue on any real business day.
+    const run = await runDunning();
+    assert.equal(run.orgErrors.length, 1);
+    assert.equal(run.orgErrors[0]!.orgId, poisoned.orgId);
+    assert.match(run.orgErrors[0]!.error, /not a known IANA time zone/);
+    const claim = await dunningClaim(invoiceId);
+    assert.equal(claim.status, "staged");
+    const { outboxRows } = await stagedNotice(invoiceId);
+    assert.equal(outboxRows.length, 1);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id in (${poisoned.orgId}, ${healthy.orgId})`);
+    await dropScratchOrg(poisoned.orgId);
+    await dropScratchOrg(healthy.orgId);
   }
 });

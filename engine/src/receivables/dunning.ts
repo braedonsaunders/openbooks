@@ -154,6 +154,13 @@ export interface DunningRunResult {
   sent: number;
   failed: number;
   notices: { documentId: string; stageId: string; toEmail: string | null; status: string }[];
+  /**
+   * One entry per organization whose collections failed wholesale this tick
+   * (a misconfigured calendar, an unreadable policy). The loop continues
+   * past a failed org so one tenant's misconfiguration never silences
+   * another's collections; each failure is also logged, never silent.
+   */
+  orgErrors: { orgId: string; error: string }[];
 }
 
 /**
@@ -241,6 +248,24 @@ async function readDunningDeliveryVerdict(
 }
 
 /**
+ * Flatten an error and its `cause` chain into one operator-readable line.
+ * Drivers wrap storage faults (a DrizzleQueryError whose message names only
+ * the statement), so recording the head alone would lose the fault itself.
+ */
+function dunningFailureMessage(error: unknown): string {
+  const head = error instanceof Error ? error.message : String(error);
+  let cause: unknown = error instanceof Error
+    ? (error as Error & { cause?: unknown }).cause
+    : undefined;
+  for (let depth = 0; depth < 3 && cause instanceof Error; depth++) {
+    const detail = cause.message.replace(/\s+/g, " ").trim();
+    if (detail && detail !== head) return `${head} — caused by: ${detail}`.slice(0, 1000);
+    cause = (cause as Error & { cause?: unknown }).cause;
+  }
+  return head.slice(0, 1000);
+}
+
+/**
  * Run dunning for every production organization. This is the scheduler entry
  * point and intentionally performs an org-spanning discovery under bypass.
  * Callers that already know their tenant (for example the SaaS simulator)
@@ -268,17 +293,43 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
  */
 export async function runDunningForOrg(orgId: string, asOf?: string): Promise<DunningRunResult> {
   if (!orgId.trim()) throw new Error("orgId is required for an org-scoped dunning run");
-  return runDunningInternal(asOf, [{ orgId }]);
+  return runOneOrgDunning(asOf, orgId);
 }
 
 async function runDunningInternal(
   asOf: string | undefined,
   orgRows: ReadonlyArray<{ orgId: string }>,
 ): Promise<DunningRunResult> {
-  const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [] };
+  const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [], orgErrors: [] };
 
   for (const { orgId } of orgRows) {
-    await withOrg(orgId, async () => {
+    try {
+      const one = await runOneOrgDunning(asOf, orgId);
+      result.scanned += one.scanned;
+      result.sent += one.sent;
+      result.failed += one.failed;
+      result.notices.push(...one.notices);
+    } catch (e) {
+      // Per-org isolation: one tenant's misconfigured calendar or unreadable
+      // policy is recorded by name and the loop continues — orgs later in the
+      // scan still get their collections this tick instead of inheriting the
+      // failure. The tick reports per-org outcomes; it does not throw.
+      const message = dunningFailureMessage(e);
+      result.orgErrors.push({ orgId, error: message });
+      console.error(`[dunning] org ${orgId} collections failed:`, e);
+    }
+  }
+  return result;
+}
+
+/**
+ * Collect one organization's dunning for a tick. Throws on an org-wholesale
+ * failure (the multi-org loop above records it and continues); the single-org
+ * entry point lets it propagate so a targeted run still fails loudly.
+ */
+async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promise<DunningRunResult> {
+  const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [], orgErrors: [] };
+  await withOrg(orgId, async () => {
       // Overdue math compares calendar days, so "today" is the org's business
       // day — the scheduler itself runs on the server's UTC day.
       const today = asOf ?? (await businessToday(orgId));
@@ -674,6 +725,5 @@ async function runDunningInternal(
         }
       }
     });
-  }
   return result;
 }
