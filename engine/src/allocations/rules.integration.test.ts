@@ -96,6 +96,42 @@ test("publish freezes the definition and stamps a recomputable hash", { skip: !p
   }
 });
 
+test("publish refuses a stepped basis by name", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId } = await org();
+  try {
+    const created = await createRule({ orgId, key: "stepped-sweep", name: "Sweep", mode: "period" }, AUDIT);
+    const draft = await createDraftVersion(
+      created.rule.id,
+      {
+        orgId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        basisKind: "stepped",
+        basisConfig: { tiers: [{ upTo: "1000" }, { upTo: null }] },
+        targets: [{ fixedPercent: "100" }],
+      },
+      AUDIT,
+    );
+    await assert.rejects(
+      publishVersion(draft.version.id, { orgId, ...AUDIT }),
+      (error: unknown) => {
+        if (!(error instanceof AllocationRuleError) || error.code !== "INVALID") return false;
+        const stepped = (error.problems ?? []).filter((problem) => problem.code === "stepped_basis");
+        return (
+          stepped.length === 1 &&
+          /stepped basis is not yet runnable/.test(stepped[0]!.message) &&
+          /fixed_percent or driver/.test(stepped[0]!.message)
+        );
+      },
+    );
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from allocation_rule_versions where org_id = ${orgId} and id = ${draft.version.id}`)).rows[0]!;
+    assert.equal(status.status, "draft");
+  } finally {
+    await dropScratchOrg(orgId);
+  }
+});
+
 test("publish refuses overlapping windows and advances the current pointer", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { orgId } = await org();
   try {

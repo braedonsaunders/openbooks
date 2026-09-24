@@ -143,18 +143,32 @@ test("entry mode needs an apply policy and a target population", () => {
 
 test("period mode needs a source measure and a usable basis", () => {
   assert.ok(codes(version({ basisKind: "driver", driverId: null }), [tgt()], ctx()).includes("driver_missing"));
+  // Stepped execution exists in no runner, so no tier shape — however
+  // well-formed — is publishable. Both spellings refuse by name.
   assert.ok(
-    codes(version({ basisKind: "stepped", basisConfig: {} }), [tgt()], ctx()).includes("stepped_tiers"),
+    codes(version({ basisKind: "stepped", basisConfig: {} }), [tgt()], ctx()).includes("stepped_basis"),
   );
   assert.deepEqual(
     codes(
       version({ basisKind: "stepped", basisConfig: { tiers: [{ upTo: "1000" }, { upTo: null }] } }),
       [tgt({ fixedPercent: null })],
       ctx(),
-    ),
+    ).filter((code) => code !== "stepped_basis"),
     [],
-    "stepped basis ignores fixed_percent columns",
+    "a stepped refusal names only the unrunnable basis, never tier shape",
   );
+});
+
+test("a stepped version is refused at publish with the runnable remedy", () => {
+  const problems = validateRuleVersion(
+    version({ basisKind: "stepped", basisConfig: { tiers: [{ upTo: "1000" }, { upTo: null }] } }),
+    [tgt()],
+    ctx(),
+  );
+  assert.equal(problems.length, 1);
+  assert.equal(problems[0]!.code, "stepped_basis");
+  assert.match(problems[0]!.message, /not yet runnable/);
+  assert.match(problems[0]!.message, /fixed_percent or driver/);
 });
 
 test("driver basis needs a known driver whose dimension matches the targets", () => {

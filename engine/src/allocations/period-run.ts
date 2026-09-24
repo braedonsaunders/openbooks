@@ -816,7 +816,13 @@ async function resolveTargets(
   } | null;
 }> {
   if (opts.version.basis_kind === "stepped") {
-    throw new Error("stepped allocation basis is not supported by period runs yet");
+    // Publish refuses stepped versions, but versions published before the
+    // refusal (or synced from another writer) still reach this runner: fail
+    // closed with the named remedy instead of the 500 fallback.
+    throw new AllocationRunError(
+      "INVALID",
+      `allocation rule ${opts.ruleKey} uses a stepped basis, which is not yet runnable — republish the version with a fixed_percent or driver basis`,
+    );
   }
   if (opts.version.target_kind === "dynamic") {
     const dynamic = opts.version.dynamic_target as {

@@ -66,7 +66,8 @@ async function seedPeriodRule(opts: {
   poolAccountId: string;
   key?: string;
   impact?: "reclass" | "net_zero_pair" | "report_only";
-  basisKind?: "fixed_percent" | "driver";
+  basisKind?: "fixed_percent" | "driver" | "stepped";
+  basisConfig?: unknown;
   sourceMeasure?: "period_activity" | "period_end_balance" | "ytd_activity";
   accountScope?: unknown;
   dimensionFilters?: unknown;
@@ -96,7 +97,7 @@ async function seedPeriodRule(opts: {
        ${JSON.stringify(opts.accountScope ?? { kind: "accounts", accountIds: [opts.poolAccountId] })}::jsonb,
        ${JSON.stringify(opts.dimensionFilters ?? {})}::jsonb,
        ${opts.sourceMeasure ?? "period_activity"},
-       ${opts.basisKind ?? "fixed_percent"}, ${opts.driverId ?? null}, 'period', '{}'::jsonb,
+       ${opts.basisKind ?? "fixed_percent"}, ${opts.driverId ?? null}, 'period', ${JSON.stringify(opts.basisConfig ?? {})}::jsonb,
        ${opts.targetKind ?? "explicit"}, ${JSON.stringify(opts.dynamicTarget ?? {})}::jsonb,
        ${opts.impact ?? "reclass"}, 'largest_share', ${opts.solveMethod ?? "sequential"},
        'manual', 0, 'Allocation {{rule.name}} for {{period.name}}', now())`);
@@ -368,6 +369,52 @@ test(
       const run = await getRun(org.orgId, preview.id);
       assert.equal((run.computation as RunComputation).targets.length, 2);
       assert.equal(run.status, "posted");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a stepped publication previews as a named runnable refusal, not a 500",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const deptA = await seedDepartment(org.orgId, "Stepped A");
+      const deptB = await seedDepartment(org.orgId, "Stepped B");
+      // Seeded straight to published, the way a pre-refusal publication
+      // reads: publish itself would refuse this version today.
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        impact: "reclass",
+        basisKind: "stepped",
+        basisConfig: { tiers: [{ upTo: "1000" }, { upTo: null }] },
+        targets: [
+          { departmentId: deptA, targetAccountId: org.accounts.adjustment, label: "Stepped A" },
+          { departmentId: deptB, targetAccountId: org.accounts.adjustment, label: "Stepped B" },
+        ],
+      });
+      await seedSourceEntry(org, actorId, "2500.0000");
+      // The refusal class is the product: only AllocationRunError reaches
+      // the routes as a named 422 instead of the generic 500 fallback.
+      await assert.rejects(
+        previewAllocationRun({
+          orgId: org.orgId,
+          ruleId,
+          periodId: org.periodId,
+          bookId: org.bookId,
+          actorId,
+          trigger: "manual",
+        }),
+        (error: unknown) =>
+          error instanceof AllocationRunError &&
+          /stepped basis, which is not yet runnable/.test(error.message) &&
+          /republish/.test(error.message),
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
