@@ -112,6 +112,7 @@ export async function runAppTool(
     allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
     operation: `apps.assistant_tool.${appToolAssistantName(opts.appKey, opts.toolKey)}`,
     auditEndpoint: `tool/${opts.toolKey}`,
+    readOnlyTool: spec.readOnly,
     idempotencyKey: idempotencyKey,
   })
 }

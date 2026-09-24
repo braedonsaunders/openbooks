@@ -30,6 +30,7 @@ import { actorHasPermission } from '@openbooks/engine/src/organization/actor-per
 import { parseNativeExtension } from './native-ui'
 import { parseObjectSpecs, type ParsedObjects } from './objects'
 import { createAppPlatformAdapter, AppPlatformError } from './platform'
+import { readOnlyAppHostAdapters } from './tool-capabilities'
 import type { SessionUser } from '@/lib/auth'
 import { permissionSetCovers } from '@/lib/permissions'
 import { lockCustomFieldKeys } from '../custom-field-write-lock'
@@ -1043,6 +1044,8 @@ export async function invokeAppEndpointHandler(opts: {
   allowedSubsidiaryIds: ReadonlySet<string> | null
   operation: string
   auditEndpoint: string
+  /** Only app-tool invocations set this from the installed manifest. */
+  readOnlyTool?: boolean
   /** Caller key (bridge invocationKey, assistant per-call key). Always required. */
   idempotencyKey: string
 }): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
@@ -1071,7 +1074,7 @@ export async function invokeAppEndpointHandler(opts: {
   if (!src[0]) return { ok: false, error: 'endpoint source missing', status: 500 }
   const handlerSource = src[0].content
 
-  const adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
+  let adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
   if (recordsGranted) adapters.records = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds)
   if (glGranted) {
     // The caller's subsidiary scope travels with the write, so an App
@@ -1085,6 +1088,7 @@ export async function invokeAppEndpointHandler(opts: {
     }
   }
   adapters.platform = platform
+  if (opts.readOnlyTool) adapters = readOnlyAppHostAdapters(adapters)
 
   const request: AppRequest = {
     method: endpoint.method === 'ANY' ? 'POST' : endpoint.method,

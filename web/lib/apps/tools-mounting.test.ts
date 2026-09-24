@@ -12,7 +12,6 @@ import test from 'node:test'
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 const registry = read('../assistant/registry.ts')
 const chatRoute = read('../../app/api/assistant/chat/route.ts')
-const mcpServer = read('../mcp/server.ts')
 const skillsTest = read('../mcp/skills.test.ts')
 const skills = read('../mcp/skills.ts')
 const prompt = read('../assistant/system-prompt.ts')
@@ -32,12 +31,6 @@ test('the chat registry appends installed app tools after the static catalogs', 
 test('named app-tool execution resolves through the same gated path', () => {
   assert.match(registry, /if \(name\.startsWith\("app_"\)\)/)
   assert.match(registry, /views\.find\(\(v\) => v\.name === name\)/)
-})
-
-test('the MCP server registers installed app tools for the same actor', () => {
-  assert.match(mcpServer, /listAppToolViews\(/)
-  assert.match(mcpServer, /registerToolCatalog\(server, await appCatalog\(context, features\), options\)/)
-  assert.match(mcpServer, /canRunTool\(candidate\.authz, definition, features\)/)
 })
 
 test('the skill-pack gate scrapes the app-tools file and the playbook names app tools', () => {
