@@ -377,14 +377,26 @@ export function validateResponse(
       }
 
       sectionRows.forEach((row, rowIndex) => {
+        // A null (or otherwise non-object) row is a shape error naming the
+        // row — reading fields off it would throw a TypeError and answer a
+        // 500 for a payload problem the filler can fix.
+        if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+          errors.push({
+            fieldId: `${section.id}.${rowIndex}`,
+            sectionId: section.id,
+            message: 'Row must be an object of field values',
+          })
+          return
+        }
         // Row fields evaluate visibility against top-level values merged with
         // the row's own values (sibling fields shadow top-level ids).
         const rowCtx: EvalContext = { values: { ...values, ...row }, rows }
+        const rowFieldIds = new Set(section.fields.map((field) => field.id))
         for (const field of section.fields) {
           if (!isResponseValueField(field.type)) continue
           const fieldVisible =
             visible && (!field.showIf || evaluateLogicRule(field.showIf, rowCtx))
-          const value = row[field.id]
+          const value = (row as FieldValueMap)[field.id]
           const key = `${section.id}.${rowIndex}.${field.id}`
           if (isEmpty(value)) {
             if (stage === 'submit' && fieldVisible && effectiveRequired(field)) {
@@ -394,6 +406,17 @@ export function validateResponse(
           }
           for (const message of fieldValueErrors(field, value)) {
             errors.push({ fieldId: key, sectionId: section.id, message })
+          }
+        }
+        // Unknown keys inside rows are refused exactly like unknown
+        // top-level keys, or a renamed row field would persist silently.
+        for (const key of Object.keys(row)) {
+          if (!rowFieldIds.has(key)) {
+            errors.push({
+              fieldId: `${section.id}.${rowIndex}.${key}`,
+              sectionId: section.id,
+              message: 'Unknown field',
+            })
           }
         }
       })

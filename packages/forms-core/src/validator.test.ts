@@ -45,6 +45,49 @@ test('accepts valid dates, including leap day', () => {
   )
 })
 
+const repeatingSchema: FormSchemaV1 = {
+  schemaVersion: 1,
+  title: 'Lines',
+  sections: [
+    {
+      id: 'lines',
+      repeating: true,
+      fields: [
+        { id: 'desc', type: 'text', label: 'Description' },
+        { id: 'qty', type: 'number', label: 'Qty' },
+      ],
+    },
+  ],
+}
+
+test('a null repeating row is a named row error, not a TypeError', () => {
+  const errors = validateResponse(
+    repeatingSchema,
+    {},
+    { lines: [{ desc: 'ok', qty: 1 }, null, ['not-an-object']] } as never,
+    'submit',
+  )
+  assert.deepEqual(
+    errors.map(({ fieldId, message }) => ({ fieldId, message })),
+    [
+      { fieldId: 'lines.1', message: 'Row must be an object of field values' },
+      { fieldId: 'lines.2', message: 'Row must be an object of field values' },
+    ],
+  )
+})
+
+test('unknown keys inside repeating rows are refused like top-level keys', () => {
+  const errors = validateResponse(
+    repeatingSchema,
+    {},
+    { lines: [{ desc: 'ok', qty: 1, ghost: 9 }] },
+    'draft',
+  )
+  assert.deepEqual(errors, [
+    { fieldId: 'lines.0.ghost', sectionId: 'lines', message: 'Unknown field' },
+  ])
+})
+
 const moneySchema: FormSchemaV1 = {
   schemaVersion: 1,
   title: 'Money',
