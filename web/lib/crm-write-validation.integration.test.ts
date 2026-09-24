@@ -424,6 +424,102 @@ test(
 )
 
 
+// A subsidiary-restricted actor drafts and links activities: subjects outside
+// the actor's scope refuse, and the refusal writes nothing.
+async function scopedCrmFixture() {
+  const { org, actor } = await fixture()
+  const hidden = randomUUID()
+  try {
+    await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`))
+    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='crm_writer'`))
+    const doc = async (number: string, subsidiaryId: string) => {
+      const id = randomUUID()
+      await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,status,subsidiary_id,created_by,updated_by) values (${id},${org.orgId},'sales_order',${number},${org.customerId},${org.date},'CAD','draft',${subsidiaryId},${actor},${actor})`))
+      return id
+    }
+    const visible = await doc('VIS-LINK-1', org.subsidiaryId)
+    const concealed = await doc('HID-LINK-1', hidden)
+    return { org, actor, hidden, visible, concealed }
+  } catch (e) {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+    throw e
+  }
+}
+
+async function activityCount(orgId: string) {
+  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_activities where org_id=${orgId}`)).rows[0]!.n
+}
+
+async function linkSubjects(orgId: string, activityId: string) {
+  return (await db.execute<{ subject_id: string }>(sql`select subject_id from crm_activity_links where org_id=${orgId} and activity_id=${activityId} order by subject_id`)).rows.map((r) => r.subject_id)
+}
+
+test('activity draft and link writes refuse out-of-scope subjects and write nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, visible, concealed } = await scopedCrmFixture()
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const before = await activityCount(org.orgId)
+      const refused = await activityDraft(
+        new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task', subjectKind: 'document', subjectId: concealed }) }),
+      )
+      assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()))
+      assert.equal(await activityCount(org.orgId), before, 'a refused draft writes no activity')
+      assert.equal((await db.execute(sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${concealed}`)).rows.length, 0)
+
+      const accepted = await activityDraft(
+        new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task', subjectKind: 'document', subjectId: visible }) }),
+      )
+      assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()))
+      const activityId = (await accepted.json()).id as string
+      assert.deepEqual(await linkSubjects(org.orgId, activityId), [visible])
+
+      const relink = await activityEdit(request({ links: [{ subjectKind: 'document', subjectId: concealed }] }), params(activityId))
+      assert.equal(relink.status, 422, JSON.stringify(await relink.clone().json()))
+      assert.deepEqual(await linkSubjects(org.orgId, activityId), [visible], 'a refused relink keeps the stored links')
+    })
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('activity draft waits on a subject rehome in flight instead of racing it', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, actor, hidden } = await scopedCrmFixture()
+  const writer = await pool.connect()
+  let pending: Promise<Response> | undefined
+  try {
+    const moving = randomUUID()
+    await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,status,subsidiary_id,created_by,updated_by) values (${moving},${org.orgId},'sales_order','MOV-LINK-1',${org.customerId},${org.date},'CAD','draft',${org.subsidiaryId},${actor},${actor})`))
+    const before = await activityCount(org.orgId)
+    await writer.query('begin')
+    await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
+    const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
+    await writer.query('update documents set subsidiary_id=$1 where id=$2 and org_id=$3', [hidden, moving, org.orgId])
+    pending = withOrgContext(org.orgId, () => activityDraft(
+      new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task', subjectKind: 'document', subjectId: moving }) }),
+    ))
+    let blocked = false
+    for (let n = 0; n < 200; n++) {
+      blocked = !!((await pool.query('select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))', [pid])).rowCount)
+      if (blocked) break
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    assert.ok(blocked, 'the draft waits on the locked subject instead of linking the pre-rehome row')
+    await writer.query('commit')
+    const response = await pending
+    assert.equal(response.status, 404, JSON.stringify(await response.clone().json()))
+    assert.equal(await activityCount(org.orgId), before, 'the draft refused after the rehome committed writes nothing')
+    assert.equal((await db.execute(sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${moving}`)).rows.length, 0)
+  } finally {
+    await writer.query('rollback').catch(() => {})
+    await pending?.catch(() => {})
+    writer.release()
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test('activity audit uses the serialized predecessor and preserves deleted children',
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const { org, actor } = await fixture()
