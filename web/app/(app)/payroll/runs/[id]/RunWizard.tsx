@@ -2741,18 +2741,19 @@ function FundingPanel({
  * response is a PDF, so the blob is opened in a new tab exactly as the stub
  * link does — reprinting is safe and returns the same numbers.
  */
+export async function fetchChequePdf(documentId: string, fallback: string): Promise<Blob> {
+  const res = await fetch(`/api/payroll/runs/${documentId}/cheques-pdf`, { method: 'POST' })
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback))
+  return res.blob()
+}
+
 function PrintChequesButton({ documentId, count }: { documentId: string; count: number }) {
   const t = useTranslations('payroll')
   const [busy, setBusy] = useState(false)
   async function print() {
     setBusy(true)
     try {
-      const res = await fetch(`/api/payroll/runs/${documentId}/cheques-pdf`, { method: 'POST' })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error ?? 'failed')
-      }
-      const url = URL.createObjectURL(await res.blob())
+      const url = URL.createObjectURL(await fetchChequePdf(documentId, t('wizard.finish.chequesFailed')))
       window.open(url, '_blank', 'noopener')
       // Revoked late so the new tab has finished reading the blob.
       setTimeout(() => URL.revokeObjectURL(url), 60_000)

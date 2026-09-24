@@ -305,6 +305,7 @@
       "stubsEmailed": "{sent, plural, one {# recibo} other {# recibos}} enviados por correo.",
       "stubsEmailedPartial": "{sent} enviados; omitidos (sin correo o fallidos): {skipped}",
       "printCheques": "Imprimir {count, plural, one {# cheque de nómina} other {# cheques de nómina}}",
+      "chequesFailed": "No se pudo preparar el PDF de cheques.",
       "partialTitle": "{count, plural, one {Ciclo parcial — # empleado excluido por decisión} other {Ciclo parcial — # empleados excluidos por decisión}}",
       "partialRecorded": "Aceptado el {date}. Esta decisión queda registrada en el ciclo.",
       "partialRecovery": "Para pagar a los empleados excluidos: aporte los datos faltantes cuando su pantalla de captura esté disponible y págueles en un ciclo fuera de nómina. Un ciclo contabilizado nunca se modifica después.",

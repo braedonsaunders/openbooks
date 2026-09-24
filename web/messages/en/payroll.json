@@ -305,6 +305,7 @@
       "stubsEmailed": "{sent, plural, one {# stub} other {# stubs}} emailed.",
       "stubsEmailedPartial": "{sent} emailed; skipped (no email or failed): {skipped}",
       "printCheques": "Print {count, plural, one {# cheque} other {# cheques}}",
+      "chequesFailed": "Could not prepare the cheque PDF.",
       "partialTitle": "{count, plural, one {Partial run — # employee left out by decision} other {Partial run — # employees left out by decision}}",
       "partialRecorded": "Acknowledged on {date}. This decision is recorded on the run.",
       "partialRecovery": "To pay the employees left out: supply the missing input once its entry screen is available, then pay them on an off-cycle run. A posted run is never edited in place.",
