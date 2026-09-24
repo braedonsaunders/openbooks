@@ -88,6 +88,7 @@ export function CashWeekFlyout({
   const locale = useLocale()
   const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
   const t = useTranslations('analytics.cashWeek')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>(initialSide)
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
@@ -350,11 +351,11 @@ export function CashWeekFlyout({
                 {t('pagination.showing', { from: start + 1, to: Math.min(start + PAGE_SIZE, sorted.length), total: sorted.length })}
               </span>
               <div className="flex items-center gap-1">
-                <button type="button" disabled={curPage <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                <button type="button" aria-label={tCommon('actions.previous')} disabled={curPage <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
                   <ChevronLeft size={14} />
                 </button>
                 <span className="px-1 text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{curPage}/{totalPages}</span>
-                <button type="button" disabled={curPage >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                <button type="button" aria-label={tCommon('actions.next')} disabled={curPage >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
                   <ChevronRight size={14} />
                 </button>
               </div>
@@ -386,6 +387,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
   const today = useBusinessToday()
   const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
+  const tCommon = useTranslations('common')
   const money = (n: string) => fmtMoney(n, { compact: true })
   const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
   const t = useTranslations('analytics.cashWeek')
@@ -533,11 +535,11 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
             {t('pagination.showing', { from: start + 1, to: Math.min(start + PAGE_SIZE, sorted.length), total: sorted.length })}
           </span>
           <div className="flex items-center gap-1">
-            <button type="button" disabled={curPage <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+            <button type="button" aria-label={tCommon('actions.previous')} disabled={curPage <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
               <ChevronLeft size={14} />
             </button>
             <span className="px-1 text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{curPage}/{totalPages}</span>
-            <button type="button" disabled={curPage >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+            <button type="button" aria-label={tCommon('actions.next')} disabled={curPage >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
               <ChevronRight size={14} />
             </button>
           </div>
