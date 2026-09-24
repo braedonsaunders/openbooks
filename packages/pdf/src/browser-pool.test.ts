@@ -124,6 +124,9 @@ test('the renderer environment carries no secrets', () => {
     HOME: '/home/node',
     LANG: 'C.UTF-8',
     TMPDIR: '/tmp',
+    LC_ALL: 'C.UTF-8',
+    FONTCONFIG_PATH: '/etc/fonts',
+    XDG_CACHE_HOME: '/home/node/.cache',
     OPENBOOKS_DB_URL: 'postgres://owner:secret@host/db',
     OPENBOOKS_DATA_KEY: '001122',
     OPENBOOKS_INTERNAL_TOKEN: 'internal',
@@ -132,23 +135,88 @@ test('the renderer environment carries no secrets', () => {
     S3_ACCESS_KEY_ID: 'akid',
     S3_SECRET_ACCESS_KEY: 'secret',
     MINIO_ROOT_PASSWORD: 'rootpw',
-    // libpq reads this freestanding name with no underscore separator, so the
-    // generic _PASSWORD suffix rule misses it — it needs its own entry.
+    // libpq reads this freestanding name with no underscore separator.
     PGPASSWORD: 'dbpw',
     POSTGRES_OWNER_PASSWORD: 'dbpw',
     REDIS_PASSWORD: 'redispw',
     SOMETHING_API_TOKEN: 'tok',
+    // The *_KEY / *_ID shapes the old denylist missed.
+    AWS_ACCESS_KEY_ID: 'dropped-key-id',
+    AWS_SECRET_ACCESS_KEY: 'secret',
+    STRIPE_SECRET_KEY: 'sk_live_xxx',
+    STRIPE_PUBLISHABLE_KEY: 'pk_live_xxx',
+    GITHUB_TOKEN: 'ghp_xxx',
+    DATABASE_URL: 'postgres://owner:secret@host/db',
+    REDIS_URL: 'redis://host',
+    MY_APP_PRIVATE_KEY: 'private',
   })
   for (const [key, value] of Object.entries(scrubbed)) {
     assert.ok(!/secret|password|token|key|url/i.test(`${key}=${value}`) || key === 'PATH', `${key} must not reach the renderer`)
   }
+  // What Chromium needs still passes through.
   assert.equal(scrubbed.PATH, '/usr/bin')
   assert.equal(scrubbed.HOME, '/home/node')
   assert.equal(scrubbed.LANG, 'C.UTF-8')
+  assert.equal(scrubbed.TMPDIR, '/tmp')
+  assert.equal(scrubbed.LC_ALL, 'C.UTF-8')
+  assert.equal(scrubbed.FONTCONFIG_PATH, '/etc/fonts')
+  assert.equal(scrubbed.XDG_CACHE_HOME, '/home/node/.cache')
+  // Everything else — the whole secret surface — is dropped by default.
   assert.equal(scrubbed.OPENBOOKS_DB_URL, undefined)
   assert.equal(scrubbed.PGPASSWORD, undefined)
   assert.equal(scrubbed.SESSION_SECRET, undefined)
   assert.equal(scrubbed.S3_SECRET_ACCESS_KEY, undefined)
+  assert.equal(scrubbed.AWS_ACCESS_KEY_ID, undefined)
+  assert.equal(scrubbed.AWS_SECRET_ACCESS_KEY, undefined)
+  assert.equal(scrubbed.STRIPE_SECRET_KEY, undefined)
+  assert.equal(scrubbed.STRIPE_PUBLISHABLE_KEY, undefined)
+  assert.equal(scrubbed.GITHUB_TOKEN, undefined)
+  assert.equal(scrubbed.DATABASE_URL, undefined)
+  assert.equal(scrubbed.MY_APP_PRIVATE_KEY, undefined)
+})
+
+test('print-page navigations are blocked while inline resources continue', async () => {
+  // A meta refresh or link that survived sanitization would arrive here as a
+  // document request: only about:blank may continue, so the print page can
+  // never navigate the renderer off the merged document.
+  const seen: Array<{ resourceType: string; url: string; continued: boolean }> = []
+  let requestHandler: ((request: { resourceType(): string; url(): string; continue(): void; abort(): void }) => void) | null = null
+  const launcher: PdfBrowserLauncher = async () =>
+    fakeBrowser(async () =>
+      ({
+        setJavaScriptEnabled: async () => undefined,
+        setRequestInterception: async () => undefined,
+        on: (_event: string, handler: typeof requestHandler) => {
+          requestHandler = handler
+        },
+        setContent: async () => undefined,
+        pdf: async () => Buffer.from('%PDF-fake'),
+        close: async () => undefined,
+      }) as unknown as Page,
+    )
+  const pool = new PdfBrowserPool(launcher)
+  await pool.withPage(async () => 'ok')
+  assert.ok(requestHandler, 'the pool must install a request handler')
+  const fire = (resourceType: string, url: string): boolean => {
+    let continued = false
+    requestHandler!({
+      resourceType: () => resourceType,
+      url: () => url,
+      continue: () => {
+        continued = true
+      },
+      abort: () => {
+        continued = false
+      },
+    })
+    seen.push({ resourceType, url, continued })
+    return continued
+  }
+  assert.equal(fire('document', 'about:blank'), true)
+  assert.equal(fire('image', 'data:image/png;base64,AAAA'), true)
+  assert.equal(fire('document', 'https://evil.example/'), false)
+  assert.equal(fire('image', 'https://evil.example/logo.png'), false)
+  assert.equal(fire('script', 'data:text/javascript,alert(1)'), false)
 })
 
 test('a sandbox failure retries unsandboxed with a warning', async () => {

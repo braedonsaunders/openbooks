@@ -104,16 +104,37 @@ export function pdfRendererStatus(): PdfRendererStatus {
 }
 
 /**
- * Secrets are blocklisted out of the renderer environment, never allowlisted
- * in: an allowlist risks breaking rendering (fonts, locale, temp dirs) in
- * ways no test here can catch — this package's suite never launches a real
- * browser — while a missed secret on a deny list only matters after a
- * renderer escape that the sandbox (below) already contains. The app's whole
- * secret surface lives under OPENBOOKS_ plus the freestanding transport and
- * credential names enumerated here; everything else passes through so the
- * renderer keeps working exactly as it does today.
+ * The renderer environment is an ALLOWLIST of what headless Chromium needs,
+ * never a denylist of what secrets look like: a denylist misses every secret
+ * shape it fails to enumerate (`*_KEY` and `*_ID` names like AWS_ACCESS_KEY_ID
+ * reached the child), while an allowlist fails closed on anything new. The
+ * renderer loads only inline `data:` resources (see `isAllowedPdfRequest`),
+ * so it needs no credentials at all — only locale, fonts, temp dirs, and the
+ * display/session plumbing below. Anything outside this list is dropped,
+ * including the whole `OPENBOOKS_` surface and freestanding transport names
+ * (`DATABASE_URL`, `PGPASSWORD`, …).
  */
-const RENDERER_SECRET_ENV = /^(OPENBOOKS_|S3_|MINIO_|POSTGRES_|REDIS_|DATABASE_URL$|REDIS_URL$|SESSION_SECRET$|PGPASSWORD$)|(_PASSWORD$|_SECRET$|_TOKEN$|_PRIVATE_KEY$)/
+const RENDERER_ENV_ALLOW_EXACT = new Set([
+  // Process basics.
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'HOSTNAME',
+  // Locale (Chromium formats dates/numbers with these).
+  'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES', 'LC_NUMERIC',
+  'LC_TIME', 'LC_COLLATE', 'LC_MONETARY', 'LC_ADDRESS', 'LC_IDENTIFICATION',
+  'LC_MEASUREMENT', 'LC_NAME', 'LC_PAPER', 'LC_TELEPHONE', 'LOCPATH', 'TZ',
+  // Temp dirs (render pages spill here).
+  'TMPDIR', 'TEMP', 'TMP',
+  // Display/session plumbing for Linux launches.
+  'DISPLAY', 'WAYLAND_DISPLAY', 'XDG_SESSION_TYPE',
+  'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_DATA_DIRS', 'XDG_RUNTIME_DIR',
+  'DBUS_SESSION_BUS_ADDRESS',
+  // Font discovery (custom fontconfig setups) and library lookup.
+  'FONTCONFIG_PATH', 'FONTCONFIG_FILE', 'LD_LIBRARY_PATH',
+  // Windows session basics for local development launches.
+  'SYSTEMROOT', 'WINDIR',
+])
+
+/** Namespace prefixes that are path/locale/session-typed, never secret-bearing. */
+const RENDERER_ENV_ALLOW_PREFIX = [/^LC_/, /^FONTCONFIG_/, /^FC_/, /^XDG_/]
 
 export function scrubRendererEnv(
   source: Record<string, string | undefined> = process.env,
@@ -121,8 +142,11 @@ export function scrubRendererEnv(
   const scrubbed: Record<string, string | undefined> = {}
   for (const [key, value] of Object.entries(source)) {
     if (value === undefined) continue
-    if (RENDERER_SECRET_ENV.test(key)) continue
-    scrubbed[key] = value
+    if (RENDERER_ENV_ALLOW_EXACT.has(key)) {
+      scrubbed[key] = value
+      continue
+    }
+    if (RENDERER_ENV_ALLOW_PREFIX.some((prefix) => prefix.test(key))) scrubbed[key] = value
   }
   return scrubbed
 }
