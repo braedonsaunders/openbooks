@@ -54,6 +54,17 @@ const mockSources = new Map<string, string>([
       const execute = async (query, local, pendingAudits) => {
         const text = sqlText(query)
         state.txQueries.push(text.replaceAll(/\\s+/g, ' ').trim())
+        // Subsidiary-scope parent reads (route-scope fix): the customer
+        // party locked for share, and any project locked through
+        // lockProjectForScope. The double's actor is unrestricted (see
+        // mock:authz), so these always resolve visible — scope denials are
+        // proven behaviorally in route-scope.integration.test.ts instead.
+        if (text.includes('from parties p') && text.includes('for share of p')) {
+          return { rows: [{ subsidiaryId: '00000000-0000-0000-0000-000000000099' }] }
+        }
+        if (text.includes('from projects p') && (text.includes('for share of p') || text.includes('for update of p'))) {
+          return { rows: [{ id: 'project-1', subsidiary_id: '00000000-0000-0000-0000-000000000099' }] }
+        }
         if (text.includes('select rate_book_id as')) {
           const row = first(local)
           return { rows: row ? [{ rateBookId: row.rate_book_id, customerId: row.customer_id, projectId: row.project_id,
@@ -114,7 +125,15 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:authz', `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }; export function can() { return true }`],
+  // The double's actor is unrestricted, so the scope gate below always
+  // answers null here — restricted-scope denials are proven behaviorally
+  // in route-scope.integration.test.ts against the real guard instead.
+  // (A mock: URL has no package base, so this stub stays import-free.)
+  ['mock:authz', `
+    export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }
+    export function can() { return true }
+    export function guardSubsidiaryScope() { return null }
+  `],
   ['mock:features', `export async function isFeatureEnabled() { return true }`],
   ['mock:business-date', `export async function businessToday() { return '2026-08-26' }
     export function isIsoCalendarDate(value) {
