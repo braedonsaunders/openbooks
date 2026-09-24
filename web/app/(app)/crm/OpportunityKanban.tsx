@@ -22,6 +22,8 @@ import {
 } from '@openbooks/ui'
 import { toast } from 'sonner'
 import { displayOpportunityStatusName } from '../../../lib/crm-status-display'
+import { isPositiveKanbanAmount, sumKanbanColumnByCurrency } from '../../../lib/crm-kanban-totals'
+import { createMoneyFormatter } from '../../../lib/money-format'
 import { useBusinessToday } from '../../../components/business-date-provider'
 
 export interface KanbanStatus {
@@ -96,13 +98,15 @@ export function OpportunityViewSwitcher({ view = 'list' }: { view?: 'board' | 'l
   )
 }
 
-function formatMoney(amount: string | number, currency = 'USD'): string {
-  const num = typeof amount === 'number' ? amount : parseFloat(amount) || 0
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(num)
+const moneyFormatters = new Map<string, (amount: string) => string>()
+
+function formatMoney(amount: string, currency: string): string {
+  let format = moneyFormatters.get(currency)
+  if (!format) {
+    format = (value: string) => createMoneyFormatter('en-US', currency).money(value, { maximumFractionDigits: 0 })
+    moneyFormatters.set(currency, format)
+  }
+  return format(amount)
 }
 
 export function OpportunityKanbanBoard({
@@ -202,8 +206,7 @@ export function OpportunityKanbanBoard({
       return
     }
 
-    const projectedNum = parseFloat(opportunity.projectedAmount) || 0
-    if (targetStatus.requiresPositiveAmount && projectedNum <= 0) {
+    if (targetStatus.requiresPositiveAmount && !isPositiveKanbanAmount(opportunity.projectedAmount)) {
       toast.error('This stage requires a positive projected deal amount.')
       return
     }
@@ -253,9 +256,9 @@ export function OpportunityKanbanBoard({
       <div className="flex gap-4 overflow-x-auto pb-6 pt-1">
         {statuses.map((status) => {
           const colOpps = filteredOpportunities.filter((op) => op.statusId === status.id)
-          const colTotal = colOpps.reduce((acc, op) => acc + (parseFloat(op.projectedAmount) || 0), 0)
-          const colWeighted = colOpps.reduce((acc, op) => acc + (parseFloat(op.weightedAmount) || 0), 0)
-          const displayCurrency = colOpps[0]?.currency || 'USD'
+          // Exact per-currency totals: a stage holding CAD 100 and USD 100
+          // reports one line per currency, never a converted-looking blend.
+          const colTotals = sumKanbanColumnByCurrency(colOpps)
 
           return (
             <div
@@ -277,15 +280,19 @@ export function OpportunityKanbanBoard({
                     {colOpps.length}
                   </span>
                 </div>
-                <div className="mt-1 flex items-baseline justify-between text-xs text-slate-500">
-                  <span className="font-medium text-slate-900 dark:text-slate-200">
-                    {formatMoney(colTotal, displayCurrency)}
-                  </span>
-                  {colWeighted > 0 && colWeighted !== colTotal && (
-                    <span className="text-[11px] text-slate-400">
-                      Weighted: {formatMoney(colWeighted, displayCurrency)}
-                    </span>
-                  )}
+                <div className="mt-1 flex flex-col gap-0.5 text-xs text-slate-500">
+                  {colTotals.map((total) => (
+                    <div key={total.currency} className="flex items-baseline justify-between">
+                      <span className="font-medium text-slate-900 dark:text-slate-200">
+                        {formatMoney(total.projected, total.currency)}
+                      </span>
+                      {isPositiveKanbanAmount(total.weighted) && total.weighted !== total.projected && (
+                        <span className="text-[11px] text-slate-400">
+                          Weighted: {formatMoney(total.weighted, total.currency)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
 
