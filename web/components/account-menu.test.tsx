@@ -71,6 +71,7 @@ const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const shell = (await import("../messages/en/shell.json", { with: { type: "json" } })).default;
+const shellFr = (await import("../messages/fr/shell.json", { with: { type: "json" } })).default;
 const { AccountMenu } = await import("./account-menu");
 
 const environments = {
@@ -83,7 +84,7 @@ const environments = {
   tenants: [{ productionOrgId: "org-1", productionOrgName: "Acme", envKind: "production" as const, sandboxes: [] }],
 };
 
-function mount() {
+function mount(locale = "en", messages = shell) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -92,7 +93,7 @@ function mount() {
     async render(isSuperAdmin = true) {
       await act(async () => {
         root.render(
-          <NextIntlClientProvider locale="en" messages={{ shell }} timeZone="UTC">
+          <NextIntlClientProvider locale={locale} messages={{ shell: messages }} timeZone="UTC">
             <AccountMenu
               name="Ada Admin"
               email="ada@example.test"
@@ -241,4 +242,26 @@ test("non-operators do not see the platform switcher", async (t) => {
     [...document.querySelectorAll("button")].some((button) => (button.textContent ?? "").includes("Platform")),
     false,
   );
+});
+
+test("account menu submenu back button uses the active locale", async (t) => {
+  const ui = mount("fr", shellFr);
+  t.after(() => ui.unmount());
+  await ui.render(false);
+
+  const trigger = ui.host.querySelector('button[aria-label="Menu du compte"]') as HTMLButtonElement | null;
+  assert.ok(trigger);
+  await act(async () => {
+    trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+    await tick();
+  });
+  const language = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Langue"));
+  assert.ok(language, "the translated language submenu is available");
+  await act(async () => {
+    language.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+
+  assert.ok(document.querySelector('button[aria-label="Retour"]'), "back control has a French accessible name");
 });

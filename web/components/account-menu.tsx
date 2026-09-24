@@ -271,6 +271,7 @@ export function AccountMenu({
       ) : (
         <div>
           <SubHeader
+            backLabel={t('back')}
             title={
               view === 'tenants'
                 ? t('organizations')
@@ -367,13 +368,13 @@ function Card({
   )
 }
 
-function SubHeader({ title, onBack }: { title: string; onBack: () => void }) {
+function SubHeader({ title, backLabel, onBack }: { title: string; backLabel: string; onBack: () => void }) {
   return (
     <div className="flex items-center gap-1.5 border-b border-slate-100 px-2 py-2 dark:border-slate-800">
       <button
         type="button"
         onClick={onBack}
-        aria-label="Back"
+        aria-label={backLabel}
         className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
       >
         <ChevronLeft size={16} />

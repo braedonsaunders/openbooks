@@ -2,6 +2,7 @@
   "accountMenu": {
     "account": "Conta",
     "menuAriaLabel": "Menu da conta",
+    "back": "Voltar",
     "theme": "Tema",
     "language": "Idioma",
     "menuLayout": "Layout do menu",
