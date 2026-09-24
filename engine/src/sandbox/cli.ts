@@ -17,6 +17,7 @@ import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
 import { listSandboxes } from "./index.ts";
 import type { SandboxTier } from "./clone.ts";
 import { resolveCliActor } from "./cli-actor.ts";
+import { resolveCreateMasking } from "./cli-masking.ts";
 
 function flag(args: string[], name: string): string | undefined {
   const p = args.find((a) => a.startsWith(`--${name}=`));
@@ -53,7 +54,7 @@ async function main() {
     case "create": {
       const name = positional[0] ?? "Sandbox";
       const tier = (flag(rest, "tier") as SandboxTier) ?? "masked";
-      const masked = flag(rest, "masked") !== "false" && tier === "masked";
+      const masked = resolveCreateMasking(tier, flag(rest, "masked"));
       console.log(`Creating ${tier} sandbox "${name}" from org ${orgId}…`);
       const t0 = Date.now();
       const { sandboxId, sandboxOrgId } = await createSandbox({
