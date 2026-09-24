@@ -641,3 +641,90 @@ test("forcing the CAM audit write to fail leaves no partial allocation or status
     await dropScratchOrg(fixture.org.orgId);
   }
 });
+
+test("a voided in-window expense with an out-of-window reversal is not billed", { skip: !DB }, async () => {
+  const fixture = await seedCamProperty();
+  try {
+    const actor = await createScratchUser(fixture.org.orgId, "CAM void operator", "admin");
+    // The voided expense posts FROM its document, so the source link exists
+    // from posting time (a posted entry's link cannot be added later).
+    const docId = randomUUID();
+    const sourceId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, document_number, document_date, currency, status, subsidiary_id,
+         voided_at, voided_by, void_reason)
+      values (${docId}, ${fixture.org.orgId}, 'vendor_bill', 'VB-VOID-1', '2026-07-15', 'CAD', 'voided',
+              ${fixture.org.subsidiaryId}, now(), ${actor}, 'Billed to the wrong property')`);
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo,
+         status, origin, source_document_id, created_by, updated_by)
+      values (${sourceId}, ${fixture.org.orgId}, ${fixture.org.bookId}, ${fixture.org.subsidiaryId},
+              'CAM-VOID-SRC', '2026-07-15', ${fixture.org.periodId}, 'CAM source activity',
+              'draft', 'manual', ${docId}, null, null)`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, location_id, amount, currency, txn_amount, fx_rate)
+      values (${fixture.org.orgId}, ${sourceId}, 1, ${fixture.ledgerAccount}, ${fixture.org.subsidiaryId},
+              ${fixture.org.locationId}, '1000', 'CAD', '1000', 1),
+             (${fixture.org.orgId}, ${sourceId}, 2, ${fixture.org.accounts.bank}, ${fixture.org.subsidiaryId},
+              null, '-1000', 'CAD', '-1000', 1)`);
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now(), updated_at=now()
+      where org_id=${fixture.org.orgId} and id=${sourceId}`);
+    const source = { id: sourceId };
+    // The reversal period the void posts into once July is closed.
+    const calendar = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars
+      where org_id=${fixture.org.orgId} limit 1`)).rows[0]!;
+    const augustId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${augustId}, ${fixture.org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar.id})`);
+    // The void end-state exactly as the document void writes it: the
+    // document is voided, its in-window entry flips to 'reversed', and the
+    // offsetting entry posts 'posted' in August with the reversal link and
+    // mirrored dimensions.
+    const reversalId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo,
+         status, origin, source_document_id, reverses_entry_id, created_by, updated_by)
+      values (${reversalId}, ${fixture.org.orgId}, ${fixture.org.bookId}, ${fixture.org.subsidiaryId},
+              'CAM-VOID-R', '2026-08-05', ${augustId}, 'Reversal: Billed to the wrong property',
+              'draft', 'manual', ${docId}, ${source.id}, ${actor}, ${actor})`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, location_id, amount, currency, txn_amount, fx_rate)
+      values (${fixture.org.orgId}, ${reversalId}, 1, ${fixture.ledgerAccount}, ${fixture.org.subsidiaryId},
+              ${fixture.org.locationId}, '-1000', 'CAD', '-1000', 1),
+             (${fixture.org.orgId}, ${reversalId}, 2, ${fixture.org.accounts.bank}, ${fixture.org.subsidiaryId},
+              null, '1000', 'CAD', '1000', 1)`);
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now()
+      where org_id=${fixture.org.orgId} and id=${reversalId}`);
+    await db.execute(sql`update documents set reversal_entry_id=${reversalId}
+      where org_id=${fixture.org.orgId} and id=${docId}`);
+    await db.execute(sql`update journal_entries set status='reversed', updated_at=now()
+      where org_id=${fixture.org.orgId} and id=${source.id}`);
+    const shape = (await db.execute<{ doc: string; orig: string; rev: string; link: string }>(sql`
+      select (select status from documents where org_id=${fixture.org.orgId} and id=${docId}) as doc,
+             (select status from journal_entries where org_id=${fixture.org.orgId} and id=${source.id}) as orig,
+             (select status from journal_entries where org_id=${fixture.org.orgId} and id=${reversalId}) as rev,
+             (select reverses_entry_id::text from journal_entries where org_id=${fixture.org.orgId} and id=${reversalId}) as link`)).rows[0]!;
+    assert.deepEqual(shape, { doc: "voided", orig: "reversed", rev: "posted", link: source.id });
+    // An unvoided control expense bills normally beside the void.
+    await postLedgerExpense(fixture, "1200");
+    const created = await createCamPool({
+      orgId: fixture.org.orgId, actorId: actor, propertyId: fixture.propertyId,
+      name: "CAM void exclusion", fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
+      allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
+    });
+    await closeGlModule(fixture, actor);
+    // Without the exclusion the voided 1000 would bill (its reversal posts
+    // outside the window): 2200 instead of 1200.
+    const result = await finalizeCamPool(fixture.org.orgId, actor, created.id);
+    assert.equal(result.actualAmount, "1200.0000");
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
