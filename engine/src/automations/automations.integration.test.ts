@@ -567,6 +567,35 @@ test("rescind refuses when a later change depends on the target, naming it", { s
   });
 });
 
+test("a rescind refuses instead of filing null evidence when the pre-rescind snapshot cannot be read", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const employmentId = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    await addLiveVersion(h.org.orgId, employmentId, "active", "2026-01-01");
+    const target = await addLiveVersion(h.org.orgId, employmentId, "on_leave", "2026-02-01");
+    // Revoking the actor's employment-read grant makes the pre-rescind
+    // snapshot read throw inside the rescind (the approve grant and the
+    // verb gate stay on, so the rescind proceeds to the read). The rescind
+    // must refuse naming the missing evidence, never file the event with
+    // a null prior state.
+    await db.execute(sql`
+      delete from user_permission_overrides
+       where org_id = ${h.org.orgId} and user_id = ${h.adminId}
+         and permission = 'hrm.employment.read'
+    `);
+    await assert.rejects(
+      rescindEmploymentChange({ orgId: h.org.orgId, actorId: h.adminId, changeId: target.changeId, reason: "unreadable snapshot" }),
+      (e: unknown) =>
+        e instanceof EventVerbError &&
+        /pre-rescind employment snapshot could not be read/.test((e as Error).message),
+    );
+    const filed = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from employment_changes
+       where org_id = ${h.org.orgId} and reverses_change_id = ${target.changeId}
+    `)).rows[0]!.n;
+    assert.equal(filed, 0, "a refused rescind files no event");
+  });
+});
+
 test("correct defaults to a pre-filled reapproval request; direct when allowed", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const employmentId = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
