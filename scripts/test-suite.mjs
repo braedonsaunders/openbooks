@@ -106,7 +106,6 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'web/lib/documents.test.ts',
   'web/lib/feature-gating.test.ts',
   'web/lib/file-cabinet.private-boundary.test.ts',
-  'web/lib/multi-book-balance-readers.test.ts',
   'web/lib/rate-adjustment-pricing.test.ts',
   'web/lib/reports-posted.test.ts',
 ])
