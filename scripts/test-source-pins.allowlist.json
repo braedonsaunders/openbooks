@@ -55,7 +55,6 @@
     "web/lib/assistant/tools-reports.test.ts": 2,
     "web/lib/assistant/tools-write.test.ts": 2,
     "web/lib/assistant/tools.test.ts": 4,
-    "web/lib/cash/cash-open-items-precision.test.ts": 1,
     "web/lib/cash/core.test.ts": 6,
     "web/lib/cash/open-items-current-projection.test.ts": 2,
     "web/lib/confirm.test.tsx": 2,

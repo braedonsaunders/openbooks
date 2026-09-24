@@ -37,6 +37,7 @@ async function seedHostileMix() {
     const docs = [
       ['INV-CAD', 'customer_invoice', org.subsidiaryId, org.customerId, 'CAD', '100', '1', org.accounts.ar, org.accounts.revenue],
       ['INV-USD', 'customer_invoice', usSub, usCust, 'USD', '200', '1', org.accounts.ar, org.accounts.revenue],
+      ['INV-LARGE-CAD', 'customer_invoice', org.subsidiaryId, org.customerId, 'CAD', '999999999999899.1234', '1', org.accounts.ar, org.accounts.revenue],
       ['BILL-CAD', 'vendor_bill', org.subsidiaryId, org.vendorId, 'CAD', '100', '1', org.accounts.ap, org.accounts.cogs],
       ['BILL-USD', 'vendor_bill', usSub, usVend, 'USD', '100', '1', org.accounts.ap, org.accounts.cogs],
     ] as const
@@ -84,13 +85,13 @@ test('open items translate foreign-functional lines at the as-of spot', { skip: 
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const ar = (await openItems(org.orgId, 'ar', '2026-07-15')).map((i) => i.remaining).sort()
-        assert.deepEqual(ar, ['100.0000', '270.0000'])
+        assert.deepEqual(ar, ['100.0000', '270.0000', '999999999999899.1234'])
         const ap = (await openItems(org.orgId, 'ap', '2026-07-15')).map((i) => i.remaining).sort()
         assert.deepEqual(ap, ['100.0000', '135.0000'])
         const app = applicationContext(org.orgId)
         const applicationAr = await listApplicationOpenItems(app, { side: 'ar', asOf: '2026-07-15' })
-        assert.equal(applicationAr.total, 2)
-        assert.deepEqual(applicationAr.items.map((item) => item.remaining).sort(), ['100.0000', '270.0000'])
+        assert.equal(applicationAr.total, 3)
+        assert.deepEqual(applicationAr.items.map((item) => item.remaining).sort(), ['100.0000', '270.0000', '999999999999899.1234'])
         const applicationAp = await listApplicationOpenItems(app, { side: 'ap', asOf: '2026-07-15' })
         assert.equal(applicationAp.total, 2)
         assert.deepEqual(applicationAp.items.map((item) => item.remaining).sort(), ['100.0000', '135.0000'])
