@@ -12,7 +12,7 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { attachExisting, getFile, getFileBlob, getFolder, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
+const { attachExisting, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
 
 /**
  * Cabinet reads never apply the caller's subsidiary fence to record-folder
@@ -161,6 +161,15 @@ test('cabinet reads hide files attached to out-of-fence records', { skip: !proce
     assert.equal(await getFile(org.orgId, free, viewerB), null)
     assert.ok(await getFile(org.orgId, free, viewerA))
 
+    for (const viewer of [viewerA, viewerB, open]) {
+      const visibleFiles = await listFiles(org.orgId, viewer, { folderId: commonId })
+      const folder = await getFolder(org.orgId, commonId, viewer)
+      assert.ok(folder)
+      assert.equal(folder.fileCount, visibleFiles.total)
+      const treeFolder = (await getFolderTree(org.orgId, viewer)).find((row) => row.id === commonId)
+      assert.equal(treeFolder?.fileCount, visibleFiles.total)
+    }
+
     // An explicit share re-opens exactly its file for the grantee.
     await setGrant({
       orgId: org.orgId, resourceType: 'file', resourceId: onlyA,
@@ -168,6 +177,8 @@ test('cabinet reads hide files attached to out-of-fence records', { skip: !proce
     })
     assert.ok(await getFile(org.orgId, onlyA, viewerB))
     assert.equal(await getFile(org.orgId, onlyB, viewerA), null)
+    const afterGrant = await listFiles(org.orgId, viewerB, { folderId: commonId })
+    assert.equal((await getFolder(org.orgId, commonId, viewerB))?.fileCount, afterGrant.total)
   } finally {
     await dropScratchOrg(org.orgId)
   }
