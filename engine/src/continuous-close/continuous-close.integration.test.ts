@@ -9,6 +9,10 @@ import {
   runContinuousCloseAgent,
   runDueContinuousCloseAgents,
 } from "./continuous-close.ts";
+import {
+  CONTINUOUS_CLOSE_AGENT_KEYS,
+  defaultContinuousCloseDetectors,
+} from "../agents/continuous-close-config.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
@@ -442,6 +446,47 @@ test(
       const stale = await runStatus(org.orgId, staleRunId);
       assert.equal(stale.status, "failed", "the abandoned lease is reclaimed as failed");
       assert.equal((stale.stats as { reason: string }).reason, "abandoned_lease_reclaimed");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "every registered agent key runs through the control-plane dispatch and completes",
+  { skip: !DB },
+  async () => {
+    // The registry contract has two halves: the compiler refuses a key
+    // without a pack (Record<ContinuousCloseAgentKey, …>), and the control
+    // plane serves every key through the one AGENT_PACKS[agentKey] dispatch.
+    // This proves the runtime half — each key's manual run reaches its pack
+    // and completes. Every detector ships disabled so the run exercises
+    // policy load, dispatch, and completion with no detector data: an empty
+    // scratch org with quiet detectors detects nothing on any agent.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await withBypassContext(async () => {
+        for (const agentKey of CONTINUOUS_CLOSE_AGENT_KEYS) {
+          const detectorSettings = Object.fromEntries(
+            defaultContinuousCloseDetectors(agentKey).map((detector) => [detector.detectorKey, { enabled: false }]),
+          );
+          await db.execute(sql`
+            insert into ai_agent_policies
+              (id, org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
+               detector_settings, analysis_settings, next_run_at)
+            values (${randomUUID()}, ${org.orgId}, ${agentKey}, true, false, 'daily', '1000',
+                    ${JSON.stringify(detectorSettings)}::jsonb,
+                    ${JSON.stringify({ rootCauseAnalysis: false, recommendations: false, narrative: false })}::jsonb,
+                    null)
+          `);
+        }
+      });
+
+      for (const agentKey of CONTINUOUS_CLOSE_AGENT_KEYS) {
+        const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey, trigger: "manual" });
+        assert.equal(result.status, "completed", `${agentKey} completes through the registry dispatch`);
+      }
+      assert.equal(await workItemCount(org.orgId), 0, "disabled detectors detect nothing on any agent");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
