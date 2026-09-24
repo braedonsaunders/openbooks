@@ -1677,17 +1677,29 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       }
     }
     if (applied) {
-      const target = (await tx.execute<{ id: string; account_id: string }>(sql`
-        select jl.id,jl.account_id
+      const target = (await tx.execute<{ id: string; account_id: string; invoiceCurrency: string; lineCurrency: string; documentNumber: string }>(sql`
+        select jl.id,jl.account_id,d.currency as "invoiceCurrency",jl.currency as "lineCurrency",d.document_number as "documentNumber"
         from documents d join journal_lines jl on jl.entry_id=d.posted_entry_id and jl.org_id=d.org_id and jl.is_open_item
         join accounts a on a.id=jl.account_id and a.org_id=jl.org_id and a.type='asset_receivable'
         where d.org_id=${input.orgId} and d.id=${input.appliedDocumentId!} and d.kind='customer_invoice'
           and d.party_id=${row.tenant_id} and d.status='posted' and coalesce(d.open_balance,0)>=${amount}
         order by jl.line_number limit 1 for update of jl
       `));
-      targetLineId = target.rows[0]?.id ?? null;
-      offsetId = target.rows[0]?.account_id ?? null;
-      if (!targetLineId || !offsetId) throw new PropertyManagementError("Posted tenant invoice with sufficient open balance not found");
+      const targetRow = target.rows[0];
+      targetLineId = targetRow?.id ?? null;
+      offsetId = targetRow?.account_id ?? null;
+      if (!targetLineId || !offsetId || !targetRow) throw new PropertyManagementError("Posted tenant invoice with sufficient open balance not found");
+      // Deposit applications settle in a single currency: the journal legs and
+      // the applications row below are stamped at rate 1 in the deposit
+      // currency, so a foreign-currency invoice must refuse by name rather
+      // than relieve the wrong AR value with no FX gain/loss.
+      if (targetRow.invoiceCurrency !== row.currency || targetRow.lineCurrency !== row.currency) {
+        throw new PropertyManagementError(
+          `Security-deposit application refused: invoice ${targetRow.documentNumber} is in ${targetRow.invoiceCurrency} but the deposit is in ${row.currency}. ` +
+          `Apply the deposit to a ${row.currency} tenant invoice, or collect the ${targetRow.invoiceCurrency} invoice with a customer payment, ` +
+          `which posts cross-currency settlement with an FX rate and realized gain/loss.`,
+        );
+      }
     } else if (!offsetId) {
       throw new PropertyManagementError("An offset account is required");
     }
