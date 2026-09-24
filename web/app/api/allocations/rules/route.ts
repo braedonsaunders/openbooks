@@ -2,8 +2,7 @@ import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
-  createDraftVersion,
-  createRule,
+  createRuleWithInitialDraft,
   listRuleHeads,
 } from '../../../../../engine/src/allocations/index.ts'
 import { businessToday } from '../../../../../engine/src/platform/business-date.ts'
@@ -48,7 +47,7 @@ export async function POST(req: Request) {
   const scope = guardUnrestrictedScope(gate)
   if (scope) return scope
   try {
-    const created = await createRule(
+    const { created, draft } = await createRuleWithInitialDraft(
       {
         orgId: gate.user.orgId,
         key: parsed.data.key,
@@ -57,15 +56,6 @@ export async function POST(req: Request) {
         mode: parsed.data.mode,
         sortOrder: parsed.data.sortOrder,
         isActive: parsed.data.isActive,
-      },
-      { actorId: gate.user.id },
-    )
-    // A1 requires an explicit effective window for every new version; the
-    // initial draft starts today and the drawer adjusts it before publish.
-    const draft = await createDraftVersion(
-      created.rule.id,
-      {
-        orgId: gate.user.orgId,
         effectiveFrom: await businessToday(gate.user.orgId),
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       },
