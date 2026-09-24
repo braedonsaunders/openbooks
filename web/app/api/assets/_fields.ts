@@ -257,7 +257,7 @@ export async function parseTaxDepreciation(
       (raw as Record<string, unknown>).businessUsePercent ?? "100",
     );
     const bonusPercent = moneyOrNull((raw as Record<string, unknown>).bonusPercent ?? "0");
-    const section179 = moneyOrNull((raw as Record<string, unknown>).section179 ?? 0);
+    const section179 = moneyOrNull((raw as Record<string, unknown>).section179 ?? "0");
     if (
       businessUsePercent === null ||
       businessUsePercent === "unreadable" ||
