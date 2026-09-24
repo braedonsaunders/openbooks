@@ -129,6 +129,14 @@ export interface PayrollStatutoryComputeContext {
   pensionable: string;
   insurable: string;
   /**
+   * Per-program bases for contribution programs the pack declares, keyed by
+   * program key (see `PayrollContributionProgram`). Absent (undefined) only
+   * on unit-constructed contexts, where every program reads the `insurable`
+   * leg (legacy math, bit-identical); the engine always provides it. A pack
+   * prices and files each program off its own base, never another's.
+   */
+  programBases?: Record<string, string>;
+  /**
    * The pensionable-flagged share of the period's non-periodic one-offs — a
    * subset of `pensionable` (and, for taxable one-offs, of `nonPeriodic`).
    * `pensionable` itself carries every pensionable period line INCLUDING a

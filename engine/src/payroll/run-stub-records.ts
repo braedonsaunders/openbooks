@@ -42,6 +42,18 @@ export interface Line {
   expenseAccountEvidence?: { reason: string; reference: string } | null;
   sequence: number;
   taxable?: boolean; pensionable?: boolean; insurable?: boolean;
+  /**
+   * Per-program applicability for contribution programs the pack declares
+   * (see `PayrollContributionProgram`): the earning type contributes to the
+   * program's own base when its key is present and true. Absent key means
+   * included, matching the sibling flags' default-true; an absent map means
+   * every declared program includes the line. Never derived from another
+   * program's base. The per-component source column and the line-build
+   * stamping (beside `taxable`/`pensionable`/`insurable` in
+   * run-earning-lines.ts) land with C-13; until then no line carries the map
+   * and every program base covers the same earnings as the EI leg.
+   */
+  programApplicability?: Record<string, boolean>;
   vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
   accrualOnly?: boolean;
   /**

@@ -111,6 +111,11 @@ export async function computeCaStatutory(
     periodsPerYear: P, income, nonPeriodic, pensionable, insurable, deduction,
     pushStatutory, bool, assertRegionSupported, employerLevies,
   } = ctx;
+  // The QPIP program's own insurable base — never the EI leg. Absent only on
+  // unit-constructed contexts, where it reads the `insurable` leg (legacy
+  // math, bit-identical); the engine always provides it via the pack's
+  // declared contribution program.
+  const qpipInsurable = ctx.programBases?.["qpip"] ?? insurable;
   const { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings } = employerLevies;
 
   assertRegionSupported(region);
@@ -119,7 +124,7 @@ export async function computeCaStatutory(
 
   const t4127Input: T4127Input = {
     payDate: run.pay_date!, province: region as Province, periodsPerYear: P,
-    income, nonPeriodic, pensionable, insurable,
+    income, nonPeriodic, pensionable, insurable, qpipInsurable,
     pensionDeductions: deduction("pension_f"),
     alimonyDeductions: deduction("alimony"),
     unionDues: deduction("union_dues"),

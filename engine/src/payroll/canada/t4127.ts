@@ -61,6 +61,15 @@ export interface T4127Input {
   pensionable?: string;
   /** IE — insurable earnings this period. Defaults to income + nonPeriodic. */
   insurable?: string;
+  /**
+   * The QPIP program's own insurable base this period (the pack's declared
+   * contribution program, accumulated per stub). Absent (undefined) only on
+   * unit-constructed inputs, where it reads the EI leg (legacy math,
+   * bit-identical); the engine always provides it. QPIP premiums price off
+   * this base, never EI's: EI-excluded earnings can be QPIP-insurable and
+   * the reverse.
+   */
+  qpipInsurable?: string;
 
   /** F — period RPP/RRSP/PRPP/RCA deductions (from periodic pay). */
   pensionDeductions?: string;
@@ -275,14 +284,17 @@ export function calculateT4127(input: T4127Input): T4127Result {
   trace("EI", EI);
 
   // ---- QPIP (Quebec) -------------------------------------------------------
+  // Priced off the program's OWN insurable base, never the EI leg (see the
+  // input): the two bases can differ in either direction.
   let qpip = ZERO;
   let qpipEmployer = ZERO;
   if (isQuebec) {
+    const IE_QPIP = input.qpipInsurable === undefined ? IE : U(input.qpipInsurable);
     const priorQpip = opt(ytd.qpip);
-    qpip = max0(bmin(U(rates.qpip.maxEmployee) - priorQpip, mulRateCents(IE, rates.qpip.employeeRate)));
+    qpip = max0(bmin(U(rates.qpip.maxEmployee) - priorQpip, mulRateCents(IE_QPIP, rates.qpip.employeeRate)));
     const priorQpipEr = opt(ytd.qpipEmployer);
     qpipEmployer = max0(
-      bmin(U(rates.qpip.maxEmployer) - priorQpipEr, mulRateCents(IE, rates.qpip.employerRate)),
+      bmin(U(rates.qpip.maxEmployer) - priorQpipEr, mulRateCents(IE_QPIP, rates.qpip.employerRate)),
     );
     trace("QPIP", qpip);
   }

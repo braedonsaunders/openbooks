@@ -102,6 +102,19 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     pensionable: "CPP/QPP pensionable earnings (T4127 factor PI)",
     insurable: "EI insurable earnings (T4127 factor IE)",
   },
+  // QPIP prices and files its OWN insurable base — never the EI base. The
+  // QPIP-eligible salary (Revenu Québec's salaire admissible, reported on
+  // the T4 box 56 and the RL-1 box I up to the QPIP maximum) can differ from
+  // EI-insurable earnings in either direction, so the stub accumulates it
+  // separately under the factor key below.
+  contributionPrograms: [
+    {
+      key: "qpip",
+      label: "QPIP insurable earnings",
+      help: "QPIP-eligible salary: employment earnings insurable under the Québec parental insurance plan.",
+      stubFactorKey: "IE_QPIP",
+    },
+  ],
   // T4127 factor U1: employee-paid dues reduce taxable income.
   employeeUnionDuesTaxTreatment: "union_dues",
   deductionTreatments: [

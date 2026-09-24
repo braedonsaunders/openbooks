@@ -315,12 +315,12 @@ test("annual T4 maxima are consumed across an employee's slips, not applied to e
   // BC→ON and ON→BC both filed as 'ON'. The CRA wants a slip per province of
   // employment — but boxes 24 and 26 are capped PER EMPLOYEE per year, so
   // capping each slip independently would report up to N × the maximum.
-  const caps = { mie: "68900", yampe: "85000" };
+  const caps = { mie: "68900", yampe: "85000", qpipMie: "103000" };
   const capped = capAnnualEarnings(
     [
-      { employeePartyId: "mover", insurable: "50000", pensionable: "60000" },
-      { employeePartyId: "mover", insurable: "40000", pensionable: "50000" },
-      { employeePartyId: "stayer", insurable: "90000", pensionable: "90000" },
+      { employeePartyId: "mover", insurable: "50000", pensionable: "60000", qpipInsurable: "0" },
+      { employeePartyId: "mover", insurable: "40000", pensionable: "50000", qpipInsurable: "0" },
+      { employeePartyId: "stayer", insurable: "90000", pensionable: "90000", qpipInsurable: "0" },
     ],
     caps,
   );
@@ -336,11 +336,12 @@ test("annual T4 maxima are consumed across an employee's slips, not applied to e
 
 test("a single-province employee is capped exactly as before", () => {
   const capped = capAnnualEarnings(
-    [{ employeePartyId: "solo", insurable: "90000", pensionable: "90000" }],
-    { mie: "68900", yampe: "85000" },
+    [{ employeePartyId: "solo", insurable: "90000", pensionable: "90000", qpipInsurable: "0" }],
+    { mie: "68900", yampe: "85000", qpipMie: "103000" },
   );
   assert.equal(capped[0]!.box24EiInsurable, "68900");
   assert.equal(capped[0]!.box26CppPensionable, "85000");
+  assert.equal(capped[0]!.box56QpipInsurable, "0");
 });
 
 /* ------------------------------------------------------------------ */

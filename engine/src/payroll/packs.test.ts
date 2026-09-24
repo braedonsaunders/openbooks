@@ -467,3 +467,16 @@ test("every remittance schedule declares a non-empty, unique frequency settings 
   // Non-vacuity: an empty schedule list would pass every assertion above.
   assert.ok(owners.size >= 2, "expected more than one declared frequency key")
 })
+
+test("the CA pack declares the QPIP program base under its own stub factor (C-12)", () => {
+  // If the declaration goes missing, run-stub-compute stops storing IE_QPIP
+  // and every slip reader silently falls back to the EI base — the exact
+  // defect C-12 removes. Pin the wiring: program key, factor key, and the
+  // Québec-only program staying out of the US pack.
+  const ca = payrollPack("CA");
+  const programs = ca.contributionPrograms ?? [];
+  const qpip = programs.find((program) => program.key === "qpip");
+  assert.ok(qpip, "the CA pack declares a qpip contribution program");
+  assert.equal(qpip.stubFactorKey, "IE_QPIP");
+  assert.deepEqual(payrollPack("US").contributionPrograms ?? [], []);
+});

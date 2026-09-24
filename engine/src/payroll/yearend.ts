@@ -84,11 +84,14 @@ function caYearCaps(taxYear: number): { mie: string; yampe: string; qpipMie: str
  * what is left. Pure, and exact — `add`/`cmp`/`neg` from money.ts, no floats.
  */
 export function capAnnualEarnings(
-  rows: readonly { employeePartyId: string; insurable: string; pensionable: string }[],
-  caps: { mie: string; yampe: string },
-): { box24EiInsurable: string; box26CppPensionable: string }[] {
+  rows: readonly {
+    employeePartyId: string; insurable: string; pensionable: string; qpipInsurable: string;
+  }[],
+  caps: { mie: string; yampe: string; qpipMie: string },
+): { box24EiInsurable: string; box26CppPensionable: string; box56QpipInsurable: string }[] {
   const usedInsurable = new Map<string, string>();
   const usedPensionable = new Map<string, string>();
+  const usedQpip = new Map<string, string>();
   const consume = (used: Map<string, string>, key: string, value: string, cap: string): string => {
     const already = used.get(key);
     if (already === undefined) {
@@ -106,6 +109,10 @@ export function capAnnualEarnings(
   return rows.map((row) => ({
     box24EiInsurable: consume(usedInsurable, row.employeePartyId, row.insurable, caps.mie),
     box26CppPensionable: consume(usedPensionable, row.employeePartyId, row.pensionable, caps.yampe),
+    // Each program is capped at its OWN maximum: the QPIP base consumes
+    // QPIP room, never EI room. Non-Quebec slips arrive with a zero QPIP
+    // base, so their box 56 stays zero through the same mechanism.
+    box56QpipInsurable: consume(usedQpip, row.employeePartyId, row.qpipInsurable, caps.qpipMie),
   }));
 }
 
@@ -356,6 +363,13 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
            sum(coalesce((c.factors->>'C2')::numeric, 0)) as cpp2,
            sum((c.factors->>'EI')::numeric) as ei,
            sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
+           -- The QPIP program's own insurable base, accumulated per stub
+           -- under the pack's declared factor key. Stubs computed before
+           -- the program-base model carry no such factor; for those the
+           -- single accumulated base IS the QPIP base by construction (the
+           -- premium was priced off it), so the fallback reads it exactly —
+           -- it is the legacy record, not an approximation.
+           sum(coalesce((c.factors->>'IE_QPIP')::numeric, c.insurable_earnings)) as qpip_insurable,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'earning'
@@ -374,7 +388,6 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
      order by p.display_name, min(c.pay_date), c.province
   `));
 
-  const capMoney = (value: string, cap: string) => (cmp(value, cap) > 0 ? cap : value);
   const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "CA");
   const stubSlips = rows.rows.map((row) => {
       const province = String(row.province ?? "");
@@ -397,9 +410,11 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
         box26CppPensionable: num(row.pensionable),
         box44UnionDues: num(row.union_dues),
         box55Qpip: num(row.qpip),
-        // Box 56 is only reported for Quebec employment, and only up to the
-        // QPIP maximum insurable earnings — a different ceiling from EI's MIE.
-        box56QpipInsurable: isQuebec ? capMoney(num(row.insurable), caps.qpipMie) : "0",
+        // Box 56 is the QPIP program's OWN insurable base — never the EI
+        // base — kept uncapped here like boxes 24/26: the opening carry-in
+        // folds in below then the program maximum is consumed per employee
+        // across slips. Only Quebec employment reports it.
+        box56QpipInsurable: isQuebec ? num(row.qpip_insurable) : "0",
         stubCount: Number(row.stub_count ?? 0),
       };
     });
@@ -437,6 +452,7 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
       employeePartyId: slip.employeePartyId,
       insurable: slip.box24EiInsurable,
       pensionable: slip.box26CppPensionable,
+      qpipInsurable: slip.box56QpipInsurable,
     })),
     caps,
   );
@@ -444,6 +460,7 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
     ...slip,
     box24EiInsurable: capped[index]!.box24EiInsurable,
     box26CppPensionable: capped[index]!.box26CppPensionable,
+    box56QpipInsurable: capped[index]!.box56QpipInsurable,
   }));
 }
 
