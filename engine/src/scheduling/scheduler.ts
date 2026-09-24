@@ -2,6 +2,12 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { WEB_TICK_LOCK_KEY, withTickClaim } from "./lock.ts";
 import {
+  publishSchedulerTickHealth,
+  recordTickDutyFailures,
+  recordTickOutcome,
+  recordTickOverlapSkip,
+} from "./tick-health.ts";
+import {
   computeScheduledScriptNextRunAt,
   InvalidScheduledScriptCronError,
   quarantineInvalidScheduledScript,
@@ -454,7 +460,18 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
 }
 
 export async function tick(): Promise<void> {
-  if (running) return;
+  if (running) {
+    // B2-SCH-1: an overrun tick used to vanish here with no log or metric
+    // while scans silently missed their cadence. Every overlap skip is now
+    // a structured warn plus a counter the health signal reads.
+    const skipped = recordTickOverlapSkip();
+    console.warn(
+      `[scheduler] tick overlap: the previous tick is still running, skipping this 60s pass ` +
+        `(overlap skip #${skipped.overlapSkips}, ${skipped.consecutiveSkips} consecutive)`,
+    );
+    await publishSchedulerTickHealth();
+    return;
+  }
   running = true;
   try {
     // One cross-replica claim around the ENTIRE scan set: a replica that loses
@@ -528,9 +545,22 @@ export async function tick(): Promise<void> {
       // in production, web/instrumentation.node.ts on single-process opt-in.
       // This tick only runs what the process registered; it never imports a
       // duty module itself, so adding a duty adds no module edge.
+      // C-56: the duty summary used to be dropped here, so a broken
+      // scanner read as healthy. Failed duties are named in the log and
+      // stored in the tick health beside the overlap-skip counter.
       try {
         const { runWorkerDuties } = await import("../worker/duties.ts");
-        await runWorkerDuties();
+        const dutySummary = await runWorkerDuties();
+        const dutyFailures = dutySummary
+          .filter((duty) => !duty.ok)
+          .map((duty) => ({ key: duty.key, error: duty.error ?? "unknown duty failure" }));
+        recordTickDutyFailures(dutyFailures);
+        for (const failure of dutyFailures) {
+          console.error(
+            `[scheduler] worker duty ${failure.key} failed: ${failure.error} — ` +
+              `recorded in tick health; the other duties already ran`,
+          );
+        }
       } catch (e) {
         console.error("[scheduler] worker duties failed:", e);
       }
@@ -552,11 +582,14 @@ export async function tick(): Promise<void> {
         console.error("[scheduler] continuous-close scan failed:", e);
       }
     });
+    recordTickOutcome(true);
   } catch (e) {
     // Never let a tick rejection escape setInterval — an unhandled rejection
     // would take down the whole server process on a transient DB error.
     console.error("[scheduler] tick failed:", e);
+    recordTickOutcome(false);
   } finally {
     running = false;
+    await publishSchedulerTickHealth();
   }
 }

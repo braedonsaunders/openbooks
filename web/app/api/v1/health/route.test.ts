@@ -7,9 +7,25 @@ import test from 'node:test'
 // unauthenticated, so it never discloses the executable path or remedy. db + worker heartbeat are mocked; the pdf probe and the
 // route are REAL.
 
+const stateKey = Symbol.for('openbooks.health-route-scheduler-test')
+interface HealthRouteState {
+  schedulerHealthJson: string | null;
+}
+const routeState: HealthRouteState = { schedulerHealthJson: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+
 const mockSources = new Map<string, string>([
   ['db', `export const pool = { query: async () => ({ rows: [] }) }`],
-  ['jobs', `export async function getWorkerHeartbeat() { return new Date().toISOString() }`],
+  ['jobs', `
+    const state = globalThis[Symbol.for('openbooks.health-route-scheduler-test')]
+    export async function getWorkerHeartbeat() { return new Date().toISOString() }
+    export function getConnection() {
+      return {
+        get: async () => state.schedulerHealthJson,
+        set: async () => {},
+      }
+    }
+  `],
 ])
 
 const SELF_URL = new URL(import.meta.url).href
@@ -103,5 +119,67 @@ test('plain liveness is unchanged', async () => {
     const body = (await response.json()) as { status: string; service: string }
     assert.equal(body.status, 'ok')
     assert.equal(body.service, 'openbooks-api')
+  })
+})
+
+async function worker(): Promise<{ status: number; body: Record<string, unknown> }> {
+  const response = await GET(new Request('http://openbooks.test/api/v1/health?include=worker'))
+  return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+}
+
+test('a healthy scheduler tick reports ok with its counters', async () => {
+  routeState.schedulerHealthJson = JSON.stringify({
+    overlapSkips: 1,
+    consecutiveSkips: 0,
+    lastTickAt: '2026-09-24T12:00:00.000Z',
+    lastTickOk: true,
+    lastDutyFailures: [],
+  })
+  try {
+    await withEnv({ NODE_ENV: 'test', SESSION_SECRET: 'health-test-secret' }, async () => {
+      const { status, body } = await worker()
+      assert.equal(status, 200)
+      assert.equal(body.status, 'ok')
+      const scheduler = body.scheduler as Record<string, unknown>
+      assert.equal(scheduler.status, 'ok')
+      assert.equal(scheduler.overlapSkips, 1)
+      assert.equal(scheduler.consecutiveSkips, 0)
+      assert.deepEqual(scheduler.dutyFailures, [])
+    })
+  } finally {
+    routeState.schedulerHealthJson = null
+  }
+})
+
+test('sustained overlap skips degrade the worker signal with the duties named', async () => {
+  routeState.schedulerHealthJson = JSON.stringify({
+    overlapSkips: 5,
+    consecutiveSkips: 3,
+    lastTickAt: '2026-09-24T12:00:00.000Z',
+    lastTickOk: true,
+    lastDutyFailures: [{ key: 'automation-tick', error: 'boom' }],
+  })
+  try {
+    await withEnv({ NODE_ENV: 'test', SESSION_SECRET: 'health-test-secret' }, async () => {
+      const { status, body } = await worker()
+      assert.equal(status, 503)
+      assert.equal(body.status, 'degraded')
+      const scheduler = body.scheduler as Record<string, unknown>
+      assert.equal(scheduler.status, 'degraded')
+      assert.equal(scheduler.consecutiveSkips, 3)
+      assert.deepEqual(scheduler.dutyFailures, [{ key: 'automation-tick', error: 'boom' }])
+    })
+  } finally {
+    routeState.schedulerHealthJson = null
+  }
+})
+
+test('an unreadable scheduler key reports null without changing the worker signal', async () => {
+  routeState.schedulerHealthJson = null
+  await withEnv({ NODE_ENV: 'test', SESSION_SECRET: 'health-test-secret' }, async () => {
+    const { status, body } = await worker()
+    assert.equal(status, 200)
+    assert.equal(body.status, 'ok')
+    assert.equal(body.scheduler, null)
   })
 })
