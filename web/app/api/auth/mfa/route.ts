@@ -40,6 +40,9 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === "MFA is already enabled") {
       return NextResponse.json({ error: "MFA is already enabled" }, { status: 409 });
     }
+    if (error instanceof Error && error.message.startsWith("MFA setup is already pending in another session;")) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error("[auth] unable to begin MFA setup:", error);
     return NextResponse.json({ error: "unable to begin MFA setup" }, { status: 500 });
   }

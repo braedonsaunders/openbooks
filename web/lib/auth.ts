@@ -816,10 +816,31 @@ export async function beginMfaSetup(
       context,
     );
     if (!reauthenticated) return null;
-    const existing = (await db.execute<{ enabledAt: Date | null }>(sql`select enabled_at as "enabledAt" from auth_mfa_factors where user_id = ${userId} for update`));
+    const existing = (await db.execute<{
+      enabledAt: Date | null
+      secretEncrypted: string
+      setupSessionId: string | null
+      setupExpiresAt: Date | string | null
+    }>(sql`
+      select enabled_at as "enabledAt", secret_encrypted as "secretEncrypted",
+             setup_session_id as "setupSessionId", setup_expires_at as "setupExpiresAt"
+        from auth_mfa_factors where user_id = ${userId} for update
+    `)).rows[0]
     // Password verification and the factor lock may themselves take time.
     if (reauthenticated.sessionExpiresAt.getTime() <= Date.now()) return null;
-    if (existing.rows[0]?.enabledAt) throw new Error("MFA is already enabled");
+    if (existing?.enabledAt) throw new Error("MFA is already enabled");
+    const pendingExpiry = dateValue(existing?.setupExpiresAt)
+    if (existing && pendingExpiry && pendingExpiry.getTime() > Date.now()) {
+      if (existing.setupSessionId !== currentSessionId) {
+        throw new Error("MFA setup is already pending in another session; finish setup there or wait for it to expire before starting again")
+      }
+      const pendingSecret = unsealSecret(existing.secretEncrypted)
+      if (!pendingSecret) throw new Error("MFA setup secret is unavailable; restart enrollment")
+      return {
+        secret: pendingSecret,
+        provisioningUri: totpProvisioningUri({ secret: pendingSecret, email: reauthenticated.email }),
+      }
+    }
     const secret = generateTotpSecret();
     const setupExpiresAt = new Date(Date.now() + MFA_SETUP_TTL_S * 1000);
     await db.execute(sql`
