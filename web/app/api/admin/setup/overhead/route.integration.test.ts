@@ -37,8 +37,7 @@ const hooks = registerHooks({
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead/route")) {
-      const real = nextResolve(specifier, context).url;
-      return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; ${mockAuthz}`)}` };
+      return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(mockAuthz)}` };
     }
     return nextResolve(specifier, context);
   },
