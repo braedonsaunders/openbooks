@@ -66,6 +66,33 @@ function budgetFilterPredicate(clause: FilterClause): SQL | null {
   return null
 }
 
+/**
+ * Scenario-level authority for the budget_scenarios list (alias `bs`): a
+ * scenario is listable only when it touches nothing outside the caller's
+ * scope. An exists-a-visible-line rule lists mixed-scope scenarios whose GET
+ * answers 404 — an enumeration oracle. An unassigned line resolves to the
+ * root subsidiary (the same rule as the scenario-authority recheck on GET),
+ * and a scenario with no lines touches nothing, so it stays visible. Shared
+ * by the list predicate and the fiscal-year quick filter so both agree on
+ * which scenarios exist for the caller.
+ */
+export function budgetScenarioScopeFilter(allowedSubsidiaryIds: ReadonlySet<string>): SQL {
+  const scope = `{${[...allowedSubsidiaryIds].join(',')}}`
+  return sql`and not exists (
+    select 1 from budget_lines bl
+     where bl.org_id = bs.org_id and bl.scenario_id = bs.id
+       and (
+         (bl.subsidiary_id is not null and bl.subsidiary_id <> all(${scope}::uuid[]))
+         or (bl.subsidiary_id is null and not exists (
+           select 1 from subsidiaries root
+            where root.org_id = bs.org_id
+              and root.parent_id is null and root.is_active and not root.is_elimination
+              and root.id = any(${scope}::uuid[])
+         ))
+       )
+  )`
+}
+
 export function budgetWhere(
   view: ListViewConfig,
   adhoc: EntityAdhoc,
@@ -74,11 +101,7 @@ export function budgetWhere(
 ): SQL {
   const parts: SQL[] = [sql`bs.org_id = ${orgId}`]
   if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null) {
-    const visibleLineFilter = subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds)
-    parts.push(sql`and exists (
-      select 1 from budget_lines bl
-       where bl.org_id = bs.org_id and bl.scenario_id = bs.id${visibleLineFilter}
-    )`)
+    parts.push(budgetScenarioScopeFilter(allowedSubsidiaryIds))
   }
   for (const filter of view.filters) {
     if (pushCustomFieldFilter(parts, filter, "bs")) continue

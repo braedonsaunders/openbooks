@@ -54,6 +54,7 @@ import {
   budgetBaseJoins,
   BUDGET_BUILT_IN_EXPR,
   BUDGET_SORTS,
+  budgetScenarioScopeFilter,
   budgetWhere,
   REVENUE_CONTRACT_BASE_JOINS,
   REVENUE_CONTRACT_BUILT_IN_EXPR,
@@ -691,13 +692,11 @@ const SOURCES: Record<string, EntityListSource> = {
           // appears cast in the select list is rejected by Postgres, and this
           // filter never loaded. Grouping also keeps the sort numeric — a text
           // sort would put 2030 before 999 and 9999 before 10000.
+          // Same scenario-authority predicate as the list itself: years that
+          // exist only in out-of-scope scenarios must not be offered.
           const visibleLineFilter = allowedSubsidiaryIds == null
             ? sql``
-            : sql`and exists (
-                select 1 from budget_lines bl
-                 where bl.org_id = bs.org_id and bl.scenario_id = bs.id
-                   ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds)}
-              )`
+            : budgetScenarioScopeFilter(allowedSubsidiaryIds)
           const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select bs.fiscal_year::text as value, bs.fiscal_year::text as label
               from budget_scenarios bs

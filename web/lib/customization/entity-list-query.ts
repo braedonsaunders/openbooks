@@ -105,6 +105,7 @@ export {
   budgetBaseJoins,
   BUDGET_BUILT_IN_EXPR,
   BUDGET_SORTS,
+  budgetScenarioScopeFilter,
   budgetWhere,
 } from "./entity-list-query/budgets"
 
