@@ -84,6 +84,46 @@ export function allocationTouchedSubsidiaries(
  * in their set. Null coordinates inherit already-checked sources, so only
  * non-null entries need membership.
  */
+export interface AllocationRuleScopeShape {
+  /** Version dimensionFilters.subsidiaryIds; absent or empty matches every source (org-wide). */
+  sourceSubsidiaryIds?: readonly string[] | null;
+  targetKind?: string;
+  /** Version dynamicTarget.dimension; subsidiary dynamics name their entities in include. */
+  dynamicDimension?: string | null;
+  dynamicIncludes?: readonly string[] | null;
+  /** Every target row's subsidiary; null/undefined inherits the (already-checked) sources. */
+  targetSubsidiaryIds: readonly (string | null | undefined)[];
+}
+
+/**
+ * Configuration-write visibility for allocation rules: a restricted caller
+ * may publish, edit, or retire a rule only when EVERY subsidiary the
+ * rule's sources and targets touch is in their set. An org-wide rule (no
+ * source filter, an unlisted dynamic-subsidiary target, or nothing pinned
+ * at all) needs the full unrestricted scope — a restricted caller never
+ * qualifies, however broad their set. Null targets inherit their sources,
+ * exactly like the run predicate's null coordinates.
+ */
+export function allocationRuleVisible(
+  allowed: SubsidiaryScope,
+  rule: AllocationRuleScopeShape,
+): boolean {
+  if (allowed === null) return true;
+  const sources = rule.sourceSubsidiaryIds ?? [];
+  if (sources.length === 0) return false;
+  if (!sources.every((s) => allowed.has(s))) return false;
+  if (rule.targetKind === "dynamic" && rule.dynamicDimension === "subsidiary") {
+    const includes = rule.dynamicIncludes ?? [];
+    if (includes.length === 0) return false;
+    if (!includes.every((s) => allowed.has(s))) return false;
+  }
+  for (const target of rule.targetSubsidiaryIds) {
+    if (target === null || target === undefined || target === "") continue;
+    if (!allowed.has(target)) return false;
+  }
+  return true;
+}
+
 export function allocationScopeVisible(
   allowed: SubsidiaryScope,
   subsidiaryId: string | null,

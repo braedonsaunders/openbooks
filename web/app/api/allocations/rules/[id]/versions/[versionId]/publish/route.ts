@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { publishVersion } from '../../../../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../../../../lib/allocations-gate'
-import { allocationErrorResponse, requireRuleId } from '../../../../../_lib.ts'
+import { allocationWriteErrorResponse, requireRuleId } from '../../../../../_lib.ts'
 
 export const runtime = 'nodejs'
 
@@ -24,7 +24,7 @@ export async function POST(
   try {
     const published = await publishVersion(
       versionParam,
-      { orgId: gate.user.orgId, actorId: gate.user.id },
+      { orgId: gate.user.orgId, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
     )
     if (published.version.ruleId !== ruleId) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -34,6 +34,6 @@ export async function POST(
       targets: published.targets,
     })
   } catch (error) {
-    return allocationErrorResponse(error)
+    return allocationWriteErrorResponse(error)
   }
 }

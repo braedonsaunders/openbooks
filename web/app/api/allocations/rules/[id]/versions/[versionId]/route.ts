@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { getRuleVersion, updateDraftVersion } from '../../../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../../../lib/allocations-gate'
-import { allocationErrorResponse, requireRevision, requireRuleId } from '../../../../_lib.ts'
+import { allocationErrorResponse, allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../../../_lib.ts'
 
 export const runtime = 'nodejs'
 
@@ -75,7 +75,11 @@ export async function PATCH(
   const body = parsed.data as Record<string, unknown> & { expectedRevision?: unknown }
   const revision = requireRevision(body)
   if (revision instanceof NextResponse) return revision
-  const patch: Record<string, unknown> = { orgId: gate.user.orgId, expectedRevision: revision }
+  const patch: Record<string, unknown> = {
+    orgId: gate.user.orgId,
+    expectedRevision: revision,
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+  }
   for (const key of DRAFT_FIELDS) {
     if (body[key] !== undefined) patch[key] = body[key]
   }
@@ -91,6 +95,6 @@ export async function PATCH(
     )
     return NextResponse.json({ version: { ...updated.version, revision: updated.revision } })
   } catch (error) {
-    return allocationErrorResponse(error)
+    return allocationWriteErrorResponse(error)
   }
 }

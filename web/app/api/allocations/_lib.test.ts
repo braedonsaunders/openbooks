@@ -26,3 +26,16 @@ test('unexpected allocation write defects stay a generic 500', async () => {
   assert.equal(failed.status, 500)
   assert.deepEqual(await failed.json(), { error: 'Unable to post the allocation run.' })
 })
+
+test('configuration-write denials hide missing and out-of-scope behind one bare 404', async () => {
+  const { allocationWriteErrorResponse } = await import('../../../lib/allocations-run-error.ts')
+  const { AllocationRuleError } = await import('../../../../engine/src/allocations/index.ts')
+  const denied = allocationWriteErrorResponse(new AllocationRuleError('NOT_FOUND', 'not found'))
+  assert.equal(denied.status, 404)
+  assert.deepEqual(await denied.json(), { error: 'not found' })
+  const missing = allocationWriteErrorResponse(new AllocationRuleError('NOT_FOUND', 'allocation rule version not found: x'))
+  assert.equal(missing.status, 404)
+  assert.deepEqual(await missing.json(), { error: 'not found' })
+  const invalid = allocationWriteErrorResponse(new AllocationRuleError('INVALID', 'dimensionFilters.subsidiaryIds must be an array'))
+  assert.equal(invalid.status, 422)
+})

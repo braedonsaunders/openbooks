@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { retireVersion } from '../../../../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../../../../lib/allocations-gate'
-import { allocationErrorResponse, requireRuleId } from '../../../../../_lib.ts'
+import { allocationWriteErrorResponse, requireRuleId } from '../../../../../_lib.ts'
 
 export const runtime = 'nodejs'
 
@@ -27,13 +27,13 @@ export async function POST(
   try {
     const retired = await retireVersion(
       versionParam,
-      { orgId: gate.user.orgId, actorId: gate.user.id, reason: body.reason.trim() },
+      { orgId: gate.user.orgId, actorId: gate.user.id, reason: body.reason.trim(), allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
     )
     if (retired.version.ruleId !== ruleId) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     return NextResponse.json({ version: { ...retired.version, revision: retired.revision } })
   } catch (error) {
-    return allocationErrorResponse(error)
+    return allocationWriteErrorResponse(error)
   }
 }

@@ -459,11 +459,11 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
         },
         audit,
       );
-      await publishVersion(draft.version.id, { orgId: ledger.orgId, actorId: ledger.actorId });
+      await publishVersion(draft.version.id, { orgId: ledger.orgId, actorId: ledger.actorId, allowedSubsidiaryIds: null });
       const before = await getRuleVersion(ledger.orgId, draft.version.id);
       const refusals: Record<string, string> = {};
       try {
-        await updateDraftVersion(draft.version.id, { orgId: ledger.orgId, memoTemplate: "changed" }, audit);
+        await updateDraftVersion(draft.version.id, { orgId: ledger.orgId, memoTemplate: "changed", allowedSubsidiaryIds: null }, audit);
       } catch (error) {
         if (error instanceof AllocationRuleError) refusals["definitionRefused"] = error.code;
         else throw error;
@@ -471,7 +471,7 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
       try {
         await replaceTargets(
           draft.version.id,
-          { orgId: ledger.orgId, targets: [{ targetAccountId: ctx.roles.cogs, fixedPercent: "100" }] },
+          { orgId: ledger.orgId, targets: [{ targetAccountId: ctx.roles.cogs, fixedPercent: "100" }], allowedSubsidiaryIds: null },
           audit,
         );
       } catch (error) {
@@ -479,7 +479,7 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
         else throw error;
       }
       try {
-        await publishVersion(draft.version.id, { orgId: ledger.orgId, actorId: ledger.actorId });
+        await publishVersion(draft.version.id, { orgId: ledger.orgId, actorId: ledger.actorId, allowedSubsidiaryIds: null });
       } catch (error) {
         if (error instanceof AllocationRuleError) refusals["republishRefused"] = error.code;
         else throw error;
