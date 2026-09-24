@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { computeCostRate, convertFixedLaborComponents, convertLaborWage, type LaborCostComponent } from "./labor-costing.ts";
+import { computeCostRate, convertFixedLaborComponents, convertLaborWage, parseLaborCostComponents, type LaborCostComponent } from "./labor-costing.ts";
 
 const laborSource = readFileSync(new URL("./labor-costing.ts", import.meta.url), "utf8");
 
@@ -48,12 +48,71 @@ test("stacked labor costing: burden percentage plus per diem", () => {
   assert.equal(computeCostRate("38", "1", cfg(comps)), "50.8200");
 });
 
-test("zero and missing values are ignored", () => {
+test("zero values are ignored", () => {
   const comps: LaborCostComponent[] = [
     { key: "z", name: "Zero", kind: "percent_of_wage", value: 0 },
-    { key: "n", name: "NaN", kind: "per_hour", value: Number.NaN },
   ];
   assert.equal(computeCostRate("40", "1", cfg(comps)), "40.0000");
+});
+
+test("an unparseable burden component refuses the costing by name", () => {
+  const comps: LaborCostComponent[] = [
+    // NaN used to be skipped silently, pricing the entry without the burden.
+    { key: "b", name: "Statutory Burden", kind: "per_hour", value: Number.NaN },
+  ];
+  assert.throws(
+    () => computeCostRate("40", "1", cfg(comps)),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Statutory Burden/);
+      assert.match(error.message, /\(b\)/);
+      return true;
+    },
+  );
+});
+
+test("an unparseable worker-comp group rate refuses by name with its source row", () => {
+  const comps: LaborCostComponent[] = [
+    { key: "wc", name: "WSIB", kind: "worker_comp", value: 3, scaleWithOvertime: true },
+  ];
+  assert.throws(
+    () =>
+      computeCostRate("40", "1", cfg(comps), {
+        workerCompPercent: "not-a-number",
+        workerCompSource: 'worker-comp group "CA-Roofing" (group-id-1)',
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /not-a-number/);
+      assert.match(error.message, /CA-Roofing/);
+      assert.match(error.message, /group-id-1/);
+      return true;
+    },
+  );
+});
+
+test("a negative worker-comp group rate refuses instead of reducing the rate", () => {
+  const comps: LaborCostComponent[] = [
+    { key: "wc", name: "WSIB", kind: "worker_comp", value: 3, scaleWithOvertime: true },
+  ];
+  assert.throws(
+    () =>
+      computeCostRate("40", "1", cfg(comps), {
+        workerCompPercent: "-2.5",
+        workerCompSource: 'worker-comp group "CA-Roofing" (group-id-1)',
+      }),
+    /cannot be negative/,
+  );
+});
+
+test("the shared component parser refuses garbage the write API would", () => {
+  assert.throws(() => parseLaborCostComponents([{ kind: "annual_bonus", value: 5 }]), /component 1: unknown kind/);
+  assert.throws(() => parseLaborCostComponents([{ kind: "per_hour", value: "1.23456" }]), /at most 4 decimals/);
+  assert.throws(() => parseLaborCostComponents([{ kind: "per_hour", value: -2 }]), /cannot be negative/);
+  assert.deepEqual(parseLaborCostComponents(null), []);
+  assert.deepEqual(parseLaborCostComponents([{ kind: "per_day", value: "75.50" }]), [
+    { key: "c0", kind: "per_day", name: "Component", value: "75.5", scaleWithOvertime: false },
+  ]);
 });
 
 test("worker_comp uses the employee's group rate, not the fallback", () => {

@@ -15,6 +15,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import {
   LaborCostingFeatureDisabledError,
   laborClearingReconciliation,
+  parseLaborCostComponents,
   postPayrollVariance,
   type LaborCostComponent,
 } from '@openbooks/engine/src/projects/labor-costing.ts'
@@ -69,65 +70,24 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 /** numeric(19,4) ceiling — rates above this must 422, not overflow mid-write. */
 const NUMERIC_19_4_MAX = '999999999999999.9999'
 
-const COMPONENT_KINDS = new Set(['percent_of_wage', 'per_hour', 'per_day', 'worker_comp'])
-
-/** The settings payload carries at most this many burden components. */
-const MAX_COMPONENTS = 20
-
 /** Control-account keys this save owns (orgs.settings.controlAccounts paths). */
 const CONTROL_ACCOUNT_KEYS = ['laborWip', 'laborClearing', 'payrollVariance'] as const
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
 
 /**
- * Strict financial-policy boundary for burden components. A component that is
- * present but malformed rejects the whole save: the previous parser silently
- * dropped unknown kinds / unparseable or negative values and truncated past
- * 20, so an admin could save believing statutory burden was configured while
- * payroll actually ran without it. Absent optional labels keep their old
- * deterministic defaults; wrong-typed ones are refused.
+ * Strict financial-policy boundary for burden components: the engine's
+ * shared parser (the same one the costing read path revalidates stored
+ * settings through), so the write API and the read path can never disagree
+ * about what a valid component is. A component that is present but
+ * malformed rejects the whole save.
  */
 function parseComponents(input: unknown): Parsed<LaborCostComponent[]> {
-  if (input == null) return { ok: true, value: [] }
-  if (!Array.isArray(input)) return { ok: false, error: 'components must be an array' }
-  if (input.length > MAX_COMPONENTS) {
-    return { ok: false, error: `at most ${MAX_COMPONENTS} components` }
+  try {
+    return { ok: true, value: parseLaborCostComponents(input) }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'components must be an array' }
   }
-  const out: LaborCostComponent[] = []
-  for (const [i, entry] of input.entries()) {
-    const label = `component ${i + 1}`
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-      return { ok: false, error: `${label}: must be an object` }
-    }
-    const raw = entry as Record<string, unknown>
-    if (typeof raw.kind !== 'string' || !COMPONENT_KINDS.has(raw.kind)) {
-      return { ok: false, error: `${label}: unknown kind` }
-    }
-    const value = canonicalDecimal(raw.value, 4)
-    if (value === null) {
-      return { ok: false, error: `${label}: value must be a number with at most 4 decimals` }
-    }
-    if (compareDecimal(value, '0') < 0) {
-      return { ok: false, error: `${label}: value cannot be negative` }
-    }
-    if (raw.scaleWithOvertime !== undefined && typeof raw.scaleWithOvertime !== 'boolean') {
-      return { ok: false, error: `${label}: scaleWithOvertime must be a boolean` }
-    }
-    if (raw.key !== undefined && raw.key !== null && typeof raw.key !== 'string') {
-      return { ok: false, error: `${label}: key must be text` }
-    }
-    if (raw.name !== undefined && raw.name !== null && typeof raw.name !== 'string') {
-      return { ok: false, error: `${label}: name must be text` }
-    }
-    out.push({
-      key: (typeof raw.key === 'string' ? raw.key.trim().slice(0, 40) : '') || `c${out.length}`,
-      name: (typeof raw.name === 'string' ? raw.name.trim().slice(0, 120) : '') || 'Component',
-      kind: raw.kind as LaborCostComponent['kind'],
-      value,
-      scaleWithOvertime: raw.scaleWithOvertime === true,
-    })
-  }
-  return { ok: true, value: out }
 }
 
 async function configuredCurrencies(orgId: string): Promise<string[]> {

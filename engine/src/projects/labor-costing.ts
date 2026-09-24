@@ -13,6 +13,7 @@ import {
   normalizeDecimal,
   normalizeMoney,
 } from "../money/money.ts";
+import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import {
   postProjectGlEntryWithinTransaction,
   recognitionAccounts,
@@ -24,6 +25,85 @@ export class LaborCostingFeatureDisabledError extends Error {
     super("projects feature is disabled");
     this.name = "LaborCostingFeatureDisabledError";
   }
+}
+
+/** A stored or supplied labor-costing input mispriced silently until now:
+ * thrown (never skipped) naming the component and its source. */
+export class LaborCostingSettingsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LaborCostingSettingsError";
+  }
+}
+
+/** Maximum burden components per org — shared by the write API and the
+ * read path so the two can never disagree about the bound. */
+export const MAX_LABOR_COST_COMPONENTS = 20;
+
+const LABOR_COST_COMPONENT_KINDS = new Set(["percent_of_wage", "per_hour", "per_day", "worker_comp"]);
+
+/**
+ * Strict burden-component parser — the single source of truth both the
+ * setup write API and the costing read path validate through. Legacy,
+ * imported, or directly-edited garbage reaches this parser on READ
+ * (laborCostingSettings) and refuses by name instead of flowing into
+ * computeCostRate, where a catch-and-continue used to drop the unparseable
+ * burden and undercost every affected entry.
+ */
+export function parseLaborCostComponents(input: unknown): LaborCostComponent[] {
+  if (input == null) return [];
+  if (!Array.isArray(input)) throw new LaborCostingSettingsError("components must be an array");
+  if (input.length > MAX_LABOR_COST_COMPONENTS) {
+    throw new LaborCostingSettingsError(`at most ${MAX_LABOR_COST_COMPONENTS} components`);
+  }
+  const out: LaborCostComponent[] = [];
+  input.forEach((raw, i) => {
+    const label = `component ${i + 1}`;
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      throw new LaborCostingSettingsError(`${label}: must be an object`);
+    }
+    const c = raw as Record<string, unknown>;
+    if (typeof c.kind !== "string" || !LABOR_COST_COMPONENT_KINDS.has(c.kind)) {
+      throw new LaborCostingSettingsError(`${label}: unknown kind`);
+    }
+    const canonical = canonicalDecimal(c.value, 4);
+    if (canonical === null) {
+      throw new LaborCostingSettingsError(`${label}: value must be a number with at most 4 decimals`);
+    }
+    if (compareDecimal(canonical, "0") < 0) {
+      throw new LaborCostingSettingsError(`${label}: value cannot be negative`);
+    }
+    if (c.scaleWithOvertime !== undefined && typeof c.scaleWithOvertime !== "boolean") {
+      throw new LaborCostingSettingsError(`${label}: scaleWithOvertime must be a boolean`);
+    }
+    if (c.key !== undefined && c.key !== null && typeof c.key !== "string") {
+      throw new LaborCostingSettingsError(`${label}: key must be text`);
+    }
+    if (c.name !== undefined && c.name !== null && typeof c.name !== "string") {
+      throw new LaborCostingSettingsError(`${label}: name must be text`);
+    }
+    out.push({
+      key: (typeof c.key === "string" ? c.key.trim().slice(0, 40) : "") || `c${out.length}`,
+      kind: c.kind as LaborCostComponent["kind"],
+      name: (typeof c.name === "string" ? c.name.trim().slice(0, 120) : "") || "Component",
+      value: canonical,
+      scaleWithOvertime: c.scaleWithOvertime === true,
+    });
+  });
+  return out;
+}
+
+/** Strict positive-hours setting on READ: absent stays the default, anything
+ * present must be a number in range — a misconfigured workday must refuse,
+ * not silently price overtime at the wrong divisor. */
+function parseLaborHoursSetting(raw: unknown, fallback: number, max: number, label: string): number {
+  if (raw == null || raw === "") return fallback;
+  const canonical = canonicalDecimal(raw, 4);
+  const n = canonical === null ? NaN : Number(canonical);
+  if (!Number.isFinite(n) || n <= 0 || n > max) {
+    throw new LaborCostingSettingsError(`${label} must be a number between 0 and ${max}`);
+  }
+  return n;
 }
 
 /**
@@ -74,14 +154,17 @@ export async function laborCostingSettings(
   const r = (await db.execute<{ c: Partial<LaborCostingSettings> | null }>(
     sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`,
   ));
-  const c = r.rows[0]?.c ?? {};
+  const c = (r.rows[0]?.c ?? {}) as Record<string, unknown>;
+  // Stored settings revalidate through the same strict parser the write API
+  // enforces: legacy, imported, or directly-edited garbage refuses by name
+  // here instead of reaching computeCostRate, where it priced without the
+  // burden it could not parse. Mode stays fail-safe (anything but an
+  // explicit "post" never posts) — the numbers are what must refuse.
   return {
     mode: c.mode === "post" ? "post" : "off",
-    hoursPerDay: Number(c.hoursPerDay) > 0 ? Number(c.hoursPerDay) : 8,
-    annualHours: Number(c.annualHours) > 0 ? Number(c.annualHours) : 2080,
-    components: Array.isArray(c.components)
-      ? (c.components as LaborCostComponent[])
-      : [],
+    hoursPerDay: parseLaborHoursSetting(c.hoursPerDay, 8, 24, "hoursPerDay"),
+    annualHours: parseLaborHoursSetting(c.annualHours, 2080, 8784, "annualHours"),
+    components: parseLaborCostComponents(c.components),
   };
 }
 
@@ -277,34 +360,54 @@ export function computeCostRate(
   wage: string,
   costMultiplier: string,
   settings: Pick<LaborCostingSettings, "hoursPerDay" | "components">,
-  opts: { workerCompPercent?: number | string } = {},
+  opts: { workerCompPercent?: number | string; workerCompSource?: string } = {},
 ): string {
   // Wage x time-type multiplier: both numeric(19,4) money-scale values, not
   // an FX conversion. mulRate additionally rejected a zero multiplier.
   const base = mul(wage, costMultiplier);
   let rate = base;
+  // An unparseable burden component refuses the costing by name — it never
+  // skips silently. Skipping priced every affected entry without that
+  // burden (systematic undercosting) with no refusal anywhere.
+  const burdenValue = (raw: unknown, c: (typeof settings.components)[number]): string => {
+    const canonical = canonicalDecimal(raw, 4);
+    if (canonical === null) {
+      throw new LaborCostingSettingsError(
+        `labor costing component "${c.name}" (${c.key}) has value ${JSON.stringify(raw) ?? "missing"} ` +
+          `that is not a number with at most 4 decimals; fix the component and re-snapshot`,
+      );
+    }
+    return normalizeMoney(canonical);
+  };
   for (const c of settings.components) {
     if (c.kind === "worker_comp") {
       // Rate = the employee's assigned comp-group %, else the component's
       // fallback value. A 0% group means no worker comp for that person.
-      const pct = String(opts.workerCompPercent ?? c.value);
-      let exactPercent: string;
-      try {
-        exactPercent = normalizeMoney(pct);
-      } catch {
-        continue;
+      // The group rate is DB data (worker_comp_groups.rate_percent),
+      // outside the settings parser — so this site names the component AND
+      // its source row, and refuses negatives (a negative burden would
+      // silently reduce every affected rate).
+      const raw = opts.workerCompPercent ?? c.value;
+      if (canonicalDecimal(raw, 4) === null) {
+        const source = opts.workerCompSource ? ` for ${opts.workerCompSource}` : "";
+        throw new LaborCostingSettingsError(
+          `worker comp rate ${JSON.stringify(raw) ?? "missing"}${source} ` +
+            `is not a number with at most 4 decimals; fix the rate and re-snapshot`,
+        );
       }
+      const exactPercent = normalizeMoney(raw);
       if (cmp(exactPercent, "0") === 0) continue;
+      if (cmp(exactPercent, "0") < 0) {
+        const source = opts.workerCompSource ? ` for ${opts.workerCompSource}` : "";
+        throw new LaborCostingSettingsError(
+          `worker comp rate "${exactPercent}"${source} cannot be negative; fix the rate and re-snapshot`,
+        );
+      }
       const on = c.scaleWithOvertime ? base : wage;
       rate = add(rate, mulPercent(on, exactPercent));
       continue;
     }
-    let value: string;
-    try {
-      value = normalizeMoney(c.value);
-    } catch {
-      continue;
-    }
+    const value = burdenValue(c.value, c);
     if (isZero(value)) continue;
     if (c.kind === "percent_of_wage") {
       const on = c.scaleWithOvertime ? base : wage;
@@ -375,13 +478,16 @@ export async function snapshotLaborCostRates(
       target_currency: string | null;
       target_subsidiary_id: string | null;
       worker_comp_percent: string | null;
+      worker_comp_group_id: string | null;
+      worker_comp_group_code: string | null;
     }>(sql`
     select te.id, te.employee_party_id, te.project_id, te.worked_on,
            coalesce(tt.cost_multiplier, '1') as cost_multiplier,
            er.job_title, er.trade_id, er.department_id, employee.subsidiary_id,
            coalesce(project_sub.base_currency, employee_sub.base_currency) as target_currency,
            coalesce(project.subsidiary_id, employee.subsidiary_id) as target_subsidiary_id,
-           wcg.rate_percent as worker_comp_percent
+           wcg.rate_percent as worker_comp_percent,
+           wcg.id as worker_comp_group_id, wcg.code as worker_comp_group_code
       from time_entries te
       left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
       left join employee_roles er on er.org_id = te.org_id and er.party_id = te.employee_party_id
@@ -486,11 +592,17 @@ export async function snapshotLaborCostRates(
     };
     const workerCompPercent =
       r.worker_comp_percent != null ? String(r.worker_comp_percent) : undefined;
+    // Name the source row so a bad group rate refuses by name (the group
+    // rate is DB data, outside the strict settings parser).
+    const workerCompSource =
+      r.worker_comp_group_id !== null
+        ? `worker-comp group "${r.worker_comp_group_code ?? r.worker_comp_group_id}" (${r.worker_comp_group_id})`
+        : undefined;
     const rate = computeCostRate(
       functionalWage,
       String(r.cost_multiplier),
       functionalSettings,
-      { workerCompPercent },
+      { workerCompPercent, workerCompSource },
     );
     await db.execute(sql`
       update time_entries
