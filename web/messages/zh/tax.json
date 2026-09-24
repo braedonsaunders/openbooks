@@ -109,6 +109,8 @@
     "description": "ASC 740 / IAS 12 — 当期与递延所得税、递延所得税资产减值准备及税率调节表。",
     "empty": "暂无计提记录。计算第一个财年计提以开始使用。",
     "emptyNoGrant": "尚无准备金测算。只有具有组织级报表创建权限的编制人员才能测算首个准备金。",
+    "fiscalYearLabel": "{year}财年",
+    "versionLabel": "v{version}",
     "columns": {
       "fiscalYear": "财年",
       "version": "版本",

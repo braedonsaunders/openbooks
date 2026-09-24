@@ -109,6 +109,8 @@
     "description": "ASC 740 / IAS 12 — laufende und latente Steuern, Wertberichtigung und Steuersatzüberleitung.",
     "empty": "Noch keine Abgrenzungen. Berechnen Sie die erste Jahresabgrenzung.",
     "emptyNoGrant": "Noch keine Rückstellungsläufe. Nur Ersteller mit organisationsweitem Berichtserstellungszugriff können die erste Rückstellung berechnen.",
+    "fiscalYearLabel": "GJ {year}",
+    "versionLabel": "v{version}",
     "columns": {
       "fiscalYear": "Geschäftsjahr",
       "version": "Version",
