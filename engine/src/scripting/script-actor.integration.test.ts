@@ -114,8 +114,8 @@ const JOURNAL_DRAFT_SOURCE = `function main(ctx) {
     documentDate: "${PROBE_DATE}",
     memo: "attribution probe draft",
     lines: [
-      { accountCode: "1000", amount: 5 },
-      { accountCode: "5000", amount: -5 },
+      { accountCode: "1000", amount: "5" },
+      { accountCode: "5000", amount: "-5" },
     ],
   });
 }`;
@@ -125,8 +125,8 @@ const JOURNAL_POST_SOURCE = `function main(ctx) {
     documentDate: "${PROBE_DATE}",
     memo: "attribution probe post",
     lines: [
-      { accountCode: "1000", amount: 5 },
-      { accountCode: "5000", amount: -5 },
+      { accountCode: "1000", amount: "5" },
+      { accountCode: "5000", amount: "-5" },
     ],
   }, { post: true });
 }`;

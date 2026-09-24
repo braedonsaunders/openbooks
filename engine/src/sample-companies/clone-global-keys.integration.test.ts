@@ -55,8 +55,8 @@ async function seedTemplateOrg(): Promise<string> {
         documentDate: "2026-07-10",
         memo: "Atlas template seed",
         lines: [
-          { accountId: template.accounts.bank, amount: 1000 },
-          { accountId: template.accounts.ar, amount: -1000 },
+          { accountId: template.accounts.bank, amount: "1000" },
+          { accountId: template.accounts.ar, amount: "-1000" },
         ],
       }, { post: true }),
     );

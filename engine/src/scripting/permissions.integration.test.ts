@@ -56,8 +56,8 @@ function main(ctx) {
     documentDate: "2026-07-15",
     memo: "script accrual",
     lines: [
-      { accountCode: "5100", amount: 25 },
-      { accountCode: "2000", amount: -25 },
+      { accountCode: "5100", amount: "25" },
+      { accountCode: "2000", amount: "-25" },
     ],
   }, post ? { post: true } : undefined);
 }
@@ -262,8 +262,8 @@ function main(ctx) {
     documentDate: "${seeded.org.date}",
     memo: "scheduled accrual",
     lines: [
-      { accountCode: "5100", amount: 40 },
-      { accountCode: "2000", amount: -40 },
+      { accountCode: "5100", amount: "40" },
+      { accountCode: "2000", amount: "-40" },
     ],
   }, { post: true });
 }
@@ -304,8 +304,8 @@ function main(ctx) {
     documentDate: "2026-07-15",
     memo: "scoped accrual",
     lines: [
-      { accountCode: "5100", amount: 25 },
-      { accountCode: "2000", amount: -25 },
+      { accountCode: "5100", amount: "25" },
+      { accountCode: "2000", amount: "-25" },
     ],
   };
   if (body.subsidiaryId) input.subsidiaryId = body.subsidiaryId;

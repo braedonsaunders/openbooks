@@ -36,7 +36,7 @@ export interface ScriptJournalLine {
   accountId?: string;
   accountCode?: string;
   /** Signed base amount: positive = debit, negative = credit. */
-  amount: number | string;
+  amount: string;
   description?: string;
   departmentId?: string;
   projectId?: string;
