@@ -28,6 +28,7 @@ import { Pagination } from '../../../../../../components/pagination'
 import { SortTh } from '../../../../../../components/sortable-th'
 import { confirmDialog } from '../../../../../../lib/confirm'
 import { isZeroAmount } from './DifferenceBadge'
+import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 
 type Search = Record<string, string | string[] | undefined>
 interface PaneParams {
@@ -481,7 +482,7 @@ export function ReconcileWorkspace({
             <Button variant="outline" onClick={() => setAdjustOpen(false)}>
               {tCommon('actions.cancel')}
             </Button>
-            <Button disabled={busy || !throughDate || statementBalance.trim() === '' || Number.isNaN(Number(statementBalance))} onClick={saveAdjust}>
+            <Button disabled={busy || !throughDate || canonicalDecimal(statementBalance, 4) === null} onClick={saveAdjust}>
               {tCommon('actions.save')}
             </Button>
           </>
