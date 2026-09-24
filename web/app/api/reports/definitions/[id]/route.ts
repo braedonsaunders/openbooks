@@ -9,7 +9,7 @@ import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canAccessReportDefinition } from '../../../../../lib/report-execution-context'
-import { canRunReportEntity, canRunReportStatement, guardReportEntity } from '../../../../../lib/report-authz'
+import { canSeeReportDefinition, guardReportEntity } from '../../../../../lib/report-authz'
 import {
   loadReportDefinition,
   slugifyReportName,
@@ -39,10 +39,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const def = await loadReportDefinition(gate.user.orgId, id)
   if (!def) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!(await canRunReportEntity(gate, def.query))) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!(await canRunReportStatement(gate, def.statement?.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
-  }
+  // Hidden definitions 404 like missing ones: the response must not say
+  // whether the id exists, which gate failed, or which type it carries.
+  if (!(await canSeeReportDefinition(gate, def))) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // node-postgres maps timestamptz to Date and drops PostgreSQL's
   // microseconds. Return the exact wire revision so an autosave can use it as
   // an optimistic-concurrency precondition without authorizing a lossy token.

@@ -19,7 +19,7 @@ registerHooks({
   },
 })
 
-const { canRunReportEntity, guardReportEntity } = await import('./report-authz.ts')
+const { canRunReportEntity, canSeeReportDefinition, guardReportEntity } = await import('./report-authz.ts')
 
 /**
  * `reports.read` is permission to use the reporting tools, not permission to
@@ -95,7 +95,7 @@ const EXECUTION_PATHS: Array<{ file: string; symbol: string; why: string }> = [
   },
   {
     file: '../app/api/reports/definitions/route.ts',
-    symbol: 'canRunReportEntity',
+    symbol: 'canSeeReportDefinition',
     why: 'listing hands out the ids and stored plans every other path keys on',
   },
   {
@@ -107,6 +107,11 @@ const EXECUTION_PATHS: Array<{ file: string; symbol: string; why: string }> = [
     file: '../app/api/reports/definitions/[id]/route.ts',
     symbol: 'guardReportEntity',
     why: 'saving a definition query must not persist an unknown or forbidden entity',
+  },
+  {
+    file: '../app/api/reports/definitions/[id]/route.ts',
+    symbol: 'canSeeReportDefinition',
+    why: 'reading a definition by id must hide what the list hides',
   },
   {
     file: '../app/api/reports/runs/[id]/csv/route.ts',
@@ -237,6 +242,41 @@ test('guardReportEntity does not refuse a statement definition with no entity pl
     'null query is a statement plan, not a missing entity — the guard must return allow',
   )
   assert.equal(await guardReportEntity(authz, undefined), null)
+})
+
+test('canSeeReportDefinition branches on report_type for the read surfaces', async () => {
+  // Statements seed query=null by design: the statement feature gate
+  // decides visibility, never the entity gate that hides them all.
+  const authz = reportReader()
+  assert.equal(
+    await canSeeReportDefinition(authz, { report_type: 'statement', query: null, statement: { kind: 'pnl' } }),
+    true,
+    'an ungated statement is visible to a reports reader',
+  )
+  // Query plans answer the entity gate.
+  const open = Object.values(REPORT_ENTITY_MAP).find(
+    (entity) => !entity.requiredPermission && !entity.featureKey,
+  )
+  assert.ok(open, 'the catalog must keep at least one always-on entity so this is not a vacuous allow')
+  assert.equal(
+    await canSeeReportDefinition(authz, { report_type: 'query', query: { entity: open.key }, statement: null }),
+    true,
+  )
+  assert.equal(
+    await canSeeReportDefinition(authz, { report_type: 'query', query: null, statement: null }),
+    false,
+    'a query plan with no entity plan stays hidden',
+  )
+  // Unknown types fail closed even when a sibling gate would allow.
+  assert.equal(
+    await canSeeReportDefinition(authz, { report_type: 'mystery', query: { entity: open.key }, statement: { kind: 'pnl' } }),
+    false,
+    'an unnamed report type is visible to nobody',
+  )
+  assert.equal(
+    await canSeeReportDefinition(authz, { report_type: null, query: { entity: open.key }, statement: null }),
+    false,
+  )
 })
 
 test('guardReportEntity still allows a catalog entity that declares no extra permission', async () => {
