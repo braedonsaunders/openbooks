@@ -17,7 +17,7 @@ import {
 } from "../../withholding-jurisdictions.ts";
 import { resolveWithholding } from "../../withholding-resolution.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
-import { computeUsWithholding } from "../withholding.ts";
+import { computeUsEmployerWithholding, computeUsWithholding } from "../withholding.ts";
 import { MD_WITHHOLDING } from "./md.ts";
 import { money } from "./conformance-support.ts";
 // The PACK publishes the US declarations now — see the note in conformance.test.ts.
@@ -722,4 +722,82 @@ test("a Maryland residence county moves SIT_MD and produces no separate levy", (
       `no blocking gap for county ${code}`,
     );
   }
+});
+
+test("every implemented sub-region levy posts to the pocket its declaration states", () => {
+  // DERIVED, never restated: the TriMet/LTD employer-pocket case. An employer
+  // levy reaching the deduction path would take the employer's tax out of the
+  // employee's cheque, so computeUsWithholding refuses it by name — and the
+  // employer path computes it. The mirror holds: no employee levy may travel
+  // the employer path. Tenant-sourced levies run with stub rates shaped like
+  // the declaration (the SHAPE is pack-declared; only the figure is
+  // employer-entered, so an arbitrary valid figure proves the routing).
+  const stubRates = () => ({
+    rate: "0.008", residentRate: "0.008", nonresidentRate: "0.008",
+    exemptionPerYear: "600.00",
+  });
+  const failures: string[] = [];
+  for (const region of packWithholding("US").regions) {
+    for (const levy of region.subRegions) {
+      if (!levy.implemented || levy.computedByParent) continue;
+      const pocket = levy.pocket ?? "employee";
+      const certificateKey = levy.certificateKey ?? region.certificateKey ?? null;
+      const certificateFor = (key: string) => {
+        if (key !== certificateKey) return null;
+        try {
+          return resolveCertificate({ certificate: payrollCertificate("US", key) });
+        } catch {
+          return null;
+        }
+      };
+      const resolution = {
+        level: "sub_region", region: region.region, subRegion: levy.code,
+        label: levy.label, basis: "nonresident", side: "work", reach: "nonresident",
+        certificateKey,
+      } as const;
+      if (pocket === "employer") {
+        assert.throws(
+          () => computeUsWithholding({
+            levy: { ...resolution }, payDate: "2026-07-21", periodEnd: "2026-07-18",
+            periodsPerYear: 26, wages: "2000.00", federalIncomeTax: "100.00",
+            certificateFor,
+            tenantRates: (_rateKey, _subRegion) => stubRates(),
+          }),
+          /never as a stub deduction/,
+          `${region.region}:${levy.code} must refuse the deduction path`,
+        );
+        const employer = computeUsEmployerWithholding({
+          levy: { ...resolution }, wages: "2000.00",
+          tenantRates: (_rateKey, _subRegion) => stubRates(),
+        });
+        assert.ok(employer.tax, `${region.region}:${levy.code} computes on the employer path`);
+        continue;
+      }
+      assert.throws(
+        () => computeUsEmployerWithholding({
+          levy: { ...resolution }, wages: "2000.00",
+          tenantRates: (_rateKey, _subRegion) => stubRates(),
+        }),
+        /not declared as an employer payroll tax/,
+        `${region.region}:${levy.code} must refuse the employer path`,
+      );
+      try {
+        computeUsWithholding({
+          levy: { ...resolution }, payDate: "2026-07-21", periodEnd: "2026-07-18",
+          periodsPerYear: 26, wages: "2000.00", federalIncomeTax: "100.00",
+          certificateFor,
+          tenantRates: (_rateKey, _subRegion) => stubRates(),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/never as a stub deduction/.test(message)) {
+          failures.push(`${region.region}:${levy.code} posted to the wrong pocket`);
+        }
+        // Any other refusal is an input/config matter (a filed answer the
+        // fixture did not invent), not a pocket violation — computation
+        // itself is the first test's job.
+      }
+    }
+  }
+  assert.deepEqual(failures, [], "wrong-pocket levies");
 });

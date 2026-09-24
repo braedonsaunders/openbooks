@@ -14,10 +14,12 @@ import {
 import "../../packs.ts";
 import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  OR_CERTIFICATE, OR_REGION, OR_RATES_2026, OR_WITHHOLDING, orAllowancesUsed, orAnnualWithholding,
+  OR_CERTIFICATE, OR_REGION, OR_RATES_2026, OR_TRANSIT_RECORD, OR_WITHHOLDING, orAllowancesUsed,
+  orAnnualWithholding,
   orBracketTableFor, orFederalCap, orMulRateDollars, orPhaseTableFor, orRatesForPayDate,
   orRoundToDollar, orSupplementalFlat, orTransitWithholding,
 } from "./or.ts";
+import { computeUsEmployerWithholding, computeUsWithholding } from "../withholding.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
@@ -32,6 +34,15 @@ test("OR certificate and region declarations are well formed", () => {
   assert.equal(OR_REGION.residentWithholding, "unknown");
   assert.equal(OR_CERTIFICATE.storage, "certificate_rows");
   for (const field of OR_CERTIFICATE.fields) {
+    assert.ok(field.help.length > 20, `${field.key} help is too thin`);
+  }
+  // The transit record is the pack's own convention (no agency form carries
+  // the district), not an agency transcription — but it must be as
+  // well-formed as one, and scoped to the employees it can follow.
+  assert.equal(certificateDeclarationProblem(OR_TRANSIT_RECORD), null);
+  assert.equal(OR_TRANSIT_RECORD.scope.region, "OR");
+  assert.equal(OR_TRANSIT_RECORD.storage, "certificate_rows");
+  for (const field of OR_TRANSIT_RECORD.fields) {
     assert.ok(field.help.length > 20, `${field.key} help is too thin`);
   }
 });
@@ -357,5 +368,46 @@ test("OR refuses a year it has not transcribed, and never extrapolates", () => {
   assert.throws(
     () => orRatesForPayDate("2025-12-31"),
     /2025 Oregon income tax withholding tables are not loaded/,
+  );
+});
+
+test("a TriMet levy computes through the EMPLOYER path, never the deduction path", () => {
+  // The pocket is the product: an employer levy reaching computeUsWithholding
+  // would post the employer's tax as a stub deduction, so it is refused by
+  // name there. The rate below is an arbitrary entered figure proving the
+  // path and the arithmetic — never a district publication, which carries no
+  // rate.
+  const levy = {
+    level: "sub_region", region: "OR", subRegion: "TRIMET",
+    label: "TriMet transit payroll tax",
+    basis: "nonresident", side: "work", reach: "nonresident",
+    certificateKey: null,
+  } as const;
+  const tenantRates = () => ({ rate: "0.008" });
+  assert.throws(
+    () => computeUsWithholding({
+      levy: { ...levy }, payDate: "2026-07-21", periodEnd: "2026-07-18",
+      periodsPerYear: 26, wages: "2000.00", federalIncomeTax: "100.00",
+      certificateFor: () => null, tenantRates,
+    }),
+    /employer payroll tax, not employee withholding.*never as a stub deduction/s,
+  );
+  const employer = computeUsEmployerWithholding({ levy: { ...levy }, wages: "2000.00", tenantRates });
+  assert.equal(employer.code, "OR-TRIMET");
+  assert.equal(employer.tax, money("16.00"));
+  assert.equal(employer.factors.OR_TRANSIT_DISTRICT, "TRIMET");
+  assert.equal(employer.factors.OR_TRANSIT_RATE, "0.008");
+});
+
+test("the employer path refuses a district with no entered rate, by name", () => {
+  const levy = {
+    level: "sub_region", region: "OR", subRegion: "LTD",
+    label: "Lane Transit District payroll tax",
+    basis: "nonresident", side: "work", reach: "nonresident",
+    certificateKey: null,
+  } as const;
+  assert.throws(
+    () => computeUsEmployerWithholding({ levy: { ...levy }, wages: "2000.00", tenantRates: () => undefined }),
+    /no transit payroll-tax rate has been entered for Lane Transit District/,
   );
 });

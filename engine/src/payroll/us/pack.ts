@@ -67,12 +67,13 @@ import { US_EMPLOYEE_FACTS } from "./employee-facts.ts";
  * jurisdiction the amount was withheld for.
  */
 function usDescribeFactor(key: string): string | null {
-  const match = /^(SIT|LIT)_(.+)$/.exec(key);
+  const match = /^(SIT|LIT|EPT)_(.+)$/.exec(key);
   if (!match) return null;
   const level = match[1];
   const code = match[2]!;
   const engine = usStateWithholding(code);
   if (engine) return `${engine.label} withheld`;
+  if (level === "EPT") return `Transit payroll tax, employer share (${code})`;
   return level === "SIT"
     ? `State income tax withheld (${code})`
     : `Local income tax withheld (${code})`;
@@ -341,6 +342,21 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         // from the component. Remittance is 'external': a state's
         // withholding goes to the state, never to the federal vendor.
         { code: "SIT", name: "State income tax", systemKey: "state_income_tax", kind: "deduction", sequence: 140, assessedOn: "taxable_income", remittance: "external" },
+      ],
+    },
+    {
+      key: "transit_payroll_tax",
+      regions: ["OR"],
+      components: [
+        // Oregon's TriMet and Lane Transit District payroll taxes: assessed
+        // on the EMPLOYER for work performed in the district (Form OQ), so
+        // employer expense plus a liability to the district — never a stub
+        // deduction. One component for both districts, with the district on
+        // the LINE (its description and the stub's factors), as the local
+        // income tax slot carries every city on one component. The districts
+        // are mutually exclusive in geography and the transit record carries
+        // one district, so one stub carries at most one transit line.
+        { code: "TRANSIT", name: "Transit payroll tax", systemKey: "transit_payroll_tax", kind: "employer_contribution", sequence: 260, assessedOn: "earnings", remittance: "external" },
       ],
     },
     {
