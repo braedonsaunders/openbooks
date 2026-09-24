@@ -4300,7 +4300,7 @@ test('I9 banking rules/feeds and ap cockpit copy ships translated in every local
   const I9_wanted = [...I9_source.keys()].filter(
     (I9_key) => I9_prefixes.some((I9_prefix) => I9_key.startsWith(I9_prefix)) || I9_extra.includes(I9_key),
   )
-  assert.equal(I9_wanted.length, 303, 'banking/ap source inventory changed; translate the new keys in every locale and re-pin')
+  assert.equal(I9_wanted.length, 304, 'banking/ap source inventory changed; translate the new keys in every locale and re-pin')
   const I9_tokens = (I9_value: string): Set<string> =>
     new Set(I9_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I9_arms = (I9_value: string): string[] => I9_value.match(/, +(plural|select)/g) ?? []
