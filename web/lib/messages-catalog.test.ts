@@ -4330,7 +4330,10 @@ test('I9 banking rules/feeds and ap cockpit copy ships translated in every local
   // m86/F4T2-12 (+2 SFTP remove-confirm keys:
   // banking.bankFeeds.client.sftpCard.removeServerConfirm/removeScheduleConfirm):
   // 306 = 304 + 2, translated in all 7 locales.
-  assert.equal(I9_wanted.length, 306, 'banking/ap source inventory changed; translate the new keys in every locale and re-pin')
+  // m86/F4T2-13 (+1 SFTP routing-failure key:
+  // banking.bankFeeds.client.sftpSecret.routeFailed):
+  // 307 = 306 + 1, translated in all 7 locales.
+  assert.equal(I9_wanted.length, 307, 'banking/ap source inventory changed; translate the new keys in every locale and re-pin')
   const I9_tokens = (I9_value: string): Set<string> =>
     new Set(I9_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I9_arms = (I9_value: string): string[] => I9_value.match(/, +(plural|select)/g) ?? []

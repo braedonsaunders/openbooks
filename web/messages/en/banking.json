@@ -854,7 +854,8 @@
         "passwordLabel": "password:",
         "done": "Done",
         "createdToast": "SFTP connection created.",
-        "addedToast": "{name} added."
+        "addedToast": "{name} added.",
+        "routeFailed": "The login was created, but its automatic routing failed. Add the route from the SFTP card."
       },
       "method": {
         "plaid": {

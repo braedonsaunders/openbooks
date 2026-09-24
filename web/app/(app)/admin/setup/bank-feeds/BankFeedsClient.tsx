@@ -272,7 +272,14 @@ export function BankFeedsClient({
                       <Button size="sm" variant="ghost" disabled={busy} onClick={() => feedAction(c.id, "sync")}>{t("connection.sync")}</Button>
                     </>
                   )}
-                  <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ isActive: !c.isActive }) }); refresh(); }}>
+                  <Button size="sm" variant="ghost" onClick={async () => {
+                    const r = await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ isActive: !c.isActive }) });
+                    // Like every mutation here, the status is checked before
+                    // refresh: a refused toggle must surface, never silently
+                    // re-render the old state (F4T2-13).
+                    if (!r.ok) setMsg(await readApiErrorMessage(r, t("feedMessages.requestFailed", { status: r.status })));
+                    refresh();
+                  }}>
                     {c.isActive ? t("connection.pause") : t("connection.resume")}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={async () => { if (!confirm(t("connection.removeConfirm"))) return; await fetch(`/api/banking/bank-feeds/${c.id}`, { method: "DELETE" }); refresh(); }}>{t("connection.remove")}</Button>
@@ -309,6 +316,7 @@ function ScheduleBinding({ sc, onChange }: { sc: SftpSchedule; onChange: () => v
   const t = useTranslations("banking.bankFeeds.client");
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(sc.expectedExternalAccountId ?? "");
+  const [saveError, setSaveError] = useState<string | null>(null);
   if (!editing) {
     return (
       <button
@@ -328,15 +336,23 @@ function ScheduleBinding({ sc, onChange }: { sc: SftpSchedule; onChange: () => v
         size="sm"
         variant="ghost"
         onClick={async () => {
-          await fetch(`/api/banking/sftp/schedules/${sc.id}`, {
+          const r = await fetch(`/api/banking/sftp/schedules/${sc.id}`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ expectedExternalAccountId: value.trim() === "" ? null : value }),
           });
+          // A refused binding save must surface (F4T2-13) — closing the
+          // editor on failure would pretend the binding held.
+          if (!r.ok) {
+            setSaveError(await readApiErrorMessage(r, t("feedMessages.requestFailed", { status: r.status })));
+            return;
+          }
+          setSaveError(null);
           setEditing(false);
           onChange();
         }}
       >{t("sftpCard.bindingSave")}</Button>
+      {saveError && <span className="text-xs text-red-600">{saveError}</span>}
     </span>
   );
 }
@@ -358,6 +374,7 @@ function SftpConnectionCard({
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [folder, setFolder] = useState("inbound");
   const [expectedAccount, setExpectedAccount] = useState("");
+  const [routeError, setRouteError] = useState<string | null>(null);
   const t = useTranslations("banking.bankFeeds.client");
   // Deep link from the scheduler's unbound-schedule notice
   // (/admin/setup/bank-feeds?schedule=<id>): ring the named schedule so the
@@ -439,9 +456,17 @@ function SftpConnectionCard({
               </Select>
               <Input value={expectedAccount} onChange={(e) => setExpectedAccount(e.target.value)} placeholder={t("sftpCard.bindingPlaceholder")} className="h-8 w-36" />
               <Button size="sm" disabled={!accountId} onClick={async () => {
-                await fetch("/api/banking/sftp/schedules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sftpServerId: server.id, accountId, folder, format: "auto", expectedExternalAccountId: expectedAccount.trim() === "" ? null : expectedAccount }) });
+                const r = await fetch("/api/banking/sftp/schedules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sftpServerId: server.id, accountId, folder, format: "auto", expectedExternalAccountId: expectedAccount.trim() === "" ? null : expectedAccount }) });
+                // A refused add-route must surface (F4T2-13), never refresh
+                // into a list that silently lacks the route.
+                if (!r.ok) {
+                  setRouteError(await readApiErrorMessage(r, t("feedMessages.requestFailed", { status: r.status })));
+                  return;
+                }
+                setRouteError(null);
                 onChange();
               }}>{t("sftpCard.addRoute")}</Button>
+              {routeError && <p className="mt-1 w-full text-xs text-red-600">{routeError}</p>}
             </div>
           )}
         </div>
@@ -591,6 +616,7 @@ function ConfigureConnection({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sftpSecret, setSftpSecret] = useState<{ username: string; password: string } | null>(null);
+  const [sftpRouteFailed, setSftpRouteFailed] = useState(false);
   const t = useTranslations("banking.bankFeeds.client");
 
   const isApi = API_PROVIDERS.has(provider);
@@ -609,13 +635,17 @@ function ConfigureConnection({
         });
         const b = await r.json().catch(() => ({}));
         if (!r.ok) { setError(b.error ?? t("errors.couldNotCreateSftp")); setBusy(false); return; }
-        // Optionally route to the chosen account immediately.
+        // Optionally route to the chosen account immediately. The login was
+        // created even when this follow-up fails, so the failure rides the
+        // secret display (F4T2-13) — never a silent success.
+        setSftpRouteFailed(false);
         if (accountId) {
-          await fetch("/api/banking/sftp/schedules", {
+          const routeRes = await fetch("/api/banking/sftp/schedules", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ sftpServerId: b.id, accountId, folder: "inbound", format: "auto" }),
           });
+          if (!routeRes.ok) setSftpRouteFailed(true);
         }
         setBusy(false);
         setSftpSecret({ username: b.username, password: b.password });
@@ -654,6 +684,9 @@ function ConfigureConnection({
           <div>{t("sftpSecret.usernameLabel")} {sftpSecret.username}</div>
           <div>{t("sftpSecret.passwordLabel")} {sftpSecret.password}</div>
         </div>
+        {sftpRouteFailed && (
+          <p className="mt-3 text-sm text-red-600 dark:text-red-400">{t("sftpSecret.routeFailed")}</p>
+        )}
         <div className="mt-4"><Button onClick={() => onDone(t("sftpSecret.createdToast"))}>{t("sftpSecret.done")}</Button></div>
       </Card>
     );

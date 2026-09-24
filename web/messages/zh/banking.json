@@ -847,7 +847,8 @@
         "passwordLabel": "密码：",
         "done": "完成",
         "createdToast": "SFTP连接已创建。",
-        "addedToast": "已添加 {name}。"
+        "addedToast": "已添加 {name}。",
+        "routeFailed": "登录已创建，但自动路由失败。请从SFTP卡片添加路由。"
       },
       "method": {
         "plaid": {
