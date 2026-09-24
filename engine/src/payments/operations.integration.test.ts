@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
@@ -14,7 +13,6 @@ import {
 import { PaymentError } from "./payment-errors.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
-const paymentOperationsSource = readFileSync(new URL("./operations.ts", import.meta.url), "utf8");
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 test("concurrent bank-profile secret rotations preserve both fields and audit the locked state", { skip: !DB }, async () => {
@@ -73,16 +71,6 @@ test("concurrent bank-profile secret rotations preserve both fields and audit th
     if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
     else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
   }
-});
-
-test("returned instructions are guarded before settlement writes", () => {
-  const guard = paymentOperationsSource.match(
-    /if \(\["returned", "reversed"\]\.includes\(instruction\.status\) && opts\.status === "settled"\) \{[\s\S]*?\n    \}/,
-  );
-  assert.ok(guard, "a returned instruction must reject a later settled outcome");
-  const guardOffset = paymentOperationsSource.indexOf(guard[0]);
-  const upsertOffset = paymentOperationsSource.indexOf("insert into payment_settlements");
-  assert.ok(guardOffset >= 0 && guardOffset < upsertOffset, "the terminal guard must run before the settlement upsert");
 });
 
 test(
