@@ -6,7 +6,7 @@ import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { syncNetSuiteFixedAssets } from "./netsuite-fixed-assets.ts";
 import type { NetSuiteSource, NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
-import type { NativeDocument } from "./source.ts";
+import type { NativeDocument } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
