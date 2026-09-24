@@ -22,13 +22,19 @@ test("project revenue sync preserves contracts and schedules while Projects is d
       values(${projectId},${org.orgId},${org.subsidiaryId},'GATE-POC','Gate POC project',${org.customerId},${typeId},'active',true,
         ${org.date},1000,'{"percentCompleteOverride":"25"}'::jsonb)`);
     const sync = () => syncProjectRevenueContracts(org.orgId, actorId, org.date, projectId);
-    assert.deepEqual(await sync(), { synced: [], problems: [] });
+    assert.deepEqual(await sync(), {
+      synced: [],
+      problems: [],
+      skipped:
+        "project revenue sync skipped: the Projects feature is off — turn it on in Company Settings → Features to recognize project progress",
+    });
     const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts
       where org_id=${org.orgId} and project_id=${projectId}`)).rows[0]!.n;
     assert.equal(count, 0, "disabled Projects cannot create revenue contracts");
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}','true'::jsonb) where id=${org.orgId}`);
     const enabled = await sync();
     assert.equal(enabled.problems.length, 0);
+    assert.equal(enabled.skipped, null);
     assert.equal(enabled.synced.length, 1);
     assert.equal(enabled.synced[0]!.percentComplete, "25.0000");
     const snapshot = async () => (await db.execute<{ evidence: unknown }>(sql`
@@ -41,12 +47,43 @@ test("project revenue sync preserves contracts and schedules while Projects is d
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=${org.orgId}`);
     await db.execute(sql`update projects set custom=jsonb_set(custom,'{percentCompleteOverride}','"75"'::jsonb)
       where org_id=${org.orgId} and id=${projectId}`);
-    assert.deepEqual(await sync(), { synced: [], problems: [] });
+    assert.deepEqual(await sync(), {
+      synced: [],
+      problems: [],
+      skipped:
+        "project revenue sync skipped: the Projects feature is off — turn it on in Company Settings → Features to recognize project progress",
+    });
     assert.deepEqual(await snapshot(), before, "disabled sync preserves every historical and scheduled row");
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}','true'::jsonb) where id=${org.orgId}`);
     const resumed = await sync();
+    assert.equal(resumed.skipped, null);
     assert.equal(resumed.synced[0]!.contractId, enabled.synced[0]!.contractId);
     assert.equal(resumed.synced[0]!.obligationId, enabled.synced[0]!.obligationId);
     assert.equal(resumed.synced[0]!.percentComplete, "75.0000");
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("sync with unmapped project accounts names the missing accounts and creates nothing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const projectId = randomUUID(), typeId = randomUUID();
+    await db.execute(sql`update orgs set settings=settings || ${JSON.stringify({
+      features: { projects: true, revenueRecognition: true },
+      controlAccounts: {},
+    })}::jsonb where id=${org.orgId}`);
+    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values(${typeId},${org.orgId},'unmapped-poc','Unmapped POC','fixed_price',
+        '{"recognition":"percent_complete_cost","billingProcedure":"standard"}'::jsonb,'{}'::jsonb)`);
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,starts_on,contract_value,custom)
+      values(${projectId},${org.orgId},${org.subsidiaryId},'UNMAPPED-POC','Unmapped POC project',${org.customerId},${typeId},'active',true,
+        ${org.date},1000,'{"percentCompleteOverride":"25"}'::jsonb)`);
+    const result = await syncProjectRevenueContracts(org.orgId, actorId, org.date, projectId);
+    assert.deepEqual(result.synced, []);
+    assert.match(result.skipped ?? "", /control accounts unmapped: unbilled receivable, project revenue/);
+    assert.match(result.skipped ?? "", /Company & Accounting/);
+    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts
+      where org_id=${org.orgId} and project_id=${projectId}`)).rows[0]!.n;
+    assert.equal(count, 0, "an unmapped sync creates no revenue contract");
   } finally { await dropScratchOrg(org.orgId); }
 });

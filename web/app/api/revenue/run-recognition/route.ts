@@ -68,16 +68,16 @@ export async function POST(req: Request) {
   try {
     // Refresh fixed-price project contracts first (percent complete → catch-up
     // schedule lines), so the run below posts current project progress too.
-    const projectsEnabled = await isFeatureEnabled(user.orgId, 'projects')
-    const projectSync = projectsEnabled
-      ? await syncProjectRevenueContracts(
-          user.orgId,
-          user.id,
-          asOfDate,
-          undefined,
-          allowedSubsidiaryIds,
-        )
-      : { problems: [] }
+    // The engine owns the Projects gate and names its skip: a run with
+    // project work waiting but no sync must warn, never post zero project
+    // progress in silence.
+    const projectSync = await syncProjectRevenueContracts(
+      user.orgId,
+      user.id,
+      asOfDate,
+      undefined,
+      allowedSubsidiaryIds,
+    )
     const result = await runRevenueRecognition(
       user.orgId,
       asOfDate,
@@ -102,6 +102,7 @@ export async function POST(req: Request) {
         : undefined,
     )
     result.problems.push(...projectSync.problems)
+    if (projectSync.skipped) result.problems.push(projectSync.skipped)
     return NextResponse.json(result)
   } catch (e: unknown) {
     return revenueRecognitionErrorResponse(e, 'Unable to run revenue recognition.')

@@ -14,6 +14,7 @@ interface RouteState {
   calls: DbCall[]
   syncCalls: SyncCall[]
   respondTxExecute: (text: string) => { rows: unknown[] }
+  syncSkipped: string | null
 }
 
 const routeState: RouteState = {
@@ -21,6 +22,7 @@ const routeState: RouteState = {
   calls: [],
   syncCalls: [],
   respondTxExecute: () => ({ rows: [] }),
+  syncSkipped: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
@@ -139,6 +141,7 @@ const mockSources = new Map<string, string>([
         return {
           synced: [{ projectId, projectCode: 'P-1', contractId: 'contract-1', obligationId: 'obligation-1', contractValue: '100.00', percentComplete: '37.5000', overridden: true, created: false }],
           problems: [],
+          skipped: state.syncSkipped,
         }
       }
     `,
@@ -187,6 +190,7 @@ function reset(): void {
   routeState.calls.length = 0
   routeState.syncCalls.length = 0
   routeState.respondTxExecute = () => ({ rows: [] })
+  routeState.syncSkipped = null
 }
 
 function put(body: Record<string, unknown>): Promise<Response> {
@@ -255,4 +259,23 @@ test('PUT updates an in-scope project and rebuilds its schedule', async () => {
     asOfDate: '2026-08-28',
     projectId: PROJECT_ID,
   }])
+})
+
+test('PUT surfaces a skipped revenue sync as a named warning, not a silent no-op', async () => {
+  reset()
+  routeState.allowedSubsidiaryIds = new Set([VISIBLE_SUBSIDIARY_ID])
+  routeState.respondTxExecute = (text) =>
+    text.includes('update projects')
+      ? { rows: [{ id: PROJECT_ID }] }
+      : text.includes('percentCompleteOverride')
+        ? { rows: [{ override: null }] }
+        : { rows: [] }
+  routeState.syncSkipped = 'project revenue sync skipped: the Projects feature is off — turn it on in Company Settings → Features to recognize project progress'
+
+  const response = await put({ percentComplete: 37.5, expectedPercentComplete: null })
+
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { status: unknown; problems: string[] }
+  assert.equal(body.status, null)
+  assert.deepEqual(body.problems, [routeState.syncSkipped])
 })

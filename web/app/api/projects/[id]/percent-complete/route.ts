@@ -109,9 +109,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (sync instanceof NextResponse) return sync
   if (!sync) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
+  // The engine owns the Projects gate and names its skip: an override saved
+  // while the sync is skipped must warn, never read back as applied progress.
   return NextResponse.json({
     ok: true,
     status: sync.synced[0] ?? null,
-    problems: sync.problems,
+    problems: sync.skipped ? [...sync.problems, sync.skipped] : sync.problems,
   })
 }
