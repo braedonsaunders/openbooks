@@ -117,14 +117,21 @@ function asDbDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
-async function appendOccurrenceEvents(id: string, orgId: string, events: OccurrenceEvent[]): Promise<void> {
-  if (events.length === 0) return;
-  await withBypassContext(() =>
+/**
+ * Append occurrence log events. Returns whether the row was present: like
+ * finalizeOccurrence below, a wrong-org or deleted script_runs row must
+ * report false instead of silently dropping the logs. Exported for the
+ * durability tests; production callers are the dispatch paths above.
+ */
+export async function appendOccurrenceEvents(id: string, orgId: string, events: OccurrenceEvent[]): Promise<boolean> {
+  if (events.length === 0) return true;
+  const appended = await withBypassContext(() =>
     db.execute(sql`
       update script_runs
          set logs = logs || ${JSON.stringify(events)}::jsonb
        where id = ${id} and org_id = ${orgId}
     `));
+  return (appended.rowCount ?? 0) === 1;
 }
 
 async function finalizeOccurrence(
@@ -243,7 +250,14 @@ async function dispatchScriptOccurrence(
     /* Redis unavailable — fall through to inline */
   }
   if (enqueued) {
-    await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "enqueued", job: jobId, attempt }]);
+    // A false return means the ledger row moved on concurrently (recovered
+    // or completed while this dispatch was in flight) — name it instead of
+    // dropping the event silently.
+    if (!(await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "enqueued", job: jobId, attempt }]))) {
+      console.warn(
+        `[scheduler] script ${occ.scriptId} occurrence ${occ.occurrenceKey} left its ledger row before the enqueue event landed`,
+      );
+    }
     return;
   }
   try {
@@ -266,7 +280,11 @@ async function dispatchScriptOccurrence(
     // this catches host-side failures (db insert, feature gate, missing row).
     const message = (e instanceof Error ? e.message : String(e)).slice(0, 1000);
     if (attempt < MAX_OCCURRENCE_ATTEMPTS) {
-      await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "dispatch_failed", error: message, attempt }]);
+      if (!(await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "dispatch_failed", error: message, attempt }]))) {
+        console.warn(
+          `[scheduler] script ${occ.scriptId} occurrence ${occ.occurrenceKey} left its ledger row before the dispatch-failure event landed`,
+        );
+      }
       console.error(`[scheduler] script ${occ.scriptId} dispatch failed (attempt ${attempt}); recovery will retry:`, e);
       return;
     }
