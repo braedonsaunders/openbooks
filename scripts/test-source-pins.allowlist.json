@@ -77,7 +77,6 @@
     "scripts/bootstrap-migration-pool.integration.test.ts": 2,
     "scripts/ci-pipeline-integrity.test.mjs": 9,
     "scripts/deploy-edge-workflow.test.mjs": 1,
-    "scripts/e2e-production-server.test.mjs": 1,
     "scripts/test-fixture-architecture.test.mjs": 3,
     "scripts/test-workflow.test.mjs": 1,
     "scripts/upgrade-rehearsal/upgrade-rehearsal.test.mjs": 2,
