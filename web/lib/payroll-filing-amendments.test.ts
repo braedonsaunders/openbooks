@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
+import type { FilingLifecycle, FilingRowReview } from '../app/(app)/payroll/_ui/filing-amendments.tsx'
 
 /**
  * Filing-cancellation evidence: cancelling an issued slip is an affirmative
@@ -249,11 +251,53 @@ sectionHooks.deregister()
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
-const REVIEW = { rowId: 'row-1', status: 'changed', lastRevision: 'original', changes: [] }
-const SECTION = { country: 'CA', key: 't4' }
-const LIFECYCLE = {
-  amendment: { supported: true, revisions: ['amended', 'cancelled'] },
+// Full render contracts: the section reads review status/revision/changes
+// for its amend-or-cancel offers and the lifecycle's supported revisions,
+// so partial shapes would lie about what is mounted. Added fields stay
+// inert (empty rows, no file, same-form vehicle) to preserve the renders.
+const REVIEW: FilingRowReview = {
+  rowId: 'row-1',
+  label: 'Test slip',
+  status: 'changed',
+  lastRevision: 'original',
+  lastIssuedAt: null,
+  changes: [],
+}
+// The section fixture carries the full render contract: the correction
+// section reads country/key for its amendment URLs and label/data for the
+// reviewed preview, so a partial shape would lie about what it mounts.
+const SECTION: YearEndFilingSection = {
+  country: 'CA',
+  key: 't4',
+  label: 'T4',
+  cadence: 'annual',
+  description: null,
+  emptyText: null,
+  installed: true,
+  data: { columns: [], rows: [], rowKey: 'rowId' },
+  hasSlip: false,
+  populationRefusal: null,
+  download: null,
+  downloadRefusal: null,
+  issue: null,
+}
+const LIFECYCLE: FilingLifecycle = {
+  country: 'CA',
+  filingKey: 't4',
+  label: 'T4',
+  taxYear: 2026,
+  amendment: {
+    supported: true,
+    revisions: ['amended', 'cancelled'],
+    vehicle: 'same_form',
+    formLabel: null,
+    download: null,
+    downloadRefusal: null,
+    hasSlip: false,
+  },
   submissions: [],
+  rows: [],
+  populationRefusal: null,
 }
 
 // The mounted operator may file: canFile gates every amendment and
