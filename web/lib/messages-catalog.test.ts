@@ -3226,7 +3226,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // m78/D14 (+2 automation trigger-unavailable keys:
   // automations.triggerKindUnavailable/triggerKindUnavailableNote):
   // 4095 = 4093 + 2, translated in all 7 locales.
-  assert.equal(wanted.length, 4095, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 4096, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3614,8 +3614,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // +2 from main (recognition-rule policy keys): 4093.
   // m78/D14 (+2 automation trigger-unavailable keys, translated in all 7
   // locales): 4095 + rehash.
-  const ADMIN_I2_SOURCE_COUNT = 4095
-  const ADMIN_I2_SOURCE_HASH = 'a5d464e1110c0905c5c644ad6ce0e2501d8b83633b4a09238bd1d6d0a367c8e0'
+  const ADMIN_I2_SOURCE_COUNT = 4096
+  const ADMIN_I2_SOURCE_HASH = 'd91e840759f50d5e7b6115506b45a9e68d2b2619ab824e91596646dc14011252'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

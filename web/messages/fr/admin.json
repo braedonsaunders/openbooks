@@ -5464,6 +5464,7 @@
       "stepDetail": "Détail",
       "runStatus": "Statut",
       "runsEmpty": "Aucune exécution.",
+      "readOnlyNotice": "Lecture seule : la modification de cette recette nécessite l’autorisation de gestion des automatisations.",
       "runVersion": "Version",
       "runSubject": "Sujet",
       "runCreated": "Créée",

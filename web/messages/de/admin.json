@@ -5464,6 +5464,7 @@
       "stepDetail": "Detail",
       "runStatus": "Status",
       "runsEmpty": "Noch keine Läufe.",
+      "readOnlyNotice": "Schreibgeschützt: Zum Bearbeiten dieses Rezepts ist die Berechtigung „Automatisierungen verwalten“ erforderlich.",
       "runVersion": "Version",
       "runSubject": "Subjekt",
       "runCreated": "Erstellt",
