@@ -24,7 +24,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({ folder })
 }
 
-/** Update a folder (rename, move, toggle private/inactive). */
+/** Update folder metadata. Trash and restore operate on the complete subtree. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
@@ -37,12 +37,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   if (!body) return NextResponse.json({ error: 'invalid body' }, { status: 400 })
+  if (Object.prototype.hasOwnProperty.call(body, 'isInactive')) {
+    return NextResponse.json(
+      { error: 'folder trash state cannot be changed with PATCH — use DELETE to trash the subtree or the restore action to restore it' },
+      { status: 400 },
+    )
+  }
 
   const patch: {
     parentId?: string | null
     name?: string
     isPrivate?: boolean
-    isInactive?: boolean
   } = {}
   if (typeof body.parentId === 'string' || body.parentId === null) {
     // Moving also needs Editor+ on the destination parent.
@@ -56,7 +61,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     patch.name = body.name.trim()
   }
   if (typeof body.isPrivate === 'boolean') patch.isPrivate = body.isPrivate
-  if (typeof body.isInactive === 'boolean') patch.isInactive = body.isInactive
   if (Object.keys(patch).length > 0) {
     const result = await patchFolder(gate.user.orgId, id, patch, gate.user.id, {
       actorId: gate.user.id,
