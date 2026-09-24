@@ -1837,4 +1837,36 @@ export async function requireHrmCertificationsManage(
     );
   }
 }
+
+/**
+ * The aggregate half of certification authority for list-shaped reads and
+ * employment-naming writes: the grant, then the allowed employer set
+ * (null = unrestricted) for the caller to filter by, never a boolean.
+ * Same shape as the performance aggregate gates — the grant alone is
+ * never the whole answer.
+ */
+export async function requireAggregateCertificationsRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmCertificationsRead(exec, orgId, actorId);
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
+/**
+ * Employment-naming certification writes (record, verify, renew, revoke,
+ * HR evidence attach) resolve their subject employment on the trusted
+ * runner and prove its employer inside this set. The caller MUST pass its
+ * write transaction's runner so this check and the subsequent write are
+ * atomic.
+ */
+export async function requireAggregateCertificationsManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmCertificationsManage(exec, orgId, actorId);
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
 // HR-14 end
