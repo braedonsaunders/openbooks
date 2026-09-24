@@ -87,8 +87,7 @@ async function insertRun(client, runId, orgId, flowId, subjectId) {
   );
 }
 
-test(
-  "same-org flow run can name its flow; cross-tenant insert and update are refused",
+test("same-org flow run can name its flow; cross-tenant insert and update are refused",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });
@@ -152,8 +151,7 @@ test(
   },
 );
 
-test(
-  "0213 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
+test("0213 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });

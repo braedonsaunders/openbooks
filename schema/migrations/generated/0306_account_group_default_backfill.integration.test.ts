@@ -35,8 +35,7 @@ async function storedGroups(orgId: string): Promise<StoredGroup[]> {
   `)).rows;
 }
 
-test(
-  "0306 backfills the default groups for every tenant without touching existing rows, idempotently",
+test("0306 backfills the default groups for every tenant without touching existing rows, idempotently",
   { skip: !DB },
   async () => {
     const pristine = await withBypass(() => createScratchOrg());

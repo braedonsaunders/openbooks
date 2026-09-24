@@ -90,8 +90,7 @@ async function insertFirstVersion(
   );
 }
 
-test(
-  "a currency change cannot pass the history check while first-version creation is in flight",
+test("a currency change cannot pass the history check while first-version creation is in flight",
   { skip: !DB },
   async () => {
     const fixture = await seedBook("RACE");
@@ -171,8 +170,7 @@ test(
   },
 );
 
-test(
-  "version, lines, and audit stay atomic, so a rolled-back creation leaves the book relabelable",
+test("version, lines, and audit stay atomic, so a rolled-back creation leaves the book relabelable",
   { skip: !DB },
   async () => {
     const fixture = await seedBook("ATOMIC");
@@ -204,8 +202,7 @@ test(
   },
 );
 
-test(
-  "a version insert must reference a tenant-owned rate book",
+test("a version insert must reference a tenant-owned rate book",
   { skip: !DB },
   async () => {
     const fixture = await seedBook("TENANT");

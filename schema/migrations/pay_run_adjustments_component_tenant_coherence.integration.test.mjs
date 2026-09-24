@@ -132,8 +132,7 @@ async function restoreSingleColumnFk(client) {
   `);
 }
 
-test(
-  "same-org pay-run adjustment can name its pay component; cross-tenant insert and update are refused",
+test("same-org pay-run adjustment can name its pay component; cross-tenant insert and update are refused",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });
@@ -211,8 +210,7 @@ test(
   },
 );
 
-test(
-  "0218 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
+test("0218 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });

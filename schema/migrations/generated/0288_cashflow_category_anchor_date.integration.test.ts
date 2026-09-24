@@ -30,8 +30,7 @@ async function storedCategories(orgId: string): Promise<StoredCategory[]> {
   return cats as StoredCategory[];
 }
 
-test(
-  "0288 backfills anchorDate onto manual categories missing it, idempotently",
+test("0288 backfills anchorDate onto manual categories missing it, idempotently",
   { skip: !DB },
   async () => {
     const org = await withBypass(() => createScratchOrg());

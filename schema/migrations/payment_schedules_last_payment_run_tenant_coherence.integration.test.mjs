@@ -110,8 +110,7 @@ async function insertSchedule(client, scheduleId, orgId, name, profileId, lastPa
   );
 }
 
-test(
-  "same-org payment schedule can name its last run; cross-tenant insert and update are refused",
+test("same-org payment schedule can name its last run; cross-tenant insert and update are refused",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });
@@ -189,8 +188,7 @@ test(
   },
 );
 
-test(
-  "0212 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
+test("0212 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });

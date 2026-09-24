@@ -57,8 +57,7 @@ async function unmatchedBucket(orgId: string, dimension: string): Promise<string
   return ref.key;
 }
 
-test(
-  "0319 keeps the tenant catch-all authoritative, refuses ambiguity by name, and holds one active catch-all",
+test("0319 keeps the tenant catch-all authoritative, refuses ambiguity by name, and holds one active catch-all",
   { skip: !DB },
   async () => {
     // The 0319 guard makes the ambiguous state unreachable, so remove it

@@ -61,8 +61,7 @@ async function seedEmailEvidence(
   `);
 }
 
-test(
-  "0329 clears claim-time sent_at only on unsent rows with no delivery evidence, with audit",
+test("0329 clears claim-time sent_at only on unsent rows with no delivery evidence, with audit",
   { skip: !DB },
   async () => {
     const org = await withBypass(() => createScratchOrg());

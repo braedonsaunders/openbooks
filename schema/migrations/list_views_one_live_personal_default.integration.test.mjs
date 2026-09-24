@@ -102,8 +102,7 @@ async function insertListView(client, {
   );
 }
 
-test(
-  "a second live personal list-view isDefault is refused",
+test("a second live personal list-view isDefault is refused",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });
@@ -210,8 +209,7 @@ test(
   },
 );
 
-test(
-  "0219 fails closed on dirty live personal defaults and does not rewrite those rows",
+test("0219 fails closed on dirty live personal defaults and does not rewrite those rows",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });
