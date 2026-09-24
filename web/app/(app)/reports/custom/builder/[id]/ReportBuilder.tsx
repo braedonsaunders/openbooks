@@ -18,6 +18,7 @@ import {
 } from '@openbooks/reports'
 import { DetailPageLayout } from '../../../../../../components/page-layout'
 import { confirmDialog } from '../../../../../../lib/confirm'
+import { readApiErrorMessage } from '../../../../../../lib/api-error'
 import { FilterTree } from '../../FilterTree'
 import { PaperView, type PaperData } from '../../../PaperView'
 import { RowsConfig, SortConfig, SummarizeConfig } from '../../../query-config'
@@ -133,22 +134,26 @@ export function ReportBuilder({
   const runPreview = useCallback(
     async (plan: ReportCustomQuery) => {
       setPreviewing(true)
-      const res = await fetch('/api/reports/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: plan }),
-      })
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
+      try {
+        const res = await fetch('/api/reports/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: plan }),
+        })
+        if (!res.ok) {
+          setPreview(null)
+          setPreviewError(await readApiErrorMessage(res, t('previewFailed')))
+          return
+        }
+        const data = (await res.json()) as { result: ReportRunResult }
+        setPreview(data.result)
+        setPreviewError(null)
+      } catch {
         setPreview(null)
-        setPreviewError(data.error ?? t('previewFailed'))
+        setPreviewError(t('previewFailed'))
+      } finally {
         setPreviewing(false)
-        return
       }
-      const data = (await res.json()) as { result: ReportRunResult }
-      setPreview(data.result)
-      setPreviewError(null)
-      setPreviewing(false)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -275,19 +280,23 @@ export function ReportBuilder({
     if (!confirmed) return
 
     setDeleting(true)
-    const res = await fetch(`/api/reports/definitions/${definition.id}`, {
-      method: 'DELETE',
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      toast.error(data.error ?? ta('deleteFailed'))
-      setDeleting(false)
-      return
-    }
+    try {
+      const res = await fetch(`/api/reports/definitions/${definition.id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, ta('deleteFailed')))
+        return
+      }
 
-    toast.success(ta('deleted'))
-    router.push('/reports/custom')
-    router.refresh()
+      toast.success(ta('deleted'))
+      router.push('/reports/custom')
+      router.refresh()
+    } catch {
+      toast.error(ta('deleteFailed'))
+    } finally {
+      setDeleting(false)
+    }
   }
 
   // ReportRunResult → the unified PaperView shape (same contract statements use).
