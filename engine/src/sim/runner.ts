@@ -253,6 +253,10 @@ export async function dayEnd(runDir: string): Promise<DayEndResult> {
       const dir = halt(runDir, manifest, "day-end (immutability)", probe);
       return { simDate, ranFull: false, pass: false, halted: { phase: "day-end", dir, failures: probe.failures } };
     }
+    // Coverage stamps ONLY on a probe pass, and the probe passes only when it
+    // staged a real posting and matched the kernel's specific closed-period
+    // refusal — vacuous worlds and wrong-error outcomes return failures and
+    // halt above, so they can never stamp period_immutability as complete.
     manifest.provenClosed.push(p.name);
     recordCoverage(manifest, "period_immutability");
   }
