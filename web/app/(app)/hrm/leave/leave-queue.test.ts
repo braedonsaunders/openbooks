@@ -1,138 +1,258 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Shared-table composition contract for the leave desk (/hrm/leave). Runs
-// without dependencies: it reads the maintained sources and proves the queue
-// renders through the shared table block (variant 'app') over
-// loader-resolved display cells, segments on the shared filter chips, carries
-// both primary actions in the page header, and opens the drawer from URL
-// params — with every label from the hrm catalog. The department calendar is
-// not a list and stays a component.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const dialog = readFileSync(new URL("./LeaveDialog.tsx", import.meta.url), "utf8");
-const calendar = readFileSync(new URL("./LeaveCalendar.tsx", import.meta.url), "utf8");
-const loader = readFileSync(new URL("../../../../lib/hrm/leave.ts", import.meta.url), "utf8");
-const widgets = readFileSync(new URL("../../../../components/viewspec/widgets-hrm.tsx", import.meta.url), "utf8");
-const contracts = readFileSync(new URL("../../../../components/viewspec/widget-contracts.ts", import.meta.url), "utf8");
-const names = readFileSync(new URL("../../../../components/viewspec/registry-names.ts", import.meta.url), "utf8");
-const strings = readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8");
+// Behaviour contract for the leave desk (/hrm/leave). These tests CALL
+// the queue loader with hand-built service rows and assert on what the
+// page observes: refusal data for unknown segments and scope denials,
+// exact per-segment counts and filtering, the requests/calendar view
+// split, and dialog hrefs that keep the view. The seams below stub I/O
+// only (feature switches, group tabs, the engine leave reads, the
+// departments lookup, translations backed by the REAL en catalog). The
+// refusal classes are the real engine errors — the authorization and
+// leave-errors modules are deliberately unstubbed so the loader's
+// instanceof catches share the class identity — and authz stubbing is
+// the sanctioned seam, with permission logic proven by the existing
+// scope DB tests, not doubled here.
+const hrmCatalog = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+) as Record<string, unknown>;
 
-test("leave renders through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadLeaveQueuePage/, "page loads through the leave loader");
-  assert.match(view, /leaveQueueSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+(globalThis as Record<string, unknown>).__leaveQueueCatalogs = { hrm: hrmCatalog };
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    const parent = context.parentURL ?? "";
+    const owned = parent.endsWith("/web/lib/hrm/leave.ts");
+    if (owned && specifier === "next-intl/server") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function getTranslations(ns) {
+              const catalogs = globalThis.__leaveQueueCatalogs;
+              const catalog = catalogs[ns] ?? {};
+              const lookup = (key) => {
+                let node = catalog;
+                for (const part of key.split('.')) {
+                  if (node !== null && typeof node === 'object') node = node[part];
+                  else return key;
+                }
+                return typeof node === 'string' ? node : key;
+              };
+              const t = (key, params) => {
+                const template = lookup(key);
+                if (!params) return template;
+                return template.replace(/\\{(\\w+)\\}/g, (_, name) => (params[name] === undefined ? '{' + name + '}' : String(params[name])));
+              };
+              t.has = (key) => lookup(key) !== key;
+              return t;
+            }`,
+          ),
+      };
+    }
+    if (owned && (specifier === "../authz" || specifier.endsWith("/lib/authz"))) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export const can = (authz, perm) => authz.permissions.has('*') || authz.permissions.has(perm);
+             export async function requirePermission() { throw new Error('stubbed requirePermission must not run here'); }
+             export async function getAuthz() { return null; }`,
+          ),
+      };
+    }
+    if (owned && specifier.endsWith("components/module-home/group-tabs")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/src/platform/business-date.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/src/hrm/leave-read.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function listOrgLeaveRequests() {
+              const s = globalThis.__leaveQueueList;
+              if (s && s.error) throw s.error;
+              return { requests: (s && s.rows) || [], truncated: false };
+            }
+            export async function myLeaveRequests() { return []; }
+            export async function listLeaveTypes() { return []; }
+            export async function payrollBankBalances() { return []; }
+            export async function timeBalanceAsOf() { return null; }`,
+          ),
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/src/hrm/attendance.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function employmentsOnLeave() {
+              return (globalThis.__leaveQueueOnLeave || []);
+            }
+            export async function absenceCalendarForDepartment() { return []; }`,
+          ),
+      };
+    }
+    // The sibling change-request label lookup runs through the same stubbed
+    // database client: with no labelled rows it resolves to the
+    // not-available fallback, which these tests never assert on.
+    if (
+      (owned || parent.endsWith("/web/lib/hrm/change-requests.ts")) &&
+      specifier === "@openbooks/engine/src/platform/db.ts"
+    ) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) };",
+      };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("leave rows render through the shared table block, not a bespoke table", () => {
-  assert.match(view, /table\(\{/, "rows compose a table block");
-  assert.match(view, /variant: 'app'/, "the table uses the app list variant");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
-  assert.ok(!/<table/.test(dialog), "the dialog island holds no hand-rolled table");
-  assert.ok(!/<table/.test(calendar), "the calendar island holds no hand-rolled table");
-  assert.ok(
-    !existsSync(new URL("./LeaveQueue.tsx", import.meta.url)),
-    "the hand-rolled queue table component is deleted",
+const { loadLeaveQueue } = await import("../../../../lib/hrm/leave.ts");
+const { HrmAuthorizationError } = await import(
+  "@openbooks/engine/src/hrm/authorization.ts"
+);
+const { LeaveError } = await import("@openbooks/engine/src/hrm/leave-errors.ts");
+
+const gap = globalThis as Record<string, unknown>;
+
+function authzWith(permissions: string[]) {
+  return {
+    user: { orgId: "org-leave", id: "actor-leave" },
+    permissions: new Set(permissions),
+    allowedSubsidiaryIds: null,
+  } as never;
+}
+
+const HR_READER = authzWith(["hrm.leave.read", "hrm.leave.request", "hrm.leave.manage"]);
+
+function stubReads(rows: Array<Record<string, unknown>> | { error: unknown }, onLeave: Array<Record<string, unknown>> = []) {
+  gap.__leaveQueueList = Array.isArray(rows) ? { rows } : rows;
+  gap.__leaveQueueOnLeave = onLeave;
+}
+
+function leaveRow(id: string, status: string, startsOn: string, endsOn: string): Record<string, unknown> {
+  return {
+    id,
+    employmentId: "emp-1",
+    workerPartyId: "party-1",
+    leaveTypeId: "type-1",
+    leaveTypeCode: "VAC",
+    startsOn,
+    endsOn,
+    hours: "8",
+    reason: null,
+    status,
+    decidedBy: null,
+    decidedAt: null,
+    decisionReason: null,
+  };
+}
+
+test("an unknown segment refuses naming the segment, never an empty table", async () => {
+  stubReads([]);
+  const data = await loadLeaveQueue(HR_READER, { segment: "bogus" });
+  assert.ok(data.refusal, "the refusal travels as data the page renders");
+  assert.equal(data.refusal.title, "Unknown segment", "the refusal carries the catalogued title");
+  assert.ok(data.refusal.message.includes("bogus"), "the refusal names the segment the URL asked for");
+  assert.equal(data.hasContent, false, "no rows render beside the refusal");
+  assert.deepEqual(data.rows, [], "no rows leak through a refused segment");
+});
+
+test("the queue counts per segment and filters to the active one", async () => {
+  stubReads(
+    [
+      leaveRow("lr-pending", "submitted", "2026-10-20", "2026-10-21"),
+      leaveRow("lr-upcoming", "approved", "2026-10-20", "2026-10-21"),
+      leaveRow("lr-history", "approved", "2026-09-01", "2026-09-02"),
+    ],
+    [{ employmentId: "emp-9" }],
   );
-});
-
-test("leave segments ride the shared list toolbar", () => {
-  assert.match(view, /widgetBlock\('list-toolbar'/, "segments ride the shared toolbar");
-  assert.match(view, /paramKey: 'segment'/, "segments filter on the segment search param");
-  assert.doesNotMatch(view, /widgetBlock\('filter-chips'/, "no second filter treatment beside the toolbar");
-});
-
-test("requests and the department calendar are TABS, never stacked panels", () => {
-  assert.match(view, /widgetBlock\('module-home-tabs', \{ tabs: data\.viewTabs \}\)/,
-    "the view switch is the shared subtab strip");
-  assert.match(view, /when: f\('onRequests'\)/, "the requests table renders only on its own tab");
-  assert.match(view, /when: f\('onCalendar'\)/, "the calendar renders only on its own tab");
-  // The defect this pins: the calendar used to render BELOW the requests
-  // table on the same page, so a viewport-filling list sat on top of it.
-  assert.ok(
-    view.indexOf("when: f('onCalendar')") > view.indexOf("when: f('onRequests')"),
-    "the two surfaces are alternatives, not a sequence",
+  const all = await loadLeaveQueue(HR_READER, {});
+  assert.equal(all.refusal, null, "a known state carries no refusal");
+  assert.deepEqual(
+    all.counts,
+    { pending: 1, upcoming: 1, today: 1, history: 1 },
+    "on-leave-today counts absence fact, not request state",
   );
-  // The calendar renders DAYS. Department/from/to are the shared toolbar's,
-  // so the island takes no basePath, no currentParams and no options.
-  assert.doesNotMatch(calendar, /method="get"/, "the calendar owns no filter form of its own");
-  assert.doesNotMatch(calendar, /departmentOptions/, "the department picker is the toolbar's");
+  assert.equal(all.total, 3, "the total counts listed requests");
+  assert.equal(all.rows.length, 3, "no segment shows every row");
+
+  const pending = await loadLeaveQueue(HR_READER, { segment: "pending" });
+  assert.deepEqual(
+    pending.rows.map((row) => row.id),
+    ["lr-pending"],
+    "the pending segment shows submitted requests only",
+  );
+  const row = pending.rows[0]!;
+  assert.equal(row.rangeLabel, "2026-10-20 → 2026-10-21", "the range renders verbatim, never through Date");
+  assert.equal(row.statusVariant, "warning", "the loader resolves the badge variant");
+  assert.ok(row.requestHref.includes("request=lr-pending"), "each row opens its own request");
 });
 
-test("both primary actions live in the page header through the shared button", () => {
-  assert.match(view, /f\('fileHref'\)/, "file navigates to a loader-built href");
-  assert.match(view, /f\('recordHref'\)/, "record navigates to a loader-built href");
-  assert.match(view, /f\('canFile'\)/, "the file button renders only with the request grant");
-  assert.match(view, /f\('canRecord'\)/, "the record button renders only with the manage grant");
-  assert.match(view, /variant: 'outline'/, "record is the secondary header action");
+test("a subsidiary-scope denial refuses with the remedy, never a partial list", async () => {
+  const remedy = "a role restricted to specific subsidiaries cannot read the org-wide leave queue — ask an administrator for access";
+  stubReads({ error: new HrmAuthorizationError(remedy) });
+  const data = await loadLeaveQueue(HR_READER, {});
+  assert.ok(data.refusal, "the denial travels as data");
+  assert.equal(data.refusal.message, remedy, "the remedy arrives verbatim");
+  assert.deepEqual(data.rows, [], "no partial list pretends to be the whole queue");
+  assert.equal(data.hasContent, false, "the table suppresses while refused");
 });
 
-test("cells compose the shared primitives over loader-resolved display fields", () => {
-  assert.match(view, /link\(item\('employeeLabel'\), item\('employeeHref'\)\)/, "employee opens the drawer href");
-  assert.match(view, /badge\(item\('statusLabel'\), \{ variant: item\('statusVariant'\) \}\)/, "status rides the shared badge");
-  assert.match(view, /link\(item\('openLabel'\), item\('requestHref'\)\)/, "each row opens its request");
-  assert.match(view, /align: 'right'/, "hours align right");
-  assert.match(loader, /employeeHref/, "the loader builds the employee drawer href");
-  assert.match(loader, /statusVariant/, "the loader resolves the badge variant");
-  assert.match(loader, /requestHref/, "the loader builds the per-row request href");
+test("a leave-domain refusal converts the same way an authorization one does", async () => {
+  stubReads({ error: new LeaveError("REFUSED", "this login is not linked to a person record") });
+  const data = await loadLeaveQueue(HR_READER, {});
+  assert.ok(data.refusal, "the domain refusal travels as data");
+  assert.ok(data.refusal.message.includes("not linked"), "the remedy arrives intact");
 });
 
-test("the drawer opens from URL params and closes by navigating away", () => {
-  assert.match(view, /hrm-leave-dialog/, "the dialog island renders in the page body");
-  assert.match(view, /f\('dialogOpen'\)/, "the dialog opens only when a file/record/request param is present");
-  assert.match(loader, /dialogOpen/, "the loader derives the dialog state from the search params");
-  assert.match(loader, /dialogCloseHref/, "the loader builds the dialog return href");
-  assert.match(dialog, /LeaveDrawer/, "file and detail open the existing drawer");
-  assert.match(dialog, /router\.push\(closeHref/, "closing the dialog navigates the params away");
+test("requests and the department calendar are alternative views, never stacked", async () => {
+  stubReads([]);
+  const requests = await loadLeaveQueue(HR_READER, {});
+  assert.equal(requests.view, "requests", "the list is the default view");
+  assert.equal(requests.onRequests, true, "the requests table renders on its own tab");
+  assert.equal(requests.onCalendar, false, "the calendar stays off the requests tab");
+
+  const calendar = await loadLeaveQueue(HR_READER, { view: "calendar" });
+  assert.equal(calendar.view, "calendar", "the calendar is its own view");
+  assert.equal(calendar.onRequests, false, "the requests table stays off the calendar tab");
+  assert.equal(calendar.onCalendar, true, "the calendar renders on its own tab");
+  assert.ok(calendar.fileHref.includes("view=calendar"), "filing from the calendar closes back onto it");
+  assert.ok(requests.fileHref.includes("file=1"), "filing opens through the file param");
+  assert.ok(!requests.fileHref.includes("view="), "the requests view adds no view param");
 });
 
-test("the calendar stays a component — it is not a list", () => {
-  assert.match(view, /hrm-leave-calendar/, "the calendar still renders through its widget");
-  assert.equal((view.match(/table\(\{/g) ?? []).length, 1, "exactly one table block exists: the queue");
-  assert.ok(!/<table/.test(calendar), "the calendar holds no hand-rolled table");
-});
-
-test("leave gates on the hrm feature switch plus the leave read grant", () => {
-  assert.match(view, /requirePermission\('hrm\.leave\.read'\)/, "page requires the leave read grant");
-  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
-  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a disabled switch redirects to the feature remedy instead of rendering a gated queue");
-  assert.match(loader, /loadLeaveQueue\(\s*authz/, "loader takes the authorized session, never re-gates");
-});
-
-test("the leave list comes from the existing service, never a table read", () => {
-  assert.match(loader, /listOrgLeaveRequests\(/, "the list resolves through the leave read service");
-  assert.ok(!/from hrm_leave_requests/.test(loader), "loader issues no direct request-table reads");
-});
-
-test("unknown segments and scope denials render as refusals, never empty tables", () => {
-  assert.match(loader, /unknownSegment/, "an unknown segment is a refusal naming the segment");
-  assert.match(loader, /HrmAuthorizationError/, "a subsidiary-scope denial is caught, never a partial list");
-  assert.match(loader, /refusal/, "refusals travel as data the page renders");
-  assert.match(view, /empty-state/, "the refusal renders with its message intact");
-});
-
-test("the leave dialog widget is registered exactly once in every registry", () => {
-  assert.match(widgets, /'hrm-leave-dialog'/, "the dialog widget renders its island, never a second copy");
-  assert.match(contracts, /'hrm-leave-dialog': \{ props: \[/, "the dialog contract pins the prop surface");
-  assert.match(names, /'hrm-leave-dialog'/, "the dialog widget name is registered");
-  assert.ok(!widgets.includes('hrm-leave-queue'), "the bespoke queue widget is deleted");
-  assert.ok(!names.includes('hrm-leave-queue'), "the bespoke queue widget name is unregistered");
-});
-
-test("leave copy resolves from the hrm catalog, never inline English", () => {
-  for (const key of [
-    "title",
-    "listTitle",
-    "segmentsLabel",
-    "allLabel",
-    "emptyTitle",
-    "fileButton",
-    "recordButton",
-    "openRequest",
-  ]) {
-    assert.ok(strings.includes(`"${key}"`), `en/hrm carries leave.${key}`);
-  }
-  assert.match(view, /f\('title'\)/, "spec titles resolve through view refs, never literals");
+test("an unexpected system failure propagates instead of an empty queue", async () => {
+  stubReads({ error: new TypeError("connection terminated") });
+  await assert.rejects(
+    loadLeaveQueue(HR_READER, {}),
+    /connection terminated/,
+    "the failure reaches the caller, never a null list",
+  );
 });
