@@ -3098,9 +3098,6 @@ function cognateScope(entry: string): string {
 }
 
 const COGNATE_SCOPES = new Set([...COGNATES].map(cognateScope))
-const COGNATE_TERMS = new Map(
-  [...COGNATES].map((entry) => [cognateScope(entry), entry.slice(entry.indexOf('|') + 1)] as const),
-)
 
 function sample(list: string[], limit = 25): string {
   const shown = list.slice(0, limit).join('\n  ')

@@ -35,7 +35,7 @@ registerHooks({
 });
 
 const gateKey = Symbol.for("openbooks.posting-fx-gate");
-const { env, withBypassContext: withBypass } = await import(
+const { withBypassContext: withBypass } = await import(
   "@openbooks/engine/src/platform/db.ts"
 );
 const { createScratchOrg, dropScratchOrg } = await import(

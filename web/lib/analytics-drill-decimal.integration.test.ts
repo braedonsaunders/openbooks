@@ -47,7 +47,7 @@ const setGateOrg = (orgId: string) => {
   }
 }
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )

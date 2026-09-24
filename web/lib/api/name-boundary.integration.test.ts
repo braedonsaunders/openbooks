@@ -58,7 +58,7 @@ const engineScopeUrl = new URL(
   "../../../engine/src/organization/subsidiary-scope.ts",
   import.meta.url,
 ).href;
-const { env, withBypassContext: withBypass } = await import(
+const { withBypassContext: withBypass } = await import(
   "@openbooks/engine/src/platform/db.ts"
 );
 const { createScratchOrg, dropScratchOrg } = await import(

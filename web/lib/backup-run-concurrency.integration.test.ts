@@ -55,7 +55,7 @@ registerHooks({
 });
 
 const gateKey = Symbol.for("openbooks.backup-run-gate");
-const { db, env, withBypassContext: withBypass } = await import(
+const { db, withBypassContext: withBypass } = await import(
   "@openbooks/engine/src/platform/db.ts"
 );
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
