@@ -97,6 +97,35 @@ for (const file of connectorRoutes) {
   assert.match(source, /guardUnrestrictedScope\s*\(/, `${file} exposes org-wide connector state without guardUnrestrictedScope`);
 }
 
+// These org-wide settings commands persist policy/secrets beneath orgs.settings
+// rather than a dedicated table, so derive each route from its writer call and
+// require the guard in the individual mutating handler. A read handler's guard
+// cannot stand in for PUT or DELETE.
+const orgSettingsWriters = new Map([
+  ["saveSetupAgentPolicy", "orgs.settings.setupAgentPolicies"],
+  ["saveOrgAiAgentSettings", "orgs.settings.ai.agentPolicies"],
+  ["saveOrgAiSettings", "orgs.settings.ai"],
+  ["clearOrgAiKey", "orgs.settings.ai.apiKey"],
+]);
+const orgSettingsWrites = [];
+for (const file of routes) {
+  const source = readFileSync(join(root, file), "utf8");
+  for (const [writer, target] of orgSettingsWriters) {
+    if (!new RegExp(`\\b${writer}\\s*\\(`).test(source)) continue;
+    const methods = writer === "clearOrgAiKey" ? ["DELETE"] : ["PUT"];
+    for (const method of methods) {
+      const arm = handlerArm(source, method);
+      assert.match(arm, new RegExp(`\\b${writer}\\s*\\(`),
+        `${file} no longer calls ${writer} from its ${method} handler; update the derived writer map`);
+      assert.match(arm, /guardUnrestrictedScope\s*\(/,
+        `${file} writes ${target} without a ${method} unrestricted-scope guard`);
+    }
+    orgSettingsWrites.push({ file, target });
+  }
+}
+
 console.log(`org-wide config scope: ${writes.length} route(s), ${writes.reduce((n, row) => n + row.tables.length, 0)} write target(s)`);
 for (const row of writes) console.log(`  ${row.file}: ${row.tables.join(", ")}`);
 console.log(`org-wide connector scope: ${connectorRoutes.length} route(s), reads and writes guarded`);
+console.log(`org-wide settings scope: ${orgSettingsWrites.length} route writer(s), mutation handlers guarded`);
+for (const row of orgSettingsWrites) console.log(`  ${row.file}: ${row.target}`);
