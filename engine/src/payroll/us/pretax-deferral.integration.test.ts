@@ -181,7 +181,6 @@ function expectedFit(fitWages: string): string {
     ficaWages: PERIOD_WAGES,
     futaWages: PERIOD_WAGES,
     filingStatus: "single",
-    futaEffectiveRate: "0.006",
     sui: { rate: "0.03", wageBase: "7000" },
   }).fit;
 }
@@ -386,6 +385,54 @@ test(
       }, "TX");
       assert.equal(resolveUsSuiYtd("TX", sameStateHistory), PERIOD_WAGES,
         "same-state SUI history remains usable; FUTA retains its independent aggregate");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "FUTA and SUI exemptions independently control their employer contribution lines",
+  { skip: !DB },
+  async () => {
+    // FUTA federal employment exclusions and state UI coverage are separate;
+    // California describes tax-rated UI and reimbursable employers separately:
+    // https://www.irs.gov/publications/p15 and https://edd.ca.gov/tax-rated-employers.
+    const fx = await usPayrollOrg();
+    try {
+      const futaOnlyExempt = await usEmployee(fx, "FUTA-only exempt employee");
+      const suiOnlyExempt = await usEmployee(fx, "SUI-only exempt employee");
+      await db.execute(sql`
+        update employee_payroll_profiles set futa_exempt = true
+         where org_id = ${fx.orgId} and employee_party_id = ${futaOnlyExempt}`);
+      await db.execute(sql`
+        update employee_payroll_profiles set sui_exempt = true
+         where org_id = ${fx.orgId} and employee_party_id = ${suiOnlyExempt}`);
+
+      const run = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+      });
+      const result = await calculatePayRun({
+        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+      });
+      assert.deepEqual(result.errors, []);
+      const lines = (await db.execute<{
+        employee_party_id: string; system_key: string; amount: string;
+      }>(sql`
+        select s.employee_party_id, pc.system_key, coalesce(sum(l.amount), 0)::text as amount
+          from pay_stubs s
+          join pay_stub_lines l on l.org_id = s.org_id and l.stub_id = s.id
+          join pay_components pc on pc.org_id = l.org_id and pc.id = l.component_id
+         where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
+           and l.kind = 'employer_contribution' and pc.system_key in ('futa', 'suta')
+         group by s.employee_party_id, pc.system_key`)).rows;
+      const amount = (employee: string, systemKey: string) =>
+        lines.find((line) => line.employee_party_id === employee && line.system_key === systemKey)?.amount ?? "0";
+      assert.equal(amount(futaOnlyExempt, "futa"), "0");
+      assert.equal(amount(futaOnlyExempt, "suta"), "60.0000");
+      assert.equal(amount(suiOnlyExempt, "futa"), "12.0000");
+      assert.equal(amount(suiOnlyExempt, "suta"), "0");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

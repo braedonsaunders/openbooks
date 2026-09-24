@@ -261,7 +261,10 @@ test("supplemental wages: 22% flat rate, 37% past $1,000,000 YTD", () => {
   assert.equal(high.fitSupplemental, money("3400.00"));
 });
 
-test("exemptions: FIT-exempt keeps FICA; FICA-exempt keeps FIT; FUTA-exempt", () => {
+// FUTA's federal exclusions do not decide state UI coverage; California
+// distinguishes FUTA-exempt public employers from tax-rated UI employers:
+// https://www.irs.gov/publications/p15 and https://edd.ca.gov/tax-rated-employers/.
+test("unemployment coverage exemptions are independent: FUTA-only and SUI-only", () => {
   const fitExempt = calculateWithConfiguredFuta({
     payDate: "2026-02-13", periodsPerYear: 26, wages: "2000.00",
     filingStatus: "single", fitExempt: true, extraPerPeriod: "25.00",
@@ -284,7 +287,14 @@ test("exemptions: FIT-exempt keeps FICA; FICA-exempt keeps FIT; FUTA-exempt", ()
     filingStatus: "single", futaExempt: true, sui: { rate: "0.027", wageBase: "9000" },
   });
   assert.equal(futaExempt.futa, money("0"));
-  assert.equal(futaExempt.suta, money("0"));
+  assert.equal(futaExempt.suta, money("54.00"));
+
+  const suiExempt = calculateWithConfiguredFuta({
+    payDate: "2026-02-13", periodsPerYear: 26, wages: "2000.00",
+    filingStatus: "single", suiExempt: true, sui: { rate: "0.027", wageBase: "9000" },
+  });
+  assert.equal(suiExempt.futa, money("12.00"));
+  assert.equal(suiExempt.suta, money("0"));
 });
 
 test("Additional Medicare when YTD wages already exceed $200,000", () => {

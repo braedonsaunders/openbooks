@@ -224,7 +224,7 @@ test('profile GET serves the packs declared subdivisions and withholding shapes'
     // to satisfy a stale comparison.
     assert.deepEqual(us.supportedSubdivisions, us.subdivisions)
     assert.ok(us.certificates.some((c) => c.key === 'us_w4'))
-    assert.deepEqual(us.exemptionFlags.map((f) => f.column).sort(), ['fica_exempt', 'futa_exempt'])
+    assert.deepEqual(us.exemptionFlags.map((f) => f.column).sort(), ['fica_exempt', 'futa_exempt', 'sui_exempt'])
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -261,6 +261,51 @@ test('profile POST validates withholding answers against the pack declaration', 
       assert.equal(response.status, status, `${label}: ${await response.clone().text()}`)
       if (message) assert.match(((await response.json()) as { error: string }).error, message)
     }
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('US FUTA and SUI exemption facts save independently', { skip: !DB }, async () => {
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const response = await post({
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: 'US',
+      province: 'CA',
+      payBasis: 'hourly',
+      ficaExempt: false,
+      futaExempt: true,
+      suiExempt: false,
+      sin: '123-45-6789',
+    })
+    assert.equal(response.status, 200, await response.clone().text())
+    const stored = await withOrgContext(org.orgId, () => db.execute<{
+      futa_exempt: boolean; sui_exempt: boolean;
+    }>(sql`
+      select futa_exempt, sui_exempt from employee_payroll_profiles
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
+    assert.deepEqual(stored.rows[0], { futa_exempt: true, sui_exempt: false })
+
+    const reverse = await post({
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: 'US',
+      province: 'CA',
+      payBasis: 'hourly',
+      ficaExempt: false,
+      futaExempt: false,
+      suiExempt: true,
+      sin: '123-45-6789',
+    })
+    assert.equal(reverse.status, 200, await reverse.clone().text())
+    const updated = await withOrgContext(org.orgId, () => db.execute<{
+      futa_exempt: boolean; sui_exempt: boolean;
+    }>(sql`
+      select futa_exempt, sui_exempt from employee_payroll_profiles
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
+    assert.deepEqual(updated.rows[0], { futa_exempt: false, sui_exempt: true })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
