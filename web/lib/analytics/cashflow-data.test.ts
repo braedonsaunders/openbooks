@@ -1,35 +1,49 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { add, cmp, sum } from '../../../engine/src/money/money.ts'
+registerHooks({resolve(specifier, context, next) {
+  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
+  if (specifier === '../money-server') return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}' }
+  return next(specifier, context)
+}})
+const { buildTimeline } = await import('../cash/cash-position')
 
-const source = readFileSync(join(import.meta.dirname, 'cashflow-data.ts'), 'utf8')
-const timelineSource = readFileSync(join(import.meta.dirname, '..', 'cash', 'cash-position.ts'), 'utf8')
+test('cash forecast rolls fractional flows exactly above the safe integer range', () => {
+  const firstWeek = '2026-09-07'
+  const secondWeek = '2026-09-14'
+  const arEntries = [
+    {
+      id: 'ar-1', entryId: 'ar-1', docKind: 'customer_invoice', docNumber: 'AR-1', docId: 'doc-1',
+      partyId: 'customer-1', partyName: 'Northwind', amount: '0.1251', tranDate: firstWeek,
+      dueDate: firstWeek, predictedDate: firstWeek, weekStart: firstWeek, daysOverdue: 0, method: 'terms',
+    },
+  ]
+  const laterArEntries = [
+    {
+      id: 'ar-2', entryId: 'ar-2', docKind: 'customer_invoice', docNumber: 'AR-2', docId: 'doc-2',
+      partyId: 'customer-1', partyName: 'Northwind', amount: '0.0001', tranDate: secondWeek,
+      dueDate: secondWeek, predictedDate: secondWeek, weekStart: secondWeek, daysOverdue: 0, method: 'terms',
+    },
+  ]
+  const categories = [{
+    id: 'insurance', name: 'Insurance', direction: 'outflow' as const, method: 'fixed_weekly' as const,
+    weekly: ['0.2500', '0.1250'], total: '0.3750', logic: 'Scheduled premium',
+    meta: { method: 'Fixed weekly' }, breakdown: [],
+  }]
 
-test('cashflow resolver keeps forecast aggregates as canonical exact money', () => {
-  assert.match(source, /startingCash: string/)
-  assert.match(source, /totalInflows: string/)
-  assert.match(source, /runwayWeeks: string \| null/)
-  assert.match(source, /sumMoney\(/)
-  assert.match(source, /divideMoney\(/)
-  assert.doesNotMatch(source, /Number\([^\n]*(?:amount|balance|remaining|inflow|outflow|cash|total)/)
-})
+  const timeline = buildTimeline({
+    weekStarts: [firstWeek, secondWeek],
+    startingCash: '9007199254740993.0000',
+    arByWeek: new Map([[firstWeek, arEntries], [secondWeek, laterArEntries]]),
+    apByWeek: new Map(),
+    categories,
+    apSettings: { weeklyCap: '0.0000', restrictToSafe: false },
+  })
 
-test('cashflow timeline sums fractional, negative, and beyond-safe values exactly', () => {
-  const huge = '9007199254740993.0000'
-  assert.match(timelineSource, /startingCash: string/)
-  assert.match(timelineSource, /running = addMoney\(running, net\)/)
-  assert.match(timelineSource, /totalIn = addMoney\(totalIn, inflow\)/)
-  assert.match(timelineSource, /totalOut = addMoney\(totalOut, outflow\)/)
-  assert.doesNotMatch(timelineSource, /running\s*\+=|totalIn\s*\+=|totalOut\s*\+=/)
-
-  // Representative ledger values that used to round differently when passed
-  // through Number: one fractional credit, one negative opening balance, and
-  // a valid numeric(19,4) value beyond Number.MAX_SAFE_INTEGER.
-  assert.equal(add(huge, '-0.1251'), '9007199254740992.8749')
-  assert.equal(add('-0.1250', '9007199254740992.8749'), '9007199254740992.7499')
-  assert.equal(add('-0.1250', '0.0001'), '-0.1249')
-  assert.equal(sum([huge, '-0.1250', '0.0001']), '9007199254740992.8751')
-  assert.equal(cmp(huge, '9007199254740992.9999'), 1)
+  assert.deepEqual(timeline.weeks.map((week) => [week.inflow, week.outflow, week.net, week.endingCash]), [
+    ['0.1251', '0.2500', '-0.1249', '9007199254740992.8751'],
+    ['0.0001', '0.1250', '-0.1249', '9007199254740992.7502'],
+  ])
+  assert.equal(timeline.totalInflows, '0.1252')
+  assert.equal(timeline.totalOutflows, '0.3750')
 })
