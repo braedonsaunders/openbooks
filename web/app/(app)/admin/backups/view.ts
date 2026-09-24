@@ -46,6 +46,7 @@ export interface AdminBackupsData {
 
 export async function loadAdminBackups(): Promise<AdminBackupsData> {
   const authz = await requirePermission('admin.backups.manage')
+  const t = await getTranslations('admin')
   const tHub = await getTranslations('admin.hub')
   const { orgId } = authz.user
 
@@ -124,9 +125,8 @@ export async function loadAdminBackups(): Promise<AdminBackupsData> {
   }
 
   return {
-    title: 'Backups',
-    description:
-      "Download a complete copy of this organization's data, schedule automatic backups to object storage, and control how many are retained.",
+    title: t('backupsManager.pageTitle'),
+    description: t('backupsManager.pageDescription'),
     backHref: '/admin',
     backLabel: tHub('title'),
     manager: { policy, runs, s3Enabled, workerOnline },

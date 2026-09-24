@@ -5187,6 +5187,8 @@
     "title": "アプリ"
   },
   "backupsManager": {
+    "pageTitle": "バックアップ",
+    "pageDescription": "組織のデータの完全なコピーをダウンロードし、オブジェクトストレージへの自動バックアップをスケジュールして、保持する数を設定します。",
     "alerts": {
       "noObjectStorageBody": "この環境にはS3オブジェクトストレージ（S3_ENDPOINT／S3_BUCKET／認証情報）がなく、保存・定期バックアップは利用できません。ブラウザのみのストリーミングは復元可能なハッシュ証跡を提供できないため意図的に無効です。運用者の<cli>backup-local-cli.ts</cli>ワークフローを使用してください。",
       "noObjectStorageTitle": "オブジェクトストレージが未設定です",

@@ -5084,6 +5084,8 @@
     }
   },
   "backupsManager": {
+    "pageTitle": "备份",
+    "pageDescription": "下载组织数据的完整副本，安排自动备份到对象存储，并设置保留的备份数量。",
     "errors": {
       "couldNotSave": "无法保存备份策略",
       "couldNotStart": "无法启动备份",
