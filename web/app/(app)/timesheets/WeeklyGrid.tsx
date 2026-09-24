@@ -803,6 +803,7 @@ function RowFragment({
         ) : (
           <Select
             value={r.timeTypeId}
+            aria-label={t('grid.lineTimeTypeAria', { line: i + 1 })}
             onChange={(e) => onTimeType(e.target.value)}
             className="w-full border-0 bg-transparent shadow-none"
           >
@@ -820,6 +821,7 @@ function RowFragment({
         ) : (
           <Select
             value={r.departmentId}
+            aria-label={t('grid.lineDepartmentAria', { line: i + 1 })}
             onChange={(e) => onDept(e.target.value)}
             className="w-full border-0 bg-transparent shadow-none"
           >
@@ -851,6 +853,7 @@ function RowFragment({
         ) : (
           <input
             value={r.memo}
+            aria-label={t('grid.lineMemoAria', { line: i + 1 })}
             onChange={(e) => onMemo(e.target.value)}
             placeholder={tCommon('labels.memo')}
             className={cellInput}

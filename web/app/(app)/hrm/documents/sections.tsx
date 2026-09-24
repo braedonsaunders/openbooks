@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
@@ -221,6 +221,7 @@ export function DocumentsDrawer({ drawer }: { drawer: Home['drawer'] }) {
 }
 
 export function DocumentsGenerateDialog({ generate }: { generate: Home['generate'] }) {
+  const fieldId = useId()
   const router = useRouter()
   const [templateId, setTemplateId] = useState('')
   const [partyId, setPartyId] = useState('')
@@ -267,8 +268,8 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
         ) : (
           <>
             <div>
-              <Label>{msg(labels, 'template')}</Label>
-              <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+              <Label id={`${fieldId}-template-label`}>{msg(labels, 'template')}</Label>
+              <Select id={`${fieldId}-template`} aria-labelledby={`${fieldId}-template-label`} aria-label={msg(labels, 'template')} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
                 {generate.templates.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label} — {t.category}
@@ -277,8 +278,8 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
               </Select>
             </div>
             <div>
-              <Label>{msg(labels, 'person')}</Label>
-              <Select value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+              <Label id={`${fieldId}-person-label`}>{msg(labels, 'person')}</Label>
+              <Select id={`${fieldId}-person`} aria-labelledby={`${fieldId}-person-label`} aria-label={msg(labels, 'person')} value={partyId} onChange={(e) => setPartyId(e.target.value)}>
                 {generate.people.map((p) => (
                   <option key={p.value} value={p.value}>
                     {p.label}
@@ -287,8 +288,8 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
               </Select>
             </div>
             <div>
-              <Label>{msg(labels, 'docTitle')}</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Label id={`${fieldId}-title-label`} htmlFor={`${fieldId}-title`}>{msg(labels, 'docTitle')}</Label>
+              <Input id={`${fieldId}-title`} aria-labelledby={`${fieldId}-title-label`} aria-label={msg(labels, 'docTitle')} value={title} onChange={(e) => setTitle(e.target.value)} />
             </div>
             {template && (
               <p className="text-xs text-slate-500">

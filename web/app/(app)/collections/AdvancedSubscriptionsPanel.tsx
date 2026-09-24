@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, Badge, Button, Card, Input, Label, Select, Skeleton } from "@openbooks/ui";
+import { Field } from "@/components/field";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 
@@ -87,10 +88,10 @@ export function AdvancedSubscriptionsPanel() {
           </table>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <div><Label>Base plan</Label><Select value={versionForm.planId} onChange={(e) => setVersionForm({ ...versionForm, planId: e.target.value })}><option value="">Choose a plan…</option>{plans.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></div>
-          <div><Label>Effective from</Label><Input type="date" value={versionForm.effectiveFrom} onChange={(e) => setVersionForm({ ...versionForm, effectiveFrom: e.target.value })} /></div>
-          <div><Label>Invoice timing</Label><Select value={versionForm.billingTiming} onChange={(e) => setVersionForm({ ...versionForm, billingTiming: e.target.value })}><option value="advance">In advance</option><option value="arrears">In arrears</option></Select></div>
-          <div><Label>Change summary</Label><Input value={versionForm.changeSummary} onChange={(e) => setVersionForm({ ...versionForm, changeSummary: e.target.value })} placeholder="Initial catalog" /></div>
+          <Field label="Base plan"><Select value={versionForm.planId} onChange={(e) => setVersionForm({ ...versionForm, planId: e.target.value })}><option value="">Choose a plan…</option>{plans.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
+          <Field label="Effective from"><Input type="date" value={versionForm.effectiveFrom} onChange={(e) => setVersionForm({ ...versionForm, effectiveFrom: e.target.value })} /></Field>
+          <Field label="Invoice timing"><Select value={versionForm.billingTiming} onChange={(e) => setVersionForm({ ...versionForm, billingTiming: e.target.value })}><option value="advance">In advance</option><option value="arrears">In arrears</option></Select></Field>
+          <Field label="Change summary"><Input value={versionForm.changeSummary} onChange={(e) => setVersionForm({ ...versionForm, changeSummary: e.target.value })} placeholder="Initial catalog" /></Field>
         </div>
         <div className="mt-3 space-y-2">
           {versionForm.components.map((component, index) => <div key={index} className="grid gap-2 rounded-md border p-2 sm:grid-cols-5"><div><Label htmlFor={`catalog-component-key-${index}`}>Component key</Label><Input id={`catalog-component-key-${index}`} placeholder="Key" value={component.componentKey} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, componentKey: e.target.value } : c) })} /></div><div className="sm:col-span-2"><Label htmlFor={`catalog-component-name-${index}`}>Component name</Label><Input id={`catalog-component-name-${index}`} placeholder="Component name" value={component.name} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, name: e.target.value } : c) })} /></div><div><Label htmlFor={`catalog-component-quantity-${index}`}>Quantity</Label><Input id={`catalog-component-quantity-${index}`} type="number" placeholder="Qty" value={component.quantity} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, quantity: e.target.value } : c) })} /></div><div className="flex gap-1"><div className="flex-1"><Label htmlFor={`catalog-component-price-${index}`}>Unit price</Label><Input id={`catalog-component-price-${index}`} type="number" placeholder="Price" value={component.unitPrice} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, unitPrice: e.target.value } : c) })} /></div>{versionForm.components.length > 1 && <Button size="sm" variant="ghost" aria-label={`Remove ${component.name || "component"}`} onClick={() => setVersionForm({ ...versionForm, components: versionForm.components.filter((_, i) => i !== index) })}>×</Button>}</div></div>)}

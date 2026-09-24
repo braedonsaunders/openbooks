@@ -96,6 +96,8 @@ test('declared levies render with their stored base year-to-date', async (t) => 
   const input = document.querySelector('input[aria-label="Employer health tax base year-to-date, ON"]') as HTMLInputElement | null
   assert.ok(input, 'the base cell is editable');
   assert.equal(input.value, '150000');
+  await act(async () => { const addRegion = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Add a region')); assert.ok(addRegion); addRegion.click() });
+  assert.ok(document.querySelector('input[aria-label="Employer health tax · New region base year-to-date"]'), 'new-row base field names its levy as well as its function');
 })
 
 test('no declared levies renders nothing, never an empty grid', async (t) => {

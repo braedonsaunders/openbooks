@@ -209,6 +209,8 @@ test("a refused save shows the named 409 with a reload path and keeps local edit
   });
   await tick(60);
 
+  assert.ok(['button[aria-label="Line 1 time type"]', 'button[aria-label="Line 1 department"]', 'input[aria-label="Line 1 memo"]'].every((selector) => document.querySelector(selector)), "line controls name their field and row");
+
   const save = buttonsNamed("Save")[0];
   assert.ok(save, "the grid must offer Save");
   await act(async () => {

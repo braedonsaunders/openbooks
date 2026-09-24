@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label } from '@openbooks/ui'
+import { Button, Input } from '@openbooks/ui'
+import { Field } from '@/components/field'
 
 export interface GeofenceRow {
   id: string
@@ -194,22 +195,18 @@ export function GeofenceSection({
         </div>
         {kind === 'circle' ? (
           <div className="grid grid-cols-3 gap-2">
-            <div>
-              <Label>{t('field.latitude')}</Label>
+            <Field label={t('field.latitude')}>
               <Input value={lat} onChange={(event) => setLat(event.target.value)} inputMode="decimal" />
-            </div>
-            <div>
-              <Label>{t('field.longitude')}</Label>
+            </Field>
+            <Field label={t('field.longitude')}>
               <Input value={lng} onChange={(event) => setLng(event.target.value)} inputMode="decimal" />
-            </div>
-            <div>
-              <Label>{t('field.radiusM')}</Label>
+            </Field>
+            <Field label={t('field.radiusM')}>
               <Input value={radius} onChange={(event) => setRadius(event.target.value)} inputMode="numeric" />
-            </div>
+            </Field>
           </div>
         ) : (
-          <div>
-            <Label>{t('field.cornersLabel')}</Label>
+          <Field label={t('field.cornersLabel')}>
             <textarea
               value={corners}
               onChange={(event) => setCorners(event.target.value)}
@@ -217,7 +214,7 @@ export function GeofenceSection({
               placeholder={t('field.cornersPlaceholder')}
               className="w-full rounded-lg border border-slate-200 bg-transparent p-2 font-mono text-sm dark:border-slate-700"
             />
-          </div>
+          </Field>
         )}
         <div className="flex gap-2">
           {kind === 'circle' ? (

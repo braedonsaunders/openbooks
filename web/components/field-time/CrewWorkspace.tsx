@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { Button, Input, Label, Select } from '@openbooks/ui'
+import { Field } from '@/components/field'
 import { readApiErrorMessage } from '../../lib/api-error'
 
 export interface CrewLine {
@@ -159,8 +160,7 @@ export function CrewWorkspace({
       disabled={locked || busy}
       className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800 md:grid md:grid-cols-[1fr_5rem_1fr_1fr] md:gap-2"
     >
-      <div>
-        <Label>{t('field.worker')}</Label>
+      <Field label={t('field.worker')}>
         <Select value={line.employeePartyId} onChange={(event) => setLine(index, { employeePartyId: event.target.value })}>
           <option value="">{t('field.chooseWorker')}</option>
           {workers.map((worker) => (
@@ -169,13 +169,11 @@ export function CrewWorkspace({
             </option>
           ))}
         </Select>
-      </div>
-      <div>
-        <Label>{t('field.hours')}</Label>
+      </Field>
+      <Field label={t('field.hours')}>
         <Input value={line.hours} onChange={(event) => setLine(index, { hours: event.target.value })} inputMode="decimal" placeholder="8" />
-      </div>
-      <div>
-        <Label>{t('field.timeType')}</Label>
+      </Field>
+      <Field label={t('field.timeType')}>
         <Select value={line.timeTypeId} onChange={(event) => setLine(index, { timeTypeId: event.target.value })}>
           <option value="">{t('field.noTimeType')}</option>
           {timeTypes.map((type) => (
@@ -184,9 +182,8 @@ export function CrewWorkspace({
             </option>
           ))}
         </Select>
-      </div>
-      <div>
-        <Label>{t('field.task')}</Label>
+      </Field>
+      <Field label={t('field.task')}>
         <Select value={line.projectTaskId} onChange={(event) => setLine(index, { projectTaskId: event.target.value })}>
           <option value="">{t('field.noTask')}</option>
           {tasks.map((task) => (
@@ -195,15 +192,13 @@ export function CrewWorkspace({
             </option>
           ))}
         </Select>
-      </div>
-      <div>
-        <Label>{t('field.costCode')}</Label>
+      </Field>
+      <Field label={t('field.costCode')}>
         <Input value={line.costCodeRef} onChange={(event) => setLine(index, { costCodeRef: event.target.value })} placeholder={t('field.costCodePlaceholder')} />
-      </div>
+      </Field>
       {equipmentOn ? (
         <>
-          <div>
-            <Label>{t('field.equipment')}</Label>
+          <Field label={t('field.equipment')}>
             <Select value={line.equipmentId} onChange={(event) => setLine(index, { equipmentId: event.target.value })}>
               <option value="">{t('field.noEquipment')}</option>
               {equipment.map((unit) => (
@@ -212,17 +207,15 @@ export function CrewWorkspace({
                 </option>
               ))}
             </Select>
-          </div>
-          <div>
-            <Label>{t('field.equipmentHours')}</Label>
+          </Field>
+          <Field label={t('field.equipmentHours')}>
             <Input value={line.equipmentHours} onChange={(event) => setLine(index, { equipmentHours: event.target.value })} inputMode="decimal" placeholder="4" />
-          </div>
+          </Field>
         </>
       ) : null}
-      <div className="md:col-span-2">
-        <Label>{t('field.memo')}</Label>
+      <Field label={t('field.memo')} className="md:col-span-2">
         <Input value={line.memo} onChange={(event) => setLine(index, { memo: event.target.value })} placeholder={t('field.memoPlaceholder')} />
-      </div>
+      </Field>
       {!locked ? (
         <div className="flex items-end">
           <Button
@@ -376,8 +369,7 @@ function CrewCreateForm({
   return (
     <div className="space-y-4" role="dialog" aria-label={t('field.newBatch')}>
       <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <Label>{t('field.foremanLabel')}</Label>
+        <Field label={t('field.foremanLabel')}>
           <Select value={foremanId} onChange={(event) => setForemanId(event.target.value)}>
             <option value="">{t('field.chooseWorker')}</option>
             {workers.map((worker) => (
@@ -386,9 +378,8 @@ function CrewCreateForm({
               </option>
             ))}
           </Select>
-        </div>
-        <div>
-          <Label>{t('field.projectLabel')}</Label>
+        </Field>
+        <Field label={t('field.projectLabel')}>
           <Select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
             <option value="">{t('field.chooseProject')}</option>
             {projects.map((project) => (
@@ -397,15 +388,13 @@ function CrewCreateForm({
               </option>
             ))}
           </Select>
-        </div>
-        <div>
-          <Label>{t('field.workedOnLabel')}</Label>
+        </Field>
+        <Field label={t('field.workedOnLabel')}>
           <Input type="date" value={workedOn} onChange={(event) => setWorkedOn(event.target.value)} />
-        </div>
-        <div>
-          <Label>{t('field.memo')}</Label>
+        </Field>
+        <Field label={t('field.memo')}>
           <Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={t('field.memoPlaceholder')} />
-        </div>
+        </Field>
       </div>
 
       {error ? (

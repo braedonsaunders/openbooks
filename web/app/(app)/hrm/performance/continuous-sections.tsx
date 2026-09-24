@@ -157,6 +157,7 @@ export function FeedbackSettingsShell({
         current={settings.current}
         anyoneLabel={settings.anyoneLabel}
         managersLabel={settings.managersLabel}
+        scopeLabel={settings.title}
         saveLabel={settings.saveLabel}
         failed={settings.failed}
       />

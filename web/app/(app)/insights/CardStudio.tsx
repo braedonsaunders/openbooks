@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Filter, Plus, Trash2 } from 'lucide-react'
@@ -91,6 +91,7 @@ export function CardStudio({
   const tCatalog = useTranslations('reports')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const fieldId = useId()
   const ro = !canCreate
   // One stable idempotency key per studio session: a double-clicked Save (or
   // a retried request) resolves to the same card instead of a duplicate.
@@ -523,16 +524,16 @@ export function CardStudio({
         <div className="space-y-6">
           <section className="grid gap-4">
             <div className={field}>
-              <Label>{tCommon('labels.name')}</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('cardStudio.namePlaceholder')} disabled={ro} />
+              <Label id={`${fieldId}-name-label`} htmlFor={`${fieldId}-name`}>{tCommon('labels.name')}</Label>
+              <Input id={`${fieldId}-name`} aria-labelledby={`${fieldId}-name-label`} aria-label={tCommon('labels.name')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('cardStudio.namePlaceholder')} disabled={ro} />
             </div>
             <div className={field}>
-              <Label>{tCommon('labels.description')}</Label>
-              <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tCommon('labels.optional')} disabled={ro} />
+              <Label id={`${fieldId}-description-label`} htmlFor={`${fieldId}-description`}>{tCommon('labels.description')}</Label>
+              <Input id={`${fieldId}-description`} aria-labelledby={`${fieldId}-description-label`} aria-label={tCommon('labels.description')} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tCommon('labels.optional')} disabled={ro} />
             </div>
             <div className={field}>
-              <Label>{t('cardStudio.sourceLabel')}</Label>
-              <Select value={sourceKey} onChange={(e) => changeSource(e.target.value)} disabled={ro}>
+              <Label id={`${fieldId}-source-label`}>{t('cardStudio.sourceLabel')}</Label>
+              <Select id={`${fieldId}-source`} aria-labelledby={`${fieldId}-source-label`} aria-label={t('cardStudio.sourceLabel')} value={sourceKey} onChange={(e) => changeSource(e.target.value)} disabled={ro}>
                 {sources.map((s) => (
                   <option key={s.key} value={s.key}>
                     {tCatalog(`catalog.entities.${s.key}.label`)}
@@ -563,6 +564,7 @@ export function CardStudio({
               measures.map((m, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <Select
+                    aria-label={`${t('cardStudio.measuresTitle')} ${i + 1}: ${t(`aggs.${m.agg}`)}`}
                     value={m.agg}
                     onChange={(e) => {
                       const agg = e.target.value as AggFn
@@ -579,6 +581,7 @@ export function CardStudio({
                   </Select>
                   {m.agg !== 'count' ? (
                     <Select
+                      aria-label={`${t('cardStudio.measuresTitle')} ${i + 1}: ${fieldLabel(m.field)}`}
                       value={m.field}
                       onChange={(e) => setMeasures(measures.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)))}
                       disabled={ro}
@@ -626,6 +629,7 @@ export function CardStudio({
                 return (
                   <div key={i} className="flex items-center gap-2">
                     <Select
+                      aria-label={`${t('cardStudio.groupByTitle')} ${i + 1}: ${fieldLabel(d.field)}`}
                       value={d.field}
                       onChange={(e) => setDimensions(dimensions.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)))}
                       disabled={ro}
@@ -639,6 +643,7 @@ export function CardStudio({
                     </Select>
                     {f?.canBin ? (
                       <Select
+                        aria-label={`${fieldLabel(d.field)}: ${t('cardStudio.binExact')}`}
                         value={d.bin}
                         onChange={(e) => setDimensions(dimensions.map((x, j) => (j === i ? { ...x, bin: e.target.value as DateBin | '' } : x)))}
                         disabled={ro}
@@ -691,6 +696,7 @@ export function CardStudio({
                   <div key={i} className="space-y-1.5 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
                     <div className="flex items-center gap-2">
                       <Select
+                        aria-label={`${t('cardStudio.filtersTitle')} ${i + 1}: ${fieldLabel(flt.field)}`}
                         value={flt.field}
                         onChange={(e) => {
                           const nf = allFields.find((x) => x.key === e.target.value)
@@ -715,6 +721,7 @@ export function CardStudio({
                     </div>
                     <div className="flex items-center gap-2">
                       <Select
+                        aria-label={`${t('cardStudio.filtersTitle')} ${i + 1}: ${t(`operators.${flt.op}`)}`}
                         value={flt.op}
                         onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, op: e.target.value as FilterOp } : x)))}
                         disabled={ro}
@@ -731,6 +738,7 @@ export function CardStudio({
                         // store stable codes — offer them as a localized select
                         // instead of asking the user to type the code.
                         <Select
+                          aria-label={`${t('cardStudio.filtersTitle')} ${i + 1}: ${t('cardStudio.filterPlaceholderValue')}`}
                           value={flt.value}
                           onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
                           disabled={ro}
@@ -773,6 +781,7 @@ export function CardStudio({
                         </div>
                       ) : needsValue ? (
                         <Input
+                          aria-label={`${t('cardStudio.filtersTitle')} ${i + 1}: ${t('cardStudio.filterPlaceholderValue')}`}
                           value={flt.value}
                           onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
                           placeholder={
@@ -871,6 +880,7 @@ function VizSettingsEditor({
   disabled: boolean
 }) {
   const t = useTranslations('insights.vizSettings')
+  const fieldId = useId()
   const set = (patch: Partial<VizSettings>) => onChange({ ...settings, ...patch })
   const toggle = (
     label: string,
@@ -879,6 +889,7 @@ function VizSettingsEditor({
     <label className="flex items-center gap-1.5 text-sm">
       <input
         type="checkbox"
+        aria-label={label}
         checked={settings[key] === true}
         onChange={(e) => set({ [key]: e.target.checked } as Partial<VizSettings>)}
         disabled={disabled}
@@ -891,8 +902,8 @@ function VizSettingsEditor({
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
       <div className={field + ' min-w-[9rem]'}>
-        <Label>{t('category')}</Label>
-        <Select value={settings.categoryField ?? ''} onChange={(e) => set({ categoryField: e.target.value || undefined })} disabled={disabled}>
+        <Label id={`${fieldId}-category-label`}>{t('category')}</Label>
+        <Select id={`${fieldId}-category`} aria-labelledby={`${fieldId}-category-label`} aria-label={t('category')} value={settings.categoryField ?? ''} onChange={(e) => set({ categoryField: e.target.value || undefined })} disabled={disabled}>
           <option value="">{t('auto')}</option>
           {dimensionCols.map((c) => (
             <option key={c.key} value={c.key}>
@@ -902,8 +913,11 @@ function VizSettingsEditor({
         </Select>
       </div>
       <div className={field + ' min-w-[9rem]'}>
-        <Label>{t('value')}</Label>
+        <Label id={`${fieldId}-value-label`}>{t('value')}</Label>
         <Select
+          id={`${fieldId}-value`}
+          aria-labelledby={`${fieldId}-value-label`}
+          aria-label={t('value')}
           value={settings.valueFields?.[0] ?? ''}
           onChange={(e) => set({ valueFields: e.target.value ? [e.target.value] : undefined })}
           disabled={disabled}

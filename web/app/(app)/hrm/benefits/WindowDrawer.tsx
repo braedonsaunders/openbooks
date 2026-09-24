@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Drawer, Textarea } from '@openbooks/ui'
+import { Button, Drawer, Label, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { WindowDrawerData } from '../../../../lib/hrm/benefits'
 
@@ -17,6 +17,7 @@ import type { WindowDrawerData } from '../../../../lib/hrm/benefits'
  */
 export function WindowDrawer({ drawer, closeHref }: { drawer: WindowDrawerData; closeHref: string }) {
   const t = useTranslations('hrm')
+  const reasonId = useId()
   const router = useRouter()
   const [closing, setClosing] = useState(false)
   const [reason, setReason] = useState('')
@@ -98,10 +99,13 @@ export function WindowDrawer({ drawer, closeHref }: { drawer: WindowDrawerData; 
         </div>
         {closing ? (
           <div className="flex flex-col gap-2">
+            <Label htmlFor={reasonId}>{t('benefits.closeReasonPlaceholder')}</Label>
             <Textarea
+              id={reasonId}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder={t('benefits.closeReasonPlaceholder')}
+              required
             />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setClosing(false)}>
