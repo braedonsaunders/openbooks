@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
+import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/compliance.ts'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -40,8 +41,10 @@ export async function POST(req: Request) {
     effectiveFrom?: string
     expiresOn?: string
   }
-  if (!isUuid(body.partyId ?? '')) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
-  if (!isUuid(body.requirementId ?? '')) {
+  const partyId = body.partyId
+  if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+  const requirementId = body.requirementId
+  if (!requirementId || !isUuid(requirementId)) {
     return NextResponse.json({ error: 'requirementId is required' }, { status: 400 })
   }
   const reason = (body.reason ?? '').trim()
@@ -68,6 +71,18 @@ export async function POST(req: Request) {
   if (span > MAX_WAIVER_DAYS) {
     return NextResponse.json(
       { error: `an exception cannot run longer than ${MAX_WAIVER_DAYS} days — change the policy instead` },
+      { status: 422 },
+    )
+  }
+
+  // The exception must name a requirement that belongs to this org and
+  // applies to the vendor's class — the same check the evidence write uses.
+  // An exception against an inactive, wrong-class or other-org requirement
+  // would never be evaluated and would quietly read as "on file".
+  const requirement = await loadApplicableRequirement(orgId, partyId, requirementId)
+  if (!requirement) {
+    return NextResponse.json(
+      { error: 'that requirement does not apply to this vendor — check its compliance class' },
       { status: 422 },
     )
   }

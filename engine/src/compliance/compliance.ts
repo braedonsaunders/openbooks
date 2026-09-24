@@ -616,6 +616,34 @@ export async function loadRequirementPolicies(
   return r.rows;
 }
 
+export type ApplicableRequirement = {
+  id: string;
+  requiresExpiry: boolean;
+};
+
+/**
+ * The requirement a certificate or an exception is filed against must belong
+ * to this org, be active, and apply to the vendor's compliance class. Shared
+ * by the evidence (records) and exception (waivers) writes: a filing against
+ * an inapplicable policy would never be evaluated and would quietly read as
+ * "on file". Returns the requirement when it applies, undefined otherwise.
+ */
+export async function loadApplicableRequirement(
+  orgId: string,
+  partyId: string,
+  requirementId: string,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<ApplicableRequirement | undefined> {
+  const applicable = await runner.execute<ApplicableRequirement>(sql`
+    select req.id, req.requires_expiry as "requiresExpiry"
+      from compliance_requirements req
+      join vendor_roles vr on vr.org_id = req.org_id and vr.party_id = ${partyId}
+     where req.org_id = ${orgId} and req.id = ${requirementId} and req.is_active
+       and (req.class_id is null or req.class_id = vr.compliance_class_id)
+  `);
+  return applicable.rows[0];
+}
+
 export interface VendorComplianceInputs {
   classId: string | null;
   lienWaiverEnforcement: LienWaiverEnforcement;

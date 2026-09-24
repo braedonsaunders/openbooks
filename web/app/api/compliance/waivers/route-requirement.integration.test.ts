@@ -5,16 +5,14 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
- * Waiver creation fences its date window with Date.parse span math, but
- * Date.parse normalises some non-calendar dates (2026-09-31 becomes October
- * 1st),
- * so a non-calendar end date passes every named check and dies in the date
- * column as a raw driver failure instead of failing closed with a named
- * error and nothing written.
+ * A waiver POST used to accept any requirementId — inactive, wrong-class or
+ * other-org — filing a pending_approval exception that covers nothing while
+ * reading as on file. The waiver write now runs the same requirement
+ * applicability check as the evidence write, through the shared helper.
  */
 const root = pathToFileURL(process.cwd() + "/").href;
 const state = { orgId: "", actorId: "" };
-Object.assign(globalThis, { __waiverDateState: state });
+Object.assign(globalThis, { __waiverRequirementState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
@@ -23,7 +21,7 @@ registerHooks({
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
-          const s = globalThis.__waiverDateState;
+          const s = globalThis.__waiverRequirementState;
           return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
         }
         export function guardSubsidiaryScope() { return null }
@@ -39,6 +37,12 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@open
 const { POST } = await import("./route.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+const VALID = {
+  reason: "Carrier renewal delayed by underwriter backlog",
+  effectiveFrom: "2026-06-01",
+  expiresOn: "2026-08-01",
+};
+
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
@@ -49,19 +53,34 @@ async function fixture() {
   );
   const partyId = randomUUID();
   const classId = randomUUID();
+  const otherClassId = randomUUID();
   await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
     values (${partyId},${org.orgId},'vendor','Waiver vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
   await withBypassContext(() => db.execute(sql`
     insert into compliance_classes (id, org_id, code, name, lien_waiver_enforcement, default_information_return, created_by, updated_by)
-    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`));
+    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId}),
+           (${otherClassId}, ${org.orgId}, 'SUP', 'Supplier', 'none', '1099-NEC', ${actorId}, ${actorId})`));
   await withBypassContext(() => db.execute(sql`
     insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
     values (${org.orgId}, ${partyId}, ${classId}, ${actorId}, ${actorId})`));
-  const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+  const applicableId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})
     returning id`))).rows[0]!.id;
-  return { org, partyId, requirementId };
+  const inactiveId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    insert into compliance_requirements (org_id, code, name, category, enforcement, is_active, created_by, updated_by)
+    values (${org.orgId}, 'OLD', 'Retired requirement', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
+    returning id`))).rows[0]!.id;
+  const wrongClassId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    insert into compliance_requirements (org_id, code, name, category, enforcement, class_id, created_by, updated_by)
+    values (${org.orgId}, 'SUP-ONLY', 'Supplier requirement', 'insurance', 'block_payment', ${otherClassId}, ${actorId}, ${actorId})
+    returning id`))).rows[0]!.id;
+  const otherOrg = await withBypassContext(() => createScratchOrg());
+  const foreignId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    insert into compliance_requirements (org_id, code, name, category, enforcement, created_by, updated_by)
+    values (${otherOrg.orgId}, 'COI', 'Foreign requirement', 'insurance', 'block_payment', ${actorId}, ${actorId})
+    returning id`))).rows[0]!.id;
+  return { org, otherOrg, partyId, applicableId, inactiveId, wrongClassId, foreignId };
 }
 
 const post = (body: unknown) =>
@@ -79,40 +98,32 @@ async function waiverCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("waiver creation refuses a non-calendar end date without writing", { skip: !DB }, async () => {
-  const { org, partyId, requirementId } = await fixture();
-  try {
-    const response = await post({
-      partyId,
-      requirementId,
-      reason: "Carrier renewal delayed by underwriter backlog",
-      expiresOn: "2026-09-31",
-    });
-    const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? "", /end date/i, `expected a named date error, got: ${JSON.stringify(json)}`);
-    assert.equal(await waiverCount(org.orgId), 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+for (const [label, key] of [["inactive", "inactiveId"], ["wrong-class", "wrongClassId"], ["other-org", "foreignId"]] as const) {
+  test(`waiver creation refuses a ${label} requirement without writing`, { skip: !DB }, async () => {
+    const { org, otherOrg, partyId, ...ids } = await fixture();
+    try {
+      const response = await post({ partyId, requirementId: ids[key], ...VALID });
+      const json = (await response.json().catch(() => null)) as { error?: string } | null;
+      assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+      assert.match(json?.error ?? "", /does not apply to this vendor/, `expected a named refusal, got: ${JSON.stringify(json)}`);
+      assert.equal(await waiverCount(org.orgId), 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+      await dropScratchOrg(otherOrg.orgId);
+    }
+  });
+}
 
-test("waiver creation still files a calendar-dated exception request", { skip: !DB }, async () => {
-  const { org, partyId, requirementId } = await fixture();
+test("waiver creation still files against an applicable requirement", { skip: !DB }, async () => {
+  const { org, otherOrg, partyId, applicableId } = await fixture();
   try {
-    const response = await post({
-      partyId,
-      requirementId,
-      reason: "Carrier renewal delayed by underwriter backlog",
-      effectiveFrom: "2026-01-05",
-      expiresOn: "2026-02-27",
-    });
+    const response = await post({ partyId, requirementId: applicableId, ...VALID });
     const json = (await response.json().catch(() => null)) as { status?: string } | null;
     assert.equal(response.status, 200, JSON.stringify(json));
-    // Requesting is not granting: the request files as pending.
     assert.equal(json?.status, "pending_approval");
     assert.equal(await waiverCount(org.orgId), 1);
   } finally {
     await dropScratchOrg(org.orgId);
+    await dropScratchOrg(otherOrg.orgId);
   }
 });
