@@ -354,7 +354,7 @@ Settings → Features**.
 - Sales-tax nexus monitoring
 - Tax filings, return boxes, mappings, adjustments, review states, exports, and
   filing evidence
-- A 49-pack return-workpaper library across 41 installable country packs, one
+- A 50-pack return-workpaper library across 41 installable country packs, one
   per country: Argentina, Australia, Austria, Belgium, Canada, Chile,
   Colombia, Czechia, Denmark, Finland, France, Germany, Greece, Hungary,
   Iceland, India, Ireland, Italy, Japan, Kenya, Mexico, the Netherlands, New
