@@ -50,9 +50,9 @@ test("the cockpit sums the live primary book, never a deactivated one", async ()
       values (${org.orgId}, ${typeId}, '2026-01-01',
               ${JSON.stringify(fixedPrice.financialProfile)}::jsonb, 'cockpit recognized fixture')`);
     await db.execute(sql`
-      insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, project_type_id, custom)
+      insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, project_type_id, contract_value, custom)
       values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'RECOG-1', 'Recognized job',
-              ${org.customerId}, 'active', true, ${typeId}, '{}'::jsonb)`);
+              ${org.customerId}, 'active', true, ${typeId}, 1250.50, '{}'::jsonb)`);
     await db.execute(sql`
       insert into revenue_contracts (id, org_id, project_id, customer_id, contract_number, total_transaction_price)
       values (${contractId}, ${org.orgId}, ${projectId}, ${org.customerId}, 'C-1', 1000)`);
@@ -77,6 +77,8 @@ test("the cockpit sums the live primary book, never a deactivated one", async ()
     const live = await loadProjectCockpit(org.orgId, projectId);
     assert.ok(live.recognition);
     assert.equal(live.recognition.recognized, "250.0000");
+    assert.equal(live.financials.pricingMethod, fixedPrice.financialProfile.totalPrice.method);
+    assert.equal(live.financials.contractValue, "1250.5000");
 
     // Deactivate the primary book: the run can no longer post there, so the
     // card must stop summing it too.
