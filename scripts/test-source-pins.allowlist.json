@@ -148,7 +148,6 @@
     "web/app/(app)/field-tickets/FieldTicketDrawer-discard.test.ts": 3,
     "web/app/(app)/hrm/benefits/benefits-queue.test.ts": 7,
     "web/app/(app)/hrm/change-request-authoring.test.ts": 8,
-    "web/app/(app)/hrm/change-requests/queue.test.ts": 13,
     "web/app/(app)/hrm/compensation/compensation-dialogs.test.ts": 1,
     "web/app/(app)/hrm/compensation/compensation-page.test.ts": 5,
     "web/app/(app)/hrm/compensation/gap-snapshot-refusal.test.ts": 1,
