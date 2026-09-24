@@ -9,6 +9,8 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../../lib/authz'
+import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
+import { notFound } from 'next/navigation'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { pickString } from '../../../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
@@ -123,6 +125,7 @@ export async function loadPayrollSetup(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PayrollSetupData> {
   const authz = await requirePermission('payroll.manage')
+  if (await guardRootSubsidiaryScope(authz)) notFound()
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
   // A subtab backed by a registry entity only exists while that entity is
