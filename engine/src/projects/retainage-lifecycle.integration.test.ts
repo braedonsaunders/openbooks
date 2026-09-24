@@ -138,7 +138,7 @@ test("customer draw void refuses while a draft release depends on it, then succe
     assert.equal(draw.retained, "100.0000");
     const rel = await f.release("60");
     await assert.rejects(voidDoc(f.org.orgId, f.actor, draw.invoiceId, f.org.date), /retainage release/);
-    await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.invoiceId, f.actor, f.org.orgId, { reason: "Discard draft release" }));
+    await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.invoiceId, f.actor, f.org.orgId, { reason: "Discard draft release", allowedSubsidiaryIds: null }));
     await voidDoc(f.org.orgId, f.actor, draw.invoiceId, f.org.date);
     // The draw application reopens for regeneration and capacity is restored.
     const reopened = (await db.execute<{ id: string; status: string }>(sql`select id, status from pay_applications where org_id=${f.org.orgId} and kind = 'progress'`)).rows[0]!;
@@ -170,7 +170,7 @@ test("vendor draw-bill void refuses while a draft release depends on it, then su
     const bill = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!.id;
     const rel = await f.release("60");
     await assert.rejects(voidDoc(f.org.orgId, f.actor, bill, f.org.date), /retainage release/);
-    await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.vendorBillDocumentId, f.actor, f.org.orgId, { reason: "Discard draft release" }));
+    await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.vendorBillDocumentId, f.actor, f.org.orgId, { reason: "Discard draft release", allowedSubsidiaryIds: null }));
     await voidDoc(f.org.orgId, f.actor, bill, f.org.date);
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });
@@ -271,7 +271,7 @@ test("customer multi-currency draw void refuses while a release depends on it", 
     assert.equal(currency, "USD");
     const rel = await withOrgTransaction(f.org.orgId, () => releaseRetainage(f.org.orgId, f.actor, project, f.org.date, "60", null));
     await assert.rejects(voidDoc(f.org.orgId, f.actor, generated.invoiceId, f.org.date), /retainage release/);
-    await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.invoiceId, f.actor, f.org.orgId, { reason: "Discard USD release" }));
+    await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.invoiceId, f.actor, f.org.orgId, { reason: "Discard USD release", allowedSubsidiaryIds: null }));
     await voidDoc(f.org.orgId, f.actor, generated.invoiceId, f.org.date);
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });

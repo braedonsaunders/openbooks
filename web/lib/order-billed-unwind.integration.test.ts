@@ -109,7 +109,7 @@ test("deleting a draft converted invoice restores the sales order billed quantit
     const soId = await withBypassContext(() => seedOrder(org, actorId, "sales_order", "SO-BILLED-DELETE-1"));
     const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
     assert.equal(await billedOf(org.orgId, soId), "10.00000000");
-    await withBypassContext(() => deleteDocument(converted.id, actorId, org.orgId, { reason: "Discard a mistakenly converted draft" }));
+    await withBypassContext(() => deleteDocument(converted.id, actorId, org.orgId, { reason: "Discard a mistakenly converted draft", allowedSubsidiaryIds: null }));
     assert.equal(await billedOf(org.orgId, soId), "0.00000000");
     const again = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
     assert.ok(again.id);
@@ -250,7 +250,7 @@ test("deleting a draft captured bill restores the purchase order billed quantity
     }));
     const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId, allowedSubsidiaryIds: null }));
     assert.equal(await billedOf(org.orgId, poId), "10.00000000");
-    await withBypassContext(() => deleteDocument(materialized.documentId, actorId, org.orgId, { reason: "Discard a mistakenly captured draft" }));
+    await withBypassContext(() => deleteDocument(materialized.documentId, actorId, org.orgId, { reason: "Discard a mistakenly captured draft", allowedSubsidiaryIds: null }));
     assert.equal(await billedOf(org.orgId, poId), "0.00000000");
     const released = await withOrgContext(org.orgId, async () => (await db.execute<{ status: string; document_id: string | null }>(sql`
       select status, document_id from ap_capture_items where id = ${itemId} and org_id = ${org.orgId}`)).rows[0]!);

@@ -170,9 +170,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
   try {
-    await deleteDocument(id, gate.authz.user.id, gate.authz.user.orgId)
+    await deleteDocument(id, gate.authz.user.id, gate.authz.user.orgId, {
+      allowedSubsidiaryIds: gate.authz.allowedSubsidiaryIds,
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
     if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
     throw e
   }

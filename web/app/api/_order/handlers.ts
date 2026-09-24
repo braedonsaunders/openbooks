@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
@@ -644,9 +645,12 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
       if (staleRevision(expectedUpdatedAt, owned.rows[0].updated_at)) {
         return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
       }
-      await deleteDocument(id, user.id, user.orgId)
+      await deleteDocument(id, user.id, user.orgId, { allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
       return NextResponse.json({ ok: true })
     }).catch((error: unknown) => {
+      if (error instanceof ScopeNotFoundError) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
       if (error instanceof DeleteError) {
         return NextResponse.json({ error: error.message }, { status: 422 })
       }

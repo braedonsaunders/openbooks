@@ -35,7 +35,7 @@ for (const mode of ['void','delete'] as const) {
    const result=await requestDocumentVoid({orgId:org.orgId,actorId:actor,documentId:invoice,reason:'Correct rent billing source',reversalDate:'2026-07-31'});
    assert.equal(result.status,'voided');
    assert.ok(result.reversalEntryId);
-  } else await withOrgTransaction(org.orgId,()=>deleteDocument(invoice,actor,org.orgId,{reason:'Correct rent billing source'}));
+  } else await withOrgTransaction(org.orgId,()=>deleteDocument(invoice,actor,org.orgId,{reason:'Correct rent billing source',allowedSubsidiaryIds:null}));
   const released=(await db.execute<{status:string;invoice_document_id:string|null}>(sql`select status,invoice_document_id from lease_schedule_lines where org_id=${org.orgId} and id=${schedule}`)).rows[0]!;
   assert.deepEqual(released,{status:'scheduled',invoice_document_id:null});
   const audit=(await db.execute<{actor_id:string;changes:{before:{invoice_document_id:string};after:{invoice_document_id:null}}}>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='lease_schedule_lines' and row_id=${schedule} and action='billing_released'`)).rows;

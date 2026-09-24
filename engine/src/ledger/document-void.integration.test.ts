@@ -300,7 +300,7 @@ test("controlled void preserves the source and posts an exact open-period revers
       { audit: { actorId, source: "test" } },
     );
     await assert.rejects(
-      deleteDocument(documentId, actorId, org.orgId),
+      deleteDocument(documentId, actorId, org.orgId, { allowedSubsidiaryIds: null }),
       /cannot be deleted.*controlled void/i,
     );
 
@@ -561,7 +561,7 @@ test("delete and submit serialize on the document row before approval gates comm
     // Releasing the holder lets PostgreSQL grant the lock in queue order.
     const submitting = submitForApproval("vendor_bill", documentId, actors.submitterId);
     await waitForDocumentLockWaiters(1);
-    const deleting = deleteDocument(documentId, actors.submitterId, org.orgId, { source: "test" });
+    const deleting = deleteDocument(documentId, actors.submitterId, org.orgId, { source: "test", allowedSubsidiaryIds: null });
     await waitForDocumentLockWaiters(2);
     releaseHolder();
 

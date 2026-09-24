@@ -1,5 +1,6 @@
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import {
   captureTransactionAuditSnapshot,
@@ -21,7 +22,13 @@ export async function deleteDocument(
   documentId: string,
   userId: string | null,
   orgId: string,
-  audit: { source?: string; reason?: string; expectedUpdatedAt?: string } = {},
+  audit: {
+    source?: string;
+    reason?: string;
+    expectedUpdatedAt?: string;
+    /** REQUIRED, no default: null is the explicit unrestricted sentinel. */
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+  },
 ): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {
     const [doc] = await tx
@@ -29,7 +36,12 @@ export async function deleteDocument(
       .from(schema.documents)
       .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)))
       .for("update");
-    if (!doc) throw new DeleteError("document not found");
+    if (!doc) throw new ScopeNotFoundError();
+    // The scope verdict runs under the document lock: an unlocked route
+    // precheck can authorize entity A while a concurrent A→B rehome lands
+    // before this delete commits. Missing, cross-org, and out-of-scope
+    // answer alike.
+    if (!subsidiaryScopeAllows(audit.allowedSubsidiaryIds, doc.subsidiaryId)) throw new ScopeNotFoundError();
     if (audit.expectedUpdatedAt !== undefined &&
         (!isDocumentRevisionToken(audit.expectedUpdatedAt) || audit.expectedUpdatedAt !== doc.revision)) {
       throw new DeleteError("this document changed after you opened it; reload and review the latest revision", 409);

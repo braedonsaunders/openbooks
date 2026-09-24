@@ -160,6 +160,7 @@ test("conversion and draft-child deletion serialize on source-order locks (no 40
       // holds the source header.
       releaser = withBypassContext(() => deleteDocument(converted.id, actorId, org.orgId, {
         reason: `F26 concurrency probe ${tag}`,
+        allowedSubsidiaryIds: null,
       }));
       void releaser.then(() => {}, () => {});
 

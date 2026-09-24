@@ -363,7 +363,7 @@ test(
         return error.status === 422 && /reconvert/.test(error.message);
       });
       await withBypassContext(() =>
-        deleteDocument(converted.id, actorId, org.orgId, { reason: "Wrong billing party requested" }),
+        deleteDocument(converted.id, actorId, org.orgId, { reason: "Wrong billing party requested", allowedSubsidiaryIds: null }),
       );
       const billed = await withOrgContext(org.orgId, async () => {
         const r = await db.execute<{ quantity_billed: string }>(sql`

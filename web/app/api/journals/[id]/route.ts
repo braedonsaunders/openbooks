@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
+import { ScopeNotFoundError, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "../../../../../engine/src/records/document-edit-policy.ts";
@@ -42,15 +43,26 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const owned = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
-  ))
-  if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
-  if (denied) return denied
-  const journal = await loadJournalDoc(id, gate.user.orgId)
+  // One transaction for the scope gate and the detail reads, locking the
+  // journal row first (READ COMMITTED, like loadAsset): a concurrent rehome
+  // blocks on the lock instead of authorizing the header and then moving
+  // the journal before the detail and revision reads of one response. (A
+  // REPEATABLE READ snapshot cannot take the lock: a locking read that meets
+  // a concurrent update errors with 40001 instead of waiting.)
+  const journal = await withOrgTransaction(gate.user.orgId, async () => {
+    const owned = (await db.execute<{ subsidiaryId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId" from documents
+           where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
+             for share`,
+    ))
+    if (!owned.rows[0]) return null
+    const loaded = await loadJournalDoc(id, gate.user.orgId)
+    if (!loaded) return null
+    return withExactDocumentRevision(loaded, id, gate.user.orgId)
+  })
   if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json(await withExactDocumentRevision(journal, id, gate.user.orgId))
+  return NextResponse.json(journal)
 }
 
 const journalLineInput = z
@@ -385,22 +397,40 @@ function isTenantReferenceViolation(error: unknown): boolean {
 }
 
 /** Delete a journal (guarded: open period, no applied payments, no downstream conversion). */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.post')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Existence and scope probe first, so a malformed or unknown id still
+  // answers 404 (never a body-shape refusal). The scope is enforced again
+  // under the document lock inside deleteDocument; this probe is a fast
+  // path only. The revision fence rides along like PATCH: without it a
+  // stale client deletes over a newer save.
   const owned = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
   ))
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
   if (denied) return denied
+  const parsedBody = await parseJsonBody(req, z.looseObject({ expectedUpdatedAt: z.string().optional() }))
+  if (!parsedBody.ok) return parsedBody.response
+  let expectedRevision: string
   try {
-    await deleteDocument(id, gate.user.id, gate.user.orgId)
+    expectedRevision = requireDocumentEditRevision((parsedBody.data as { expectedUpdatedAt?: unknown }).expectedUpdatedAt)
+  } catch (e) {
+    if (e instanceof DocumentEditError) return NextResponse.json({ error: e.message }, { status: e.status })
+    throw e
+  }
+  try {
+    await deleteDocument(id, gate.user.id, gate.user.orgId, {
+      expectedUpdatedAt: expectedRevision,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: e.status })
     throw e
   }
 }

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
@@ -204,9 +205,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     throw e
   }
   try {
-    await deleteDocument(id, gate.user.id, gate.user.orgId, { source: 'ui', expectedUpdatedAt: expectedRevision })
+    await deleteDocument(id, gate.user.id, gate.user.orgId, {
+      source: 'ui',
+      expectedUpdatedAt: expectedRevision,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // The engine fence carries its own 409; every other refusal stays 422.
     if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: e.status })
     throw e

@@ -130,7 +130,7 @@ test("ordinary progress applications preserve their lines and regenerate after d
   await db.execute(sql`update pay_application_lines set this_period_completed=100 where org_id=${org.orgId} and pay_application_id=${app.id}`);
   await db.execute(sql`update pay_applications set status='approved' where org_id=${org.orgId} and id=${app.id}`);
   const first = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
-  await withOrgTransaction(org.orgId, () => deleteDocument(first.invoiceId, actor, org.orgId, { reason: "Correct progress invoice" }));
+  await withOrgTransaction(org.orgId, () => deleteDocument(first.invoiceId, actor, org.orgId, { reason: "Correct progress invoice", allowedSubsidiaryIds: null }));
   assert.equal((await db.execute(sql`select status from pay_applications where org_id=${org.orgId} and id=${app.id}`)).rows[0]!.status, "approved");
   const replacement = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
   assert.notEqual(replacement.invoiceId, first.invoiceId);
@@ -164,7 +164,7 @@ test("deleting a release invoice cancels its application with evidence and permi
   await hold();
   const first = await release("100");
   const app = (await db.execute<{ id: string }>(sql`select id from pay_applications where org_id=${org.orgId} and invoice_document_id=${first.invoiceId}`)).rows[0]!.id;
-  await withOrgTransaction(org.orgId, () => deleteDocument(first.invoiceId, actor, org.orgId, { reason: "Correct release amount" }));
+  await withOrgTransaction(org.orgId, () => deleteDocument(first.invoiceId, actor, org.orgId, { reason: "Correct release amount", allowedSubsidiaryIds: null }));
   assert.deepEqual((await db.execute(sql`select status,invoice_document_id,updated_by from pay_applications where org_id=${org.orgId} and id=${app}`)).rows, [{ status: "void", invoice_document_id: null, updated_by: actor }]);
   const evidence = (await db.execute<{ changes: { before: { status: string }; after: { status: string }; reason: string }; actor_id: string }>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and row_id=${app} and action='billing_released'`)).rows;
   assert.equal(evidence.length, 1);
