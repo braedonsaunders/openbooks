@@ -147,6 +147,18 @@ test("DE supplemental paid with regular wages is aggregated", () => {
   assert.equal(aggregated.taxSupplemental, money("0"));
 });
 
+// Delaware Employer's Guide: Form W-4NR source-income apportionment.
+// https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
+test("DE refuses nonresident payroll until Form W-4NR source allocation is captured", () => {
+  assert.throws(
+    () => DE_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 12, wages: "5000.00",
+      basis: "nonresident", certificate: cert({ filing_status: "single" }),
+    }),
+    /Delaware nonresident withholding requires Form W-4NR source-allocation facts.*refused by name/,
+  );
+});
+
 test("DE refuses a year it has not transcribed", () => {
   assert.throws(
     () => DE_WITHHOLDING.compute({
