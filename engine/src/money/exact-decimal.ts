@@ -7,7 +7,11 @@ export function canonicalDecimal(value: unknown, maxScale = 4): string | null {
   // an optional sign, digits with an optional fraction, or a leading-dot
   // fraction (".5" normalizes to "0.5"). A trailing dot ("5.") is the
   // zero-length fraction the kernel accepts and normalizes to "5".
-  const raw = String(value ?? "").trim();
+  // JSON numbers have already crossed IEEE-754 before this boundary sees
+  // them. Converting with String() would make the rounded value look exact;
+  // callers must provide the decimal spelling as text.
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
   const match = raw.match(/^([+-]?)(\d+(?:\.(\d*))?|\.(\d+))$/);
   const fractionRaw = match?.[3] ?? match?.[4] ?? "";
   if (!match || maxScale < 0 || fractionRaw.length > maxScale) return null;

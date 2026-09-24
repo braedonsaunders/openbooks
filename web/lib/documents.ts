@@ -46,6 +46,7 @@ import { resolveOrgId } from './org-scope'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from './list-params'
 import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
+import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 
 import {
   DOCUMENT_EDIT_REVISION_CONFLICT, DocumentEditError, requireDocumentEditRevision, assertNoExistingDocumentCorrection,
@@ -489,7 +490,7 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
     if (exactAmount === null) {
       throw new DocumentEditError(
         422,
-        `Line ${n}: "${l.amount}" is not a valid amount — enter an exact decimal of at most 4 decimal places`,
+        decimalNullRefusal(`Line ${n} amount`, 'an exact decimal amount', l.amount, 4),
       )
     }
     // document_lines.amount is numeric(19,4): the format check above admits
@@ -515,7 +516,7 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
       if (exact === null) {
         throw new DocumentEditError(
           422,
-          `Line ${n}: "${l.quantity}" is not a valid quantity — enter an exact decimal of at most 8 decimal places`,
+          decimalNullRefusal(`Line ${n} quantity`, 'an exact decimal quantity', l.quantity, 8),
         )
       }
       const wholeDigits = exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '')
@@ -1432,7 +1433,10 @@ export async function applyDocumentEdit(
       }
       const amount = exactMoney(l.amount)
       if (amount === null) {
-        throw new DocumentEditError(422, `Line ${i + 1}: amount is not a valid amount`)
+        throw new DocumentEditError(
+          422,
+          decimalNullRefusal(`Line ${i + 1} amount`, 'an exact decimal amount', l.amount, 4),
+        )
       }
       // Entry-mode stamps ride the planned line by index: computed lines
       // preserve the input order, so the i-th planned line stamps the i-th

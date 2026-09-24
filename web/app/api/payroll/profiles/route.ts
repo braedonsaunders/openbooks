@@ -89,7 +89,7 @@ const profileBodySchema = z.looseObject({
   jpHyojunHoshu: optionalPackCount,
   jpKaigoDainigou: z.string().nullable().optional(),
   brDependentes: optionalPackCount,
-  brPensaoMensal: z.union([z.number(), z.string()]).nullable().optional(),
+  brPensaoMensal: z.string({ error: "brPensaoMensal must be sent as a decimal string, not a JSON number" }).nullable().optional(),
   // Standing commission-pay status for statutory-holiday rules that read it.
   // Nullable three-state: true/false answers, null un-answers. Omit to keep.
   paidOnCommission: z.boolean().nullable().optional(),

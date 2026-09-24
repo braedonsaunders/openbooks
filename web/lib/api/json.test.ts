@@ -169,13 +169,16 @@ test("parseJsonBody default ceiling applies without an explicit override", async
   assert.equal((await parseJsonBody(small, z.object({ text: z.string() }))).ok, true);
 });
 
-test("exactMoney accepts decimal strings and safe integer numbers without IEEE-754 drift", () => {
+test("exactMoney accepts decimal strings and refuses JSON numbers to preserve precision", () => {
   assert.equal(exactMoneySchema().parse("1234.5"), "1234.5000");
   assert.equal(exactMoneySchema().parse("-0"), "0.0000");
   assert.equal(exactMoneySchema().parse("10"), "10.0000");
-  assert.equal(exactMoneySchema().parse(100), "100.0000");
   assert.equal(exactMoneySchema().parse("0.0001"), "0.0001");
   assert.equal(exactMoneySchema().parse("-12.34"), "-12.3400");
+  assert.throws(
+    () => exactMoneySchema().parse(100),
+    (e: unknown) => e instanceof z.ZodError && /decimal string/.test(e.issues[0]?.message ?? ""),
+  );
   assert.throws(() => exactMoneySchema().parse(100.5));
   assert.throws(() => exactMoneySchema().parse(Number.MAX_SAFE_INTEGER + 1));
   assert.throws(() => exactMoneySchema().parse("1.00001"));

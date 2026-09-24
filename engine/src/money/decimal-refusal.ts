@@ -40,6 +40,7 @@ export function suppliedValue(raw: unknown): string {
  * full — how Excel renders a large figure), or no number at all.
  */
 export type DecimalNullCause =
+  | { cause: 'json-number' }
   | { cause: 'scale'; decimals: number }
   | { cause: 'separator'; separator: string }
   | { cause: 'decimal-comma'; dotted: string }
@@ -57,9 +58,11 @@ const GROUPING_DISPLAY: Record<string, string> = { ' ': 'space', '\u00a0': 'non-
 const CURRENCY_SYMBOLS = ['$', '€', '£', '¥', '₹', '₩']
 
 export function decimalNullCause(raw: unknown): DecimalNullCause {
-  // Numbers stringify faithfully ("1234.567", "1e+21"); anything else that is
-  // not a string has no digits to classify, so it is not a number.
-  if (typeof raw !== 'string' && typeof raw !== 'number') return { cause: 'not-a-number' }
+  // JSON numbers have already crossed IEEE-754. Even an integer cannot prove
+  // the original spelling or precision, so require the caller to resend it
+  // as decimal text instead of classifying String(raw).
+  if (typeof raw === 'number') return { cause: 'json-number' }
+  if (typeof raw !== 'string') return { cause: 'not-a-number' }
   const text = String(raw).trim()
   const plain = PLAIN_DECIMAL.exec(text)
   // A plain shape with an acceptable scale would not have refused, so a plain
@@ -155,6 +158,8 @@ export function decimalNullRefusal(field: string, noun: string, raw: unknown, ma
   const shown = `"${suppliedValue(raw)}"`
   const cause = decimalNullCause(raw)
   switch (cause.cause) {
+    case 'json-number':
+      return `${field} must be sent as a decimal string, not a JSON number — re-enter the amount as text and try again`
     case 'scale':
       return `${field} allows at most ${maxScale} decimal places — got ${cause.decimals} in ${shown}; round to fewer decimals and try again`
     case 'separator':

@@ -382,6 +382,17 @@ test("unconfigured inputs are refused by name, never stored as zero", async () =
   assert.equal(state.audits.length, 0);
 });
 
+test("financial JSON numbers are refused with a decimal-string remedy before equipment creation", async () => {
+  reset();
+  const response = await post(KEY_A, { ...baseBody(), purchasePrice: 100.25 });
+  assert.equal(response.status, 400);
+  const body = (await response.json()) as { error: string; issues?: { path: string; message: string }[] };
+  assert.match(body.error, /decimal string.*JSON number/);
+  assert.equal(body.issues?.[0]?.path, "purchasePrice");
+  assert.equal(state.units.length, 0);
+  assert.equal(state.audits.length, 0);
+});
+
 test("a supplied number conflict names the remedy and consumes no audit row", async () => {
   reset();
   const first = await post(KEY_A, { ...baseBody(), unitNumber: "EQ-0007" });

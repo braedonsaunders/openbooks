@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F3-39: the band/cycle/line amount schema accepts what a typed client
-// serializes — a JSON number or a numeric string — and canonicalizes it
-// through the exact-decimal grammar. A naive string-only regex rejected JSON
-// numbers and canonical spellings like ".5" before the money parser ran.
+// Band/cycle/line amounts preserve the exact decimal spelling across JSON.
 process.env.OPENBOOKS_DB_URL = "";
 process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 
@@ -21,12 +18,12 @@ const BAND = {
   reason: "annual ladder",
 };
 
-test("band amounts accept JSON numbers and canonicalize them", () => {
-  const parsed = createBandBody.safeParse({ ...BAND, min: 50000, target: 65000.5, max: "080000.00" });
-  if (!parsed.success) assert.fail(JSON.stringify(parsed.error.issues));
-  assert.equal(parsed.data.min, "50000");
-  assert.equal(parsed.data.target, "65000.5");
-  assert.equal(parsed.data.max, "80000");
+test("band amounts refuse JSON numbers and name the decimal-string remedy", () => {
+  const parsed = createBandBody.safeParse({ ...BAND, min: 50000 });
+  assert.equal(parsed.success, false);
+  if (!parsed.success) {
+    assert.match(parsed.error.issues.find((issue) => issue.path.join(".") === "min")!.message, /decimal string/);
+  }
 });
 
 test("band amounts accept canonical spellings the naive regex rejected", () => {

@@ -180,6 +180,15 @@ test('a malformed or over-precise amount fails closed with its line number', () 
   }
 })
 
+test('a JSON number amount is refused with the decimal-string remedy', () => {
+  assert.throws(
+    () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: 100.25 as never }]),
+    (e: unknown) => e instanceof DocumentEditError
+      && e.status === 422
+      && /Line 1 amount must be sent as a decimal string, not a JSON number/.test(e.message),
+  )
+})
+
 test('a malformed, over-precise, or out-of-range quantity fails closed with its line number', () => {
   // document_lines.quantity reached the insert unvalidated: junk, blank, and
   // 9dp quantities either died in Postgres with a storage error (a 500) or —

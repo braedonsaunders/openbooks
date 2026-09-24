@@ -10,14 +10,11 @@ import { decimalNullRefusal, suppliedValue } from "../../../../lib/payroll-decim
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
 const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
-// A band/cycle/line amount accepts what a typed client serializes — a JSON
-// number or a numeric string — and canonicalizes it through the exact-decimal
-// grammar (F3-39: the naive string-only regex rejected JSON numbers and
-// canonical spellings like ".5" before the money parser ever saw them). The
-// output is the canonical string the engine persists. Anything else is
-// refused with the per-cause remedy, never coerced.
+// A band/cycle/line amount must retain its exact decimal spelling across the
+// JSON boundary. Numeric JSON values have already crossed IEEE-754 and are
+// refused with a remedy instead of being stringified.
 const money4 = (field: string) =>
-  z.union([z.string(), z.number()]).transform((raw, ctx) => {
+  z.string({ error: `${field} must be sent as a decimal string, not a JSON number` }).transform((raw, ctx) => {
     const exact = canonicalDecimal(raw, 4);
     if (exact === null) {
       ctx.addIssue({
