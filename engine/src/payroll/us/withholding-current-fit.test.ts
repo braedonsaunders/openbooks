@@ -244,6 +244,22 @@ test('Georgia separately paid bonus uses the effective flat supplemental rate', 
   assert.equal(beforeRateChange?.factors.US_SUPPLEMENTAL_RATE, '0.0519')
 })
 
+test('Michigan separately paid bonus uses 4.25% without the period exemption', () => {
+  // Michigan Form 446 (2026), Bonuses and Other Payments.
+  // https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf
+  const result = computeUsWithholding({
+    levy: levy('MI', 'us_mi_miw4'),
+    payDate: '2026-07-21', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '500.0000',
+    supplementalPaymentTiming: 'separate',
+    certificateFor: () => certificate('us_mi_miw4', { exemptions: '99' }),
+    tenantRates: () => undefined, federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0])
+  assert.equal(result?.tax, '21.2500')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.0425')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '21.2500')
+})
+
 test('every US state and DC declares a separate-supplemental method', () => {
   assert.deepEqual(
     Object.keys(US_SEPARATE_SUPPLEMENTAL_METHODS).sort(),

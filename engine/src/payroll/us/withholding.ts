@@ -110,6 +110,15 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
       },
     ],
   } as const,
+  MI: {
+    kind: "flat",
+    // Michigan Form 446 (2026), "Bonuses and Other Payments": separately
+    // paid supplemental compensation is withheld at 4.25% without exemptions.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.0425",
+      source: "https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf",
+    }],
+  } as const,
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
 
 /**
