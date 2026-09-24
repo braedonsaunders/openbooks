@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { AssetLifecycleError, computeDisposal, computeRemeasurement, disposeAsset, remeasureAsset, type DisposalAccounts } from "./asset-lifecycle.ts";
 import { add, isZero } from "../money/money.ts";
-
-const lifecycleSource = readFileSync(new URL("./asset-lifecycle.ts", import.meta.url), "utf8");
 
 const acc: DisposalAccounts = {
   assetAccountId: "asset",
@@ -15,30 +12,10 @@ const acc: DisposalAccounts = {
 const amt = (r: { lines: { accountId: string; amount: string }[] }, id: string) =>
   r.lines.find((l) => l.accountId === id)?.amount ?? null;
 
-test("disposal snapshots carrying value after locking the asset row", () => {
-  const start = lifecycleSource.indexOf("export async function disposeAsset(");
-  const end = lifecycleSource.indexOf("export interface RemeasureResult", start);
-  assert.ok(start >= 0 && end > start, "disposeAsset source must be present");
-  const dispose = lifecycleSource.slice(start, end);
-  const transaction = dispose.indexOf("return db.transaction");
-  const lock = dispose.indexOf("await lockAssetRow(tx, orgId, assetId, opts.allowedSubsidiaryIds)", transaction);
-  const assetRead = dispose.indexOf("select a.id", transaction);
-  const deltaRead = /await\s+netRemeasurementDelta\(\s*orgId\s*,\s*assetId\s*,\s*bookId\s*,\s*tx\s*,?\s*\)/.exec(dispose)?.index ?? -1;
-  const basisRead = /await\s+assetBasisDelta\(\s*tx\s*,\s*orgId\s*,\s*assetId\s*,\s*bookId\s*,?\s*\)/.exec(dispose)?.index ?? -1;
-  const compute = dispose.indexOf("computeDisposal({", transaction);
-
-  assert.ok(transaction >= 0, "disposal must post in one database transaction");
-  assert.ok(lock > transaction, "disposal must lock the asset row inside its transaction");
-  assert.ok(assetRead > lock, "disposal must read asset and posted depreciation after locking");
-  assert.ok(deltaRead > assetRead, "disposal must read remeasurement events after locking");
-  assert.ok(basisRead > assetRead && basisRead < compute, "disposal must consume lifecycle basis changes from the same locked snapshot");
-  assert.ok(compute > deltaRead, "disposal must compute carrying value from the locked snapshot");
-  assert.equal(
-    dispose.slice(0, transaction).includes("db.execute"),
-    false,
-    "disposal must not read mutable asset state before opening its transaction",
-  );
-});
+/* Disposal lock-then-read ordering is proven under real concurrency in
+ * asset-lifecycle.integration.test.ts ("concurrent disposals serialize on
+ * the asset row: exactly one writes"): the loser must observe the winner's
+ * committed status instead of computing from a pre-lock snapshot. */
 
 test("gain on sale: proceeds above NBV credit the gain/loss account", () => {
   // cost 10000, accum 6000 → NBV 4000; proceeds 5000 → gain 1000.

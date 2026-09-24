@@ -548,3 +548,74 @@ test(
     }
   },
 );
+
+test(
+  "concurrent disposals serialize on the asset row: exactly one writes",
+  { skip: !DB },
+  async () => {
+    // The lock-then-read contract: disposeAsset locks the asset row before
+    // reading carrying value, so a racing disposal waits for the winner's
+    // commit and then refuses against the committed status instead of
+    // computing a second disposal from a pre-lock snapshot. Without the
+    // lock, both contenders would derecognize the same carrying value.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const categoryId = randomUUID();
+    const assetId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into asset_categories
+          (id, org_id, name, asset_account_id,
+           accumulated_depreciation_account_id,
+           depreciation_expense_account_id, gain_loss_account_id,
+           default_method, default_life_months, default_convention,
+           tax_attributes, is_active, created_by, updated_by)
+        values
+          (${categoryId}, ${org.orgId}, 'Race equipment',
+           ${org.accounts.invAsset}, ${org.accounts.clearing},
+           ${org.accounts.adjustment}, ${org.accounts.adjustment},
+           'straight_line', 10, 'full_month', '{}'::jsonb, true,
+           ${actorId}, ${actorId})
+      `);
+      await db.execute(sql`
+        insert into fixed_assets
+          (id, org_id, subsidiary_id, category_id, asset_number, name, status,
+           acquired_on, in_service_on, acquisition_cost, salvage_value,
+           depreciation_method, useful_life_months, depreciation_convention,
+           custom, created_by, updated_by)
+        values
+          (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId},
+           'ASSET-RACE', 'Race asset', 'in_service',
+           ${org.date}, ${org.date}, 1000, 0, 'straight_line', 10,
+           'full_month', '{}'::jsonb, ${actorId}, ${actorId})
+      `);
+
+      const outcomes = await Promise.allSettled([
+        disposeAsset(org.orgId, assetId, { writeOff: true, date: org.date, actorId }),
+        disposeAsset(org.orgId, assetId, { writeOff: true, date: org.date, actorId }),
+      ]);
+      const won = outcomes.filter((outcome) => outcome.status === "fulfilled");
+      const refused = outcomes.filter((outcome) => outcome.status === "rejected");
+      assert.equal(won.length, 1, "exactly one disposal writes");
+      assert.equal(refused.length, 1, "the loser refuses instead of double-disposing");
+      const refusal = (refused[0] as PromiseRejectedResult).reason;
+      assert.ok(
+        refusal instanceof AssetLifecycleError && /already written_off/.test(refusal.message),
+        `the loser names the winner's committed status, got: ${String(refusal)}`,
+      );
+
+      const events = (await db.execute<{ kind: string; n: number }>(sql`
+        select kind, count(*)::int as n from asset_events
+         where org_id = ${org.orgId} and asset_id = ${assetId}
+         group by kind
+      `)).rows;
+      assert.deepEqual(events, [{ kind: "written_off", n: 1 }], "one disposal event, never two");
+      const status = (await db.execute<{ status: string }>(sql`
+        select status from fixed_assets where id = ${assetId}
+      `)).rows[0]!.status;
+      assert.equal(status, "written_off");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
