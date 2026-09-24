@@ -1,8 +1,14 @@
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { loadOwnEmploymentIds, requireHrmSelfRead } from "../authorization.ts";
+import {
+  HrmAuthorizationError,
+  loadOwnEmploymentIds,
+  requireHrmEmploymentRead,
+  requireHrmSelfRead,
+} from "../authorization.ts";
 import { AiRailsError, aiSubjectRefused } from "./errors.ts";
 import { logDecision } from "./governance.ts";
 
@@ -19,8 +25,11 @@ import { logDecision } from "./governance.ts";
  *
  * Reads only through the payroll stub tables under the actor's scope:
  * own stubs through hrm.self.read, any stub through payroll.manage (or
- * hrm.employment.read for HR readers). Explaining another person's pay
- * without a grant refuses with the remedy.
+ * hrm.employment.read for HR readers) GATED on the employment's employer
+ * subsidiary — a grant alone never opens another entity's pay. Unknown,
+ * cross-org, and out-of-scope employments refuse identically as
+ * ai_subject_missing. Explaining another person's pay without a grant
+ * refuses with the remedy.
  */
 
 export interface ExplainPayLine {
@@ -75,15 +84,69 @@ async function assertExplainFeature(exec: SqlExecutor, orgId: string): Promise<v
   }
 }
 
-/** Own employment or a held grant — anything else refuses by name. */
+/**
+ * Uniform employment denial for the elevated paths: an unknown id, a
+ * cross-org id, and an out-of-scope employment share one code and one
+ * message, so a subsidiary-restricted actor probing a B employment learns
+ * nothing a fabricated id would not teach. The ai_subject_missing shape
+ * is this endpoint's not-found (404 through aiRailsErrorResponse) — the
+ * HRM authorization error has no mapping here and must never escape as
+ * a 500 that buries the refusal.
+ */
+function employmentNotVisible(): AiRailsError {
+  return new AiRailsError(
+    "ai_subject_missing",
+    "payslip for this employment matched no visible row — it is missing, outside this organization, or outside your legal-entity scope; reload and retry",
+  );
+}
+
+/**
+ * Employer scope for the payroll.manage path, which carries no HRM
+ * employment grant: the trusted employment row's employer subsidiary on
+ * this runner, against the actor's allowed set. Unrestricted actors pass;
+ * a missing employer fails closed like an unknown id.
+ */
+async function assertPayrollEmploymentScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<void> {
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed === null) return;
+  const row = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+    select employer_subsidiary_id as "employerSubsidiaryId" from worker_employments
+     where org_id = ${orgId}::uuid and id = ${employmentId}::uuid`)).rows[0];
+  if (!row?.employerSubsidiaryId || !allowed.has(row.employerSubsidiaryId)) {
+    throw employmentNotVisible();
+  }
+}
+
+/** Own employment or a held grant with the employer's scope — anything else refuses by name. */
 async function assertExplainScope(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
   employmentId: string,
 ): Promise<void> {
-  if (await actorHasPermission(exec, orgId, actorId, "payroll.manage")) return;
-  if (await actorHasPermission(exec, orgId, actorId, "hrm.employment.read")) return;
+  // Elevated paths check the employer's scope, never the grant alone: a
+  // payroll.manage or hrm.employment.read holder restricted to subsidiary
+  // A must not explain B's pay components, inputs, net pay, or stub diff.
+  if (await actorHasPermission(exec, orgId, actorId, "payroll.manage")) {
+    await assertPayrollEmploymentScope(exec, orgId, actorId, employmentId);
+    return;
+  }
+  if (await actorHasPermission(exec, orgId, actorId, "hrm.employment.read")) {
+    try {
+      await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
+    } catch (error) {
+      // The grant held, so this half is the subject/scope check: unknown,
+      // cross-org, and out-of-scope refuse identically.
+      if (error instanceof HrmAuthorizationError) throw employmentNotVisible();
+      throw error;
+    }
+    return;
+  }
   await requireHrmSelfRead(exec, orgId, actorId);
   const own = await loadOwnEmploymentIds(exec, orgId, actorId);
   if (!own.includes(employmentId)) {
