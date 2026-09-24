@@ -16,6 +16,7 @@ import { can } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { validateSandboxCutoff } from "@openbooks/engine/src/sandbox/lifecycle.ts";
 import { validateSandboxCadence } from "@openbooks/engine/src/sandbox/cadence.ts";
+import { validateSandboxTier } from "@openbooks/engine/src/sandbox/clone.ts";
 import type { PromotionTransition } from "../../../../lib/sandbox-promotion";
 
 function assertUuid(value: string, label: string): void {
@@ -61,7 +62,7 @@ export async function createSandboxAction(input: {
   const clientOpKey = assertClientOpKey(input.clientOpKey);
   if (input.asOfPeriodId != null) assertUuid(input.asOfPeriodId, "As-of period");
   const name = input.name.trim() || "Sandbox";
-  const tier = input.tier;
+  const tier = validateSandboxTier(input.tier);
   const asOfPeriodId = input.asOfPeriodId ?? null;
   validateSandboxCutoff(tier, asOfPeriodId);
   await enqueueSandboxOp(

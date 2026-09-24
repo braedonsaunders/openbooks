@@ -15,7 +15,7 @@ import { db, pool } from "../platform/db.ts";
 import { applyChangeSet, buildChangeSet } from "./promote.ts";
 import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
 import { listSandboxes } from "./index.ts";
-import type { SandboxTier } from "./clone.ts";
+import { validateSandboxTier } from "./clone.ts";
 import { resolveCliActor } from "./cli-actor.ts";
 import { resolveCreateMasking } from "./cli-masking.ts";
 
@@ -53,7 +53,7 @@ async function main() {
     }
     case "create": {
       const name = positional[0] ?? "Sandbox";
-      const tier = (flag(rest, "tier") as SandboxTier) ?? "masked";
+      const tier = validateSandboxTier(flag(rest, "tier") ?? "masked");
       const masked = resolveCreateMasking(tier, flag(rest, "masked"));
       console.log(`Creating ${tier} sandbox "${name}" from org ${orgId}…`);
       const t0 = Date.now();

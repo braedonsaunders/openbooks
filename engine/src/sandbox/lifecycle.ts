@@ -15,6 +15,7 @@ import {
   CUSTOMIZATION_LAYER,
   listSandboxS3VersionIds,
   runClone,
+  validateSandboxTier,
   type SandboxTier,
 } from "./clone.ts";
 import { deleteS3Blobs } from "../platform/file-storage.ts";
@@ -354,7 +355,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   sandboxId: string;
   sandboxOrgId: string;
 }> {
-  const tier = input.tier ?? "masked";
+  const tier = input.tier === undefined ? "masked" : validateSandboxTier(input.tier);
   const masked = input.masked ?? tier === "masked";
   const sandboxOrgId = randomUUID();
   const seed = randomUUID();
@@ -506,6 +507,7 @@ export async function refreshSandbox(
   }>(sql`
     select org_id, production_org_id, tier, masked, as_of_period_id from sandboxes where id = ${sandboxId}`);
   const s = requireFoundSandbox(sandboxId, row.rows[0]);
+  const tier = validateSandboxTier(s.tier);
   const seed = (await db.execute(sql`select sandbox_seed from orgs where id = ${s.org_id}`));
   const sandboxSeed = seed.rows[0]?.sandbox_seed as string;
   const proofToken = newRefreshCloneProofToken();
@@ -548,7 +550,7 @@ export async function refreshSandbox(
       if (s.masked) await seedDefaultMaskingPolicies(s.production_org_id);
 
       await inRefreshTransaction(async () => {
-        if (s.tier === "as_of" && !s.as_of_period_id) throw new Error("as-of sandbox requires a cutoff period");
+        if (tier === "as_of" && !s.as_of_period_id) throw new Error("as-of sandbox requires a cutoff period");
         // Only the cutoff period ID crosses into the clone: runClone resolves
         // its calendar and end date inside the shared snapshot transaction,
         // so the refresh resolves exactly what it copies. The sandbox org
@@ -562,7 +564,7 @@ export async function refreshSandbox(
           productionOrgId: s.production_org_id,
           sandboxOrgId: s.org_id,
           seed: sandboxSeed,
-          tier: s.tier,
+          tier,
           masked: s.masked,
           asOfPeriodId: s.as_of_period_id,
           onlyTables: target,
@@ -606,7 +608,7 @@ export async function refreshSandbox(
       await verifyCloneRls({
         productionOrgId: s.production_org_id,
         sandboxOrgId: s.org_id,
-        tier: s.tier,
+        tier,
       });
       const markedReady = await db.execute<{ id: string }>(sql`
         update sandboxes
