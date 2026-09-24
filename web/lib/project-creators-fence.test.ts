@@ -145,7 +145,12 @@ const hooks = registerHooks({
 const chargesUrl = './project-charges.ts?creators-fence-test'
 const requestsUrl = './billing-requests.ts?creators-fence-test'
 const chargesModule = (await import(chargesUrl)) as unknown as {
-  createProjectCharge: (orgId: string, userId: string, input: { projectId: string; lines: unknown[] }) => Promise<unknown>
+  createProjectCharge: (
+    orgId: string,
+    userId: string,
+    input: { projectId: string; lines: unknown[] },
+    opts: { post: boolean; allowedSubsidiaryIds: Set<string> | null },
+  ) => Promise<unknown>
   ChargeError: new (message?: string) => Error
 }
 const requestsModule = (await import(requestsUrl)) as unknown as {
@@ -170,7 +175,7 @@ test('createProjectCharge refuses a Projects disable committed before the insert
     chargesModule.createProjectCharge('org-1', 'user-1', {
       projectId: PROJECT_ID,
       lines: [{ itemId: '00000000-0000-4000-8000-00000000c102', quantity: '1', costRate: '10', billRate: '20' }],
-    }),
+    }, { post: true, allowedSubsidiaryIds: null }),
     (error: unknown) => error instanceof chargesModule.ChargeError && error.message === 'Projects feature is disabled',
   )
   const texts = txTexts()

@@ -28,6 +28,14 @@ const mockAuthz = `
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
+  // Fixture authz carries every permission; mirror the wildcard semantics the
+  // real check applies so the posting decision stays allowed here.
+  export function can(authz, perm) {
+    const perms = authz.permissions
+    if (!perms) return false
+    if (perms.has('*') || perms.has(perm)) return true
+    return perms.has(String(perm).split('.')[0] + '.*')
+  }
 `;
 
 const hooks = registerHooks({

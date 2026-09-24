@@ -70,7 +70,7 @@ test(
             projectId,
             documentDate: org.date,
             lines: [{ itemId, quantity: '1', costRate: '10', billRate: '15' }],
-          }),
+          }, { post: true, allowedSubsidiaryIds: null }),
           (error) => {
             failure = error;
             return error instanceof ChargeCommittedError
@@ -96,7 +96,7 @@ test(
           projectId,
           documentDate: org.date,
           lines: [{ itemId, quantity: '1', costRate: '10', billRate: '15' }],
-        }, { post: false });
+        }, { post: false, allowedSubsidiaryIds: null });
         assert.ok(draft.id);
         assert.match(draft.documentNumber, /^CHG-/);
         assert.equal(draft.approvalPending, false);
@@ -109,7 +109,7 @@ test(
             cost: priceCappedLadder('0.0001', [tier], 'cost'),
             bill: priceCappedLadder('0.0001', [tier], 'bill'),
           } }],
-        }, { post: false });
+        }, { post: false, allowedSubsidiaryIds: null });
         const fraction = (await db.execute(sql\`
           select c.quantity, c.amount, c.quantity_ratio from charge_rate_components c
           join document_lines l on l.id = c.document_line_id and l.org_id = c.org_id
@@ -168,7 +168,7 @@ test(
             projectId,
             documentDate: org.date,
             lines: [{ itemId, quantity: '1', accountId: org.accounts.cogs, costRate: '10', billRate: '15' }],
-          }, { post: false }),
+          }, { post: false, allowedSubsidiaryIds: null }),
           (error) => error instanceof ChargeError && /account/i.test(error.message),
         );
         assert.equal((await db.execute(sql\`
@@ -224,7 +224,7 @@ test(
             projectId,
             documentDate: org.date,
             lines: [{ itemId, quantity: '1', accountId: org.accounts.bank, costRate: '10', billRate: '15' }],
-          }, { post: false }),
+          }, { post: false, allowedSubsidiaryIds: null }),
           (error) => error instanceof ChargeError && new RegExp('expense/COGS account', 'i').test(error.message),
         );
         assert.equal((await db.execute(sql\`

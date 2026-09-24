@@ -1,6 +1,10 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { inDbTransaction, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import {
+  lockProjectForScope,
+  ScopeNotFoundError,
+} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { cmp, div, isZero, mul, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
@@ -74,7 +78,17 @@ export interface ChargeInput {
 }
 
 export class ChargeError extends Error {
-  override readonly name = 'ChargeError'
+  override readonly name: string = 'ChargeError'
+}
+
+/**
+ * The project is missing, cross-org, or outside the caller's subsidiary
+ * scope — including when a concurrent rehome moved it after the route's
+ * pre-read. Answers exactly like the route's own 404, never a 422.
+ */
+export class ChargeNotFoundError extends ChargeError {
+  override readonly name = 'ChargeNotFoundError'
+  readonly status = 404
 }
 
 export type ChargeCommittedStage = 'approval-routing' | 'posting'
@@ -140,7 +154,7 @@ export async function createProjectCharge(
   orgId: string,
   userId: string,
   input: ChargeInput,
-  opts: { post?: boolean } = { post: true },
+  opts: { post?: boolean; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<{ id: string; documentNumber: string; approvalPending: boolean }> {
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new ChargeError('Projects feature is disabled')
   const [equipmentOn, inventoryOn] = await Promise.all([
@@ -157,10 +171,18 @@ export async function createProjectCharge(
     if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
       throw new ChargeError('Projects feature is disabled')
     }
-    const proj = (await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
-      select id, subsidiary_id from projects where id = ${input.projectId} and org_id = ${orgId}
-    `))
-    if (!proj.rows[0]) throw new ChargeError('Project not found')
+    // Lock the project and recheck scope inside the write transaction: the
+    // route's pre-read may be stale by the time this insert lands, and a
+    // concurrent rehome must refuse here rather than stamp the charge with
+    // another subsidiary. Missing, cross-org, and out-of-scope share one
+    // not-found answer.
+    let lockedProject: { id: string; subsidiaryId: string | null }
+    try {
+      lockedProject = await lockProjectForScope(tx, orgId, input.projectId, opts.allowedSubsidiaryIds)
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw new ChargeNotFoundError('not found')
+      throw error
+    }
     if (input.fieldTicketId) {
       const ticket = (await tx.execute<{ id: string }>(sql`
         select id
@@ -175,7 +197,7 @@ export async function createProjectCharge(
         throw new ChargeError('The source Field Ticket does not belong to this project')
       }
     }
-    const subsidiaryId = proj.rows[0].subsidiary_id
+    const subsidiaryId = lockedProject.subsidiaryId
     const org = (await tx.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
     const currency = org.rows[0]?.base_currency ?? 'CAD'
     const documentNumber = await nextDocumentNumber(orgId, 'project_charge', 'CHG-', subsidiaryId ?? undefined)
