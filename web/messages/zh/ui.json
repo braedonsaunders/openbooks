@@ -89,6 +89,7 @@
     "maxRowsReached": "已达到最多 {count} 行。"
   },
   "lineGrid": {
+    "lineNumberHeader": "行",
     "addLine": "添加行",
     "keyboardHint": "Enter 添加/下移 · Alt+↑/↓ 重排 · ⌘D 复制 · ⌘⌫ 移除",
     "lineActionsAria": "第 {number} 行操作",

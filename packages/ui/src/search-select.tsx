@@ -40,6 +40,7 @@ export function SearchSelect({
   emptyLabel,
   sheetTitle,
   ariaLabel,
+  ariaLabelledBy,
   className,
   triggerClassName,
   searchable,
@@ -63,6 +64,8 @@ export function SearchSelect({
   /** Title shown at the top of the mobile bottom sheet. */
   sheetTitle?: string
   ariaLabel?: string
+  /** IDs of visible labels that together name the trigger control. */
+  ariaLabelledBy?: string
   /** Classes for the outer wrapper (layout / width). */
   className?: string
   /** Classes for the trigger button (height / text size overrides). */
@@ -344,6 +347,7 @@ export function SearchSelect({
         onClick={() => (open ? setOpen(false) : openMenu())}
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(

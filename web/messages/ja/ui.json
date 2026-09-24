@@ -89,6 +89,7 @@
     "maxRowsReached": "行数の上限 {count} に達しました。"
   },
   "lineGrid": {
+    "lineNumberHeader": "行",
     "addLine": "行を追加",
     "keyboardHint": "Enter で追加/下へ移動 · Alt+↑/↓ で並べ替え · ⌘D で複製 · ⌘⌫ で削除",
     "lineActionsAria": "行 {number} のアクション",
