@@ -28,6 +28,7 @@ import {
 } from '@openbooks/engine/src/hrm/recruiting/scorecards.ts'
 import { listCandidateConsents } from '@openbooks/engine/src/hrm/recruiting/retention.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
 import { sql } from 'drizzle-orm'
 import type { Authz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -244,6 +245,7 @@ export async function loadPoolsTab(authz: Authz, t: T, tab: DepthTab): Promise<P
 
 export interface InterviewDrawer {
   id: string
+  timeZone: string
   closeHref: string
   candidate: string
   requisition: string
@@ -276,6 +278,7 @@ export async function loadInterviewDrawer(
       actorId: authz.user.id,
       interviewId,
     })
+    const timeZone = await businessTimeZone(authz.user.orgId)
     const interview = (
       await db.execute<{ candidate: string; requisition: string; kitId: string | null }>(sql`
         select c.display_name as candidate, r.title as requisition, i.kit_id as "kitId"
@@ -333,6 +336,7 @@ export async function loadInterviewDrawer(
     }
     return {
       id: interviewId,
+      timeZone,
       closeHref: hrefForTab(tab, null),
       candidate: interview.candidate,
       requisition: interview.requisition,
@@ -377,6 +381,7 @@ export async function loadInterviewDrawer(
         starts: t('recruiting.depth.starts'),
         ends: t('recruiting.depth.ends'),
         timezone: t('recruiting.depth.timezone'),
+        invalidTime: t('recruiting.depth.invalidTime'),
         bookingLink: t('recruiting.depth.bookingLink'),
         email: t('recruiting.depth.email'),
         name: t('recruiting.depth.name'),

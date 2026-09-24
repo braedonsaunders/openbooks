@@ -494,7 +494,8 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
           <SlotProposeIsland
             interviewId={detail.id}
             pools={detail.pools}
-            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed ?? 'Save failed.', proposeFromPool: detail.labels.proposeFromPool ?? 'Propose from pool', starts: detail.labels.starts ?? 'Starts', ends: detail.labels.ends ?? 'Ends', timezone: detail.labels.timezone ?? 'Time zone', bookingLink: detail.labels.bookingLink ?? 'Booking link' }}
+            timeZone={detail.timeZone}
+            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed ?? 'Save failed.', invalidTime: detail.labels.invalidTime ?? 'Enter a valid local time.', proposeFromPool: detail.labels.proposeFromPool ?? 'Propose from pool', starts: detail.labels.starts ?? 'Starts', ends: detail.labels.ends ?? 'Ends', timezone: detail.labels.timezone ?? 'Time zone', bookingLink: detail.labels.bookingLink ?? 'Booking link' }}
           />
         </div>
       </div>

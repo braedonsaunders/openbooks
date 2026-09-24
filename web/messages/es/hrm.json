@@ -797,6 +797,7 @@
       "starts": "Inicio",
       "ends": "Fin",
       "timezone": "Zona horaria",
+      "invalidTime": "Introduzca una hora local válida en la zona horaria de la organización. No se pueden reservar las horas omitidas o repetidas por el cambio de hora.",
       "bookingLink": "Enlace de reserva",
       "email": "Correo electrónico",
       "name": "Nombre",

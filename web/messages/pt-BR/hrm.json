@@ -797,6 +797,7 @@
       "starts": "Início",
       "ends": "Fim",
       "timezone": "Fuso horário",
+      "invalidTime": "Informe um horário local válido no fuso horário da organização. Horários inexistentes ou repetidos pela mudança do relógio não podem ser agendados.",
       "bookingLink": "Link de agendamento",
       "email": "E-mail",
       "name": "Nome",

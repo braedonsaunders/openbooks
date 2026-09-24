@@ -37,6 +37,71 @@ export function canonicalTimeZone(value: unknown): string | null {
 }
 
 /**
+ * Resolve a datetime-local civil value in an explicit IANA zone. DST gaps
+ * and repeated wall-clock times are refused so a booking is never shifted
+ * or assigned to an arbitrary occurrence.
+ */
+export function civilDateTimeToInstant(value: string, timeZone: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value)
+  const zone = canonicalTimeZone(timeZone)
+  if (!match || !zone) throw new RangeError('Enter a valid local date and time in a supported time zone.')
+
+  const wanted = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: Number(match[6] ?? '0'),
+  }
+  const civilAsUtc = (parts: typeof wanted) => {
+    const date = new Date(0)
+    date.setUTCFullYear(parts.year, parts.month - 1, parts.day)
+    date.setUTCHours(parts.hour, parts.minute, parts.second, 0)
+    return date.getTime()
+  }
+  const target = civilAsUtc(wanted)
+  const roundTrip = new Date(target)
+  if (
+    wanted.year < 1 || roundTrip.getUTCFullYear() !== wanted.year ||
+    roundTrip.getUTCMonth() + 1 !== wanted.month || roundTrip.getUTCDate() !== wanted.day ||
+    roundTrip.getUTCHours() !== wanted.hour || roundTrip.getUTCMinutes() !== wanted.minute ||
+    roundTrip.getUTCSeconds() !== wanted.second
+  ) throw new RangeError('Enter a valid local date and time in a supported time zone.')
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: zone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  })
+  const localParts = (instant: number) => {
+    const parts = formatter.formatToParts(new Date(instant))
+    const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value)
+    return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour'), minute: get('minute'), second: get('second') }
+  }
+  const matches = (have: ReturnType<typeof localParts>) =>
+    have.year === wanted.year && have.month === wanted.month && have.day === wanted.day &&
+    have.hour === wanted.hour && have.minute === wanted.minute && have.second === wanted.second
+
+  const candidates = new Set<number>()
+  for (const hours of [-36, -24, -12, 0, 12, 24, 36]) {
+    let guess = target + hours * 60 * 60 * 1000
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const have = localParts(guess)
+      const difference = target - civilAsUtc(have)
+      if (difference === 0) {
+        if (matches(have)) candidates.add(guess)
+        break
+      }
+      guess += difference
+    }
+  }
+  if (candidates.size === 0) throw new RangeError('That local time does not exist because the clocks change in this time zone.')
+  if (candidates.size > 1) throw new RangeError('That local time occurs twice because the clocks change in this time zone; choose another time.')
+  return new Date([...candidates][0]!)
+}
+
+/**
  * The canonical zone names a picker can offer, sorted with UTC first. UTC
  * is unioned in because enumeration omits it (like the US/Eastern-style
  * aliases) while every runtime still formats it — a picker built from the

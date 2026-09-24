@@ -853,6 +853,7 @@
       "starts": "Starts",
       "ends": "Ends",
       "timezone": "Time zone",
+      "invalidTime": "Enter a valid local time in the organization time zone. Times skipped or repeated by a clock change cannot be booked.",
       "bookingLink": "Booking link",
       "email": "Email",
       "name": "Name",
