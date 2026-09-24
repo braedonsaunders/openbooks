@@ -246,6 +246,51 @@ test("concurrent replays of one offline id record once", { skip: !DB }, async ()
   }
 });
 
+test("concurrent distinct clock-ins serialize per employee", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId);
+    const workers = Array.from({ length: 40 }, () => ({ worker: randomUUID(), projectId: randomUUID() }));
+    for (const { worker, projectId } of workers) {
+      await seedWorker(org.orgId, org.subsidiaryId, worker, projectId);
+    }
+
+    const attempts = workers.flatMap(({ worker, projectId }) => [0, 1].map((device) => ({
+      orgId: org.orgId,
+      actorUserId: null,
+      employeePartyId: worker,
+      kind: "clock_in" as const,
+      occurredAt: "2026-09-14T11:00:00.000Z",
+      source: "mobile" as const,
+      projectId,
+      deviceId: `device-${device}`,
+      clientEventId: randomUUID(),
+    })));
+    const results = await Promise.all(attempts.map((input) =>
+      recordClockEvent(input).then(
+        () => ({ accepted: true }),
+        (error) => {
+          assert.ok(error instanceof FieldTimeError, `expected a named clock refusal, got ${String(error)}`);
+          return { accepted: false };
+        },
+      ),
+    ));
+    assert.equal(results.filter((result) => result.accepted).length, workers.length,
+      "only one of each employee's two distinct clock-ins may be accepted");
+    await withOrg(org.orgId, async () => {
+      const duplicates = (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from (
+          select employee_party_id from time_clock_events
+           where org_id = ${org.orgId} and kind = 'clock_in' and status = 'recorded'
+           group by employee_party_id having count(*) > 1
+        ) duplicate_employees`)).rows[0]?.n;
+      assert.equal(duplicates, "0", "no employee may have two open clock-ins");
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a reused offline id with a different payload conflicts", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

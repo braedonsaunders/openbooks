@@ -429,6 +429,14 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
   }
 
   return withOrgTransaction(input.orgId, async () => {
+    // Every transition for one worker shares this transaction lock. Acquire it
+    // before claiming the event id or reading the open pair so distinct device
+    // ids cannot both validate against the same empty state under READ COMMITTED.
+    await db.execute(sql`
+      select pg_advisory_xact_lock(
+        hashtextextended(${`field-clock:${input.orgId}:${input.employeePartyId}`}, 0)
+      )`);
+
     // Transaction-safe get-or-create on the offline idempotency key.
     // Reading the key outside the transaction let two simultaneous
     // replays both see nothing, so the second died on the unique index
@@ -628,5 +636,3 @@ export async function clockStatus(
     queuedNote: false,
   };
 }
-
-
