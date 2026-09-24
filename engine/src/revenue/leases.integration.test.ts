@@ -218,6 +218,10 @@ test("invalid lease inputs are refused as LeaseError with no rows written", { sk
       ["bad frequency", { paymentFrequency: "fortnightly" }, /payment frequency/],
       ["junk classification term", { classificationInputs: { leaseTermMonths: "abc", economicLifeMonths: 120 } }, /whole number of months/],
       ["junk classification threshold", { classificationInputs: { pvOfPayments: "91000", fairValue: "100000", pvThresholdPercent: "ninety" } }, /exact decimal/],
+      ["negative term threshold", { classificationInputs: { termThresholdPercent: "-0.01" } }, /between 0 and 100 percent/],
+      ["excessive term threshold", { classificationInputs: { termThresholdPercent: "100.01" } }, /between 0 and 100 percent/],
+      ["negative PV threshold", { classificationInputs: { pvThresholdPercent: "-1" } }, /between 0 and 100 percent/],
+      ["excessive PV threshold", { classificationInputs: { pvThresholdPercent: "101" } }, /between 0 and 100 percent/],
       ["oversized payment", { paymentAmount: "99999999999999999999999" }, /supported ledger magnitude/],
       ["oversized rate", { annualDiscountRatePercent: "99999999999999999999999" }, /supported ledger magnitude/],
     ];
