@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 
 /**
  * Pack-declared certificate answers — the entry surface for every row-backed
@@ -114,13 +115,31 @@ function FieldInput(props: {
       </label>
     )
   }
+  if (field.kind === 'amount') {
+    return (
+      <label htmlFor={id} className="block text-sm">
+        <span className="mb-1 block font-medium">{field.label}{field.required ? ' *' : ''}</span>
+        <MoneyInput
+          id={id}
+          ariaLabel={field.label}
+          value={value}
+          onChange={onChange}
+          field={field.label}
+          noun="a money amount"
+          maxScale={4}
+          placeholder={field.default ?? ''}
+          className="w-full rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800"
+        />
+      </label>
+    )
+  }
   return (
     <label htmlFor={id} className="block text-sm">
       <span className="mb-1 block font-medium">{field.label}{field.required ? ' *' : ''}</span>
       <input
         id={id}
         type="text"
-        inputMode={field.kind === 'amount' ? 'decimal' : 'text'}
+        inputMode="text"
         placeholder={field.default ?? ''}
         className="w-full rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800"
         value={value}
@@ -150,6 +169,14 @@ export function CertificateForm(props: {
   )
   const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? '')
   const [busy, setBusy] = useState(false)
+
+  // Certificate amounts are classified before the save posts: an unreadable
+  // value names its cause and remedy under the field, and the save stays
+  // disabled until every amount reads. Blank means unanswered, as before.
+  const amountRefusal = certificate.fields
+    .filter((field) => field.kind === 'amount')
+    .map((field) => moneyFieldError(field.label, 'a money amount', answers[field.key] ?? '', 4))
+    .find((refusal) => refusal !== null) ?? null
 
   const save = async () => {
     setBusy(true)
@@ -241,7 +268,7 @@ export function CertificateForm(props: {
       </div>
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || amountRefusal !== null}
         onClick={save}
         className="mt-3 rounded bg-teal-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
       >

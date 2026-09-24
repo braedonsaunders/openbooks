@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 
 export interface ScheduleOption {
   id: string
@@ -407,7 +408,39 @@ export function ProfileEditor(props: {
   const columnOf = (field: DeclaredProfileField): string | null =>
     field.storage?.kind === 'column' ? field.storage.column : null
 
+  // An amount answer, resolved exactly as the inputs below bind it: bespoke
+  // column state, then the generic extra-column read, then the row answers.
+  // Blank means unknown (the server stores null); anything else must read
+  // through the shared decimal classifier before it is posted.
+  const amountValue = (
+    certificate: DeclaredProfileCertificate,
+    field: DeclaredProfileField,
+    column: string | null,
+  ): string =>
+    column
+      ? (columnText[column]?.[0] ?? extraValue(column))
+      : (rowAnswers[certificate.key]?.[field.key] ?? '')
+
   async function save() {
+    // Pack amount fields are classified before anything is posted: an
+    // unreadable value names its cause and remedy now, not as a server
+    // round trip that discards every other answer with it.
+    for (const certificate of applicableCertificates) {
+      for (const field of certificate.fields) {
+        if (field.kind !== 'amount') continue
+        const column = columnOf(field)
+        const refusal = moneyFieldError(
+          fieldLabel(column, field.label),
+          'a money amount',
+          amountValue(certificate, field, column),
+          4,
+        )
+        if (refusal !== null) {
+          toast.error(refusal)
+          return
+        }
+      }
+    }
     setBusy(true)
     try {
       // Declared columns with no bespoke binding above save generically:
@@ -601,15 +634,31 @@ export function ProfileEditor(props: {
         </div>
       )
     }
+    if (field.kind === 'amount') {
+      return (
+        <div key={field.key}>
+          <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
+          <MoneyInput
+            id={id}
+            ariaLabel={label}
+            value={value}
+            onChange={set}
+            field={label}
+            noun="a money amount"
+            maxScale={4}
+            placeholder="0.00"
+          />
+        </div>
+      )
+    }
     return (
       <div key={field.key}>
         <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
         <Input
           id={id}
-          inputMode={field.kind === 'amount' ? 'decimal' : 'text'}
+          inputMode="text"
           value={value}
           onChange={(e) => set(e.target.value)}
-          placeholder={field.kind === 'amount' ? '0.00' : undefined}
         />
       </div>
     )

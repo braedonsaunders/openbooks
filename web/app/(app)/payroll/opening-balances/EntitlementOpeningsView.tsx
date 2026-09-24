@@ -7,6 +7,8 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle, Download, Info, Lock, Upload } from 'lucide-react'
 import { Badge, Button, FieldHelp, Input, Label, cn } from '@openbooks/ui'
+import { canonicalDecimal, isZeroDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements.ts'
 
 interface SaveError {
@@ -67,7 +69,9 @@ export function EntitlementOpeningsView({
     if (edited !== undefined) return edited
     const stored = initial.rows.find((r) => r.employeePartyId === employeePartyId)?.amounts[planId]
     if (stored === undefined) return ''
-    return Number(stored) === 0 ? '' : trimZeros(stored)
+    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+      ? ''
+      : trimZeros(stored)
   }
 
   const setValue = (employeePartyId: string, planId: string, value: string) => {
@@ -90,6 +94,31 @@ export function EntitlementOpeningsView({
         employeePartyId,
         amounts: draft[employeePartyId] ?? {},
       }))
+      // Client-side decimal gate, like the statutory grid above: every
+      // EDITED non-blank carry-in names its cause and remedy without a
+      // round trip. Blank clears; untouched banks were already accepted.
+      const clientErrors: SaveError[] = []
+      for (const employeePartyId of dirtyIds) {
+        const row = initial.rows.find((r) => r.employeePartyId === employeePartyId)
+        for (const plan of plans) {
+          const edited = draft[employeePartyId]?.[plan.id]
+          if (edited === undefined || edited.trim() === '') continue
+          const refusal = moneyFieldError(
+            plan.name,
+            plan.unit === 'hours' ? 'a number of hours' : 'a money amount',
+            edited,
+            4,
+          )
+          if (refusal !== null) {
+            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+          }
+        }
+      }
+      if (clientErrors.length > 0) {
+        setErrors(clientErrors)
+        toast.error(fallback)
+        return
+      }
       const response = await fetch('/api/payroll/opening-balances/entitlements', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -368,16 +397,18 @@ export function EntitlementOpeningsView({
                               <Lock size={11} aria-hidden />
                             </Badge>
                           )}
-                          <Input
-                            inputMode="decimal"
-                            disabled={!canManage || lock !== undefined}
-                            aria-label={`${row.employeeName} — ${plan.name}`}
-                            className={cn('w-32 text-right tabular-nums')}
+                          <MoneyInput
+                            ariaLabel={`${row.employeeName} — ${plan.name}`}
                             value={valueOf(row.employeePartyId, plan.id)}
-                            placeholder="0.00"
-                            onChange={(event) =>
-                              setValue(row.employeePartyId, plan.id, event.target.value)
+                            onChange={(value) =>
+                              setValue(row.employeePartyId, plan.id, value)
                             }
+                            field={plan.name}
+                            noun={plan.unit === 'hours' ? 'a number of hours' : 'a money amount'}
+                            maxScale={4}
+                            placeholder="0.00"
+                            disabled={!canManage || lock !== undefined}
+                            className={cn('w-32 text-right tabular-nums')}
                           />
                         </div>
                       </td>

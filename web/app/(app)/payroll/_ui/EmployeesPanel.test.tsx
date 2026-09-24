@@ -536,3 +536,39 @@ test('read mode respects the section split', () => {
   assert.doesNotMatch(tax, /<select/)
   assert.doesNotMatch(tax, /Monthly/)
 })
+
+// F3-10: a pack amount the classifier cannot read names its cause and
+// remedy under the field instead of posting raw text for the server to
+// refuse. A decimal comma reads as twelve-thirty-four (never as a
+// thousands separator to strip — that remedy would store 1234).
+test('an unreadable pack amount names its cause and remedy', () => {
+  const pack: PackProfileDeclaration = {
+    ...xxPack,
+    certificates: [
+      ...xxPack.certificates,
+      {
+        key: 'xx_bonus',
+        form: 'XX-2',
+        label: 'Fixture bonus certificate',
+        citation: 'Fixture revenue authority, Fixture Form XX-2 (2026)',
+        storage: 'profile_columns' as const,
+        scope: { level: 'country' },
+        fields: [
+          {
+            key: 'bonus',
+            label: 'Fixture bonus',
+            kind: 'amount',
+            storage: { kind: 'column', column: 'xx_bonus' },
+            help: 'The fixture bonus amount.',
+          },
+        ],
+      },
+    ],
+  }
+  const html = render({}, { XX: pack }, ['XX'], [], { xx_bonus: '12,34' })
+  assert.match(html, /id="pp-xx_bonus-bonus"/)
+  // Static markup escapes the quotes around the readings (&quot;), so the
+  // assertions name the remedy without pinning the serializer's escaping.
+  assert.match(html, /must use .* as the decimal point/)
+  assert.match(html, /12\.34/)
+})

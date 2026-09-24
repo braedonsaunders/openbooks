@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle, Download, Lock, Upload } from 'lucide-react'
-import { Badge, Button, FieldHelp, Input, Select, cn } from '@openbooks/ui'
+import { Badge, Button, FieldHelp, Select, cn } from '@openbooks/ui'
+import { canonicalDecimal, isZeroDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import type {
   OpeningBalanceRow,
   OpeningBalanceYear,
@@ -117,7 +119,12 @@ export function OpeningBalancesView({
     const stored = row.amounts?.[key]
     if (stored === undefined) return ''
     // Show a stored zero as blank: "nothing carried in" reads better empty.
-    return Number(stored) === 0 ? '' : trimZeros(stored)
+    // A decimal-string comparison, never Number(): floats cannot read money.
+    // Non-canonical text (which the server would never have written) still
+    // displays raw rather than throwing out of the render.
+    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+      ? ''
+      : trimZeros(stored)
   }
 
   const setValue = (employeePartyId: string, key: string, value: string) => {
@@ -132,7 +139,9 @@ export function OpeningBalancesView({
     if (edited !== undefined) return edited
     const stored = row.componentAmounts?.[componentId]
     if (stored === undefined) return ''
-    return Number(stored) === 0 ? '' : trimZeros(stored)
+    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+      ? ''
+      : trimZeros(stored)
   }
 
   const setComponentValue = (employeePartyId: string, componentId: string, value: string) => {
@@ -178,6 +187,37 @@ export function OpeningBalancesView({
         }
         return { employeePartyId, amounts, components: componentAmounts }
       })
+      // Client-side decimal gate: every EDITED non-blank value is classified
+      // through the shared decimal helper before anything is posted, so an
+      // unreadable carry-in names its cause and remedy without a round trip.
+      // Blank clears (the server treats it as omitted); untouched cells were
+      // already accepted when they were written.
+      const clientErrors: SaveError[] = []
+      for (const employeePartyId of dirtyIds) {
+        const row = initial.rows.find((r) => r.employeePartyId === employeePartyId)
+        for (const field of fields) {
+          const edited = draft[employeePartyId]?.[field.key]
+          if (edited === undefined || edited.trim() === '') continue
+          const refusal = moneyFieldError(field.label, 'a money amount', edited, 4)
+          if (refusal !== null) {
+            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+          }
+        }
+        for (const component of components) {
+          if (!component.capped) continue
+          const edited = componentDraft[employeePartyId]?.[component.componentId]
+          if (edited === undefined || edited.trim() === '') continue
+          const refusal = moneyFieldError(component.name, 'a money amount', edited, 4)
+          if (refusal !== null) {
+            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+          }
+        }
+      }
+      if (clientErrors.length > 0) {
+        setErrors(clientErrors)
+        toast.error(fallback)
+        return
+      }
       const response = await fetch('/api/payroll/opening-balances', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -411,16 +451,18 @@ export function OpeningBalancesView({
                   return (
                     <td key={field.key} className="px-2 py-1.5 text-right">
                       {applies ? (
-                        <Input
-                          inputMode="decimal"
-                          disabled={row.locked || !canManage}
-                          aria-label={`${row.employeeName} — ${field.label}`}
-                          className="w-32 text-right tabular-nums"
+                        <MoneyInput
+                          ariaLabel={`${row.employeeName} — ${field.label}`}
                           value={valueOf(row, field.key)}
-                          placeholder="0.00"
-                          onChange={(event) =>
-                            setValue(row.employeePartyId, field.key, event.target.value)
+                          onChange={(value) =>
+                            setValue(row.employeePartyId, field.key, value)
                           }
+                          field={field.label}
+                          noun="a money amount"
+                          maxScale={4}
+                          placeholder="0.00"
+                          disabled={row.locked || !canManage}
+                          className="w-32 text-right tabular-nums"
                         />
                       ) : (
                         <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
@@ -436,16 +478,18 @@ export function OpeningBalancesView({
                       index === 0 && 'border-l border-slate-200 dark:border-slate-800',
                     )}
                   >
-                    <Input
-                      inputMode="decimal"
-                      disabled={row.locked || !canManage || !component.capped}
-                      aria-label={`${row.employeeName} — ${component.name}`}
-                      className="w-32 text-right tabular-nums"
+                    <MoneyInput
+                      ariaLabel={`${row.employeeName} — ${component.name}`}
                       value={componentValueOf(row, component.componentId)}
-                      placeholder="0.00"
-                      onChange={(event) =>
-                        setComponentValue(row.employeePartyId, component.componentId, event.target.value)
+                      onChange={(value) =>
+                        setComponentValue(row.employeePartyId, component.componentId, value)
                       }
+                      field={component.name}
+                      noun="a money amount"
+                      maxScale={4}
+                      placeholder="0.00"
+                      disabled={row.locked || !canManage || !component.capped}
+                      className="w-32 text-right tabular-nums"
                     />
                   </td>
                 ))}

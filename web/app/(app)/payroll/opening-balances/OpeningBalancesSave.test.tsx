@@ -178,7 +178,7 @@ test('a named 422 refusal lands in the error panel with its per-row reasons', as
       { status: 422 },
     ),
   )
-  await editCell('12,34')
+  await editCell('100.00')
   const save = findSave()
   assert.ok(save && !save.disabled, 'Save must enable once a cell is edited')
   await click(save)
@@ -198,6 +198,24 @@ test('a non-JSON 502 surfaces the fallback with the status, never a SyntaxError'
   const errors = errorToasts()
   assert.ok(errors.some((m) => m.includes('(status 502)')), `expected a status-502 toast, got ${JSON.stringify(errors)}`)
   assert.ok(errors.every((m) => !/SyntaxError|Unexpected token/.test(m)), 'no parse error may surface')
+})
+
+test('a decimal comma is refused with its remedy before anything is posted', async (t) => {
+  let posts = 0
+  await mount(t, () => {
+    posts += 1
+    return Response.json({ created: 1, updated: 0, deleted: 0 })
+  })
+  await editCell('12,34')
+  const save = findSave()
+  assert.ok(save, 'Save must render')
+  await click(save)
+  // The shared classifier reads 12,34 as twelve-thirty-four (decimal comma),
+  // never as a thousands separator to strip — that remedy would store 1234.
+  assert.match(document.body.textContent ?? '', /must use "\." as the decimal point/)
+  assert.match(document.body.textContent ?? '', /12\.34/)
+  assert.equal(posts, 0, 'an unreadable carry-in must never reach the server')
+  assert.deepEqual(successToasts(), [], 'a refused save must not toast success')
 })
 
 test('a thrown fetch toasts instead of escaping as an unhandled rejection', async (t) => {
