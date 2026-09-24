@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { amendLockedWeek, amendTimeEntry } from '../../../../lib/time-amendment'
 import {
   isIsoDate,
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
       if (!sourceEmployee) {
         return NextResponse.json({ error: 'Entry not found' }, { status: 422 })
       }
-      const result = await amendTimeEntry(gate.user.orgId, gate.user.id, body.entryId)
+      const result = await amendTimeEntry(gate.user.orgId, gate.user.id, body.entryId, gate.allowedSubsidiaryIds)
       return NextResponse.json(result, { status: 201 })
     }
     if (!body.employee || !isUuid(body.employee)) {
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Employee not found' }, { status: 422 })
     }
     const week = weekStart(body.week)
-    const result = await amendLockedWeek(gate.user.orgId, gate.user.id, ownedEmployee, week)
+    const result = await amendLockedWeek(gate.user.orgId, gate.user.id, ownedEmployee, week, gate.allowedSubsidiaryIds)
     const payload = await loadWeek(
       gate.user.orgId,
       ownedEmployee,
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
     )
     return NextResponse.json({ ...payload, ...result }, { status: 201 })
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ error: e instanceof Error ? e.message : 'could not amend' }, { status: 422 })
   }
 }

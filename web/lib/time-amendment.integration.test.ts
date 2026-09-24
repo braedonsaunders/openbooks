@@ -9,7 +9,9 @@ registerHooks({resolve(specifier,context,next){
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, seedFlowActors, seedActiveEmployment, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { amendTimeEntry } = await import('./time-amendment')
+const { ScopeNotFoundError } = await import('@openbooks/engine/src/organization/subsidiary-scope.ts')
+const { pinTimesheetEntryEmployee, weekStart } = await import('../app/api/timesheets/_lib.ts')
+const { amendLockedWeek, amendTimeEntry } = await import('./time-amendment')
 const { approveSubmittedTimeEntries } = await import('./time-approval')
 
 /**
@@ -51,7 +53,7 @@ test('an amendment carries the original snapshots and approves as an exact contr
       await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, approved_by, approved_at, created_by, updated_by)
         values (${randomUUID()}, ${org.orgId}, ${employee}, ${week}, 'approved', ${actor}, now(), ${actor}, ${actor})`)
 
-      const { id: amendment } = await amendTimeEntry(org.orgId, actor, original)
+      const { id: amendment } = await amendTimeEntry(org.orgId, actor, original, null)
       const snapshot = async () => (await db.execute<Record<string, unknown>>(sql`
         select hours::text as hours, bill_rate::text as bill_rate, cost_rate::text as cost_rate, costing_basis,
                project_task_id, memo_is_private, field_ticket_id, status, overhead_journal_entry_id
@@ -113,7 +115,7 @@ test('amending an editable entry is refused and writes no offset', {skip:!proces
           (id, org_id, employee_party_id, worked_on, hours, project_id, status, is_billable, custom, created_by, updated_by)
           values (${entry}, ${org.orgId}, ${employee}, ${org.date}, '8.0000', ${project}, ${status}, true, '{}'::jsonb, ${actor}, ${actor})`)
         await assert.rejects(
-          amendTimeEntry(org.orgId, actor, entry),
+          amendTimeEntry(org.orgId, actor, entry, null),
           /only an approved entry can be amended/,
           status,
         )
@@ -148,7 +150,7 @@ test('amending a project-linked entry refuses while Projects is disabled', {skip
       // Projects disable-blocker — so it must refuse instead.
       await db.execute(sql`update orgs set settings = jsonb_set(settings,'{features,projects}','false'::jsonb) where id = ${org.orgId}`)
       await assert.rejects(
-        amendTimeEntry(org.orgId, actor, original),
+        amendTimeEntry(org.orgId, actor, original, null),
         /Projects feature is disabled/,
       )
       const offsets = (await db.execute<{ n: number }>(sql`
@@ -156,6 +158,47 @@ test('amending a project-linked entry refuses while Projects is disabled', {skip
          where org_id = ${org.orgId} and amends_entry_id = ${original}`)).rows[0]!.n
       assert.equal(offsets, 0, 'the refused amendment writes no contra entry')
     } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  })
+})
+
+test('an amendment rechecks employee scope under the transaction lock', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId
+      const employee = randomUUID(), original = randomUUID(), subsidiaryB = randomUUID()
+      await db.execute(sql`insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${subsidiaryB}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${employee}, ${org.orgId}, 'employee', 'Scope recheck worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await seedActiveEmployment(org.orgId, employee)
+      await db.execute(sql`insert into time_entries
+        (id, org_id, employee_party_id, worked_on, hours, status, is_billable, custom, created_by, updated_by)
+        values (${original}, ${org.orgId}, ${employee}, ${org.date}, '8.0000', 'approved', false, '{}'::jsonb, ${actor}, ${actor})`)
+      await db.execute(sql`insert into timesheet_weeks
+        (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
+        values (${randomUUID()}, ${org.orgId}, ${employee}, ${weekStart(org.date)}, 'approved', ${actor}, ${actor})`)
+
+      const allowed = new Set([org.subsidiaryId])
+      assert.equal(await pinTimesheetEntryEmployee(org.orgId, original, allowed), employee)
+      await db.execute(sql`update parties set subsidiary_id = ${subsidiaryB} where org_id = ${org.orgId} and id = ${employee}`)
+      // Every amendment writer must enforce the subject's current subsidiary
+      // under its own transaction lock, regardless of which editor path calls it.
+      const amendmentWriters = [
+        ['entry amendment', () => amendTimeEntry(org.orgId, actor, original, allowed)],
+        ['locked-week amendment', () => amendLockedWeek(org.orgId, actor, employee, weekStart(org.date), allowed)],
+      ] as const
+      for (const [name, write] of amendmentWriters) {
+        await assert.rejects(write(), (error: unknown) => error instanceof ScopeNotFoundError, name)
+      }
+      const offsets = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from time_entries where org_id = ${org.orgId} and amends_entry_id = ${original}`)).rows[0]!.n
+      assert.equal(offsets, 0, 'a rehomed source never produces an out-of-scope contra')
+    } finally {
+      await db.execute(sql`delete from time_entries where org_id = ${org.orgId}`)
       await dropScratchOrg(org.orgId)
     }
   })
