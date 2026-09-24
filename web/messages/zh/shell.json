@@ -205,5 +205,33 @@
     "workingIssues": "正在查找已知问题…",
     "workingFile": "正在提交产品问题…",
     "workingDefault": "正在分析您的反馈…"
-  }
+  },
+  "securityPage": {
+  "title": "登录安全",
+  "description": "使用验证器保护账户，并查看当前活跃的浏览器会话。",
+  "authenticatorTitle": "多重身份验证",
+  "enabled": "已启用 · 剩余 {count} 个恢复码",
+  "disabledDescription": "使用密码或 SSO 登录后，要求输入限时验证码。",
+  "confirmPassword": "确认当前密码",
+  "setupAuthenticator": "设置验证器",
+  "setupKey": "验证器设置密钥",
+  "setupKeyHelp": "将此密钥添加为六位数 TOTP 账户。",
+  "setupExpiry": "此设置将在 10 分钟后或五次错误确认后过期。",
+  "confirmCode": "确认六位数验证码",
+  "enableMfa": "启用多重身份验证",
+  "currentCode": "当前验证器代码或恢复码",
+  "passwordRequired": "密码（进行任一更改都需要）",
+  "replaceRecoveryCodes": "更换恢复码",
+  "disableMfa": "停用多重身份验证",
+  "saveRecoveryCodes": "立即保存这些恢复码",
+  "recoveryCodesHelp": "每个代码只能使用一次，之后不会再次显示。",
+  "copyCodes": "复制代码",
+  "sessionsTitle": "活跃会话",
+  "sessionsDescription": "撤销浏览器会话，而无需更改密码。",
+  "thisSession": "当前会话",
+  "browserSession": "浏览器会话",
+  "lastUsed": "上次使用：{date}",
+  "revoke": "撤销",
+  "revokeOtherSessions": "撤销其他所有会话"
+}
 }
