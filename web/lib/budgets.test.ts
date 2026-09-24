@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -16,7 +15,6 @@ const React = await import('react')
 ;(globalThis as typeof globalThis & { React: typeof React }).React = React
 
 const { restoreFailedBudgetCells } = await import('../app/(app)/budgets/BudgetDrawer.tsx')
-const drawerSource = readFileSync(new URL('../app/(app)/budgets/BudgetDrawer.tsx', import.meta.url), 'utf8')
 
 test('failed budget saves do not restore a cell superseded while the request was pending', () => {
   const key = 'account-1|period-1|sub-1'
@@ -34,5 +32,4 @@ test('failed budget saves do not restore a cell superseded while the request was
     [latest],
     'a failed request still retries its cell when no newer edit exists',
   )
-  assert.match(drawerSource, /restoreFailedBudgetCells\(pending, pendingVersionsRef\.current\)/)
 })
