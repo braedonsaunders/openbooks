@@ -1070,6 +1070,7 @@ function ToleranceDrawer({
   text: (key: string, fallback: string) => string
   money: (value: string) => string
 }) {
+  const tCommon = useTranslations('common')
   const [slotKey, setSlotKey] = useState('')
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
@@ -1226,7 +1227,7 @@ function ToleranceDrawer({
                     {tolerance.reason}
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => void remove(tolerance)}>
+                <Button variant="ghost" size="sm" aria-label={tCommon('actions.delete')} onClick={() => void remove(tolerance)}>
                   <Trash2 size={14} aria-hidden />
                 </Button>
               </li>
