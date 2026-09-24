@@ -65,11 +65,14 @@ async function fixture() {
       insert into accounts (id, org_id, number, name, type, is_summary, is_active)
       values (${randomUUID()}, ${org.orgId}, ${number}, 'Dupe Account', 'expense', false, true)`)
   }
+  const sub = (await db.execute<{ id: string }>(sql`
+    insert into subsidiaries (org_id, parent_id, name, base_currency, country)
+    values (${org.orgId}, ${org.subsidiaryId}, 'Hidden Budget Branch', 'CAD', 'CA') returning id`)).rows[0]!
   // Two departments sharing one name (codes differ): same refusal.
-  for (const code of ['D1', 'D2']) {
+  for (const [code, subsidiaryId] of [['D1', org.subsidiaryId], ['D2', sub.id]] as const) {
     await db.execute(sql`
-      insert into departments (id, org_id, code, name, is_active)
-      values (${randomUUID()}, ${org.orgId}, ${code}, 'Dupe Dept', true)`)
+      insert into departments (id, org_id, subsidiary_id, code, name, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${subsidiaryId}, ${code}, 'Dupe Dept', true)`)
   }
   // A second calendar reusing the default period's name.
   const otherCalendar = randomUUID()
@@ -87,7 +90,7 @@ async function fixture() {
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
     values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Ambiguity Target', 'budget', 'draft')`)
-  return { org, accountNumber, scenarioId, otherPeriod }
+  return { org, subB: sub.id, accountNumber, scenarioId, otherPeriod }
 }
 
 test('import refuses ambiguous names naming the candidates', { skip: !DB }, async () => {
@@ -140,6 +143,32 @@ test('import resolves a repeated period name within the default calendar', { ski
       select period_id from budget_lines where scenario_id = ${f.scenarioId} and org_id = ${f.org.orgId}`)).rows[0]!
     assert.equal(line.period_id, f.org.periodId, 'the line lands on the default-calendar period, not the same-named one')
   } finally {
+    await dropScratchOrg(f.org.orgId)
+  }
+})
+
+test('a scoped import resolves dimension names only among visible subsidiaries', { skip: !DB }, async () => {
+  const f = await fixture()
+  try {
+    state.allowed = new Set([f.org.subsidiaryId])
+    await db.execute(sql`update accounts set subsidiary_id = ${f.org.subsidiaryId}
+      where org_id = ${f.org.orgId} and id = ${f.org.accounts.cogs}`)
+    const text = csv([
+      ['Account Number', 'Period', 'Department', 'Amount'],
+      [f.accountNumber, '2026-07', 'Dupe Dept', '100'],
+    ])
+    const dry = await post(f.scenarioId, { format: 'csv', text, expectedRevision: 1 })
+    assert.equal(dry.status, 200)
+    const result = await dry.json() as {
+      valid: boolean
+      errors: { field: string; message: string }[]
+      sample: { departmentId: string | null }[]
+    }
+    assert.equal(result.valid, true, `only the visible department should participate in resolution: ${JSON.stringify(result.errors)}`)
+    assert.deepEqual(result.errors, [])
+    assert.ok(result.sample[0]?.departmentId)
+  } finally {
+    state.allowed = null
     await dropScratchOrg(f.org.orgId)
   }
 })
