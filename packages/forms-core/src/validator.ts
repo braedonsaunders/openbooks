@@ -10,7 +10,16 @@ import {
 } from './evaluator'
 import { FIELD_TYPES, isResponseValueField, type FileMeta } from './field-types'
 import {
+  canonicalDecimal,
+  compareExactDecimals,
+  exactDecimalOfNumber,
+  parseExactDecimalParts,
+  renderExactDecimal,
+  type ExactDecimal,
+} from './decimals'
+import {
   textValidationHardLimit,
+  type FieldType,
   type FormField,
   type FormSchemaV1,
   type FormSection,
@@ -72,6 +81,53 @@ function isFileMeta(v: unknown): v is FileMeta {
   )
 }
 
+/** Default decimal scale of a currency field: money is two places. */
+const CURRENCY_SCALE = 2
+
+const MAX_NUMERIC_PARTS: ExactDecimal = { units: BigInt(MAX_NUMERIC_ABS), scale: 0 }
+const MIN_NUMERIC_PARTS: ExactDecimal = { units: -BigInt(MAX_NUMERIC_ABS), scale: 0 }
+
+type ExactNumericInput = { text: string; parts: ExactDecimal } | { error: string }
+
+/**
+ * Measure a number/currency/percentage submission exactly. Currency accepts
+ * exact decimal strings (and numbers whose exact expansion fits the scale);
+ * numbers and percentages accept JSON numbers, bounded by the declared scale
+ * when one is declared. Anything else is a named refusal, never a coercion.
+ */
+function exactNumericInput(
+  type: FieldType,
+  value: unknown,
+  scale: number | undefined,
+): ExactNumericInput {
+  if (type === 'currency') {
+    const places = scale ?? CURRENCY_SCALE
+    if (typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) {
+      return { error: 'Must be a number' }
+    }
+    const canonical = canonicalDecimal(value, places)
+    if (canonical === null) {
+      return typeof value === 'string'
+        ? { error: `Must be an exact decimal amount with at most ${places} decimal places` }
+        : { error: `Must have at most ${places} decimal places` }
+    }
+    return { text: canonical, parts: parseExactDecimalParts(canonical)! }
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) return { error: 'Must be a number' }
+  if (scale === undefined) return { text: String(value), parts: exactDecimalOfNumber(value)! }
+  const parts = exactDecimalOfNumber(value)
+  if (!parts || parts.scale > scale) return { error: `Must have at most ${scale} decimal places` }
+  return { text: renderExactDecimal(parts.units, parts.scale), parts }
+}
+
+/** Exact comparison against a configured bound (bounds are plain numbers). */
+function compareToBound(input: { text: string; parts: ExactDecimal }, bound: number): -1 | 0 | 1 {
+  const boundParts = exactDecimalOfNumber(bound)
+  if (boundParts) return compareExactDecimals(input.parts, boundParts)
+  const n = Number(input.text)
+  return n < bound ? -1 : n > bound ? 1 : 0
+}
+
 /** Validate ONE field's value. Returns error messages (empty = valid). */
 function fieldValueErrors(field: FormField, value: unknown): string[] {
   const errors: string[] = []
@@ -109,26 +165,54 @@ function fieldValueErrors(field: FormField, value: unknown): string[] {
 
     case 'number':
     case 'currency':
-    case 'percentage':
+    case 'percentage': {
+      // Money and measured values are exact decimals, never binary floats. A
+      // currency value must be an exact decimal string within the field's
+      // scale (a submitted number is measured through the same parser and
+      // refused over-scale); a number or percentage value must fit its
+      // declared scale when one is declared. Over-precision is refused by
+      // name — silently rounding it would store an amount nobody typed.
+      const scale = field.validation?.scale ?? (field.type === 'currency' ? CURRENCY_SCALE : undefined)
+      const input = exactNumericInput(field.type, value, scale)
+      if ('error' in input) {
+        fail(input.error)
+        break
+      }
+      if (
+        compareExactDecimals(input.parts, MAX_NUMERIC_PARTS) > 0 ||
+        compareExactDecimals(input.parts, MIN_NUMERIC_PARTS) < 0
+      ) {
+        fail('Number is out of range')
+      }
+      const configMin = typeof field.config?.min === 'number' ? field.config.min : undefined
+      const configMax = typeof field.config?.max === 'number' ? field.config.max : undefined
+      if (configMin !== undefined && compareToBound(input, configMin) < 0) {
+        fail(`Must be at least ${configMin}`)
+      }
+      if (configMax !== undefined && compareToBound(input, configMax) > 0) {
+        fail(`Must be no more than ${configMax}`)
+      }
+      if (validation?.min !== undefined && compareToBound(input, validation.min) < 0) {
+        fail(`Must be at least ${validation.min}`)
+      }
+      if (validation?.max !== undefined && compareToBound(input, validation.max) > 0) {
+        fail(`Must be no more than ${validation.max}`)
+      }
+      break
+    }
+
     case 'rating': {
       if (typeof value !== 'number' || !Number.isFinite(value)) {
         fail('Must be a number')
         break
       }
       if (Math.abs(value) > MAX_NUMERIC_ABS) fail('Number is out of range')
-      const configMin = typeof field.config?.min === 'number' ? field.config.min : undefined
-      const configMax = typeof field.config?.max === 'number' ? field.config.max : undefined
-      if (field.type === 'rating') {
-        const scaleMax =
-          typeof field.config?.max === 'number' && Number.isInteger(field.config.max)
-            ? field.config.max
-            : 5
-        if (!Number.isInteger(value) || value < 1 || value > scaleMax) {
-          fail(`Must be a whole number between 1 and ${scaleMax}`)
-        }
-      } else {
-        if (configMin !== undefined && value < configMin) fail(`Must be at least ${configMin}`)
-        if (configMax !== undefined && value > configMax) fail(`Must be no more than ${configMax}`)
+      const scaleMax =
+        typeof field.config?.max === 'number' && Number.isInteger(field.config.max)
+          ? field.config.max
+          : 5
+      if (!Number.isInteger(value) || value < 1 || value > scaleMax) {
+        fail(`Must be a whole number between 1 and ${scaleMax}`)
       }
       if (validation?.min !== undefined && value < validation.min) {
         fail(`Must be at least ${validation.min}`)
