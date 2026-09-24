@@ -184,7 +184,7 @@ function requireHeadcount(value: unknown): number {
 
 const DECIMAL_4 = /^\d+(\.\d{1,4})?$/;
 
-function requireCompensation(value: unknown): RequisitionCompensation | null {
+export function requireCompensation(value: unknown): RequisitionCompensation | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "object") {
     throw new RecruitingError("INVALID_INPUT", "compensation travels as an all-or-nothing range (min, max, currency, basis) — send all four or none");
@@ -195,6 +195,13 @@ function requireCompensation(value: unknown): RequisitionCompensation | null {
   }
   if (typeof max !== "string" || !DECIMAL_4.test(max)) {
     throw new RecruitingError("INVALID_INPUT", "compensation max must be a decimal with up to 4 fraction digits");
+  }
+  const scaled = (amount: string): bigint => {
+    const [whole, fraction = ""] = amount.split(".");
+    return BigInt(`${whole}${fraction.padEnd(4, "0")}`);
+  };
+  if (scaled(min) > scaled(max)) {
+    throw new RecruitingError("INVALID_INPUT", "compensation min exceeds max — enter a range where the minimum is no greater than the maximum");
   }
   if (typeof currency !== "string" || !/^[A-Z]{3}$/.test(currency)) {
     throw new RecruitingError("INVALID_INPUT", "compensation currency must be a 3-letter code");
