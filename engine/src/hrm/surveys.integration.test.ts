@@ -152,6 +152,27 @@ test("anonymous responses store no link and results aggregate", { skip: !DB }, a
   });
 });
 
+test("concurrent opens of one draft commit a single audience", { skip: !DB }, async () => {
+  await withHarness(2, async (h: Harness) => {
+    const survey = await makeSurvey(h, "anonymous", 2);
+    const outcomes = await Promise.allSettled([
+      openSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id, partyIds: [h.parties[0]!] }),
+      openSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id, partyIds: [h.parties[1]!] }),
+    ]);
+    assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+    assert.equal(outcomes.filter((outcome) => outcome.status === "rejected").length, 1);
+    const persisted = (await db.execute<{ status: string; invitees: string }>(sql`
+      select s.status, count(i.id)::text as invitees
+        from hrm_surveys s left join hrm_survey_invitations i
+          on i.org_id = s.org_id and i.survey_id = s.id
+       where s.org_id = ${h.org.orgId} and s.id = ${survey.id}
+       group by s.id
+    `)).rows[0]!;
+    assert.equal(persisted.status, "open");
+    assert.equal(persisted.invitees, "1", "only the audience chosen by the winning open is committed");
+  });
+});
+
 test("heatmap suppresses below min_group_size and comments hide", { skip: !DB }, async () => {
   await withHarness(2, async (h: Harness) => {
     // min_group_size 3 with 2 respondents: min − 1 everywhere.
