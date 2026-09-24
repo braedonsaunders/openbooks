@@ -141,7 +141,10 @@ export function buildCpa005File(run: Cpa005Run): string {
   // The creation day arrives already zoned (a civil-day string from the
   // caller), so the A record renders byte-identical bytes on any server.
   const creationJulian = julian(run.fileCreationDate, "file creation date");
-  const txnType = /^\d{3}$/.test(s.transactionCode ?? "") ? s.transactionCode! : "460";
+  if (s.transactionCode !== undefined && (typeof s.transactionCode !== "string" || !/^\d{3}$/.test(s.transactionCode))) {
+    throw new PaymentError("CPA-005 transaction code override must be three digits; omit it to use the standard 460 code");
+  }
+  const txnType = s.transactionCode ?? "460";
 
   let recordCount = 0;
   const records: string[] = [];

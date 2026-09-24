@@ -107,6 +107,7 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   sftpServerId?: string | null;
   currency: string;
   settings?: Record<string, unknown>;
+  originatorSecrets?: Record<string, unknown> | null;
 }): Promise<void> {
   const result = (await db.execute<{ format_currency: string | null; rail: string }>(sql`
     select f.currency as format_currency, f.rail
@@ -134,6 +135,11 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   }
   if (row.rail === "positive_pay" && !String(input.settings?.positivePayAccountReference ?? "").trim()) {
     throw new PaymentError("Positive Pay requires the institution's bank account reference");
+  }
+  const transactionCode = input.originatorSecrets?.transactionCode;
+  if (row.rail === "cpa005_credit" && transactionCode !== undefined
+      && (typeof transactionCode !== "string" || !/^\d{3}$/.test(transactionCode))) {
+    throw new PaymentError("CPA-005 transaction code override must be three digits; omit it to use the standard 460 code");
   }
 }
 
@@ -219,6 +225,15 @@ export async function updatePaymentBankProfile(
     `));
     if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
     const current = existing.rows[0];
+    const rotating = input.originatorSecrets !== undefined;
+    const originatorSecrets = rotating
+      ? input.originatorSecrets === null
+        ? null
+        : {
+            ...(unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted) ?? {}),
+            ...input.originatorSecrets,
+          }
+      : unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted);
     await validatePaymentBankProfileRefs(orgId, {
       bankAccountId: input.bankAccountId ?? current.bank_account_id,
       subsidiaryId: input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId,
@@ -226,15 +241,12 @@ export async function updatePaymentBankProfile(
       currency: input.currency ?? current.currency,
       settings: input.settings ?? current.settings,
       sftpServerId: input.sftpServerId === undefined ? current.sftp_server_id : input.sftpServerId,
+      originatorSecrets,
     });
-    const rotating = input.originatorSecrets !== undefined;
     const secret = rotating
       ? input.originatorSecrets === null
         ? null
-        : sealJson({
-            ...(unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted) ?? {}),
-            ...input.originatorSecrets,
-          })
+        : sealJson(originatorSecrets ?? {})
       : current.originator_secrets_encrypted;
     const write = await tx.execute<{ id: string }>(sql`
       update payment_bank_profiles set
