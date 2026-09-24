@@ -422,7 +422,7 @@
     "orPasteBelow": "o pegue abajo",
     "statementText": "Texto del extracto",
     "pastePlaceholderOfx": "'<OFX>…<STMTTRN>…'",
-    "pastePlaceholderCsv": "Date,Description,Amount\n2026-07-02,Payroll run,-18250.00",
+    "pastePlaceholderCsv": "Fecha,Descripción,Importe\n2026-07-02,Pago de nómina,-18250.00",
     "columnMapping": "Asignación de columnas",
     "selectColumn": "Seleccionar columna…",
     "columnN": "Columna {n}",
@@ -714,9 +714,9 @@
     }
   },
   "bankFeeds": {
-    "title": "Bank Feeds",
+    "title": "Feeds bancarios",
     "description": "Conecta cuentas bancarias para la importación automatizada de extractos — feeds agregadores en directo o el endpoint SFTP integrado.",
-    "navTitle": "Bank Feeds",
+    "navTitle": "Feeds bancarios",
     "tabs": {
       "connections": "Conexiones",
       "sftp-endpoint": "Endpoint SFTP",
@@ -764,7 +764,7 @@
         "addConnection": "Añadir conexión",
         "cancel": "Cancelar"
       },
-      "title": "Bank Feeds",
+      "title": "Feeds bancarios",
       "description": "Conecta cada cuenta bancaria para la importación automatizada de extractos — feeds en directo, depósitos de archivos SFTP o subida manual. Todo se importa por el mismo proceso de conciliación.",
       "addConnection": "+ Añadir conexión",
       "empty": {
@@ -904,7 +904,7 @@
     "clearingAccountHint": "La cuenta de compensación con los cobros pendientes hasta la liquidación. Obligatoria antes de contabilizar.",
     "stripePayloadLabel": "Array JSON de transacciones de saldo",
     "genericPayloadLabel": "Objeto JSON de la liquidación",
-    "payloadShapeHint": "Cada fila requiere id, type, amount en unidades mínimas, fee, net y currency — p. ej. {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}. Sin type, la fila no se puede clasificar.",
+    "payloadShapeHint": "Cada fila requiere id, type, amount en unidades mínimas, fee, net y currency — p. ej. '{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}'. Sin type, la fila no se puede clasificar.",
     "genericPayloadHint": "Un objeto JSON por liquidación: id, moneda, importes de cargos/reembolsos/comisiones/neto y líneas opcionales.",
     "accountPlaceholder": "Seleccionar cuenta…",
     "uploadPayload": "Subir JSON",

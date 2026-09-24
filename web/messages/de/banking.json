@@ -714,9 +714,9 @@
     }
   },
   "bankFeeds": {
-    "title": "Bank Feeds",
+    "title": "Bankfeeds",
     "description": "Verbinden Sie Bankkonten für den automatisierten Auszugsimport — Live-Aggregator-Feeds oder den integrierten SFTP-Endpunkt.",
-    "navTitle": "Bank Feeds",
+    "navTitle": "Bankfeeds",
     "tabs": {
       "connections": "Verbindungen",
       "sftp-endpoint": "SFTP-Endpunkt",
@@ -726,7 +726,7 @@
     "operational": {
       "title": "Bankfeed-Verbindungen",
       "manage": "Feeds verwalten",
-      "none": "Keine aktiven Bankfeed-Verbindungen. Richten Sie eine unter Company Settings → Bank Feeds ein.",
+      "none": "Keine aktiven Bankfeed-Verbindungen. Richten Sie eine unter Einrichtung → Bankfeeds ein.",
       "lastSync": "Letzte Synchronisierung",
       "lastAttempt": "Letzter Versuch",
       "never": "Nie"
@@ -764,7 +764,7 @@
         "addConnection": "Verbindung hinzufügen",
         "cancel": "Abbrechen"
       },
-      "title": "Bank Feeds",
+      "title": "Bankfeeds",
       "description": "Verbinden Sie jedes Bankkonto für den automatisierten Auszugsimport — Live-Feeds, SFTP-Dateiablagen oder manueller Upload. Alles läuft über dieselbe Abstimmungspipeline.",
       "addConnection": "+ Verbindung hinzufügen",
       "empty": {
@@ -904,7 +904,7 @@
     "clearingAccountHint": "Das Verrechnungskonto für Anbieterforderungen bis zur Auszahlung. Vor dem Buchen erforderlich.",
     "stripePayloadLabel": "JSON-Array der Saldenbuchungen",
     "genericPayloadLabel": "JSON-Objekt der Abrechnung",
-    "payloadShapeHint": "Jede Zeile benötigt id, type, amount in Kleinsteeinheiten, fee, net und currency — z. B. {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}. Ohne type kann die Zeile nicht zugeordnet werden.",
+    "payloadShapeHint": "Jede Zeile benötigt id, type, amount in Kleinsteeinheiten, fee, net und currency — z. B. '{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}'. Ohne type kann die Zeile nicht zugeordnet werden.",
     "genericPayloadHint": "Ein JSON-Objekt für eine Abrechnung: id, Währung, Charge-/Refund-/Gebühren-/Nettobeträge und optionale Zeilen.",
     "accountPlaceholder": "Konto wählen…",
     "uploadPayload": "JSON hochladen",

@@ -714,9 +714,9 @@
     }
   },
   "bankFeeds": {
-    "title": "Bank Feeds",
+    "title": "Flux bancaires",
     "description": "Connectez les comptes bancaires pour l'import automatisé des relevés — flux agrégateurs en direct ou point de terminaison SFTP intégré.",
-    "navTitle": "Bank Feeds",
+    "navTitle": "Flux bancaires",
     "tabs": {
       "connections": "Connexions",
       "sftp-endpoint": "Point de terminaison SFTP",
@@ -764,7 +764,7 @@
         "addConnection": "Ajouter la connexion",
         "cancel": "Annuler"
       },
-      "title": "Bank Feeds",
+      "title": "Flux bancaires",
       "description": "Connectez chaque compte bancaire pour l'import automatisé des relevés — flux en direct, dépôts de fichiers SFTP ou téléversement manuel. Tout est importé via le même pipeline de rapprochement.",
       "addConnection": "+ Ajouter une connexion",
       "empty": {
@@ -904,7 +904,7 @@
     "clearingAccountHint": "Le compte de compensation portant les créances en attente de versement. Requis avant comptabilisation.",
     "stripePayloadLabel": "Tableau JSON des opérations de solde",
     "genericPayloadLabel": "Objet JSON du règlement",
-    "payloadShapeHint": "Chaque ligne requiert id, type, amount en plus petites unités, fee, net et currency — p. ex. {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}. Sans type, la ligne ne peut pas être classée.",
+    "payloadShapeHint": "Chaque ligne requiert id, type, amount en plus petites unités, fee, net et currency — p. ex. '{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}'. Sans type, la ligne ne peut pas être classée.",
     "genericPayloadHint": "Un objet JSON par règlement : id, devise, montants des paiements/remboursements/frais/nets, et lignes facultatives.",
     "accountPlaceholder": "Sélectionner un compte…",
     "uploadPayload": "Importer un JSON",

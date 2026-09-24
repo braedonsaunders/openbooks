@@ -422,7 +422,7 @@
     "orPasteBelow": "または以下に貼り付け",
     "statementText": "明細テキスト",
     "pastePlaceholderOfx": "'<OFX>…<STMTTRN>…'",
-    "pastePlaceholderCsv": "Date,Description,Amount\n2026-07-02,Payroll run,-18250.00",
+    "pastePlaceholderCsv": "日付,説明,金額\n2026-07-02,給与支払,-18250.00",
     "columnMapping": "列マッピング",
     "selectColumn": "列を選択…",
     "columnN": "列 {n}",
@@ -714,9 +714,9 @@
     }
   },
   "bankFeeds": {
-    "title": "Bank Feeds",
+    "title": "銀行フィード",
     "description": "銀行口座を接続して明細を自動インポートします — ライブアグリゲーターフィードまたは内蔵SFTPエンドポイント。",
-    "navTitle": "Bank Feeds",
+    "navTitle": "銀行フィード",
     "tabs": {
       "connections": "接続",
       "sftp-endpoint": "SFTPエンドポイント",
@@ -726,7 +726,7 @@
     "operational": {
       "title": "銀行フィード接続",
       "manage": "フィードを管理",
-      "none": "有効な銀行フィード接続がありません。Company Settings → Bank Feeds で設定してください。",
+      "none": "有効な銀行フィード接続がありません。セットアップ → 銀行フィード で設定してください。",
       "lastSync": "最終同期",
       "lastAttempt": "最終試行",
       "never": "なし"
@@ -764,7 +764,7 @@
         "addConnection": "接続を追加",
         "cancel": "キャンセル"
       },
-      "title": "Bank Feeds",
+      "title": "銀行フィード",
       "description": "各銀行口座を接続して明細の自動インポートを設定します — ライブフィード、SFTPファイル受信、手動アップロード。すべて同じ照合パイプラインでインポートされます。",
       "addConnection": "+ 接続を追加",
       "empty": {
@@ -904,7 +904,7 @@
     "clearingAccountHint": "支払いまでプロバイダー売掛金を保持するクリアリング口座。転記前に必須。",
     "stripePayloadLabel": "残高取引の JSON 配列",
     "genericPayloadLabel": "決済明細の JSON オブジェクト",
-    "payloadShapeHint": "各行に id、type、最小単位の amount、fee、net、currency が必要です — 例: {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}。type がない行は分類できません。",
+    "payloadShapeHint": "各行に id、type、最小単位の amount、fee、net、currency が必要です — 例: '{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}'。type がない行は分類できません。",
     "genericPayloadHint": "1件の決済ごとのJSONオブジェクト1件: id、通貨、請求/返金/手数料/正味金額、任意の明細。",
     "accountPlaceholder": "口座を選択…",
     "uploadPayload": "JSONをアップロード",
