@@ -24,7 +24,7 @@
   "emptyResultSet": "A consulta não retornou colunas",
   "noFilterMatch": "Nenhuma linha corresponde ao seu filtro",
   "rail": {
-    "schema": "Schema",
+    "schema": "Esquema",
     "snippets": "Trechos",
     "history": "Histórico"
   },
