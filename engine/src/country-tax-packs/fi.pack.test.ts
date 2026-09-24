@@ -87,6 +87,20 @@ test("the primary code is the standard band and the post-2026 bands are current"
   assert.equal(byCode.get("FI-VAT-ZERO")?.role, "zero");
 });
 
+test("the 10% band predates the 2025 narrowing instead of opening at it", () => {
+  const byCode = new Map(packTaxCodesForReturn(pack, "FI_ALV").map((definition) => [definition.code, definition] as const));
+  // The Vero rates page records most 10% supplies moving to 14% on
+  // 2025-01-01: a single row opening that day refuses every pre-2025
+  // document priced at the broad 10%.
+  assert.deepEqual(
+    byCode.get("FI-VAT-RED10")!.rates!.map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
+    [
+      [10, "2013-01-01", "2024-12-31"],
+      [10, "2025-01-01", null],
+    ],
+  );
+});
+
 test("Finland evidence stays on vero.fi hosts with well-formed metadata", () => {
   assert.ok(pack.sources.length > 0);
   for (const source of pack.sources) {
