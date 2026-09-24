@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import {
   assertTaxYear,
   declaredEmployerLevyFields,
@@ -8,10 +9,12 @@ import {
   saveEmployerLevyOpening,
   type DeclaredEmployerLevyField,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
-import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
+import type { CellValue, ImportMode, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resources'
 import {
+  duplicateImportRowIndexes,
   enforceExportRowLimit,
+  importRowAction,
   type ReadCtx,
 } from './resource-core'
 
@@ -117,13 +120,21 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
       const fields = resourceFields()
       return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows }
     },
-    async write(rows, _mode, ctx: WriteCtx) {
+    async write(rows, mode: ImportMode, ctx: WriteCtx) {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
-      // One strict save per row, like the sibling resources: the engine call
-      // is all-or-nothing, and resource outcomes are per-row, so each row
-      // stands or fails on its own with its own message.
+      const existingByYear = new Map<number, Set<string>>()
+      const prepared: ({
+        taxYear: number
+        country: string
+        levyKey: string
+        region: string | null
+        baseYtd: string
+        key: string
+      } | { error: string })[] = []
+
+      // Resolve and validate every row before writing: duplicate natural keys
+      // must refuse every colliding row, not let input order choose the winner.
       for (let index = 0; index < rows.length; index++) {
-        const rowNo = index + 1
         const src = rows[index]!
         try {
           const taxYear = assertTaxYear(src.taxYear)
@@ -135,31 +146,68 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
           if ('error' in resolved) throw new Error(resolved.error)
           const regionRaw = String(src.region ?? '').trim()
           const region = regionRaw === '' ? null : regionRaw
-          const baseYtd = src.baseYtd
-          if (baseYtd == null || String(baseYtd).trim() === '') throw new Error('base year-to-date is required')
-          if (ctx.dryRun) {
-            outcome.created++
-            continue
+          if (resolved.scope === 'region' && region === null) {
+            throw new Error(`levy "${resolved.levyKey}" is assessed per region — name the region this history belongs to`)
           }
+          if (resolved.scope === 'org' && region !== null) {
+            throw new Error(`levy "${resolved.levyKey}" is employer-wide — it carries no region`)
+          }
+          const rawBase = String(src.baseYtd ?? '').trim()
+          if (!rawBase) throw new Error('base year-to-date is required')
+          const baseYtd = normalizeMoney(rawBase)
+          if (cmp(baseYtd, '0') < 0) throw new Error('base is history already earned — never less than zero')
+          const key = `${taxYear}\0${resolved.country}\0${resolved.levyKey}\0${region ?? ''}`
+          if (!existingByYear.has(taxYear)) {
+            const stored = await employerLevyOpeningsForYear(ctx.orgId, taxYear)
+            existingByYear.set(taxYear, new Set(stored.map((opening) =>
+              `${taxYear}\0${opening.country}\0${opening.levyKey}\0${opening.region ?? ''}`)))
+          }
+          prepared.push({ taxYear, country: resolved.country, levyKey: resolved.levyKey, region, baseYtd, key })
+        } catch (error) {
+          prepared.push({ error: error instanceof Error ? error.message : 'write failed' })
+        }
+      }
+
+      const duplicates = duplicateImportRowIndexes(prepared.map((row) => 'error' in row ? null : row.key))
+      for (const index of duplicates) {
+        outcome.failed++
+        outcome.errors.push({ row: index + 1, message: 'this employer levy carry-in appears more than once in this load — keep one row per country, levy, region, and tax year' })
+      }
+
+      for (let index = 0; index < prepared.length; index++) {
+        const row = prepared[index]!
+        if ('error' in row) {
+          outcome.failed++
+          outcome.errors.push({ row: index + 1, message: row.error })
+          continue
+        }
+        if (duplicates.has(index)) continue
+        const action = importRowAction(mode, existingByYear.get(row.taxYear)!.has(row.key))
+        if (action === 'conflict') {
+          outcome.failed++
+          outcome.errors.push({ row: index + 1, message: 'this employer levy carry-in already exists — choose upsert to replace it' })
+          continue
+        }
+        if (ctx.dryRun) {
+          if (action === 'update') outcome.updated++
+          else outcome.created++
+          continue
+        }
+        try {
           const result = await saveEmployerLevyOpening({
             orgId: ctx.orgId,
             actorId: ctx.actorId,
-            taxYear,
-            rows: [{
-              country: resolved.country,
-              levyKey: resolved.levyKey,
-              region,
-              baseYtd: String(baseYtd).trim(),
-            }],
+            taxYear: row.taxYear,
+            mode,
+            rows: [{ country: row.country, levyKey: row.levyKey, region: row.region, baseYtd: row.baseYtd }],
           })
           outcome.created += result.created
           outcome.updated += result.updated + result.deleted
+          if (result.created > 0) existingByYear.get(row.taxYear)!.add(row.key)
+          if (result.deleted > 0) existingByYear.get(row.taxYear)!.delete(row.key)
         } catch (error) {
           outcome.failed++
-          outcome.errors.push({
-            row: rowNo,
-            message: error instanceof Error ? error.message : 'write failed',
-          })
+          outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' })
         }
       }
       return outcome

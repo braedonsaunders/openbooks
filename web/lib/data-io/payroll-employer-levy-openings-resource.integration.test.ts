@@ -23,6 +23,7 @@ hooks.deregister();
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { cmp } = await import("@openbooks/engine/src/money/money.ts");
+const { employerLevyOpeningsForYear } = await import("@openbooks/engine/src/payroll/opening-balances.ts");
 const { PAYROLL_COUNTRY_PACKS } = await import("@openbooks/engine/src/payroll/packs.ts");
 const { setPackSlotAccount } = await import("@openbooks/engine/src/payroll/packs.ts");
 const { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
@@ -214,6 +215,54 @@ test(
         const count = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from payroll_employer_levy_opening where org_id = ${org.orgId}`));
         assert.equal(count.rows[0]!.n, 0);
+      });
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "employer carry-in imports preflight amounts, duplicate keys, and insert versus upsert consistently",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    try {
+      await withDeclarations([thresholdLevy()], async () => {
+        const resource = payrollEmployerLevyOpeningsResource(org.orgId);
+        const previewCtx = { orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null };
+        const row = (baseYtd: unknown) => ({ country: "CA", levy: "synth_threshold", region: "", taxYear: 2026, baseYtd });
+
+        const invalidPreview = await resource.write([row("not-money")], "insert", previewCtx);
+        assert.equal(invalidPreview.failed, 1);
+        assert.equal(invalidPreview.created, 0);
+
+        const duplicate = await resource.write([row("100"), row("200")], "insert", previewCtx);
+        assert.equal(duplicate.failed, 2);
+        assert.equal(duplicate.created, 0);
+
+        const inserted = await resource.write([row("100")], "insert", { ...previewCtx, dryRun: false });
+        assert.equal(inserted.created, 1);
+        assert.equal(inserted.failed, 0);
+
+        const insertPreview = await resource.write([row("200")], "insert", previewCtx);
+        assert.equal(insertPreview.failed, 1);
+        assert.equal(insertPreview.updated, 0);
+        const blockedInsert = await resource.write([row("200")], "insert", { ...previewCtx, dryRun: false });
+        assert.equal(blockedInsert.failed, 1);
+        assert.equal(blockedInsert.updated, 0);
+
+        const upsertPreview = await resource.write([row("250")], "upsert", previewCtx);
+        assert.equal(upsertPreview.failed, 0);
+        assert.equal(upsertPreview.updated, 1);
+        const upserted = await resource.write([row("250")], "upsert", { ...previewCtx, dryRun: false });
+        assert.equal(upserted.failed, 0);
+        assert.equal(upserted.updated, 1);
+
+        const stored = await employerLevyOpeningsForYear(org.orgId, 2026);
+        assert.equal(stored.length, 1);
+        assert.equal(stored[0]!.baseYtd, "250.0000");
       });
     } finally {
       await dropScratchOrgReporting(org.orgId);
