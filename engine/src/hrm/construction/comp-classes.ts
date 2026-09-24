@@ -1,14 +1,22 @@
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
-import { requireHrmConstructionManage, requireHrmConstructionRead } from "../authorization.ts";
+import {
+  requireConstructionScope,
+  requireHrmConstructionRead,
+  requireUnrestrictedHrmScope,
+} from "../authorization.ts";
 import { recordFinding } from "./findings.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { compRuleMatches, pickCompRule, type CompMatch, type CompTarget } from "./pure.ts";
 import {
   HRM_WORKERS_COMP_FEATURE,
   assertConstructionFeature,
+  assertEmploymentInScope,
+  assertProjectInScope,
   requireDate,
   requireId,
   requireText,
+  withOrgTransaction,
   type SqlExecutor,
 } from "./shared.ts";
 
@@ -55,47 +63,51 @@ export async function listCompClasses(exec: SqlExecutor, orgId: string, actorId:
 export async function createCompClass(
   exec: SqlExecutor,
   input: {
-    orgId: string;
-    actorId: string;
-    code: string;
-    name: string;
-    jurisdictionCode?: string | null;
-    ratePer100?: string | null;
-    effectiveFrom: string;
-  },
-): Promise<CompClass> {
+  orgId: string;
+  actorId: string;
+  code: string;
+  name: string;
+  jurisdictionCode?: string | null;
+  ratePer100?: string | null;
+  effectiveFrom: string;
+}): Promise<CompClass> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
-  await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp classes");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
+  const actorId = requireId(input.actorId, "actorId");
   const code = requireText(input.code, "code");
   const name = requireText(input.name, "name");
   if (input.ratePer100 !== undefined && input.ratePer100 !== null && !/^\d+(\.\d{1,4})?$/.test(input.ratePer100)) {
     throw new HrmConstructionError(`ratePer100 must be a non-negative decimal with at most 4 places — got ${input.ratePer100}.`);
   }
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
-  try {
-    const created = (
-      await exec.execute<{ id: string }>(sql`
-        insert into hrm_comp_classes
-          (org_id, code, name, jurisdiction_code, rate_per_100, effective_from, created_by, updated_by)
-        values (${orgId}::uuid, ${code}, ${name}, ${input.jurisdictionCode ?? null},
-                ${input.ratePer100 ?? null}, ${effectiveFrom}::date,
-                ${input.actorId}::uuid, ${input.actorId}::uuid)
-        returning id::text as id
-      `)
-    ).rows[0];
-    if (!created) throw new HrmConstructionError(`Comp class ${code} was not created — no row was written.`);
-    const rows = await listCompClasses(exec, orgId, input.actorId);
-    const found = rows.find((row) => row.id === created.id);
-    if (!found) throw new HrmConstructionError(`Comp class ${code} was not created — it cannot be read back.`);
-    return found;
-  } catch (error) {
-    if (error instanceof HrmConstructionError) throw error;
-    throw new HrmConstructionError(
-      `Comp class ${code} cannot be saved — its code is already in use in this organization.`,
-    );
-  }
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp classes");
+    // Premium classes price every entity's exposure: org-wide config
+    // needs unrestricted scope (named 403).
+    await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    await requireUnrestrictedHrmScope(exec, orgId, actorId);
+    try {
+      const created = (
+        await exec.execute<{ id: string }>(sql`
+          insert into hrm_comp_classes
+            (org_id, code, name, jurisdiction_code, rate_per_100, effective_from, created_by, updated_by)
+          values (${orgId}::uuid, ${code}, ${name}, ${input.jurisdictionCode ?? null},
+                  ${input.ratePer100 ?? null}, ${effectiveFrom}::date,
+                  ${actorId}::uuid, ${actorId}::uuid)
+          returning id::text as id
+        `)
+      ).rows[0];
+      if (!created) throw new HrmConstructionError(`Comp class ${code} was not created — no row was written.`);
+      const rows = await listCompClasses(exec, orgId, actorId);
+      const found = rows.find((row) => row.id === created.id);
+      if (!found) throw new HrmConstructionError(`Comp class ${code} was not created — it cannot be read back.`);
+      return found;
+    } catch (error) {
+      if (error instanceof HrmConstructionError) throw error;
+      throw new HrmConstructionError(
+        `Comp class ${code} cannot be saved — its code is already in use in this organization.`,
+      );
+    }
+  });
 }
 
 export interface CompRule {
@@ -118,37 +130,54 @@ export async function listCompRules(
 
 export async function createCompRule(
   exec: SqlExecutor,
-  input: { orgId: string; actorId: string; priority: number; match: CompMatch; compClassId: string },
-): Promise<CompRule> {
+  input: {
+  orgId: string;
+  actorId: string;
+  priority: number;
+  match: CompMatch;
+  compClassId: string;
+}): Promise<CompRule> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
-  await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp classes");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
+  const actorId = requireId(input.actorId, "actorId");
   if (!Number.isInteger(input.priority) || input.priority < 0) {
     throw new HrmConstructionError("Rule priority must be a non-negative integer — higher wins.");
   }
   assertCompMatch(input.match);
   const compClassId = requireId(input.compClassId, "compClassId");
-  const compClass = (
-    await exec.execute<{ id: string }>(sql`
-      select id from hrm_comp_classes where org_id = ${orgId}::uuid and id = ${compClassId}::uuid
-    `)
-  ).rows[0];
-  if (!compClass) {
-    throw new HrmConstructionError(
-      `Comp class ${compClassId} does not exist in this organization — point the rule at a declared class.`,
-    );
-  }
-  const created = (
-    await exec.execute<{ id: string }>(sql`
-      insert into hrm_comp_class_rules (org_id, priority, match, comp_class_id, created_by, updated_by)
-      values (${orgId}::uuid, ${input.priority}, ${JSON.stringify(input.match)}::jsonb,
-              ${compClassId}::uuid, ${input.actorId}::uuid, ${input.actorId}::uuid)
-      returning id::text as id
-    `)
-  ).rows[0];
-  if (!created) throw new HrmConstructionError("The comp-class rule was not written — no row was created.");
-  return { id: String(created.id), priority: input.priority, match: input.match, compClassId };
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp classes");
+    // Rules price org-wide exposure: org-wide config needs unrestricted
+    // scope — except a rule naming a project, which is project-scoped
+    // config and needs scope over that project instead.
+    const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    const matchProjectId =
+      typeof input.match.project_id === "string" ? input.match.project_id : null;
+    if (matchProjectId !== null) {
+      await assertProjectInScope(exec, orgId, matchProjectId, allowed, "share");
+    } else {
+      await requireUnrestrictedHrmScope(exec, orgId, actorId);
+    }
+    const compClass = (
+      await exec.execute<{ id: string }>(sql`
+        select id from hrm_comp_classes where org_id = ${orgId}::uuid and id = ${compClassId}::uuid
+      `)
+    ).rows[0];
+    if (!compClass) {
+      throw new HrmConstructionError(
+        `Comp class ${compClassId} does not exist in this organization — point the rule at a declared class.`,
+      );
+    }
+    const created = (
+      await exec.execute<{ id: string }>(sql`
+        insert into hrm_comp_class_rules (org_id, priority, match, comp_class_id, created_by, updated_by)
+        values (${orgId}::uuid, ${input.priority}, ${JSON.stringify(input.match)}::jsonb,
+                ${compClassId}::uuid, ${actorId}::uuid, ${actorId}::uuid)
+        returning id::text as id
+      `)
+    ).rows[0];
+    if (!created) throw new HrmConstructionError("The comp-class rule was not written — no row was created.");
+    return { id: String(created.id), priority: input.priority, match: input.match, compClassId };
+  });
 }
 
 function assertCompMatch(match: CompMatch): void {
@@ -204,8 +233,16 @@ export async function classify(
   },
 ): Promise<CompClass> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
+  const actorId = requireId(input.actorId, "actorId");
   await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp-class resolution");
+  // No grant gate (costing resolution runs for actors holding no
+  // construction grant), but named anchors still fence by the actor's
+  // subsidiary lens: B's project or employment reads exactly like a
+  // fabricated id, and the unresolved finding can never be aimed
+  // cross-entity.
+  const lens = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (input.projectId) await assertProjectInScope(exec, orgId, input.projectId, lens);
+  if (input.employmentId) await assertEmploymentInScope(exec, orgId, input.employmentId, lens);
   const target: CompTarget = {
     projectId: input.projectId ?? null,
     costCodeId: input.costCodeId ?? null,
@@ -262,16 +299,10 @@ export async function dailySplit(
   const projectId = requireId(input.projectId, "projectId");
   const workedOn = requireDate(input.workedOn, "workedOn");
   await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp-class resolution");
-  const project = (
-    await exec.execute<{ id: string }>(sql`
-      select id from projects where org_id = ${orgId}::uuid and id = ${projectId}::uuid
-    `)
-  ).rows[0];
-  if (!project) {
-    throw new HrmConstructionError(
-      `Project ${projectId} does not exist in this organization — split one of its projects.`,
-    );
-  }
+  // The split exposes per-employment hours: the project must sit inside
+  // the reader's lens — a B project reads exactly like a missing one.
+  const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+  await assertProjectInScope(exec, orgId, projectId, allowed);
   const hours = (
     await exec.execute<{
       employmentId: string | null;

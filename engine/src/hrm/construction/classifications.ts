@@ -1,12 +1,19 @@
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
-import { requireHrmConstructionManage, requireHrmConstructionRead } from "../authorization.ts";
+import {
+  requireConstructionScope,
+  requireHrmConstructionRead,
+  requireUnrestrictedHrmScope,
+} from "../authorization.ts";
 import {
   HRM_CONSTRUCTION_FEATURE,
   assertConstructionFeature,
+  assertEmploymentInScope,
+  assertScheduleReferenceInScope,
   requireDate,
   requireId,
   requireText,
+  withOrgTransaction,
   type SqlExecutor,
 } from "./shared.ts";
 
@@ -73,20 +80,17 @@ export async function listClassifications(
 export async function createClassification(
   exec: SqlExecutor,
   input: {
-    orgId: string;
-    actorId: string;
-    code: string;
-    name: string;
-    trade: string;
-    isApprentice?: boolean;
-    apprenticeProgramRef?: string | null;
-    journeyClassificationId?: string | null;
-  },
-): Promise<WorkClassification> {
+  orgId: string;
+  actorId: string;
+  code: string;
+  name: string;
+  trade: string;
+  isApprentice?: boolean;
+  apprenticeProgramRef?: string | null;
+  journeyClassificationId?: string | null;
+}): Promise<WorkClassification> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
-  await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Work classifications");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
+  const actorId = requireId(input.actorId, "actorId");
   const code = requireText(input.code, "code");
   const name = requireText(input.name, "name");
   const trade = requireText(input.trade, "trade");
@@ -103,115 +107,113 @@ export async function createClassification(
       `Apprentice classification ${code} names no journey class — every apprentice ratio counts against a journey class, so name one.`,
     );
   }
-  try {
-    const created = (
-      await exec.execute<{ id: string }>(sql`
-        insert into hrm_work_classifications
-          (org_id, code, name, trade, is_apprentice, apprentice_program_ref,
-           journey_classification_id, created_by, updated_by)
-        values (${orgId}::uuid, ${code}, ${name}, ${trade}, ${isApprentice},
-                ${input.apprenticeProgramRef ?? null}, ${journeyClassificationId}::uuid,
-                ${input.actorId}::uuid, ${input.actorId}::uuid)
-        returning id::text as id
-      `)
-    ).rows[0];
-    if (!created) throw new HrmConstructionError(`Classification ${code} was not created — no row was written.`);
-    const rows = await listClassifications(exec, orgId, input.actorId);
-    const found = rows.find((row) => row.id === created.id);
-    if (!found) throw new HrmConstructionError(`Classification ${code} was not created — it cannot be read back.`);
-    return found;
-  } catch (error) {
-    if (error instanceof HrmConstructionError) throw error;
-    throw new HrmConstructionError(
-      `Classification ${code} cannot be saved — its code is already in use in this organization.`,
-    );
-  }
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Work classifications");
+    // The trade taxonomy is org-wide reference: creating a class needs
+    // unrestricted scope (named 403).
+    await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    await requireUnrestrictedHrmScope(exec, orgId, actorId);
+    try {
+      const created = (
+        await exec.execute<{ id: string }>(sql`
+          insert into hrm_work_classifications
+            (org_id, code, name, trade, is_apprentice, apprentice_program_ref,
+             journey_classification_id, created_by, updated_by)
+          values (${orgId}::uuid, ${code}, ${name}, ${trade}, ${isApprentice},
+                  ${input.apprenticeProgramRef ?? null}, ${journeyClassificationId}::uuid,
+                  ${actorId}::uuid, ${actorId}::uuid)
+          returning id::text as id
+        `)
+      ).rows[0];
+      if (!created) throw new HrmConstructionError(`Classification ${code} was not created — no row was written.`);
+      const rows = await listClassifications(exec, orgId, actorId);
+      const found = rows.find((row) => row.id === created.id);
+      if (!found) throw new HrmConstructionError(`Classification ${code} was not created — it cannot be read back.`);
+      return found;
+    } catch (error) {
+      if (error instanceof HrmConstructionError) throw error;
+      throw new HrmConstructionError(
+        `Classification ${code} cannot be saved — its code is already in use in this organization.`,
+      );
+    }
+  });
 }
 
 export async function assignClassification(
   exec: SqlExecutor,
   input: {
-    orgId: string;
-    actorId: string;
-    employmentId: string;
-    classificationId: string;
-    effectiveFrom: string;
-    homeScheduleId?: string | null;
-  },
-): Promise<EmploymentClassification> {
+  orgId: string;
+  actorId: string;
+  employmentId: string;
+  classificationId: string;
+  effectiveFrom: string;
+  homeScheduleId?: string | null;
+}): Promise<EmploymentClassification> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
+  const actorId = requireId(input.actorId, "actorId");
   const employmentId = requireId(input.employmentId, "employmentId");
   const classificationId = requireId(input.classificationId, "classificationId");
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
-  await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Work classifications");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
-  const employment = (
-    await exec.execute<{ id: string }>(sql`
-      select id from worker_employments where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
-    `)
-  ).rows[0];
-  if (!employment) {
-    throw new HrmConstructionError(
-      `Employment ${employmentId} does not exist in this organization — assign the classification to one of its employments.`,
-    );
-  }
-  const classification = (
-    await exec.execute<{ id: string }>(sql`
-      select id from hrm_work_classifications
-       where org_id = ${orgId}::uuid and id = ${classificationId}::uuid and is_active
-    `)
-  ).rows[0];
-  if (!classification) {
-    throw new HrmConstructionError(
-      `Classification ${classificationId} does not exist or is retired in this organization — activate it before assigning.`,
-    );
-  }
-  const homeScheduleId = input.homeScheduleId ?? null;
-  if (homeScheduleId) {
-    const schedule = (
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Work classifications");
+    // The assignment prices one employment's hours: the employment's
+    // employer must sit inside the lens, locked shared so a concurrent
+    // rehome waits for the check. Missing and out-of-scope employments
+    // refuse identically.
+    const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    await assertEmploymentInScope(exec, orgId, employmentId, allowed, true);
+    const classification = (
       await exec.execute<{ id: string }>(sql`
-        select id from hrm_rate_schedules where org_id = ${orgId}::uuid and id = ${homeScheduleId}::uuid
+        select id from hrm_work_classifications
+         where org_id = ${orgId}::uuid and id = ${classificationId}::uuid and is_active
       `)
     ).rows[0];
-    if (!schedule) {
+    if (!classification) {
       throw new HrmConstructionError(
-        `Home schedule ${homeScheduleId} does not exist in this organization — name the worker's home local from a declared schedule.`,
+        `Classification ${classificationId} does not exist or is retired in this organization — activate it before assigning.`,
       );
     }
-  }
-  // Close the row the new assignment supersedes; history stays readable.
-  await exec.execute(sql`
-    update hrm_employment_classifications
-       set effective_to = (${effectiveFrom}::date - interval '1 day')::date,
-           updated_by = ${input.actorId}::uuid, updated_at = now()
-     where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
-       and effective_from <= ${effectiveFrom}::date
-       and (effective_to is null or effective_to >= ${effectiveFrom}::date)
-  `);
-  const created = (
-    await exec.execute<{ id: string }>(sql`
-      insert into hrm_employment_classifications
-        (org_id, employment_id, classification_id, effective_from, home_schedule_id, created_by, updated_by)
-      values (${orgId}::uuid, ${employmentId}::uuid, ${classificationId}::uuid,
-              ${effectiveFrom}::date, ${homeScheduleId}::uuid,
-              ${input.actorId}::uuid, ${input.actorId}::uuid)
-      returning id::text as id
-    `)
-  ).rows[0];
-  if (!created) {
-    throw new HrmConstructionError(
-      `The classification assignment for employment ${employmentId} was not written — no row was created.`,
-    );
-  }
-  return {
-    id: String(created.id),
-    employmentId,
-    classificationId,
-    effectiveFrom,
-    effectiveTo: null,
-    homeScheduleId,
-  };
+    const homeScheduleId = input.homeScheduleId ?? null;
+    if (homeScheduleId) {
+      // The home local prices this worker's hours by reciprocity: it must
+      // sit inside the lens, or the assignment subscribes the worker to
+      // another entity's rates. Missing and out-of-scope refuse
+      // identically.
+      await assertScheduleReferenceInScope(exec, orgId, actorId, homeScheduleId, allowed);
+    }
+    // Close the row the new assignment supersedes; history stays readable.
+    await exec.execute(sql`
+      update hrm_employment_classifications
+         set effective_to = (${effectiveFrom}::date - interval '1 day')::date,
+             updated_by = ${actorId}::uuid, updated_at = now()
+       where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
+         and effective_from <= ${effectiveFrom}::date
+         and (effective_to is null or effective_to >= ${effectiveFrom}::date)
+    `);
+    const created = (
+      await exec.execute<{ id: string }>(sql`
+        insert into hrm_employment_classifications
+          (org_id, employment_id, classification_id, effective_from, home_schedule_id, created_by, updated_by)
+        values (${orgId}::uuid, ${employmentId}::uuid, ${classificationId}::uuid,
+                ${effectiveFrom}::date, ${homeScheduleId}::uuid,
+                ${actorId}::uuid, ${actorId}::uuid)
+        returning id::text as id
+      `)
+    ).rows[0];
+    if (!created) {
+      throw new HrmConstructionError(
+        `The classification assignment for employment ${employmentId} was not written — no row was created.`,
+      );
+    }
+    return {
+      id: String(created.id),
+      employmentId,
+      classificationId,
+      effectiveFrom,
+      effectiveTo: null,
+      homeScheduleId,
+    };
+  });
 }
 
 /** The employment's classification as of a date, with the apprentice flag and journey class. */

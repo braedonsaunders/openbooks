@@ -1,8 +1,14 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { addCalendarDays, businessToday, utcDateFromParts } from "../../platform/business-date.ts";
+import { UnrestrictedScopeError } from "../../organization/subsidiary-scope.ts";
 import { HrmConstructionError } from "./errors.ts";
-import { requireHrmConstructionManage, requireHrmConstructionRead } from "../authorization.ts";
+import {
+  requireConstructionScope,
+  requireHrmConstructionRead,
+  requireUnrestrictedHrmScope,
+} from "../authorization.ts";
+import { withOrgTransaction } from "../../platform/db.ts";
 import { classificationAsOf } from "./classifications.ts";
 import { resolveWage } from "./rates.ts";
 import {
@@ -16,6 +22,7 @@ import { PAYROLL_COUNTRY_PACKS, type PayrollCountryPack } from "../../payroll/pa
 import {
   HRM_CERTIFIED_PAYROLL_FEATURE,
   assertConstructionFeature,
+  assertProjectInScope,
   loadOrgCountry,
   requireDate,
   requireId,
@@ -438,11 +445,20 @@ export async function loadRun(exec: SqlExecutor, orgId: string, runId: string): 
     `)
   ).rows[0];
   if (!row) {
-    throw new HrmConstructionError(
-      `Certified run ${runId} does not exist in this organization — it may belong to another org.`,
-    );
+    throw runNotFound(runId);
   }
   return row;
+}
+
+/**
+ * Run-shaped scope denial: a run outside the actor's scope refuses exactly
+ * like a missing run — never with the project's message, which would
+ * confirm the run exists and name its project.
+ */
+function runNotFound(runId: string): HrmConstructionError {
+  return new HrmConstructionError(
+    `Certified run ${runId} does not exist in this organization — it may belong to another org.`,
+  );
 }
 
 export async function listRuns(
@@ -453,7 +469,11 @@ export async function listRuns(
 ): Promise<readonly CertifiedRun[]> {
   await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
   requireId(actorId, "actorId");
-  await requireHrmConstructionRead(exec, orgId, actorId);
+  // Runs attest named workers' certified wages (identity + amounts):
+  // restricted readers see only runs for in-scope projects; runs with no
+  // project are legacy/corrupt and stay hidden from restricted readers.
+  const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.read");
+  const projectFilter = projectId ? sql`and r.project_id = ${projectId}::uuid` : sql``;
   const rows = (
     await exec.execute<{
       id: string;
@@ -465,14 +485,16 @@ export async function listRuns(
       submittedAt: string | null;
       amendsRunId: string | null;
     }>(sql`
-      select id::text as id, project_id::text as "projectId", week_ending::text as "weekEnding",
-             status, format_key as "formatKey",
-             generated_at::text as "generatedAt", submitted_at::text as "submittedAt",
-             amends_run_id::text as "amendsRunId"
-        from hrm_certified_payroll_runs
-       where org_id = ${orgId}::uuid
-         and (${projectId}::uuid is null or project_id = ${projectId}::uuid)
-       order by week_ending desc
+      select r.id::text as id, r.project_id::text as "projectId", r.week_ending::text as "weekEnding",
+             r.status, r.format_key as "formatKey",
+             r.generated_at::text as "generatedAt", r.submitted_at::text as "submittedAt",
+             r.amends_run_id::text as "amendsRunId"
+        from hrm_certified_payroll_runs r
+        left join projects p on p.org_id = r.org_id and p.id = r.project_id
+       where r.org_id = ${orgId}::uuid
+         ${projectFilter}
+         ${allowed === null ? sql`` : sql`and p.subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
+       order by r.week_ending desc
     `)
   ).rows;
   return rows;
@@ -492,7 +514,14 @@ export async function generate(
   const weekEnding = requireDate(input.weekEnding, "weekEnding");
   const formatKey = requireText(input.formatKey, "formatKey");
   await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
-  await requireHrmConstructionManage(exec, orgId, actorId);
+  // A certified run attests named workers' wages for a project: the
+  // project must be in the actor's subsidiary scope before the run
+  // freezes anything — generating B's attested filing as A is refused.
+  // The assert sits inside the transaction so the share lock pins the
+  // project row while the payload builds.
+  const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+  return withOrgTransaction(orgId, async () => {
+  await assertProjectInScope(exec, orgId, projectId, allowed, "share");
   const pack = await packForOrg(exec, orgId);
   if (laborComplianceFilesFor(pack).length === 0) {
     throw new HrmConstructionError(
@@ -512,6 +541,7 @@ export async function generate(
     fileId: rendered.fileId,
     amendsRunId: null,
   });
+  });
 }
 
 export async function submitRun(
@@ -519,25 +549,48 @@ export async function submitRun(
   input: { orgId: string; actorId: string; runId: string },
 ): Promise<CertifiedRun> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
+  const actorId = requireId(input.actorId, "actorId");
   const runId = requireId(input.runId, "runId");
   await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
-  const updated = (
-    await exec.execute<{ id: string }>(sql`
+  // Submitting files B's attested wages: scope fences before the status
+  // read. An out-of-scope run refuses with the run's own shape — never
+  // the project's — so a B run id probes like a fabricated one.
+  const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+  const denied = `Certified run ${runId} cannot be submitted — it does not exist here or is not generated.`;
+  return withOrgTransaction(orgId, async () => {
+    const run = (
+      await exec.execute<{ status: string; projectId: string | null }>(sql`
+        select status, project_id::text as "projectId" from hrm_certified_payroll_runs
+         where org_id = ${orgId}::uuid and id = ${runId}::uuid
+         for update
+      `)
+    ).rows[0];
+    if (!run) {
+      throw new HrmConstructionError(denied);
+    }
+    try {
+      if (!run.projectId) {
+        await requireUnrestrictedHrmScope(exec, orgId, actorId);
+      } else {
+        await assertProjectInScope(exec, orgId, run.projectId, allowed, "share");
+      }
+    } catch (error) {
+      if (error instanceof HrmConstructionError || error instanceof UnrestrictedScopeError) {
+        throw new HrmConstructionError(denied);
+      }
+      throw error;
+    }
+    if (run.status !== "generated") {
+      throw new HrmConstructionError(denied);
+    }
+    await exec.execute(sql`
       update hrm_certified_payroll_runs
          set status = 'submitted', submitted_at = now(),
-             updated_by = ${input.actorId}::uuid, updated_at = now()
-       where org_id = ${orgId}::uuid and id = ${runId}::uuid and status = 'generated'
-      returning id::text as id
-    `)
-  ).rows[0];
-  if (!updated) {
-    throw new HrmConstructionError(
-      `Certified run ${runId} cannot be submitted — it does not exist here or is not generated.`,
-    );
-  }
-  return loadRun(exec, orgId, String(updated.id));
+             updated_by = ${actorId}::uuid, updated_at = now()
+       where org_id = ${orgId}::uuid and id = ${runId}::uuid
+    `);
+    return loadRun(exec, orgId, runId);
+  });
 }
 
 /** Amend: a new run linked to the original with a freshly rebuilt payload; the original reads amended. */
@@ -549,15 +602,25 @@ export async function amendRun(
   const actorId = requireId(input.actorId, "actorId");
   const runId = requireId(input.runId, "runId");
   await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
-  await requireHrmConstructionManage(exec, orgId, actorId);
+  // Amending rebuilds B's attested filing under a new run: scope fences
+  // before the status read, and an out-of-scope run refuses with the
+  // run's own not-found shape — never the project's.
+  const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+  return withOrgTransaction(orgId, async () => {
   const source = await loadRun(exec, orgId, runId);
+  if (!source.projectId) {
+    throw new HrmConstructionError(`Certified run ${runId} names no project — amendments need a project to rebuild.`);
+  }
+  try {
+    await assertProjectInScope(exec, orgId, source.projectId, allowed, "share");
+  } catch (error) {
+    if (error instanceof HrmConstructionError) throw runNotFound(runId);
+    throw error;
+  }
   if (source.status !== "submitted" && source.status !== "generated") {
     throw new HrmConstructionError(
       `Certified run ${runId} is ${source.status} — only generated or submitted runs amend.`,
     );
-  }
-  if (!source.projectId) {
-    throw new HrmConstructionError(`Certified run ${runId} names no project — amendments need a project to rebuild.`);
   }
   const pack = await packForOrg(exec, orgId);
   const built = await buildPayload(exec, orgId, actorId, source.projectId, source.weekEnding);
@@ -579,6 +642,7 @@ export async function amendRun(
      where org_id = ${orgId}::uuid and id = ${runId}::uuid
   `);
   return amended;
+  });
 }
 
 export interface ProjectComplianceSummary {
@@ -608,7 +672,11 @@ export async function projectComplianceSummary(
   requireId(actorId, "actorId");
   const project = requireId(projectId, "projectId");
   await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
-  await requireHrmConstructionRead(exec, orgId, actorId);
+  // The cockpit aggregates one project's findings and filings: the
+  // project itself must be in scope, or B's open-findings count and last
+  // filing leak through A's cockpit.
+  const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.read");
+  await assertProjectInScope(exec, orgId, project, allowed);
   const schedules = (
     await exec.execute<{ id: string; name: string; kind: string }>(sql`
       select id::text as id, name, kind from hrm_rate_schedules
@@ -678,7 +746,24 @@ export async function downloadRun(
   requireId(actorId, "actorId");
   requireId(runId, "runId");
   await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
-  await requireHrmConstructionRead(exec, orgId, actorId);
+  // The frozen file names B's workers and their certified wages: the
+  // run's project must be in scope before the bytes are returned —
+  // both a missing run and an out-of-scope one refuse not-found, so
+  // B's run id probes like a fabricated one.
+  const run = await loadRun(exec, orgId, runId);
+  const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.read");
+  try {
+    if (!run.projectId) {
+      await requireUnrestrictedHrmScope(exec, orgId, actorId);
+    } else {
+      await assertProjectInScope(exec, orgId, run.projectId, allowed);
+    }
+  } catch (error) {
+    if (error instanceof HrmConstructionError || error instanceof UnrestrictedScopeError) {
+      throw runNotFound(runId);
+    }
+    throw error;
+  }
   const row = (
     await exec.execute<{ payload: { rendered?: { filename: string; contentType: string; body: string } } }>(sql`
       select payload from hrm_certified_payroll_runs

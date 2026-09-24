@@ -81,6 +81,46 @@ export async function requireAggregateCompensationRead(
 }
 
 /**
+ * Aggregate compensation manage authority for writes anchored to one
+ * employer (pay bands, merit cycles): the hrm.compensation.manage grant,
+ * then the employer-subsidiary scope for the declared anchor. A null
+ * (org-wide) anchor prices every legal entity at once, so a restricted
+ * actor is refused by name with the org-wide remedy; a B anchor outside
+ * a restricted actor's lens refuses uniformly not-visible, exactly like
+ * a missing row, so a fabricated subsidiary id probes nothing. Returns
+ * the allowed set (null = unrestricted) for callers that fence further
+ * rows by it.
+ */
+export async function requireCompensationManageForEmployer(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employerSubsidiaryId: string | null,
+  what: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.compensation.manage"))) {
+    throw new HrmAuthorizationError(
+      "Compensation access requires the hrm.compensation.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (employerSubsidiaryId === null) {
+    if (allowed !== null) {
+      throw new HrmAuthorizationError(
+        `${what} applies across legal entities — ask an administrator with organization-wide scope to change it instead.`,
+      );
+    }
+    return allowed;
+  }
+  if (allowed !== null && !allowed.has(employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      `${what} is not visible in this organization and legal-entity scope.`,
+    );
+  }
+  return allowed;
+}
+
+/**
  * Subsidiary lens without a permission gate, for write paths whose own
  * contract carries no compensation grant: structural managers propose on
  * direct reports through hrm.self.read, never hrm.compensation.read, so
@@ -671,17 +711,25 @@ export async function requireAggregateDocumentsManage(
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
-/** Author surveys and read aggregate results (never respondent links). */
+/**
+ * Author surveys and read aggregate results (never respondent links): the
+ * hrm.surveys.manage grant plus the employer-subsidiary scope for the
+ * caller to fence invitees and respondents by (null = unrestricted),
+ * never a boolean to trust. Every survey service resolves this inside
+ * its transaction — a survey spanning entities must never aggregate
+ * another entity's respondents for a restricted reader.
+ */
 export async function requireHrmSurveysManage(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
-): Promise<void> {
+): Promise<Set<string> | null> {
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.surveys.manage"))) {
     throw new HrmAuthorizationError(
       "Survey access requires the hrm.surveys.manage permission — ask an administrator to grant it in /admin/roles.",
     );
   }
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
 /**
@@ -1525,6 +1573,24 @@ export async function requireHrmBenefitsManage(
 }
 
 /**
+ * Aggregate benefits manage authority for employment-spanning writes
+ * (payroll input generation): the hrm.benefits.manage grant, then the
+ * employer-subsidiary scope for the caller to filter by (null =
+ * unrestricted), never a boolean to trust. Generation materializes
+ * deduction rows per employment, so it is scoped like the enrollments
+ * it reads — unlike window/plan configuration, which is scoped by its
+ * own anchor.
+ */
+export async function requireAggregateBenefitsManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmBenefitsManage(exec, orgId, actorId);
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
+/**
  * Self-service election gate: hrm.benefits.read plus proof the employment
  * is the actor's own. An employee reads and elects only their own
  * enrolments through this structural scope — nothing beyond their own rows.
@@ -1778,6 +1844,28 @@ export async function requireHrmConstructionRead(
       "Construction compliance access requires the hrm.construction.read permission — ask an administrator to grant it in /admin/roles.",
     );
   }
+}
+
+/**
+ * Construction grant plus the employer-subsidiary scope for the caller to
+ * fence projects, employments, and targeted config by (null =
+ * unrestricted), never a boolean to trust. Certified payroll, per-diem,
+ * rate schedules, and findings all price or expose per-entity pay, so
+ * every one of them resolves this inside its transaction — a project or
+ * row in B must read to an A-scoped actor exactly like a missing one.
+ */
+export async function requireConstructionScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  grant: "hrm.construction.read" | "hrm.construction.manage",
+): Promise<Set<string> | null> {
+  if (grant === "hrm.construction.read") {
+    await requireHrmConstructionRead(exec, orgId, actorId);
+  } else {
+    await requireHrmConstructionManage(exec, orgId, actorId);
+  }
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
 /** Author construction-compliance configuration, entries, runs and findings transitions. */

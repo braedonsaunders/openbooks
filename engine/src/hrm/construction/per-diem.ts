@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
-import { requireHrmConstructionManage, requireHrmConstructionRead } from "../authorization.ts";
+import {
+  requireConstructionScope,
+  requireHrmConstructionRead,
+  requireUnrestrictedHrmScope,
+} from "../authorization.ts";
 import { add, cmp, fromUnits, mul, neg } from "../../money/money.ts";
 import { addCalendarDays } from "../../platform/business-date.ts";
 import {
@@ -12,9 +16,11 @@ import {
 import {
   HRM_PER_DIEM_FEATURE,
   assertConstructionFeature,
+  assertEmploymentInScope,
   requireDate,
   requireId,
   requireText,
+  withOrgTransaction,
   type SqlExecutor,
 } from "./shared.ts";
 
@@ -85,23 +91,20 @@ export async function listPolicies(exec: SqlExecutor, orgId: string, actorId: st
 export async function createPolicy(
   exec: SqlExecutor,
   input: {
-    orgId: string;
-    actorId: string;
-    name: string;
-    basis: PerDiemBasis;
-    rules: Record<string, unknown>;
-    lodgingOffset?: string | null;
-    weeklyRule?: { worked_days: number; paid_days: number } | null;
-    payComponentId?: string | null;
-    currency: string;
-    effectiveFrom: string;
-    effectiveTo?: string | null;
-  },
-): Promise<PerDiemPolicy> {
+  orgId: string;
+  actorId: string;
+  name: string;
+  basis: PerDiemBasis;
+  rules: Record<string, unknown>;
+  lodgingOffset?: string | null;
+  weeklyRule?: { worked_days: number; paid_days: number } | null;
+  payComponentId?: string | null;
+  currency: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+}): Promise<PerDiemPolicy> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
-  await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem policies");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
+  const actorId = requireId(input.actorId, "actorId");
   const name = requireText(input.name, "name");
   if (!["flat_daily", "distance_brackets", "hours_threshold"].includes(input.basis)) {
     throw new HrmConstructionError(
@@ -120,27 +123,34 @@ export async function createPolicy(
   const currency = requireText(input.currency, "currency");
   if (currency.length !== 3) throw new HrmConstructionError("Currency must be a 3-letter ISO code.");
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
-  if (input.payComponentId) {
-    await assertAllowanceComponent(exec, orgId, input.payComponentId);
-  }
-  const created = (
-    await exec.execute<{ id: string }>(sql`
-      insert into hrm_per_diem_policies
-        (org_id, name, basis, rules, lodging_offset, weekly_rule,
-         pay_component_id, currency, effective_from, effective_to, created_by, updated_by)
-      values (${orgId}::uuid, ${name}, ${input.basis}, ${JSON.stringify(input.rules ?? {})}::jsonb,
-              ${input.lodgingOffset ?? null}, ${weeklyRule ? JSON.stringify(weeklyRule) : null}::jsonb,
-              ${input.payComponentId ?? null}::uuid,
-              ${currency.toUpperCase()}, ${effectiveFrom}::date, ${input.effectiveTo ?? null}::date,
-              ${input.actorId}::uuid, ${input.actorId}::uuid)
-      returning id::text as id
-    `)
-  ).rows[0];
-  if (!created) throw new HrmConstructionError(`Per-diem policy ${name} was not created — no row was written.`);
-  const rows = await listPolicies(exec, orgId, input.actorId);
-  const found = rows.find((row) => row.id === created.id);
-  if (!found) throw new HrmConstructionError(`Per-diem policy ${name} was not created — it cannot be read back.`);
-  return found;
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem policies");
+    // Policies price every entity's travel: org-wide config needs
+    // unrestricted scope, named with the remedy.
+    await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    await requireUnrestrictedHrmScope(exec, orgId, actorId);
+    if (input.payComponentId) {
+      await assertAllowanceComponent(exec, orgId, input.payComponentId);
+    }
+    const created = (
+      await exec.execute<{ id: string }>(sql`
+        insert into hrm_per_diem_policies
+          (org_id, name, basis, rules, lodging_offset, weekly_rule,
+           pay_component_id, currency, effective_from, effective_to, created_by, updated_by)
+        values (${orgId}::uuid, ${name}, ${input.basis}, ${JSON.stringify(input.rules ?? {})}::jsonb,
+                ${input.lodgingOffset ?? null}, ${weeklyRule ? JSON.stringify(weeklyRule) : null}::jsonb,
+                ${input.payComponentId ?? null}::uuid,
+                ${currency.toUpperCase()}, ${effectiveFrom}::date, ${input.effectiveTo ?? null}::date,
+                ${actorId}::uuid, ${actorId}::uuid)
+        returning id::text as id
+      `)
+    ).rows[0];
+    if (!created) throw new HrmConstructionError(`Per-diem policy ${name} was not created — no row was written.`);
+    const rows = await listPolicies(exec, orgId, actorId);
+    const found = rows.find((row) => row.id === created.id);
+    if (!found) throw new HrmConstructionError(`Per-diem policy ${name} was not created — it cannot be read back.`);
+    return found;
+  });
 }
 
 /** The zod-equivalent shape pin per basis: rules carry what the basis reads, nothing else. */
@@ -377,118 +387,129 @@ async function policyForWeek(
  */
 export async function computeForWeek(
   exec: SqlExecutor,
-  input: { orgId: string; actorId: string; employmentId: string; weekStart: string },
-): Promise<readonly PerDiemEntry[]> {
+  input: {
+  orgId: string;
+  actorId: string;
+  employmentId: string;
+  weekStart: string;
+}): Promise<readonly PerDiemEntry[]> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
+  const actorId = requireId(input.actorId, "actorId");
   const employmentId = requireId(input.employmentId, "employmentId");
   const weekStart = requireDate(input.weekStart, "weekStart");
-  await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem computation");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
-  const partyId = await employmentParty(exec, orgId, employmentId);
-  const policy = await policyForWeek(exec, orgId, input.actorId, weekStart);
-  const days = await approvedWeekHours(exec, orgId, partyId, weekStart);
-  if (days.length === 0) {
-    throw new HrmConstructionError(
-      `Employment ${employmentId} has no approved time in the week of ${weekStart} — approve the timesheet before computing per-diem.`,
-    );
-  }
-  const rules = policy.rules as {
-    amount?: string;
-    brackets?: readonly DistanceBracket[];
-    min_hours?: number;
-    amount_for_hours?: string;
-    home_location_id?: string;
-    home_lat?: number;
-    home_lng?: number;
-  };
-  let home: { lat: number; lng: number } | null = null;
-  if (typeof rules.home_location_id === "string") {
-    home = await coordinatesForLocation(exec, orgId, rules.home_location_id);
-  } else if (typeof rules.home_lat === "number" && typeof rules.home_lng === "number") {
-    home = { lat: rules.home_lat, lng: rules.home_lng };
-  }
-  const written: PerDiemEntry[] = [];
-  const dailyAmounts: string[] = [];
-  for (const day of days) {
-    let distanceKm: number | null = null;
-    if (policy.basis === "distance_brackets") {
-      if (!home) {
-        throw new HrmConstructionError(
-          `Per-diem policy ${policy.name} is distance-based but declares no home base — set rules.home_location_id or home coordinates before computing.`,
-        );
-      }
-      if (!day.projectId) {
-        throw new HrmConstructionError(
-          `Approved time on ${day.workedOn} names no project — distance per-diem prices project days only.`,
-        );
-      }
-      const locationId = await projectLocationId(exec, orgId, day.projectId);
-      if (!locationId) {
-        throw new HrmConstructionError(
-          `Project ${day.projectId} declares no location — set custom.location_id on the project before computing distance per-diem.`,
-        );
-      }
-      const coords = await coordinatesForLocation(exec, orgId, locationId);
-      if (!coords) {
-        throw new HrmConstructionError(
-          `Location ${locationId} carries no coordinates — set latitude/longitude on the location before computing distance per-diem.`,
-        );
-      }
-      distanceKm = haversineKm(home, coords);
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem computation");
+    // Computing materializes allowance rows for one employment: the
+    // employment's employer must sit inside the lens, locked shared so a
+    // concurrent rehome waits for the check. Missing and out-of-scope
+    // employments refuse identically.
+    const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    await assertEmploymentInScope(exec, orgId, employmentId, allowed, true);
+    const partyId = await employmentParty(exec, orgId, employmentId);
+    const policy = await policyForWeek(exec, orgId, actorId, weekStart);
+    const days = await approvedWeekHours(exec, orgId, partyId, weekStart);
+    if (days.length === 0) {
+      throw new HrmConstructionError(
+        `Employment ${employmentId} has no approved time in the week of ${weekStart} — approve the timesheet before computing per-diem.`,
+      );
     }
-    let amount = perDiemAmountForDay(
-      policy.basis,
-      {
-        amount: rules.amount,
-        brackets: rules.brackets,
-        min_hours: rules.min_hours,
-        amount_for_hours: rules.amount_for_hours,
-      },
-      { distanceKm, hours: day.hours },
-    );
-    if (policy.lodgingOffset && cmp(policy.lodgingOffset, "0") > 0 && cmp(amount, "0") > 0) {
-      const reduced = add(amount, neg(policy.lodgingOffset));
-      amount = cmp(reduced, "0") > 0 ? reduced : "0.0000";
+    const rules = policy.rules as {
+      amount?: string;
+      brackets?: readonly DistanceBracket[];
+      min_hours?: number;
+      amount_for_hours?: string;
+      home_location_id?: string;
+      home_lat?: number;
+      home_lng?: number;
+    };
+    let home: { lat: number; lng: number } | null = null;
+    if (typeof rules.home_location_id === "string") {
+      home = await coordinatesForLocation(exec, orgId, rules.home_location_id);
+    } else if (typeof rules.home_lat === "number" && typeof rules.home_lng === "number") {
+      home = { lat: rules.home_lat, lng: rules.home_lng };
     }
-    dailyAmounts.push(amount);
-    written.push(
-      await upsertEntry(exec, orgId, input.actorId, "hrm_per_diem_entries", {
-        employmentId,
-        projectId: day.projectId,
-        workedOn: day.workedOn,
-        policyId: policy.id,
-        amount,
-        currency: policy.currency,
-        basisInputs: { distance_km: distanceKm == null ? null : quantizeDistanceKm(distanceKm), hours: day.hours },
-      }),
-    );
-  }
-  // Weekly top-up: 5 worked days paid as 7 writes the two missing days of
-  // the same week at the last daily amount — same table, same policy, the
-  // basis_inputs say what produced them.
-  const topped = applyWeeklyRule(dailyAmounts, policy.weeklyRule);
-  if (topped.length > dailyAmounts.length) {
-    const existingDays = new Set(days.map((day) => day.workedOn));
-    const missing = weekDates(weekStart).filter((date) => !existingDays.has(date));
-    const lastProject = days[days.length - 1]!.projectId;
-    for (let i = dailyAmounts.length; i < topped.length; i += 1) {
-      const date = missing[i - dailyAmounts.length];
-      if (!date) break;
+    const written: PerDiemEntry[] = [];
+    const dailyAmounts: string[] = [];
+    for (const day of days) {
+      let distanceKm: number | null = null;
+      if (policy.basis === "distance_brackets") {
+        if (!home) {
+          throw new HrmConstructionError(
+            `Per-diem policy ${policy.name} is distance-based but declares no home base — set rules.home_location_id or home coordinates before computing.`,
+          );
+        }
+        if (!day.projectId) {
+          throw new HrmConstructionError(
+            `Approved time on ${day.workedOn} names no project — distance per-diem prices project days only.`,
+          );
+        }
+        const locationId = await projectLocationId(exec, orgId, day.projectId);
+        if (!locationId) {
+          throw new HrmConstructionError(
+            `Project ${day.projectId} declares no location — set custom.location_id on the project before computing distance per-diem.`,
+          );
+        }
+        const coords = await coordinatesForLocation(exec, orgId, locationId);
+        if (!coords) {
+          throw new HrmConstructionError(
+            `Location ${locationId} carries no coordinates — set latitude/longitude on the location before computing distance per-diem.`,
+          );
+        }
+        distanceKm = haversineKm(home, coords);
+      }
+      let amount = perDiemAmountForDay(
+        policy.basis,
+        {
+          amount: rules.amount,
+          brackets: rules.brackets,
+          min_hours: rules.min_hours,
+          amount_for_hours: rules.amount_for_hours,
+        },
+        { distanceKm, hours: day.hours },
+      );
+      if (policy.lodgingOffset && cmp(policy.lodgingOffset, "0") > 0 && cmp(amount, "0") > 0) {
+        const reduced = add(amount, neg(policy.lodgingOffset));
+        amount = cmp(reduced, "0") > 0 ? reduced : "0.0000";
+      }
+      dailyAmounts.push(amount);
       written.push(
-        await upsertEntry(exec, orgId, input.actorId, "hrm_per_diem_entries", {
+        await upsertEntry(exec, orgId, actorId, "hrm_per_diem_entries", {
           employmentId,
-          projectId: lastProject,
-          workedOn: date,
+          projectId: day.projectId,
+          workedOn: day.workedOn,
           policyId: policy.id,
-          amount: topped[i]!,
+          amount,
           currency: policy.currency,
-          basisInputs: { weekly_rule_top_up: true },
+          basisInputs: { distance_km: distanceKm == null ? null : quantizeDistanceKm(distanceKm), hours: day.hours },
         }),
       );
     }
-  }
-  return written;
+    // Weekly top-up: 5 worked days paid as 7 writes the two missing days of
+    // the same week at the last daily amount — same table, same policy, the
+    // basis_inputs say what produced them.
+    const topped = applyWeeklyRule(dailyAmounts, policy.weeklyRule);
+    if (topped.length > dailyAmounts.length) {
+      const existingDays = new Set(days.map((day) => day.workedOn));
+      const missing = weekDates(weekStart).filter((date) => !existingDays.has(date));
+      const lastProject = days[days.length - 1]!.projectId;
+      for (let i = dailyAmounts.length; i < topped.length; i += 1) {
+        const date = missing[i - dailyAmounts.length];
+        if (!date) break;
+        written.push(
+          await upsertEntry(exec, orgId, actorId, "hrm_per_diem_entries", {
+            employmentId,
+            projectId: lastProject,
+            workedOn: date,
+            policyId: policy.id,
+            amount: topped[i]!,
+            currency: policy.currency,
+            basisInputs: { weekly_rule_top_up: true },
+          }),
+        );
+      }
+    }
+    return written;
+  });
 }
 
 async function upsertEntry(
@@ -581,7 +602,11 @@ export async function listEntries(
 ): Promise<readonly PerDiemEntry[]> {
   await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem entries");
   requireId(actorId, "actorId");
-  await requireHrmConstructionRead(exec, orgId, actorId);
+  // Entries carry per-employee allowance amounts: the read fences to
+  // in-scope employments — B's rows and amounts never reach an A-scoped
+  // reader.
+  const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.read");
+  const statusFilter = status ? sql`and e.status = ${status}::text` : sql``;
   const rows = (
     await exec.execute<{
       id: string;
@@ -593,13 +618,15 @@ export async function listEntries(
       currency: string;
       status: string;
     }>(sql`
-      select id::text as id, employment_id::text as "employmentId",
-             project_id::text as "projectId", worked_on::text as "workedOn",
-             policy_id::text as "policyId", amount::text as amount, currency, status
-        from hrm_per_diem_entries
-       where org_id = ${orgId}::uuid
-         and (${status}::text is null or status = ${status}::text)
-       order by worked_on desc
+      select e.id::text as id, e.employment_id::text as "employmentId",
+             e.project_id::text as "projectId", e.worked_on::text as "workedOn",
+             e.policy_id::text as "policyId", e.amount::text as amount, e.currency, e.status
+        from hrm_per_diem_entries e
+        left join worker_employments w on w.org_id = e.org_id and w.id = e.employment_id
+       where e.org_id = ${orgId}::uuid
+         ${statusFilter}
+         ${allowed === null ? sql`` : sql`and w.employer_subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
+       order by e.worked_on desc
     `)
   ).rows;
   return rows;
@@ -613,71 +640,87 @@ export async function listEntries(
  */
 export async function approveEntry(
   exec: SqlExecutor,
-  input: { orgId: string; actorId: string; entryId: string; kind: "per_diem" | "travel" },
-): Promise<PerDiemEntry> {
+  input: {
+  orgId: string;
+  actorId: string;
+  entryId: string;
+  kind: "per_diem" | "travel";
+}): Promise<PerDiemEntry> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
+  const actorId = requireId(input.actorId, "actorId");
   const entryId = requireId(input.entryId, "entryId");
-  await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem approval");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
   const table = input.kind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries";
-  const entry = (
-    await exec.execute<{
-      id: string;
-      employmentId: string;
-      partyId: string;
-      policyId: string;
-      componentId: string | null;
-      amount: string;
-      currency: string;
-      workedOn: string;
-      status: string;
-    }>(sql`
-      select e.id::text as id, e.employment_id::text as "employmentId",
-             w.worker_party_id::text as "partyId",
-             e.policy_id::text as "policyId", p.pay_component_id::text as "componentId",
-             e.amount::text as amount, e.currency, e.worked_on::text as "workedOn", e.status
-        from ${sql.raw(table)} e
-        join worker_employments w on w.org_id = e.org_id and w.id = e.employment_id
-        join hrm_per_diem_policies p on p.org_id = e.org_id and p.id = e.policy_id
-       where e.org_id = ${orgId}::uuid and e.id = ${entryId}::uuid
-    `)
-  ).rows[0];
-  if (!entry) {
-    throw new HrmConstructionError(
-      `Entry ${entryId} does not exist in this organization — approve one of its entries.`,
-    );
-  }
-  if (entry.status !== "computed") {
-    throw new HrmConstructionError(
-      `Entry ${entryId} is ${entry.status} — only computed entries approve.`,
-    );
-  }
-  if (!entry.componentId) {
-    throw new HrmConstructionError(
-      "The entry's policy names no pay component — link an allowance or reimbursement component before approving.",
-    );
-  }
-  await assertAllowanceComponent(exec, orgId, entry.componentId);
-  await exec.execute(sql`
-    update ${sql.raw(table)}
-       set status = 'approved', updated_by = ${input.actorId}::uuid, updated_at = now()
-     where id = ${entryId}::uuid
-  `);
-  await exec.execute(sql`
-    insert into hrm_allowance_payroll_inputs
-      (org_id, entry_kind, entry_id, employment_id, employee_party_id, pay_component_id,
-       amount, currency, coverage_date, status, created_by, updated_by)
-    values (${orgId}::uuid, ${input.kind}, ${entryId}::uuid, ${entry.employmentId}::uuid,
-            ${entry.partyId}::uuid, ${entry.componentId}::uuid,
-            ${entry.amount}, ${entry.currency}, ${entry.workedOn}::date, 'pending',
-            ${input.actorId}::uuid, ${input.actorId}::uuid)
-    on conflict (org_id, entry_kind, entry_id) do nothing
-  `);
-  // on conflict do nothing is justified here: approval is idempotent —
-  // the seam row is keyed by the entry, so a second approval of the same
-  // entry carries the same amount and must not double-pay.
-  return readEntry(exec, orgId, table, entryId);
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem approval");
+    // Approving feeds payroll: the entry is locked and its employment's
+    // employer must sit inside the lens — a B entry reads exactly like a
+    // missing one, and B's amounts never cross into the allowance seam.
+    const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    const entry = (
+      await exec.execute<{
+        id: string;
+        employmentId: string;
+        employerSubsidiaryId: string | null;
+        partyId: string;
+        policyId: string;
+        componentId: string | null;
+        amount: string;
+        currency: string;
+        workedOn: string;
+        status: string;
+      }>(sql`
+        select e.id::text as id, e.employment_id::text as "employmentId",
+               w.employer_subsidiary_id::text as "employerSubsidiaryId",
+               w.worker_party_id::text as "partyId",
+               e.policy_id::text as "policyId", p.pay_component_id::text as "componentId",
+               e.amount::text as amount, e.currency, e.worked_on::text as "workedOn", e.status
+          from ${sql.raw(table)} e
+          left join worker_employments w on w.org_id = e.org_id and w.id = e.employment_id
+          join hrm_per_diem_policies p on p.org_id = e.org_id and p.id = e.policy_id
+         where e.org_id = ${orgId}::uuid and e.id = ${entryId}::uuid
+         for update of e
+      `)
+    ).rows[0];
+    if (
+      !entry ||
+      (allowed !== null &&
+        (!entry.employerSubsidiaryId || !allowed.has(entry.employerSubsidiaryId)))
+    ) {
+      throw new HrmConstructionError(
+        `Entry ${entryId} does not exist in this organization — approve one of its entries.`,
+      );
+    }
+    if (entry.status !== "computed") {
+      throw new HrmConstructionError(
+        `Entry ${entryId} is ${entry.status} — only computed entries approve.`,
+      );
+    }
+    if (!entry.componentId) {
+      throw new HrmConstructionError(
+        "The entry's policy names no pay component — link an allowance or reimbursement component before approving.",
+      );
+    }
+    await assertAllowanceComponent(exec, orgId, entry.componentId);
+    await exec.execute(sql`
+      update ${sql.raw(table)}
+         set status = 'approved', updated_by = ${actorId}::uuid, updated_at = now()
+       where id = ${entryId}::uuid
+    `);
+    await exec.execute(sql`
+      insert into hrm_allowance_payroll_inputs
+        (org_id, entry_kind, entry_id, employment_id, employee_party_id, pay_component_id,
+         amount, currency, coverage_date, status, created_by, updated_by)
+      values (${orgId}::uuid, ${input.kind}, ${entryId}::uuid, ${entry.employmentId}::uuid,
+              ${entry.partyId}::uuid, ${entry.componentId}::uuid,
+              ${entry.amount}, ${entry.currency}, ${entry.workedOn}::date, 'pending',
+              ${actorId}::uuid, ${actorId}::uuid)
+      on conflict (org_id, entry_kind, entry_id) do nothing
+    `);
+    // on conflict do nothing is justified here: approval is idempotent —
+    // the seam row is keyed by the entry, so a second approval of the same
+    // entry carries the same amount and must not double-pay.
+    return readEntry(exec, orgId, table, entryId);
+  });
 }
 
 /**
@@ -687,50 +730,79 @@ export async function approveEntry(
  */
 export async function voidEntry(
   exec: SqlExecutor,
-  input: { orgId: string; actorId: string; entryId: string; kind: "per_diem" | "travel"; reason: string },
-): Promise<PerDiemEntry> {
+  input: {
+  orgId: string;
+  actorId: string;
+  entryId: string;
+  kind: "per_diem" | "travel";
+  reason: string;
+}): Promise<PerDiemEntry> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
+  const actorId = requireId(input.actorId, "actorId");
   const entryId = requireId(input.entryId, "entryId");
   const reason = requireText(input.reason, "reason");
-  await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem voids");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
   const table = input.kind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries";
-  const seam = (
-    await exec.execute<{ status: string | null; runId: string | null }>(sql`
-      select status, consumed_by_run_document_id::text as "runId"
-        from hrm_allowance_payroll_inputs
-       where org_id = ${orgId}::uuid and entry_kind = ${input.kind} and entry_id = ${entryId}::uuid
-    `)
-  ).rows[0];
-  if (seam && seam.status === "consumed") {
-    throw new HrmConstructionError(
-      `Entry ${entryId} was consumed by pay run ${seam.runId} — recalculate the run instead of voiding it.`,
-    );
-  }
-  const updated = (
-    await exec.execute<{ id: string }>(sql`
-      update ${sql.raw(table)}
-         set status = 'voided', voided_at = now(), void_reason = ${reason},
-             updated_by = ${input.actorId}::uuid, updated_at = now()
-       where org_id = ${orgId}::uuid and id = ${entryId}::uuid and status in ('computed', 'approved')
-      returning id::text as id
-    `)
-  ).rows[0];
-  if (!updated) {
-    throw new HrmConstructionError(
-      `Entry ${entryId} cannot be voided — it does not exist here or is already voided or consumed.`,
-    );
-  }
-  if (seam) {
-    await exec.execute(sql`
-      update hrm_allowance_payroll_inputs
-         set status = 'voided', voided_at = now(), void_reason = ${reason},
-             updated_by = ${input.actorId}::uuid, updated_at = now()
-       where org_id = ${orgId}::uuid and entry_kind = ${input.kind} and entry_id = ${entryId}::uuid
-    `);
-  }
-  return readEntry(exec, orgId, table, entryId);
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem voids");
+    // Voiding touches the entry and its payroll seam together: the entry
+    // is locked and its employment's employer must sit inside the lens —
+    // a B entry voids exactly like a missing one.
+    const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    const locked = (
+      await exec.execute<{ employmentId: string; employerSubsidiaryId: string | null }>(sql`
+        select e.employment_id::text as "employmentId",
+               w.employer_subsidiary_id::text as "employerSubsidiaryId"
+          from ${sql.raw(table)} e
+          left join worker_employments w on w.org_id = e.org_id and w.id = e.employment_id
+         where e.org_id = ${orgId}::uuid and e.id = ${entryId}::uuid
+         for update of e
+      `)
+    ).rows[0];
+    if (
+      !locked ||
+      (allowed !== null &&
+        (!locked.employerSubsidiaryId || !allowed.has(locked.employerSubsidiaryId)))
+    ) {
+      throw new HrmConstructionError(
+        `Entry ${entryId} cannot be voided — it does not exist here or is already voided or consumed.`,
+      );
+    }
+    const seam = (
+      await exec.execute<{ status: string | null; runId: string | null }>(sql`
+        select status, consumed_by_run_document_id::text as "runId"
+          from hrm_allowance_payroll_inputs
+         where org_id = ${orgId}::uuid and entry_kind = ${input.kind} and entry_id = ${entryId}::uuid
+      `)
+    ).rows[0];
+    if (seam && seam.status === "consumed") {
+      throw new HrmConstructionError(
+        `Entry ${entryId} was consumed by pay run ${seam.runId} — recalculate the run instead of voiding it.`,
+      );
+    }
+    const updated = (
+      await exec.execute<{ id: string }>(sql`
+        update ${sql.raw(table)}
+           set status = 'voided', voided_at = now(), void_reason = ${reason},
+               updated_by = ${actorId}::uuid, updated_at = now()
+         where org_id = ${orgId}::uuid and id = ${entryId}::uuid and status in ('computed', 'approved')
+        returning id::text as id
+      `)
+    ).rows[0];
+    if (!updated) {
+      throw new HrmConstructionError(
+        `Entry ${entryId} cannot be voided — it does not exist here or is already voided or consumed.`,
+      );
+    }
+    if (seam) {
+      await exec.execute(sql`
+        update hrm_allowance_payroll_inputs
+           set status = 'voided', voided_at = now(), void_reason = ${reason},
+               updated_by = ${actorId}::uuid, updated_at = now()
+         where org_id = ${orgId}::uuid and entry_kind = ${input.kind} and entry_id = ${entryId}::uuid
+      `);
+    }
+    return readEntry(exec, orgId, table, entryId);
+  });
 }
 
 /**
@@ -741,109 +813,111 @@ export async function voidEntry(
 export async function computeTravelForWeek(
   exec: SqlExecutor,
   input: {
-    orgId: string;
-    actorId: string;
-    employmentId: string;
-    weekStart: string;
-    mode: "hourly" | "per_km" | "bracketed";
-  },
-): Promise<readonly PerDiemEntry[]> {
+  orgId: string;
+  actorId: string;
+  employmentId: string;
+  weekStart: string;
+  mode: "hourly" | "per_km" | "bracketed";
+}): Promise<readonly PerDiemEntry[]> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
+  const actorId = requireId(input.actorId, "actorId");
   const employmentId = requireId(input.employmentId, "employmentId");
   const weekStart = requireDate(input.weekStart, "weekStart");
-  await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Travel-pay computation");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
-  const partyId = await employmentParty(exec, orgId, employmentId);
-  const policy = await policyForWeek(exec, orgId, input.actorId, weekStart);
-  const days = await approvedWeekHours(exec, orgId, partyId, weekStart);
-  if (days.length === 0) {
-    throw new HrmConstructionError(
-      `Employment ${employmentId} has no approved time in the week of ${weekStart} — approve the timesheet before computing travel pay.`,
-    );
-  }
-  const rules = policy.rules as {
-    brackets?: readonly DistanceBracket[];
-    amount_for_hours?: string;
-    amount_per_km?: string;
-    home_location_id?: string;
-    home_lat?: number;
-    home_lng?: number;
-  };
-  let home: { lat: number; lng: number } | null = null;
-  if (typeof rules.home_location_id === "string") {
-    home = await coordinatesForLocation(exec, orgId, rules.home_location_id);
-  } else if (typeof rules.home_lat === "number" && typeof rules.home_lng === "number") {
-    home = { lat: rules.home_lat, lng: rules.home_lng };
-  }
-  const written: PerDiemEntry[] = [];
-  for (const day of days) {
-    let amount: string;
-    const basisInputs: Record<string, unknown> = { hours: day.hours, travel_mode: input.mode };
-    if (input.mode === "hourly") {
-      if (!rules.amount_for_hours) {
-        throw new HrmConstructionError(
-          `Policy ${policy.name} has no rules.amount_for_hours — set it before computing hourly travel pay.`,
-        );
-      }
-      amount = allowanceProduct(day.hours, rules.amount_for_hours);
-    } else {
-      if (!home) {
-        throw new HrmConstructionError(
-          `Policy ${policy.name} declares no home base — set rules.home_location_id or home coordinates before computing travel pay.`,
-        );
-      }
-      if (!day.projectId) {
-        throw new HrmConstructionError(
-          `Approved time on ${day.workedOn} names no project — travel pay prices project days only.`,
-        );
-      }
-      const locationId = await projectLocationId(exec, orgId, day.projectId);
-      if (!locationId) {
-        throw new HrmConstructionError(
-          `Project ${day.projectId} declares no location — set custom.location_id on the project before computing travel pay.`,
-        );
-      }
-      const coords = await coordinatesForLocation(exec, orgId, locationId);
-      if (!coords) {
-        throw new HrmConstructionError(
-          `Location ${locationId} carries no coordinates — set latitude/longitude on the location before computing travel pay.`,
-        );
-      }
-      const distanceKm = haversineKm(home, coords);
-      const distanceQty = quantizeDistanceKm(distanceKm);
-      basisInputs.distance_km = distanceQty;
-      if (input.mode === "per_km") {
-        if (!rules.amount_per_km) {
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Travel-pay computation");
+    // Same employment scope as per-diem computation: the employer must
+    // sit inside the lens, locked shared against a concurrent rehome.
+    const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    await assertEmploymentInScope(exec, orgId, employmentId, allowed, true);
+    const partyId = await employmentParty(exec, orgId, employmentId);
+    const policy = await policyForWeek(exec, orgId, actorId, weekStart);
+    const days = await approvedWeekHours(exec, orgId, partyId, weekStart);
+    if (days.length === 0) {
+      throw new HrmConstructionError(
+        `Employment ${employmentId} has no approved time in the week of ${weekStart} — approve the timesheet before computing travel pay.`,
+      );
+    }
+    const rules = policy.rules as {
+      brackets?: readonly DistanceBracket[];
+      amount_for_hours?: string;
+      amount_per_km?: string;
+      home_location_id?: string;
+      home_lat?: number;
+      home_lng?: number;
+    };
+    let home: { lat: number; lng: number } | null = null;
+    if (typeof rules.home_location_id === "string") {
+      home = await coordinatesForLocation(exec, orgId, rules.home_location_id);
+    } else if (typeof rules.home_lat === "number" && typeof rules.home_lng === "number") {
+      home = { lat: rules.home_lat, lng: rules.home_lng };
+    }
+    const written: PerDiemEntry[] = [];
+    for (const day of days) {
+      let amount: string;
+      const basisInputs: Record<string, unknown> = { hours: day.hours, travel_mode: input.mode };
+      if (input.mode === "hourly") {
+        if (!rules.amount_for_hours) {
           throw new HrmConstructionError(
-            `Policy ${policy.name} has no rules.amount_per_km — set it before computing per-km travel pay.`,
+            `Policy ${policy.name} has no rules.amount_for_hours — set it before computing hourly travel pay.`,
           );
         }
-        amount = allowanceProduct(distanceQty, rules.amount_per_km);
+        amount = allowanceProduct(day.hours, rules.amount_for_hours);
       } else {
-        amount = perDiemAmountForDay(
-          "distance_brackets",
-          { brackets: rules.brackets },
-          { distanceKm },
-        );
+        if (!home) {
+          throw new HrmConstructionError(
+            `Policy ${policy.name} declares no home base — set rules.home_location_id or home coordinates before computing travel pay.`,
+          );
+        }
+        if (!day.projectId) {
+          throw new HrmConstructionError(
+            `Approved time on ${day.workedOn} names no project — travel pay prices project days only.`,
+          );
+        }
+        const locationId = await projectLocationId(exec, orgId, day.projectId);
+        if (!locationId) {
+          throw new HrmConstructionError(
+            `Project ${day.projectId} declares no location — set custom.location_id on the project before computing travel pay.`,
+          );
+        }
+        const coords = await coordinatesForLocation(exec, orgId, locationId);
+        if (!coords) {
+          throw new HrmConstructionError(
+            `Location ${locationId} carries no coordinates — set latitude/longitude on the location before computing travel pay.`,
+          );
+        }
+        const distanceKm = haversineKm(home, coords);
+        const distanceQty = quantizeDistanceKm(distanceKm);
+        basisInputs.distance_km = distanceQty;
+        if (input.mode === "per_km") {
+          if (!rules.amount_per_km) {
+            throw new HrmConstructionError(
+              `Policy ${policy.name} has no rules.amount_per_km — set it before computing per-km travel pay.`,
+            );
+          }
+          amount = allowanceProduct(distanceQty, rules.amount_per_km);
+        } else {
+          amount = perDiemAmountForDay(
+            "distance_brackets",
+            { brackets: rules.brackets },
+            { distanceKm },
+          );
+        }
       }
+      written.push(
+        await upsertEntry(exec, orgId, input.actorId, "hrm_travel_pay_entries", {
+          employmentId,
+          projectId: day.projectId,
+          workedOn: day.workedOn,
+          policyId: policy.id,
+          amount,
+          currency: policy.currency,
+          basisInputs,
+        }),
+      );
     }
-    written.push(
-      await upsertEntry(exec, orgId, input.actorId, "hrm_travel_pay_entries", {
-        employmentId,
-        projectId: day.projectId,
-        workedOn: day.workedOn,
-        policyId: policy.id,
-        amount,
-        currency: policy.currency,
-        basisInputs,
-      }),
-    );
-  }
-  return written;
+    return written;
+  });
 }
-
-
 /**
  * Seam reads for the payroll coordinator's consumer: pending rows to
  * consume, and the consumed marker the run sets after pricing.

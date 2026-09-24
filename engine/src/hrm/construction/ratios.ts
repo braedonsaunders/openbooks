@@ -1,14 +1,17 @@
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
-import { requireHrmConstructionManage } from "../authorization.ts";
+import { requireConstructionScope } from "../authorization.ts";
 import { classificationAsOf } from "./classifications.ts";
 import { recordFinding } from "./findings.ts";
 import { evaluateRatio } from "./pure.ts";
+import { lockScheduleScopeForWrite } from "./rates.ts";
 import {
   HRM_APPRENTICE_RATIO_FEATURE,
   assertConstructionFeature,
+  assertProjectInScope,
   requireDate,
   requireId,
+  withOrgTransaction,
   type SqlExecutor,
 } from "./shared.ts";
 
@@ -34,22 +37,19 @@ export interface ApprenticeRatioRule {
 export async function createRatioRule(
   exec: SqlExecutor,
   input: {
-    orgId: string;
-    actorId: string;
-    scheduleId: string;
-    journeyClassificationId: string;
-    apprenticeClassificationId: string;
-    ratioJourney: number;
-    ratioApprentice: number;
-    measured: "daily" | "weekly";
-    effectiveFrom: string;
-    effectiveTo?: string | null;
-  },
-): Promise<ApprenticeRatioRule> {
+  orgId: string;
+  actorId: string;
+  scheduleId: string;
+  journeyClassificationId: string;
+  apprenticeClassificationId: string;
+  ratioJourney: number;
+  ratioApprentice: number;
+  measured: "daily" | "weekly";
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+}): Promise<ApprenticeRatioRule> {
   const orgId = requireId(input.orgId, "orgId");
-  requireId(input.actorId, "actorId");
-  await assertConstructionFeature(exec, orgId, HRM_APPRENTICE_RATIO_FEATURE, "Apprentice ratio rules");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
+  const actorId = requireId(input.actorId, "actorId");
   const scheduleId = requireId(input.scheduleId, "scheduleId");
   const journeyClassificationId = requireId(input.journeyClassificationId, "journeyClassificationId");
   const apprenticeClassificationId = requireId(input.apprenticeClassificationId, "apprenticeClassificationId");
@@ -65,50 +65,58 @@ export async function createRatioRule(
     throw new HrmConstructionError(`Unknown ratio measure ${input.measured} — use daily or weekly.`);
   }
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
-  const apprentice = (
-    await exec.execute<{ isApprentice: boolean; journeyId: string | null }>(sql`
-      select is_apprentice as "isApprentice", journey_classification_id::text as "journeyId"
-        from hrm_work_classifications
-       where org_id = ${orgId}::uuid and id = ${apprenticeClassificationId}::uuid
-    `)
-  ).rows[0];
-  if (!apprentice) {
-    throw new HrmConstructionError(
-      `Apprentice classification ${apprenticeClassificationId} does not exist in this organization.`,
-    );
-  }
-  if (!apprentice.isApprentice) {
-    throw new HrmConstructionError(
-      `Classification ${apprenticeClassificationId} is not flagged as an apprentice class — flag it before it can stand in a ratio.`,
-    );
-  }
-  if (apprentice.journeyId !== journeyClassificationId) {
-    throw new HrmConstructionError(
-      `Classification ${apprenticeClassificationId} counts against journey class ${apprentice.journeyId ?? "none"} — the ratio must name the same journey class.`,
-    );
-  }
-  const created = (
-    await exec.execute<{ id: string }>(sql`
-      insert into hrm_apprentice_ratio_rules
-        (org_id, schedule_id, journey_classification_id, apprentice_classification_id,
-         ratio_journey, ratio_apprentice, measured, effective_from, effective_to, created_by, updated_by)
-      values (${orgId}::uuid, ${scheduleId}::uuid, ${journeyClassificationId}::uuid,
-              ${apprenticeClassificationId}::uuid, ${input.ratioJourney}, ${input.ratioApprentice},
-              ${input.measured}, ${effectiveFrom}::date, ${input.effectiveTo ?? null}::date,
-              ${input.actorId}::uuid, ${input.actorId}::uuid)
-      returning id::text as id
-    `)
-  ).rows[0];
-  if (!created) throw new HrmConstructionError("The apprentice ratio rule was not written — no row was created.");
-  return {
-    id: String(created.id),
-    scheduleId,
-    journeyClassificationId,
-    apprenticeClassificationId,
-    ratioJourney: input.ratioJourney,
-    ratioApprentice: input.ratioApprentice,
-    measured: input.measured,
-  };
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_APPRENTICE_RATIO_FEATURE, "Apprentice ratio rules");
+    // The rule prices its schedule's hours: the parent schedule's
+    // CURRENT target governs — a rule on B's schedule (or an org-wide
+    // one) refuses a restricted actor before anything is validated.
+    const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    await lockScheduleScopeForWrite(exec, orgId, actorId, scheduleId, allowed);
+    const apprentice = (
+      await exec.execute<{ isApprentice: boolean; journeyId: string | null }>(sql`
+        select is_apprentice as "isApprentice", journey_classification_id::text as "journeyId"
+          from hrm_work_classifications
+         where org_id = ${orgId}::uuid and id = ${apprenticeClassificationId}::uuid
+      `)
+    ).rows[0];
+    if (!apprentice) {
+      throw new HrmConstructionError(
+        `Apprentice classification ${apprenticeClassificationId} does not exist in this organization.`,
+      );
+    }
+    if (!apprentice.isApprentice) {
+      throw new HrmConstructionError(
+        `Classification ${apprenticeClassificationId} is not flagged as an apprentice class — flag it before it can stand in a ratio.`,
+      );
+    }
+    if (apprentice.journeyId !== journeyClassificationId) {
+      throw new HrmConstructionError(
+        `Classification ${apprenticeClassificationId} counts against journey class ${apprentice.journeyId ?? "none"} — the ratio must name the same journey class.`,
+      );
+    }
+    const created = (
+      await exec.execute<{ id: string }>(sql`
+        insert into hrm_apprentice_ratio_rules
+          (org_id, schedule_id, journey_classification_id, apprentice_classification_id,
+           ratio_journey, ratio_apprentice, measured, effective_from, effective_to, created_by, updated_by)
+        values (${orgId}::uuid, ${scheduleId}::uuid, ${journeyClassificationId}::uuid,
+                ${apprenticeClassificationId}::uuid, ${input.ratioJourney}, ${input.ratioApprentice},
+                ${input.measured}, ${effectiveFrom}::date, ${input.effectiveTo ?? null}::date,
+                ${actorId}::uuid, ${actorId}::uuid)
+        returning id::text as id
+      `)
+    ).rows[0];
+    if (!created) throw new HrmConstructionError("The apprentice ratio rule was not written — no row was created.");
+    return {
+      id: String(created.id),
+      scheduleId,
+      journeyClassificationId,
+      apprenticeClassificationId,
+      ratioJourney: input.ratioJourney,
+      ratioApprentice: input.ratioApprentice,
+      measured: input.measured,
+    };
+  });
 }
 
 /**
@@ -118,14 +126,34 @@ export async function createRatioRule(
  */
 export async function checkDay(
   exec: SqlExecutor,
-  input: { orgId: string; actorId: string; projectId: string; workedOn: string },
-): Promise<readonly { ruleId: string; breach: boolean; journeyHours: string; apprenticeHours: string }[]> {
+  input: {
+  orgId: string;
+  actorId: string;
+  projectId: string;
+  workedOn: string;
+}): Promise<readonly { ruleId: string; breach: boolean; journeyHours: string; apprenticeHours: string }[]> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const projectId = requireId(input.projectId, "projectId");
   const workedOn = requireDate(input.workedOn, "workedOn");
-  await assertConstructionFeature(exec, orgId, HRM_APPRENTICE_RATIO_FEATURE, "Apprentice ratio checks");
-  await requireHrmConstructionManage(exec, orgId, input.actorId);
+  return withOrgTransaction(orgId, async () => {
+    await assertConstructionFeature(exec, orgId, HRM_APPRENTICE_RATIO_FEATURE, "Apprentice ratio checks");
+    // The check aggregates one project's employments AND writes breach
+    // findings: the project must sit inside the lens first, or an
+    // A-scoped actor checks (and flags) B's day.
+    const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
+    await assertProjectInScope(exec, orgId, projectId, allowed, "share");
+    return checkDayInScope(exec, orgId, actorId, projectId, workedOn);
+  });
+}
+
+async function checkDayInScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  projectId: string,
+  workedOn: string,
+): Promise<readonly { ruleId: string; breach: boolean; journeyHours: string; apprenticeHours: string }[]> {
   const rules = (
     await exec.execute<{
       id: string;
