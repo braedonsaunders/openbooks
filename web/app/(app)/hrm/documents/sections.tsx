@@ -53,6 +53,41 @@ function signerStatusLabel(status: string, labels: Record<string, string>): stri
   }
 }
 
+/**
+ * Document timeline event kinds arrive as stored codes; the drawer shows
+ * the translated event label. An unrecognized kind falls back to the raw
+ * code (the same unknown-code rule as signer statuses) so a new engine
+ * event never renders blank.
+ */
+function eventKindLabel(kind: string, labels: Record<string, string>): string {
+  switch (kind) {
+    case 'created':
+      return msg(labels, 'eventCreated')
+    case 'sent':
+      return msg(labels, 'eventSent')
+    case 'viewed':
+      return msg(labels, 'eventViewed')
+    case 'signed':
+      return msg(labels, 'eventSigned')
+    case 'declined':
+      return msg(labels, 'eventDeclined')
+    case 'acknowledged':
+      return msg(labels, 'eventAcknowledged')
+    case 'voided':
+      return msg(labels, 'eventVoided')
+    case 'reminded':
+      return msg(labels, 'eventReminded')
+    case 'expired':
+      return msg(labels, 'eventExpired')
+    case 'retention_flagged':
+      return msg(labels, 'eventRetentionFlagged')
+    case 'deleted':
+      return msg(labels, 'eventDeleted')
+    default:
+      return kind
+  }
+}
+
 export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
   const router = useRouter()
   const labels = drawer.labels
@@ -138,7 +173,7 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
           <ul className="flex flex-col gap-1 text-sm">
             {document.events.map((event, index) => (
               <li key={index} className="flex justify-between gap-3">
-                <span>{event.kind}</span>
+                <span>{eventKindLabel(event.kind, labels)}</span>
                 <span className="text-slate-500">{event.recordedAt}</span>
               </li>
             ))}

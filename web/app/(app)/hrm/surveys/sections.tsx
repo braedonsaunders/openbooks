@@ -27,6 +27,15 @@ function msg(labels: Record<string, string>, key: string): string {
   return labels[key] ?? key
 }
 
+/**
+ * Stored survey question kinds render through the same translated options
+ * the author dialog offers; an unrecognized kind falls back to the raw
+ * code so a new engine kind never renders blank.
+ */
+function questionKindLabel(kind: string, kinds: { value: string; label: string }[]): string {
+  return kinds.find((k) => k.value === kind)?.label ?? kind
+}
+
 async function post(url: string, body: unknown, failed: string): Promise<boolean> {
   const res = await fetch(url, {
     method: 'POST',
@@ -213,7 +222,7 @@ function ResultsPanel({ drawer }: { drawer: Drawer }) {
           {survey.questions.map((question) => (
             <li key={question.id} className="flex justify-between gap-3">
               <span>{question.prompt}</span>
-              <span className="text-slate-500">{question.kind}</span>
+              <span className="text-slate-500">{questionKindLabel(question.kind, drawer.questionKinds)}</span>
             </li>
           ))}
         </ul>
