@@ -9,6 +9,7 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import { decimalCmp, decimalSum } from "../../../lib/statement-format";
+import { readApiErrorMessage } from "../../../lib/api-error";
 import { Metric, type Option } from "./workspace-ui";
 import { PropertiesTable } from "./PropertiesTable";
 import { RentRollTable } from "./RentRollTable";
@@ -52,15 +53,17 @@ const empty: PropertyWorkspace = {
   camAllocations: [],
 };
 
-async function api(payload: Record<string, unknown>) {
+async function api(payload: Record<string, unknown>, fallback: string) {
   const response = await fetch("/api/property-management", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? "Property action failed");
-  return body;
+  // The status is checked before the body parses, and the translated
+  // fallback (never a hard-coded English string) carries the status when
+  // the server names no refusal.
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, fallback));
+  return response.json().catch(() => ({}));
 }
 
 export function PropertyManagementWorkspace({
@@ -126,13 +129,16 @@ export function PropertyManagementWorkspace({
     return fetch("/api/property-management", {
       cache: "no-store",
     })
-      .then((response) => response.json().then((body) => {
-        if (!response.ok) throw new Error(body.error);
-        setData(body);
-      }))
+      .then(async (response) => {
+        // The status is checked before the body parses: a non-JSON 502 page
+        // must name the translated failure, and a refusal without a body
+        // must never become new Error(undefined) with an empty toast.
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t("toasts.couldNotLoad")));
+        setData(await response.json());
+      })
       .catch((error: unknown) => {
         toast.error(
-          error instanceof Error ? error.message : t("toasts.couldNotLoad"),
+          error instanceof Error && error.message ? error.message : t("toasts.couldNotLoad"),
         );
       })
       .finally(() => {
@@ -150,7 +156,7 @@ export function PropertyManagementWorkspace({
     if (busy) return null;
     setBusy(true);
     try {
-      const result = await api(payload);
+      const result = await api(payload, t("toasts.actionFailed"));
       toast.success(success);
       setLoading(true);
       await load();
