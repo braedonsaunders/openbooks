@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'a four-digit tax year is required' }, { status: 400 })
   }
   if (taxYear >= Number((await businessToday(orgId)).slice(0, 4))) {
-    return NextResponse.json({ error: 'that tax year has not started yet' }, { status: 422 })
+    return NextResponse.json({ error: 'only completed tax years can be filed — that tax year has not ended yet' }, { status: 422 })
   }
   if (!FORM_TYPES.includes(body.formType as FormType)) {
     return NextResponse.json({ error: `formType must be one of ${FORM_TYPES.join(', ')}` }, { status: 400 })
