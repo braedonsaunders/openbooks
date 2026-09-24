@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -32,6 +32,8 @@ export function StartReconciliationButton({
   const [busy, setBusy] = useState(false)
   const [throughDate, setThroughDate] = useState(useBusinessToday())
   const [statementBalance, setStatementBalance] = useState('')
+  const throughDateId = useId()
+  const statementBalanceId = useId()
 
   if (openReconciliationId) {
     return (
@@ -88,16 +90,17 @@ export function StartReconciliationButton({
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>
+            <Label htmlFor={throughDateId}>
               {tBanking('labels.reconcileThrough')}<span className="text-red-500"> *</span>
             </Label>
-            <Input type="date" value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
+            <Input id={throughDateId} type="date" value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>
+            <Label htmlFor={statementBalanceId}>
               {tBanking('labels.statementBalance')}<span className="text-red-500"> *</span>
             </Label>
             <Input
+              id={statementBalanceId}
               inputMode="decimal"
               value={statementBalance}
               onChange={(e) => setStatementBalance(e.target.value)}

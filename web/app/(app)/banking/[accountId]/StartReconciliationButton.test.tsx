@@ -117,6 +117,18 @@ async function click(button: HTMLButtonElement): Promise<void> {
   })
 }
 
+test('reconciliation inputs are associated with their visible labels', async (t) => {
+  await mount(t, () => new Response(null, { status: 200 }))
+  const open = findButton('Start reconciliation')
+  assert.ok(open)
+  await click(open)
+  for (const name of ['Reconcile through', 'Statement balance']) {
+    const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.includes(name))
+    assert.ok(label, `${name} label renders`)
+    assert.ok(label.control, `${name} label controls its input`)
+  }
+})
+
 /** Open the drawer and enter a statement balance so Start enables. */
 async function openAndFill(): Promise<void> {
   const open = findButton('Start reconciliation')
