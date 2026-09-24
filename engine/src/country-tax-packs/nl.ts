@@ -96,6 +96,8 @@ export const NETHERLANDS_TAX_PACK: CountryTaxPackDefinition = {
           { ratePercent: 19, effectiveFrom: "2001-01-01", effectiveTo: "2012-09-30", sourceId: "netherlands_standard_rate_history" },
           { ratePercent: 21, effectiveFrom: "2012-10-01", sourceId: "netherlands_vat_21_2012" },
         ],
+        // Rubriek 1a names the "hoog tarief" in words, not numbers.
+        returnBoxes: ["1a"],
       },
       {
         code: "NL-VAT-RED",
@@ -107,6 +109,8 @@ export const NETHERLANDS_TAX_PACK: CountryTaxPackDefinition = {
           { ratePercent: 6, effectiveFrom: "2005-01-01", effectiveTo: "2018-12-31", sourceId: "wet_ob_1968_article_9_reduced_6" },
           { ratePercent: 9, effectiveFrom: "2019-01-01", sourceId: "netherlands_vat_reduced_9_2019" },
         ],
+        // Rubriek 1b names the "laag tarief" in words, not numbers.
+        returnBoxes: ["1b"],
       },
     ],
   },
