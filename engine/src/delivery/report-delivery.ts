@@ -535,6 +535,17 @@ export async function dispatchReportDeliveries(
     }
     const mail = scheduledReportEmail({ orgName: row.org_name, reportName: row.report_name, attachmentName: row.filename });
     const jobId = `report-delivery|${row.id}|${row.dispatch_count}`;
+    // Claim the outbox row BEFORE staging: concurrent dispatchers select the
+    // same pending row, and each stages its PDF under a fresh random key —
+    // only the claimant may stage, so the loser's blobs are never orphaned.
+    // The status + generation guard is the arbiter: exactly one claimant wins.
+    const claimed = (await db.execute<{ id: string }>(sql`
+      update report_delivery_outbox set status='enqueued', dispatch_count=dispatch_count+1,
+             queue_job_id=${jobId}, error=null, updated_at=now()
+       where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed') and dispatch_count=${row.dispatch_count}
+       returning id
+    `));
+    if (!claimed.rows[0]) continue;
     // Stage the rendered bytes outside the queue payload: the worker fetches
     // them at send time instead of Redis holding file contents for days.
     const attachments = await storeEmailAttachments([
@@ -558,28 +569,64 @@ export async function dispatchReportDeliveries(
       // The settlement keeps them when the job provably exists (or when
       // the queue cannot be reached to check) and deletes only on provable
       // non-acceptance; on a kept job it reports success and dispatch
-      // proceeds down the normal enqueued path below.
-      const settled = await settleStagedAttachmentsAfterEnqueueError({
-        attachments,
-        data: emailData,
-        jobId,
-        error,
-        probeQueuedJob: deps.probeQueuedJob,
-      });
-      console.warn(
-        `[reports] email enqueue for delivery ${row.id} threw after queue acceptance ` +
-        `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
-      );
+      // proceeds down the normal enqueued path below. Any other outcome
+      // rethrows: the claim below is restored so the next tick retries
+      // promptly instead of waiting out the stuck-delivery rebuild.
+      try {
+        const settled = await settleStagedAttachmentsAfterEnqueueError({
+          attachments,
+          data: emailData,
+          jobId,
+          error,
+          probeQueuedJob: deps.probeQueuedJob,
+        });
+        console.warn(
+          `[reports] email enqueue for delivery ${row.id} threw after queue acceptance ` +
+          `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
+        );
+      } catch {
+        await db.execute(sql`
+          update report_delivery_outbox set status='failed', dispatch_count=${row.dispatch_count},
+                 queue_job_id=null, error=${(error instanceof Error ? error.message : String(error)).slice(0, 1000)},
+                 next_attempt_at=${now}, updated_at=now()
+           where id=${row.id} and org_id=${row.org_id} and status='enqueued' and queue_job_id=${jobId}
+        `);
+        throw error;
+      }
     }
-    // Same fence-out rule as the run dispatcher above: a concurrent
-    // dispatcher, racing callback, or rebuild sweep may have moved the row
-    // first, and the loser must not count a dispatch it did not land.
-    const marked = await db.execute(sql`
-      update report_delivery_outbox set status='enqueued', dispatch_count=dispatch_count+1,
-             queue_job_id=${jobId}, error=null, updated_at=now()
-       where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed') and dispatch_count=${row.dispatch_count}
-    `);
-    if ((marked.rowCount ?? 0) > 0) dispatched++;
+    // Confirm the row still carries this dispatch: a concurrent suppression
+    // or rebuild may have moved it after staging. Only an applied confirm
+    // counts — a fenced-out dispatch is never reported as done.
+    const confirmed = (await db.execute<{ id: string }>(sql`
+      update report_delivery_outbox set updated_at=now()
+       where id=${row.id} and org_id=${row.org_id} and status='enqueued' and queue_job_id=${jobId}
+       returning id
+    `));
+    if (!confirmed.rows[0]) {
+      // This attempt's staged refs belong to no live dispatch. Settle them
+      // through the shared helper: it keeps them only when the queued job
+      // provably needs them and deletes them on provable non-acceptance.
+      // Either way this dispatch is not counted.
+      try {
+        await settleStagedAttachmentsAfterEnqueueError({
+          attachments,
+          data: emailData,
+          jobId,
+          error: new Error(`report delivery ${row.id} left 'enqueued' before its dispatch confirmed`),
+          probeQueuedJob: deps.probeQueuedJob,
+        });
+      } catch {
+        // Provably never accepted (refs deleted), partially accepted, or
+        // unverifiable (refs kept for a possible live job): none of them is
+        // a completed dispatch.
+      }
+      continue;
+    }
+    // Reaching here means this dispatch claimed the row (the fence's
+    // status + generation guard) and the confirm above verified it still
+    // carries this dispatch — the B-DLV-02 count-only-applied rule, enforced
+    // by claim + confirm instead of a second update.
+    dispatched++;
   }
   return dispatched;
 }
