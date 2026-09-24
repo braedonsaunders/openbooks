@@ -16,6 +16,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import {
   calibrationDistribution,
+  calibrationPotentialOptions,
   getCalibrationSession,
   listCalibrationSessions,
 } from '@openbooks/engine/src/hrm/performance/calibration.ts'
@@ -208,6 +209,14 @@ export async function loadContinuousTab(
     if (sessionId) {
       try {
         const session = await getCalibrationSession({ orgId: authz.user.orgId, actorId: authz.user.id, id: sessionId })
+        // F3-34: the editor offers the session cycle's declared scale
+        // labels — the same source setPotential enforces, so an offered
+        // option always saves. A labelless template offers nothing.
+        const potentialOptions = await calibrationPotentialOptions({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          sessionId,
+        })
         const distribution = await calibrationDistribution({ orgId: authz.user.orgId, actorId: authz.user.id, id: sessionId })
         const distEntries = [...Object.entries(distribution.calibrated)]
         const distMax = Math.max(1, ...distEntries.map(([, count]) => count))
@@ -231,7 +240,7 @@ export async function loadContinuousTab(
               entryId: entry.id,
               calibratedRating: entry.calibratedRating,
               potentialKey: entry.potentialKey,
-              potentialOptions: [],
+              potentialOptions,
               justification: entry.justification,
               ratingLabel: t('performance.continuous.calibration.ratingLabel'),
               potentialLabel: t('performance.continuous.calibration.potentialLabel'),

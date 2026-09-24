@@ -509,6 +509,42 @@ export async function setCalibratedRating(args: {
   });
 }
 
+/**
+ * The potential options a calibration editor may offer: the review
+ * template's declared scale labels for the session's cycle (F3-34). The
+ * same labels setPotential enforces, so an offered option always saves.
+ * A cycle whose template declares no labels (or names a missing
+ * template) offers nothing — the editor cannot record potential, and
+ * forcing a pick would only be refused downstream.
+ */
+export async function calibrationPotentialOptions(args: {
+  orgId: string;
+  actorId: string;
+  sessionId: string;
+}): Promise<string[]> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  const sessionId = requireId("sessionId", args.sessionId);
+  return withOrgTransaction(orgId, async () => {
+    await assertCalibrationFeature(db, orgId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const session = await loadSession(db, orgId, sessionId);
+    if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
+    const readCycle = (await db.execute<{ appliesTo: unknown }>(sql`
+      select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
+    `)).rows[0];
+    if (!readCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    assertCycleInScope(readCycle.appliesTo, allowed);
+    try {
+      const scale = await loadCycleRatingScale(db, orgId, session.cycle_id);
+      return [...scale.labels];
+    } catch (error) {
+      if (error instanceof HrmPerformanceError) return [];
+      throw error;
+    }
+  });
+}
+
 export async function setPotential(args: {
   orgId: string;
   actorId: string;

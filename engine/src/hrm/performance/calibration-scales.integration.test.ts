@@ -13,6 +13,7 @@ import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, openCycle } from "./review-cycles.ts";
 import { submitReview } from "./reviews.ts";
 import {
+  calibrationPotentialOptions,
   createCalibrationSession,
   getCalibrationSession,
   openCalibrationSession,
@@ -207,6 +208,59 @@ test("decided ratings and potential keys validate against the cycle scales", asy
        where org_id = ${h.org.orgId} and id = ${entryId}`)).rows[0]!.sessionId;
     const session = await getCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: sessionId });
     assert.equal(session.entries[0]!.potentialKey, "high");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("the calibration editor offers the cycle scale labels and saves one", async () => {
+  // F3-34: the editor's options come from the same template labels
+  // setPotential enforces, so an offered option always saves.
+  const h = await setupHarness();
+  try {
+    const entryId = await openEntryId(h);
+    const sessionId = (await db.execute<{ sessionId: string }>(sql`
+      select session_id as "sessionId" from hrm_calibration_entries
+       where org_id = ${h.org.orgId} and id = ${entryId}`)).rows[0]!.sessionId;
+    assert.deepEqual(await calibrationPotentialOptions({ orgId: h.org.orgId, actorId: h.hrId, sessionId }), [
+      "low",
+      "high",
+    ]);
+    await setPotential({ orgId: h.org.orgId, actorId: h.hrId, entryId, potentialKey: "high" });
+    const session = await getCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: sessionId });
+    assert.equal(session.entries[0]!.potentialKey, "high");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("a template with no scale labels offers no potential options", async () => {
+  // F3-34: the missing arm degrades openly — the editor offers nothing
+  // instead of inventing options the server would refuse.
+  const h = await setupHarness();
+  try {
+    const templateId = (await db.execute<{ id: string }>(sql`
+      insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
+      values (${h.org.orgId}, 'Labelless', '{"min": 1, "max": 3}'::jsonb, ${h.hrId}, ${h.hrId})
+      returning id`)).rows[0]!.id;
+    const cycle = await createCycle({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      templateId,
+      name: "FY26 labelless",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-12-31",
+    });
+    const session = await createCalibrationSession({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      cycleId: cycle.id,
+      name: "Labelless session",
+    });
+    assert.deepEqual(
+      await calibrationPotentialOptions({ orgId: h.org.orgId, actorId: h.hrId, sessionId: session.id }),
+      [],
+    );
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
