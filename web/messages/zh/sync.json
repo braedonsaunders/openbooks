@@ -124,7 +124,8 @@
     "copied": "重定向 URI 已复制",
     "copyFailed": "无法复制——请手动选择并复制文本",
     "deletionRetained": "源端删除已留存并附管理层证据",
-    "deletionVoided": "源端删除的交易已冲销并作废"
+    "deletionVoided": "源端删除的交易已冲销并作废",
+    "saveFailed": "无法保存连接"
   },
   "confirmDelete": "删除连接“{name}”？已迁移的数据将保留；仅移除此链接。",
   "drawer": {

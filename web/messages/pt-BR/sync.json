@@ -124,7 +124,8 @@
     "copied": "URI de redirecionamento copiado",
     "copyFailed": "Não foi possível copiar — selecione e copie o texto manualmente",
     "deletionRetained": "Exclusão na origem mantida com evidência do controller",
-    "deletionVoided": "Transação excluída na origem revertida e anulada"
+    "deletionVoided": "Transação excluída na origem revertida e anulada",
+    "saveFailed": "Não foi possível salvar a conexão"
   },
   "confirmDelete": "Excluir a conexão \"{name}\"? Os dados migrados permanecem; apenas o vínculo é removido.",
   "drawer": {
