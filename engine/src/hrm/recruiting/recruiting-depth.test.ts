@@ -18,6 +18,9 @@ import { pgTextArray, pgUuidArray } from "./depth.ts";
 import { matchTags } from "./pools.ts";
 import { ANONYMIZED_DISPLAY_NAME, retentionScopeMatches } from "./retention.ts";
 import { requireCompensation } from "./requisitions.ts";
+import { RecruitingError } from "./errors.ts";
+import { scheduleInterview } from "./interviews.ts";
+import { isIsoInstantWithOffset } from "./input.ts";
 
 // The token signer reads the secret live from process.env (never a stored
 // constant): pin a test-only secret and restore it afterwards.
@@ -40,6 +43,23 @@ test("requisition compensation refuses a reversed exact-decimal range", () => {
   assert.deepEqual(requireCompensation({ min: "120000.0000", max: "120000.0001", currency: "USD", basis: "annual" }), {
     min: "120000.0000", max: "120000.0001", currency: "USD", basis: "annual",
   });
+});
+
+test("scheduled interviews require a valid ISO instant with an explicit offset", async () => {
+  assert.equal(isIsoInstantWithOffset("2026-09-25T14:00:00Z"), true);
+  assert.equal(isIsoInstantWithOffset("2026-09-25T14:00:00-04:00"), true);
+  for (const scheduledAt of ["2026-09-25T14:00:00", "2026-02-30T14:00:00Z", "not an instant"]) {
+    await assert.rejects(
+      scheduleInterview({
+        orgId: ID_A,
+        actorId: ID_B,
+        applicationId: ID_C,
+        kind: "video",
+        scheduledAt,
+      }),
+      (error: unknown) => error instanceof RecruitingError && error.code === "INVALID_INPUT",
+    );
+  }
 });
 
 test("booking tokens verify for their purpose and row, and nowhere else", () => {
