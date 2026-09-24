@@ -228,6 +228,11 @@
     "allClear": "一切正常。",
     "needsAttention": "需要处理。",
     "requestTimeOff": "申请休假",
-    "lastSlip": "上期 {date}"
+    "lastSlip": "上期 {date}",
+    "serviceYears": "{years, plural, other {#年}}",
+    "joinedSince": "自{date}起",
+    "joinsOn": "{date}入职",
+    "overdueSteps": "团队中有{overdue, plural, other {#个}}逾期的检查清单步骤",
+    "newJoiners": "过去30天有{joiners, plural, other {#名}}新员工 — 请安排首次1:1"
   }
 }

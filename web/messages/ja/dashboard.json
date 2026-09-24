@@ -228,6 +228,11 @@
     "allClear": "すべて完了です。",
     "needsAttention": "要対応。",
     "requestTimeOff": "休暇を申請",
-    "lastSlip": "最新明細 {date}"
+    "lastSlip": "最新明細 {date}",
+    "serviceYears": "{years, plural, other {#年}}",
+    "joinedSince": "{date}から",
+    "joinsOn": "{date}入社",
+    "overdueSteps": "チームで期限切れのチェックリスト手順が{overdue, plural, other {#件}}",
+    "newJoiners": "過去30日間の新入社員が{joiners, plural, other {#人}} — 初回の1on1を設定してください"
   }
 }

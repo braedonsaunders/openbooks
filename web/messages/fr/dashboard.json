@@ -228,6 +228,11 @@
     "allClear": "Tout est à jour.",
     "needsAttention": "À traiter.",
     "requestTimeOff": "Demander un congé",
-    "lastSlip": "Dernier bulletin {date}"
+    "lastSlip": "Dernier bulletin {date}",
+    "serviceYears": "{years, plural, one {# an} other {# ans}}",
+    "joinedSince": "depuis le {date}",
+    "joinsOn": "arrivée le {date}",
+    "overdueSteps": "{overdue, plural, one {# étape de liste de contrôle} other {# étapes de liste de contrôle}} en retard dans votre équipe",
+    "newJoiners": "{joiners, plural, one {# nouvel arrivant} other {# nouveaux arrivants}} ces 30 derniers jours — planifiez le premier entretien individuel"
   }
 }

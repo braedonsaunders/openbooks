@@ -228,6 +228,11 @@
     "allClear": "Tudo em dia.",
     "needsAttention": "Precisa de atenção.",
     "requestTimeOff": "Solicitar férias",
-    "lastSlip": "Último holerite {date}"
+    "lastSlip": "Último holerite {date}",
+    "serviceYears": "{years, plural, one {# ano} other {# anos}}",
+    "joinedSince": "desde {date}",
+    "joinsOn": "ingressa em {date}",
+    "overdueSteps": "{overdue, plural, one {# etapa de checklist} other {# etapas de checklist}} vencidas na sua equipe",
+    "newJoiners": "{joiners, plural, one {# nova contratação} other {# novas contratações}} nos últimos 30 dias — agende a primeira conversa 1:1"
   }
 }
