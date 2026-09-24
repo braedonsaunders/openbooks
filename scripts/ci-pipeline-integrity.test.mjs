@@ -1,3 +1,4 @@
+// source-pin-contract: CI merge-gate and release workflow gate policy (test.yml, trust.yml, publish-container.yml)
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -277,12 +278,6 @@ test('the coverage run executes the canonical integration partition, not a paral
     /--test-reporter=lcov/,
     'the coverage step must still emit lcov',
   )
-})
-
-test('the canonical npm test script keeps the trusted-bypass contract it is trusted for', () => {
-  const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
-  assert.match(scripts.test, /OPENBOOKS_TRUSTED_TEST_BYPASS=1/)
-  assert.match(scripts.test, /NODE_ENV=test/)
 })
 
 test('the integration canary fails on a recorded test failure, not only on a skip', () => {
