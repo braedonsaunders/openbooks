@@ -851,17 +851,17 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../engine/src/flows/scheduled.ts'),
-    /coalesce\(\(organization\.settings->'features'->>'flows'\)::boolean, true\)/,
+    /case \(organization\.settings->'features'->>'flows'\) when 'true' then true when 'false' then false else true end/,
     'scheduled flows must not fire when the Flows switch is off',
   )
   assert.match(
     read('../engine/src/flows/gates.ts'),
-    /coalesce\(\(organization\.settings->'features'->>'flows'\)::boolean, true\)/,
+    /case \(organization\.settings->'features'->>'flows'\) when 'true' then true when 'false' then false else true end/,
     'gate reminder/escalation timers must not fire when the Flows switch is off',
   )
   assert.match(
     read('../engine/src/continuous-close/continuous-close.ts'),
-    /coalesce\(\(o\.settings->'features'->>'continuousClose'\)::boolean, true\)/,
+    /case \(o\.settings->'features'->>'continuousClose'\) when 'true' then true when 'false' then false else true end/,
     'scheduled continuous-close agents must not scan when Continuous Close is off',
   )
   assert.equal(routeGateState('/analytics/true-cost'), 'gated')
@@ -1232,7 +1232,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../engine/src/fx/providers.ts'),
-    /coalesce\(\(organization\.settings->'features'->>'multiCurrency'\)::boolean, false\)/,
+    /case \(organization\.settings->'features'->>'multiCurrency'\)[\s\S]{0,80}when 'true' then true/,
     'scheduled FX imports must not write rates when Multi-currency is off',
   )
   assert.match(
@@ -1247,7 +1247,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../engine/src/close/run-automation.ts'),
-    /coalesce\(\(organization\.settings->'features'->>'advancedClose'\)::boolean, false\)/,
+    /case \(organization\.settings->'features'->>'advancedClose'\) when 'true' then true when 'false' then false else false end/,
     'scheduled close automations must skip orgs whose Advanced close switch is off',
   )
   assert.match(
@@ -1282,17 +1282,17 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../engine/src/worker/overhead-scheduler.ts'),
-    /coalesce\(\(settings->'features'->>'projects'\)::boolean, true\)/,
+    /case \(settings->'features'->>'projects'\) when 'true' then true when 'false' then false else true end/,
     'scheduled overhead publish must skip orgs whose Projects switch is off',
   )
   assert.match(
     read('../engine/src/billing/recurring.ts'),
-    /when 'quote' then coalesce\(\(o\.settings->'features'->>'orders'\)::boolean, true\)/,
+    /when 'quote' then case \(o\.settings->'features'->>'orders'\) when 'true' then true when 'false' then false else true end/,
     'scheduled recurring must not mint quotes/orders when Orders is off',
   )
   assert.match(
     read('../engine/src/billing/recurring.ts'),
-    /when 'expense_report' then coalesce\(\(o\.settings->'features'->>'expenses'\)::boolean, true\)/,
+    /when 'expense_report' then case \(o\.settings->'features'->>'expenses'\) when 'true' then true when 'false' then false else true end/,
     'scheduled recurring must not mint expense reports when Expenses is off',
   )
   assert.match(
@@ -1901,12 +1901,12 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../engine/src/sync/netsuite-fixed-assets.ts'),
-    /coalesce\(\(settings->'features'->>'fixedAssets'\)::boolean, true\)/,
+    /orgFeatureEnabled\(options\.orgId, "fixedAssets"\)/,
     'NetSuite FAM sync must not write fixed assets when the Fixed Assets switch is off — existing register stays',
   )
   assert.match(
     read('../engine/src/property/management.ts'),
-    /coalesce\(\(settings->'features'->>'fixedAssets'\)::boolean, true\)/,
+    /orgFeatureEnabled\(orgId, "fixedAssets"/,
     'property writes must not store fixed_asset_id when Fixed Assets is off — existing links stay',
   )
   assert.match(

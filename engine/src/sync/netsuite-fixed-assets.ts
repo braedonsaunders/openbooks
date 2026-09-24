@@ -6,6 +6,7 @@ import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/m
 import { postDocument } from "../ledger/posting-document.ts";
 import { buildNativeContext } from "./native.ts";
 import { NetSuiteSource, type NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
 type Row = Record<string, unknown>;
 
@@ -183,10 +184,10 @@ export async function syncNetSuiteFixedAssets(
   source: NetSuiteSource,
   options: NetSuiteFixedAssetSyncOptions,
 ): Promise<NetSuiteFixedAssetSyncResult> {
-  const enabled = (await db.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'fixedAssets')::boolean, true) as enabled
-      from orgs where id = ${options.orgId}`));
-  if (enabled.rows[0]?.enabled !== true) throw new Error("Fixed Assets feature is disabled");
+  // Canonical switchboard read (::boolean casts threw on non-boolean imports).
+  if (!(await orgFeatureEnabled(options.orgId, "fixedAssets"))) {
+    throw new Error("Fixed Assets feature is disabled");
+  }
   const snapshot = await source.fixedAssets();
   const asOf = await extractionDate(snapshot, options.orgId);
   const historyByAsset = new Map<string, Row[]>();

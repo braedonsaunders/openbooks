@@ -15,6 +15,7 @@ import { listSchema, runUserSql } from "../platform/sqlapi.ts";
 import { createScriptJournal, type ScriptJournalResult } from "../ledger/journal-writes.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
 /**
  * User scripting: REAL JavaScript (ES2023), executed in a QuickJS sandbox —
@@ -189,12 +190,8 @@ export async function scriptQueryRefusal(
 ): Promise<string | null> {
   const userId = ctx.user?.id;
   if (!userId) return null;
-  const feature = (await db.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'queryConsole')::boolean, false) as enabled
-      from orgs
-     where id = ${ctx.org.id}
-  `)).rows[0];
-  if (!feature?.enabled) return "queryConsole feature is disabled";
+  // Canonical switchboard read (::boolean casts threw on non-boolean imports).
+  if (!(await orgFeatureEnabled(ctx.org.id, "queryConsole"))) return "queryConsole feature is disabled";
   if (!(await actorHasPermission(db, ctx.org.id, userId, "sql.execute"))) {
     return "missing permission: sql.execute";
   }

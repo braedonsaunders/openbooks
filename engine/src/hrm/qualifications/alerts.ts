@@ -72,11 +72,14 @@ function scheduleForType(
 
 /** Orgs with the full alerts chain on (hrm → hrmCertifications → hrmCertificationAlerts). */
 export async function listAlertEligibleOrgs(exec: SqlExecutor): Promise<string[]> {
+  // Registry fallback shape (non-boolean stored values fall back to the
+  // default instead of throwing 22P02); the explicit conjunction is the
+  // hrm → hrmCertifications → hrmCertificationAlerts parent chain.
   const rows = (await exec.execute<{ id: string }>(sql`
     select id::text as id from orgs
-     where coalesce((settings->'features'->>'hrm')::boolean, false)
-       and coalesce((settings->'features'->>'hrmCertifications')::boolean, false)
-       and coalesce((settings->'features'->>'hrmCertificationAlerts')::boolean, false)
+     where case (settings->'features'->>'hrm') when 'true' then true when 'false' then false else false end
+       and case (settings->'features'->>'hrmCertifications') when 'true' then true when 'false' then false else false end
+       and case (settings->'features'->>'hrmCertificationAlerts') when 'true' then true when 'false' then false else false end
   `)).rows;
   return rows.map((row) => row.id);
 }

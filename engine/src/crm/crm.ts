@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type TerritoryRule, type TerritorySubject } from "./crm-math.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
 /**
  * The stage gate lives in crm-math.ts because it is pure and this module is
@@ -17,12 +18,10 @@ export {
 
 type SqlExecutor = Pick<typeof db, "execute">;
 
+// Canonical switchboard read: the previous inline ::boolean cast threw
+// 22P02 on a non-boolean stored value.
 async function crmFeatureEnabled(executor: SqlExecutor, orgId: string): Promise<boolean> {
-  const result = (await executor.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'crm')::boolean, true) as enabled
-      from orgs where id = ${orgId}
-  `));
-  return result.rows[0]?.enabled === true;
+  return orgFeatureEnabled(orgId, "crm", executor);
 }
 
 const DEFAULT_ACCOUNT_STATUSES = [

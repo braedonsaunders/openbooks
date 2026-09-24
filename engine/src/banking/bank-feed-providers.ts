@@ -428,7 +428,7 @@ export async function testBankFeedConnection(
         join orgs o on o.id = c.org_id
        where c.id = ${connectionId}
          and c.org_id = ${ctx.orgId}
-         and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
+         and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
     `)),
   );
   const conn = row.rows[0];
@@ -625,7 +625,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
         join orgs o on o.id = c.org_id
        where c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
          and o.env_kind = 'production'
-         and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
+         and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
          and c.sync_cadence <> 'manual'
          and (c.next_sync_at is null or c.next_sync_at <= now())
     `)),
@@ -685,7 +685,7 @@ export async function syncBankFeedNow(
         join orgs o on o.id = c.org_id
        where c.id = ${connectionId}
          and c.org_id = ${ctx.orgId}
-         and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
+         and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
     `)),
   );
   const conn = row.rows[0];

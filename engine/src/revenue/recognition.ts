@@ -11,6 +11,7 @@ import {
   type AccretionPeriod,
 } from "../money/present-value.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { isLegacyProvenance } from "../platform/legacy-provenance.ts";
 import {
   MAX_RECOGNITION_DAY_OFFSET,
@@ -257,16 +258,14 @@ export class RevenueRecognitionError extends Error {
   readonly name = "RevenueRecognitionError";
 }
 
-/** Registry default is on — absence must not disable recognition. */
+/** Registry default is on — absence must not disable recognition. Resolved
+ * through the canonical switchboard: the previous inline ::boolean cast
+ * threw 22P02 on a non-boolean stored value. */
 export async function revenueRecognitionFeatureEnabled(
   runner: Pick<typeof db, "execute">,
   orgId: string,
 ): Promise<boolean> {
-  const result = await runner.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'revenueRecognition')::boolean, true) as enabled
-      from orgs where id = ${orgId}
-  `);
-  return result.rows[0]?.enabled === true;
+  return orgFeatureEnabled(orgId, "revenueRecognition", runner as SqlExecutor);
 }
 
 async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<void> {

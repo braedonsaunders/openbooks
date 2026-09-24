@@ -19,6 +19,7 @@ import {
   type AdvancedBillingLine,
 } from "./advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
 /**
  * Subscription billing engine. Each active subscription is billed when its
@@ -505,10 +506,8 @@ async function createSubscriptionInvoiceInTransaction(
   }
   // Stored subscriptions and existing invoices stay. Turning Equipment off
   // must refuse a generate that would persist equipment_charge.
-  const equipmentOn = (await db.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
-      from orgs where id = ${spec.orgId}
-  `)).rows[0]?.enabled === true;
+  // Canonical switchboard read (::boolean casts threw on non-boolean imports).
+  const equipmentOn = await orgFeatureEnabled(spec.orgId, "equipment");
   if (!equipmentOn) {
     const itemIds = [...new Set(
       invoiceLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
@@ -781,8 +780,11 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
         join orgs o on o.id = s.org_id
        where s.status = 'active' and s.next_bill_on <= ${scanCutoff}
          and o.env_kind = 'production'
-         and coalesce((o.settings->'features'->>'subscriptionBilling')::boolean, false)
-         and (l.id is null or coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false))
+         -- Registry fallback shape (non-boolean stored values fall back to the
+         -- default instead of throwing 22P02); the explicit conjunction is
+         -- the advancedSubscriptions requiresAll ['subscriptionBilling'] chain.
+         and case (o.settings->'features'->>'subscriptionBilling') when 'true' then true when 'false' then false else false end
+         and (l.id is null or case (o.settings->'features'->>'advancedSubscriptions') when 'true' then true when 'false' then false else false end)
          ${orgScope}
     `)),
   );
@@ -919,10 +921,14 @@ export async function billSubscriptionNow(
   actor?: SubscriptionBillingActorOptions,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
   const actorId = actor?.actorId ?? null;
+  // Both flags use the registry fallback shape (non-boolean stored values
+  // fall back to the default instead of throwing 22P02); the conjunction is
+  // the advancedSubscriptions requiresAll ['subscriptionBilling'] chain.
   const meta = await withBypass(async () =>
     (await db.execute<{ orgId: string; advancedLifecycle: boolean; advancedEnabled: boolean }>(sql`
       select s.org_id as "orgId", l.id is not null as "advancedLifecycle",
-             coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false) as "advancedEnabled"
+             (case (o.settings->'features'->>'advancedSubscriptions') when 'true' then true when 'false' then false else false end
+              and case (o.settings->'features'->>'subscriptionBilling') when 'true' then true when 'false' then false else false end) as "advancedEnabled"
         from subscriptions s join orgs o on o.id = s.org_id
         left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
        where s.id = ${subscriptionId}

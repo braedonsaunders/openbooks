@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { SqlExecutor } from "../platform/db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import { dataDependentFeatureDefault, type DataDependentFeatureKey } from "./feature-defaults.ts";
 import { featureEnabled, type FeatureState } from "./feature-registry.ts";
 
@@ -64,4 +64,39 @@ export async function lockAndCheckOrgFeature(
     return featureEnabled({ ...stored, [key]: true }, key);
   }
   return featureEnabled(row.features, key);
+}
+
+/**
+ * Read-gate resolution for one org's feature switchboard — the engine
+ * counterpart to web/lib/features.ts `isFeatureEnabled`. Single-org gate
+ * checks that used to read
+ * `coalesce((settings->'features'->>'key')::boolean, <default>)` inline are
+ * routed here instead: the inline cast throws 22P02 on a non-boolean stored
+ * value (an import artifact like 'yes') so the guarded surface 500'd, and it
+ * bypassed the registry's parent/requiresAll chains and data-dependent
+ * defaults. This resolves through the same machinery the Features page uses —
+ * the registry's `featureEnabled` (non-boolean falls back to default, parent
+ * and requiresAll chains enforced) with the data-dependent defaults for
+ * `multiSubsidiary`/`multiCurrency` — so a gate can never disagree with the
+ * switchboard.
+ *
+ * Unlike `lockAndCheckOrgFeature` (the recheck inside an open write
+ * transaction, fail-closed on a missing org), this is a pure read: an
+ * unknown org resolves like the Features page does, from registry defaults.
+ */
+export async function orgFeatureEnabled(
+  orgId: string,
+  key: string,
+  executor: SqlExecutor = db,
+): Promise<boolean> {
+  const row = (await executor.execute<{ features: FeatureState | null }>(sql`
+    select settings->'features' as features from orgs where id = ${orgId}`)).rows[0];
+  const stored = row?.features ?? {};
+  if (
+    (key === "multiSubsidiary" || key === "multiCurrency") &&
+    typeof stored[key] !== "boolean"
+  ) {
+    return dataDependentFeatureDefault(executor, orgId, key as DataDependentFeatureKey, stored);
+  }
+  return featureEnabled(stored, key);
 }

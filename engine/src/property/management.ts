@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrg, withOrgTransaction } from "../platform/db.ts";
+import { db, type SqlExecutor, withBypass, withOrg, withOrgTransaction } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "../money/money.ts";
@@ -10,7 +10,7 @@ import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import type { AdvancedBillingLine } from "../billing/advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
@@ -244,11 +244,12 @@ export function isSecurityDepositImportConflict(error: unknown): boolean {
   return false;
 }
 
+// Canonical switchboard read: the previous inline ::boolean cast threw
+// 22P02 on a non-boolean stored value.
 async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<void> {
-  const result = (await runner.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'propertyManagement')::boolean,false) as enabled from orgs where id=${orgId}
-  `));
-  if (!result.rows[0]?.enabled) throw new PropertyManagementError("Property management feature is disabled");
+  if (!(await orgFeatureEnabled(orgId, "propertyManagement", runner as SqlExecutor))) {
+    throw new PropertyManagementError("Property management feature is disabled");
+  }
 }
 
 async function assertPropertyPostingScope(
@@ -275,11 +276,10 @@ async function assertPropertyPostingScope(
   }
 }
 
+// Canonical switchboard read: the previous inline ::boolean cast threw
+// 22P02 on a non-boolean stored value.
 async function fixedAssetsFeatureEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<boolean> {
-  const result = (await runner.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'fixedAssets')::boolean, true) as enabled from orgs where id=${orgId}
-  `));
-  return result.rows[0]?.enabled !== false;
+  return orgFeatureEnabled(orgId, "fixedAssets", runner as SqlExecutor);
 }
 
 /** The shared data-dependent resolver, not a second copy of the SQL: the
@@ -1126,10 +1126,8 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
     // Stored charges and the scheduled escalation stay. Turning Equipment
     // off must refuse an apply that would persist equipment_charge.
     if (charge.item_id) {
-      const equipmentOn = (await tx.execute<{ enabled: boolean }>(sql`
-        select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
-          from orgs where id = ${orgId}
-      `)).rows[0]?.enabled === true;
+      // Canonical switchboard read (::boolean casts threw on non-boolean imports).
+      const equipmentOn = await orgFeatureEnabled(orgId, "equipment", tx as SqlExecutor);
       if (!equipmentOn) {
         const item = (await tx.execute<{ kind: string }>(sql`
           select kind from items where id = ${charge.item_id} and org_id = ${orgId}`));
@@ -2643,7 +2641,9 @@ export async function propertyManagementWorkspace(orgId: string, asOf?: string) 
 export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: number; invoices: number; lateFees: number; orgErrors: { orgId: string; error: string }[] }> {
   const result: { billed: number; invoices: number; lateFees: number; orgErrors: { orgId: string; error: string }[] } =
     { billed: 0, invoices: 0, lateFees: 0, orgErrors: [] };
-  const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where coalesce((settings->'features'->>'propertyManagement')::boolean,false)`)));
+  // Registry fallback shape: a non-boolean stored value falls back to the
+  // default instead of throwing 22P02 like the previous ::boolean cast.
+  const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where case (settings->'features'->>'propertyManagement') when 'true' then true when 'false' then false else false end`)));
   for (const org of orgs.rows) {
     try {
       await withOrg(org.id, async () => {

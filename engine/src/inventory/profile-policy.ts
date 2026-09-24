@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
-import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
+import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { restrictionAdmits, type SubsidiaryContext } from "../organization/subsidiaries.ts";
 import { type InventoryProfile, InventoryError, InventoryOwnershipError, CostingPolicyChangeBlockedError, type Runner } from "./contracts.ts";
 /**
@@ -281,16 +281,14 @@ export function assertMovementOwner(ctx: SubsidiaryContext, subsidiaryId: string
   }
 }
 
-/** Registry default is on — absence must not disable inventory. */
+/** Registry default is on — absence must not disable inventory. Resolved
+ * through the canonical switchboard: the previous inline ::boolean cast
+ * threw 22P02 on a non-boolean stored value. */
 export async function inventoryFeatureEnabled(
   runner: Runner,
   orgId: string,
 ): Promise<boolean> {
-  const result = await runner.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'inventory')::boolean, true) as enabled
-      from orgs where id = ${orgId}
-  `);
-  return result.rows[0]?.enabled === true;
+  return orgFeatureEnabled(orgId, "inventory", runner as SqlExecutor);
 }
 
 /** New stock activity holds the authoritative feature through its write transaction. */

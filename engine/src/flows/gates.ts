@@ -1326,7 +1326,9 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.remind_at is not null and gate.remind_at <= ${now}
        and gate.reminded_at is null and organization.env_kind = 'production'
-       and coalesce((organization.settings->'features'->>'flows')::boolean, true)
+       -- Registry fallback shape (non-boolean stored values fall back to the
+       -- default instead of throwing 22P02).
+       and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
      order by gate.remind_at
      limit 200
   `));
@@ -1379,7 +1381,9 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.escalate_at is not null and gate.escalate_at <= ${now}
        and organization.env_kind = 'production'
-       and coalesce((organization.settings->'features'->>'flows')::boolean, true)
+       -- Registry fallback shape (non-boolean stored values fall back to the
+       -- default instead of throwing 22P02).
+       and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
      order by gate.escalate_at
      limit 100
   `));
