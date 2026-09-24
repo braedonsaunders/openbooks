@@ -174,6 +174,23 @@ test("SCT with an S-code prices the Scottish bands end to end", async () => {
   assert.equal(factors.GB_TAX, "236.8900");
 });
 
+test("a recorded student-loan plan refuses instead of completing without its deduction", async () => {
+  const { ctx, pushed } = gbContext({
+    codes: {
+      ...NOTICE_1257L,
+      gb_starter_checklist: { starter_declaration: "A", student_loan_plan: "plan_2" },
+    },
+    income: "3000",
+    pensionable: "3000",
+  });
+
+  await assert.rejects(
+    () => computeGbStatutory(ctx),
+    /records plan_2: HMRC student-loan and postgraduate-loan deductions are not yet implemented/,
+  );
+  assert.deepEqual(pushed, []);
+});
+
 test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
   const { ctx, pushed } = gbContext({
     region: "ENG",

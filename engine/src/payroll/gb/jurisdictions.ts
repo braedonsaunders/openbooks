@@ -136,8 +136,8 @@ const GB_STARTER_CHECKLIST: PayrollCertificate = {
         { value: "plan_5", label: "Plan 5 (postgraduate-plan undergraduate)" },
         { value: "postgraduate", label: "Postgraduate loan" },
       ],
-      help: "Collected from the starter checklist's student-loan question. Recorded for the "
-        + "future student-loan slot; no repayments are computed from it yet (see the module header).",
+      help: "Collected from the starter checklist's student-loan question. A selected plan currently "
+        + "blocks payroll because this pack cannot yet calculate the required loan repayment.",
     },
   ],
 };
