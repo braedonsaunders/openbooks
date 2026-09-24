@@ -10,6 +10,13 @@
   "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
   "failed": "Fehlgeschlagen",
   "queryError": "Abfragefehler",
+  "errors": {
+    "emptyResponse": "Der Abfragedienst hat eine leere Antwort zurückgegeben (HTTP {status})",
+    "invalidResponse": "Der Abfragedienst hat eine ungültige Antwort zurückgegeben (HTTP {status})",
+    "requestFailed": "Abfrageanfrage fehlgeschlagen (HTTP {status})",
+    "invalidSchema": "Der Abfragedienst hat eine ungültige Schemaantwort zurückgegeben",
+    "invalidResult": "Der Abfragedienst hat ein ungültiges Ergebnis zurückgegeben"
+  },
   "rowCount": "{count, plural, one {# Zeile} other {# Zeilen}}",
   "truncated": "Gekürzt bei {max}",
   "ranSelection": "Auswahl ausgeführt",

@@ -10,6 +10,13 @@
   "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
   "failed": "Échec",
   "queryError": "Erreur de requête",
+  "errors": {
+    "emptyResponse": "Le service de requête a renvoyé une réponse vide (HTTP {status})",
+    "invalidResponse": "Le service de requête a renvoyé une réponse invalide (HTTP {status})",
+    "requestFailed": "La requête a échoué (HTTP {status})",
+    "invalidSchema": "Le service de requête a renvoyé un schéma invalide",
+    "invalidResult": "Le service de requête a renvoyé un résultat invalide"
+  },
   "rowCount": "{count, plural, one {# ligne} other {# lignes}}",
   "truncated": "Tronqué à {max}",
   "ranSelection": "Sélection exécutée",

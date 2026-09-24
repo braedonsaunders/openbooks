@@ -10,6 +10,13 @@
   "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
   "failed": "失敗しました",
   "queryError": "クエリエラー",
+  "errors": {
+    "emptyResponse": "クエリサービスが空の応答を返しました (HTTP {status})",
+    "invalidResponse": "クエリサービスが無効な応答を返しました (HTTP {status})",
+    "requestFailed": "クエリ要求に失敗しました (HTTP {status})",
+    "invalidSchema": "クエリサービスが無効なスキーマ応答を返しました",
+    "invalidResult": "クエリサービスが無効な結果を返しました"
+  },
   "rowCount": "{count, plural, one {# 行} other {# 行}}",
   "truncated": "{max} 件で切り詰められました",
   "ranSelection": "選択範囲を実行しました",

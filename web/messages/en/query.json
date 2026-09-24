@@ -10,6 +10,13 @@
   "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
   "failed": "Failed",
   "queryError": "Query error",
+  "errors": {
+    "emptyResponse": "The query service returned an empty response (HTTP {status})",
+    "invalidResponse": "The query service returned an invalid response (HTTP {status})",
+    "requestFailed": "Query request failed (HTTP {status})",
+    "invalidSchema": "The query service returned an invalid schema response",
+    "invalidResult": "The query service returned an invalid result"
+  },
   "rowCount": "{count, plural, one {# row} other {# rows}}",
   "truncated": "Truncated at {max}",
   "ranSelection": "Ran selection",
