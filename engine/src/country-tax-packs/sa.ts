@@ -10,16 +10,20 @@ const SA_VAT_RETURN: TaxReturnPack = {
   governmentFormat: "portal_entry",
   submissionUrl: "https://zatca.gov.sa/en/HelpCenter/CustomerJourney/Pages/tax-journey.aspx",
   watermark: "Working copy — review state-borne supplies, threshold-driven frequency, and corrections treatment, then file through the ZATCA portal",
+  // Box labels stay rate-neutral on purpose: the standard band priced 5%
+  // from 2018-01-01 to 2020-06-30 and 15% since 2020-07-01, so a "(15%)"
+  // label misdescribes every 2018–2020 document. The SA-VAT-STD code
+  // declares its destination boxes explicitly instead.
   boxes: [
-    { lineCode: "1", label: "Box 1 — standard-rated domestic sales (15%)", sign: 1, sequence: 10 },
+    { lineCode: "1", label: "Box 1 — standard-rated domestic sales", sign: 1, sequence: 10 },
     { lineCode: "2", label: "Box 2 — sales where the State bears the VAT (citizens: private healthcare, private education, qualifying first home)", sign: 1, sequence: 20 },
     { lineCode: "3", label: "Box 3 — zero-rated domestic sales", sign: 1, sequence: 30 },
     { lineCode: "4", label: "Box 4 — exports", sign: 1, sequence: 40 },
     { lineCode: "5", label: "Box 5 — exempt sales", sign: 1, sequence: 50 },
     { lineCode: "6", label: "Box 6 — total sales", sign: 1, sequence: 60 },
-    { lineCode: "7", label: "Box 7 — standard-rated domestic purchases (15%)", sign: 1, sequence: 70 },
-    { lineCode: "8", label: "Box 8 — imports subject to VAT paid at customs (15%)", sign: 1, sequence: 80 },
-    { lineCode: "9", label: "Box 9 — imports subject to VAT accounted for through the reverse charge mechanism (15%)", sign: 1, sequence: 90 },
+    { lineCode: "7", label: "Box 7 — standard-rated domestic purchases", sign: 1, sequence: 70 },
+    { lineCode: "8", label: "Box 8 — imports subject to VAT paid at customs", sign: 1, sequence: 80 },
+    { lineCode: "9", label: "Box 9 — imports subject to VAT accounted for through the reverse charge mechanism", sign: 1, sequence: 90 },
     { lineCode: "10", label: "Box 10 — zero-rated purchases", sign: 1, sequence: 100 },
     { lineCode: "11", label: "Box 11 — exempt purchases", sign: 1, sequence: 110 },
     { lineCode: "12", label: "Box 12 — total purchases", sign: 1, sequence: 120 },
@@ -116,6 +120,10 @@ export const SAUDI_ARABIA_TAX_PACK: CountryTaxPackDefinition = {
           { ratePercent: 5, effectiveFrom: "2018-01-01", effectiveTo: "2020-06-30", sourceId: "zatca_retail_vat_guide" },
           { ratePercent: 15, effectiveFrom: "2020-07-01", sourceId: "zatca_retail_vat_guide" },
         ],
+        // Box labels are rate-neutral (the 5% era shares these boxes), so
+        // the destinations are declared: standard-rated sales, purchases,
+        // and both import boxes.
+        returnBoxes: ["1", "7", "8", "9"],
       },
       {
         code: "SA-VAT-ZERO",

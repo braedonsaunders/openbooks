@@ -48,6 +48,20 @@ describe("Saudi Arabia VAT pack", () => {
     assert.ok(ret.submissionUrl.startsWith("https://zatca.gov.sa/"));
   });
 
+  it("keeps standard-box labels rate-neutral across the 5%-to-15% history and declares the destinations", () => {
+    const boxes = new Map(pack.returnPacks[0]!.boxes.map((box) => [box.lineCode, box] as const));
+    // A "(15%)" label misdescribes every 2018–2020 document the schedule
+    // prices at 5%: labels name the box's content, never today's rate.
+    for (const line of ["1", "7", "8", "9"]) {
+      assert.ok(!/\d\s*%/.test(boxes.get(line)!.label), `box ${line} must not embed a rate`);
+    }
+    const standard = packTaxCodesForReturn(pack, RETURN_CODE).find((code) => code.code === "SA-VAT-STD")!;
+    assert.deepEqual(standard.returnBoxes, ["1", "7", "8", "9"]);
+    for (const line of standard.returnBoxes ?? []) {
+      assert.ok(boxes.has(line), `declared destination box ${line} is missing from the return`);
+    }
+  });
+
   it("carries the 5%-to-15% standard-rate history contiguously", () => {
     const codes = packTaxCodesForReturn(pack, RETURN_CODE);
     const standard = codes.find((code) => code.code === "SA-VAT-STD");
