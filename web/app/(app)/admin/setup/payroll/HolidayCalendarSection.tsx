@@ -39,9 +39,7 @@ export async function HolidayCalendarSection({
   const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
 
   const jurisdictions = declaredJurisdictions()
-  const jurisdiction = pickString(sp.jurisdiction)
-    ?? jurisdictions.find((entry) => entry.key === 'CA-ON')?.key
-    ?? jurisdictions[0]!.key
+  const jurisdiction = selectedHolidayJurisdiction(sp)
   const thisYear = Number((await businessToday(orgId)).slice(0, 4))
   const year = Number(pickString(sp.year) ?? thisYear)
 
@@ -49,12 +47,12 @@ export async function HolidayCalendarSection({
   let failure: string | null = null
   let payRule: ReturnType<typeof statutoryHolidayPayRule> | undefined
   try {
-    holidays = await observedHolidays(orgId, jurisdiction, `${year}-01-01`, `${year}-12-31`)
+    if (jurisdiction) holidays = await observedHolidays(orgId, jurisdiction, `${year}-01-01`, `${year}-12-31`)
     // Holiday-pay formulas are effective-dated (Prince Edward Island's changed
     // mid-2026), so the rule shown is the one in force at the END of the year
     // being viewed — the one that governs the next holiday, not a rule that has
     // already been repealed.
-    payRule = statutoryHolidayPayRule(jurisdiction, `${year}-12-31`)
+    if (jurisdiction) payRule = statutoryHolidayPayRule(jurisdiction, `${year}-12-31`)
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error)
   }
@@ -108,7 +106,11 @@ export async function HolidayCalendarSection({
           reads as "this employer works every day". */}
       {failure ? <Alert variant="destructive">{failure}</Alert> : null}
 
-      {!failure && payRule === null ? (
+      {!failure && !jurisdiction ? (
+        <Alert>{label('holidayCalendar.selectJurisdiction', 'Select a jurisdiction to view its statutory holidays.')}</Alert>
+      ) : null}
+
+      {!failure && jurisdiction && payRule === null ? (
         <Alert>
           {label(
             'holidayCalendar.noMandate',
@@ -126,7 +128,7 @@ export async function HolidayCalendarSection({
         </Alert>
       ) : null}
 
-      {!failure ? (
+      {!failure && jurisdiction ? (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
@@ -177,6 +179,10 @@ export async function HolidayCalendarSection({
       ) : null}
     </div>
   )
+}
+
+export function selectedHolidayJurisdiction(searchParams: Record<string, string | string[] | undefined>): string | null {
+  return pickString(searchParams.jurisdiction) ?? null
 }
 
 /** The formula, worded the way the statute words it. */

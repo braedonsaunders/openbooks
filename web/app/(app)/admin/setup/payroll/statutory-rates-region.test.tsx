@@ -60,6 +60,7 @@ const messages = (await import('../../../../../messages/en')).default
 const settingsPage = (await import('../../../../../messages/en/payroll.json', { with: { type: 'json' } })).default
   .settingsPage as unknown as Record<string, Record<string, string>>
 const { StatutoryRatesSection } = await import('./StatutoryRatesSection')
+const { selectedHolidayJurisdiction } = await import('./HolidayCalendarSection')
 const { BusinessDateProvider } = await import('../../../../../components/business-date-provider')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
@@ -191,12 +192,15 @@ test('the rate dialog labels the region picker from the pack, capitalized', asyn
   try {
     await openDialog()
     const label = document.querySelector('label[for="rate-region"]')
-    assert.ok(label, 'the dialog must label its region picker')
-    assert.match(label?.textContent ?? '', /State/, 'the pack region token renders capitalized')
-    assert.doesNotMatch(label?.textContent ?? '', /\bstate\b/, 'the raw token never shows')
+    assert.ok(label, 'the dialog must label its region picker'); assert.match(label?.textContent ?? '', /State/, 'the pack region token renders capitalized'); assert.doesNotMatch(label?.textContent ?? '', /\bstate\b/, 'the raw token never shows')
   } finally {
     await unmount()
   }
+})
+
+test('the holiday calendar does not choose a jurisdiction when none was selected', () => {
+  assert.equal(selectedHolidayJurisdiction({}), null)
+  assert.equal(selectedHolidayJurisdiction({ jurisdiction: 'NZ-AUK' }), 'NZ-AUK')
 })
 
 test('rate inputs name their scale and range from the declaration', async () => {
@@ -204,11 +208,7 @@ test('rate inputs name their scale and range from the declaration', async () => 
   try {
     await openDialog()
     const body = document.body.textContent ?? ''
-    assert.ok(
-      body.includes(String(settingsPage.rates?.rateScaleHint ?? 'Decimal rate')),
-      'a decimal-rate input names its scale',
-    )
-    assert.ok(body.includes('0–1'), 'the input names the accepted range from the declaration')
+    assert.ok(body.includes(String(settingsPage.rates?.rateScaleHint ?? 'Decimal rate')), 'a decimal-rate input names its scale'); assert.ok(body.includes('0–1'), 'the input names the accepted range from the declaration')
   } finally {
     await unmount()
   }
@@ -219,19 +219,16 @@ test('the rate dialog keeps the save rejection visible inside the drawer', async
   const { unmount } = await mountRates(() => Response.json({ error: refusal }, { status: 422 }))
   try {
     await openDialog()
-    setInputById('rate-field-rate', '0.0060')
-    await tick()
+    setInputById('rate-field-rate', '0.0060'); await tick()
     const save = [...document.querySelectorAll('button')].find(
       (b) => (b.textContent ?? '').trim() === 'Save',
     ) as HTMLButtonElement | undefined
-    assert.ok(save, 'the dialog must offer Save')
-    await act(async () => {
+    assert.ok(save, 'the dialog must offer Save'); await act(async () => {
       save.click()
       await tick()
       await tick()
     })
-    await tick()
-    const alert = [...document.querySelectorAll('div')].find((el) =>
+    await tick(); const alert = [...document.querySelectorAll('div')].find((el) =>
       (el.textContent ?? '').includes(refusal),
     )
     assert.ok(alert, 'the rejection stays rendered inside the drawer until the next save')
