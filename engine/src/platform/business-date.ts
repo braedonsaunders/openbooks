@@ -69,16 +69,23 @@ export function formatTimestampInZone(date: Date, timeZone: string): string {
 /**
  * The org's configured IANA time zone: the canonical name when a zone is
  * stored (aliases resolve through the shared validator, so a stored
- * "US/Eastern" days as America/New_York); UTC when no zone is stored or the
- * org does not exist. A stored value no runtime accepts is a misconfigured
- * org, not a UTC org — it refuses by name so the operator fixes the setting
- * instead of posting on the wrong day.
+ * "US/Eastern" days as America/New_York); UTC when no zone is stored. An
+ * org id with no row is a caller bug, not a UTC org — it refuses by name
+ * so the wrong tenant never silently inherits the UTC day. A stored value
+ * no runtime accepts is a misconfigured org, not a UTC org — it refuses by
+ * name so the operator fixes the setting instead of posting on the wrong day.
  */
 export async function businessTimeZone(orgId: string): Promise<string> {
   const r = (await db.execute<{ time_zone: string | null }>(sql`
     select settings->>'timeZone' as time_zone from orgs where id = ${orgId}
   `));
-  const stored = r.rows[0]?.time_zone;
+  const row = r.rows[0];
+  if (!row) {
+    throw new Error(
+      `organization ${orgId} not found — cannot resolve its business time zone`,
+    );
+  }
+  const stored = row.time_zone;
   if (!stored || !stored.trim()) return "UTC";
   const canonical = canonicalTimeZone(stored);
   if (!canonical) {
