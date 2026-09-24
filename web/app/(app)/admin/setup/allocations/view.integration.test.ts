@@ -71,18 +71,22 @@ const hooks = registerHooks({
 const { loadAllocations } = (await import('./view.ts')) as typeof import('./view.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
 
+// F1T-FIX-ALLOC: seeds run under the explicit bypass. The unscoped
+// orgs-settings write previously matched zero rows under pooled RLS, so the
+// allocations flag never landed and 'loader parses tabs' read the
+// feature-required redirect instead of the tabs.
 async function seed(withFeature: boolean): Promise<string> {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   if (withFeature) {
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       update orgs set settings = coalesce(settings, '{}'::jsonb)
         || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) || '{"allocations": true}'::jsonb)
-       where id = ${org.orgId}`)
+       where id = ${org.orgId}`))
   }
   viewState.orgId = org.orgId
   return org.orgId
@@ -91,7 +95,7 @@ async function seed(withFeature: boolean): Promise<string> {
 test('loader 404s while the feature is off', { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
   const orgId = await seed(false)
   t.after(() => dropScratchOrg(orgId))
-  await assert.rejects(loadAllocations({}), (error: unknown) => {
+  await assert.rejects(withOrgContext(orgId, () => loadAllocations({})), (error: unknown) => {
     assert.ok(error instanceof Error)
     // next/navigation notFound() — any navigation throw counts as the 404 path.
     return /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND|not found/i.test(error.message) || 'digest' in error
@@ -101,9 +105,9 @@ test('loader 404s while the feature is off', { skip: !process.env.OPENBOOKS_DB_U
 test('loader parses tabs and falls back to rules', { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
   const orgId = await seed(true)
   t.after(() => dropScratchOrg(orgId))
-  assert.equal((await loadAllocations({})).tab, 'rules')
-  assert.equal((await loadAllocations({ tab: 'runs' })).tab, 'runs')
-  const unknown = await loadAllocations({ tab: 'nope' })
+  assert.equal((await withOrgContext(orgId, () => loadAllocations({}))).tab, 'rules')
+  assert.equal((await withOrgContext(orgId, () => loadAllocations({ tab: 'runs' }))).tab, 'runs')
+  const unknown = await withOrgContext(orgId, () => loadAllocations({ tab: 'nope' }))
   assert.equal(unknown.tab, 'rules')
   assert.deepEqual([unknown.onRules, unknown.onDrivers, unknown.onRuns], [true, false, false])
   // Loader-resolved copy is non-empty catalog text (vendor neutrality is
