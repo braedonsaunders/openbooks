@@ -246,6 +246,7 @@ export async function computeUsStatutory(
   }
 
   let regionTax: string | undefined;
+  const workRegionTaxes: { region: string; amount: string }[] = [];
   let sequence = 140;
   // Nebraska's special minimum is measured on gross wages after tax-qualified
   // deductions. The pack's deduction treatment is the authoritative source
@@ -297,6 +298,13 @@ export async function computeUsStatutory(
       wages: income,
       supplemental: nonPeriodic,
       supplementalPaymentTiming,
+      wageAllocations: ctx.workAllocations,
+      residentWithholdingFacts: levy.basis === "resident_out_of_region"
+        ? {
+          outOfRegionWages: sum([income, nonPeriodic]),
+          workRegionTaxes: [...workRegionTaxes],
+        }
+        : undefined,
       federalIncomeTax: statutory.fit,
       taxQualifiedDeductions,
       certificateFor,
@@ -313,6 +321,9 @@ export async function computeUsStatutory(
         config.subRegionRates(rateKey, levy.region, subRegion),
     });
     if (!withheld) continue;
+    if (levy.level === "region" && levy.side === "work") {
+      workRegionTaxes.push({ region: levy.region, amount: withheld.tax });
+    }
     if (levy.level === "region") regionTax = withheld.tax;
     pushStatutory(
       levy.level === "region" ? "state_income_tax" : "local_income_tax",
