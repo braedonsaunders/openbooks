@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
+  markPaymentRemittanceSent,
   OrgEmailConfigConflictError,
   readOrgEmailConfigView,
   saveOrgEmailConfig,
@@ -336,6 +337,80 @@ test("concurrent configuration edits serialize on the org row and cannot lose di
   } finally {
     await client.query("rollback").catch(() => {});
     client.release();
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("an unknown remittance id refuses by name instead of recording a phantom send (B-DLV-04)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const seed = async (status: string): Promise<string> => {
+      const runId = randomUUID();
+      await db.execute(sql`
+        insert into payment_runs
+          (id, org_id, run_number, bank_account_id, subsidiary_id, method,
+           direction, purpose, currency, status, payment_count, total_amount)
+        values (${runId}, ${org.orgId}, ${`REM-${runId}`}, ${org.accounts.bank},
+                ${org.subsidiaryId}, 'wire', 'outbound', 'vendor_payments', 'CAD',
+                'generated', 1, '25')
+      `);
+      const instructionId = randomUUID();
+      await db.execute(sql`
+        insert into payment_instructions
+          (id, org_id, payment_run_id, payee_party_id, amount, currency, status)
+        values (${instructionId}, ${org.orgId}, ${runId}, ${org.vendorId}, '25', 'CAD', 'pending')
+      `);
+      const id = randomUUID();
+      await db.execute(sql`
+        insert into payment_remittances (id, org_id, payment_instruction_id, recipients, status)
+        values (${id}, ${org.orgId}, ${instructionId}, '["ap@example.com"]'::jsonb, ${status})
+      `);
+      return id;
+    };
+    // A pending row completes and reports the transition.
+    const pending = await seed("pending");
+    assert.equal(await markPaymentRemittanceSent(org.orgId, pending), "sent");
+    // A replay over the recorded acceptance is idempotent success.
+    assert.equal(await markPaymentRemittanceSent(org.orgId, pending), "already-sent");
+    // An unknown id, a wrong org, and a cancelled row all refuse by name —
+    // the caller must not record a provider-accepted send that never happened.
+    await assert.rejects(markPaymentRemittanceSent(org.orgId, randomUUID()), /no such pending remittance/);
+    const other = await createScratchOrg();
+    try {
+      const otherRunId = randomUUID();
+      await db.execute(sql`
+        insert into payment_runs
+          (id, org_id, run_number, bank_account_id, subsidiary_id, method,
+           direction, purpose, currency, status, payment_count, total_amount)
+        values (${otherRunId}, ${other.orgId}, ${`REM-${otherRunId}`}, ${other.accounts.bank},
+                ${other.subsidiaryId}, 'wire', 'outbound', 'vendor_payments', 'CAD',
+                'generated', 1, '25')
+      `);
+      const otherInstructionId = randomUUID();
+      await db.execute(sql`
+        insert into payment_instructions
+          (id, org_id, payment_run_id, payee_party_id, amount, currency, status)
+        values (${otherInstructionId}, ${other.orgId}, ${otherRunId}, ${other.vendorId}, '25', 'CAD', 'pending')
+      `);
+      const foreign = await db.execute<{ id: string }>(sql`
+        insert into payment_remittances (id, org_id, payment_instruction_id, recipients, status)
+        values (${randomUUID()}, ${other.orgId}, ${otherInstructionId}, '["ap@example.com"]'::jsonb, 'pending')
+        returning id
+      `);
+      await assert.rejects(
+        markPaymentRemittanceSent(org.orgId, foreign.rows[0]!.id),
+        /no such pending remittance/,
+      );
+    } finally {
+      await dropScratchOrgReporting(other.orgId);
+    }
+    const cancelled = await seed("cancelled");
+    await assert.rejects(markPaymentRemittanceSent(org.orgId, cancelled), /no such pending remittance/);
+    const row = (await db.execute<{ status: string }>(sql`
+      select status from payment_remittances where id = ${cancelled}
+    `)).rows[0]!;
+    assert.equal(row.status, "cancelled");
+  } finally {
     await dropScratchOrgReporting(org.orgId);
   }
 });
