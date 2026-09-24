@@ -8,6 +8,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { AttachmentPanel } from '../../../../components/attachment-panel'
 import { promptDialog } from '../../../../lib/prompt'
 import type { LienWaiverRow } from '../../../../lib/compliance'
+import { LienWaiverLegacyNotice } from './LienWaiverLegacyNotice'
 
 /**
  * One lien waiver, and the transitions available from where it stands.
@@ -114,15 +115,7 @@ export function LienWaiverDrawer({
         </AlertDescription>
       </Alert>
 
-      {legacyUnverified ? (
-        <Alert className="mb-4" variant="destructive">
-          <AlertDescription>
-            <strong className="mr-1">Legacy waiver — executed evidence not captured at signing.</strong>
-            The print reflects current records, not the document as signed. Verify against the attached
-            executed copy below, or void and reissue.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <LienWaiverLegacyNotice visible={legacyUnverified} />
 
       <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
         {(

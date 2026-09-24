@@ -214,6 +214,11 @@
     "title": "Verzichtserklärungen",
     "description": "Gesetzliche Verzichtserklärungen im Austausch gegen Bauzahlungen — von Subunternehmern erhalten, an Auftraggeber ausgestellt.",
     "new": "Neue Verzichtserklärung",
+    "legacyNotice": {
+      "title": "Ältere Verzichtserklärung — der unterzeichnete Nachweis wurde beim Unterzeichnen nicht erfasst.",
+      "body": "Der Ausdruck zeigt aktuelle Datensätze, nicht das unterzeichnete Dokument.",
+      "remedy": "Prüfen Sie die beigefügte unterzeichnete Kopie oder heben Sie die Verzichtserklärung auf und stellen Sie sie neu aus."
+    },
     "create": "Verzichtserklärung erstellen",
     "columns": {
       "number": "Verzichtserklärung",

@@ -214,6 +214,11 @@
     "title": "Renuncias de gravamen",
     "description": "Liberaciones legales que se intercambian por el pago de obra: recibidas de subcontratistas, emitidas a la propiedad.",
     "new": "Nueva renuncia",
+    "legacyNotice": {
+      "title": "Renuncia anterior: no se capturó la evidencia firmada al firmar.",
+      "body": "La impresión refleja los registros actuales, no el documento firmado.",
+      "remedy": "Verifique la copia firmada adjunta o anule la renuncia y emita otra."
+    },
     "create": "Crear renuncia",
     "columns": {
       "number": "Renuncia",

@@ -214,6 +214,11 @@
     "title": "Lien waivers",
     "description": "Statutory releases exchanged for construction payment — received from subcontractors, issued to owners.",
     "new": "New waiver",
+    "legacyNotice": {
+      "title": "Legacy waiver — executed evidence not captured at signing.",
+      "body": "The print reflects current records, not the document as signed.",
+      "remedy": "Verify against the attached executed copy below, or void and reissue."
+    },
     "create": "Create waiver",
     "columns": {
       "number": "Waiver",
