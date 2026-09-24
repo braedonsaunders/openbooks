@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { approveSubmittedTimeEntries } from '../../../../lib/time-approval'
 import { isIsoDate, loadWeek, pinTimesheetEmployee, weekStart } from '../_lib'
 
@@ -42,8 +43,10 @@ export async function POST(req: Request) {
       actorId: user.id,
       employeePartyId: ownedEmployee,
       weekStart: week,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
   } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const message = error instanceof Error ? error.message : String(error)
     // Guard rejections carry their own sentence: nothing submitted (422), or
     // the week's approval workflow still owns it (409). Anything else is a

@@ -588,7 +588,11 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
         });
       }
 
-      const ctx: FlowExecCtx = { orgId: gate.orgId, userId: asSystem ? null : userId };
+      const ctx: FlowExecCtx = {
+        orgId: gate.orgId,
+        userId: asSystem ? null : userId,
+        allowedSubsidiaryIds: args.allowedSubsidiaryIds ?? null,
+      };
       const subject = await adapter.loadContext(gate.subjectId);
 
       // The quorum is resolved — tell the requester what happened to their record

@@ -64,7 +64,7 @@ test('an amendment carries the original snapshots and approves as an exact contr
       // Approve the amendment through the real approval path (snapshots + overhead pair).
       await db.execute(sql`update time_entries set status = 'submitted' where org_id = ${org.orgId} and id = ${amendment}`)
       await db.execute(sql`update timesheet_weeks set status = 'submitted' where org_id = ${org.orgId} and employee_party_id = ${employee} and week_start = ${week}`)
-      const approved = await approveSubmittedTimeEntries({ orgId: org.orgId, actorId: actor, employeePartyId: employee, weekStart: week })
+      const approved = await approveSubmittedTimeEntries({ orgId: org.orgId, actorId: actor, employeePartyId: employee, weekStart: week, allowedSubsidiaryIds: null })
       assert.deepEqual(approved, [amendment])
 
       const after = await snapshot()

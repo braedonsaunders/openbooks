@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockScopeRow } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { laborCostingSettings, setPrevailingWageEntryWage, snapshotLaborCostRates } from '@openbooks/engine/src/projects/labor-costing.ts'
 // HR-13: register the prevailing-wage resolver for the snapshot hook —
 // the projects module never imports hrm, so the web approval path wires
@@ -65,6 +66,7 @@ export interface ApproveSubmittedTimeEntriesOptions {
   actorId: string
   employeePartyId: string
   weekStart: string
+  allowedSubsidiaryIds: ReadonlySet<string> | null
 }
 
 /**
@@ -83,6 +85,18 @@ export async function approveSubmittedTimeEntries(
   const days = weekWindow(options.weekStart)
   const week = days[0]!
   return withOrgTransaction(options.orgId, async () => {
+    // Parties precede their dependent week headers in the canonical lock
+    // order. The route's preliminary pin can go stale while this transaction
+    // starts, so recheck the employee's current scope under a shared lock and
+    // hold it through costing and posting.
+    await lockScopeRow(
+      db,
+      options.orgId,
+      'party',
+      options.employeePartyId,
+      options.allowedSubsidiaryIds,
+      'share',
+    )
     // The week's header owns the lifecycle: lock it first so a concurrent
     // submission cannot interleave gate creation with this approval, then
     // refuse weeks no approval may consume. The locked status is the audit

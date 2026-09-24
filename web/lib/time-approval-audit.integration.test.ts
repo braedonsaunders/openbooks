@@ -125,6 +125,7 @@ test(
           actorId: fixture.actorId,
           employeePartyId: fixture.employeeId,
           weekStart: "2026-07-12",
+          allowedSubsidiaryIds: null,
         });
         const audit = await db.execute(sql\`
           select action, actor_id as "actorId", changes
@@ -165,7 +166,7 @@ test(
         await db.execute(sql\`
           update orgs
              set settings = settings || \${JSON.stringify({
-               laborCosting: { mode: "post", hoursPerDay: 8, annualHours: 2080, components: [] },
+               laborCosting: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] },
                controlAccounts: {
                  ar: fixture.org.accounts.ar,
                  ap: fixture.org.accounts.ap,
@@ -185,6 +186,7 @@ test(
             actorId: fixture.actorId,
             employeePartyId: fixture.employeeId,
             weekStart: "2026-07-12",
+            allowedSubsidiaryIds: null,
           }),
           /no accounting period covers/,
         );
