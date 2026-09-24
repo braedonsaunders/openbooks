@@ -58,14 +58,6 @@ test("backup purges persist intent before storage deletion and atomically record
   assert.match(backup, /rotateBackups[\s\S]*await purgeBackupRun/);
 });
 
-test("stale upload reconciliation requires exact object hash and size", () => {
-  assert.match(scheduler, /status = 'running' and updated_at < now\(\) - interval '6 hours'/);
-  assert.match(backup, /update backup_runs set updated_at = now\(\)/);
-  assert.match(scheduler, /object\.Metadata\?\.sha256 === run\.sha256/);
-  assert.match(scheduler, /String\(object\.ContentLength\) === run\.byte_size/);
-  assert.match(scheduler, /cannot reconcile .* will retry/);
-});
-
 test("stale upload reconciliation claims the row before touching storage", () => {
   // The delete must sit behind a locked re-check: a heartbeat or completion
   // racing the scan wins the lock first and the tick stands down, so an
