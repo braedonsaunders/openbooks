@@ -1348,6 +1348,8 @@
     "clearEmployee": "Tous les employés",
     "cleanNote": "Chaque montant comparé concordait au cent près, sans tolérance ni colonne non mappée.",
     "noFindings": "Cette comparaison ne contient aucun constat du tout.",
+    "findingsLoadFailed": "Impossible de charger les constats de la comparaison.",
+    "retryFindings": "Réessayer",
     "noExceptions": "Aucune exception — chaque cellule concordait exactement.",
     "loading": "Chargement…",
     "saving": "Enregistrement…",

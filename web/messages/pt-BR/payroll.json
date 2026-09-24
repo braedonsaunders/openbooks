@@ -1348,6 +1348,8 @@
     "clearEmployee": "Todos os funcionários",
     "cleanNote": "Todo valor comparado bateu no centavo, sem tolerância e sem coluna sem mapeamento.",
     "noFindings": "Esta comparação não tem nenhum apontamento.",
+    "findingsLoadFailed": "Não foi possível carregar os apontamentos da comparação.",
+    "retryFindings": "Tentar novamente",
     "noExceptions": "Sem exceções — cada célula bateu exatamente.",
     "loading": "Carregando…",
     "saving": "Salvando…",

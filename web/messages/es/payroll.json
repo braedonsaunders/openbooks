@@ -1348,6 +1348,8 @@
     "clearEmployee": "Todos los empleados",
     "cleanNote": "Cada monto comparado coincidió al centavo, sin tolerancia ni columna sin mapear.",
     "noFindings": "Esta comparación no tiene ningún hallazgo.",
+    "findingsLoadFailed": "No se pudieron cargar los hallazgos de la comparación.",
+    "retryFindings": "Reintentar",
     "noExceptions": "Sin excepciones — cada celda coincidió exactamente.",
     "loading": "Cargando…",
     "saving": "Guardando…",

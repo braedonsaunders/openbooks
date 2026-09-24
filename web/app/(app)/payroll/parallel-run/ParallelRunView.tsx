@@ -222,6 +222,7 @@ export function ParallelRunView({
   const [openComparison, setOpenComparison] = useState<Comparison | null>(null)
   const [findings, setFindings] = useState<Finding[]>([])
   const [loadingFindings, setLoadingFindings] = useState(false)
+  const [findingsLoadFailed, setFindingsLoadFailed] = useState(false)
   const [employeeFilter, setEmployeeFilter] = useState<string | null>(null)
   const [showMatches, setShowMatches] = useState(false)
   const [toleranceOpen, setToleranceOpen] = useState(false)
@@ -282,6 +283,7 @@ export function ParallelRunView({
     setOpenComparison(comparison)
     setEmployeeFilter(employeePartyId ?? null)
     setLoadingFindings(true)
+    setFindingsLoadFailed(false)
     setFindings([])
     try {
       const qs = employeePartyId ? `?employeePartyId=${employeePartyId}` : ''
@@ -291,10 +293,13 @@ export function ParallelRunView({
       // The status is checked before the body is parsed (see compare above).
       if (!response.ok) {
         toast.error(await readApiErrorMessage(response, 'could not load the comparison'))
+        setFindingsLoadFailed(true)
         return
       }
       const body = (await response.json()) as { findings?: Finding[]; error?: string }
       setFindings(body.findings ?? [])
+    } catch {
+      setFindingsLoadFailed(true)
     } finally {
       setLoadingFindings(false)
     }
@@ -902,6 +907,13 @@ export function ParallelRunView({
               <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                 {text('loading', 'Loading…')}
               </p>
+            ) : findingsLoadFailed ? (
+              <div role="alert" className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-8 text-sm text-red-700 dark:border-red-900 dark:text-red-300">
+                <span>{text('findingsLoadFailed', 'Could not load comparison findings.')}</span>
+                <Button variant="outline" size="sm" onClick={() => void openDrawer(openComparison, employeeFilter ?? undefined)}>
+                  {text('retryFindings', 'Retry')}
+                </Button>
+              </div>
             ) : (
               <PagedTable
                 rows={visibleFindings}

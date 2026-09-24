@@ -1348,6 +1348,8 @@
     "clearEmployee": "All employees",
     "cleanNote": "Every compared amount agreed to the penny, with no tolerance and no unmapped column.",
     "noFindings": "This comparison has no findings at all.",
+    "findingsLoadFailed": "Could not load comparison findings.",
+    "retryFindings": "Retry",
     "noExceptions": "No exceptions — every cell matched exactly.",
     "loading": "Loading…",
     "saving": "Saving…",
