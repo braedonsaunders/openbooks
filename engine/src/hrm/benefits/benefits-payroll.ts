@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmBenefitsManage } from "../authorization.ts";
+import {
+  HrmAuthorizationError,
+  requireAggregateBenefitsManage,
+  requireHrmBenefitsManage,
+  requireHrmBenefitsManageOnEmployment,
+} from "../authorization.ts";
 import { BenefitsError } from "./errors.ts";
 import { enrollmentTouchesMonth, monthBounds, monthlyFromBasis, prorateForMonth } from "./benefits-math.ts";
 import {
@@ -152,23 +157,32 @@ export async function generateBenefitPayrollInputs(
   const actorId = requireActorId(query.actorId);
   const month = monthBounds(query.coverageMonth);
   return withOrgTransaction(orgId, async () => {
-    await requireHrmBenefitsManage(db, orgId, actorId);
+    // Generation materializes deduction rows per employment, so it reads
+    // through the actor's employer lens: out-of-scope enrollments are
+    // never generated and never returned. Unrestricted actors (null)
+    // keep the full month, dangling employment links included.
+    const scope = await requireAggregateBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     const elections = (
       await db.execute<Record<string, unknown>>(sql`
-        select id, employment_id as "employmentId", plan_id as "planId",
-               effective_from::text as "effectiveFrom",
-               effective_to::text as "effectiveTo",
-               employee_amount_per_period::text as "employeeAmountPerPeriod",
-               employer_amount_per_period::text as "employerAmountPerPeriod",
-               currency
-          from hrm_benefit_enrollments
-         where org_id = ${orgId} and status = 'active'
-           and effective_from <= ${month.to}::date
-           and (effective_to is null or effective_to >= ${month.from}::date)
-         order by id
+        select e.id, e.employment_id as "employmentId", e.plan_id as "planId",
+               e.effective_from::text as "effectiveFrom",
+               e.effective_to::text as "effectiveTo",
+               e.employee_amount_per_period::text as "employeeAmountPerPeriod",
+               e.employer_amount_per_period::text as "employerAmountPerPeriod",
+               e.currency, emp.employer_subsidiary_id as "employerSubsidiaryId"
+          from hrm_benefit_enrollments e
+          left join worker_employments emp on emp.org_id = e.org_id and emp.id = e.employment_id
+         where e.org_id = ${orgId} and e.status = 'active'
+           and e.effective_from <= ${month.to}::date
+           and (e.effective_to is null or e.effective_to >= ${month.from}::date)
+         order by e.id
       `)
-    ).rows;
+    ).rows.filter(
+      (row) =>
+        scope === null ||
+        (row.employerSubsidiaryId != null && scope.has(String(row.employerSubsidiaryId))),
+    );
     const out: BenefitPayrollInputDTO[] = [];
     for (const election of elections) {
       const active: ActiveElection = {
@@ -401,6 +415,32 @@ export async function voidBenefitPayrollInput(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
+    // The row is locked first and its employment's employer scope is
+    // rechecked inside the write transaction: a B input is
+    // indistinguishable from a missing one (uniform NOT_FOUND), so an
+    // A-scoped actor can neither void B's inputs nor probe their ids.
+    const locked = (
+      await db.execute<{ employment_id: string }>(sql`
+        select employment_id from hrm_benefit_payroll_inputs
+         where org_id = ${orgId} and id = ${inputId} for update`)
+    ).rows[0];
+    if (!locked) {
+      throw new BenefitsError(
+        "NOT_FOUND",
+        "benefit payroll input is not visible in this organization and legal-entity scope — reload and retry",
+      );
+    }
+    try {
+      await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, String(locked.employment_id));
+    } catch (error) {
+      if (error instanceof HrmAuthorizationError) {
+        throw new BenefitsError(
+          "NOT_FOUND",
+          "benefit payroll input is not visible in this organization and legal-entity scope — reload and retry",
+        );
+      }
+      throw error;
+    }
     const updated = requireOneRow(
       (
         await db.execute<Record<string, unknown>>(sql`
