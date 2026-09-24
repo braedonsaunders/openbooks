@@ -42,7 +42,7 @@ import {
   emptyResolvedCertificate,
   type ResolvedCertificate,
 } from "../certificates.ts";
-import { add as addMoney } from "../../money/money.ts";
+import { add as addMoney, roundDiv } from "../../money/money.ts";
 import type { ResolvedWithholdingLevy } from "../withholding-resolution.ts";
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
@@ -73,7 +73,12 @@ export type UsSeparateSupplementalMethod =
   | { kind: "not_applicable" }
   | { kind: "aggregate"; source: string }
   | { kind: "differential"; source: string }
-  | { kind: "flat"; rates: readonly { effectiveFrom: string; rate: string; source: string }[] };
+  | {
+    kind: "flat";
+    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+    requiresRegularWithholding?: boolean;
+    rounding?: "whole_dollar";
+  };
 
 /**
  * State method declarations for a supplemental check paid apart from regular
@@ -130,6 +135,44 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     rates: [{
       effectiveFrom: "2026-01-01", rate: "0.0625",
       source: "https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf",
+    }],
+  } as const,
+  MT: {
+    kind: "flat",
+    // Montana Employer and Information Agent Guide with Tax Tables – 2026,
+    // p. 3: for a separately paid supplemental, an employer may use a flat 5%.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.05",
+      source: "https://revenuefiles.mt.gov/files/Forms/Montana_Employer_and_Information_Agent_Guide_with_Tax_Tables.pdf",
+    }],
+  } as const,
+  NC: {
+    kind: "flat",
+    // NC-30 (2026), §12: the 4.09% option requires tax withheld from regular
+    // wages; otherwise §12's aggregate method is mandatory.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.0409",
+      source: "https://www.ncdor.gov/income-tax-withholding-tables-and-instructions-employers/open",
+    }],
+    requiresRegularWithholding: true,
+    rounding: "whole_dollar",
+  } as const,
+  ND: {
+    kind: "flat",
+    // North Dakota 2026 Income Tax Withholding Rates and Instructions,
+    // Supplemental Wages: Option 1 is 1.50% of the supplemental wage.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.015",
+      source: "https://www.tax.nd.gov/sites/www/files/documents/forms/individual/2026-iit/2026-income-tax-withholding-rates-booklet.pdf",
+    }],
+  } as const,
+  NE: {
+    kind: "flat",
+    // Nebraska Circular EN 2026, Bonuses, Supplemental Wages, and Taxable
+    // Awards: employers may elect a flat 3.5% rate for separate payments.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.035",
+      source: "https://revenue.nebraska.gov/sites/revenue.nebraska.gov/files/doc/business/Cir_En_2025/2026cir_en_whole.pdf",
     }],
   } as const,
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
@@ -189,6 +232,8 @@ export interface UsWithholdingInput {
   supplemental?: string;
   /** Whether supplemental wages were paid with regular wages or separately. */
   supplementalPaymentTiming?: "combined" | "separate";
+  /** Committed same-year regular-wage withholding history for conditional flat methods. */
+  regularWageTaxWithheldThisYear?: boolean;
   /** Resolved exact work shares used by state and local allocation rules. */
   wageAllocations?: readonly UsWageAllocation[];
   /** Verified out-of-region wage source and current work-region tax amounts. */
@@ -239,6 +284,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     : input.residentWithholdingFacts;
   const supplemental = input.supplemental == null ? 0n : U(input.supplemental);
   let separateFlatRate: string | undefined;
+  let separateFlatWholeDollar = false;
   if (supplemental > 0n && input.supplementalPaymentTiming == null) {
     throw new UsWithholdingError(
       `separately paid or combined supplemental timing is missing for ${levy.label}; record whether this payment was issued with regular wages before calculating — refused by name`,
@@ -254,6 +300,15 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       );
     }
     if (method.kind === "flat") {
+      if (
+        "requiresRegularWithholding" in method && method.requiresRegularWithholding
+        && input.regularWageTaxWithheldThisYear !== true
+      ) {
+        throw new UsWithholdingError(
+          `${levy.label} cannot use its separate-supplemental flat rate without committed evidence of regular-wage withholding; `
+          + "provide that history or the regular-period basis required by the aggregate method before calculating — refused by name",
+        );
+      }
       const applicable = method.rates
         .filter((rate) => rate.effectiveFrom <= input.payDate)
         .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
@@ -265,6 +320,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         );
       }
       separateFlatRate = applicable.rate;
+      separateFlatWholeDollar = "rounding" in method && method.rounding === "whole_dollar";
     } else {
       throw new UsWithholdingError(
         `${levy.label} separately paid supplemental method ${method.kind} is declared but its calculator is not available in this pack version — update the pack before calculating; refused by name`,
@@ -303,7 +359,10 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         socialInsuranceDeducted: input.socialInsuranceDeducted,
         ytd: input.ytd,
       });
-      const supplementalTax = mulRateCents(supplemental, separateFlatRate);
+      const rawSupplementalTax = mulRateCents(supplemental, separateFlatRate);
+      const supplementalTax = separateFlatWholeDollar
+        ? roundDiv(rawSupplementalTax, 10_000n) * 10_000n
+        : rawSupplementalTax;
       return {
         code: engine.state,
         label: engine.label,

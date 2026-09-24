@@ -281,6 +281,61 @@ test('Minnesota separately paid supplemental wages use Method 2 at 6.25%', () =>
   assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.0625')
 })
 
+test('Montana separately paid supplemental wages use the guide’s 5% option', () => {
+  // Montana Employer and Information Agent Guide with Tax Tables – 2026, p. 3
+  // allows a separately paid supplemental to be withheld at 5% of that wage.
+  const result = computeUsWithholding({
+    levy: levy('MT', 'us_mt_mw4'),
+    payDate: '2026-06-01', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '500.0000', supplementalPaymentTiming: 'separate',
+    federalIncomeTax: '0.00', certificateFor: () => certificate('us_mt_mw4', {}),
+    tenantRates: () => undefined,
+  })
+  assert.equal(result?.tax, '25.0000')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_METHOD, 'flat')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.05')
+})
+
+test('North Carolina separate supplementals use 4.09% only with regular withholding history', () => {
+  // NC-30 (2026), §12: the 4.09% flat option is conditional on tax having
+  // been withheld from regular wages; the guide requires its aggregate method otherwise.
+  const input = {
+    levy: levy('NC', 'us_nc_nc4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
+    periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
+    supplementalPaymentTiming: 'separate' as const, federalIncomeTax: '0.00',
+    certificateFor: () => certificate('us_nc_nc4', {}), tenantRates: () => undefined,
+  }
+  const result = computeUsWithholding({ ...input, regularWageTaxWithheldThisYear: true })
+  assert.equal(result?.tax, '20.0000')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.0409')
+  assert.throws(
+    () => computeUsWithholding(input),
+    /NC income tax cannot use its separate-supplemental flat rate without committed evidence of regular-wage withholding.*refused by name/,
+  )
+})
+
+test('North Dakota and Nebraska separate supplementals use their published flat rates', () => {
+  // ND 2026 Rates and Instructions, Supplemental Wages, Option 1: 1.50%.
+  const nd = computeUsWithholding({
+    levy: levy('ND', 'us_nd_w4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
+    periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
+    supplementalPaymentTiming: 'separate', federalIncomeTax: '0.00',
+    certificateFor: () => certificate('us_nd_w4', {}), tenantRates: () => undefined,
+  })
+  assert.equal(nd?.tax, '7.5000')
+  assert.equal(nd?.factors.US_SUPPLEMENTAL_RATE, '0.015')
+
+  // Nebraska Circular EN 2026, Bonuses and Supplemental Wages: elected 3.5%.
+  const ne = computeUsWithholding({
+    levy: levy('NE', 'us_ne_w4n'), payDate: '2026-06-01', periodEnd: PERIOD_END,
+    periodsPerYear: 26, employerEmployeeCount: 2, wages: '0.0000', supplemental: '500.0000',
+    supplementalPaymentTiming: 'separate', federalIncomeTax: '0.00',
+    certificateFor: () => certificate('us_ne_w4n', {}), tenantRates: () => undefined,
+  })
+  assert.equal(ne?.tax, '17.5000')
+  assert.equal(ne?.factors.US_SUPPLEMENTAL_RATE, '0.035')
+})
+
 test('US regional and subregional methods receive exact, sourced allocation facts', () => {
   const allocation = {
     region: 'MI', subRegion: 'DETROIT', workShare: '0.250000', source: 'approved work-location record',
