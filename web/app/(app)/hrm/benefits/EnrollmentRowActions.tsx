@@ -15,11 +15,13 @@ export function EnrollmentRowActions({
   enrollmentId,
   enrollmentStatus,
   approveLabel,
+  failedLabel,
   canManage,
 }: {
   enrollmentId: string
   enrollmentStatus: string
   approveLabel: string
+  failedLabel: string
   canManage: boolean
 }) {
   const router = useRouter()
@@ -32,7 +34,7 @@ export function EnrollmentRowActions({
       body: JSON.stringify({ action: 'approve' }),
     })
     if (!res.ok) {
-      toast.error(await readApiErrorMessage(res, approveLabel))
+      toast.error(await readApiErrorMessage(res, failedLabel))
       return
     }
     router.refresh()
