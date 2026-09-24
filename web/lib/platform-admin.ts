@@ -341,7 +341,8 @@ export async function platformGrants(
 
 export async function platformUser(
   id: string,
-): Promise<{ user: PlatformUser; grants: PlatformGrant[] } | null> {
+  grantsInput?: { page: number; perPage: number },
+): Promise<{ user: PlatformUser; grants: PlatformGrant[]; totalGrants: number } | null> {
   return withBypassContext(async () => {
     const usersResult = (await db.execute(sql`
       select u.id, u.email, u.name, u.org_id as "orgId", o.name as "orgName",
@@ -354,22 +355,37 @@ export async function platformUser(
     `)) as { rows: PlatformUser[] };
     const user = usersResult.rows[0];
     if (!user) return null;
-    const grantsResult = await db.execute<PlatformGrant>(sql`
-      select a.id, a.member_user_id as "memberUserId", m.email as "memberEmail", m.name as "memberName",
-             mo.name as "memberOrgName", a.org_id as "orgId", o.name as "orgName",
-             a.acting_user_id as "actingUserId", au.email as "actingEmail", au.name as "actingName",
-             a.is_active as "isActive", a.created_at as "createdAt", a.updated_at as "updatedAt"
-        from user_org_access a
-        join users m on m.id = a.member_user_id
-        join orgs mo on mo.id = m.org_id
-        join orgs o on o.id = a.org_id
-        join users au on au.id = a.acting_user_id
-       where a.member_user_id = ${id}
-       order by o.name asc, m.email asc
-    `);
+    // The detail page's grant list pages in SQL like every other operator
+    // list: an identity collecting grants across many organizations would
+    // otherwise render an unbounded table. The order stays the
+    // long-standing organization-then-member order.
+    const limit = grantsInput?.perPage;
+    const offset = grantsInput ? (grantsInput.page - 1) * grantsInput.perPage : 0;
+    const [grantsResult, totalResult] = await Promise.all([
+      db.execute<PlatformGrant>(sql`
+        select a.id, a.member_user_id as "memberUserId", m.email as "memberEmail", m.name as "memberName",
+               mo.name as "memberOrgName", a.org_id as "orgId", o.name as "orgName",
+               a.acting_user_id as "actingUserId", au.email as "actingEmail", au.name as "actingName",
+               a.is_active as "isActive", a.created_at as "createdAt", a.updated_at as "updatedAt"
+          from user_org_access a
+          join users m on m.id = a.member_user_id
+          join orgs mo on mo.id = m.org_id
+          join orgs o on o.id = a.org_id
+          join users au on au.id = a.acting_user_id
+         where a.member_user_id = ${id}
+         order by o.name asc, m.email asc
+         ${limit === undefined ? sql`` : sql`limit ${limit} offset ${offset}`}
+      `),
+      db.execute(
+        sql`select count(*)::int as total from user_org_access a where a.member_user_id = ${id}`,
+      ),
+    ]);
     return {
       user,
       grants: grantsResult.rows,
+      totalGrants: Number(
+        (totalResult.rows[0] as { total?: number } | undefined)?.total ?? 0,
+      ),
     };
   });
 }
