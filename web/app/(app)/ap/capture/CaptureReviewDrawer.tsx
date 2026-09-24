@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
 import type { CaptureIssue, NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { ReadOnlyValue } from '../../../../components/read-only-value'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 type Evidence = { fieldKey: string; lineIndex: number | null; confidence: string | null; pageNumber: number | null; polygon: { points: number[]; width: number; height: number } | null }
 
@@ -143,14 +144,18 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
           })
           // The status is checked before the body is parsed: a proxy 502/504
           // HTML page is not JSON, and parsing first would turn the refusal
-          // into a syntax error.
-          let body: { normalized?: NormalizedCapture; validationIssues?: CaptureIssue[]; vendorId?: string | null; purchaseOrderId?: string | null; status?: string; updatedAt?: string; error?: string }
+          // into a syntax error. The named refusal (or the translated
+          // fallback with the status) rides in the error, never a
+          // SyntaxError.
+          if (!response.ok) {
+            throw new CaptureSaveError(await readApiErrorMessage(response, t('saveFailed')), response.status)
+          }
+          let body: { normalized?: NormalizedCapture; validationIssues?: CaptureIssue[]; vendorId?: string | null; purchaseOrderId?: string | null; status?: string; updatedAt?: string }
           try {
             body = (await response.json()) as typeof body
           } catch {
-            throw new CaptureSaveError('save_failed', response.status)
+            throw new CaptureSaveError(t('saveFailed'), response.status)
           }
-          if (!response.ok) throw new CaptureSaveError(body.error ?? 'save_failed', response.status)
           // Always adopt the newest revision — even when the operator typed
           // meanwhile. Dropping it here is what wedged every later autosave
           // on 409 after one slow response.
@@ -207,26 +212,21 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
     return () => window.clearTimeout(timer)
   }, [dirty, editable, save, form, vendorId, purchaseOrderId, documentKind])
 
-  /** Read a JSON body without letting a proxy HTML error page throw: null means "unusable body, use the fallback". */
-  async function readJsonBody<T>(response: Response): Promise<T | null> {
-    try {
-      return (await response.json()) as T
-    } catch {
-      return null
-    }
-  }
-
   async function action(kind: 'reprocess' | 'reject') {
     setActing(kind)
     try {
       const response = await fetch('/api/ap-capture/actions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: kind, ids: [initial.id] }) })
-      const body = await readJsonBody<{ results?: Array<{ ok: boolean; error?: string }> }>(response)
-      if (!response.ok || !body?.results?.[0]?.ok) throw new Error(body?.results?.[0]?.error ?? 'action_failed')
+      // The status is checked before the body parses, and the single
+      // item's named refusal is toasted — never a SyntaxError, never the
+      // generic fallback that hides which document failed and why.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
+      const body = (await response.json()) as { results?: Array<{ ok: boolean; error?: string }> }
+      if (!body?.results?.[0]?.ok) throw new Error(body?.results?.[0]?.error ?? t('actionFailed'))
       toast.success(t(kind === 'reject' ? 'rejected' : 'reprocessQueued'))
       router.push('/ap/capture')
       router.refresh()
-    } catch {
-      toast.error(t('actionFailed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('actionFailed'))
     } finally {
       setActing(null)
     }
@@ -237,12 +237,13 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
     setActing('materialize')
     try {
       const response = await fetch(`/api/ap-capture/${initial.id}/materialize`, { method: 'POST' })
-      const body = await readJsonBody<{ documentId?: string; error?: string }>(response)
-      if (!response.ok || !body?.documentId) throw new Error(body?.error ?? 'create_failed')
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
+      const body = (await response.json()) as { documentId?: string }
+      if (!body?.documentId) throw new Error(t('actionFailed'))
       toast.success(t('draftCreated'))
       router.push(`/ap/bills?doc=${body.documentId}&mode=edit`)
-    } catch {
-      toast.error(t('actionFailed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('actionFailed'))
     } finally {
       setActing(null)
     }

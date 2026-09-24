@@ -91,6 +91,7 @@
     "createDraft": "创建草稿",
     "createDrafts": "创建草稿",
     "bulkComplete": "批量操作完成：{succeeded} 成功，{failed} 失败。",
+    "bulkPartial": "批量操作部分完成：{succeeded} 成功，{failed} 失败。失败的文档保持选中状态，原因如下。",
     "actionFailed": "采集操作失败。",
     "rejected": "文档已拒绝。",
     "reprocessQueued": "文档已排队等待重新处理。",

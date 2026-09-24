@@ -115,21 +115,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/ap/capture/CaptureReviewDrawer.tsx",
-    "fn": "CaptureReviewDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/ap/capture/CaptureUploadButton.tsx",
-    "fn": "upload",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/ap/capture/sections.tsx",
-    "fn": "act",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/assets/AssetDrawer.tsx",
     "fn": "remove",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
