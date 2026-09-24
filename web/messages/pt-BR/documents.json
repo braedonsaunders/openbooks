@@ -167,6 +167,7 @@
       "body": "Os arquivos e pastas selecionados serão movidos para a Lixeira. Você pode restaurá-los mais tarde."
     },
     "deleted": "{count} movidos para a Lixeira",
+    "partialDeleted": "{done} movidos para a Lixeira — {skipped} ignorados ({reasons})",
     "deleteFailed": "Não foi possível excluir a seleção",
     "downloadFailed": "Não foi possível baixar a seleção",
     "nothingDownloadable": "Selecione arquivos para baixar"

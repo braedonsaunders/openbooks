@@ -165,6 +165,7 @@
       "body": "The selected files and folders will be moved to Trash. You can restore them later."
     },
     "deleted": "Moved {count} to Trash",
+    "partialDeleted": "Moved {done} to Trash — {skipped} skipped ({reasons})",
     "deleteFailed": "Could not delete selection",
     "downloadFailed": "Could not download selection",
     "nothingDownloadable": "Select files to download"

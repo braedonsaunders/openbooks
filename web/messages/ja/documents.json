@@ -167,6 +167,7 @@
       "body": "選択したファイルとフォルダーはごみ箱に移動されます。後で元に戻すことができます。"
     },
     "deleted": "{count}件をごみ箱に移動しました",
+    "partialDeleted": "{done}件をごみ箱に移動しました — {skipped}件をスキップしました ({reasons})",
     "deleteFailed": "選択内容を削除できませんでした",
     "downloadFailed": "選択内容をダウンロードできませんでした",
     "nothingDownloadable": "ダウンロードするファイルを選択してください"

@@ -167,6 +167,7 @@
       "body": "Les fichiers et dossiers sélectionnés seront déplacés dans la Corbeille. Vous pourrez les restaurer ultérieurement."
     },
     "deleted": "{count} déplacés dans la Corbeille",
+    "partialDeleted": "{done} déplacés dans la Corbeille — {skipped} ignorés ({reasons})",
     "deleteFailed": "Impossible de supprimer la sélection",
     "downloadFailed": "Impossible de télécharger la sélection",
     "nothingDownloadable": "Sélectionnez des fichiers à télécharger"
