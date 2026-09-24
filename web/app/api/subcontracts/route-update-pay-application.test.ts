@@ -61,8 +61,15 @@ const mockSources = new Map<string, string>([
           }
           return Promise.resolve({ rows: [] })
         },
+        transaction: async (fn) => fn({ execute: db.execute }),
       }
     `,
+  ],
+  [
+    "mock:subsidiary-scope",
+    `export class ScopeNotFoundError extends Error {}
+     export async function lockProjectForScope() { return { id: 'project-1', subsidiaryId: null } }
+     export async function withScopeSnapshot(_orgId, fn) { return fn() }`,
   ],
   [
     "mock:authz",
@@ -123,6 +130,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/src/organization/subsidiary-scope.ts", "mock:subsidiary-scope"],
   ["@openbooks/engine/src/projects/subcontracts.ts", "mock:subcontracts"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],
