@@ -9,6 +9,7 @@ import { Play, Scale } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 /**
  * Start a reconciliation session (through date + bank statement balance),
  * or resume the account's open one — one open session per account.
@@ -44,19 +45,23 @@ export function StartReconciliationButton({
 
   async function start() {
     setBusy(true)
-    const res = await fetch('/api/banking/reconciliations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountId, throughDate, statementBalance }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? tBanking('errors.startFailed'))
+    try {
+      const res = await fetch('/api/banking/reconciliations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, throughDate, statementBalance }),
+      })
+      // The status is checked before the body parses: a non-JSON 502 page
+      // must toast the translated fallback, never a SyntaxError.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tBanking('errors.startFailed')))
+      const data = (await res.json()) as { id: string }
+      router.push((`/banking/${accountId}/reconcile/${data.id}`))
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : tBanking('errors.startFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    router.push((`/banking/${accountId}/reconcile/${data.id}`))
-    router.refresh()
   }
 
   return (
