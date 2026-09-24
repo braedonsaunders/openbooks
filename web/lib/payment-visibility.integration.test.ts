@@ -255,6 +255,7 @@ for (const boundary of [
   'read revision race',
   'collections screen',
   'malformed settlement identifiers',
+  'posting rehome race',
 ] as const) {
   test(
     `payment visibility: ${boundary}`,
@@ -439,6 +440,88 @@ for (const boundary of [
                 null,
                 'a guessed foreign payment ID must not create a drawer',
               )
+            } else if (boundary === 'posting rehome race') {
+              const revision = (
+                await db.execute<{ revision: string }>(
+                  sql`select (revision_seq)::text as revision from documents where id=${payment.id} and org_id=${org.orgId}`,
+                )
+              ).rows[0]!.revision
+              const targetLine = (
+                await db.execute<{ id: string }>(sql`
+                  select jl.id
+                    from journal_lines jl
+                    join documents d on d.posted_entry_id = jl.entry_id and d.org_id = jl.org_id
+                   where d.org_id = ${org.orgId} and d.id = ${docs.VISIBLE}
+                     and jl.is_open_item and jl.amount < 0
+                   limit 1
+                `)
+              ).rows[0]!.id
+              let unlockHolder = () => {}
+              let signalHeld = () => {}
+              const held = new Promise<void>((resolve) => { signalHeld = resolve })
+              const released = new Promise<void>((resolve) => { unlockHolder = resolve })
+              const holder = withBypassContext(() => db.transaction(async (tx) => {
+                await tx.execute(sql`select id from documents where org_id=${org.orgId} and id=${payment.id} for update`)
+                await tx.execute(sql`update documents set subsidiary_id=${other} where org_id=${org.orgId} and id=${payment.id}`)
+                signalHeld()
+                await released
+              }))
+              await held
+              let response: Response | undefined
+              const posting = postPayment(
+                new Request('http://test.local/api/payments/post-with-applications', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({
+                    documentId: payment.id,
+                    expectedUpdatedAt: revision,
+                    allocations: [{
+                      openLineId: targetLine,
+                      sourceTransactionAmount: '100',
+                      targetTransactionAmount: '100',
+                      settlementRate: '1',
+                      settlementRateSource: 'same_currency',
+                      settlementRateReference: 'same currency',
+                    }],
+                  }),
+                }),
+              ).then((result) => { response = result })
+              let waiting = false
+              try {
+                for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
+                  const lockState = await withBypassContext(async () => db.execute<{ waiting: boolean }>(sql`
+                      select exists (
+                        select 1 from pg_stat_activity
+                         where datname = current_database()
+                           and wait_event_type = 'Lock'
+                           and query ilike '%from documents%'
+                           and query ilike '%for update%'
+                      ) as waiting
+                    `))
+                  waiting = lockState.rows[0]!.waiting
+                  if (!waiting) await new Promise((resolve) => setTimeout(resolve, 20))
+                }
+              } finally {
+                unlockHolder()
+              }
+              await holder
+              await posting
+              assert.ok(waiting, 'posting must reach its locked reload after the stale scope precheck')
+              assert.equal(response?.status, 404, 'the locked recheck hides the payment after rehome')
+              const persisted = (await db.execute<{
+                status: string
+                subsidiary_id: string
+                posted_entry_id: string | null
+                allocations: unknown[] | null
+              }>(sql`
+                select status, subsidiary_id, posted_entry_id,
+                       custom->'allocations' as allocations
+                  from documents where org_id=${org.orgId} and id=${payment.id}
+              `)).rows[0]!
+              assert.equal(persisted.status, 'draft')
+              assert.equal(persisted.subsidiary_id, other)
+              assert.equal(persisted.posted_entry_id, null)
+              assert.deepEqual(persisted.allocations, [], 'rejected posting must not save the requested allocation')
             } else if (boundary === 'read revision race') {
               const exact = (
                 await db.execute<{ revision: string }>(
