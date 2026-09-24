@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { db } from "../platform/db.ts";
 import {
   capAnnualEarnings,
@@ -182,68 +182,137 @@ test("opening bases are capped together with committed T4 bases", () => {
   assert.equal(capped[1]!.box26CppPensionable, "0");
 });
 
-test("an opening with no country profile is Canadian, while an explicit US opening is W-2-only", async (t) => {
-  const nullProfileEmployee = "00000000-0000-4000-8000-000000000001";
-  const usEmployee = "00000000-0000-4000-8000-000000000002";
-  const orgId = "00000000-0000-4000-8000-000000000099";
-  const population = [
-    { employeePartyId: nullProfileEmployee, profileCountry: null, taxableYtd: "12000" },
-    { employeePartyId: usEmployee, profileCountry: "US", taxableYtd: "34000" },
-  ] as const;
-  const countryRows = (country: string) => population.filter((row) =>
-    (row.profileCountry ?? "CA") === country);
-  const queries: { sql: string; params: unknown[] }[] = [];
+/**
+ * An opening whose employee has no payroll profile row is refused — by name,
+ * on BOTH year-end populations — never slipped as Canadian.
+ *
+ * The old reads folded the missing row into Canada (`coalesce(prof.country,
+ * 'CA')`), so a profile-less carry-in became a Canadian T4; the inner-join
+ * half of the same shape silently dropped it instead. Both are silent. The
+ * mock below emulates the profile join per country the way the database
+ * would, so the refusal (and the absence of any slip) is behavioral, through
+ * the real `t4Slips`/`w2Slips` entry points.
+ */
+interface MockPopulationRow {
+  employeePartyId: string;
+  employeeName: string;
+  profileCountry: string | null;
+  province: string;
+  taxableYtd: string;
+}
+
+function mockOpeningPopulations(t: TestContext, population: readonly MockPopulationRow[]): void {
   const dialect = (db as unknown as {
     dialect: { sqlToQuery(query: Parameters<typeof db.execute>[0]): { sql: string; params: unknown[] } };
   }).dialect;
-
+  const requestedCountry = (params: unknown[]): string | null => {
+    for (const param of params) {
+      if (param === "CA" || param === "US") return param;
+    }
+    return null;
+  };
+  const zeroYtd = {
+    pensionable_ytd: "0", insurable_ytd: "0", cpp_ytd: "0", cpp2_ytd: "0",
+    ei_ytd: "0", qpip_ytd: "0", taxable_ytd: "0", tax_ytd: "0", fica_withheld_ytd: "0",
+  };
   t.mock.method(db, "execute", async (query: Parameters<typeof db.execute>[0]) => {
     const built = dialect.sqlToQuery(query);
-    queries.push({ sql: built.sql, params: built.params });
-    if (built.sql.includes("from payroll_opening_balances")) {
-      const country = String(built.params[0]);
+    // The unknown-country guard's opening check: carry-ins with NO profile row.
+    if (built.sql.includes("from payroll_opening_balances")
+      && built.sql.includes("prof.employee_party_id is null")) {
       return {
-        rows: countryRows(country).map((row) => ({
-          employee_party_id: row.employeePartyId,
-          pensionable_ytd: "0", insurable_ytd: "0", cpp_ytd: "0", cpp2_ytd: "0",
-          ei_ytd: "0", qpip_ytd: "0", taxable_ytd: row.taxableYtd, tax_ytd: "0",
-        })),
+        rows: population
+          .filter((row) => row.profileCountry == null)
+          .map((row) => ({ employee_party_id: row.employeePartyId, display_name: row.employeeName })),
       };
     }
-    if (built.sql.includes("left join employee_payroll_profiles")) {
-      const country = String(built.params[0]);
+    // The readers' opening check: carry-ins joined to a profile of the
+    // requested country (a missing row joins to nothing, like the database).
+    if (built.sql.includes("from payroll_opening_balances")) {
+      const country = requestedCountry(built.params);
       return {
-        rows: countryRows(country).map((row) => ({
-          employee_party_id: row.employeePartyId,
-          display_name: row.employeePartyId === nullProfileEmployee ? "Null Profile" : "US Employee",
-          province: row.profileCountry === "US" ? "CA" : "ON",
-          filing_account_id: null,
-        })),
+        rows: population
+          .filter((row) => row.profileCountry === country)
+          .map((row) => ({
+            employee_party_id: row.employeePartyId,
+            ...zeroYtd,
+            taxable_ytd: row.taxableYtd,
+          })),
+      };
+    }
+    if (built.sql.includes("from parties p")) {
+      const country = requestedCountry(built.params);
+      return {
+        rows: population
+          .filter((row) => row.profileCountry === country)
+          .map((row) => ({
+            employee_party_id: row.employeePartyId,
+            display_name: row.employeeName,
+            province: row.province,
+            filing_account_id: null,
+          })),
       };
     }
     // No committed stubs: both populations are opening-only and are seeded by
-    // their country-filtered opening rows above.
+    // their country-routed opening rows above.
     return { rows: [] };
   });
+}
+
+test("an opening with no profile refuses year-end by name and is never slipped as CA", async (t) => {
+  const orgId = "00000000-0000-4000-8000-000000000099";
+  mockOpeningPopulations(t, [
+    {
+      employeePartyId: "00000000-0000-4000-8000-000000000001",
+      employeeName: "No Profile", profileCountry: null, province: "", taxableYtd: "12000",
+    },
+    {
+      employeePartyId: "00000000-0000-4000-8000-000000000002",
+      employeeName: "US Employee", profileCountry: "US", province: "CA", taxableYtd: "34000",
+    },
+  ]);
+
+  await assert.rejects(
+    t4Slips(orgId, 2026),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /No Profile/);
+      assert.match(error.message, /unknown historical country/);
+      return true;
+    },
+  );
+  await assert.rejects(
+    w2Slips(orgId, 2026),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /No Profile/);
+      return true;
+    },
+  );
+});
+
+test("explicitly routed openings still seed exactly their own country's slips", async (t) => {
+  const caEmployee = "00000000-0000-4000-8000-000000000001";
+  const usEmployee = "00000000-0000-4000-8000-000000000002";
+  const orgId = "00000000-0000-4000-8000-000000000099";
+  mockOpeningPopulations(t, [
+    {
+      employeePartyId: caEmployee,
+      employeeName: "CA Employee", profileCountry: "CA", province: "ON", taxableYtd: "12000",
+    },
+    {
+      employeePartyId: usEmployee,
+      employeeName: "US Employee", profileCountry: "US", province: "CA", taxableYtd: "34000",
+    },
+  ]);
 
   const ca = await t4Slips(orgId, 2026);
   const us = await w2Slips(orgId, 2026);
 
-  assert.deepEqual(ca.map((slip) => slip.employeePartyId), [nullProfileEmployee]);
+  assert.deepEqual(ca.map((slip) => slip.employeePartyId), [caEmployee]);
   assert.equal(ca[0]!.box14EmploymentIncome, "12000.0000");
   assert.deepEqual(us.map((slip) => slip.employeePartyId), [usEmployee]);
   assert.equal(us[0]!.box1Wages, "34000.0000");
-
-  const countryQueries = queries.filter((query) =>
-    query.sql.includes("coalesce(prof.country")
-    && (query.sql.includes("from payroll_opening_balances")
-      || query.sql.includes("from parties p")));
-  assert.equal(countryQueries.length, 4);
-  assert.deepEqual(countryQueries.map((query) => query.params[0]), ["CA", "CA", "US", "US"]);
-  for (const query of countryQueries) {
-    assert.match(query.sql, /coalesce\(prof\.country, 'CA'\) = \$1/);
-    assert.doesNotMatch(query.sql, /coalesce\(prof\.country, \$1\)/);
-  }
 });
 
 test("a FICA tax withheld carry-in splits into W-2 boxes 4 and 6", () => {
