@@ -45,6 +45,11 @@ test("Vietnam 01/GTGT return carries the real chi tieu boxes plus the OB workpap
     "25",
     "36",
     "40",
+    "PL08-I-05",
+    "PL08-I-06",
+    "PL08-II-07",
+    "PL08-II-08",
+    "PL08-III-09",
     "OB_OUTPUT",
     "OB_INPUT",
   ]);
@@ -104,6 +109,17 @@ test("the temporary 8% band covers the pinned date and carries its published exp
 
 test("Vietnam GTGT is national — no subnational jurisdictions declared", () => {
   assert.equal(VIETNAM_TAX_PACK.jurisdictions.length, 0);
+});
+
+test("the 8% band routes to the Phu luc III Mau 01 reduction schedule, not only the workpaper", () => {
+  // ND 174/2025 Dieu 1 khoan 6: covered businesses file the 8% schedule
+  // (Mau 01, Appendix III) with the GTGT return — section I totals [05]/[06]
+  // for 8% purchases, section II totals [07]/[08] for 8% sales, [09]=[08]-[06].
+  const boxes = new Map(VIETNAM_TAX_PACK.returnPacks[0]!.boxes.map((box) => [box.lineCode, box] as const));
+  for (const line of ["PL08-I-05", "PL08-I-06", "PL08-II-07", "PL08-II-08", "PL08-III-09"]) {
+    assert.ok(boxes.get(line)?.label.includes("8%"), `${line} must carry the 8% schedule amount`);
+  }
+  assert.equal(boxes.get("PL08-II-08")!.sign, -1);
 });
 
 test("Vietnam 10/5/0 bands run back to 2009 as single open rows, 8% window untouched", () => {

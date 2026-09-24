@@ -21,8 +21,13 @@ const VN_GTGT_01: TaxReturnPack = {
     { lineCode: "25", label: "Chỉ tiêu [25] — thuế GTGT của hàng hóa, dịch vụ mua vào được khấu trừ kỳ này", sign: 1, sequence: 80 },
     { lineCode: "36", label: "Chỉ tiêu [36] — thuế GTGT phát sinh trong kỳ ([35]−[25])", sign: 1, sequence: 90 },
     { lineCode: "40", label: "Chỉ tiêu [40] — thuế GTGT còn phải nộp trong kỳ ([40a]−[40b])", sign: 1, sequence: 100 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 110, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 120, basis: "tax_paid", glMap: "purchases" },
+    { lineCode: "PL08-I-05", label: "Phụ lục III Mẫu 01 §I [05] — 8% purchases value (ND 174/2025 reduction schedule, filed with 01/GTGT)", sign: 1, sequence: 102 },
+    { lineCode: "PL08-I-06", label: "Phụ lục III Mẫu 01 §I [06] — 8% purchase input tax", sign: 1, sequence: 104 },
+    { lineCode: "PL08-II-07", label: "Phụ lục III Mẫu 01 §II [07] — 8% sales value", sign: 1, sequence: 106 },
+    { lineCode: "PL08-II-08", label: "Phụ lục III Mẫu 01 §II [08] — 8% sales output tax", sign: -1, sequence: 108 },
+    { lineCode: "PL08-III-09", label: "Phụ lục III Mẫu 01 §III [09]=[08]−[06] — 8% net", sign: 1, sequence: 110 },
+    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 120, basis: "tax_collected", glMap: "sales" },
+    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 130, basis: "tax_paid", glMap: "purchases" },
   ],
 };
 
@@ -77,6 +82,17 @@ const VN_GTGT_01: TaxReturnPack = {
  * rate right now. The band covers today and carries its published
  * effectiveTo; when it expires the schedule guard fails until the
  * successor rate is transcribed.
+ *
+ * 01/GTGT treatment of the 8% band (ND 174/2025, Điều 1, read from the
+ * decree's Công báo text): 8% sales are invoiced with "8%" on the VAT-rate
+ * line and the seller declares output / the buyer declares input per the
+ * reduced amounts on the invoice (khoản 3a) — those amounts flow through
+ * the 01/GTGT aggregates — AND every covered business files the reduction
+ * schedule Phụ lục III Mẫu số 01 with the return (khoản 6): §I lists 8%
+ * purchases (totals [05] value, [06] tax), §II lists 8% sales (totals [07]
+ * value, [08] reduced tax), §III reports [09]=[08]−[06]. Those five totals
+ * are the modelled boxes PL08-*, so the 8% band has a declared destination
+ * on the return instead of landing only in the workpaper.
  *
  * Later amendments were read and change no headline rate: Luật
  * 90/2025/QH15 (Điều 9.1a export-goods definition), Luật 149/2025/QH15
