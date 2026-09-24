@@ -94,12 +94,35 @@ async function seedFixture(): Promise<Fixture> {
 }
 
 async function dropFixture(fixture: Fixture): Promise<void> {
-  for (const orgId of fixture.createdOrgIds) {
+  const dropClone = async (orgId: string) => {
     try {
       await withBypass(() => dropSampleCloneOrg(orgId));
-    } catch {
-      // Best-effort cleanup: the test already failed if strays remain, and a
-      // throwing cleanup would mask the assertion that matters.
+    } catch (error) {
+      // Best-effort per org so one stray's failure cannot mask the
+      // assertion, but never silent: an unreported leak is what breaks the
+      // next run on a shared database.
+      console.error(`service-resume teardown: could not drop clone org ${orgId}`, error);
+    }
+  };
+  for (const orgId of fixture.createdOrgIds) await dropClone(orgId);
+  // Children before parents: a clone org row points at the fixture org it
+  // was cloned from through orgs_sandbox_of_fkey, so dropping a fixture
+  // parent while any child still references it dies with an FK violation.
+  // Anything still referencing a fixture parent here is a stray this test
+  // created but never tracked (only this test knows these parent ids, so a
+  // match is unambiguously ours) — drop it through the same canonical path
+  // before the parent delete can trip over it.
+  const known = new Set([...fixture.createdOrgIds, fixture.templateOrgId, fixture.memberOrgId]);
+  for (let depth = 0; depth < 10; depth += 1) {
+    const strays = (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+      select id from orgs
+       where sandbox_of in (${sql.join([...known].map((id) => sql`${id}`), sql`, `)})`)).rows))
+      .map((row) => row.id)
+      .filter((id) => !known.has(id));
+    if (strays.length === 0) break;
+    for (const id of strays) {
+      known.add(id);
+      await dropClone(id);
     }
   }
   await withBypass(() => dropScratchOrg(fixture.templateOrgId));
@@ -284,6 +307,11 @@ test(
   async () => {
     const fixture = await seedFixture();
     try {
+      // Global by profile: other suites (or an earlier run) may own rows
+      // here too, so the test records what exists before it acts and only
+      // asserts about its own footprint afterwards — never global emptiness.
+      const beforeAttempts = new Set((await templateAttemptOrgs("general-business")).map((row) => row.id));
+      const beforeSims = new Set((await simProfileOrgs("general-business")).map((row) => row.id));
       await assert.rejects(
         createSampleCompany(fixture.input, {
           prepareTemplate: async (industryKey: string) => {
@@ -323,8 +351,14 @@ test(
           return true;
         },
       );
-      assert.deepEqual(await templateAttemptOrgs("general-business"), []);
-      assert.deepEqual(await simProfileOrgs("general-business"), []);
+      // The failed attempt was wiped: nothing it created may remain, while
+      // rows owned by anyone else are none of this test's business.
+      for (const row of await templateAttemptOrgs("general-business")) {
+        assert.ok(beforeAttempts.has(row.id), `stray template attempt left behind: ${row.id}`);
+      }
+      for (const row of await simProfileOrgs("general-business")) {
+        assert.ok(beforeSims.has(row.id), `stray sim org left behind: ${row.id}`);
+      }
     } finally {
       await dropFixture(fixture);
     }
@@ -338,18 +372,19 @@ test(
     // A stale attempt from an earlier crashed generation must be swept
     // before provisioning, so the retry converges on exactly one org.
     const staleId = await seedStaleTemplateAttempt("general-business");
+    const owned = [staleId];
     try {
       const template = await generateTemplate("general-business", {
         simulateTemplate: fakeSuccessfulSimulate,
       });
       assert.ok(template.id);
+      owned.push(template.id);
 
-      const remaining = await simProfileOrgs("general-business");
-      assert.deepEqual(
-        remaining.map((row) => row.id).sort(),
-        [template.id].sort(),
-        "the sweep must remove the stale attempt and the retry must provision exactly one org",
-      );
+      // Scoped to this test's own orgs: foreign rows under the same profile
+      // (parallel suites, earlier runs) must not move these assertions.
+      const remaining = new Set((await simProfileOrgs("general-business")).map((row) => row.id));
+      assert.ok(remaining.has(template.id), "the retry must provision its template org");
+      assert.ok(!remaining.has(staleId), "the sweep must remove the stale attempt");
       assert.ok(
         !(await hasTemplateAttemptMarker(template.id)),
         "the attempt marker must clear once the template converges",
@@ -357,8 +392,14 @@ test(
       assert.equal(await templateOracleStatus(template.id), "passed");
       assert.ok(staleId !== template.id);
     } finally {
-      for (const row of await simProfileOrgs("general-business")) {
-        await withBypass(() => wipeSimOrg(row.id));
+      // Only this test's own orgs: wiping the whole profile would delete
+      // rows a parallel suite is still using.
+      for (const id of owned) {
+        try {
+          await withBypass(() => wipeSimOrg(id));
+        } catch (error) {
+          console.error(`service-resume teardown: could not wipe sim org ${id}`, error);
+        }
       }
     }
   },
@@ -369,6 +410,7 @@ test(
   { skip: !DB },
   async () => {
     const staleId = await seedStaleTemplateAttempt("general-business");
+    const before = new Set((await simProfileOrgs("general-business")).map((row) => row.id));
     try {
       await assert.rejects(
         generateTemplate("general-business", {
@@ -389,11 +431,14 @@ test(
           return true;
         },
       );
-      // Nothing new was provisioned beside the stuck attempt.
-      assert.deepEqual(
-        (await simProfileOrgs("general-business")).map((row) => row.id),
-        [staleId],
-      );
+      // Nothing new was provisioned beside the stuck attempt: the profile
+      // holds exactly what it held before, plus the stale the test seeded.
+      // Foreign rows under the same profile must not move this assertion.
+      const after = new Set((await simProfileOrgs("general-business")).map((row) => row.id));
+      assert.ok(after.has(staleId), "the stuck attempt must still be there");
+      for (const id of after) {
+        assert.ok(id === staleId || before.has(id), `unexpected org provisioned beside the stuck attempt: ${id}`);
+      }
     } finally {
       await withBypass(() => wipeSimOrg(staleId));
     }
