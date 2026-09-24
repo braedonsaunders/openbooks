@@ -49,6 +49,9 @@ const mockAuthz = `
   export async function getAuthz() {
     return state.authz
   }
+  export function guardUnrestrictedScope(authz) {
+    return authz.allowedSubsidiaryIds === null ? null : state.deny('unrestricted scope required')
+  }
 `;
 
 const hooks = registerHooks({
@@ -67,6 +70,9 @@ const hooks = registerHooks({
       (context.parentURL?.includes("/lib/feature-gates") ||
         context.parentURL?.includes("/lib/super-admin"))
     ) {
+      return { url: "mock:banking-rules-authz", shortCircuit: true };
+    }
+    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("/banking/rules/[id]/route")) {
       return { url: "mock:banking-rules-authz", shortCircuit: true };
     }
     if (specifier.startsWith("@/") && context.parentURL) {
@@ -92,6 +98,8 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?banking-rules-concurrency-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
+const deleteRouteUrl = "./[id]/route.ts?banking-rules-delete-test";
+const { DELETE } = (await import(deleteRouteUrl)) as typeof import("./[id]/route.ts");
 hooks.deregister();
 
 const { db, withBypass, withOrgContext } =
@@ -195,6 +203,13 @@ async function auditUpdates(
   });
 }
 
+async function deleteRule(fixture: Fixture): Promise<Response> {
+  return withOrgContext(fixture.orgId, () => DELETE(
+    new Request(`http://openbooks.test/api/banking/rules/${fixture.ruleId}`, { method: "DELETE" }),
+    { params: Promise.resolve({ id: fixture.ruleId }) },
+  ));
+}
+
 /** Wait until each route transaction is visibly waiting on the rule row lock. */
 async function waitForRuleWriters(expected: number): Promise<void> {
   const deadline = Date.now() + 15_000;
@@ -296,6 +311,28 @@ test(
         await holder.query("rollback").catch(() => {});
         await holder.end().catch(() => {});
       }
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "concurrent DELETE requests return one success and write one delete audit",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const responses = await Promise.all([deleteRule(fixture), deleteRule(fixture)]);
+      assert.deepEqual(responses.map((response) => response.status).sort(), [200, 404]);
+      const audits = await withOrgContext(fixture.orgId, () => db.execute<{ count: number }>(sql`
+        select count(*)::int as count from audit_log
+         where org_id = ${fixture.orgId} and table_name = 'bank_match_rules'
+           and row_id = ${fixture.ruleId} and action = 'delete'
+      `));
+      assert.equal(audits.rows[0]?.count, 1);
+    } finally {
+      routeState.authz = null;
       await dropScratchOrg(fixture.orgId);
     }
   },

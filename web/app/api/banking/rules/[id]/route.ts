@@ -22,9 +22,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     // auto-categorize bank lines.
     const existing = (await tx.execute<Record<string, unknown>>(sql`
       select * from bank_match_rules where id = ${id} and org_id = ${user.orgId}
+       for update
     `))
     if (!existing.rows[0]) return true
-    await tx.execute(sql`delete from bank_match_rules where id = ${id} and org_id = ${user.orgId}`)
+    const deleted = (await tx.execute<{ id: string }>(sql`
+      delete from bank_match_rules where id = ${id} and org_id = ${user.orgId}
+      returning id
+    `)).rows[0]
+    if (!deleted) return true
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
