@@ -72,6 +72,7 @@ const post = (body: Record<string, unknown>) =>
 
 const carryIn = (mode: "preview" | "commit", employee: string) => ({
   mode,
+  ...(mode === "commit" ? { idempotencyKey: randomUUID() } : {}),
   resource: "payroll-opening-balances",
   rows: [{ employee, taxYear: "2025", pensionableYtd: "5000.00", cppYtd: "100.00" }],
   mapping: {

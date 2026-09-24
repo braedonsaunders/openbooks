@@ -77,7 +77,7 @@ function commitRequest(rows: Record<string, unknown>[]) {
   return new Request('http://openbooks.test/api/data/import', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ mode: 'commit', resource: 'probe', mapping: {}, rows }),
+    body: JSON.stringify({ mode: 'commit', resource: 'probe', mapping: {}, rows, idempotencyKey: 'oversized-import-key-001' }),
   })
 }
 

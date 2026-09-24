@@ -38,6 +38,7 @@ interface ImportRouteState {
     lines: Record<string, unknown>[]
     historyJobs: Record<string, unknown>[]
   }
+  idempotency: Map<string, { request: string; value: unknown }>
 }
 
 const stateKey = Symbol.for('openbooks.data-import-route-test')
@@ -58,6 +59,7 @@ const importState: ImportRouteState = {
   insideOrgTransaction: false,
   activeOrgTxn: null,
   committed: { documents: [], lines: [], historyJobs: [] },
+  idempotency: new Map(),
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
 
@@ -131,6 +133,23 @@ const mockSources = new Map<string, string>([
           state.insideOrgTransaction = false
           state.activeOrgTxn = null
         }
+      }
+
+      export function applicationContextFromSession(authz, source, requestId) {
+        return { authz, source, requestId, apiKeyId: null }
+      }
+
+      export async function executeIdempotent(args) {
+        const key = [args.context.authz.user.orgId, args.context.authz.user.id, args.context.source, args.operation, args.idempotencyKey].join('|')
+        const request = JSON.stringify(args.request)
+        const prior = state.idempotency.get(key)
+        if (prior) {
+          if (prior.request !== request) throw new Error('idempotencyKey was already used with different input')
+          return { replayed: true, value: prior.value }
+        }
+        const value = await withOrgTransaction(args.context.authz.user.orgId, args.execute)
+        state.idempotency.set(key, { request, value })
+        return { replayed: false, value }
       }
 
       export const db = {
@@ -300,6 +319,8 @@ const hooks = registerHooks({
       ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],
       ['../../../../lib/authz', 'mock:authz'],
+      ['../../../../lib/application/context', 'mock:db'],
+      ['../../../../lib/application/idempotency', 'mock:db'],
       ['../../../../lib/data-io/resources', 'mock:resources'],
       ['../../../../lib/data-io/parse', 'mock:parse'],
     ]).get(specifier)
@@ -352,6 +373,7 @@ function resetImportState(): void {
   importState.committed.documents.length = 0
   importState.committed.lines.length = 0
   importState.committed.historyJobs.length = 0
+  importState.idempotency.clear()
 }
 
 test('route rejects an unknown mode before resource lookup or writes', async () => {
@@ -432,6 +454,7 @@ test('route rejects a non-boolean posting flag instead of treating it as true', 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       mode: 'commit',
+      idempotencyKey: 'charge-import-retry-001',
       resource: 'txn:card_charge',
       rows: [],
       mapping: {},
@@ -454,6 +477,7 @@ function commitRequest(overrides: Record<string, unknown> = {}): Request {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       mode: 'commit',
+      idempotencyKey: 'charge-import-retry-001',
       resource: 'txn:card_charge',
       format: 'json',
       rows: [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000' }],
@@ -475,6 +499,7 @@ test('commit persists imported rows and their import_jobs evidence in ONE org tr
     outcome: { created: 1, updated: 0, failed: 0, errors: [] },
     jobId: 'job-1',
     total: 1,
+    replayed: false,
   })
   assert.equal(importState.withOrgTransactionCalls, 1)
   assert.equal(importState.historyInsertCalls, 1)
@@ -498,6 +523,7 @@ test('commit applies the documented defaults when optional fields are absent', a
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       mode: 'commit',
+      idempotencyKey: 'charge-default-retry-001',
       resource: 'txn:card_charge',
       rows: [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000' }],
       mapping: { documentDate: 'documentDate', account: 'account', amount: 'amount' },
@@ -509,6 +535,7 @@ test('commit applies the documented defaults when optional fields are absent', a
     outcome: { created: 1, updated: 0, failed: 0, errors: [] },
     jobId: 'job-1',
     total: 1,
+    replayed: false,
   })
   const job = importState.committed.historyJobs[0] as { values: unknown[] } | undefined
   assert.ok(job)
@@ -516,6 +543,42 @@ test('commit applies the documented defaults when optional fields are absent', a
   assert.equal(job.values[3], 'csv')
   assert.equal(job.values[4], null)
   assert.equal(job.values[5], 'upsert')
+})
+
+test('a repeated commit key replays the saved import result without writing records or a second import job', async () => {
+  resetImportState()
+
+  const first = await POST(commitRequest())
+  const firstPayload = await first.json()
+  const replay = await POST(commitRequest())
+
+  assert.equal(first.status, 200)
+  assert.equal(replay.status, 200)
+  assert.deepEqual(await replay.json(), { ...firstPayload, replayed: true })
+  assert.equal(importState.resourceWriteCalls, 1)
+  assert.equal(importState.historyInsertCalls, 1)
+  assert.equal(importState.committed.documents.length, 1)
+  assert.equal(importState.committed.historyJobs.length, 1)
+})
+
+test('a repeated commit key with changed import content is refused before writes', async () => {
+  resetImportState()
+  await POST(commitRequest())
+
+  await assert.rejects(
+    POST(commitRequest({ rows: [{ documentDate: '2026-08-25', account: '5000', amount: '100.0000' }] })),
+    /idempotencyKey was already used with different input/,
+  )
+  assert.equal(importState.resourceWriteCalls, 1)
+  assert.equal(importState.historyInsertCalls, 1)
+})
+
+test('commit requires a stable idempotency key before opening its transaction', async () => {
+  resetImportState()
+  const response = await POST(commitRequest({ idempotencyKey: undefined }))
+  assert.equal(response.status, 400)
+  assert.equal(importState.withOrgTransactionCalls, 0)
+  assert.equal(importState.resourceWriteCalls, 0)
 })
 
 test('a failed import_jobs insert rolls the whole commit back — no data without evidence', async () => {

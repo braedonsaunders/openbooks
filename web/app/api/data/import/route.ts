@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { BankingError } from '@openbooks/engine/src/banking/banking.ts'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { applicationContextFromSession } from '../../../../lib/application/context'
+import { executeIdempotent } from '../../../../lib/application/idempotency'
+import { ApplicationError } from '../../../../lib/application/errors'
 import { can, guardPermission } from '../../../../lib/authz'
 import { parseJsonBody } from '../../../../lib/api/json'
 import { getResource } from '../../../../lib/data-io/resources'
@@ -39,6 +42,9 @@ const importBodySchema = z.object({
   importMode: z.enum(['insert', 'upsert'], { error: 'importMode must be insert or upsert' }).optional(),
   fileName: z.string().optional(),
   post: z.boolean({ error: 'post must be a boolean' }).optional(),
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/, {
+    error: 'idempotencyKey must be 8-200 characters using letters, numbers, ".", "_", ":", or "-"',
+  }).optional(),
 })
 
 /**
@@ -88,6 +94,9 @@ export async function POST(req: Request) {
       { error: 'importing this resource requires organization-wide access' },
       { status: 403 },
     )
+  }
+  if (mode === 'commit' && !body.idempotencyKey) {
+    return NextResponse.json({ error: 'commit requires an idempotencyKey' }, { status: 400 })
   }
 
   if (mode === 'parse') {
@@ -171,23 +180,52 @@ export async function POST(req: Request) {
   }
 
   // commit — the writes and the evidence row are one atomic unit.
-  const committed = await withOrgTransaction(orgId, async () => {
-    const outcome = await resource.write(mappedRows, importMode, ctx)
-    const inserted = (await db.execute(sql`
-      insert into import_jobs
-        (org_id, resource_key, resource_label, format, file_name, mode, status, mapping,
-         total_rows, created_count, updated_count, failed_count, errors, created_by)
-      values (${orgId}, ${resource.descriptor.key}, ${resource.descriptor.label}, ${format},
-              ${body.fileName ?? null}, ${importMode},
-              ${outcome.failed > 0 && outcome.created === 0 && outcome.updated === 0 ? 'failed' : 'committed'},
-              ${JSON.stringify(mapping)}::jsonb, ${mappedRows.length},
-              ${outcome.created}, ${outcome.updated}, ${outcome.failed},
-              ${JSON.stringify(outcome.errors)}::jsonb, ${authz.user.id})
-      returning id`)) as { rows: { id: string }[] }
-    return { outcome, jobId: inserted.rows[0]?.id }
-  })
+  const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID()
+  let committed: {
+    replayed: boolean
+    value: { outcome: Awaited<ReturnType<typeof resource.write>>; jobId: string | undefined }
+  }
+  try {
+    committed = await executeIdempotent({
+      context: applicationContextFromSession(authz, 'api', requestId),
+      operation: 'data.import.commit',
+      idempotencyKey: body.idempotencyKey!,
+      request: {
+        resource: resource.descriptor.key,
+        format,
+        fileName: body.fileName ?? null,
+        importMode,
+        mapping,
+        rows: mappedRows,
+        post,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null
+          ? null
+          : [...authz.allowedSubsidiaryIds].sort(),
+      },
+      execute: async () => {
+        const outcome = await resource.write(mappedRows, importMode, ctx)
+        const inserted = (await db.execute(sql`
+          insert into import_jobs
+            (org_id, resource_key, resource_label, format, file_name, mode, status, mapping,
+             total_rows, created_count, updated_count, failed_count, errors, created_by)
+          values (${orgId}, ${resource.descriptor.key}, ${resource.descriptor.label}, ${format},
+                  ${body.fileName ?? null}, ${importMode},
+                  ${outcome.failed > 0 && outcome.created === 0 && outcome.updated === 0 ? 'failed' : 'committed'},
+                  ${JSON.stringify(mapping)}::jsonb, ${mappedRows.length},
+                  ${outcome.created}, ${outcome.updated}, ${outcome.failed},
+                  ${JSON.stringify(outcome.errors)}::jsonb, ${authz.user.id})
+          returning id`)) as { rows: { id: string }[] }
+        return { outcome, jobId: inserted.rows[0]?.id }
+      },
+    })
+  } catch (error) {
+    if (error instanceof ApplicationError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+    }
+    throw error
+  }
 
-  return NextResponse.json({ outcome: committed.outcome, jobId: committed.jobId, total: mappedRows.length })
+  return NextResponse.json({ ...committed.value, total: mappedRows.length, replayed: committed.replayed })
 }
 
 /**
