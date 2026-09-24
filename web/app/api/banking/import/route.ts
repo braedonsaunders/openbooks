@@ -14,6 +14,7 @@ import {
   type CsvMapping,
   type ParsedStatement,
   type ParsedStatementLine,
+  type SkippedStatementRow,
 } from '@openbooks/engine/src/banking/banking.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -126,7 +127,7 @@ export async function POST(req: Request) {
     }
 
     let lines: ParsedStatementLine[]
-    let skippedLines: { line: number; reason: string }[] = []
+    let skippedLines: SkippedStatementRow[] = []
     let meta: Omit<ParsedStatement, 'lines'> = {}
     if (body.source === 'ofx') {
       const parsed = parseOfx(sourceContent)

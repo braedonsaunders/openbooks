@@ -868,7 +868,7 @@ test("parser-skipped rows are reported in the preview and the import", async () 
          set reconcilable = true, currency_restriction = 'CAD'
        where id = ${org.accounts.bank} and org_id = ${org.orgId}
     `);
-    const skipped = [{ line: 1, reason: "skipped as a header row" }];
+    const skipped = [{ line: 1, code: "csv_metadata_row" as const, dateCell: "Bank export" }];
     const preview = await importStatement(
       {
         accountId: org.accounts.bank,

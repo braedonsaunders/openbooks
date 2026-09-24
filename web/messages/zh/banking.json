@@ -433,7 +433,7 @@
     "optionalPlaceholder": "可选",
     "nothingNew": "每一条解析出的明细在此账户上均已存在 — 无新内容可导入。",
     "skippedNotice": "{count, plural, other {有 {count} 个源行已略过（未导入）}}",
-    "skippedRow": "第 {line} 行：{reason}",
+    "skippedRow": "第 {line} 行（{dateCell}）已作为元数据行略过，未导入",
     "moreLines": "…以及 {count, plural, one {# 条其他明细} other {# 条其他明细}}",
     "totalBadge": "共 {count, number} 条",
     "possibleDuplicateBadge": "可能重复"

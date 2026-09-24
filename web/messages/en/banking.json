@@ -440,7 +440,7 @@
     "optionalPlaceholder": "optional",
     "nothingNew": "Every parsed line already exists on this account — nothing new to import.",
     "skippedNotice": "{count, plural, one {# source row was set aside without importing} other {# source rows were set aside without importing}}",
-    "skippedRow": "Row {line}: {reason}",
+    "skippedRow": "Row {line} (\"{dateCell}\") was set aside as a metadata row — not imported",
     "moreLines": "…and {count, plural, one {# more line} other {# more lines}}",
     "totalBadge": "{count, number} total",
     "possibleDuplicateBadge": "Possible duplicate"

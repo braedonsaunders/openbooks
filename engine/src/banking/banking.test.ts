@@ -56,7 +56,8 @@ test("human statement amounts refuse a lone comma two locales could read differe
 test("a leading disclaimer row is reported as skipped, never silently dropped", () => {
   // A bank CSV with a metadata row on top used to lose that row silently:
   // its date failed, so it was sliced off as the header and the import
-  // agreed with the loss. The row is now reported by line number.
+  // agreed with the loss. The row is now reported by line number with a
+  // reason code (locales render the sentence; no English prose crosses).
   const parsed = parseCsv(
     "Bank export - confidential\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n",
     { date: 0, amount: 1, description: 2 },
@@ -65,9 +66,65 @@ test("a leading disclaimer row is reported as skipped, never silently dropped", 
     parsed.lines.map((line) => line.amount),
     ["12.5000", "-5.0000"],
   );
-  assert.equal(parsed.skipped.length, 1);
-  assert.equal(parsed.skipped[0]!.line, 1);
-  assert.match(parsed.skipped[0]!.reason, /header row/);
+  assert.deepEqual(parsed.skipped, [
+    { line: 1, code: "csv_metadata_row", dateCell: "Bank export - confidential" },
+  ]);
+});
+
+test("an ordinary column-header row is consumed, never warned about", () => {
+  // The header used to land in `skipped`, so nearly every CSV import showed
+  // the amber "1 source row was set aside" warning — training operators to
+  // ignore it. A row whose mapped amount column holds a label (not a
+  // number) beside a description is the header in ANY language: numericity,
+  // not vocabulary, is the test, so the German header classifies alike.
+  for (const header of ["Date,Amount,Description", "Datum,Betrag,Beschreibung"]) {
+    const parsed = parseCsv(
+      `${header}\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n`,
+      { date: 0, amount: 1, description: 2 },
+    );
+    assert.deepEqual(
+      parsed.lines.map((line) => line.amount),
+      ["12.5000", "-5.0000"],
+      `header ${JSON.stringify(header)} must parse without warnings`,
+    );
+    assert.deepEqual(parsed.skipped, [], `header ${JSON.stringify(header)} must not warn`);
+  }
+});
+
+test("a metadata preamble before the header reports each disclaimer row", () => {
+  // Bank exports with leading metadata rows used to die on the real header
+  // ("unparseable date 'Date'"): only row 1 was ever classified. The whole
+  // leading block now classifies under the same rule — disclaimers reported,
+  // the header consumed, data intact.
+  const parsed = parseCsv(
+    "Bank export - confidential\nGenerated 2026-07-01\nDate,Amount,Description\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n",
+    { date: 0, amount: 1, description: 2 },
+  );
+  assert.deepEqual(
+    parsed.lines.map((line) => line.amount),
+    ["12.5000", "-5.0000"],
+  );
+  assert.deepEqual(parsed.skipped, [
+    { line: 1, code: "csv_metadata_row", dateCell: "Bank export - confidential" },
+    { line: 2, code: "csv_metadata_row", dateCell: "Generated 2026-07-01" },
+  ]);
+});
+
+test("a transaction-looking row inside a preamble refuses by row number", () => {
+  // A set-aside block must never swallow a real transaction: the row that
+  // reads as one refuses with its number and the remedy, even mid-block.
+  assert.throws(
+    () =>
+      parseCsv("Bank export - confidential\noops,12.50,salary\n2026-07-01,5.00,coffee\n", {
+        date: 0,
+        amount: 1,
+        description: 2,
+      }),
+    (error: unknown) =>
+      error instanceof BankingError &&
+      /CSV row 2 looks like a transaction/.test(error.message) &&
+      /remove the row|fix the date/.test(error.message),
+  );
 });
 
 test("a transaction-looking first row with a bad date refuses by name", () => {
