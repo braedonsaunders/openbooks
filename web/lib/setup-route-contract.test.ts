@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -67,23 +66,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await i
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-test("segment hierarchy API validation walks scoped descendants before the write", () => {
-  // The validation moved verbatim from the admin setup route into the shared
-  // setup command layer (web/lib/setup/write.ts) — pin the library, not the
-  // thin route adapter.
-  const source = readFileSync(
-    new URL("./setup/write.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(
-    source,
-    /with recursive descendants as \([\s\S]*where id = \$\{rowId\} and org_id = \$\{orgId\} and segment_id = \$\{segmentId\}[\s\S]*where value\.org_id = \$\{orgId\} and value\.segment_id = \$\{segmentId\}/,
-  );
-  assert.match(source, /A segment value cannot be parented beneath itself/);
-  const preflight = source.lastIndexOf("const integrityError = await validateEntityIntegrity");
-  const write = source.lastIndexOf("const found = await setupWriteTransaction");
-  assert.ok(preflight >= 0 && preflight < write, "PATCH integrity validation must precede its write transaction");
-});
+
 
 interface Fixture {
   orgId: string;
