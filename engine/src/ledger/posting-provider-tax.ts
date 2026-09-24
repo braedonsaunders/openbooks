@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { providerBindingMismatch, providerEvidenceMismatch, readTaxRateProviderConfig, readTaxQuoteForDocumentLine, sumComponentTax, type Address, type PersistedTaxQuote } from "../tax/rate-providers.ts";
+import { providerBindingMismatch, providerEvidenceMismatch, readTaxRateProviderConfigForPosting, readTaxQuoteForDocumentLine, sumComponentTax, type Address, type PersistedTaxQuote } from "../tax/rate-providers.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
 import { type Doc, type DocLine, type PostingDeps, type TaxPostingComponent, PostingError } from "./posting-contracts.ts";
 type ProviderTaxPlan = {
@@ -186,7 +186,7 @@ export async function resolveProviderTaxPlans(
   deps: PostingDeps,
 ): Promise<ProviderTaxPlan[]> {
   if (deps.migration || !providerTaxDocumentKind(doc.kind)) return [];
-  const config = await readTaxRateProviderConfig(doc.orgId);
+  const config = await readTaxRateProviderConfigForPosting(doc.orgId);
   // Manual rates are an explicit local provider. An administrator opting out
   // of external authority must never trigger a hidden HTTP call.
   if (!config?.isEnabled || !config.preferProvider || config.provider === "manual") return [];
@@ -259,6 +259,8 @@ export async function resolveProviderTaxPlans(
       existingComponents,
       persisted.components,
       config.settings,
+      db,
+      true,
     );
     if (bindingMismatch) {
       throw new PostingError(
