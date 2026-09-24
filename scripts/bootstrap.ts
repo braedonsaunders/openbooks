@@ -1764,6 +1764,17 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "Restamp, not reapply: the revision stages the build but changes no "
       + "enforced state.",
   },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "2d6d2fa331c3a6ffc138f1a30fb1eb6b8f183609ae3a055931aa25acc132ac7b",
+    to: "65ec1f847284c54e4ff51d8cfad926a89cfdeecc94c467d2ae83f1c9d8f1bd31",
+    strategy: "reapply",
+    reason:
+      "same growth as the entries above, for shard databases that applied "
+      + "the branch G4+G5+G6+G8+G9 body: the delta is the wipe-fix and the "
+      + "G10 line-edit recompute trigger, all idempotent on replay. "
+      + "Reapply, not restamp.",
+  },
 ];
 
 async function executeTrackedMigration(
