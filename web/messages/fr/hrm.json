@@ -591,6 +591,8 @@
     "emptyDescription": "Enregistrez votre première demande.",
     "balancesTitle": "Soldes",
     "balancesEmpty": "Aucun type de congé actif.",
+    "balanceEmployment": "{employer} · Emploi {employment}",
+    "balancePerson": "Au niveau de la personne",
     "timeKind": "temps",
     "valueKind": "valeur",
     "unlimited": "Illimité"

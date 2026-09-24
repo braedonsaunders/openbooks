@@ -102,9 +102,9 @@ registerHooks({
               return (s && s.rows) || [];
             }
             export async function listOrgLeaveRequests() { return { requests: [], truncated: false }; }
-            export async function listLeaveTypes() { return []; }
-            export async function payrollBankBalances() { return []; }
-            export async function timeBalanceAsOf() { return null; }`,
+            export async function listLeaveTypes() { return globalThis.__myLeaveTypes ?? []; }
+            export async function payrollBankBalances(...args) { (globalThis.__myLeaveBankCalls ??= []).push(args); return globalThis.__myLeaveBanks ?? []; }
+            export async function timeBalanceAsOf(...args) { (globalThis.__myLeaveTimeCalls ??= []).push(args); return { balance: String(args[2]), unlimited: false }; }`,
           ),
       };
     }
@@ -133,7 +133,7 @@ registerHooks({
           "data:text/javascript," +
           encodeURIComponent(
             `export { HrmAuthorizationError } from ${JSON.stringify(engineAuthorizationUrl)};
-             export async function loadOwnEmploymentIds() { return []; }`,
+             export async function loadOwnEmploymentIds() { return globalThis.__myLeaveEmployments ?? []; }`,
           ),
       };
     }
@@ -141,7 +141,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) };",
+        url: "data:text/javascript,export const db = { execute: async () => ({ rows: globalThis.__myLeaveEmploymentRows ?? [] }) };",
       };
     }
     return nextResolve(specifier, context);
@@ -164,6 +164,12 @@ function authzWith() {
 function stubInbox(rows: Array<Record<string, unknown>> | { error: unknown }) {
   gap.__myLeaveInbox = Array.isArray(rows) ? { rows } : rows;
   gap.__myLeaveArgs = [];
+  gap.__myLeaveEmployments = [];
+  gap.__myLeaveEmploymentRows = [];
+  gap.__myLeaveTypes = [];
+  gap.__myLeaveBanks = [];
+  gap.__myLeaveTimeCalls = [];
+  gap.__myLeaveBankCalls = [];
 }
 
 function leaveRow(id: string, status: string): Record<string, unknown> {
@@ -197,6 +203,29 @@ test("the inbox lists the caller's own requests through the shared primitives", 
   assert.equal(row.statusVariant, "warning", "the loader resolves the badge variant");
   assert.ok(row.requestHref.includes("request=lr-mine"), "each row opens its own request");
   assert.equal(row.employeeLabel, "Not available", "unlabelled rows name the fallback, never an id");
+});
+
+test("my leave resolves time balances for each employment and value banks once at person level", async () => {
+  stubInbox([]);
+  gap.__myLeaveEmployments = ["employment-a", "employment-b"];
+  gap.__myLeaveEmploymentRows = [
+    { employmentId: "employment-a", employmentNumber: "A-17", employerName: "North Entity", partyId: "party-mine" },
+    { employmentId: "employment-b", employmentNumber: "B-24", employerName: "South Entity", partyId: "party-mine" },
+  ];
+  gap.__myLeaveTypes = [{ id: "type-vac", code: "VAC", isActive: true }];
+  gap.__myLeaveBanks = [{ planCode: "BANK", balance: "12.50" }];
+  gap.__myLeaveTimeCalls = [];
+  gap.__myLeaveBankCalls = [];
+
+  const data = await loadMyLeave(authzWith(), {});
+
+  assert.deepEqual((gap.__myLeaveTimeCalls as Array<unknown[]>).map((call) => call[2]), ["employment-a", "employment-b"]);
+  assert.equal(data.balances.length, 3, "each employment has a time balance and the party bank appears once");
+  assert.deepEqual(data.balances.map((row) => row.employmentId), ["employment-a", "employment-b", null]);
+  assert.match(data.balances[0]!.scopeLabel, /North Entity.*A-17/);
+  assert.match(data.balances[1]!.scopeLabel, /South Entity.*B-24/);
+  assert.match(data.balances[2]!.scopeLabel, /Person/);
+  assert.equal((gap.__myLeaveBankCalls as unknown[]).length, 1, "party-level banks are not repeated per employment");
 });
 
 test("a leave-domain refusal converts to data, never a thrown page", async () => {

@@ -647,6 +647,8 @@
     "emptyDescription": "File your first request to see it here.",
     "balancesTitle": "Balances",
     "balancesEmpty": "No active leave types.",
+    "balanceEmployment": "{employer} · Employment {employment}",
+    "balancePerson": "Person-level",
     "timeKind": "time",
     "valueKind": "value",
     "unlimited": "Unlimited"
