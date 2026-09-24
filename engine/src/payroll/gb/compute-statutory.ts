@@ -145,6 +145,15 @@ export async function computeGbStatutory(
   }
   const tables = gbTablesForTaxYear(taxYear);
 
+  const studentLoanPlan = certificateFor("gb_starter_checklist")?.answers.student_loan_plan;
+  if (studentLoanPlan && studentLoanPlan !== "none") {
+    throw new PayrollPackError(
+      `GB payroll cannot calculate this run while the starter checklist records ${studentLoanPlan}: `
+      + "HMRC student-loan and postgraduate-loan deductions are not yet implemented, so this run "
+      + "must be completed with payroll software that calculates the applicable loan deductions.",
+    );
+  }
+
   const notice = certificateFor("gb_tax_code_notice");
   const rawCode = notice?.onFile ? notice.answers.tax_code : null;
   if (!rawCode || !rawCode.trim()) {
