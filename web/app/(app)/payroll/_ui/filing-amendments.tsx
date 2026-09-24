@@ -46,7 +46,7 @@ import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-h
 export type FilingRevision = 'original' | 'amended' | 'cancelled'
 
 export type FilingRowStatus =
-  | 'unfiled' | 'unchanged' | 'changed' | 'absent' | 'withdrawn' | 'resurrected'
+  | 'unfiled' | 'unchanged' | 'changed' | 'absent' | 'unavailable' | 'withdrawn' | 'resurrected'
 
 export interface FilingFieldChange {
   code: string | null
@@ -117,6 +117,7 @@ const STATUS_TEXT: Record<FilingRowStatus, { english: string; variant: 'default'
   unchanged: { english: 'Filed', variant: 'success' },
   changed: { english: 'Changed since filing', variant: 'warning' },
   absent: { english: 'No longer in the ledger', variant: 'destructive' },
+  unavailable: { english: 'Current status unavailable', variant: 'warning' },
   withdrawn: { english: 'Cancelled', variant: 'secondary' },
   resurrected: { english: 'Cancelled but still in the ledger', variant: 'destructive' },
 }
@@ -639,10 +640,12 @@ function FilingCorrectionSectionBody({
   }, [preview, year])
 
   const canAmend = canFile
+    && !lifecycle?.populationRefusal
     && amendment.supported
     && amendment.revisions.includes('amended')
     && review.status === 'changed'
   const canCancel = canFile
+    && !lifecycle?.populationRefusal
     && amendment.supported
     && amendment.revisions.includes('cancelled')
     && (review.status === 'absent' || review.status === 'changed' || review.status === 'unchanged')
@@ -689,6 +692,14 @@ function FilingCorrectionSectionBody({
         </Alert>
       ) : (
         <>
+          {lifecycle.populationRefusal && (
+            <Alert variant="warning">
+              <AlertDescription>
+                {text('lifecycle.populationUnavailable', 'The current filing population could not be built, so row status is unavailable and corrections are disabled.')}
+                {' '}{lifecycle.populationRefusal}
+              </AlertDescription>
+            </Alert>
+          )}
           {review.status === 'unfiled' && lifecycle.submissions.length === 0 && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {text(
