@@ -27,7 +27,6 @@
     "engine/src/sync/source-deletions.test.ts": 6,
     "engine/src/tax/pack-provisioning.test.ts": 1,
     "engine/src/worker/backup-scheduler.test.ts": 11,
-    "web/app/(app)/items/ItemDrawer.test.tsx": 4,
     "web/app/(app)/journal/JournalDrawer.test.tsx": 6,
     "web/app/(app)/payments/PaymentDrawer.test.tsx": 8,
     "web/app/(app)/payments/RunBuilder.test.tsx": 1,
