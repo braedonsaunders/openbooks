@@ -54,6 +54,8 @@
     "toFail": "Erros",
     "commit": "Importar {n} linhas",
     "committing": "Importando…",
+    "commitFailed": "Não foi possível concluir a importação.",
+    "commitConflict": "Esta importação está em conflito com uma tentativa anterior. Confira primeiro o histórico de importações. Se você alterou o arquivo ou o mapeamento, faça uma nova prévia e envie a importação atualizada; recarregar com os mesmos dados tenta novamente a solicitação anterior com segurança.",
     "row": "Linha",
     "status": "Status",
     "message": "Mensagem",

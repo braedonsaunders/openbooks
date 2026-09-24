@@ -58,6 +58,8 @@
     "warnings": "Warnings",
     "commit": "Import {n} rows",
     "committing": "Importing…",
+    "commitFailed": "The import could not be completed.",
+    "commitConflict": "This import conflicts with an earlier attempt. Check Import History first. If you changed the file or mapping, preview and submit the updated import; reloading with unchanged inputs safely retries the earlier request.",
     "row": "Row",
     "status": "Status",
     "message": "Message",

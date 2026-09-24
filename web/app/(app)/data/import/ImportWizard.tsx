@@ -11,6 +11,11 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { enterOrg } from '../../../../lib/sandbox-session'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { exportCsv } from '../../analytics/_ui/exportCsv'
+import {
+  forgetImportCommitIdentity,
+  resolveImportCommitIdentity,
+  type ImportCommitIdentity,
+} from './commit-identity'
 
 interface ResourceDescriptor {
   key: string
@@ -107,7 +112,7 @@ export function ImportWizard() {
   const [sampleIndustry, setSampleIndustry] = useState('')
   const [sampleBusy, setSampleBusy] = useState(false)
   const [sampleError, setSampleError] = useState<SampleCompanyRefusal | null>(null)
-  const commitIdempotencyKey = useRef<string | null>(null)
+  const commitIdentity = useRef<ImportCommitIdentity | null>(null)
 
   const sampleErrorText = (refusal: SampleCompanyRefusal): string => {
     const copyKey = refusal.code ? SAMPLE_COMPANY_FAILURE_COPY[refusal.code] : undefined
@@ -273,20 +278,35 @@ export function ImportWizard() {
   const doCommit = async () => {
     setBusy(true)
     try {
-      // Retain this key after transport/server errors. If the server committed
-      // but the response was lost, another click must replay that import.
-      const idempotencyKey = commitIdempotencyKey.current ?? crypto.randomUUID()
-      commitIdempotencyKey.current = idempotencyKey
+      // The key follows the exact request inputs. A lost response reuses it,
+      // including after reload; editing the import creates a distinct request.
+      let storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null = null
+      try {
+        storage = window.sessionStorage
+      } catch {
+        // In-memory retries still work where session storage is unavailable.
+      }
+      const identity = await resolveImportCommitIdentity(
+        { resource, format, rows, mapping, importMode, fileName, post },
+        commitIdentity.current,
+        storage,
+        () => crypto.randomUUID(),
+      )
+      commitIdentity.current = identity
       const res = await fetch('/api/data/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'commit', resource, format, rows, mapping, importMode, fileName, post, idempotencyKey }),
+        body: JSON.stringify({ mode: 'commit', resource, format, rows, mapping, importMode, fileName, post, idempotencyKey: identity.key }),
       })
+      if (!res.ok) {
+        if (res.status === 409) throw new Error(t('import.commitConflict'))
+        throw new Error(await readApiErrorMessage(res, t('import.commitFailed')))
+      }
       const d = await res.json()
-      if (!res.ok) throw new Error(d.error ?? 'import failed')
       setResult(d.outcome)
       setStep('result')
-      commitIdempotencyKey.current = null
+      forgetImportCommitIdentity(identity, storage)
+      commitIdentity.current = null
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -295,7 +315,7 @@ export function ImportWizard() {
   }
 
   const reset = () => {
-    commitIdempotencyKey.current = null
+    commitIdentity.current = null
     setStep('source')
     setResource('')
     setFileName('')
