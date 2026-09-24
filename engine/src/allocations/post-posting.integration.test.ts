@@ -53,17 +53,18 @@ interface TargetSeed {
 async function seedManualDriver(
   ctx: Ctx,
   key: string,
-  entries: Array<[string, string]>,
+  entries: Array<[string, string, string?, (string | null)?]>,
 ): Promise<string> {
   const driverId = randomUUID();
   await db.execute(sql`
     insert into allocation_drivers (id, org_id, key, name, dimension, source_kind, config, is_active)
     values (${driverId}, ${ctx.org.orgId}, ${key}, ${key}, 'department', 'manual', '{}'::jsonb, true)`);
-  for (const [dimensionValueId, value] of entries) {
+  for (const [dimensionValueId, value, effectiveFrom, effectiveTo] of entries) {
     await db.execute(sql`
       insert into allocation_driver_values
-        (id, org_id, driver_id, dimension_value_id, effective_from, value)
-      values (${randomUUID()}, ${ctx.org.orgId}, ${driverId}, ${dimensionValueId}, '2026-01-01', ${value})`);
+        (id, org_id, driver_id, dimension_value_id, effective_from, effective_to, value)
+      values (${randomUUID()}, ${ctx.org.orgId}, ${driverId}, ${dimensionValueId},
+              ${effectiveFrom ?? "2026-01-01"}, ${effectiveTo ?? null}, ${value})`);
   }
   return driverId;
 }
@@ -78,7 +79,7 @@ async function seedPostRule(
     bookIds?: string[];
     offsetAccountId?: string | null;
     accountId?: string;
-    basis?: { kind: "driver"; driverId: string };
+    basis?: { kind: "driver"; driverId: string; driverAsOf?: "period" | "document_date" | "prior_period" };
   },
 ): Promise<{ ruleId: string; versionId: string }> {
   const ruleId = randomUUID();
@@ -94,12 +95,13 @@ async function seedPostRule(
     insert into allocation_rule_versions
       (id, org_id, rule_id, version_no, status, effective_from, definition_hash,
        book_scope, book_ids, document_kinds, account_scope, dimension_filters,
-       basis_kind, driver_id, target_kind, impact, offset_account_id, residual_policy)
+       basis_kind, driver_id, driver_as_of, target_kind, impact, offset_account_id, residual_policy)
     values (${versionId}, ${ctx.org.orgId}, ${ruleId}, 1, 'draft', '2026-01-01', null,
        ${opts.bookScope ?? "primary"}, ${JSON.stringify(opts.bookIds ?? [])}::jsonb,
        '["vendor_bill"]'::jsonb,
        ${JSON.stringify({ kind: "accounts", accountIds: [accountId] })}::jsonb,
        '{}'::jsonb, ${opts.basis?.kind ?? "fixed_percent"}, ${opts.basis?.driverId ?? null},
+       ${opts.basis?.driverAsOf ?? "period"},
        'explicit', ${opts.impact},
        ${opts.offsetAccountId ?? null}, 'largest_share')`);
   let sequence = 0;
@@ -127,8 +129,27 @@ async function seedPostRule(
 }
 
 /** An approved vendor bill with one expense line in the source department. */
-async function seedBill(ctx: Ctx, number: string, amount: string): Promise<string> {
+async function seedPeriod(
+  ctx: Ctx,
+  period: { year: number; num: number; name: string; start: string; end: string },
+): Promise<void> {
+  const calId = (await db.execute<{ id: string }>(sql`
+    select id from fiscal_calendars where org_id = ${ctx.org.orgId} and is_default = true`)).rows[0]!.id;
+  await db.execute(sql`
+    insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+    values (${randomUUID()}, ${ctx.org.orgId}, ${period.year}, ${period.num}, ${period.name},
+            ${period.start}, ${period.end}, false, ${calId})`);
+}
+
+async function seedBill(
+  ctx: Ctx,
+  number: string,
+  amount: string,
+  dates?: { documentDate: string; postingDate: string },
+): Promise<string> {
   const documentId = randomUUID();
+  const documentDate = dates?.documentDate ?? ctx.org.date;
+  const postingDate = dates?.postingDate ?? ctx.org.date;
   // Draft first: posted-document guards refuse line writes on an approved
   // header, so lines land while the bill is still a draft.
   await db.execute(sql`
@@ -136,7 +157,7 @@ async function seedBill(ctx: Ctx, number: string, amount: string): Promise<strin
       (id, org_id, kind, status, document_number, subsidiary_id, party_id,
        document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
     values (${documentId}, ${ctx.org.orgId}, 'vendor_bill', 'draft', ${number},
-            ${ctx.org.subsidiaryId}, ${ctx.org.vendorId}, ${ctx.org.date}, ${ctx.org.date},
+            ${ctx.org.subsidiaryId}, ${ctx.org.vendorId}, ${documentDate}, ${postingDate},
             'CAD', '1', ${amount}, '0.0000', ${amount})`);
   await db.execute(sql`
     insert into document_lines
@@ -509,6 +530,74 @@ test("driver-basis rules weight lines by the measured vector end to end", { skip
       ["-100.0000", null, "4.0000", null],
     ]);
     assert.ok(lineage.every((r) => r.journal_line_id !== null));
+  } finally {
+    await dropScratchOrg(ctx.org.orgId);
+  }
+});
+
+test("a prior_period driver rule at posting measures the prior-period vector", { skip: !DB }, async () => {
+  const ctx = await setupCtx();
+  try {
+    await seedPeriod(ctx, { year: 2026, num: 6, name: "2026-06", start: "2026-06-01", end: "2026-06-30" });
+    // Headcount flips mid-year: the June (prior-period) vector is 80/20,
+    // the live July vector is 20/80. The old code measured the posting
+    // date and would post 20/80 here.
+    const driverId = await seedManualDriver(ctx, "headcount-prior", [
+      [ctx.deptA, "80.0000", "2026-01-01", "2026-06-30"],
+      [ctx.deptB, "20.0000", "2026-01-01", "2026-06-30"],
+      [ctx.deptA, "20.0000", "2026-07-01", null],
+      [ctx.deptB, "80.0000", "2026-07-01", null],
+    ]);
+    await seedPostRule(ctx, {
+      key: "headcount-prior-split",
+      impact: "net_zero_pair",
+      basis: { kind: "driver", driverId, driverAsOf: "prior_period" },
+      targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
+    });
+    const entryId = await postBill(ctx, await seedBill(ctx, "BILL-DRV-PRIOR-1", "100.0000"));
+    const lines = await entryLines(ctx.org.orgId, entryId);
+    assert.deepEqual(lines.slice(2).map((l) => [l.department_id, l.amount]), [
+      [ctx.deptA, "80.0000"],
+      [ctx.deptB, "20.0000"],
+      [ctx.deptSrc, "-100.0000"],
+    ]);
+  } finally {
+    await dropScratchOrg(ctx.org.orgId);
+  }
+});
+
+test("a document_date driver rule at posting measures the document date, not the posting date", { skip: !DB }, async () => {
+  const ctx = await setupCtx();
+  try {
+    await seedPeriod(ctx, { year: 2026, num: 8, name: "2026-08", start: "2026-08-01", end: "2026-08-31" });
+    // A July bill posted in August: the document-date vector is 80/20, the
+    // live August vector is 20/80. The old code measured the posting date
+    // and would post 20/80 here.
+    const driverId = await seedManualDriver(ctx, "headcount-docdate", [
+      [ctx.deptA, "80.0000", "2026-01-01", "2026-07-31"],
+      [ctx.deptB, "20.0000", "2026-01-01", "2026-07-31"],
+      [ctx.deptA, "20.0000", "2026-08-01", null],
+      [ctx.deptB, "80.0000", "2026-08-01", null],
+    ]);
+    await seedPostRule(ctx, {
+      key: "headcount-docdate-split",
+      impact: "net_zero_pair",
+      basis: { kind: "driver", driverId, driverAsOf: "document_date" },
+      targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
+    });
+    const entryId = await postBill(
+      ctx,
+      await seedBill(ctx, "BILL-DRV-DOCDATE-1", "100.0000", {
+        documentDate: "2026-07-15",
+        postingDate: "2026-08-05",
+      }),
+    );
+    const lines = await entryLines(ctx.org.orgId, entryId);
+    assert.deepEqual(lines.slice(2).map((l) => [l.department_id, l.amount]), [
+      [ctx.deptA, "80.0000"],
+      [ctx.deptB, "20.0000"],
+      [ctx.deptSrc, "-100.0000"],
+    ]);
   } finally {
     await dropScratchOrg(ctx.org.orgId);
   }
