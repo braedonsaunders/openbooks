@@ -2,21 +2,43 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const source = readFileSync(new URL('./RemittancesView.tsx', import.meta.url), 'utf8')
-
 // Exercise the real client view: a refusal must never look like a zero balance.
 const { registerHooks } = await import('node:module')
 registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === 'next/link') return {
+      shortCircuit: true,
+      url: 'data:text/javascript,export default function Link(props){return globalThis.React.createElement("a",{href:props.href},props.children)}',
+    }
     if (specifier === 'next/navigation') return {
       shortCircuit: true,
       url: 'data:text/javascript,export function useRouter(){return {refresh(){}}}',
     }
+    if (specifier === 'sonner') return {
+      shortCircuit: true,
+      url: 'data:text/javascript,export const toast={success(){},error(){}}',
+    }
     return next(specifier, context)
   },
 })
+const { JSDOM } = await import('jsdom')
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+  url: 'http://localhost:4800/payroll/remittances',
+})
+const domGlobals = globalThis as Record<string, unknown>
+const domWindow = dom.window as unknown as Record<string, unknown>
+for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'MouseEvent', 'self']) {
+  if (domGlobals[key] === undefined) domGlobals[key] = domWindow[key]
+}
+;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+if (typeof window.matchMedia !== 'function') {
+  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
+}
+
 const React = await import('react')
 const { renderToStaticMarkup } = await import('react-dom/server')
+const { createRoot } = await import('react-dom/client')
+const { act } = React
 const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { RemittancesView } = await import('./RemittancesView')
@@ -24,17 +46,90 @@ const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payrol
 import type { RemittanceGroup } from '../../../../../engine/src/payroll/remittance.ts'
 Object.assign(globalThis, { React })
 
-test('remittance bill payload follows edited dates while preserving unchanged range values', () => {
-  assert.match(source, /const \[range, setRange\] = useState\(\{ from, to \}\)/)
-  assert.match(source, /value=\{range\.from\}[\s\S]*?from: e\.target\.value/)
-  assert.match(source, /value=\{range\.to\}[\s\S]*?to: e\.target\.value/)
+const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
 
-  const payload = source.match(/body: JSON\.stringify\(\{([\s\S]*?)\n        \}\),/)?.[1]
-  assert.ok(payload, 'create-bill must serialize a request payload')
-  assert.match(payload, /from: range\.from/)
-  assert.match(payload, /to: range\.to/)
-  assert.doesNotMatch(payload, /^\s*from,\s*$/m)
-  assert.doesNotMatch(payload, /^\s*to,\s*$/m)
+async function mountInteractive(t: import('node:test').TestContext, group: RemittanceGroup): Promise<void> {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    for (const child of [...document.body.children]) child.remove()
+  })
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={{ payroll: messages }}>
+        <MoneyProvider currency="CAD">
+          <RemittancesView groups={[group]} from="2026-07-01" to="2026-07-31" canCreate />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+}
+
+test('bill creation submits the operator-edited date range', async (t) => {
+  const group: RemittanceGroup = {
+    partyId: '11111111-1111-4111-8111-111111111111',
+    partyName: 'Receiver General',
+    filingAccount: { id: '22222222-2222-4222-8222-222222222222', accountNumber: null, name: null, remitterType: null },
+    hasUnknownFilingAccount: false,
+    hasEntitylessAccruals: false,
+    regionalCalendar: null,
+    vendorKeys: [],
+    schedule: null,
+    provinces: ['ON'],
+    components: [],
+    total: '0.00',
+    currency: 'CAD',
+    translated: false,
+    slices: [],
+    grossPayroll: '0.00',
+    employeeCount: 1,
+    existingBills: [],
+  }
+  await mountInteractive(t, group)
+
+  const requests: { url: string; body: unknown }[] = []
+  const priorFetch = globalThis.fetch
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    requests.push({ url: String(input), body: JSON.parse(String(init?.body)) })
+    return Response.json({ documentNumber: 'RB-104' })
+  }) as typeof fetch
+  t.after(() => { globalThis.fetch = priorFetch })
+
+  for (const [name, value] of [['from', '2026-08-01'], ['to', '2026-08-31']] as const) {
+    const input = document.querySelector(`input[name="${name}"]`) as HTMLInputElement | null
+    assert.ok(input, `${name} date field is rendered`)
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, value)
+      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+      input.dispatchEvent(new window.Event('change', { bubbles: true }))
+      await tick()
+    })
+    assert.equal(input.value, value, `${name} date field accepts the edited value`)
+  }
+  const create = [...document.querySelectorAll('button')].find((button) =>
+    button.textContent?.includes(messages.remittances.createBill),
+  )
+  assert.ok(create, 'the bill action is available to a caller with create permission')
+  await act(async () => {
+    create.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+  })
+  assert.deepEqual(requests, [{
+    url: '/api/payroll/remittances',
+    body: {
+      action: 'create-bill',
+      partyId: group.partyId,
+      filingAccountId: group.filingAccount.id,
+      subsidiaryId: null,
+      from: '2026-08-01',
+      to: '2026-08-31',
+    },
+  }])
 })
 
 test('refused remittance view renders an alert and date form, without an empty balance or bill action', () => {

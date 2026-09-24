@@ -20,7 +20,6 @@
     "engine/src/scripting/permissions.integration.test.ts": 4,
     "engine/src/sim/saas-autopilot.test.ts": 1,
     "web/app/(app)/payroll/_ui/filing-workspace.test.tsx": 2,
-    "web/app/(app)/payroll/remittances/RemittancesView.test.tsx": 1,
     "web/app/(app)/payroll/runs/RunWizard.test.ts": 7,
     "web/app/(app)/payroll/runs/[id]/view-approval.test.ts": 3
   }
