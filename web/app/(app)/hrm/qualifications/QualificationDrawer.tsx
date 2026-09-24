@@ -49,10 +49,14 @@ interface Detail {
 export function QualificationDrawer({
   qualificationId,
   recordOpen,
+  canManage,
   onClose,
 }: {
   qualificationId: string | null
   recordOpen: boolean
+  /** Loader-resolved manage grant (F3-37): Verify, Renew and Revoke render
+   * only with it, never on stored status alone. */
+  canManage: boolean
   onClose: () => void
 }) {
   const t = useTranslations('hrm')
@@ -267,11 +271,13 @@ export function QualificationDrawer({
               </a>
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            {isPending ? <Button onClick={verify}>{t('qualifications.verify')}</Button> : null}
-            {!isRevoked ? <Button variant="outline" onClick={renew}>{t('qualifications.renew')}</Button> : null}
-            {!isRevoked ? <Button variant="outline" onClick={revoke}>{t('qualifications.revoke')}</Button> : null}
-          </div>
+          {canManage ? (
+            <div className="flex flex-wrap gap-2">
+              {isPending ? <Button onClick={verify}>{t('qualifications.verify')}</Button> : null}
+              {!isRevoked ? <Button variant="outline" onClick={renew}>{t('qualifications.renew')}</Button> : null}
+              {!isRevoked ? <Button variant="outline" onClick={revoke}>{t('qualifications.revoke')}</Button> : null}
+            </div>
+          ) : null}
           <section aria-label={t('qualifications.drawer.events')}>
             <h3 className="mb-1 text-sm font-semibold">{t('qualifications.drawer.events')}</h3>
             <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">

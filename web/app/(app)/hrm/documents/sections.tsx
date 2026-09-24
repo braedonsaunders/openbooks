@@ -117,17 +117,23 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
     if (await post(`${base}/hold`, { hold: !held }, msg(labels, 'actionFailed'))) router.refresh()
   }
 
+  // F3-38: Send, Remind, Void and Legal-hold are writes — they render
+  // only with the manage grant, never on document status alone. Detail
+  // and download stay readable without it.
+  const canAct = drawer.canManage
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap gap-2">
-        {actionable && (
+        {canAct && actionable && (
           <Button onClick={send}>{msg(labels, 'send')}</Button>
         )}
-        {document.status !== 'draft' && <Button variant="outline" onClick={remind}>{msg(labels, 'remind')}</Button>}
-        <Button variant="outline" onClick={toggleHold}>
-          {document.legalHold ? msg(labels, 'releaseHold') : msg(labels, 'hold')}
-        </Button>
-        {actionable && (
+        {canAct && document.status !== 'draft' && <Button variant="outline" onClick={remind}>{msg(labels, 'remind')}</Button>}
+        {canAct && (
+          <Button variant="outline" onClick={toggleHold}>
+            {document.legalHold ? msg(labels, 'releaseHold') : msg(labels, 'hold')}
+          </Button>
+        )}
+        {canAct && actionable && (
           <Button variant="outline" onClick={voidDocument}>{msg(labels, 'void')}</Button>
         )}
         {document.fileId && (

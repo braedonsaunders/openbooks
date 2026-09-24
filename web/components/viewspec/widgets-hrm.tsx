@@ -65,6 +65,7 @@ export const HRM_WIDGETS = {
       employmentId={str(props, 'employmentId') ?? ''}
       appliedChangeId={str(props, 'appliedChangeId') ?? null}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestRowActions>['departmentOptions']) ?? []}
+      canManage={props.canManage === true}
     />
   ),
   /** OM-12: the request-detail drawer (?request=<id>), closing by
@@ -77,6 +78,7 @@ export const HRM_WIDGETS = {
       closeHref={str(props, 'closeHref') ?? '/hrm/change-requests'}
       subject={(props.subject as ComponentProps<typeof ChangeRequestDetailDialog>['subject']) ?? null}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestDetailDialog>['departmentOptions']) ?? []}
+      canManage={props.canManage === true}
     />
   ),
   /** HR-16 begin: the applied event's verb chip (0227) — renders only when
@@ -216,6 +218,7 @@ export const HRM_WIDGETS = {
       qualificationId={str(props, 'qualificationId') ?? null}
       recordOpen={props.recordOpen === true}
       closeHref={str(props, 'closeHref') ?? '/hrm/qualifications'}
+      canManage={props.canManage === true}
     />
   ),
   // HR-14 end

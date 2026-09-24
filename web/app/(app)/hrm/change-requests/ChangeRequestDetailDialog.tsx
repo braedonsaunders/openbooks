@@ -18,11 +18,15 @@ export function ChangeRequestDetailDialog({
   closeHref,
   subject,
   departmentOptions,
+  canManage,
 }: {
   requestId: string | null
   closeHref: string
   subject: ChangeRequestDetailSubject | null
   departmentOptions: { value: string; label: string }[]
+  /** Loader-resolved manage grant (F3-36): the drawer's lifecycle actions
+   * render only with it. */
+  canManage: boolean
 }) {
   const router = useRouter()
   if (!requestId) return null
@@ -32,6 +36,7 @@ export function ChangeRequestDetailDialog({
       requestId={requestId}
       subject={subject}
       departmentOptions={departmentOptions}
+      canManage={canManage}
       onClose={() => {
         router.push(closeHref as never)
         router.refresh()

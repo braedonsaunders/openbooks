@@ -120,6 +120,7 @@ export function ChangeRequestDetailDrawer({
   requestId,
   subject,
   departmentOptions,
+  canManage,
   onClose,
 }: {
   requestId: string
@@ -127,6 +128,9 @@ export function ChangeRequestDetailDrawer({
    * on a deep link into another segment — the live fetch still resolves. */
   subject: ChangeRequestDetailSubject | null
   departmentOptions: { value: string; label: string }[]
+  /** Loader-resolved manage grant (F3-36): the lifecycle actions render
+   * only with it; detail stays readable without it. */
+  canManage: boolean
   onClose: () => void
 }) {
   const t = useTranslations('hrm')
@@ -422,6 +426,7 @@ export function ChangeRequestDetailDrawer({
               employmentId={detail.employmentId}
               appliedChangeId={detail.appliedEmploymentChangeId}
               departmentOptions={departmentOptions}
+              canManage={canManage}
               onChanged={() => router.refresh()}
             />
           </>

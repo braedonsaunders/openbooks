@@ -404,3 +404,45 @@ test("type creation carries code and category into the service", async () => {
     { fn: "createType", args: { orgId: "org-1", actorId: "user-1", code: "OSHA30", name: "OSHA 30", category: "certification" } },
   ]);
 });
+
+test("F3-37: record, verify, renew and revoke refuse a read-only role before the service runs", async () => {
+  reset();
+  routeState.perms = ["hrm.certifications.read", "hrm.self.read"];
+  const params = { params: Promise.resolve({ id: "q-9" }) };
+  const record = await ledgerRoute.POST(
+    new Request("http://openbooks.test/api/hrm/qualifications", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ employmentId: UUID, typeId: UUID2, issuedOn: "2026-09-21" }),
+    }),
+  );
+  assert.equal(record.status, 403);
+  const verify = await verifyRoute.POST(
+    new Request("http://openbooks.test/api/hrm/qualifications/q-9/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    }),
+    params,
+  );
+  assert.equal(verify.status, 403);
+  const renew = await renewRoute.POST(
+    new Request("http://openbooks.test/api/hrm/qualifications/q-9/renew", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ issuedOn: "2026-09-21" }),
+    }),
+    params,
+  );
+  assert.equal(renew.status, 403);
+  const revoke = await revokeRoute.POST(
+    new Request("http://openbooks.test/api/hrm/qualifications/q-9/revoke", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "fraud" }),
+    }),
+    params,
+  );
+  assert.equal(revoke.status, 403);
+  assert.deepEqual(routeState.calls, [], "no write reached the service without the manage grant");
+});

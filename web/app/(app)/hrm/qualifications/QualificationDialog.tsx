@@ -17,10 +17,14 @@ export function QualificationDialog({
   qualificationId,
   recordOpen,
   closeHref,
+  canManage,
 }: {
   qualificationId: string | null
   recordOpen: boolean
   closeHref: string
+  /** Loader-resolved manage grant (F3-37): Verify, Renew and Revoke render
+   * only with it. */
+  canManage: boolean
 }) {
   const router = useRouter()
   return (
@@ -28,6 +32,7 @@ export function QualificationDialog({
       key={qualificationId ?? 'record'}
       qualificationId={qualificationId}
       recordOpen={recordOpen}
+      canManage={canManage}
       onClose={() => {
         router.push(closeHref as never)
         router.refresh()

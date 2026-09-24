@@ -32,6 +32,7 @@ export function ChangeRequestActions({
   employmentId,
   appliedChangeId,
   departmentOptions,
+  canManage,
   onChanged,
 }: {
   request: ChangeRequestRow
@@ -39,6 +40,9 @@ export function ChangeRequestActions({
   /** Applied employment_changes id (0227): Rescind/Correct act on it. */
   appliedChangeId?: string | null
   departmentOptions: DepartmentOption[]
+  /** Loader-resolved manage grant (F3-36): without it no lifecycle action
+   * renders, even on a draft — the queue table gates its column the same way. */
+  canManage: boolean
   onChanged: () => void
 }) {
   const t = useTranslations('hrm')
@@ -49,6 +53,9 @@ export function ChangeRequestActions({
   // HR-16: verb-action busyness lives with the other hooks (never conditional).
   const [verbBusy, setVerbBusy] = useState(false)
 
+  // F3-36: a viewer without the manage grant sees detail only — Edit,
+  // Submit and Withdraw never render, whatever the stored status.
+  if (!canManage) return null
   if ((TERMINAL as readonly string[]).includes(request.status) && !(request.status === 'applied' && appliedChangeId)) return null
 
   async function verbAction(verb: 'rescind' | 'correct') {

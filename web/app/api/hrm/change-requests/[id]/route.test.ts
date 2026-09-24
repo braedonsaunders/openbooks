@@ -5,6 +5,9 @@ import { NextResponse } from "next/server";
 
 interface RouteState {
   gate: { user: { id: string; orgId: string } } | { status: number };
+  // F3-36: the mock answers 403 for permissions the role does not hold,
+  // like the real gate — a read-only role carries read without manage.
+  perms: string[];
   featureOn: boolean;
   actionReasonsOn: boolean;
   calls: Array<{ fn: string; args: unknown }>;
@@ -22,6 +25,7 @@ const test: TestFn = isVitest
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
+  perms: ["hrm.employment.read", "hrm.employment.manage"],
   featureOn: true,
   // Off by default: the reason codes are an opt-in sub-feature, so the
   // plain submit path must keep working without them.
@@ -44,6 +48,11 @@ const mockSources = new Map<string, string>([
         if (state.gate && 'status' in state.gate) {
           const NextResponse = globalThis.openbooksHrmIdRouteNextResponse
           return NextResponse.json({ error: 'denied' }, { status: state.gate.status })
+        }
+        // The real gate answers 403 without the grant; the route decides.
+        if (!state.perms.includes(permission)) {
+          const NextResponse = globalThis.openbooksHrmIdRouteNextResponse
+          return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
         }
         return state.gate
       }
@@ -160,6 +169,7 @@ const ctx = { params: Promise.resolve({ id: REQUEST_ID }) };
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
+  routeState.perms = ["hrm.employment.read", "hrm.employment.manage"];
   routeState.featureOn = true;
   routeState.calls = [];
   routeState.serviceThrow = null;
@@ -252,4 +262,37 @@ if (isVitest) {
     assert.deepEqual(await withdrawn.json(), { request: { id: REQUEST_ID, status: "withdrawn" } });
     assert.deepEqual(routeState.calls[1], { fn: "withdraw", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "hiring freeze" } });
   });
+
+  test("F3-36: edit, submit and withdraw refuse a read-only role before the service runs", async () => {
+  reset();
+  routeState.perms = ["hrm.employment.read"];
+  const patch = await idRoute!.PATCH(
+    new Request("http://openbooks.test/x", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload: { kind: "hire", effectiveFrom: "2026-09-01" } }),
+    }),
+    ctx,
+  );
+  assert.equal(patch.status, 403);
+  const submit = await submitRoute!.POST(
+    new Request("http://openbooks.test/x", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "go" }),
+    }),
+    ctx,
+  );
+  assert.equal(submit.status, 403);
+  const withdraw = await withdrawRoute!.POST(
+    new Request("http://openbooks.test/x", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "stop" }),
+    }),
+    ctx,
+  );
+  assert.equal(withdraw.status, 403);
+  assert.deepEqual(routeState.calls, [], "no write reached the service without the manage grant");
+});
 }

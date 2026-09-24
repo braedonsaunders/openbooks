@@ -583,6 +583,9 @@ export function EmploymentTab({
                       request={{ id: request.id, status: request.status }}
                       employmentId={employmentId}
                       departmentOptions={departmentOptions}
+                      // F3-36: this branch already renders inside the
+                      // canManageHrm gate — the grant travels explicitly.
+                      canManage={canManageHrm}
                       onChanged={reload}
                     />
                   </span>

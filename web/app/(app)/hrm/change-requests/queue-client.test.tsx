@@ -59,6 +59,7 @@ test('a terminal row renders no lifecycle actions', () => {
   const html = renderToStaticMarkup(
     provider(
       <ChangeRequestRowActions
+        canManage
         requestId="cr-1"
         requestStatus="approved"
         employmentId="emp-1"
@@ -73,6 +74,7 @@ test('a draft row renders its lifecycle actions through the real module', () => 
   const html = renderToStaticMarkup(
     provider(
       <ChangeRequestRowActions
+        canManage
         requestId="cr-1"
         requestStatus="draft"
         employmentId="emp-1"

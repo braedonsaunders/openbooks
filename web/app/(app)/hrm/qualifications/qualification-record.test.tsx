@@ -42,7 +42,10 @@ interface Mount {
   unmount: () => Promise<void>
 }
 
-async function mount(respond: (url: string, method: string) => Promise<{ ok: boolean; body: unknown }>): Promise<Mount> {
+async function mount(
+  respond: (url: string, method: string) => Promise<{ ok: boolean; body: unknown }>,
+  drawerProps?: { canManage?: boolean; qualificationId?: string | null; recordOpen?: boolean },
+): Promise<Mount> {
   const { JSDOM } = await import('jsdom')
   // A real URL: drawers resolve hrefs against the address bar.
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
@@ -92,7 +95,12 @@ async function mount(respond: (url: string, method: string) => Promise<{ ok: boo
     root.render(
       <NextIntlClientProvider locale="en" messages={{ hrm: hrmMessages, common: commonMessages }}>
         <BusinessDateProvider today="2026-09-24">
-          <QualificationDrawer qualificationId={null} recordOpen onClose={() => {}} />
+          <QualificationDrawer
+            qualificationId={drawerProps?.qualificationId ?? null}
+            recordOpen={drawerProps?.recordOpen ?? true}
+            canManage={drawerProps?.canManage ?? true}
+            onClose={() => {}}
+          />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
     )
@@ -226,3 +234,60 @@ test('a picker failure renders the translated error with retry', async () => {
     await m.unmount()
   }
 })
+
+// F3-37: Verify, Renew and Revoke render for the manage grant only — a
+// read-only viewer sees the credential detail with no action buttons.
+const PENDING_DETAIL = {
+  qualification: {
+    id: 'q-1',
+    employmentId: 'emp-1',
+    type: { id: 'type-1', code: 'FIRST-AID', name: 'First aid', category: 'safety', validityMonths: 12, requiresEvidence: false, isActive: true },
+    identifier: null,
+    issuedOn: '2026-09-01',
+    expiresOn: '2027-09-01',
+    storedStatus: 'pending_verification',
+    status: 'pending_verification',
+    evidenceFileId: null,
+    notes: null,
+  },
+  events: [],
+}
+
+function detailRespond(url: string): Promise<{ ok: boolean; body: unknown }> {
+  if (url === '/api/hrm/qualifications/q-1') return Promise.resolve({ ok: true, body: PENDING_DETAIL })
+  if (url.includes('/api/hrm/qualification-types')) return Promise.resolve({ ok: true, body: TYPES })
+  throw new Error(`unexpected fetch GET ${url}`)
+}
+
+function actionButtons(document: Document): string[] {
+  return [...document.querySelectorAll('button')].map((b) => b.textContent ?? '')
+}
+
+test('a pending credential offers Verify, Renew and Revoke to the manage grant', async () => {
+  const m = await mount(detailRespond, { qualificationId: 'q-1', recordOpen: false, canManage: true })
+  try {
+    await flushAsync()
+    const buttons = actionButtons(m.document)
+    assert.ok(buttons.includes('Verify'), 'Verify renders for the manage grant')
+    assert.ok(buttons.includes('Renew'), 'Renew renders for the manage grant')
+    assert.ok(buttons.includes('Revoke'), 'Revoke renders for the manage grant')
+  } finally {
+    await m.unmount()
+  }
+})
+
+test('a read-only viewer sees the credential with no Verify, Renew or Revoke', async () => {
+  const m = await mount(detailRespond, { qualificationId: 'q-1', recordOpen: false, canManage: false })
+  try {
+    await flushAsync()
+    const text = m.document.body.textContent ?? ''
+    assert.match(text, /First aid/, 'the credential detail still renders for a read-only viewer')
+    const buttons = actionButtons(m.document)
+    assert.ok(!buttons.includes('Verify'), 'Verify never renders without the manage grant')
+    assert.ok(!buttons.includes('Renew'), 'Renew never renders without the manage grant')
+    assert.ok(!buttons.includes('Revoke'), 'Revoke never renders without the manage grant')
+  } finally {
+    await m.unmount()
+  }
+})
+

@@ -73,6 +73,9 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
           employmentId: item('employmentId'),
           appliedChangeId: item('appliedChangeId'),
           departmentOptions: rootF('departmentOptions'),
+          // F3-36: this column only renders inside the gated branch, so
+          // the grant travels explicitly rather than by implication.
+          canManage: rootF('canManage'),
         }),
       ),
     )
@@ -174,6 +177,9 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
                   closeHref: f('dialogCloseHref'),
                   subject: f('dialogSubject'),
                   departmentOptions: f('departmentOptions'),
+                  // F3-36: the drawer hosts the same lifecycle actions as
+                  // the gated table column, so it carries the same grant.
+                  canManage: f('canManage'),
                 },
                 f('dialogOpen'),
               ),

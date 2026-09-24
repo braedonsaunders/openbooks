@@ -191,6 +191,9 @@ export async function loadDocumentsHome(
     signerNames: Record<string, string>
     missingDetail: string | null
     labels: Record<string, string>
+    // F3-38: Send, Remind, Void and Legal-hold render only with the
+    // manage grant, never on document status alone.
+    canManage: boolean
   } | null = null
   if (documentId) {
     try {
@@ -199,6 +202,7 @@ export async function loadDocumentsHome(
       drawer = {
         closeHref: hrefFor(status, null, false),
         title: document.title,
+        canManage: authz.canManage,
         document,
         signerNames: Object.fromEntries(signerNames),
         missingDetail: null,
@@ -241,6 +245,7 @@ export async function loadDocumentsHome(
       drawer = {
         closeHref: hrefFor(status, null, false),
         title: t('documents.drawer.title'),
+        canManage: authz.canManage,
         document: null,
         signerNames: {},
         missingDetail: t('documents.drawer.missing'),
