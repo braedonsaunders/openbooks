@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { Badge, Button, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { mergeHref } from '../../../../lib/list-params'
 import { SortTh } from '../../../../components/sortable-th'
-import { readApiBulkFailures, readApiErrorMessage } from '../../../../lib/api-error'
+import { chunkArray, readApiErrorMessage, reconcileBulkResults } from '../../../../lib/api-error'
 import { CaptureUploadButton } from './CaptureUploadButton'
 
 export type CaptureListRow = {
@@ -63,25 +63,37 @@ export function CaptureList({ rows, currentParams, canCreate, uploadDisabled, so
   } | null>(null)
   const names = new Map(rows.map((row) => [row.id, row.filename] as const))
 
+  // One request per bounded batch: the route refuses batches over its
+  // per-request ceiling by name (see BULK_ACTION_MAX_IDS in
+  // web/app/api/ap-capture/actions), so a 100-row selection goes as
+  // bounded batches and every selected id is attempted.
+  const BULK_BATCH_SIZE = 50
+
   async function act(action: 'reprocess' | 'reject' | 'materialize') {
     if (!selected.size) return
     setBusy(true)
     setBulkResult(null)
     try {
-      const response = await fetch('/api/ap-capture/actions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action, ids: [...selected] }),
-      })
-      // The status is checked before the body parses: a non-JSON 502 page
-      // must toast the translated fallback, never a SyntaxError.
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
-      const body = (await response.json()) as { results?: Array<{ id: string; ok: boolean }> }
-      // A partial bulk result names its reasons per item instead of
-      // collapsing them to counts: the operator can act only on the which
-      // and the why. Failed rows stay selected for a one-click retry.
-      const failed = readApiBulkFailures(body, t('actionFailed'))
-      const succeeded = (body.results?.length ?? 0) - failed.length
+      const ids = [...selected]
+      const aggregated: Array<{ id: string; ok: boolean; error?: string }> = []
+      for (const chunk of chunkArray(ids, BULK_BATCH_SIZE)) {
+        const response = await fetch('/api/ap-capture/actions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action, ids: chunk }),
+        })
+        // The status is checked before the body parses: a non-JSON 502 page
+        // must toast the translated fallback, never a SyntaxError.
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
+        const body = (await response.json()) as { results?: Array<{ id: string; ok: boolean; error?: string }> }
+        aggregated.push(...(body.results ?? []))
+      }
+      // Every requested id gets exactly one verdict: a partial bulk result
+      // names its reasons per item instead of collapsing them to counts,
+      // and an id the server never answered stays selected flagged "not
+      // processed" instead of vanishing as a phantom success.
+      const failed = reconcileBulkResults(ids, aggregated, t('notProcessed'))
+      const succeeded = ids.length - failed.length
       if (failed.length > 0) {
         setBulkResult({
           succeeded,

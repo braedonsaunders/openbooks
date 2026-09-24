@@ -91,7 +91,7 @@
     "createDraft": "Create draft",
     "createDrafts": "Create drafts",
     "bulkComplete": "Bulk action complete: {succeeded} succeeded, {failed} failed.",
-    "bulkPartial": "Bulk action partially complete: {succeeded} succeeded, {failed} failed. The failed documents stay selected with their reasons below.",
+    "notProcessed": "Not processed in this run — still selected.", "bulkPartial": "Bulk action partially complete: {succeeded} succeeded, {failed} failed. The failed documents stay selected with their reasons below.",
     "actionFailed": "The capture action failed.",
     "rejected": "Document rejected.",
     "reprocessQueued": "Document queued for reprocessing.",

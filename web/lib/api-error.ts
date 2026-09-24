@@ -43,6 +43,52 @@ function readNamedRefusal(body: unknown): string | null {
 
 export type ApiBulkFailure = { id: string; error: string }
 
+export type ApiBulkItemResult = { id: string; ok: boolean; error?: unknown }
+
+/**
+ * Split a bulk selection into bounded request batches. The server refuses
+ * batches over its per-request ceiling by name, so the client never sends
+ * more than the ceiling per request — every requested id is attempted.
+ */
+export function chunkArray<T>(values: readonly T[], size: number): T[][] {
+  if (!Number.isInteger(size) || size <= 0) throw new Error('chunk size must be a positive integer')
+  const chunks: T[][] = []
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push([...values.slice(index, index + size)])
+  }
+  return chunks
+}
+
+/**
+ * Reconcile requested ids against the aggregated batch results: every
+ * requested id gets exactly one verdict. An id the server never answered —
+ * a truncated batch, a dropped row — stays failed with the not-processed
+ * message instead of vanishing from the selection as a phantom success.
+ */
+export function reconcileBulkResults(
+  requestedIds: readonly string[],
+  results: readonly ApiBulkItemResult[] | undefined,
+  notProcessedMessage: string,
+): ApiBulkFailure[] {
+  const byId = new Map((results ?? []).map((result) => [result.id, result]))
+  const failures: ApiBulkFailure[] = []
+  for (const id of requestedIds) {
+    const result = byId.get(id)
+    if (!result) {
+      failures.push({ id, error: notProcessedMessage })
+    } else if (result.ok === false) {
+      failures.push({
+        id,
+        error:
+          typeof result.error === 'string' && result.error.trim() !== ''
+            ? result.error.trim()
+            : notProcessedMessage,
+      })
+    }
+  }
+  return failures
+}
+
 /**
  * Per-item reasons from a bulk `{ results: [{ id, ok, error? }] }` body (see
  * the ap-capture actions route). Collapsing a partial bulk result to counts

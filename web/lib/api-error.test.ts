@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readApiBulkFailures, readApiErrorMessage, throwApiErrorIfNotOk } from './api-error.ts'
+import {
+  chunkArray,
+  readApiBulkFailures,
+  readApiErrorMessage,
+  reconcileBulkResults,
+  throwApiErrorIfNotOk,
+} from './api-error.ts'
 
 // The latent client defect: every error path parsed the body BEFORE checking
 // the status, so a non-JSON error body threw a SyntaxError and the operator
@@ -115,4 +121,35 @@ test('readApiBulkFailures never throws on an unparseable body', () => {
   assert.deepEqual(readApiBulkFailures(null), [])
   assert.deepEqual(readApiBulkFailures({ results: 'nope' }), [])
   assert.deepEqual(readApiBulkFailures({ results: [null, 42, { ok: true }] }), [])
+})
+
+test('chunkArray splits a 100-id selection into bounded batches', () => {
+  const ids = Array.from({ length: 100 }, (_, i) => `id-${i}`)
+  const chunks = chunkArray(ids, 50)
+  assert.equal(chunks.length, 2)
+  assert.ok(chunks.every((chunk) => chunk.length <= 50))
+  assert.deepEqual(chunks.flat(), ids)
+  assert.deepEqual(chunkArray([], 50), [])
+  assert.throws(() => chunkArray(ids, 0), /positive integer/)
+})
+
+test('reconcileBulkResults flags ids the server never answered', () => {
+  assert.deepEqual(
+    reconcileBulkResults(
+      ['a', 'b', 'c'],
+      [
+        { id: 'a', ok: true },
+        { id: 'b', ok: false, error: 'duplicate invoice INV-9' },
+      ],
+      'not processed',
+    ),
+    [
+      { id: 'b', error: 'duplicate invoice INV-9' },
+      { id: 'c', error: 'not processed' },
+    ],
+  )
+  assert.deepEqual(reconcileBulkResults(['a'], [{ id: 'a', ok: true }], 'not processed'), [])
+  assert.deepEqual(reconcileBulkResults(['a'], undefined, 'not processed'), [
+    { id: 'a', error: 'not processed' },
+  ])
 })
