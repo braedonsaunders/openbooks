@@ -65,3 +65,49 @@ test("a deposit into a currency-mismatched account refuses with a typed posting 
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
+
+/**
+ * A-S29: a document denominated in a well-formed but non-ISO code. "ZZZ"
+ * passes a three-letter shape check but is no currency, and capture's shared
+ * gate is not the only defense — the ledger boundary refuses it at post with
+ * a typed PostingError naming the code and the ISO 4217 remedy, leaving no
+ * partial journal behind.
+ */
+test("posting a non-ISO document currency refuses with a typed posting error", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Treasurer", "admin"));
+    const id = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id,
+           document_date, currency, subtotal, tax_total, total, created_by)
+        values (${id}, ${org.orgId}, 'deposit', 'draft', 'DEP-ISO-GATE',
+                ${org.subsidiaryId}, ${org.date}, 'ZZZ',
+                '100.0000', '0', '100.0000', ${userId})`);
+      await db.execute(sql`
+        update documents set status = 'approved', updated_at = now()
+         where id = ${id} and org_id = ${org.orgId}`);
+    });
+    await assert.rejects(
+      postDocument(id, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      }),
+      (error: unknown) =>
+        error instanceof PostingError &&
+        /"ZZZ"/.test(error.message) &&
+        /ISO 4217/.test(error.message) &&
+        /correct the document currency/.test(error.message) &&
+        !/Failed query/i.test(error.message),
+    );
+    const untouched = await db.execute<{ status: string; entries: number }>(sql`
+      select status,
+             (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
+        from documents where id = ${id} and org_id = ${org.orgId}
+    `);
+    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0 });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});

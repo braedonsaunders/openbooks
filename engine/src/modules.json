@@ -286,6 +286,7 @@
       "dependsOn": [
         "connectors",
         "flows",
+        "fx",
         "inventory",
         "money",
         "organization",
