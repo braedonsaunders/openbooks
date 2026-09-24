@@ -268,6 +268,45 @@ test("retention due, grace, legal hold, delete, and anonymize matrix", { skip: !
       select status from hrm_documents where id = ${heldDoc.document.id}
     `)).rows[0]!;
     assert.equal(held.status, "signed");
+    await setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId: heldDoc.document.id, hold: false });
+    const releasedTick = await runRetentionTick(h.org.orgId, tickDay);
+    assert.equal(releasedTick.executed, 1, "releasing a legal hold unblocks the recorded retention action");
+    const released = (await db.execute<{ status: string }>(sql`
+      select status from hrm_documents where org_id = ${h.org.orgId} and id = ${heldDoc.document.id}
+    `)).rows[0]!;
+    assert.equal(released.status, "deleted");
+  });
+});
+
+test("a missing termination anchor cannot execute retention or multiply blocked actions", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const templateId = await makeTemplate(h, "contract");
+    await saveSchedule({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      categoryKey: "contract",
+      retainYears: 0,
+      fromEvent: "termination",
+      action: "delete",
+    });
+    const documentId = await completeDocument(h, templateId, "Termination anchored record");
+
+    for (let tick = 0; tick < 2; tick += 1) {
+      const result = await runRetentionTick(h.org.orgId, "2026-09-24");
+      assert.equal(result.executed, 0, "an unresolved termination date cannot authorize purge");
+    }
+    const beforeResolution = await withOrgTransaction(h.org.orgId, async () => ({
+      status: (await db.execute<{ status: string }>(sql`
+        select status from hrm_documents where org_id = ${h.org.orgId} and id = ${documentId}`)).rows[0]?.status,
+      actions: (await db.execute<{ blocked_reason: string | null; executed_at: string | null }>(sql`
+        select blocked_reason, executed_at::text as executed_at from hrm_retention_actions
+         where org_id = ${h.org.orgId} and document_id = ${documentId}`)).rows,
+    }));
+    assert.equal(beforeResolution.status, "signed");
+    assert.equal(beforeResolution.actions.length, 1, "repeated ticks must preserve one blocked marker per rule");
+    assert.match(beforeResolution.actions[0]!.blocked_reason ?? "", /termination anchor/);
+    assert.equal(beforeResolution.actions[0]!.executed_at, null);
+
   });
 });
 
