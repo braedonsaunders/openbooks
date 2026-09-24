@@ -185,13 +185,15 @@ test('ROE selection: a malformed employee id is refused at the route before any 
   const wellFormed = await post({ filing: 'roe', employees: `${id}:left the company` })
   assert.notEqual(wellFormed.status, 422, 'a well-formed selection passes the shape boundary')
   assert.deepEqual(routeState.roeCalls, [[id]], 'the scope guard receives exactly the parsed ids')
+
+  routeState.filingIssue = { ...issue, param: 'employeesToIssue' }
+  const alternateKey = await get(`?country=CA&filing=roe&year=2026&employeesToIssue=${id}`)
+  assert.equal(alternateKey.status, 405)
+  assert.deepEqual(await alternateKey.json(), { error: 'issue filing selections must be submitted in a POST body' })
 })
 
 test('ROE selection: an absent section still refuses a malformed id', async () => {
-  // A section is missing whenever the filing is gated off for the org or the
-  // year holds no data. The selection guards must not hang off the section:
-  // reading `issue` from there let an absent section skip the shape check AND
-  // the subsidiary-scope guard, handing the builder an unvalidated selection.
+  // A missing section must not bypass the independent registry declaration.
   // The filing declaration is org-independent, so it is the one that answers.
   routeState.filingIssue = {
     param: 'employees', idColumn: 'employeePartyId', maxSelection: 10, commentMaxLength: 100,
@@ -208,4 +210,3 @@ test('ROE selection: an absent section still refuses a malformed id', async () =
   assert.notEqual(wellFormed.status, 422)
   assert.deepEqual(routeState.roeCalls, [[id]], 'the scope guard still runs without a section')
 })
-
