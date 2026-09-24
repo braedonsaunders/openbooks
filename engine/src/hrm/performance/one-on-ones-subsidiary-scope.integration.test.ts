@@ -290,3 +290,31 @@ test("the self-service report filter shows nothing for a foreign employment", { 
     await dropScratchOrg(h.orgId);
   }
 });
+
+test("a recurring 1:1 follows its weekday and local time across daylight saving", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{timeZone}', '"America/New_York"'::jsonb, true)
+       where id = ${h.orgId}`);
+    const scheduled = await scheduleOneOnOne({
+      orgId: h.orgId,
+      actorId: h.hrFull,
+      managerEmploymentId: h.a.managerEmploymentId,
+      reportEmploymentId: h.a.reportEmploymentId,
+      scheduledAt: "2026-03-02T15:00:00Z",
+      recurrence: { every_weeks: 2, weekday: 3, time: "16:30" },
+    });
+
+    await skipOneOnOne({ orgId: h.orgId, actorId: h.hrFull, id: scheduled.id, reason: "reschedule" });
+    const next = (await db.execute<{ scheduled_at: string }>(sql`
+      select scheduled_at::text from hrm_one_on_ones
+       where org_id = ${h.orgId} and series_id = ${scheduled.id} and status = 'scheduled'
+    `)).rows[0];
+    assert.ok(next, "skipping a recurring occurrence creates its next occurrence");
+    assert.equal(new Date(next.scheduled_at).toISOString(), "2026-03-18T20:30:00.000Z");
+  } finally {
+    await dropScratchOrg(h.orgId);
+  }
+});

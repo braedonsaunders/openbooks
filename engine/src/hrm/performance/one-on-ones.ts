@@ -2,7 +2,14 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
-import { businessToday } from "../../platform/business-date.ts";
+import {
+  businessTimeZone,
+  businessToday,
+  formatInZone,
+  formatTimeInZone,
+  parseIsoDate,
+} from "../../platform/business-date.ts";
+import { civilDateTimeToInstant } from "../../platform/time-zone.ts";
 import {
   HrmAuthorizationError,
   loadApprovalPerson,
@@ -446,6 +453,7 @@ export async function scheduleOneOnOne(args: {
 }
 
 async function nextOccurrenceAt(
+  orgId: string,
   scheduledAt: string,
   recurrence: { every_weeks: number; weekday: number; time?: string },
 ): Promise<string> {
@@ -453,7 +461,30 @@ async function nextOccurrenceAt(
   if (Number.isNaN(base.getTime())) {
     throw new HrmPerformanceError("INVALID_INPUT", "scheduled_at is not a readable timestamp");
   }
-  return new Date(base.getTime() + recurrence.every_weeks * 7 * 24 * 60 * 60 * 1000).toISOString();
+  if (!Number.isInteger(recurrence.every_weeks) || recurrence.every_weeks < 1 ||
+      !Number.isInteger(recurrence.weekday) || recurrence.weekday < 0 || recurrence.weekday > 6 ||
+      (recurrence.time !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(recurrence.time))) {
+    throw new HrmPerformanceError("INVALID_INPUT", "the stored 1:1 recurrence is invalid — set a positive week interval, weekday 0–6, and a valid local time");
+  }
+  const timeZone = await businessTimeZone(orgId);
+  const targetDate = parseIsoDate(formatInZone(base, timeZone));
+  targetDate.setUTCDate(targetDate.getUTCDate() + recurrence.every_weeks * 7);
+  const weekdayOffset = (recurrence.weekday - targetDate.getUTCDay() + 7) % 7;
+  targetDate.setUTCDate(targetDate.getUTCDate() + weekdayOffset);
+  const localDate = targetDate.toISOString().slice(0, 10);
+  const currentTime = formatTimeInZone(base, timeZone);
+  const localTime = recurrence.time ?? `${currentTime.slice(0, 2)}:${currentTime.slice(2)}`;
+  try {
+    return civilDateTimeToInstant(`${localDate}T${localTime}`, timeZone).toISOString();
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new HrmPerformanceError(
+        "REFUSED",
+        `the next recurring 1:1 time is invalid in ${timeZone}: ${error.message} — choose a different recurring time or time zone`,
+      );
+    }
+    throw error;
+  }
 }
 
 export async function holdOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<OneOnOneDTO> {
@@ -487,7 +518,7 @@ export async function holdOneOnOne(args: { orgId: string; actorId: string; id: s
     // the items stay open on the held record as its history.
     const person = await loadApprovalPerson(db, orgId, actorId);
     if (one.recurrence) {
-      const nextAt = await nextOccurrenceAt(one.scheduled_at, one.recurrence);
+      const nextAt = await nextOccurrenceAt(orgId, one.scheduled_at, one.recurrence);
       const seriesId = one.series_id ?? one.id;
       const next = (await db.execute<{ id: string }>(sql`
         insert into hrm_one_on_ones (org_id, manager_employment_id, report_employment_id, scheduled_at, recurrence, series_id, created_by, updated_by)
@@ -568,7 +599,7 @@ export async function skipOneOnOne(args: {
       throw new HrmPerformanceError("STALE_REVISION", "the 1:1 changed under you — reload it and try again");
     }
     if (one.recurrence) {
-      const nextAt = await nextOccurrenceAt(one.scheduled_at, one.recurrence);
+      const nextAt = await nextOccurrenceAt(orgId, one.scheduled_at, one.recurrence);
       const seriesId = one.series_id ?? one.id;
       await db.execute(sql`
         insert into hrm_one_on_ones (org_id, manager_employment_id, report_employment_id, scheduled_at, recurrence, series_id, created_by, updated_by)
