@@ -39,10 +39,10 @@ test('tests use only explicitly supplied service endpoints, including an explici
 test('normal application startup preserves environment precedence and missing-file handling', () => {
   assert.deepEqual(
     resolveDatabaseEnvironment(
-      { OPENBOOKS_DB_URL: 'override' },
+      { NODE_ENV: 'development', OPENBOOKS_DB_URL: 'override' },
       () => 'OPENBOOKS_DB_URL=file\nORG_COUNTRY=CA',
     ),
-    { OPENBOOKS_DB_URL: 'override', ORG_COUNTRY: 'CA' },
+    { NODE_ENV: 'development', OPENBOOKS_DB_URL: 'override', ORG_COUNTRY: 'CA' },
   )
   assert.deepEqual(
     resolveDatabaseEnvironment({ NODE_ENV: 'production' }, () => {
@@ -50,4 +50,26 @@ test('normal application startup preserves environment precedence and missing-fi
     }),
     { NODE_ENV: 'production' },
   )
+})
+
+test('an unset NODE_ENV never reads developer-local configuration (fail closed)', () => {
+  for (const env of [{}, { NODE_ENV: '' }, { NODE_ENV: 'production' }, { NODE_ENV: 'staging' }]) {
+    let reads = 0
+    const resolved = resolveDatabaseEnvironment(env, () => {
+      reads++
+      return 'OPENBOOKS_DB_URL=repo-dev-db'
+    })
+    assert.equal(reads, 0)
+    assert.equal(resolved.OPENBOOKS_DB_URL, undefined)
+  }
+})
+
+test('only an explicit development runtime reads the local file', () => {
+  let reads = 0
+  const resolved = resolveDatabaseEnvironment({ NODE_ENV: 'development' }, () => {
+    reads++
+    return 'OPENBOOKS_DB_URL=dev-db'
+  })
+  assert.equal(reads, 1)
+  assert.equal(resolved.OPENBOOKS_DB_URL, 'dev-db')
 })
