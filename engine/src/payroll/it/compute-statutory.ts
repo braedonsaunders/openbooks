@@ -258,11 +258,8 @@ export interface It2025Input {
   /** it_detrazioni declaration on file (gates art. 13 + c. 2). */
   hasDetrazioniDeclaration: boolean;
   /**
-   * Any art. 12 family charge (coniuge/figli/altri a carico). Decides the
-   * 15.001–28.000 TI band: without family charges the verifica provably
-   * fails there (detrazione lavoro < imposta lorda on the whole band), so
-   * TI is 0; with family charges the verifica needs the untranscribed
-   * art. 12 detrazioni and the engine refuses by name.
+   * Any declared art. 12 family charge (coniuge/figli/altri a carico).
+   * The pack lacks the facts and amounts needed to compute those deductions.
    */
   hasFamilyCharges?: boolean;
   isFixedTerm?: boolean;
@@ -331,6 +328,21 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       `IT ${year} refuses tempo determinato: NASpI addizionale 1.40% plus 0.50 points per qualifying renewal `
       + "and contract-specific exclusions are not priced — the pack does not carry renewal count or the "
       + `required exemption facts; see ${refused}`,
+    );
+  }
+  if (input.hasFamilyCharges) {
+    // TUIR art. 12 deductions vary by relationship, income, age, disability,
+    // and allocation between eligible taxpayers. The declaration currently
+    // carries only a yes/no flag, so ordinary IRPEF would over-withhold at any
+    // income where a deduction is owed. TUIR art. 12 (as amended by
+    // D.Lgs. 192/2025) and L. 207/2024 art. 1:
+    // https://www.normattiva.it/uri/res/N2Ls?urn:nir:stato:decreto.del.presidente.della.repubblica:1986-12-22;917~art12
+    // https://www.normattiva.it/eli/id/2024/12/31/24G00229/CONSOLIDATED/20251219
+    // https://www.normattiva.it/atto/caricaDettaglioAtto?atto.codiceRedazionale=25G00202&atto.dataPubblicazioneGazzetta=2025-12-19&qId=&tipoDettaglio=originario
+    refuse(
+      `IT ${year} refuses a declared art. 12 TUIR family deduction: the pack lacks the dependent's `
+      + "relationship, income, age/disability, and deduction-allocation facts needed to calculate it. "
+      + `Obtain a supported art. 12 calculation before finalizing the payroll; see ${refused}`,
     );
   }
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear <= 0) {
@@ -423,13 +435,6 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       trattamentoIntegrativo = U(TI.amount);
     }
   } else if (R <= U(L.bandB_cap)) {
-    if (input.hasFamilyCharges) {
-      refuse(
-        `IT ${year} trattamento integrativo for reddito complessivo 15.001–28.000 with family charges `
-        + "is refused by name: the verifica (detrazioni art. 12/15 > imposta lorda) needs the "
-        + `untranscribed art. 12 detrazioni — see ${refused}`,
-      );
-    }
     // No-family case: detrazione lavoro alone stays below the imposta lorda
     // on the whole (15.000, 28.000] band (max ~3.100 at the left edge vs a
     // lorda that starts at ~3.133 and rises), so the verifica fails and TI
