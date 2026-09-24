@@ -13,7 +13,7 @@ import test from "node:test";
  * through_date is date NOT NULL; amount is numeric(19,4).
  */
 const root = pathToFileURL(process.cwd() + "/").href;
-const state = { orgId: "", actorId: "" };
+const state: { orgId: string; actorId: string; scope: Set<string> | null } = { orgId: "", actorId: "", scope: null };
 Object.assign(globalThis, { __lienWaiverBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
@@ -24,7 +24,13 @@ registerHooks({
       return virtual(`
         export async function guardPermission() {
           const s = globalThis.__lienWaiverBoundState;
-          return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+          return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: s.scope ?? null };
+        }
+        export function guardSubsidiaryScope(authz, subsidiaryId) {
+          const allowed = authz?.allowedSubsidiaryIds ?? null;
+          if (allowed === null) return null;
+          if (typeof subsidiaryId === 'string' && allowed.has(subsidiaryId)) return null;
+          return Response.json({ error: 'not found' }, { status: 404 });
         }
       `);
     // The real @/lib/compliance loads: the fixture enables subcontractorCompliance.
@@ -35,7 +41,8 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { POST } = await import("./route.ts");
+const { GET, POST } = await import("./route.ts");
+const { PATCH } = await import("./[id]/route.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
@@ -163,6 +170,79 @@ test("lien-waiver creation still files an ordinary waiver", { skip: !DB }, async
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(await waiverCount(org.orgId), 1);
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the waiver list shows a restricted caller only waivers for visible projects", { skip: !DB }, async () => {
+  const { org, partyId, projectId } = await fixture();
+  try {
+    const hiddenSub = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values (${hiddenSub},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`));
+    const hiddenProject = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+      values (${hiddenProject},${org.orgId},${hiddenSub},'WAIVER-H','Hidden project',${org.customerId},'active',true,'{}'::jsonb)`));
+    const waiverBody = {
+      partyId, waiverType: "conditional_progress",
+      throughDate: "2026-03-31", amount: "1000.00", currency: "CAD",
+    };
+    for (const pid of [projectId, hiddenProject]) {
+      const filed = await post({ ...waiverBody, projectId: pid });
+      assert.equal(filed.status, 200, JSON.stringify(await filed.json().catch(() => null)));
+    }
+    state.scope = new Set([org.subsidiaryId]);
+    const listed = await withOrgContext(
+      state.orgId,
+      () => GET(new Request("http://waiver.test/api/compliance/lien-waivers")),
+    );
+    assert.equal(listed.status, 200);
+    const body = (await listed.json()) as { waivers?: Array<{ projectId?: string }> };
+    assert.equal(body.waivers?.length, 1);
+    assert.equal(body.waivers?.[0]?.projectId, projectId);
+  } finally {
+    state.scope = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a lifecycle write on an out-of-scope waiver is a 404 that changes nothing", { skip: !DB }, async () => {
+  const { org, partyId } = await fixture();
+  try {
+    const hiddenSub = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values (${hiddenSub},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`));
+    const hiddenProject = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+      values (${hiddenProject},${org.orgId},${hiddenSub},'WAIVER-H','Hidden project',${org.customerId},'active',true,'{}'::jsonb)`));
+    const filed = await post({
+      partyId, projectId: hiddenProject, waiverType: "conditional_progress",
+      throughDate: "2026-03-31", amount: "1000.00", currency: "CAD",
+    });
+    assert.equal(filed.status, 200);
+    const waiverId = ((await filed.json()) as { id: string }).id;
+    state.scope = new Set([org.subsidiaryId]);
+
+    const response = await withOrgContext(
+      state.orgId,
+      () => PATCH(
+        new Request(`http://waiver.test/api/compliance/lien-waivers/${waiverId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "update", amount: "2000.00" }),
+        }),
+        { params: Promise.resolve({ id: waiverId }) },
+      ),
+    );
+
+    assert.equal(response.status, 404);
+    const rows = (await withBypassContext(() => db.execute<{ status: string; amount: string }>(
+      sql`select status, amount from lien_waivers where id = ${waiverId} and org_id = ${org.orgId}`,
+    ))).rows;
+    assert.equal(rows[0]?.status, "draft");
+    assert.equal(rows[0]?.amount, "1000.0000");
+  } finally {
+    state.scope = null;
     await dropScratchOrg(org.orgId);
   }
 });
