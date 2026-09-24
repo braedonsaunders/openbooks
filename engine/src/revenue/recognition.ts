@@ -13,6 +13,7 @@ import {
 } from "../money/present-value.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { isLegacyProvenance } from "../platform/legacy-provenance.ts";
 import {
   MAX_RECOGNITION_DAY_OFFSET,
@@ -2160,6 +2161,8 @@ export async function cancelRevenueRecognitionForInvoice(input: {
   actorId: string;
   reason: string;
   reversalDate: string;
+  /** REQUIRED, no default: null is the explicit unrestricted sentinel. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<CancelRevenueRecognitionResult> {
   if (!input.actorId) {
     throw new RevenueRecognitionCancellationError(
@@ -2183,10 +2186,11 @@ export async function cancelRevenueRecognitionForInvoice(input: {
       const document = (await tx.execute<{
         id: string;
         status: string;
+        subsidiary_id: string | null;
         reversal_entry_id: string | null;
         void_requested_at: Date | null;
       }>(sql`
-        select id, status, reversal_entry_id, void_requested_at
+        select id, status, subsidiary_id, reversal_entry_id, void_requested_at
           from documents
          where id = ${input.documentId}
            and org_id = ${input.orgId}
@@ -2194,10 +2198,11 @@ export async function cancelRevenueRecognitionForInvoice(input: {
          for update
       `));
       const doc = document.rows[0];
-      if (!doc) {
-        throw new RevenueRecognitionCancellationError(
-          "customer invoice not found",
-        );
+      // Scope is rechecked under the invoice lock: the route's unlocked
+      // pre-read can authorize entity A while a concurrent A→B rehome lands
+      // before this cancel commits. Missing and out-of-scope answer alike.
+      if (!doc || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, doc.subsidiary_id)) {
+        throw new ScopeNotFoundError();
       }
       if (!["posted", "voided"].includes(doc.status)) {
         throw new RevenueRecognitionCancellationError(

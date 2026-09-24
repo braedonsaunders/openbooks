@@ -159,7 +159,7 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
     // (f6's route flips the July posting to reversed and mirrors in August).
     // A small August invoice keeps E in the August billing population.
     await postSale(scratch, actor, { kind: 'customer_invoice', partyId: custE, amount: '10', date: '2026-08-05' })
-    await withBypass(() => cancelRevenueRecognitionForInvoice({ documentId: eJul, orgId: scratch.orgId, actorId: actor, reason: 'Recon cancel test', reversalDate: '2026-08-15' }))
+    await withBypass(() => cancelRevenueRecognitionForInvoice({ documentId: eJul, orgId: scratch.orgId, actorId: actor, reason: 'Recon cancel test', reversalDate: '2026-08-15', allowedSubsidiaryIds: null }))
 
     // Reads through web readers run inside withOrgContext: importing a web
     // reader replaces the test bypass, so an unscoped read silently returns
