@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
@@ -93,11 +94,15 @@ function eventKindLabel(kind: string, labels: Record<string, string>): string {
 
 export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
   const router = useRouter()
+  const commonActions = useTranslations('common.actions')
   const viewer = useViewerFormat()
   const labels = drawer.labels
   const document = drawer.document
   if (!document) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>
+    return <div className="flex items-center gap-3">
+      <p role={drawer.loadError ? 'alert' : undefined} className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>
+      {drawer.loadError && <Button variant="outline" onClick={() => router.refresh()}>{commonActions('retry')}</Button>}
+    </div>
   }
   const actionable = ['draft', 'sent', 'viewed', 'partially_signed'].includes(document.status)
   const base = `/api/hrm/documents/${document.id}`
