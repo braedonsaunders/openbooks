@@ -274,7 +274,7 @@
       "matchMode": "Regelabgleich",
       "rules": "Weiterleitungsregeln",
       "rulesHint": "Optional. Jede Regel gleicht ein Feld mit einem Wert ab, um Leads hierher weiterzuleiten. Felder: region, country, annualRevenue. Operatoren: equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
       "members": "Teammitglieder",
       "targetType": "Zieltyp",
       "isQualified": "Qualifizierter Status",

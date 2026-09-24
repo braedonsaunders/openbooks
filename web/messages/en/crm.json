@@ -274,7 +274,7 @@
       "matchMode": "Rule matching",
       "rules": "Routing rules",
       "rulesHint": "Optional. Each rule matches a field against a value to route leads here. Fields: region, country, annualRevenue. Operators: equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
       "members": "Team members",
       "targetType": "Target type",
       "isQualified": "Qualified status",

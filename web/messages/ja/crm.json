@@ -274,7 +274,7 @@
       "matchMode": "ルールのマッチング",
       "rules": "ルーティングルール",
       "rulesHint": "任意。各ルールはフィールドを値と照合してリードをここにルーティングします。フィールド: region、country、annualRevenue。演算子: equals、contains、in、gte、lte。",
-      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
       "members": "チームメンバー",
       "targetType": "対象タイプ",
       "isQualified": "評価済みステータス",
