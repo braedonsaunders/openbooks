@@ -20,13 +20,20 @@ const { renderToStaticMarkup } = await import('react-dom/server')
 Object.assign(globalThis, { React })
 const { NextIntlClientProvider } = await import('next-intl')
 const { CertificateForm } = await import('./PackCertificateForms')
-const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
+const enMessages = {
+  common: JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8')),
+  payroll: JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8')),
+}
+const deMessages = {
+  common: JSON.parse(readFileSync(new URL('../../../../messages/de/common.json', import.meta.url), 'utf8')),
+  payroll: JSON.parse(readFileSync(new URL('../../../../messages/de/payroll.json', import.meta.url), 'utf8')),
+}
 
 // The read-only form renders values through the shared catalog, so it needs
 // the same provider the drawer gives it in production.
 function renderReadOnly(element: React.ReactElement): string {
   return renderToStaticMarkup(
-    <NextIntlClientProvider locale="en" messages={{ common: commonMessages }}>{element}</NextIntlClientProvider>,
+    <NextIntlClientProvider locale="en" messages={enMessages}>{element}</NextIntlClientProvider>,
   )
 }
 // Side effect: publishes the built-in packs' certificate sources, the same
@@ -208,4 +215,35 @@ test('an unreadable certificate amount names its remedy and blocks the save', ()
   assert.match(html, /must use .* as the decimal point/)
   assert.match(html, /12\.34/)
   assert.match(html, /<button[^>]*disabled[^>]*>Save certificate<\/button>/)
+})
+
+// F3-17: the save confirmation, the save button and the effective-from
+// label resolve through the catalog in every locale — a German operator
+// reads German, not the English literals the form used to carry.
+test('the certificate chrome translates with the operator locale', () => {
+  const declared = packCertificates('NL').certificates
+  const certificate = declared.find((entry) => entry.key === 'nl_premies')!
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="de" messages={deMessages}>
+      {React.createElement(CertificateForm, {
+        partyId: 'employee',
+        country: 'NL',
+        certificate: {
+          key: certificate.key,
+          form: certificate.form,
+          label: certificate.label,
+          scope: certificate.scope,
+          citation: certificate.citation,
+          summary: certificate.summary,
+          fields: certificate.fields,
+        },
+        stored: [],
+        onSaved: () => {},
+      })}
+    </NextIntlClientProvider>,
+  )
+  assert.match(html, /Gültig ab/)
+  assert.match(html, /Zertifikat speichern/)
+  assert.doesNotMatch(html, /Effective from/)
+  assert.doesNotMatch(html, /Save certificate/)
 })

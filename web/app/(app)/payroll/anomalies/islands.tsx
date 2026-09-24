@@ -141,19 +141,26 @@ export function AnomalyDrawer({
   flag: NonNullable<AnomalyChecksData['dialogFlag']>
   closeHref: string
 }) {
+  // Every fact sits under its own heading: the severity value under
+  // Severity, the status value under Status — never the kind under one and
+  // the employment under the other.
+  const facts: Array<[term: string, value: string]> = [
+    [flag.severityTerm, flag.severityLabel],
+    [flag.kindTerm, flag.kindLabel],
+    [flag.employmentTerm, flag.employmentLabel],
+    [flag.statusTerm, flag.statusLabel],
+  ]
   return (
     <UrlDrawer open closeHref={closeHref} title={`${flag.kindLabel} · ${flag.periodLabel}`}>
       <div className="space-y-3">
         <p className="text-sm text-slate-700 dark:text-slate-200">{flag.explanation}</p>
         <dl className="grid grid-cols-2 gap-2 text-sm">
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{flag.severityLabel}</dt>
-            <dd className="font-medium">{flag.kindLabel}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{flag.statusLabel}</dt>
-            <dd className="font-medium">{flag.employmentLabel}</dd>
-          </div>
+          {facts.map(([term, value]) => (
+            <div key={term}>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">{term}</dt>
+              <dd className="font-medium">{value}</dd>
+            </div>
+          ))}
         </dl>
         {flag.reason ? <p className="text-xs text-slate-500 dark:text-slate-400">{flag.reason}</p> : null}
         <AnomalyTransitionForm flagId={flag.id} labels={flag.transitionLabels} />

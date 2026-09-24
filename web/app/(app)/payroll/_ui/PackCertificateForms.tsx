@@ -160,6 +160,7 @@ export function CertificateForm(props: {
 }) {
   const { partyId, country, certificate, stored, onSaved, readOnly } = props
   const tc = useTranslations('common')
+  const tp = useTranslations('payroll.profiles.certificates')
   // The parent remounts this form (via `key`) whenever the underlying row
   // changes, so the draft below is always seeded from the latest answers and
   // no effect has to sync props into state.
@@ -195,7 +196,7 @@ export function CertificateForm(props: {
       // The status is checked before the body is parsed: a non-JSON error body
       // must surface the failure, never a SyntaxError from res.json().
       if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to save the certificate'))
-      toast.success('Certificate saved')
+      toast.success(tp('saved'))
       onSaved?.()
     } catch (error) {
       toast.error((error as Error).message)
@@ -231,7 +232,7 @@ export function CertificateForm(props: {
             </div>
           ))}
           <div>
-            <p className="block text-sm font-medium">Effective from</p>
+            <p className="block text-sm font-medium">{tp('effectiveFrom')}</p>
             <p className="text-sm text-slate-800 dark:text-slate-200">{latest?.effective_from ?? '—'}</p>
           </div>
         </div>
@@ -256,7 +257,7 @@ export function CertificateForm(props: {
           </div>
         ))}
         <label htmlFor={`cert-effective-${certificate.key}`} className="block text-sm">
-          <span className="mb-1 block font-medium">Effective from</span>
+          <span className="mb-1 block font-medium">{tp('effectiveFrom')}</span>
           <input
             id={`cert-effective-${certificate.key}`}
             type="date"
@@ -272,7 +273,7 @@ export function CertificateForm(props: {
         onClick={save}
         className="mt-3 rounded bg-teal-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
       >
-        {busy ? 'Saving…' : 'Save certificate'}
+        {busy ? tp('saving') : tp('save')}
       </button>
     </section>
   )

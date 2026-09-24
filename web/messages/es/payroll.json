@@ -552,6 +552,12 @@
       "cheque": "Cheque",
       "help": "Cómo se paga a este empleado. Déjelo en el valor de la parte salvo que esta persona se pague distinto del resto — un cheque para alguien sin datos bancarios en archivo, por ejemplo. El ciclo divide el día de pago entre los dos rieles y fondea cada uno por separado.",
       "inherit": "Usar el valor de la parte"
+    },
+    "certificates": {
+      "saved": "Certificado guardado",
+      "save": "Guardar certificado",
+      "saving": "Guardando…",
+      "effectiveFrom": "Vigente desde"
     }
   },
   "setupWizard": {

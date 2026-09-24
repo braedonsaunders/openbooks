@@ -552,6 +552,12 @@
       "cheque": "Cheque",
       "help": "Como este funcionário é pago. Mantenha o padrão do funcionário, salvo se esta pessoa for paga de forma diferente das demais — em cheque para quem não tem dados bancários registrados, por exemplo. A folha divide o dia de pagamento entre os dois meios e financia cada um separadamente.",
       "inherit": "Usar o padrão do funcionário"
+    },
+    "certificates": {
+      "saved": "Certificado salvo",
+      "save": "Salvar certificado",
+      "saving": "Salvando…",
+      "effectiveFrom": "Vigente a partir de"
     }
   },
   "setupWizard": {
