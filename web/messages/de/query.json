@@ -43,7 +43,8 @@
     "showSchema": "Schema anzeigen",
     "browseRows": "Zeilen durchsuchen",
     "insertTableName": "Tabellennamen einfügen",
-    "insertSelectTemplate": "SELECT-Vorlage einfügen"
+    "insertSelectTemplate": "SELECT-Vorlage einfügen",
+    "keyColumn": "Primär- oder eindeutiger Schlüssel"
   },
   "history": {
     "count": "{count, plural, one {# Abfrage} other {# Abfragen}}",

@@ -43,7 +43,8 @@
     "showSchema": "显示架构",
     "browseRows": "浏览行",
     "insertTableName": "插入表名",
-    "insertSelectTemplate": "插入 SELECT 模板"
+    "insertSelectTemplate": "插入 SELECT 模板",
+    "keyColumn": "主键或唯一键"
   },
   "history": {
     "count": "{count, plural, one {# 个查询} other {# 个查询}}",

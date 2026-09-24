@@ -60,6 +60,7 @@ class GovernedPoolHarness {
               data_type: "uuid",
               is_nullable: "NO",
               ordinal_position: 1,
+              is_key: false,
             }],
             fields: [],
             rowCount: 1,
@@ -218,7 +219,7 @@ test("SQL API operations use only the isolated governed pool", async () => {
   assert.deepEqual(catalog, [{
     name: "accounts",
     kind: "view",
-    columns: [{ name: "id", type: "uuid", nullable: false }],
+    columns: [{ name: "id", type: "uuid", nullable: false, isKey: false }],
   }]);
   assert.equal(harness.governedConnects, 3);
   assert.equal(harness.requestConnects, 0);
