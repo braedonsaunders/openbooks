@@ -1763,13 +1763,19 @@ export async function updateFilingRecipient(args: {
 }
 
 /**
- * Stamp the recipients whose copies were just furnished as printed.
+ * Stamp the recipients whose copies were just furnished as printed, and audit
+ * each stamp.
  *
  * This is deliberately the ONLY write to a frozen filing's recipients besides
  * the lifecycle transitions: furnishing a copy is not an edit of what was
  * transmitted — the stamp records that the evidence was handed over, which is
  * exactly why it must stay possible after the freeze. It lives here, and
  * nowhere else, so every writer of these tables is in this one auditable file.
+ *
+ * A stamp that matches zero rows is a failure, not a success: a recipient id
+ * that names no included recipient of this filing answers exactly like
+ * not-found, and a filing that left its frozen state mid-flight refuses with
+ * its current status. Returns the number of stamped recipients.
  */
 export async function stampRecipientCopiesPrinted(args: {
   orgId: string;
@@ -1777,8 +1783,8 @@ export async function stampRecipientCopiesPrinted(args: {
   /** One recipient, or all included recipients when omitted. */
   recipientId?: string | null;
   actorId: string;
-}): Promise<void> {
-  await withOrg(args.orgId, async () => {
+}): Promise<number> {
+  return withOrg(args.orgId, async () => {
     // Lock the parent before the child update. This closes the race where a
     // mutable filing is finalized (or a finalized filing is voided) between a
     // route preflight and the stamp itself.
@@ -1788,17 +1794,52 @@ export async function stampRecipientCopiesPrinted(args: {
         `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies`,
       );
     }
-    await db.execute(sql`
-      update information_return_recipients
-         set printed_at = now(), updated_at = now(), updated_by = ${args.actorId}
-       where org_id = ${args.orgId} and filing_id = ${args.filingId} and status = 'included'
-         and (${args.recipientId ?? null}::uuid is null or id = ${args.recipientId ?? null}::uuid)
-         and exists (
-           select 1 from information_return_filings f
-            where f.org_id = information_return_recipients.org_id
-              and f.id = information_return_recipients.filing_id
-              and f.status in ('finalized', 'filed')
-         )
-    `);
+    const before = (
+      await db.execute<{ id: string; printed_at: string | null }>(sql`
+        select id, printed_at::text as printed_at
+          from information_return_recipients
+         where org_id = ${args.orgId} and filing_id = ${args.filingId} and status = 'included'
+           and (${args.recipientId ?? null}::uuid is null or id = ${args.recipientId ?? null}::uuid)
+      `)
+    ).rows;
+    if (before.length === 0) {
+      throw new InformationReturnError(
+        args.recipientId ? "not found" : "no included recipients to mark furnished",
+        args.recipientId ? 404 : 422,
+      );
+    }
+    const stamped = (
+      await db.execute<{ id: string; printed_at: string }>(sql`
+        update information_return_recipients
+           set printed_at = now(), updated_at = now(), updated_by = ${args.actorId}
+         where org_id = ${args.orgId} and filing_id = ${args.filingId} and status = 'included'
+           and (${args.recipientId ?? null}::uuid is null or id = ${args.recipientId ?? null}::uuid)
+           and exists (
+             select 1 from information_return_filings f
+              where f.org_id = information_return_recipients.org_id
+                and f.id = information_return_recipients.filing_id
+                and f.status in ('finalized', 'filed')
+           )
+        returning id, printed_at::text as printed_at
+      `)
+    ).rows;
+    if (stamped.length === 0) {
+      const current = await lockFilingRow(args.orgId, args.filingId);
+      throw new InformationReturnError(
+        `a ${current.status} filing is not frozen — finalize it before furnishing recipient copies`,
+      );
+    }
+    const beforeById = new Map(before.map((row) => [String(row.id), row.printed_at]));
+    for (const row of stamped) {
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${args.orgId}, 'information_return_recipients', ${row.id}, 'update',
+                ${JSON.stringify({
+                  before: { printed_at: beforeById.get(String(row.id)) ?? null },
+                  after: { printed_at: row.printed_at },
+                })}::jsonb, ${args.actorId})
+      `);
+    }
+    return stamped.length;
   });
 }
