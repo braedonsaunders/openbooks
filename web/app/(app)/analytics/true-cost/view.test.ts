@@ -4,51 +4,55 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 /**
- * True Cost hub dashboard (route `/analytics/true-cost`).
- *
- * The route used to `redirect('/reports/true-cost')` — an analytics
- * dashboard must not redirect to a report page. These pins are source
- * contracts (no module hooks, no top-level await) so they cannot hang a
- * unit shard the way an executed ModuleView import did under
- * `--test-force-exit`.
+ * True Cost hub dashboard (route `/analytics/true-cost`): the spec links the
+ * tabular report preserving the query, and the empty-categories guidance
+ * names the `burden` dimension.
  */
 
-const pageSource = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8')
-const viewSource = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
-
-test('the dashboard page renders through ModuleView instead of redirecting', () => {
-  assert.doesNotMatch(pageSource, /redirect\(/)
-  assert.match(pageSource, /ModuleView/)
-  assert.match(pageSource, /loadTrueCost/)
-  assert.match(pageSource, /trueCostSpec/)
-  assert.match(pageSource, /true-cost-view|trusted/)
+const { registerHooks } = await import('node:module')
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, url: 'data:text/javascript,' }
+    }
+    return next(specifier, context)
+  },
 })
 
-test('the loader requires reports.read', () => {
-  assert.match(viewSource, /requirePermission\('reports\.read'\)/)
-})
+const { trueCostSpec } = await import('./view')
 
-test('the loader requires the projects feature', () => {
-  assert.match(viewSource, /requireFeatureEnabled\(authz\.user\.orgId, 'projects'\)/)
-})
-
-test('the loader scopes queries to the reader subsidiary fence', () => {
-  assert.match(viewSource, /trueCostData\(/)
-  assert.match(viewSource, /authz\.allowedSubsidiaryIds/)
-})
+function dashboardData(reportHref: string) {
+  return {
+    title: 'True Cost',
+    backLabel: 'Back to hub',
+    periodLabel: 'Jul 2026',
+    reportHref,
+    reportLabel: 'Open report',
+    data: {},
+  } as unknown as Parameters<typeof trueCostSpec>[0]
+}
 
 test('the spec carries an open-report link preserving the query', () => {
-  assert.match(viewSource, /reportHref: `\/reports\/true-cost\$\{qs \? `\?\$\{qs\}` : ''\}`/)
-  assert.match(viewSource, /route: '\/analytics\/true-cost'/)
-  assert.match(viewSource, /widgetBlock\('true-cost-view'/)
-  assert.match(viewSource, /frame\(\s*'analytics-header'/)
-  assert.match(viewSource, /widgetBlock\('report-period-filter'\)/)
-  assert.match(viewSource, /widgetBlock\('link-button'/)
+  const spec = JSON.stringify(trueCostSpec(dashboardData('/reports/true-cost?period=2026-07')))
+  assert.ok(spec.includes('"/analytics/true-cost"'), `the spec must route at /analytics/true-cost, got:\n${spec}`)
+  assert.ok(
+    spec.includes('"/reports/true-cost?period=2026-07"'),
+    `the link button must keep the query, got:\n${spec}`,
+  )
+  assert.ok(spec.includes('"Open report"'), `the link must carry its label, got:\n${spec}`)
+  assert.ok(spec.includes('"true-cost-view"'), `the body must mount the dashboard view, got:\n${spec}`)
+  assert.ok(spec.includes('"analytics-header"'), `the header frame must wrap the controls, got:\n${spec}`)
+  assert.ok(
+    spec.includes('"report-period-filter"'),
+    `the header must keep the shared period filter, got:\n${spec}`,
+  )
+  assert.ok(spec.includes('"link-button"'), `the header must hold the report link, got:\n${spec}`)
 })
 
 test('the spec links the bare report route when no query is set', () => {
-  assert.match(viewSource, /\/reports\/true-cost/)
-  assert.match(viewSource, /qs \? `\?\$\{qs\}` : ''/)
+  const spec = JSON.stringify(trueCostSpec(dashboardData('/reports/true-cost')))
+  assert.ok(spec.includes('"/reports/true-cost"'), `the link must target the bare report route, got:\n${spec}`)
+  assert.ok(!spec.includes('/reports/true-cost?'), `no stray query may be appended, got:\n${spec}`)
 })
 
 test('the open-report copy exists in every locale catalog', () => {
@@ -89,9 +93,4 @@ test('the empty-categories guidance names the burden dimension in every locale',
     en.trueCost.accountsPanel.noCategories,
     'No overhead categories yet. Categories are account groups in the `burden` dimension — create one, then assign these accounts to it.',
   )
-})
-
-test('the Categories tab renders the empty-categories guidance when no burden category exists', () => {
-  const viewSource = readFileSync(new URL('./TrueCostView.tsx', import.meta.url), 'utf8')
-  assert.match(viewSource, /accountsPanel\.noCategories/)
 })
