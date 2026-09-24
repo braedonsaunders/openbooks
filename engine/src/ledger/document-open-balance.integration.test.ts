@@ -312,6 +312,29 @@ test("posted INSERT computes open_balance and the backfill heals NULL caches", {
   });
 });
 
+test("posting-date moves keep payment stats tied to the sanctioned verifier", { skip: !DB }, async () => {
+  // G11: the stats trigger watched applications only and snapshotted each
+  // line's posting_date at apply time, so a later amend-path date change
+  // left the settled_on bucket and day counts drifting. After the move
+  // the sanctioned verifier must report no drift — proven non-vacuous by
+  // asserting the stats row exists first.
+  await fixture(async (org, actor) => {
+    const inv = await invoice(org, actor);
+    await payment(org, actor, inv.line);
+    const drifted = async () => (await db.execute(sql`
+      select * from openbooks_party_payment_stats_verify(${org.orgId})`)).rows;
+    const stats = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from party_payment_stats where org_id = ${org.orgId}`)).rows[0]!.n;
+    assert.ok(stats > 0, "settlement must record payment stats to move");
+    assert.deepEqual(await drifted(), []);
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+      await tx.execute(sql`update journal_lines set posting_date = posting_date + 30 where id = ${inv.line}`);
+    });
+    assert.deepEqual(await drifted(), []);
+  });
+});
+
 test("amend-path line edits recompute open_balance like a from-scratch rebuild", { skip: !DB }, async () => {
   // G10: the amend branch of the line guard fenced only the period, with
   // no column allowlist, so flipping is_open_item on a posted line left
