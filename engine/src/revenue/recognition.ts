@@ -10,7 +10,7 @@ import {
   periodRateFromAnnualPercent,
   type AccretionPeriod,
 } from "../money/present-value.ts";
-import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { defaultPostingSubsidiaryId, loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { isLegacyProvenance } from "../platform/legacy-provenance.ts";
 import {
@@ -1668,8 +1668,11 @@ async function recognitionNetRecognized(
  return row?.net ?? "0";
 }
 
-function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readonly string[]) {
+function recognitionObligationScope(orgId: string, allowedSubsidiaryIds: readonly string[] | undefined, fallbackSubsidiaryId: string) {
   if (allowedSubsidiaryIds === undefined) return sql`true`;
+  // Unattributed obligations fall back to the shared unscoped-posting
+  // default (the hierarchy root), resolved once by the caller — never the
+  // oldest subsidiary.
   return sql`exists (
     select 1 from revenue_contracts scoped_contract
       left join document_lines scoped_line on scoped_line.id = o.document_line_id and scoped_line.org_id = o.org_id
@@ -1677,7 +1680,7 @@ function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readon
       left join projects scoped_project on scoped_project.id = scoped_contract.project_id and scoped_project.org_id = o.org_id
      where scoped_contract.id = o.contract_id and scoped_contract.org_id = o.org_id
        and coalesce(scoped_contract.subsidiary_id, scoped_line.subsidiary_id, scoped_document.subsidiary_id, scoped_project.subsidiary_id,
-         (select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1))
+         ${fallbackSubsidiaryId})
          = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])
   )`;
 }
@@ -1704,12 +1707,13 @@ async function recognitionPostingRows(
   runner: SqlExecutor,
   orgId: string,
   asOfDate: string,
+  fallbackSubsidiaryId: string,
   obligationId?: string,
   allowedSubsidiaryIds?: string[],
   lineId?: string,
   claim = false,
 ): Promise<RecognitionPostingRow[]> {
-  const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds);
+  const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds, fallbackSubsidiaryId);
   return (await runner.execute<RecognitionPostingRow>(sql`
     select l.id             as line_id,
            l.recognition_on::text as recognition_on,
@@ -1732,8 +1736,8 @@ async function recognitionPostingRows(
            r.deferred_account_id    as rule_deferred,
            r.recognized_account_id  as rule_recognized,
            c.contract_number as contract_number,
-           coalesce(c.subsidiary_id, dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id) as subsidiary_id,
-           coalesce(sub.base_currency, psub.base_currency, sub0.base_currency) as base_currency,
+           coalesce(c.subsidiary_id, dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, fsub.id) as subsidiary_id,
+           coalesce(sub.base_currency, psub.base_currency, fsub.base_currency) as base_currency,
            coalesce(dl.department_id, doc.department_id) as department_id,
            coalesce(dl.project_id, doc.project_id, c.project_id) as project_id,
            coalesce(dl.location_id, doc.location_id) as location_id,
@@ -1755,8 +1759,8 @@ async function recognitionPostingRows(
       left join subsidiaries sub on sub.id = coalesce(c.subsidiary_id, dl.subsidiary_id, doc.subsidiary_id) and sub.org_id = o.org_id
       left join subsidiaries psub on psub.id = prj.subsidiary_id and psub.org_id = prj.org_id
       left join lateral (
-        select id, base_currency from subsidiaries where org_id = ${orgId} order by created_at, id limit 1
-      ) sub0 on true
+        select id, base_currency from subsidiaries where org_id = ${orgId} and id = ${fallbackSubsidiaryId}
+      ) fsub on true
      where l.org_id = ${orgId}
        and l.journal_entry_id is null and l.superseded_by_change_id is null
        and o.status <> 'cancelled'
@@ -1815,7 +1819,10 @@ export async function runRevenueRecognition(
 ): Promise<RunRecognitionResult> {
   recognitionDate(asOfDate, "recognition as-of date");
   await assertEnabled(db, orgId);
-  const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds);
+  // Unattributed obligations default to the hierarchy root through the
+  // shared resolver — never the oldest subsidiary.
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
+  const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds, fallbackSubsidiaryId);
 
   const effectiveMethod=sql`coalesce((select s.change_basis->>'method' from recognition_schedules s join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary where s.obligation_id=o.id and s.org_id=o.org_id limit 1),r.method)`;
 
@@ -1833,7 +1840,7 @@ export async function runRevenueRecognition(
     if (confirmedLineIds.size === 0) return { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
   }
 
-  const due = (await recognitionPostingRows(db, orgId, asOfDate, obligationId, allowedSubsidiaryIds))
+  const due = (await recognitionPostingRows(db, orgId, asOfDate, fallbackSubsidiaryId, obligationId, allowedSubsidiaryIds))
     .filter((row) => confirmedLineIds === null || confirmedLineIds.has(row.line_id));
 
   const result: RunRecognitionResult = { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
@@ -1851,7 +1858,7 @@ export async function runRevenueRecognition(
         if (!obligation.rows[0]) return { status: "already_posted" as const };
         await assertEnabled(tx, orgId);
         const row = (await recognitionPostingRows(
-          tx, orgId, asOfDate, candidate.obligation_id, allowedSubsidiaryIds,
+          tx, orgId, asOfDate, fallbackSubsidiaryId, candidate.obligation_id, allowedSubsidiaryIds,
           candidate.line_id, true,
         ))[0];
         if (!row) return { status: "already_posted" as const };
@@ -2675,11 +2682,13 @@ export async function previewRevenueRecognition(
 ): Promise<RecognitionPreview> {
   recognitionDate(input.asOfDate, "recognition as-of date");
   await assertEnabled(db, orgId);
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
 
   const due = await recognitionPostingRows(
     db,
     orgId,
     input.asOfDate,
+    fallbackSubsidiaryId,
     input.obligationId,
     input.allowedSubsidiaryIds,
   );
