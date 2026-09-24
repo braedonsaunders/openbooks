@@ -11,10 +11,12 @@ import {
 } from '@openbooks/engine/src/apps/runtime.ts'
 import {
   executeAppInvocation,
+  lockInstalledAppForInvocation,
   deriveAppInvocationKey,
   isValidAppInvocationKey,
   AppInvocationInFlightError,
   AppInvocationRequestMismatchError,
+  AppInvocationDisabledError,
   type AppInvocationAuditRow,
   type AppInvocationAttempt,
 } from '@openbooks/engine/src/apps/invocations.ts'
@@ -1118,6 +1120,7 @@ export async function invokeAppEndpointHandler(opts: {
       operation: opts.operation,
       idempotencyKey: opts.idempotencyKey,
       requestHash: requestHash({ endpoint: opts.endpoint, payload: opts.body ?? null }),
+      authorize: () => lockInstalledAppForInvocation(opts.orgId, app.id, app.activeVersionId),
       run: () => runAppEndpoint({ source: handlerSource, request, adapters }),
       audit: insertAppRun,
     })
@@ -1153,6 +1156,9 @@ function invocationRefusal(error: unknown): { ok: false; error: string; status: 
   }
   if (error instanceof AppInvocationRequestMismatchError) {
     return { ok: false, error: error.message, status: 409 }
+  }
+  if (error instanceof AppInvocationDisabledError) {
+    return { ok: false, error: error.message, status: 403 }
   }
   // Drizzle wraps driver errors; carry the cause chain so the operator sees
   // WHY the invocation refused instead of a bare "failed query" wrapper.

@@ -13,6 +13,8 @@ import {
   deriveAppInvocationKey,
   deriveClaimNamespaceKey,
   executeAppInvocation,
+  lockInstalledAppForInvocation,
+  AppInvocationDisabledError,
   AppInvocationRequestMismatchError,
   type AppInvocationAttempt,
   type AppInvocationAuditRow,
@@ -94,6 +96,59 @@ const runStatuses = async (orgId: string): Promise<string[]> =>
       db.execute<{ status: string }>(sql`select status from app_runs where org_id = ${orgId} order by at`),
     )
   ).rows.map((r) => r.status);
+
+test(
+  "an invocation rechecks installed state after a concurrent disable gets the shared lock",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    let releaseDisable!: () => void;
+    let announceLocked!: () => void;
+    const disabledLockHeld = new Promise<void>((resolve) => { announceLocked = resolve; });
+    const finishDisable = new Promise<void>((resolve) => { releaseDisable = resolve; });
+    const disabling = withOrgContext(fx.orgId, async () => {
+      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${fx.orgId}`}, 0))`);
+      await db.execute(sql`update apps set status = 'disabled' where org_id = ${fx.orgId} and id = ${fx.appId}`);
+      announceLocked();
+      await finishDisable;
+    });
+    try {
+      await disabledLockHeld;
+      let ran = false;
+      const pending = executeAppInvocation({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        appId: fx.appId,
+        versionId: null,
+        endpoint: "do",
+        operation: "apps.call_backend.do",
+        idempotencyKey: deriveAppInvocationKey({ endpoint: "do", body: "raced-disable" }),
+        requestHash: deriveAppInvocationKey({ requestHashOf: "raced-disable" }),
+        authorize: () => lockInstalledAppForInvocation(fx.orgId, fx.appId, null),
+        run: async () => {
+          ran = true;
+          await stageEffect(fx.orgId, fx.actorId);
+          return { status: "ok", response: { wrote: true } };
+        },
+        audit: auditingAgainst(fx, []),
+      });
+      const refusal = assert.rejects(pending, AppInvocationDisabledError);
+
+      // The invocation must wait for the disable transaction, then observe
+      // its committed status before claiming or executing any work.
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      releaseDisable();
+      await disabling;
+      await refusal;
+      assert.equal(ran, false);
+      assert.equal(await committedEffects(fx.orgId), 0);
+    } finally {
+      releaseDisable();
+      await disabling;
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
 
 test(
   "a successful invocation commits its claim, stored response, and audit evidence atomically",
