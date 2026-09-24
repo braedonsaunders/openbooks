@@ -6,6 +6,7 @@ import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 import { loadCatalog } from "./catalog.ts";
+import { TENANT_TABLE_POLICIES } from "./tenant-table-policies.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -30,6 +31,8 @@ const NEVER_CLONED = [
 
 test("the clone plan never copies executable scheduler work or live tokens", { skip: !DB }, async () => {
   const catalog = await loadCatalog();
+  assert.equal(TENANT_TABLE_POLICIES.payroll_opening_program_bases, "clone:catalog-uuid-rebase");
+  assert.ok(catalog.rebaseSet.has("payroll_opening_program_bases"));
   for (const table of NEVER_CLONED) {
     assert.ok(!catalog.rebaseSet.has(table), `${table} must be excluded from the clone plan`);
   }

@@ -615,6 +615,79 @@ test("a full sandbox clones an org with live posted documents and lines", { skip
   }
 });
 
+test("a full sandbox clones payroll opening program bases with their rebased parent", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let sandboxId: string | null = null;
+  try {
+    const employeeId = randomUUID();
+    const actorId = await createScratchUser(org.orgId, `CloneOpening ${randomUUID()}`, "accountant");
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name)
+      values (${employeeId}, ${org.orgId}, 'employee', 'Clone opening base employee')
+    `);
+    await db.execute(sql`
+      insert into payroll_opening_balances
+        (org_id, employee_party_id, tax_year, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, 2026, ${actorId}, ${actorId})
+    `);
+    await db.execute(sql`
+      insert into payroll_opening_program_bases
+        (org_id, employee_party_id, tax_year, program_key, insurable_ytd, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, 2026, 'qpip', '4321.0000', ${actorId}, ${actorId})
+    `);
+
+    const created = await createSandbox({
+      productionOrgId: org.orgId,
+      name: `Clone opening bases ${randomUUID()}`,
+      tier: "full",
+      masked: false,
+    });
+    sandboxId = created.sandboxId;
+
+    const cloned = (await db.execute<{
+      source_id: string;
+      cloned_id: string;
+      source_employee: string;
+      cloned_employee: string;
+      source_amount: string;
+      cloned_amount: string;
+      parent_count: number;
+    }>(sql`
+      select source.id::text as source_id,
+             clone.id::text as cloned_id,
+             source.employee_party_id::text as source_employee,
+             clone.employee_party_id::text as cloned_employee,
+             source.insurable_ytd::text as source_amount,
+             clone.insurable_ytd::text as cloned_amount,
+             (select count(*)::int from payroll_opening_balances parent
+               where parent.org_id = clone.org_id
+                 and parent.employee_party_id = clone.employee_party_id
+                 and parent.tax_year = clone.tax_year) as parent_count
+        from payroll_opening_program_bases source
+        join payroll_opening_program_bases clone
+          on clone.org_id = ${created.sandboxOrgId}
+         and clone.program_key = source.program_key
+         and clone.tax_year = source.tax_year
+       where source.org_id = ${org.orgId}
+         and source.program_key = 'qpip'
+    `)).rows[0];
+    assert.ok(cloned, "the full clone must include the source opening program base");
+    assert.notEqual(cloned.cloned_id, cloned.source_id);
+    assert.notEqual(cloned.cloned_employee, cloned.source_employee);
+    assert.equal(cloned.cloned_amount, cloned.source_amount);
+    assert.equal(cloned.parent_count, 1, "the rebased program base must reference its cloned opening balance");
+  } finally {
+    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
+    else {
+      const rows = (await db.execute(sql`
+        select id from sandboxes where production_org_id = ${org.orgId}
+      `)).rows as { id: string }[];
+      for (const row of rows) await deleteSandbox(row.id).catch(() => undefined);
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a sandbox holding posted documents can be deleted without stranding its org", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `DeletePosted ${randomUUID()}`;

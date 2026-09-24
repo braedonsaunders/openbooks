@@ -242,14 +242,14 @@ function generateCopySql(
       exprs.push(`ob_rebase("id", '${seed}')`);
     } else if (c.name === "org_id") {
       exprs.push(`'${sbx}'::uuid`);
-    } else if (fkTarget && retainedTenantTables.has(fkTarget)) {
+    } else if (c.isUuid && fkTarget && retainedTenantTables.has(fkTarget)) {
       if (!c.isNullable) {
         throw new Error(
           `sandbox clone: ${t.name}.${c.name} is NOT NULL and references ${fkTarget}, which is never copied into a sandbox`,
         );
       }
       exprs.push("null");
-    } else if ((fkTarget && rebaseSet.has(fkTarget)) || t.forceRebase.has(c.name)) {
+    } else if (c.isUuid && ((fkTarget && rebaseSet.has(fkTarget)) || t.forceRebase.has(c.name))) {
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
     } else if (t.name === "hrm_employment_change_requests" && c.name === "decision_snapshot") {
       // OM-13c: the decision snapshot binds flow_run_id BY VALUE (storage
