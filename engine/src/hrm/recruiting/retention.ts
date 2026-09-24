@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { businessTimeZone } from "../../platform/business-date.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { assertUnrestrictedScope, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { requireHrmRecruitingManageOrg, requireHrmRecruitingReadOrg } from "../authorization.ts";
@@ -316,6 +317,7 @@ type CandidateScanRow = {
   extensionRequestedAt: string | null;
   hasOpenApplication: boolean;
   hasInScopeApplication: boolean;
+  regions: string[];
   resumeFileId: string | null;
 };
 
@@ -339,6 +341,16 @@ export interface EvaluateRuleOptions {
    * otherwise needs an unrestricted human runner for full coverage.
    */
   readonly runner?: RetentionRunner;
+  /** Worker claim key; the durable run row makes one successful run per business day. */
+  readonly claimBusinessDay?: string;
+}
+
+/** Active rule ids for the worker scanner, read under explicit bypass and org scope. */
+export async function activeRetentionRuleIdsForDuty(orgId: string): Promise<string[]> {
+  const scopedOrgId = requireOrgId(orgId);
+  return withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    select id from hrm_retention_rules where org_id = ${scopedOrgId} and is_active order by id
+  `)).rows.map((row) => row.id));
 }
 
 /**
@@ -381,6 +393,24 @@ export async function evaluateRetentionRule(
     if (!rule.isActive) {
       throw new RecruitingError("REFUSED", `rule ${rule.name} is retired — reactivate it before running it`);
     }
+    if (options.claimBusinessDay) {
+      const businessZone = await businessTimeZone(orgId);
+      await db.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended(${`hrm-candidate-retention:${orgId}:${ruleId}:${options.claimBusinessDay}`}, 0))
+      `);
+      const priorRun = (await db.execute<RetentionRunDTO>(sql`
+        select id, rule_id as "ruleId", ran_at as "ranAt",
+               candidates_anonymized as "candidatesAnonymized",
+               candidates_deleted as "candidatesDeleted",
+               extensions_requested as "extensionsRequested", detail
+          from hrm_retention_runs
+         where org_id = ${orgId} and rule_id = ${ruleId}
+           and ran_at >= (${options.claimBusinessDay}::date::timestamp at time zone ${businessZone})
+           and ran_at < ((${options.claimBusinessDay}::date + 1)::timestamp at time zone ${businessZone})
+         order by ran_at limit 1
+      `)).rows[0];
+      if (priorRun) return priorRun;
+    }
     // Unrestricted runners own every candidate (including prospects with no
     // applications yet); scoped runners own only candidates with an
     // application on an in-scope requisition (canonical visibility filter).
@@ -405,6 +435,11 @@ export async function evaluateRetentionRule(
              exists (select 1 from hrm_applications a
                       where a.org_id = ${orgId} and a.candidate_id = c.id and a.status = 'active') as "hasOpenApplication",
              (${inScopeExpression}) as "hasInScopeApplication",
+             coalesce((select array_agg(distinct s.country)
+                         from hrm_applications a
+                         join hrm_requisitions r on r.org_id = a.org_id and r.id = a.requisition_id
+                         join subsidiaries s on s.org_id = r.org_id and s.id = r.employer_subsidiary_id
+                        where a.org_id = ${orgId} and a.candidate_id = c.id), '{}'::text[]) as regions,
              c.resume_attachment_id as "resumeFileId"
         from hrm_candidates c
        where c.org_id = ${orgId}
@@ -420,6 +455,15 @@ export async function evaluateRetentionRule(
     let extensions = 0;
     const detail: Record<string, unknown>[] = [];
     for (const candidate of candidates) {
+      const candidateLock = (await db.execute<{ id: string; partyId: string | null }>(sql`
+        select id, party_id as "partyId" from hrm_candidates
+         where org_id = ${orgId} and id = ${candidate.id} for update
+      `)).rows[0];
+      if (!candidateLock) continue;
+      const nowOpen = (await db.execute<{ open: boolean }>(sql`
+        select exists (select 1 from hrm_applications
+                        where org_id = ${orgId} and candidate_id = ${candidate.id} and status = 'active') as open
+      `)).rows[0]?.open ?? false;
       // THE OPEN-APPLICATION RULE: a candidate with an open application is
       // never touched, whatever the rule says. A hired candidate (party
       // linked — an employee) is never touched either: retention owns
@@ -427,11 +471,10 @@ export async function evaluateRetentionRule(
       // candidate owned outside the runner's scope: without an application
       // on an in-scope requisition the runner cannot see them, so the run
       // must not anonymize or delete them.
-      if (candidate.hasOpenApplication) continue;
-      if (candidate.partyId) continue;
+      if (nowOpen || candidateLock.partyId !== null) continue;
       if (!candidate.hasInScopeApplication) continue;
       // Region scope gates before the basis clock (an empty scope matches all).
-      if (!retentionScopeMatches(rule.regionScope ?? {}, [])) continue;
+      if (!retentionScopeMatches(rule.regionScope ?? {}, candidate.regions)) continue;
       if (rule.basis === "inactivity") {
         const age = monthsAgo(candidate.lastEventAt);
         if (age === null || age < cutoffMonths) continue;

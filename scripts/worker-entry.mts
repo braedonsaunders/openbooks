@@ -22,6 +22,8 @@ import { FEATURE_BY_KEY } from "../engine/src/organization/feature-registry.ts";
 import { registerWorkerDuty } from "../engine/src/worker/duties.ts";
 import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "../engine/src/automations/tick.ts";
 import { runQualificationAlertScan } from "../engine/src/hrm/qualifications/alerts.ts";
+import { SYSTEM_ACTOR_ID } from "../engine/src/banking/banking.ts";
+import { activeRetentionRuleIdsForDuty, evaluateRetentionRule } from "../engine/src/hrm/recruiting/retention.ts";
 import { db, pool, withBypassContext, withOrgTransaction } from "../engine/src/platform/db.ts";
 import { businessToday } from "../engine/src/platform/business-date.ts";
 import { runRetentionTick } from "../engine/src/hrm/documents/retention.ts";
@@ -142,6 +144,25 @@ async function runRetentionDuty(now: Date): Promise<void> {
     });
   }
   void now;
+}
+
+async function runRecruitingRetentionDuty(): Promise<void> {
+  for (const orgId of await orgsWithFeature("hrmCandidateRetention")) {
+    const today = await businessToday(orgId);
+    for (const ruleId of await activeRetentionRuleIdsForDuty(orgId)) {
+      await withOrgClaim("hrm-candidate-retention", orgId, `${today}:${ruleId}`, async () => {
+        try {
+          const run = await evaluateRetentionRule(
+            { orgId, actorId: SYSTEM_ACTOR_ID, ruleId },
+            { runner: { kind: "system" }, claimBusinessDay: today },
+          );
+          console.log(`[worker] hrm-candidate-retention ${orgId}/${ruleId}/${today}: ${run.id}`);
+        } catch (error) {
+          console.error(`[worker] hrm-candidate-retention ${orgId}/${ruleId} failed:`, (error as Error).message);
+        }
+      });
+    }
+  }
 }
 
 async function runDsarDuty(): Promise<void> {
@@ -273,6 +294,13 @@ export function registerWorkerDuties(): void {
     key: "hrm-retention-tick",
     run: async (now: Date) => {
       await runRetentionDuty(now);
+    },
+  });
+  console.log("[worker] duty registered: hrm-candidate-retention");
+  registerWorkerDuty({
+    key: "hrm-candidate-retention",
+    run: async () => {
+      await runRecruitingRetentionDuty();
     },
   });
   console.log("[worker] duty registered: hrm-dsar-exports");
