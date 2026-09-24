@@ -120,7 +120,7 @@
       "add": "Ajouter une ligne",
       "remove": "Retirer la ligne",
       "empty": "Aucune ligne pour l'instant.",
-      "itemRequired": "Choisissez un article",
+      "itemRequired": "Choisissez un article", "rateFailed": "Résolution du tarif impossible", "projectLoadFailed": "Chargement du projet impossible", "reloadFailed": "Rechargement du ticket impossible",
       "operator": "Opérateur",
       "noOperator": "Non renseigné"
     },
