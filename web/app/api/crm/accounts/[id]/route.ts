@@ -3,7 +3,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { promoteCrmAccount, routeCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
+import { CrmLifecycleRefusalError, promoteCrmAccount, routeCrmAccount, transitionCrmAccountStage } from '@openbooks/engine/src/crm/crm.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -230,6 +230,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const denied = await db.transaction(async (tx) => {
     const visible = await tx.execute(sql`select id from parties where id=${id} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
     if (!visible.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    // A demotion owns the stage, the status and the stage event through the
+    // transition helper; the field update below must not re-own the status
+    // it just wrote. (Promotion keeps the existing split: the helper assigns
+    // the default status and the field update applies an explicit one.)
+    let statusOwnedByTransition = false
     if (stage && stage !== row.lifecycle_stage) {
       const rank = { lead: 0, prospect: 1, customer: 2 }
       if (rank[stage] > rank[row.lifecycle_stage as Stage]) {
@@ -243,20 +248,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           throw new Error('customer role was not established while promoting the account')
         }
       } else {
-        const reason = stageReason ?? null
-        await tx.execute(sql`
-          update crm_account_profiles set lifecycle_stage = ${stage},
-                 status_id = ${statusId !== undefined ? statusId : sql`status_id`},
-                 updated_at = now(), updated_by = ${user.id} where id = ${row.id} and org_id = ${user.orgId}`)
-        await tx.execute(sql`
-          insert into crm_account_stage_events
-            (org_id, account_profile_id, from_stage, to_stage, source_kind, reason, created_by, updated_by)
-          values (${user.orgId}, ${row.id}, ${row.lifecycle_stage}, ${stage}, 'manual', ${reason}, ${user.id}, ${user.id})`)
+        try {
+          const demotion = await transitionCrmAccountStage(tx, {
+            orgId: user.orgId,
+            partyId: id,
+            actorId: user.id,
+            toStage: stage,
+            sourceKind: 'manual',
+            reason: stageReason ?? null,
+            statusId: statusId !== undefined ? statusId : undefined,
+          })
+          if (!demotion.lifecycleApplied) {
+            throw new Error('CRM lifecycle transition was not applied')
+          }
+        } catch (error) {
+          // An unsafe demotion is an operator-actionable refusal, not a
+          // server fault: answer 422 with the message that names the remedy.
+          if (error instanceof CrmLifecycleRefusalError) {
+            return NextResponse.json({ error: error.message }, { status: 422 })
+          }
+          throw error
+        }
+        statusOwnedByTransition = true
       }
     }
     await tx.execute(sql`
       update crm_account_profiles set
-        status_id = ${statusWrite !== undefined ? statusWrite : sql`status_id`},
+        status_id = ${statusOwnedByTransition ? sql`status_id` : (statusWrite !== undefined ? statusWrite : sql`status_id`)},
         owner_user_id = ${ownerUserId !== undefined ? ownerUserId : sql`owner_user_id`},
         territory_id = ${territoryId !== undefined ? territoryId : sql`territory_id`},
         lead_source_id = ${leadSourceId !== undefined ? leadSourceId : sql`lead_source_id`},

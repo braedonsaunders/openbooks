@@ -115,10 +115,23 @@ async function ensureActiveCustomerRole(
 }
 
 /**
- * Move an account forward one lifecycle transition and write immutable
- * evidence in the caller's transaction. Becoming a customer (role plus
- * profile) is core AR and happens with CRM on or off; only the CRM
- * lifecycle and stage bookkeeping is CRM-gated.
+ * An operator-facing lifecycle refusal: the transition is understood but the
+ * account's open AR makes it unsafe. The message names the remedy. Boundary
+ * routes map it to a 4xx with that message instead of collapsing it into a
+ * 500; internal invariants (a role that moved under the lock) stay plain
+ * Error and remain 500.
+ */
+export class CrmLifecycleRefusalError extends Error {
+  readonly name = "CrmLifecycleRefusalError";
+}
+
+/**
+ * Move an account forward or backward one lifecycle transition and write
+ * immutable evidence in the caller's transaction. Becoming a customer (role
+ * plus profile) is core AR and happens with CRM on or off; only the CRM
+ * lifecycle and stage bookkeeping is CRM-gated. A demotion away from
+ * customer deactivates the customer role in the same transaction, refusing
+ * by name when open documents make that unsafe.
  */
 export async function transitionCrmAccountStage(
   executor: SqlExecutor,
@@ -130,6 +143,8 @@ export async function transitionCrmAccountStage(
     sourceKind: string;
     sourceId?: string | null;
     reason?: string | null;
+    /** Target status for a demotion (undefined keeps the current status). */
+    statusId?: string | null;
   },
 ): Promise<CrmStageTransition> {
   const idle: CrmStageTransition = { customerRoleActive: false, lifecycleApplied: false, transitioned: false };
@@ -161,16 +176,59 @@ export async function transitionCrmAccountStage(
               ${input.toStage === "customer" ? sql`now()` : null}, ${input.actorId}, ${input.actorId})
       returning id`));
     profileId = inserted.rows[0]!.id;
-  } else {
-    if (!shouldPromoteLifecycle(fromStage!, input.toStage)) {
-      // No stage movement — but a customer call still converges the role
-      // (rows created while CRM was off, or by AR writers, may lack one).
-      if (input.toStage === "customer") {
-        await ensureActiveCustomerRole(executor, input);
-        return { ...idle, customerRoleActive: true, lifecycleApplied: crmOn };
-      }
-      return { ...idle, lifecycleApplied: crmOn };
+  } else if (fromStage === input.toStage) {
+    // No stage movement — but a customer call still converges the role
+    // (rows created while CRM was off, or by AR writers, may lack one).
+    if (input.toStage === "customer") {
+      await ensureActiveCustomerRole(executor, input);
+      return { ...idle, customerRoleActive: true, lifecycleApplied: crmOn };
     }
+    return { ...idle, lifecycleApplied: crmOn };
+  } else if (!shouldPromoteLifecycle(fromStage!, input.toStage)) {
+    // Backward: demotion. Lifecycle is CRM-gated, so with CRM off the stage
+    // is frozen and there is nothing to move.
+    if (!crmOn) return idle;
+    if (fromStage === "customer") {
+      // The ex-customer must not keep an ACTIVE role: holds, limits and
+      // customer pickers all key off it. Refuse first when open AR makes
+      // deactivation unsafe (the same bar as party deactivation), then
+      // deactivate in the same transaction as the stage move.
+      const blocked = (await executor.execute<{ blocked: boolean }>(sql`
+        select exists (
+          select 1 from documents
+           where org_id = ${input.orgId} and party_id = ${input.partyId}
+             and (status in ('pending_approval', 'approved')
+                  or (status = 'posted' and coalesce(open_balance, 0) <> 0))
+        ) as blocked`)).rows[0]?.blocked;
+      if (blocked) {
+        throw new CrmLifecycleRefusalError(
+          `cannot demote this customer back to ${input.toStage} while documents are in flight or carry an open balance — resolve in-flight transactions and open balances before changing the stage`,
+        );
+      }
+      const role = (await executor.execute<{ id: string }>(sql`
+        select id from customer_roles
+         where org_id = ${input.orgId} and party_id = ${input.partyId} and is_active for update`));
+      if (role.rows[0]) {
+        const deactivated = (await executor.execute<{ id: string }>(sql`
+          update customer_roles set is_active = false, updated_at = now(), updated_by = ${input.actorId}
+           where id = ${role.rows[0].id} and org_id = ${input.orgId} and is_active returning id`));
+        if (!deactivated.rows[0]) {
+          throw new Error("customer role changed during demotion — retry the demotion");
+        }
+      }
+    }
+    await executor.execute(sql`
+      update crm_account_profiles set lifecycle_stage = ${input.toStage},
+             status_id = ${input.statusId !== undefined ? input.statusId : sql`status_id`},
+             updated_at = now(), updated_by = ${input.actorId}
+       where id = ${profileId} and org_id = ${input.orgId}`);
+    await executor.execute(sql`
+      insert into crm_account_stage_events
+        (org_id, account_profile_id, from_stage, to_stage, source_kind, source_id, reason, created_by, updated_by)
+      values (${input.orgId}, ${profileId}, ${fromStage ?? null}, ${input.toStage}, ${input.sourceKind},
+              ${input.sourceId ?? null}, ${input.reason ?? null}, ${input.actorId}, ${input.actorId})`);
+    return { customerRoleActive: false, lifecycleApplied: true, transitioned: true };
+  } else {
     if (!crmOn) {
       if (input.toStage === "customer") {
         await ensureActiveCustomerRole(executor, input);

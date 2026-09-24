@@ -507,8 +507,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           // lead. Opening a lead or prospect from the account list and saving
           // it must not quietly make it invoiceable — the lifecycle says it
           // has not been won yet. Only blocked when the role does not already
-          // exist: a customer DEMOTED back to prospect keeps its role, and
-          // must stay saveable.
+          // exist: a demotion back to prospect deactivates the role in the
+          // same transaction, so a demoted account lands here and must
+          // re-promote before it can carry receivable terms again.
           const preCustomer = (await tx.execute<{ stage: string }>(sql`
             select cp.lifecycle_stage as stage
               from crm_account_profiles cp
