@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
   entitlementOpenings,
   type EntitlementOpeningsResult,
@@ -63,23 +63,25 @@ export async function scopedOpeningBalances(
   gate: Authz,
   taxYear: number,
 ): Promise<OpeningBalanceYear> {
-  const data = await openingBalancesForYear(gate.user.orgId, taxYear)
-  const visible = await visiblePayrollEmployeeIds(gate)
-  if (!visible) return data
-  const rows = data.rows.filter((row) => visible.has(row.employeePartyId))
-  const years = (await db.execute<{ taxYear: number }>(sql`
-    select distinct b.tax_year as "taxYear"
-      from payroll_opening_balances b
-      join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
-     where b.org_id = ${gate.user.orgId}
-       and p.id = any(${`{${[...visible].join(',')}}`}::uuid[])
-     order by b.tax_year desc`)).rows.map((row) => Number(row.taxYear))
-  return {
-    ...data,
-    rows,
-    entered: rows.filter((row) => row.amounts !== null).length,
-    years,
-  }
+  return withOrgTransaction(gate.user.orgId, async () => {
+    const visible = await visiblePayrollEmployeeIds(gate, true)
+    const data = await openingBalancesForYear(gate.user.orgId, taxYear)
+    if (!visible) return data
+    const rows = data.rows.filter((row) => visible.has(row.employeePartyId))
+    const years = (await db.execute<{ taxYear: number }>(sql`
+      select distinct b.tax_year as "taxYear"
+        from payroll_opening_balances b
+        join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
+       where b.org_id = ${gate.user.orgId}
+         and p.id = any(${`{${[...visible].join(',')}}`}::uuid[])
+       order by b.tax_year desc`)).rows.map((row) => Number(row.taxYear))
+    return {
+      ...data,
+      rows,
+      entered: rows.filter((row) => row.amounts !== null).length,
+      years,
+    }
+  })
 }
 
 /** Entitlement bank carry-ins, limited to the employees the caller may see. */
@@ -87,18 +89,20 @@ export async function scopedEntitlementOpenings(
   gate: Authz,
   opts: { asOf?: string } = {},
 ): Promise<EntitlementOpeningsResult> {
-  const data = await entitlementOpenings(gate.user.orgId, opts)
-  const visible = await visiblePayrollEmployeeIds(gate)
-  if (!visible) return data
-  const rows = data.rows.filter((row) => visible.has(row.employeePartyId))
-  return {
-    ...data,
-    rows,
-    entered: rows.filter((row) => Object.keys(row.amounts).length > 0).length,
-    blocked: Object.fromEntries(
-      Object.entries(data.blocked).filter(([employeePartyId]) => visible.has(employeePartyId)),
-    ),
-  }
+  return withOrgTransaction(gate.user.orgId, async () => {
+    const visible = await visiblePayrollEmployeeIds(gate, true)
+    const data = await entitlementOpenings(gate.user.orgId, opts)
+    if (!visible) return data
+    const rows = data.rows.filter((row) => visible.has(row.employeePartyId))
+    return {
+      ...data,
+      rows,
+      entered: rows.filter((row) => Object.keys(row.amounts).length > 0).length,
+      blocked: Object.fromEntries(
+        Object.entries(data.blocked).filter(([employeePartyId]) => visible.has(employeePartyId)),
+      ),
+    }
+  })
 }
 
 /** Active schedules with committed history, visible to the caller. */

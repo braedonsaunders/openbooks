@@ -417,12 +417,14 @@ export function payrollVisibleScheduleFilter(gate: Authz) {
  * Payroll pages, API routes and assistant tools that filter a population
  * share this one query so the three transports cannot disagree.
  */
-export async function visiblePayrollEmployeeIds(gate: Authz): Promise<Set<string> | null> {
+export async function visiblePayrollEmployeeIds(gate: Authz, lock = false): Promise<Set<string> | null> {
   if (gate.allowedSubsidiaryIds === null) return null
   const rows = await db.execute<{ id: string }>(sql`
     select id from parties p
      where p.org_id = ${gate.user.orgId}
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`)
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
+     order by p.id
+       ${lock ? sql`for share of p` : sql``}`)
   return new Set(rows.rows.map((row) => row.id))
 }
 
