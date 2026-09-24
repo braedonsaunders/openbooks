@@ -8,7 +8,15 @@ import test from 'node:test'
 // default: today), while explicit params keep their meaning.
 const TODAY = '2026-09-24'
 const agingKey = Symbol.for('openbooks.aging-export-asof-test')
-const agingState: { asOfValues: unknown[] } = { asOfValues: [] }
+const agingState: {
+  asOfValues: unknown[]
+  bookThreading: Array<{ kind: string; bookId: unknown }>
+  featuresOn: string[]
+} = {
+  asOfValues: [],
+  bookThreading: [],
+  featuresOn: [],
+}
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[agingKey] = agingState
 
 const reportsIndexUrl = new URL('./reports.ts', import.meta.url).href
@@ -20,7 +28,9 @@ const executionContextUrl = new URL('./report-execution-context.ts', import.meta
 const mockSources = new Map<string, string>([
   [
     'mock:features',
-    'export async function isFeatureEnabled() { return false }; export async function subsidiaryFeatureEnabled() { return false }',
+    `const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
+     export async function isFeatureEnabled(orgId, key) { return state.featuresOn.includes(key) }
+     export async function subsidiaryFeatureEnabled() { return false }`,
   ],
   [
     'mock:execution-context',
@@ -50,23 +60,52 @@ const mockSources = new Map<string, string>([
     `
       export * from '${reportsIndexUrl}'
       const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
-      export async function agingByParty(side, asOf) {
+      export async function agingByParty(side, asOf, dims, orgId, opts) {
         state.asOfValues.push(asOf)
+        state.bookThreading.push({ kind: 'aging', bookId: opts?.bookId })
         return []
       }
+      const thread = (kind, bookId) => { state.bookThreading.push({ kind, bookId }) }
+      // Shape contract with web/lib/report-run.ts: the ledger resolves to
+      // { accounts } and the journal to { entries }; the export-data mocks
+      // ignore the payloads, but resolveReport reads these fields.
+      export async function generalLedger(from, to, opts) { thread('general-ledger', opts?.bookId); return { accounts: [] } }
+      export async function journalReport(from, to, opts) { thread('journal', opts?.bookId); return { entries: [] } }
+      export async function partyRegister(side, opts) { thread('registers', opts?.bookId); return [] }
+      export async function partnerStatement(partyId, orgId, opts) { thread('partner-statement', opts?.bookId); return {} }
+      export async function projectProfitability(from, to, opts) { thread('project-profitability', opts?.bookId); return [] }
+      export async function trialBalance(asOf, dims, orgId, bookId) { thread('trial-balance', bookId); return [] }
+      export async function partnerBalances(s, orgId, asOf, bookId, dims) { thread('partners', bookId); return [] }
+      export async function cashFlow(from, to, dims, orgId, bookId) { thread('cash-flow', bookId); return {} }
+      export async function cashFlowIndirect(from, to, dims, orgId, bookId) { thread('cash-flow-indirect', bookId); return {} }
     `,
   ],
   [
     'mock:report-pdf',
     `export * from '${reportPdfUrl}'
-     export function agingExportData() { return { title: 'Aging', dateRangeLabel: '', summary: [], groups: [] } }`,
+     export function agingExportData() { return { title: 'Aging', dateRangeLabel: '', summary: [], groups: [] } }
+     export function generalLedgerExportData() { return { title: 'GL' } }
+     export function journalExportData() { return { title: 'Journal' } }
+     export function registerExportData() { return { title: 'Register' } }
+     export function partnerStatementExportData() { return { title: 'Statement' } }
+     export function projectProfitabilityExportData() { return { title: 'Projects' } }
+     export function trialBalanceExportData() { return { title: 'TB' } }
+     export function partnersExportData() { return { title: 'Partners' } }
+     export function cashFlowExportData() { return { title: 'CF' } }
+     export function cashFlowIndirectExportData() { return { title: 'CFI' } }`,
   ],
   [
     'mock:db',
     `export * from '${dbUrl}'
      export const db = { async execute(query) {
        const chunks = query?.queryChunks ?? [];
-       const text = chunks.map((c) => typeof c === 'string' ? c : '').join(' ').slice(0, 100);
+       const text = chunks.map((c) => typeof c === 'string' ? c : (Array.isArray(c?.value) ? c.value.join('') : '')).join(' ').slice(0, 200);
+       if (text.includes('from accounting_books')) {
+         return { rows: [
+           { id: '11111111-1111-1111-8111-111111111111', code: 'PRIMARY', name: 'Primary book', is_primary: true },
+           { id: '22222222-2222-2222-8222-222222222222', code: 'TAX', name: 'Tax book', is_primary: false },
+         ] };
+       }
        throw new Error("unexpected SQL before the reader: " + text);
      } }`,
   ],
@@ -128,4 +167,38 @@ test('an explicit aging as-of keeps its meaning', async () => {
   await resolveReport('aging', new URLSearchParams('asOf=2026-07-31'), ctx)
 
   assert.deepEqual(agingState.asOfValues, ['2026-07-31'])
+})
+
+// A secondary-book statement export must not silently mix primary-book
+// detail lines: every journal-backed detail reader receives the selected
+// book, while a bare export keeps the readers' primary-book default.
+test('statement exports thread the selected book into every journal-backed detail reader', async () => {
+  const SECONDARY = '22222222-2222-2222-8222-222222222222'
+  const PARTY = '33333333-3333-3333-8333-333333333333'
+  const cases: Array<[Parameters<typeof resolveReport>[0], Record<string, string>]> = [
+    ['general-ledger', {}],
+    ['journal', {}],
+    ['registers', {}],
+    ['partner-statement', { party: PARTY }],
+    ['project-profitability', {}],
+    ['trial-balance', {}],
+    ['partners', {}],
+    ['aging', {}],
+    ['cash-flow', {}],
+    ['cash-flow-indirect', {}],
+  ]
+  agingState.featuresOn = ['projects']
+  try {
+    for (const [kind, extra] of cases) {
+      agingState.bookThreading = []
+      await resolveReport(kind, new URLSearchParams({ book: SECONDARY, ...extra }), ctx)
+      assert.deepEqual(agingState.bookThreading, [{ kind, bookId: SECONDARY }])
+    }
+  } finally {
+    agingState.featuresOn = []
+  }
+
+  agingState.bookThreading = []
+  await resolveReport('general-ledger', new URLSearchParams(), ctx)
+  assert.deepEqual(agingState.bookThreading, [{ kind: 'general-ledger', bookId: undefined }])
 })
