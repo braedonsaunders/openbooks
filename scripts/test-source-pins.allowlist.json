@@ -96,7 +96,6 @@
     "web/app/(app)/admin/setup/bank-feeds/bank-feeds-accounts.test.ts": 2,
     "web/app/(app)/admin/setup/payroll/setup-vendors.test.ts": 2,
     "web/app/(app)/admin/setup/payroll/statutory-rates-region.test.ts": 4,
-    "web/app/(app)/admin/setup/readiness/guide-links.test.ts": 1,
     "web/app/(app)/admin/setup/setup-layout-responsive.test.ts": 2,
     "web/app/(app)/admin/users/link-person.test.ts": 5,
     "web/app/(app)/agents/agents-moved-notice.test.ts": 1,
