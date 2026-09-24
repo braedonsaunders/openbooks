@@ -28,6 +28,21 @@ before(async () => {
   try {
     const { readFileSync } = await import("node:fs");
     await client.query(readFileSync("schema/migrations/generated/0291_sftp_import_schedule_expected_account.sql", "utf8"));
+    // The per-shard test DB template can predate this forward migration.
+    // Provision its run-claim shape idempotently for the scheduled-import
+    // behavior exercised here.
+    await client.query(`
+      alter table public.sftp_import_schedules
+        add column if not exists run_claim_token uuid,
+        add column if not exists run_claimed_at timestamptz;
+      do $$ begin
+        if not exists (select 1 from pg_constraint where conname = 'sftp_import_schedules_run_claim_pair') then
+          alter table public.sftp_import_schedules
+            add constraint sftp_import_schedules_run_claim_pair
+            check ((run_claim_token is null) = (run_claimed_at is null));
+        end if;
+      end $$;
+    `);
   } finally {
     client.release();
   }
@@ -132,6 +147,7 @@ test("account identity gates the scheduled import end to end", { skip: !DB }, as
     const runs = await withBypass(() => runDueSftpImports(fixture.orgId));
     const bound = runs.find((r) => r.scheduleId === fixture.boundScheduleId)!;
     const unbound = runs.find((r) => r.scheduleId === fixture.unboundScheduleId)!;
+    assert.ok(bound && unbound, `expected both schedules in scan results; got ${JSON.stringify(runs)}`);
 
     // RED before the fix: both folders imported every file into the
     // schedule's account with no comparison — the stranger's lines became
@@ -165,6 +181,54 @@ test("account identity gates the scheduled import end to end", { skip: !DB }, as
     // Exactly the two imported files' lines landed (one line each).
     assert.equal((await lineCount(fixture.orgId)) - before, 2);
   } finally {
+    await withBypass(() => dropScratchOrgReporting(fixture.orgId));
+  }
+});
+
+test("scheduled import uses the binding that wins the claim after discovery", { skip: !DB }, async () => {
+  const fixture = await seedBindingFixture();
+  const triggerName = `sftp_rebind_during_claim_${randomUUID().replaceAll("-", "")}`;
+  const functionName = `${triggerName}_fn`;
+  try {
+    // Reproduce a rebind after the scanner's discovery SELECT but before its
+    // claim UPDATE. A trigger makes that ordering deterministic: the claim
+    // itself observes the newly committed bank identity.
+    await withOrgContext(fixture.orgId, async () => {
+      await db.execute(sql`
+        update sftp_import_schedules set expected_external_account_id = null
+         where id = ${fixture.boundScheduleId} and org_id = ${fixture.orgId}
+      `);
+      await db.execute(sql.raw(`
+        create function ${functionName}() returns trigger language plpgsql as $$
+        begin
+          if new.folder = 'inbound-a' and old.run_claim_token is null and new.run_claim_token is not null then
+            new.expected_external_account_id := 'BR001-77';
+          end if;
+          return new;
+        end;
+        $$
+      `));
+      await db.execute(sql.raw(`
+        create trigger ${triggerName} before update on sftp_import_schedules
+        for each row execute function ${functionName}()
+      `));
+    });
+
+    const runs = await withBypass(() => runDueSftpImports(fixture.orgId, fixture.boundScheduleId));
+    const run = runs.find((entry) => entry.scheduleId === fixture.boundScheduleId)!;
+    assert.ok(run, `expected the claimed schedule in scan results; got ${JSON.stringify(runs)}`);
+    const own = run.files.find((entry) => entry.file === "own.ofx")!;
+    assert.ok(own, `expected the staged file outcome; got ${JSON.stringify(run)}`);
+    assert.equal(own.imported, 1, "the claimed run must use the binding returned by its claim update");
+    assert.equal(own.error, undefined);
+    const stranger = run.files.find((entry) => entry.file === "stranger.ofx")!;
+    assert.equal(stranger.imported, 0);
+    assert.match(stranger.error ?? "", /OTHER-99/);
+  } finally {
+    await withOrgContext(fixture.orgId, async () => {
+      await db.execute(sql.raw(`drop trigger if exists ${triggerName} on sftp_import_schedules`));
+      await db.execute(sql.raw(`drop function if exists ${functionName}()`));
+    }).catch(() => undefined);
     await withBypass(() => dropScratchOrgReporting(fixture.orgId));
   }
 });

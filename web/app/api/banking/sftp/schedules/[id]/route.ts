@@ -143,9 +143,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         select * from sftp_import_schedules where id = ${id} and org_id = ${user.orgId} for update
       `)).rows[0]
       if (!before) return null
+      if (before.run_claim_token) return { busy: true as const }
       const after = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
         update sftp_import_schedules set expected_external_account_id = ${canonical}, updated_at = now(), updated_by = ${user.id}
-         where id = ${id} and org_id = ${user.orgId}
+         where id = ${id} and org_id = ${user.orgId} and run_claim_token is null
         returning *
       `)).rows[0]
       if (!after) throw new Error('SFTP schedule binding update matched no row')
@@ -161,6 +162,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return after
     })
     if (!bound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if ('busy' in bound) {
+      return NextResponse.json(
+        { error: 'This schedule is being scanned; wait for the scan to finish before changing its expected bank account.' },
+        { status: 409 },
+      )
+    }
     // The binding landing resolves the scheduler's named notice for this
     // schedule (same kind + href the engine writes): the inbox stays
     // truthful without the operator dismissing it by hand. Clearing the
