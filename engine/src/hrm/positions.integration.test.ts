@@ -19,7 +19,7 @@ import {
   revisePosition,
   writePositionFunding,
 } from "./positions.ts";
-import { getPositionAsOf, getVacancyAsOf } from "./positions-read.ts";
+import { getPositionAsOf, getVacancyAsOf, listPositionOptions } from "./positions-read.ts";
 import {
   createChangeRequestDraft,
   submitChangeRequest,
@@ -707,6 +707,45 @@ test("position as-of reads authorize the resolved version's employer scope", { s
       knownAt: new Date(Date.now() + 1000).toISOString(),
     });
     assert.equal(currentB.version.title, "Current B role", "B retains access to the current version in its scope");
+  });
+});
+
+test("position option pages scope before applying their limit", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const orgId = h.org.orgId;
+    const subsidiaryB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${subsidiaryB}, ${orgId}, ${h.org.subsidiaryId}, 'Other entity', 'USD', 'US')
+    `);
+    await createPosition({
+      orgId,
+      actorId: h.managerId,
+      positionCode: "A-HIDDEN",
+      title: "Hidden entity role",
+      employerSubsidiaryId: subsidiaryB,
+      effectiveFrom: "2026-07-01",
+      reason: "open in B",
+    });
+    const visible = await createPosition({
+      orgId,
+      actorId: h.managerId,
+      positionCode: "Z-VISIBLE",
+      title: "Visible entity role",
+      employerSubsidiaryId: h.org.subsidiaryId,
+      effectiveFrom: "2026-07-01",
+      reason: "open in A",
+    });
+    const reader = await createScratchUser(orgId, "A position reader", "position_a_reader");
+    await grantPermissions(orgId, reader, ["hrm.position.read"]);
+    await db.execute(sql`
+      update app_roles
+         set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [h.org.subsidiaryId] })}::jsonb
+       where org_id = ${orgId} and key = 'position_a_reader'
+    `);
+
+    const options = await listPositionOptions({ orgId, actorId: reader, limit: 1 });
+    assert.deepEqual(options.map((row) => row.positionId), [visible.id]);
   });
 });
 
