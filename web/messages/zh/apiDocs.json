@@ -9,8 +9,8 @@
     "description": "将您的 API 密钥作为 bearer token 传递。密钥具有作用域限制 — 仅当密钥的作用域和所有者的权限均覆盖某请求时，该请求才被允许。"
   },
   "customBadge": "自定义",
-  "requires": "read:",
-  "writesRequire": "write:",
+  "requires": "读取:",
+  "writesRequire": "写入:",
   "fields": {
     "field": "字段",
     "type": "类型",

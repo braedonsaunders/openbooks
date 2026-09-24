@@ -9,8 +9,8 @@
     "description": "Passe sua chave de API como bearer token. As chaves têm escopo — uma requisição só é permitida quando tanto os escopos da chave quanto as permissões do proprietário a cobrem."
   },
   "customBadge": "personalizado",
-  "requires": "read:",
-  "writesRequire": "write:",
+  "requires": "leitura:",
+  "writesRequire": "escrita:",
   "fields": {
     "field": "Campo",
     "type": "Tipo",

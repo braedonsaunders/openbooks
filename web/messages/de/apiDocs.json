@@ -9,8 +9,8 @@
     "description": "Übergeben Sie Ihren API-Schlüssel als Bearer-Token. Schlüssel sind gescopet — eine Anfrage ist nur zulässig, wenn sowohl die Scopes des Schlüssels als auch die Berechtigungen des Eigentümers sie abdecken."
   },
   "customBadge": "benutzerdefiniert",
-  "requires": "read:",
-  "writesRequire": "write:",
+  "requires": "Lesen:",
+  "writesRequire": "Schreiben:",
   "fields": {
     "field": "Feld",
     "type": "Typ",
