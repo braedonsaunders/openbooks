@@ -19,11 +19,9 @@ registerHooks({
       return virtual(`
         export async function getAuthz() {
           const s = globalThis.__documentStockState;
-          return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: [], allowedSubsidiaryIds: null };
+          return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
         }
-        export function can() { return true }
-        export function guardSubsidiaryScope() { return null }
-        export function subsidiariesInScope() { return true }
+        export { can, guardSubsidiaryScope, subsidiariesInScope } from '${root}web/lib/authz.ts'
       `)
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)

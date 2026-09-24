@@ -38,15 +38,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:provisioning',
     `
       const state = globalThis[Symbol.for('openbooks.tax-setup-scope-test')]
@@ -82,7 +73,6 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') return { format: 'module', source: '', shortCircuit: true, url: 'mock:server-only' }
-    if (specifier === '@/lib/api/json') return { url: 'mock:json', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/tax/pack-provisioning.ts') {
       return { url: 'mock:provisioning', shortCircuit: true }

@@ -222,7 +222,7 @@ const sectionHooks = registerHooks({
     if (specifier === 'next-intl') {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export function useTranslations() { const t = (key) => key; t.has = () => false; return t }',
+        url: 'data:text/javascript,export function useTranslations() { const t = (key) => key; t.has = () => false; return t }export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}',
       }
     }
     if (specifier === '../../../../components/money-provider') {

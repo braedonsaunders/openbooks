@@ -80,19 +80,9 @@ const mockSources = new Map<string, string>([
       export async function paymentControlDeps() { return {} }
     `,
   ],
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['@openbooks/engine/src/ledger/posting-document.ts', 'mock:posting'],

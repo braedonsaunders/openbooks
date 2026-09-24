@@ -14,14 +14,14 @@ const bomb = `throw new Error("no database in this test")`;
 const dbStub = `const fail = () => { ${bomb} };
 export const ambientTenantOrgId = (...args) => fail();
 export const assertSafeRuntimeDatabaseRole = (...args) => fail();
-export const currentRequestOrgResolver = (...args) => fail();
+export const currentRequestOrgResolver = () => null;
 export const db = new Proxy({}, { get() { ${bomb} } });
 export const env = new Proxy({}, { get() { ${bomb} } });
 export const inDbTransaction = (...args) => fail();
 export const longPool = new Proxy({}, { get() { ${bomb} } });
 export const orgContext = (...args) => fail();
 export const pool = new Proxy({}, { get() { ${bomb} } });
-export const registerRequestOrgResolver = (...args) => fail();
+export const registerRequestOrgResolver = () => {};
 export const schema = new Proxy({}, { get() { ${bomb} } });
 export const withBypass = (...args) => fail();
 export const withBypassContext = (...args) => fail();
@@ -35,6 +35,9 @@ export const ambientBypassWithoutTransaction = () => false;`;
 
 registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
     if (
       specifier === "@openbooks/engine/src/platform/db.ts" ||
       specifier === "../platform/db.ts"

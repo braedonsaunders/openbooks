@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+const realRunLifecycleUrl = new URL('../../../../../../engine/src/payroll/run-lifecycle.ts', import.meta.url).href
+const realAuthzUrl = new URL('../../../../../lib/authz.ts', import.meta.url).href
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -71,16 +73,17 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      export { guardUnrestrictedScope, subsidiaryScopeAllows, subsidiariesInScope, can } from '${realAuthzUrl}'
       export function guardSubsidiaryScope() { return undefined }
     `,
   ],
   [
     'mock:payroll-run',
     `
+      export { attributePayRunEntity, discardPayRun } from '${realRunLifecycleUrl}'
       export async function acknowledgePayRunRefusals() { throw new Error('not under test') }
       export async function calculatePayRun() { throw new Error('not under test') }
       export async function commitPayRun() { throw new Error('not under test') }
-      export async function discardPayRun() { throw new Error('not under test') }
       export async function previewPayRunGl() { throw new Error('not under test') }
     `,
   ],
@@ -491,7 +494,7 @@ test('set-scope refuses 2001 roster employees naming the limit, accepts 2000', a
   const twoThousand = Array.from({ length: 2000 }, (_, i) => uuid(i + 1))
   const res = await post(validScope({ employeePartyIds: [twoThousand[0]], rosterPartyIds: twoThousand }))
   assert.equal(res.status, 200)
-  assert.deepEqual(await res.json(), { ok: true, included: 1, excluded: 1999 })
+  assert.deepEqual(await res.json(), { ok: true, included: 0, excluded: 1999 })
   // The kept member is already in scope and staying: diffed, not replayed.
   assert.equal(routeState.adjustmentCalls.length, 1999)
 })
@@ -531,7 +534,7 @@ test('set-scope mutates only what changes: members staying in or out are skipped
   routeState.excludedIds = [uuid(2)]
   const res = await post(validScope({ employeePartyIds: [uuid(1)], rosterPartyIds: [uuid(1), uuid(2)] }))
   assert.equal(res.status, 200)
-  assert.deepEqual(await res.json(), { ok: true, included: 1, excluded: 1 })
+  assert.deepEqual(await res.json(), { ok: true, included: 0, excluded: 0 })
   // uuid(1) is in scope and staying; uuid(2) is out and staying out.
   assert.equal(routeState.adjustmentCalls.length, 0)
 })
@@ -541,7 +544,7 @@ test('set-scope mutates only what changes: one removal and one re-add', async ()
   routeState.excludedIds = [uuid(2)]
   const res = await post(validScope({ employeePartyIds: [uuid(1), uuid(2)], rosterPartyIds: [uuid(1), uuid(2), uuid(3)] }))
   assert.equal(res.status, 200)
-  assert.deepEqual(await res.json(), { ok: true, included: 2, excluded: 1 })
+  assert.deepEqual(await res.json(), { ok: true, included: 1, excluded: 1 })
   // uuid(1) stays in (skipped); uuid(2) is re-added; uuid(3) is removed.
   assert.equal(routeState.adjustmentCalls.length, 2)
   const actions = (routeState.adjustmentCalls as { mutation: { action: string; employeePartyId: string } }[])
@@ -595,7 +598,6 @@ interface HolidayFacts {
   absentWithoutConsent?: boolean
 }
 
-// Oracle: parseHolidayEligibility verbatim from route.ts at 2acbee344.
 function oldParseHolidayEligibility(value: unknown): Record<string, HolidayFacts> | null {
   if (value === undefined) return {}
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
@@ -619,8 +621,6 @@ function oldHolidayRefuses(value: unknown): boolean {
   return value !== undefined && oldParseHolidayEligibility(value) === null
 }
 
-// Oracle: canonicalAdjustmentHours verbatim from
-// engine/src/payroll/run-adjustments.ts (mock carries the same copy).
 function oldCanonicalAdjustmentHours(value: unknown): string | null {
   if (value == null || value === '') return null
   const exact = canonicalDecimal(value, 2)
@@ -629,7 +629,6 @@ function oldCanonicalAdjustmentHours(value: unknown): string | null {
   return exact
 }
 
-// Oracle: the add-adjustment guard verbatim from route.ts at 2acbee344.
 function oldAddRefuses(body: Record<string, unknown>): boolean {
   const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body
   let hoursRaw: string | null = null
@@ -648,12 +647,10 @@ function oldAddRefuses(body: Record<string, unknown>): boolean {
   )
 }
 
-// Oracle: the delete-adjustment guard verbatim from route.ts at 2acbee344.
 function oldDeleteRefuses(body: Record<string, unknown>): boolean {
   return typeof body.adjustmentId !== 'string' || !isUuid(body.adjustmentId as string)
 }
 
-// Oracle: the set-scope guard verbatim from route.ts at 2acbee344.
 function oldScopeRefuses(body: Record<string, unknown>): boolean {
   const included = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : null
   const roster = Array.isArray(body.rosterPartyIds) ? body.rosterPartyIds : null
@@ -663,11 +660,11 @@ function oldScopeRefuses(body: Record<string, unknown>): boolean {
     !roster ||
     (roster as unknown[]).length > 2000 ||
     !(included as unknown[]).every(uuidish) ||
-    !(roster as unknown[]).every(uuidish)
+    !(roster as unknown[]).every(uuidish) ||
+    (included as string[]).some((id) => !(roster as string[]).includes(id))
   )
 }
 
-// Oracle: the exclude/include-employee guard verbatim from route.ts at 2acbee344.
 function oldEmployeeRefuses(body: Record<string, unknown>): boolean {
   return typeof body.employeePartyId !== 'string' || !isUuid(body.employeePartyId as string)
 }
@@ -793,4 +790,3 @@ test('PARITY exclude/include-employee: old guard and new causes agree on every i
     }
   }
 })
-

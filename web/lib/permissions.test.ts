@@ -43,6 +43,7 @@ interface EmailRouteState {
 }
 
 const stateKey = Symbol.for('openbooks.email-route-permission-test')
+const realAuthzUrl = new URL('./authz.ts?email-permission-test-helper', import.meta.url).href
 const emailState: EmailRouteState = {
   permissions: new Set(),
   engineCalls: [],
@@ -90,6 +91,7 @@ const mockSources = new Map<string, string>([
           allowedSubsidiaryIds: null,
         }
       }
+      export { guardUnrestrictedScope } from '${realAuthzUrl}'
     `,
   ],
   [
@@ -129,6 +131,19 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') {
+      return { url: 'data:text/javascript,export {}', shortCircuit: true }
+    }
+    if (
+      context.parentURL?.includes('?email-permission-test-helper') &&
+      !specifier.startsWith('node:')
+    ) {
+      const resolved = nextResolve(specifier, context)
+      if (resolved.url.startsWith('file:') && !resolved.url.includes('?')) {
+        return { ...resolved, url: `${resolved.url}?email-permission-test-helper` }
+      }
+      return resolved
+    }
     // Keep every real emails export (validators included); only sendVia is
     // instrumented below so no test ever touches a real provider.
     if (specifier === '@openbooks/emails') {
@@ -345,7 +360,7 @@ const provisionPostHooks = registerHooks({
     if (specifier === './auth' || specifier.endsWith('/lib/auth')) {
       return { url: 'mock:provision-post-auth', shortCircuit: true }
     }
-    if (specifier === './subsidiaries' || specifier.endsWith('/lib/subsidiaries')) {
+    if ((specifier === './subsidiaries' || specifier.endsWith('/lib/subsidiaries')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { url: 'mock:provision-post-subsidiaries', shortCircuit: true }
     }
     return nextResolve(specifier, context)
@@ -568,9 +583,8 @@ test('the provision post route denies reports-only and out-of-scope principals b
     'the 403 precedes even the scoped run load',
   )
 
-  // Unknown run and restricted-root deny with one indistinguishable 404 shape,
-  // and both leave the kernel untouched — a child-restricted poster can neither
-  // discover nor mutate the root-entity journal.
+  // The root-only posting is an org-wide operation, so a child-restricted
+  // caller receives the named scope remedy before the run is disclosed.
   provisionPostState.rolePermissions = ['gl.post']
   provisionPostState.runExists = false
   const unknownRun = await postProvision(PROVISION_POST_RUN_ID)
@@ -579,11 +593,11 @@ test('the provision post route denies reports-only and out-of-scope principals b
   provisionPostState.runExists = true
   provisionPostState.allowedSubsidiaryIds = new Set([PROVISION_POST_CHILD_ID])
   const outOfScopeRoot = await postProvision(PROVISION_POST_RUN_ID)
-  assert.equal(outOfScopeRoot.status, 404)
+  assert.equal(outOfScopeRoot.status, 403)
   assert.deepEqual(
     await outOfScopeRoot.json(),
-    { error: 'not found' },
-    'an out-of-scope root subsidiary is indistinguishable from a missing run',
+    { error: 'requires unrestricted subsidiary access' },
+    'an org-wide provision post names the scope requirement',
   )
   assert.deepEqual(provisionPostState.engineCalls, [], 'neither denial reached the kernel')
 })

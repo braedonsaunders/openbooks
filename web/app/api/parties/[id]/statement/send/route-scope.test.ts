@@ -99,15 +99,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
   ['mock:intl', `export async function getTranslations() { return (key) => key }`],
   ['mock:bizdate', `export async function businessToday() { return '2026-07-15' }`],
   [
@@ -157,7 +148,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:bizdate'],
   ['@openbooks/engine/src/delivery/email-config.ts', 'mock:email-config'],

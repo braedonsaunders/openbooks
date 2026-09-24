@@ -22,14 +22,15 @@ registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../lib/authz') {
-      return virtual(`export async function getAuthz() {
+      return virtual(`
+      export { can, subsidiariesInScope, subsidiaryScopeAllows, guardSubsidiaryScope, guardUnrestrictedScope, guardRootSubsidiaryScope } from '${root}web/lib/authz.ts'
+      export async function getAuthz() {
         return {
           user: { id: 'user-1', orgId: 'org-1', name: 'Tester', roles: [], isSuperAdmin: false },
+          permissions: globalThis.__documentCreateUnit.can ? new Set(['ar.create']) : new Set(),
           allowedSubsidiaryIds: null,
         }
-      }
-      export function can() { return globalThis.__documentCreateUnit.can }
-      export function subsidiariesInScope() { return true }`)
+      }`)
     }
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)

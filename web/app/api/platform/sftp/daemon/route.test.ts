@@ -156,6 +156,11 @@ const mockSources = new Map<string, string>([
         },
       }
       export const schema = {}
+      export const ambientTenantOrgId = () => null
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const withBypass = (_options, work) => work()
+      export const withBypassContext = (_options, work) => work()
     `,
   ],
 ])
