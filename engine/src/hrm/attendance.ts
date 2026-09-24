@@ -101,13 +101,29 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
     // request behind it. Value treatment for a backdated day goes through a
     // leave request (approval raises the inputs) or a retro run — the
     // recording itself rewrites no paid history, so no retro refusal here.
-    const inserted = (await db.execute<{ id: string }>(sql`
-      insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
-        leave_type_id, source, created_by, updated_by)
-      values (${orgId}, null, ${query.employmentId}, ${onDate}, ${hours},
-        ${query.leaveTypeId}, 'recorded', ${actorId}, ${actorId})
-      returning id
-    `)).rows[0];
+    // The count check above cannot arbitrate two concurrent writers: both
+    // pass it under READ COMMITTED and both insert. The partial day guard
+    // (0337, one live row per employment and day) settles the race in
+    // storage, and the loser lands here — translated to the same named
+    // refusal, never a raw 23505.
+    let inserted: { id: string } | undefined;
+    try {
+      inserted = (await db.execute<{ id: string }>(sql`
+        insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
+          leave_type_id, source, created_by, updated_by)
+        values (${orgId}, null, ${query.employmentId}, ${onDate}, ${hours},
+          ${query.leaveTypeId}, 'recorded', ${actorId}, ${actorId})
+        returning id
+      `)).rows[0];
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new LeaveError(
+          "REFUSED",
+          `an absence is already recorded for ${onDate} — reload the day before recording`,
+        );
+      }
+      throw error;
+    }
     if (!inserted) throw new LeaveError("REFUSED", "the absence was not stored — no row was written; retry the request");
     return { id: inserted.id, employmentId: query.employmentId, onDate, hours, leaveTypeCode: type.code, source: "recorded" as const };
   });

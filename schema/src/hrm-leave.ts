@@ -195,12 +195,23 @@ export const hrmAbsences = pgTable(
     leaveTypeId: uuid("leave_type_id").notNull(),
     source: text("source", { enum: HRM_ABSENCE_SOURCES }).notNull(),
     reversalOf: uuid("reversal_of"),
+    isPreGuardLegacy: boolean("is_pre_guard_legacy").notNull().default(false),
     ...auditColumns,
   },
   (t) => [
     uniqueIndex("hrm_absences_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_absences_employment_day").on(t.orgId, t.employmentId, t.onDate),
     check("hrm_absences_hours", sql`${t.hours} <> 0`),
+    // One live row per (org, employment, day). Two concurrent recordings used
+    // to both pass the application count check and double-count the day
+    // (0337). Reversal rows stay insertable alongside the row they reverse;
+    // marked pre-guard duplicate history is preserved as evidence. The SQL
+    // migration is authoritative: it builds this as a standalone partial
+    // unique index (a constraint cannot be partial), so the mirror states
+    // the partiality here.
+    uniqueIndex("hrm_absences_no_double_record")
+      .on(t.orgId, t.employmentId, t.onDate)
+      .where(sql`${t.reversalOf} IS NULL AND NOT ${t.isPreGuardLegacy}`),
   ],
 );
 
