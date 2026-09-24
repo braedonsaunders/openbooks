@@ -588,7 +588,6 @@ test("the migrated catalog carries the canonical baseline shape", async () => {
         "selection_source",
         "legacy_json_migration",
         "validation_replay",
-        "adminapp2",
       ],
     ],
   );

@@ -140,9 +140,10 @@ const connectorPaths = [
   /^web\/lib\/docs\/articles\/migrate-with-a-connector\.ts$/,
   /^web\/lib\/docs\/index\.ts$/,
   /^web\/messages\/[^/]+\/sync\.json$/,
-  // Catalog cognate pins quote connector-namespace keys (sync.netsuite.*)
-  // the locale files themselves already hold in scope.
-  /^web\/lib\/messages-catalog\.test\.ts$/,
+  // The catalog-parity cognate list declares identical-by-fact strings by
+  // their key, and connector keys live under their namespaces (sync.netsuite.*,
+  // sync.qbd.*), which the locale files above already hold in scope.
+  /^web\/messages\/catalog-parity\.test\.ts$/,
   // Burn-down list of source-pin tests. Its keys are repository-relative test
   // file paths and its values are integer counts, so it names the connector
   // tests already in scope above. It carries no product copy, no executable
