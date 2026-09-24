@@ -28,6 +28,7 @@ const mockSources = new Map<string, string>([
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
       export function guardSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
     `,
   ],
   [

@@ -12,7 +12,7 @@ import {
   type PermanentDifference,
 } from "@openbooks/engine/src/tax-returns/income-tax-provision.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
@@ -48,7 +48,11 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await guardPermission("reports.create");
   if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardSubsidiaryScope(gate, null);
+  // Org-wide write (canonical shape 2 in
+  // engine/src/organization/subsidiary-scope.ts): computing a provision
+  // measures every entity, so a subsidiary-restricted caller gets the named
+  // 403 instead of the silent 404.
+  const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
