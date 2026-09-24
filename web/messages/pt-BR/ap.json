@@ -91,7 +91,7 @@
     "createDraft": "Criar rascunho",
     "createDrafts": "Criar rascunhos",
     "bulkComplete": "Ação em massa concluída: {succeeded} com sucesso, {failed} com falha.",
-    "bulkPartial": "Ação em massa parcialmente concluída: {succeeded} com sucesso, {failed} com falha. Os documentos com falha permanecem selecionados com seus motivos abaixo.",
+    "notProcessed": "Não processado nesta execução — permanece selecionado.", "bulkPartial": "Ação em massa parcialmente concluída: {succeeded} com sucesso, {failed} com falha. Os documentos com falha permanecem selecionados com seus motivos abaixo.",
     "actionFailed": "A ação de captura falhou.",
     "rejected": "Documento rejeitado.",
     "reprocessQueued": "Documento na fila para reprocessamento.",

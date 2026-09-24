@@ -5,7 +5,7 @@ import { enqueueApCapture } from '@openbooks/jobs'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { materializeCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { guardPermission } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
+import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 
 export const runtime = 'nodejs'
@@ -38,16 +38,12 @@ export async function POST(request: Request) {
   if (gate instanceof NextResponse) return gate
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { action?: string; ids?: string[] }
-  // Keep the historical 36-character hex/dash collector so a dash-only
-  // string is still a named id (not dropped into invalid_action), then
-  // refuse it with the same not_found the item routes compute — never bind
-  // it into a uuid column.
-  const ids = Array.isArray(body.ids) ? [...new Set(body.ids.filter((id) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id)))].slice(0, 50) : []
-  if (!ids.length || !['reprocess', 'reject', 'materialize'].includes(String(body.action))) {
-    return NextResponse.json({ error: 'invalid_action' }, { status: 400 })
+  const parsed = parseBulkActionIds(parsedBody.data)
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: parsed.error === 'not_found' ? 404 : 400 })
   }
-  if (!ids.every(isUuid)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  const body = { action: parsed.action }
+  const ids = parsed.ids
   const results: Array<{ id: string; ok: boolean; error?: string; documentId?: string }> = []
   for (const id of ids) {
     try {

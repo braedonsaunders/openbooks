@@ -86,13 +86,19 @@ function row(id: string, filename: string): CaptureListRow {
   }
 }
 
-async function mount(t: TestContext, responder: () => Response): Promise<void> {
+async function mount(
+  t: TestContext,
+  handler: (body: { action: string; ids: string[] }) => Response,
+  count = 2,
+): Promise<void> {
   script.errors = []
   script.successes = []
   ;(globalThis as Record<string, unknown>).__captureToasts = { success: script.successes, error: script.errors }
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    if (String(input) === '/api/ap-capture/actions' && (init?.method ?? 'GET') === 'POST') return responder()
+    if (String(input) === '/api/ap-capture/actions' && (init?.method ?? 'GET') === 'POST') {
+      return handler(JSON.parse(String(init?.body)) as { action: string; ids: string[] })
+    }
     throw new Error(`unexpected fetch ${String(input)}`)
   }) as typeof fetch
   t.after(() => {
@@ -108,11 +114,12 @@ async function mount(t: TestContext, responder: () => Response): Promise<void> {
     host.remove()
     for (const node of [...document.body.children]) node.remove()
   })
+  const rows = Array.from({ length: count }, (_, i) => row(`c${i + 1}`, `invoice-${i + 1}.pdf`))
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <CaptureList
-          rows={[row('c1', 'invoice-1.pdf'), row('c2', 'invoice-2.pdf')]}
+          rows={rows}
           currentParams={{}}
           canCreate
           uploadDisabled
@@ -147,6 +154,7 @@ test('a partial bulk result names each failed document with its reason and keeps
         { id: 'c2', ok: false, error: 'duplicate invoice INV-9' },
       ],
     }),
+    2,
   )
   await click(checkboxFor('invoice-1.pdf'))
   await click(checkboxFor('invoice-2.pdf'))
@@ -168,11 +176,47 @@ test('a partial bulk result names each failed document with its reason and keeps
 })
 
 test('a non-JSON 502 on a bulk action toasts the translated fallback, never a SyntaxError', async (t) => {
-  await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
+  await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }), 2)
   await click(checkboxFor('invoice-1.pdf'))
   const drafts = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Create drafts'))
   assert.ok(drafts, 'bulk actions must appear once rows are selected')
   await click(drafts as HTMLButtonElement)
   assert.deepEqual(script.errors, ['The capture action failed. (status 502)'])
   assert.equal(document.querySelector('[role="alert"]'), null, 'a transport failure names no per-item reasons')
+})
+
+test('a 60-row selection is attempted in bounded batches and unanswered ids stay selected', async (t) => {
+  const batches: string[][] = []
+  await mount(
+    t,
+    (body) => {
+      batches.push(body.ids)
+      // First batch fully answered; second batch answers only 5 of 10 —
+      // the old silent-truncation shape. Every requested id must still get
+      // exactly one verdict.
+      const answered = batches.length === 1 ? body.ids : body.ids.slice(0, 5)
+      return Response.json({ results: answered.map((id) => ({ id, ok: true })) })
+    },
+    60,
+  )
+  const selectAll = document.querySelector('label input[type="checkbox"]') as HTMLInputElement | null
+  assert.ok(selectAll, 'the select-all checkbox must render')
+  await click(selectAll)
+  const reject = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Reject'))
+  assert.ok(reject, 'bulk actions must appear once rows are selected')
+  await click(reject as HTMLButtonElement)
+  assert.deepEqual(
+    batches.map((batch) => batch.length),
+    [50, 10],
+    'no request may exceed the route batch ceiling',
+  )
+  assert.equal(script.errors.length, 1)
+  assert.match(script.errors[0]!, /55 succeeded, 5 failed/)
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the unanswered ids must render inline')
+  assert.match(alert.textContent ?? '', /Not processed in this run/)
+  for (let i = 56; i <= 60; i++) {
+    assert.equal(checkboxFor(`invoice-${i}.pdf`).checked, true, `unanswered invoice-${i}.pdf must stay selected`)
+  }
+  assert.equal(checkboxFor('invoice-1.pdf').checked, false, 'an answered row must leave the selection')
 })

@@ -91,7 +91,7 @@
     "createDraft": "下書きを作成",
     "createDrafts": "下書きを作成",
     "bulkComplete": "一括処理が完了しました: {succeeded} 件成功、{failed} 件失敗。",
-    "bulkPartial": "一括処理が部分的に完了しました: {succeeded} 件成功、{failed} 件失敗。失敗したドキュメントは理由とともに選択されたままになります。",
+    "notProcessed": "今回未処理 — 選択されたままです。", "bulkPartial": "一括処理が部分的に完了しました: {succeeded} 件成功、{failed} 件失敗。失敗したドキュメントは理由とともに選択されたままになります。",
     "actionFailed": "取込アクションに失敗しました。",
     "rejected": "ドキュメントを却下しました。",
     "reprocessQueued": "ドキュメントを再処理のためキューに追加しました。",

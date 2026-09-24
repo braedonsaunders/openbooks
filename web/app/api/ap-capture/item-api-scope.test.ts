@@ -110,13 +110,17 @@ test("ap-capture malformed-id authz double exports the PATCH subsidiary gate", (
 });
 
 test("ap-capture actions refuse a 36-hyphen id as not_found before a uuid bind", () => {
+  // The id parse lives in lib/api/bulk-ids.ts (pure, behaviour-tested in
+  // bulk-ids.test.ts); the route only wires it to statuses.
   const src = source("actions/route.ts");
-  assert.match(src, /import \{ isUuid \}/);
-  assert.match(src, /if \(!ids\.every\(isUuid\)\)/);
-  assert.match(src, /error: 'not_found'/);
-  assert.match(src, /status: 404/);
+  assert.match(src, /parseBulkActionIds\(parsedBody\.data\)/, "the route must parse ids through the shared bulk parser");
+  assert.match(src, /error === 'not_found' \? 404 : 400/, "not_found stays a 404, refusals stay 400");
+  const parse = source("../../../lib/api/bulk-ids.ts");
+  assert.match(parse, /import \{ isUuid \}/);
+  assert.match(parse, /if \(!ids\.every\(isUuid\)\)/);
+  assert.match(parse, /error: 'not_found'/);
   assert.match(
-    src,
+    parse,
     /\[0-9a-f-\]\{36\}/,
     "the 36-character collector must still name a dash string so it 404s instead of becoming invalid_action",
   );
