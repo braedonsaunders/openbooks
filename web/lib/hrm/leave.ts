@@ -94,6 +94,7 @@ export interface LeaveQueueData {
   recordButton: string
   calendarTitle: string
   calendarDepartmentLabel: string
+  calendarAllDepartments: string
   calendarFromLabel: string
   calendarToLabel: string
   calendarDays: { date: string; entries: { workerName: string; hours: string; leaveTypeCode: string }[] }[]
@@ -187,6 +188,7 @@ export async function loadLeaveQueue(
     recordButton: t('leave.recordButton'),
     calendarTitle: t('leave.calendarTitle'),
     calendarDepartmentLabel: t('leave.calendarDepartmentLabel'),
+    calendarAllDepartments: t('leave.calendarAllDepartments'),
     calendarFromLabel: t('leave.calendarFromLabel'),
     calendarToLabel: t('leave.calendarToLabel'),
     calendarEmpty: t('leave.calendarEmpty'),
