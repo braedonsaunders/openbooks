@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { computeTaxReturn, TaxReturnError } from "./return.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
-// A state-return install maps only jurisdiction-matched codes, so an active
-// code with period activity can map to no box — and the return used to file
+// A state-return install maps only jurisdiction-matched codes, so a code with
+// period activity can map to no box — and the return used to file
 // short silently. The compute now refuses by name when the unmapped code
 // belongs on THIS return (its jurisdiction, or the catalog's expected code
 // for the form). Another jurisdiction's codes stay another return's
@@ -102,6 +104,72 @@ test("the catalog-expected code with activity but no jurisdiction refuses", { sk
     const codeId = await seedCode(org.orgId, "US-NY-ST", null, "US");
     await postTaxActivity(org, codeId);
     await rejectsUnderstating(org, "US-NY-ST");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("deactivating a code does not hide its posted in-period activity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const nyId = await seedNyForm(org.orgId);
+    const codeId = await seedCode(org.orgId, "US-NY-INACTIVE", nyId, "US");
+    await postTaxActivity(org, codeId);
+    await db.execute(sql`update tax_codes set is_active = false where org_id = ${org.orgId} and id = ${codeId}`);
+    await rejectsUnderstating(org, "US-NY-INACTIVE");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a voided source document is not return-relevant unmapped activity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const nyId = await seedNyForm(org.orgId);
+    const codeId = await seedCode(org.orgId, "US-NY-VOIDED", nyId, "US");
+    const documentId = randomUUID();
+    const lineId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
+      values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-VOIDED-NY',
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date}, 'CAD', 1,
+              '200.0000', '20.0000', '220.0000')`);
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
+         tax_amount, tax_code_id, quantity, unit_price)
+      values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '200.0000',
+              '200.0000', '20.0000', ${codeId}, '1', '200.0000')`);
+    await db.execute(sql`
+      insert into document_line_tax_components
+        (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+         tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+         price_includes_tax, compound_on_previous, rounding_scale, collected_account_id,
+         paid_account_id, withholding_account_id, overridden)
+      values (${org.orgId}, ${lineId}, ${codeId}, 1, '10', '200.0000', '20.0000',
+              '20.0000', '0.0000', 'standard', false, false, 2, ${org.accounts.taxOutput},
+              null, null, false)`);
+    await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${documentId}`);
+    await postDocument(documentId, { control: {
+      ar: org.accounts.ar,
+      ap: org.accounts.ap,
+      bank: org.accounts.bank,
+    } });
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const voidResult = await requestDocumentVoid({
+      documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "voided tax transaction probe",
+      reversalDate: org.date,
+      source: "api",
+    });
+    assert.equal(voidResult.status, "voided");
+
+    const result = await computeTaxReturn(org.orgId, FORM, org.date, org.date);
+    assert.equal(result.boxes.length, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }

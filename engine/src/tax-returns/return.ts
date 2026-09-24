@@ -229,6 +229,28 @@ export interface TaxReturnGlSource {
   basis: string;
 }
 
+/** Shared economic-activity window for return sums and the unmapped-code
+ * refusal. A code remains return-relevant after deactivation: posted evidence
+ * is historical and must not disappear from the same period's sum or guard.
+ * Voided source documents, on the other hand, are not economic activity. */
+function journalReturnActivityPredicate(input: {
+  from: string;
+  to: string;
+  primaryBookId: string;
+  scopeIds: string[] | null;
+}): ReturnType<typeof sql> {
+  const lineScope = input.scopeIds
+    ? sql`and l.subsidiary_id = any(${uuidArray(input.scopeIds)}::uuid[])`
+    : sql``;
+  return sql`
+    and e.status in ('posted', 'reversed')
+    and e.posting_date between ${input.from} and ${input.to}
+    and e.book_id = ${input.primaryBookId}
+    and (vd.id is null or vd.status <> 'voided')
+    ${lineScope}
+  `;
+}
+
 /**
  * Plan a return from its configured rows. Several rows may share a line code —
  * a box like GST34 line 103 sums GST + every HST rate — so rows collapse to one
@@ -695,9 +717,9 @@ async function sumReturnGlRaw(
   },
 ): Promise<Map<string, string>> {
   const { orgId, formCode, from, to, primaryBookId, orgTaxCollected, orgTaxPaid, glSources } = opts;
-  const jlScope = opts.scopeIds
-    ? sql`and l.subsidiary_id = any(${uuidArray(opts.scopeIds)}::uuid[])`
-    : sql``;
+  const journalActivity = journalReturnActivityPredicate({
+    from, to, primaryBookId, scopeIds: opts.scopeIds,
+  });
   const docScope =
     opts.scopeIds === null
       ? sql``
@@ -728,9 +750,7 @@ async function sumReturnGlRaw(
           join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
           left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
-           and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
-           and e.book_id = ${primaryBookId} and (vd.id is null or vd.status <> 'voided')
-           ${jlScope}
+           ${journalActivity}
            and (
              exists (
                select 1
@@ -770,9 +790,7 @@ async function sumReturnGlRaw(
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
-           and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
-           and e.book_id = ${primaryBookId} and (vd.id is null or vd.status <> 'voided')
-           ${jlScope}`));
+           ${journalActivity}`));
       total = r.rows[0]?.total ?? "0";
     } else {
       continue; // taxable_base sources are summed once per box below.
@@ -1015,7 +1033,7 @@ async function resolveReturnRegistration(
  * Only codes that belong on THIS return count: codes scoped to the form's
  * jurisdiction, plus the codes the return-pack catalog declares for the
  * form (a hand-made code carrying the expected code string but no
- * jurisdiction). Any other active code with activity is another return's
+ * jurisdiction). Any other code with activity is another return's
  * business — a multi-jurisdiction org files each return separately.
  */
 async function assertNoUnmappedActivity(
@@ -1035,14 +1053,14 @@ async function assertNoUnmappedActivity(
   const pack = countryTaxPackForReturn(formCode);
   const expectedCodes = pack ? packTaxCodesForReturn(pack, formCode).map((d) => d.code) : [];
   if (!formJurisdictionId && expectedCodes.length === 0) return;
-  const jlScope = scopeIds ? sql`and l.subsidiary_id = any(${uuidArray(scopeIds)}::uuid[])` : sql``;
+  const journalActivity = journalReturnActivityPredicate({ from, to, primaryBookId, scopeIds });
   const codeMatch = expectedCodes.length > 0
     ? sql`or tc.code in (${sql.join(expectedCodes.map((code) => sql`${code}`), sql`, `)})`
     : sql``;
   const rows = (await runner.execute<{ code: string }>(sql`
     select tc.code
       from tax_codes tc
-     where tc.org_id = ${orgId} and tc.is_active
+     where tc.org_id = ${orgId}
        and (
          ${formJurisdictionId ? sql`tc.jurisdiction_id = ${formJurisdictionId}` : sql`false`}
          ${codeMatch}
@@ -1052,17 +1070,15 @@ async function assertNoUnmappedActivity(
          select 1
            from journal_lines l
            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+           left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
           where l.org_id = ${orgId} and l.tax_code_id = tc.id
-            and e.status in ('posted', 'reversed')
-            and e.posting_date between ${from} and ${to}
-            and e.book_id = ${primaryBookId}
-            ${jlScope}
+            ${journalActivity}
        )
      order by tc.code`));
   if (rows.rows.length === 0) return;
   const codes = rows.rows.map((r) => `"${r.code}"`).join(", ");
   throw new TaxReturnError(
-    `tax return "${formCode}" understates: active tax code${rows.rows.length === 1 ? "" : "s"} ${codes} ` +
+    `tax return "${formCode}" understates: tax code${rows.rows.length === 1 ? "" : "s"} ${codes} ` +
     `has activity in ${from} to ${to} but maps to no box — map each code to a box ` +
     `(reinstall the "${formCode}" library form after assigning its jurisdiction), ` +
     `otherwise the filed return omits that activity`,
