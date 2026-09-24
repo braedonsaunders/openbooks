@@ -180,3 +180,38 @@ export async function lockProjectForScope(
 export async function withScopeSnapshot<T>(orgId: string, fn: () => Promise<T>): Promise<T> {
   return withOrgTransaction(orgId, fn, { isolationLevel: "REPEATABLE READ" });
 }
+
+export type DraftSubsidiaryResolution =
+  | { ok: true; subsidiaryId: string | null }
+  | { ok: false; error: "subsidiary_required" | "subsidiary_out_of_scope" };
+
+/**
+ * Draft-factory subsidiary rule: every draft or create factory takes the
+ * actor's scope as a REQUIRED parameter and assigns an in-scope subsidiary —
+ * the actor's single allowed one, or a required choice — never NULL or the
+ * org root for a restricted actor, validated BEFORE any insert or numbering.
+ * Unrestricted callers (explicit null) keep their requested subsidiary,
+ * including an explicit null for the shared chart. A restricted caller naming
+ * an out-of-scope subsidiary is refused by name; one that cannot be assigned
+ * exactly one subsidiary (none, or several with no choice) is told to choose.
+ * Both refusals are named, never silent nulls: a draft the actor's own reads
+ * cannot observe must never be minted.
+ */
+export function resolveDraftSubsidiary(
+  scope: ReadonlySet<string> | null,
+  requested?: string | null,
+): DraftSubsidiaryResolution {
+  if (scope === null) return { ok: true, subsidiaryId: requested ?? null };
+  if (requested !== null && requested !== undefined && requested !== "") {
+    return scope.has(requested)
+      ? { ok: true, subsidiaryId: requested }
+      : { ok: false, error: "subsidiary_out_of_scope" };
+  }
+  if (scope.size === 1) {
+    const only = [...scope][0];
+    return only === undefined
+      ? { ok: false, error: "subsidiary_required" }
+      : { ok: true, subsidiaryId: only };
+  }
+  return { ok: false, error: "subsidiary_required" };
+}
