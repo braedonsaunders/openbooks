@@ -208,3 +208,24 @@ test('a non-JSON 500 on delete names the failure and releases the button', async
   const del = findButton(document.body, 'Delete')
   assert.equal(del.disabled, false, 'busy releases after the failed delete')
 })
+
+test('autosave checks status first and surfaces a named refusal', async (t) => {
+  const { host, root } = await mount({ create: true })
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  on('PATCH', '/api/insights/dashboards/d-1', async () =>
+    Response.json({ error: 'the dashboard changed in another session' }, { status: 409 }),
+  )
+  const name = host.querySelector('input')
+  assert.ok(name)
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+    setter?.call(name, 'Changed dashboard')
+    name.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 750))
+    await tick()
+  })
+  assert.ok(errors().some((message) => message.includes('changed in another session')))
+})

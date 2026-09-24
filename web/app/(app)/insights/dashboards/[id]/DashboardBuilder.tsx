@@ -110,12 +110,11 @@ export function DashboardBuilder({
       // from the exact-token GET before the first write when necessary.
       if (!revisionRef.current) {
         const current = await fetch(`/api/insights/dashboards/${dashboard.id}`)
+        if (!current.ok) throw new Error(await readApiErrorMessage(current, t('autosave.failed')))
         const currentData = (await current.json().catch(() => ({}))) as {
           updated_at?: unknown
         }
-        if (!current.ok || typeof currentData.updated_at !== 'string') {
-          throw new Error(t('autosave.failed'))
-        }
+        if (typeof currentData.updated_at !== 'string') throw new Error(t('autosave.failed'))
         revisionRef.current = currentData.updated_at
       }
 
@@ -127,16 +126,16 @@ export function DashboardBuilder({
           expectedUpdatedAt: revisionRef.current,
         }),
       })
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: unknown
-        updated_at?: unknown
-      }
       if (!res.ok) {
+        const message = await readApiErrorMessage(res, t('autosave.failed'))
         if (pending.sequence === saveSequenceRef.current && pendingSaveRef.current === null) {
           setSaveState('error')
-          toast.error(typeof data.error === 'string' ? data.error : t('autosave.failed'))
+          toast.error(message)
         }
         return
+      }
+      const data = (await res.json().catch(() => ({}))) as {
+        updated_at?: unknown
       }
 
       if (typeof data.updated_at !== 'string') throw new Error(t('autosave.failed'))
