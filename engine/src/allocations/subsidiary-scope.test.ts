@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  allocationRuleVisible,
   allocationScopeVisible,
   allocationTouchedSubsidiaries,
   previewPinError,
@@ -75,4 +76,39 @@ test("rule subsidiary filter intersects the pin", () => {
   const refusal = sourceScopeViolation("Sweep", SUB_A, [SUB_B]) ?? "";
   assert.match(refusal, /Sweep/);
   assert.match(refusal, new RegExp(SUB_A));
+});
+
+test("rule visibility needs every touched source and target", () => {
+  const scoped = { sourceSubsidiaryIds: [SUB_A], targetSubsidiaryIds: [SUB_A] };
+  assert.equal(allocationRuleVisible(null, scoped), true);
+  assert.equal(allocationRuleVisible(new Set([SUB_A]), scoped), true);
+  assert.equal(allocationRuleVisible(new Set([SUB_B]), scoped), false);
+  // A B target on A sources touches both: the A caller is refused.
+  assert.equal(
+    allocationRuleVisible(new Set([SUB_A]), { sourceSubsidiaryIds: [SUB_A], targetSubsidiaryIds: [SUB_B] }),
+    false,
+  );
+  // Null targets inherit the already-checked sources.
+  assert.equal(
+    allocationRuleVisible(new Set([SUB_A]), { sourceSubsidiaryIds: [SUB_A], targetSubsidiaryIds: [null] }),
+    true,
+  );
+  // No source filter means every source: org-wide, restricted callers never qualify.
+  assert.equal(allocationRuleVisible(new Set([SUB_A, SUB_B]), { targetSubsidiaryIds: [SUB_A] }), false);
+  assert.equal(allocationRuleVisible(new Set([SUB_A]), { sourceSubsidiaryIds: [], targetSubsidiaryIds: [SUB_A] }), false);
+  assert.equal(allocationRuleVisible(new Set([SUB_A]), { sourceSubsidiaryIds: [SUB_A], targetSubsidiaryIds: [] }), true);
+  // Dynamic subsidiary targets name their entities in include; an unlisted
+  // dynamic target is org-wide.
+  const dynamicListed = {
+    sourceSubsidiaryIds: [SUB_A],
+    targetKind: "dynamic",
+    dynamicDimension: "subsidiary",
+    dynamicIncludes: [SUB_A],
+    targetSubsidiaryIds: [],
+  };
+  assert.equal(allocationRuleVisible(new Set([SUB_A]), dynamicListed), true);
+  assert.equal(allocationRuleVisible(new Set([SUB_B]), dynamicListed), false);
+  const dynamicOpen = { ...dynamicListed, dynamicIncludes: [] as string[] };
+  assert.equal(allocationRuleVisible(new Set([SUB_A, SUB_B]), dynamicOpen), false);
+  assert.equal(allocationRuleVisible(null, dynamicOpen), true);
 });

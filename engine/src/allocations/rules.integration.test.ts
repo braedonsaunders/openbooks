@@ -47,7 +47,7 @@ async function publishedRule(
     },
     AUDIT,
   );
-  const published = await publishVersion(draft.version.id, { orgId, ...AUDIT });
+  const published = await publishVersion(draft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
   return { ruleId: created.rule.id, versionId: published.version.id };
 }
 
@@ -86,9 +86,9 @@ test("publish freezes the definition and stamps a recomputable hash", { skip: !p
       },
     );
     // The service refuses them too.
-    await assert.rejects(updateDraftVersion(versionId, { orgId, basisKind: "driver" }, AUDIT), AllocationRuleError);
+    await assert.rejects(updateDraftVersion(versionId, { orgId, basisKind: "driver", allowedSubsidiaryIds: null }, AUDIT), AllocationRuleError);
     await assert.rejects(
-      replaceTargets(versionId, { orgId, targets: [{ fixedPercent: "100" }] }, AUDIT),
+      replaceTargets(versionId, { orgId, targets: [{ fixedPercent: "100" }], allowedSubsidiaryIds: null }, AUDIT),
       AllocationRuleError,
     );
   } finally {
@@ -113,7 +113,7 @@ test("publish refuses a stepped basis by name", { skip: !process.env.OPENBOOKS_D
       AUDIT,
     );
     await assert.rejects(
-      publishVersion(draft.version.id, { orgId, ...AUDIT }),
+      publishVersion(draft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null }),
       (error: unknown) => {
         if (!(error instanceof AllocationRuleError) || error.code !== "INVALID") return false;
         const stepped = (error.problems ?? []).filter((problem) => problem.code === "stepped_basis");
@@ -142,13 +142,13 @@ test("publish refuses overlapping windows and advances the current pointer", { s
       { orgId, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
-    await publishVersion(v1.version.id, { orgId, ...AUDIT });
+    await publishVersion(v1.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     const overlapping = await createDraftVersion(
       rule.id,
       { orgId, effectiveFrom: "2026-06-30", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
-    await assert.rejects(publishVersion(overlapping.version.id, { orgId, ...AUDIT }), (error: unknown) => {
+    await assert.rejects(publishVersion(overlapping.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null }), (error: unknown) => {
       assert.ok(error instanceof AllocationRuleError);
       assert.ok(error.problems?.some((p) => p.code === "effective_overlap"));
       return true;
@@ -158,7 +158,7 @@ test("publish refuses overlapping windows and advances the current pointer", { s
       { orgId, effectiveFrom: "2026-07-01", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
-    const published = await publishVersion(successor.version.id, { orgId, ...AUDIT });
+    const published = await publishVersion(successor.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     assert.equal(published.version.versionNo, 3);
     const head = await db.execute<{ current_version_id: string }>(
       sql`select current_version_id from allocation_rules where org_id = ${orgId} and id = ${rule.id}`,
@@ -179,8 +179,8 @@ test("listRulesInEffect honours window, status and activity in one ordered query
     // Inactive rule stays invisible.
     const quiet = await createRule({ orgId, key: "quiet-rule", name: "Quiet", mode: "period", sortOrder: 2 }, AUDIT);
     const quietDraft = await createDraftVersion(quiet.rule.id, { orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] }, AUDIT);
-    await publishVersion(quietDraft.version.id, { orgId, ...AUDIT });
-    await updateRule(quiet.rule.id, { orgId, isActive: false }, AUDIT);
+    await publishVersion(quietDraft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
+    await updateRule(quiet.rule.id, { orgId, isActive: false, allowedSubsidiaryIds: null }, AUDIT);
     // Expired window stays invisible on later dates.
     await publishedRule(orgId, { key: "old-rule", sortOrder: 5, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31" });
 
@@ -206,7 +206,7 @@ test("book_scope books is refused for unknown books and honoured by the listing"
       { orgId, effectiveFrom: "2026-01-01", bookScope: "books", bookIds: ["00000000-0000-0000-0000-000000000000"], targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
-    await assert.rejects(publishVersion(ghost.version.id, { orgId, ...AUDIT }), (error: unknown) => {
+    await assert.rejects(publishVersion(ghost.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null }), (error: unknown) => {
       assert.ok(error instanceof AllocationRuleError);
       assert.ok(error.problems?.some((p) => p.code === "book_scope"));
       return true;
@@ -216,7 +216,7 @@ test("book_scope books is refused for unknown books and honoured by the listing"
       { orgId, effectiveFrom: "2026-01-01", bookScope: "books", bookIds: [bookId], targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
-    await publishVersion(live.version.id, { orgId, ...AUDIT });
+    await publishVersion(live.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     const forBook = await listRulesInEffect({ orgId, mode: "period", onDate: "2026-07-15", bookId });
     assert.deepEqual(forBook.map((r) => r.rule.key), ["book-sweep"]);
     const elsewhere = await listRulesInEffect({
@@ -241,7 +241,7 @@ test("new version from current copies the definition for editing", { skip: !proc
       { orgId, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "60" }, { fixedPercent: "40" }] },
       AUDIT,
     );
-    await publishVersion(first.version.id, { orgId, ...AUDIT });
+    await publishVersion(first.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     const next = await createDraftVersion(rule.id, { orgId, fromVersionId: first.version.id }, AUDIT);
     assert.equal(next.version.versionNo, 2);
     assert.equal(next.version.status, "draft");
@@ -251,13 +251,13 @@ test("new version from current copies the definition for editing", { skip: !proc
     );
     // The copy inherits the old window, so it cannot publish until it moves.
     assert.equal(next.version.effectiveTo, "2026-06-30");
-    await assert.rejects(publishVersion(next.version.id, { orgId, ...AUDIT }), AllocationRuleError);
+    await assert.rejects(publishVersion(next.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null }), AllocationRuleError);
     await updateDraftVersion(
       next.version.id,
-      { orgId, effectiveFrom: "2026-07-01", effectiveTo: null, memoTemplate: "sweep {{period.name}}" },
+      { orgId, effectiveFrom: "2026-07-01", effectiveTo: null, memoTemplate: "sweep {{period.name}}", allowedSubsidiaryIds: null },
       AUDIT,
     );
-    const edited = await publishVersion(next.version.id, { orgId, ...AUDIT });
+    const edited = await publishVersion(next.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     assert.equal(edited.version.memoTemplate, "sweep {{period.name}}");
   } finally {
     await dropScratchOrg(orgId);
@@ -270,8 +270,8 @@ test("retire clears the current pointer and audit evidence records every transit
     const created = await createRule({ orgId, key: "retire-sweep", name: "Sweep", mode: "period" }, AUDIT);
     const rule = created.rule;
     const draft = await createDraftVersion(rule.id, { orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] }, AUDIT);
-    const published = await publishVersion(draft.version.id, { orgId, ...AUDIT });
-    await retireVersion(published.version.id, { orgId, actorId: null, reason: "superseded" });
+    const published = await publishVersion(draft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
+    await retireVersion(published.version.id, { orgId, actorId: null, reason: "superseded", allowedSubsidiaryIds: null });
     const live = await listRulesInEffect({ orgId, mode: "period", onDate: "2026-07-15" });
     assert.deepEqual(live, []);
     const head = await db.execute<{ current_version_id: string | null }>(
@@ -290,7 +290,7 @@ test("retire clears the current pointer and audit evidence records every transit
       assert.ok("before" in changes && "after" in changes, "every audit write carries before/after");
     }
     // Retired versions are frozen too.
-    await assert.rejects(updateDraftVersion(published.version.id, { orgId, memoTemplate: "x" }, AUDIT), AllocationRuleError);
+    await assert.rejects(updateDraftVersion(published.version.id, { orgId, memoTemplate: "x", allowedSubsidiaryIds: null }, AUDIT), AllocationRuleError);
   } finally {
     await dropScratchOrg(orgId);
   }
@@ -314,12 +314,12 @@ test("mutations return revision tokens that guard stale writes", { skip: !proces
   try {
     const created = await createRule({ orgId, key: "rev-rule", name: "Rev", mode: "period" }, AUDIT);
     assert.match(created.revision, REVISION_PATTERN);
-    const updated = await updateRule(created.rule.id, { orgId, name: "Rev 2", expectedRevision: created.revision }, AUDIT);
+    const updated = await updateRule(created.rule.id, { orgId, name: "Rev 2", expectedRevision: created.revision, allowedSubsidiaryIds: null }, AUDIT);
     assert.match(updated.revision, REVISION_PATTERN);
     assert.notEqual(updated.revision, created.revision);
     // Replaying the old token is a stale write.
     await assert.rejects(
-      updateRule(created.rule.id, { orgId, name: "Stale", expectedRevision: created.revision }, AUDIT),
+      updateRule(created.rule.id, { orgId, name: "Stale", expectedRevision: created.revision, allowedSubsidiaryIds: null }, AUDIT),
       (error: unknown) => error instanceof AllocationRuleError && error.code === "STALE",
     );
     // The drawer flow works the same on versions and targets.
@@ -331,17 +331,17 @@ test("mutations return revision tokens that guard stale writes", { skip: !proces
     assert.match(draft.revision, REVISION_PATTERN);
     const edited = await updateDraftVersion(
       draft.version.id,
-      { orgId, memoTemplate: "hi", expectedRevision: draft.revision },
+      { orgId, memoTemplate: "hi", expectedRevision: draft.revision, allowedSubsidiaryIds: null },
       AUDIT,
     );
     assert.match(edited.revision, REVISION_PATTERN);
     await assert.rejects(
-      replaceTargets(draft.version.id, { orgId, targets: [{ fixedPercent: "100" }], expectedRevision: draft.revision }, AUDIT),
+      replaceTargets(draft.version.id, { orgId, targets: [{ fixedPercent: "100" }], expectedRevision: draft.revision, allowedSubsidiaryIds: null }, AUDIT),
       (error: unknown) => error instanceof AllocationRuleError && error.code === "STALE",
     );
-    const published = await publishVersion(draft.version.id, { orgId, ...AUDIT });
+    const published = await publishVersion(draft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     assert.match(published.revision, REVISION_PATTERN);
-    const retired = await retireVersion(published.version.id, { orgId, ...AUDIT });
+    const retired = await retireVersion(published.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     assert.match(retired.revision, REVISION_PATTERN);
   } finally {
     await dropScratchOrg(orgId);
@@ -359,8 +359,8 @@ test("listRuleHeads filters and summarizes current versions", { skip: !process.e
       { orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
-    await publishVersion(quietDraft.version.id, { orgId, ...AUDIT });
-    await updateRule(quiet.rule.id, { orgId, isActive: false }, AUDIT);
+    await publishVersion(quietDraft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
+    await updateRule(quiet.rule.id, { orgId, isActive: false, allowedSubsidiaryIds: null }, AUDIT);
 
     const all = await listRuleHeads(orgId);
     assert.deepEqual(all.map((h) => h.rule.key), ["heads-quiet", "heads-a", "heads-b"]);
@@ -393,7 +393,7 @@ test("getRuleDetail returns the head with its version timeline", { skip: !proces
       { orgId, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
-    await publishVersion(first.version.id, { orgId, ...AUDIT });
+    await publishVersion(first.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     await createDraftVersion(created.rule.id, { orgId, fromVersionId: first.version.id }, AUDIT);
 
     const detail = await getRuleDetail(orgId, created.rule.id);

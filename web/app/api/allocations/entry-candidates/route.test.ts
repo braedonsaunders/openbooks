@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextResponse } from "next/server";
+import { allocationRuleVisible } from "@openbooks/engine/src/allocations/subsidiary-scope.ts";
+
+// The route's scope wrapper (web/lib/allocations-scope.ts) cannot load here
+// — it carries the server-only boundary — so this double maps the canned
+// rule onto the REAL engine predicate: the refusal decision under test is
+// production code, only the web-layer import is stubbed.
+const scopeVisibleKey = Symbol.for("openbooks.entry-candidates-scope-visible");
+(globalThis as typeof globalThis & Record<symbol, unknown>)[scopeVisibleKey] = allocationRuleVisible;
 
 // Boundary contract for GET /api/allocations/entry-candidates (shard A9):
 // feature + permission gates, query validation, subsidiary scope, and the
@@ -23,6 +31,7 @@ interface CannedVersion {
   __specificity?: number;
   applyPolicy: string;
   documentKinds?: string[] | null;
+  dimensionFilters?: Record<string, string[]>;
 }
 
 interface CannedRule {
@@ -30,6 +39,7 @@ interface CannedRule {
   name: string;
   sortOrder: number;
   version: CannedVersion & { id: string };
+  targets?: { subsidiaryId?: string | null }[];
 }
 
 interface RouteState {
@@ -59,7 +69,14 @@ const deniedKey = Symbol.for("openbooks.entry-candidates-route-denied");
 
 function cannedRule(
   key: string,
-  overrides: Partial<CannedRule> & { policy?: string; match?: boolean; specificity?: number; documentKinds?: string[] | null } = {},
+  overrides: Partial<CannedRule> & {
+    policy?: string;
+    match?: boolean;
+    specificity?: number;
+    documentKinds?: string[] | null;
+    dimensionFilters?: Record<string, string[]>;
+    targets?: { subsidiaryId?: string | null }[];
+  } = {},
 ): CannedRule {
   return {
     key,
@@ -69,9 +86,11 @@ function cannedRule(
       id: `00000000-0000-4000-8000-00000000b${key.slice(-3)}`,
       applyPolicy: overrides.policy ?? "manual",
       documentKinds: overrides.documentKinds ?? null,
+      dimensionFilters: overrides.dimensionFilters,
       __match: overrides.match ?? true,
       __specificity: overrides.specificity ?? 0,
     },
+    targets: overrides.targets,
   };
 }
 
@@ -106,6 +125,19 @@ const mockSources = new Map<string, string>([
      }`,
   ],
   [
+    "mock:allocations-scope",
+    `export function allocationRuleScopeVisible(allowed, rule) {
+      const real = globalThis[Symbol.for('openbooks.entry-candidates-scope-visible')]
+      return real(allowed, {
+        sourceSubsidiaryIds: rule.version.dimensionFilters?.subsidiaryIds,
+        targetKind: rule.version.targetKind,
+        dynamicDimension: rule.version.dynamicTarget?.dimension,
+        dynamicIncludes: rule.version.dynamicTarget?.include,
+        targetSubsidiaryIds: (rule.targets ?? []).map((t) => t.subsidiaryId),
+      })
+    }`,
+  ],
+  [
     "mock:match",
     `export async function listEntryRulesInEffect(request) {
        const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
@@ -134,7 +166,7 @@ const mockSources = new Map<string, string>([
            bookIds: [],
            documentKinds: canned.version.documentKinds ?? null,
            accountScope: { kind: 'any' },
-           dimensionFilters: {},
+           dimensionFilters: canned.version.dimensionFilters ?? {},
            applyPolicy: canned.version.applyPolicy,
            sourceMeasure: 'period_activity',
            basisKind: 'fixed_percent',
@@ -157,7 +189,7 @@ const mockSources = new Map<string, string>([
            __match: canned.version.__match,
            __specificity: canned.version.__specificity,
          },
-         targets: [],
+         targets: canned.targets ?? [],
        }))
      }
      export function matchLine(version, line) {
@@ -181,6 +213,7 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
+  ["../../../../lib/allocations-scope", "mock:allocations-scope"],
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/features", "mock:features"],
   ["@openbooks/engine/src/allocations/match.ts", "mock:match"],
@@ -351,4 +384,48 @@ test("the default document date is the org business day, passed through as asOf"
   const seen = state as RouteState & { lastBusinessTodayOrg?: string; lastListRequest?: { asOf?: string } };
   assert.equal(seen.lastBusinessTodayOrg, ORG_ID);
   assert.equal(seen.lastListRequest?.asOf, "2026-07-15");
+});
+
+test("header context shows a restricted caller only their own subsidiaries' rules", async () => {
+  reset();
+  state.allowedSubsidiaryIds = [SUBSIDIARY_ID];
+  state.rules = [
+    cannedRule("mine", {
+      policy: "manual",
+      dimensionFilters: { subsidiaryIds: [SUBSIDIARY_ID] },
+      targets: [{ subsidiaryId: SUBSIDIARY_ID }],
+    }),
+    cannedRule("theirs", {
+      policy: "manual",
+      dimensionFilters: { subsidiaryIds: [OTHER_SUBSIDIARY_ID] },
+      targets: [{ subsidiaryId: OTHER_SUBSIDIARY_ID }],
+    }),
+    cannedRule("orgwide", { policy: "manual" }),
+  ];
+  const res = await get("?documentKind=bill&documentDate=2026-09-01");
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { rules: { ruleKey: string }[] };
+  assert.deepEqual(
+    body.rules.map((r) => r.ruleKey),
+    ["mine"],
+  );
+});
+
+test("header context shows an unrestricted caller every rule in effect", async () => {
+  reset();
+  state.rules = [
+    cannedRule("mine", {
+      policy: "manual",
+      dimensionFilters: { subsidiaryIds: [SUBSIDIARY_ID] },
+      targets: [{ subsidiaryId: SUBSIDIARY_ID }],
+    }),
+    cannedRule("orgwide", { policy: "manual" }),
+  ];
+  const res = await get("?documentKind=bill&documentDate=2026-09-01");
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { rules: { ruleKey: string }[] };
+  assert.deepEqual(
+    body.rules.map((r) => r.ruleKey),
+    ["mine", "orgwide"],
+  );
 });

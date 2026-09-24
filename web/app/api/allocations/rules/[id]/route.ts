@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { getRuleDetail, updateRule } from '../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../lib/allocations-gate'
-import { allocationErrorResponse, requireRevision, requireRuleId } from '../../_lib.ts'
+import { allocationErrorResponse, allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../_lib.ts'
 
 export const runtime = 'nodejs'
 
@@ -54,11 +54,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         description: body.description as string | null | undefined,
         sortOrder: body.sortOrder as number | undefined,
         isActive: body.isActive as boolean | undefined,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       },
       { actorId: gate.user.id },
     )
     return NextResponse.json({ rule: { ...updated.rule, revision: updated.revision } })
   } catch (error) {
-    return allocationErrorResponse(error)
+    return allocationWriteErrorResponse(error)
   }
 }

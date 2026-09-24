@@ -6,7 +6,7 @@ import {
   type AllocationTargetInput,
 } from '../../../../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../../../../lib/allocations-gate'
-import { allocationErrorResponse, requireRevision, requireRuleId } from '../../../../../_lib.ts'
+import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../../../../_lib.ts'
 
 export const runtime = 'nodejs'
 
@@ -67,11 +67,11 @@ export async function PUT(
     }
     const saved = await replaceTargets(
       versionParam,
-      { orgId: gate.user.orgId, expectedRevision: revision, targets },
+      { orgId: gate.user.orgId, expectedRevision: revision, targets, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
       { actorId: gate.user.id },
     )
     return NextResponse.json({ targets: saved.targets, revision: saved.revision })
   } catch (error) {
-    return allocationErrorResponse(error)
+    return allocationWriteErrorResponse(error)
   }
 }

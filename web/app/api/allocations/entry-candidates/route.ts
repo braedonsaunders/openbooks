@@ -4,6 +4,7 @@ import { listEntryRulesInEffect, matchLine, selectRule } from '@openbooks/engine
 import type { LineCoordinate, RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { resolveAccountGroups } from '@openbooks/engine/src/records/account-groups.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { allocationRuleScopeVisible } from '../../../../lib/allocations-scope'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -99,7 +100,11 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   const inEffect = await listEntryRulesInEffect({ orgId: user.orgId, mode: 'entry', asOf: documentDate })
-  const inPolicy = policy === undefined ? inEffect : inEffect.filter((c) => c.version.applyPolicy === policy)
+  // Rule-scope visibility (same logic the configuration writes enforce): a
+  // restricted caller only sees rules touching their own subsidiaries, and
+  // never an org-wide rule — including this unfiltered enumeration.
+  const inPolicy = (policy === undefined ? inEffect : inEffect.filter((c) => c.version.applyPolicy === policy))
+    .filter((c) => allocationRuleScopeVisible(allowed, c))
 
   // A kind no entry rule covers has no candidates whatever the gate says:
   // answer the empty set instead of refusing, so draft editors for

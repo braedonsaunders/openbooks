@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { NextResponse } from 'next/server'
-import { AllocationRuleError } from '../../../../engine/src/allocations/index.ts'
 import { allocationRunErrorResponse } from '../../../lib/allocations-run-error'
 import { isUuid } from '../../../lib/list-params'
 
@@ -13,24 +12,7 @@ export { allocationRunErrorResponse }
  * problem codes the drawer renders inline. Unexpected failures stay a
  * generic 500.
  */
-export function allocationErrorResponse(error: unknown): NextResponse {
-  if (error instanceof AllocationRuleError) {
-    if (error.code === 'NOT_FOUND') return NextResponse.json({ error: error.message }, { status: 404 })
-    if (error.code === 'STALE') {
-      return NextResponse.json(
-        { error: error.message, code: 'STALE' },
-        { status: 409 },
-      )
-    }
-    const body: { error: string; code: string; problems?: { code: string; message: string }[] } = {
-      error: error.message,
-      code: error.code,
-    }
-    if (error.problems) body.problems = error.problems
-    return NextResponse.json(body, { status: 422 })
-  }
-  return NextResponse.json({ error: 'Unable to save the allocation rule.' }, { status: 500 })
-}
+export { allocationErrorResponse, allocationWriteErrorResponse } from '../../../lib/allocations-run-error'
 
 /** UUID path params 404 like the rest of the app's record routes. */
 export function requireRuleId(id: string): string | NextResponse {

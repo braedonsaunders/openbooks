@@ -29,6 +29,10 @@ import {
   type KnownDriver,
   type PeriodBoundary,
 } from "./validate.ts";
+import {
+  allocationRuleVisible,
+  type SubsidiaryScope,
+} from "./subsidiary-scope.ts";
 
 /**
  * Rule/version service (shard A1): versioned, effective-dated allocation
@@ -127,6 +131,8 @@ export interface UpdateRuleInput extends AllocationOrgScope {
   description?: string | null;
   sortOrder?: number;
   isActive?: boolean;
+  /** Subsidiaries the actor may configure; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: SubsidiaryScope;
 }
 
 export interface AllocationTargetInput {
@@ -175,16 +181,23 @@ export interface DraftVersionInput extends AllocationOrgScope {
   targets?: AllocationTargetInput[];
 }
 
-export type UpdateDraftInput = Omit<DraftVersionInput, "fromVersionId" | "targets">;
+export type UpdateDraftInput = Omit<DraftVersionInput, "fromVersionId" | "targets"> & {
+  /** Subsidiaries the actor may configure; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: SubsidiaryScope;
+};
 
 export interface ReplaceTargetsInput extends AllocationOrgScope {
   targets: AllocationTargetInput[];
+  /** Subsidiaries the actor may configure; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: SubsidiaryScope;
 }
 
 export interface VersionTransitionInput {
   orgId: string;
   actorId: string | null;
   reason?: string;
+  /** Subsidiaries the actor may configure; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: SubsidiaryScope;
 }
 
 export interface ListRulesInEffectInput {
@@ -485,6 +498,30 @@ async function loadVersionRow(orgId: string, versionId: string): Promise<Prefixe
   return row;
 }
 
+/**
+ * Configuration-write scope gate: the caller must see every subsidiary the
+ * version's sources and targets touch (org-wide needs unrestricted scope).
+ * Denied versions answer the bare uniform not-found — identical to a
+ * missing version — never a scope shape that would confirm the rule exists.
+ */
+function assertRuleVisible(
+  scope: SubsidiaryScope,
+  version: Pick<AllocationRuleVersion, "dimensionFilters" | "targetKind" | "dynamicTarget">,
+  targetSubsidiaryIds: readonly (string | null | undefined)[],
+): void {
+  if (
+    !allocationRuleVisible(scope, {
+      sourceSubsidiaryIds: version.dimensionFilters.subsidiaryIds,
+      targetKind: version.targetKind,
+      dynamicDimension: version.dynamicTarget.dimension,
+      dynamicIncludes: version.dynamicTarget.include,
+      targetSubsidiaryIds,
+    })
+  ) {
+    throw new AllocationRuleError("NOT_FOUND", "not found");
+  }
+}
+
 async function loadTargets(orgId: string, versionId: string): Promise<AllocationRuleTarget[]> {
   const rows = await db.execute<Prefixed>(
     sql`select ${TARGET_COLS} from allocation_rule_targets t
@@ -621,6 +658,20 @@ export async function updateRule(ruleId: string, input: UpdateRuleInput, audit: 
   return withOrgTransaction(orgId, async () => {
     const before = await loadRuleHead(orgId, id, false);
     refuseSystemRule(before, "edited");
+    // Head metadata governs every version: scope is asserted over all of
+    // the rule's versions, not just the current one, so a restricted caller
+    // cannot reshape a rule whose drafts touch another entity.
+    const versionIds = (await db.execute<{ id: string }>(sql`
+      select id::text as id from allocation_rule_versions
+       where org_id = ${orgId} and rule_id = ${id}`)).rows.map((r) => r.id);
+    for (const versionId of versionIds) {
+      const version = mapVersion(await loadVersionRow(orgId, versionId), "version_");
+      assertRuleVisible(
+        input.allowedSubsidiaryIds,
+        version,
+        (await loadTargets(orgId, versionId)).map((t) => t.subsidiaryId),
+      );
+    }
     await requireRevision("allocation_rules", orgId, id, input.expectedRevision);
     const name = input.name === undefined ? before.name : nonEmpty(input.name, "name");
     const description = input.description === undefined ? (before.description ?? null) : input.description;
@@ -947,6 +998,9 @@ export async function updateDraftVersion(
       throw new AllocationRuleError("FROZEN", `version ${id} is ${before.status}; only drafts are editable`);
     }
     await requireRevision("allocation_rule_versions", orgId, id, input.expectedRevision);
+    // The edit is asserted against the post-edit definition: widening the
+    // sources (or the dynamic-subsidiary target) past the caller's scope is
+    // refused even when the current definition is in scope.
     const patch = resolveDefinition(input, "update");
     const next: ResolvedDefinition = {
       ...defaultDefinition(),
@@ -977,6 +1031,11 @@ export async function updateDraftVersion(
       lineDescriptionTemplate: before.lineDescriptionTemplate ?? null,
       ...patch,
     };
+    assertRuleVisible(
+      input.allowedSubsidiaryIds,
+      next,
+      (await loadTargets(orgId, id)).map((t) => t.subsidiaryId),
+    );
     try {
       await db.execute(sql`update allocation_rule_versions
         set effective_from = ${next.effectiveFrom}, effective_to = ${next.effectiveTo},
@@ -1022,6 +1081,13 @@ export async function replaceTargets(
     await requireRevision("allocation_rule_versions", orgId, id, input.expectedRevision);
     const before = await loadTargets(orgId, id);
     checkedTargets(input.targets, "allocation version");
+    // Replacing targets touches both sides: removing B's targets reads and
+    // rewrites another entity's policy, so the union of old and new target
+    // subsidiaries (plus the version's sources) must all be in scope.
+    assertRuleVisible(input.allowedSubsidiaryIds, version, [
+      ...before.map((t) => t.subsidiaryId),
+      ...input.targets.map((t) => t.subsidiaryId ?? null),
+    ]);
     try {
       await db.execute(sql`delete from allocation_rule_targets where org_id = ${orgId} and version_id = ${id}`);
       await insertTargets(orgId, id, input.targets, audit.actorId);
@@ -1100,6 +1166,7 @@ export async function publishVersion(
       throw new AllocationRuleError("FROZEN", `version ${id} is retired and cannot publish`);
     }
     const targets = await loadTargets(orgId, id);
+    assertRuleVisible(input.allowedSubsidiaryIds, version, targets.map((t) => t.subsidiaryId));
     const context = await validationContext(orgId, version.ruleId, version);
     const problems = validateRuleVersion(version, targets, {
       orgId,
@@ -1147,6 +1214,11 @@ export async function retireVersion(
     if (version.status === "retired") {
       throw new AllocationRuleError("FROZEN", `version ${id} is already retired`);
     }
+    assertRuleVisible(
+      input.allowedSubsidiaryIds,
+      version,
+      (await loadTargets(orgId, id)).map((t) => t.subsidiaryId),
+    );
     try {
       await db.execute(sql`update allocation_rule_versions
         set status = 'retired', retired_at = now(), retired_by = ${input.actorId},

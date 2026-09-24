@@ -311,7 +311,7 @@ test("publishing a mid-period effective date refuses with the boundary suggestio
       AUDIT,
     );
     await assert.rejects(
-      publishVersion(draft.version.id, { orgId: org.orgId, ...AUDIT }),
+      publishVersion(draft.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null }),
       (e: unknown) => {
         assert.ok(e instanceof AllocationRuleError, `expected AllocationRuleError, got ${String(e)}`);
         assert.equal(e.code, "INVALID");
@@ -359,7 +359,7 @@ test("boundary-aligned versions publish and each run prices under its own versio
       },
       AUDIT,
     );
-    await publishVersion(v1.version.id, { orgId: org.orgId, ...AUDIT });
+    await publishVersion(v1.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null });
     const v2 = await createDraftVersion(
       created.rule.id,
       {
@@ -370,7 +370,7 @@ test("boundary-aligned versions publish and each run prices under its own versio
       },
       AUDIT,
     );
-    await publishVersion(v2.version.id, { orgId: org.orgId, ...AUDIT });
+    await publishVersion(v2.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null });
     const january = await previewAllocationRun({
       orgId: org.orgId,
       ruleId: created.rule.id,
@@ -428,7 +428,7 @@ test("entry-mode versions keep arbitrary effective dates", { skip: !DB }, async 
       { orgId: org.orgId, effectiveFrom: "2026-01-15", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
-    const published = await publishVersion(draft.version.id, { orgId: org.orgId, ...AUDIT });
+    const published = await publishVersion(draft.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null });
     assert.equal(published.version.status, "published");
   } finally {
     await dropScratchOrg(org.orgId);

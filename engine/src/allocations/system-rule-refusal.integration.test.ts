@@ -51,10 +51,10 @@ async function expectFrozen(promise: Promise<unknown>): Promise<void> {
 test("system rule heads refuse every rules-API edit", { skip: !DB }, async () => {
   const s = await seed();
   try {
-    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, name: "Renamed" }, AUDIT));
-    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, description: "x" }, AUDIT));
-    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, sortOrder: 1 }, AUDIT));
-    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, isActive: false }, AUDIT));
+    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, name: "Renamed", allowedSubsidiaryIds: null }, AUDIT));
+    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, description: "x", allowedSubsidiaryIds: null }, AUDIT));
+    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, sortOrder: 1, allowedSubsidiaryIds: null }, AUDIT));
+    await expectFrozen(updateRule(s.systemId, { orgId: s.orgId, isActive: false, allowedSubsidiaryIds: null }, AUDIT));
   } finally {
     await dropScratchOrg(s.orgId);
   }
@@ -65,10 +65,10 @@ test("system rule versions refuse every rules-API transition", { skip: !DB }, as
   try {
     await expectFrozen(createDraftVersion(s.systemId, { orgId: s.orgId, effectiveFrom: "2026-06-01" }, AUDIT));
     const draftId = await draftVersion(s.orgId, s.systemId);
-    await expectFrozen(updateDraftVersion(draftId, { orgId: s.orgId, runOffsetDays: 3 }, AUDIT));
-    await expectFrozen(replaceTargets(draftId, { orgId: s.orgId, targets: [] }, AUDIT));
-    await expectFrozen(publishVersion(draftId, { orgId: s.orgId, actorId: s.actorId }));
-    await expectFrozen(retireVersion(draftId, { orgId: s.orgId, actorId: s.actorId }));
+    await expectFrozen(updateDraftVersion(draftId, { orgId: s.orgId, runOffsetDays: 3, allowedSubsidiaryIds: null }, AUDIT));
+    await expectFrozen(replaceTargets(draftId, { orgId: s.orgId, targets: [], allowedSubsidiaryIds: null }, AUDIT));
+    await expectFrozen(publishVersion(draftId, { orgId: s.orgId, actorId: s.actorId, allowedSubsidiaryIds: null }));
+    await expectFrozen(retireVersion(draftId, { orgId: s.orgId, actorId: s.actorId, allowedSubsidiaryIds: null }));
   } finally {
     await dropScratchOrg(s.orgId);
   }

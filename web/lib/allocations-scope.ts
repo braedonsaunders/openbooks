@@ -5,7 +5,11 @@ import {
   getRun,
   type RunDetail,
 } from "../../engine/src/allocations/run-queries.ts";
-import { allocationScopeVisible } from "../../engine/src/allocations/subsidiary-scope.ts";
+import {
+  allocationRuleVisible,
+  allocationScopeVisible,
+} from "../../engine/src/allocations/subsidiary-scope.ts";
+import type { RuleInEffect } from "../../engine/src/allocations/types.ts";
 
 /**
  * Allocation run scope gate (m40_allocation_scope): the ONE shared helper
@@ -34,4 +38,24 @@ export async function requireVisibleAllocationRun(
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   return run;
+}
+
+/**
+ * Rule-catalog visibility (m40_allocation_scope, configuration half): the
+ * same rule-scope logic the configuration writes enforce — a restricted
+ * caller sees a rule only when every subsidiary its sources and targets
+ * touch is in their set; an org-wide rule needs the full unrestricted
+ * scope. Used to filter enumeration surfaces like entry-candidates.
+ */
+export function allocationRuleScopeVisible(
+  allowed: ReadonlySet<string> | null,
+  rule: Pick<RuleInEffect, "version" | "targets">,
+): boolean {
+  return allocationRuleVisible(allowed, {
+    sourceSubsidiaryIds: rule.version.dimensionFilters.subsidiaryIds,
+    targetKind: rule.version.targetKind,
+    dynamicDimension: rule.version.dynamicTarget.dimension,
+    dynamicIncludes: rule.version.dynamicTarget.include,
+    targetSubsidiaryIds: rule.targets.map((t) => t.subsidiaryId),
+  });
 }
