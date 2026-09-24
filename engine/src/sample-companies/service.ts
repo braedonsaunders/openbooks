@@ -11,6 +11,7 @@ import {
   withOrgTransaction,
 } from "../platform/db.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
+import { loadCatalog } from "../sandbox/catalog.ts";
 import { autopilotRunToEnd, provisionRun } from "../sim/runner.ts";
 import { wipeSimOrg } from "../sim/world.ts";
 import { reconcileDocumentSequences } from "../records/numbering.ts";
@@ -581,6 +582,45 @@ async function setSampleCompanyStage(orgId: string, stage: SampleCompanyOrgStage
   }
 }
 
+const CATALOG_TABLE_NAME_RE = /^[a-z0-9_]+$/;
+
+/**
+ * Prove a shell org (no sandbox row) holds no tenant state before its row is
+ * deleted directly. Every org_id-bearing tenant table must be empty for it —
+ * CASCADE delete rules would otherwise silently remove children the caller
+ * never saw — plus the two org references that carry no org_id of their own
+ * (a marketplace listing publishing it, a child naming it as sandbox
+ * parent). Refuses by name naming the first table that still holds rows.
+ */
+async function assertShellOrgHasNoTenantRows(orgId: string): Promise<void> {
+  const catalog = await loadCatalog();
+  const tables = catalog.tenantTables.filter((t) => t.hasOrgId).map((t) => t.name);
+  for (const name of tables) {
+    if (!CATALOG_TABLE_NAME_RE.test(name)) throw new Error(`unexpected catalog table name: ${name}`);
+  }
+  const probes = [
+    ...tables.map((name) => `select '${name}' as t where exists (select 1 from public."${name}" where org_id = '${orgId}')`),
+    `select 'app_listings' as t where exists (select 1 from public.app_listings where publisher_org_id = '${orgId}')`,
+    `select 'orgs' as t where exists (select 1 from public.orgs where sandbox_of = '${orgId}')`,
+  ];
+  // The org id travels in raw SQL below: it is DB-sourced (the marker
+  // lookup), but assert its shape at this boundary anyway; the table names
+  // above are allow-listed from the live catalog.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
+    throw new Error(`not a uuid: ${orgId}`);
+  }
+  for (let offset = 0; offset < probes.length; offset += 50) {
+    const batch = probes.slice(offset, offset + 50);
+    const holder = (await db.execute<{ t: string }>(sql.raw(batch.join("\nunion all\n")))).rows[0];
+    if (holder) {
+      throw new SampleCompanyError(
+        `refusing to delete partial sample company ${orgId}: table ${holder.t} still holds its rows; ` +
+          `remove them and retry, or delete the org manually once they are reconciled`,
+      );
+    }
+  }
+}
+
 /**
  * Compensate an unresumable partial company through the product's own
  * sandbox deletion path (the same prep dropSampleCloneOrg applies: a
@@ -616,13 +656,21 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
     const sandboxRows = (await db.execute<{ id: string }>(sql`
       select id from sandboxes where org_id = ${orgId}`)).rows;
     if (sandboxRows.length === 0) {
-      // The clone died between its first two statements (or suffered outside
-      // interference). Refuse rather than guess: blind-deleting an org row
-      // whose children cannot be proven absent risks orphaning rows, and the
-      // member lock means no concurrent provisioning can be waiting on it.
-      throw new SampleCompanyError(
-        `refusing to delete partial sample company ${orgId}: it has no sandbox row`,
-      );
+      // C-63: the clone died between the org INSERT and the sandboxes INSERT
+      // (rows that predate the one-transaction birth), or suffered outside
+      // interference. A marked org with no sandbox row holds no clone work,
+      // so it is safe to delete once that is proven: every tenant table must
+      // be empty for it, no marketplace listing may publish it, and no org
+      // may name it as a sandbox parent. Anything present refuses by name
+      // with its remedy instead of deleting.
+      await assertShellOrgHasNoTenantRows(orgId);
+      await db.execute(sql`delete from orgs where id = ${orgId}`);
+      const remaining = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from orgs where id = ${orgId}`)).rows[0]!.n;
+      if (remaining !== 0) {
+        throw new SampleCompanyError(`partial sample company ${orgId} survived deletion`);
+      }
+      return "deleted";
     }
     if (sandboxRows.length !== 1) {
       throw new SampleCompanyError(
@@ -1185,12 +1233,48 @@ export interface FinalizeSampleCompanyArgs {
  * Step seams for createSampleCompany. Every step is injectable for tests;
  * production always uses the real pipeline. This is what lets a regression
  * test force a failure after the clone (or inside numbering) and then retry
- * through the real resume path.
+ * through the real resume path. The clone step's arguments travel in
+ * CloneSampleCompanyArgs; cloneSampleCompanyTemplate below is the default.
  */
+export interface CloneSampleCompanyArgs {
+  templateOrgId: string;
+  companyName: string;
+  input: CreateSampleCompanyInput;
+  profileId: string;
+}
+
 export interface SampleCompanyProvisionDeps {
   prepareTemplate?: (industryKey: string) => Promise<PrepareSampleCompanyResult>;
+  cloneCompany?: (args: CloneSampleCompanyArgs) => Promise<{ sandboxId: string; sandboxOrgId: string }>;
   finalizeCompany?: (args: FinalizeSampleCompanyArgs) => Promise<void>;
   reconcileNumbering?: (orgId: string) => Promise<unknown>;
+}
+
+/**
+ * Clone the template into the member's company shell, birth-marked so a
+ * crash at any later stage stays attributable and resumable (SC-RESUME-b).
+ * Extracted (same call, no shadow) so tests can drive a failing clone
+ * through the real compensation path.
+ */
+export async function cloneSampleCompanyTemplate(
+  args: CloneSampleCompanyArgs,
+): Promise<{ sandboxId: string; sandboxOrgId: string }> {
+  return withBypassContext(() =>
+    createSandbox({
+      productionOrgId: args.templateOrgId,
+      name: args.companyName,
+      tier: "full",
+      masked: false,
+      createdBy: null,
+      settingsOverlay: sampleCompanyBirthMarker({
+        industryKey: args.input.industryKey,
+        profileId: args.profileId,
+        memberUserId: args.input.memberUserId,
+        sourceOrgId: args.input.sourceOrgId,
+        templateOrgId: args.templateOrgId,
+      }),
+    }),
+  );
 }
 
 /**
@@ -1230,6 +1314,33 @@ async function resumePartialSampleCompany(args: {
     sandboxOrgId: args.partial.id,
     memberUserId: args.input.memberUserId,
   });
+}
+
+/**
+ * Compensate a failed clone so the staged "Nothing was created" refusal is
+ * true when it is reported. The birth marker makes this attempt's shell
+ * findable; deleting it goes through the same partial-company compensation
+ * as a retry (a failed sandbox row via the sandbox deletion path, a rowless
+ * shell via the proven-empty direct delete). No shell found means the clone
+ * died before its birth insert committed and there is nothing to clean.
+ * When the cleanup itself is refused, the shell and its remedy replace the
+ * stage message — reporting "nothing was created" over a stranded org is
+ * what OM-13b forbids — and the refusal passes the stage wrapper untouched
+ * as a known precondition error.
+ */
+async function compensateFailedClone(input: CreateSampleCompanyInput): Promise<void> {
+  const partial = await findPartialSampleCompany(input.memberUserId, input.industryKey);
+  if (!partial) return;
+  try {
+    await deletePartialSampleOrg(partial.id);
+  } catch (error) {
+    console.error(`[sample-company] could not remove failed clone shell ${partial.id}`, error);
+    throw new SampleCompanyPreconditionError(
+      `sample company clone failed and its incomplete shell (org ${partial.id}) could not be removed automatically; ` +
+        `remove the shell org manually, then retry`,
+      { cause: error },
+    );
+  }
 }
 
 export async function createSampleCompany(
@@ -1335,28 +1446,27 @@ export async function createSampleCompany(
       await deletePartialSampleOrg(partial.id);
     }
 
+    // OM-13b: a failed clone still commits its shell (org + sandbox row),
+    // so "nothing was created" is only true once the shell is compensated.
+    // Clean it inside the stage: success keeps the staged clone message
+    // truthful, and a cleanup failure raises the shell and its remedy
+    // instead of the false message.
+    // SC-RESUME-b: ownership and stage travel inside the clone (birth
+    // marker, preserved across its settings overwrite), so no crash/cancel
+    // gap after the clone returns can leave an unattributable sandbox. This
+    // marker is what the next retry resumes from — and what the compensation
+    // below finds.
+    const cloneCompany = deps.cloneCompany ?? cloneSampleCompanyTemplate;
     const cloned = await runProvisioningStage("clone", () =>
-      withBypassContext(() =>
-        createSandbox({
-          productionOrgId: prepared.templateOrgId,
-          name: profile.companyName,
-          tier: "full",
-          masked: false,
-          createdBy: null,
-          // SC-RESUME-b: ownership and stage travel inside the clone (birth
-          // marker, preserved across its settings overwrite), so no
-          // crash/cancel gap after the clone returns can leave an
-          // unattributable sandbox. This marker is what the next retry
-          // resumes from.
-          settingsOverlay: sampleCompanyBirthMarker({
-            industryKey: input.industryKey,
-            profileId: profile.profileId,
-            memberUserId: input.memberUserId,
-            sourceOrgId: input.sourceOrgId,
-            templateOrgId: prepared.templateOrgId,
-          }),
-        }),
-      ),
+      cloneCompany({
+        templateOrgId: prepared.templateOrgId,
+        companyName: profile.companyName,
+        input,
+        profileId: profile.profileId,
+      }).catch(async (error) => {
+        await compensateFailedClone(input);
+        throw error;
+      }),
     );
     await reacquireLockIfNeeded();
     const winnerBeforeFinalize = await existingFor(input.memberUserId, input.industryKey);

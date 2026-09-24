@@ -48,9 +48,12 @@ const SAMPLE_COMPANY_STAGE_PHRASES: Record<
 };
 
 /**
- * What actually exists after each stage fails. Template and clone fail
- * before any company row is committed (a failed template attempt is wiped;
- * a failed clone never commits), so "nothing was created" is the truth.
+ * What actually exists after each stage fails. Template fails before any
+ * company row is committed (a failed template attempt is wiped), and a
+ * failed clone's shell is compensated before the refusal is reported
+ * (service compensateFailedClone) — so "nothing was created" is the truth
+ * for both. When the clone-shell cleanup itself is refused, the error is a
+ * precondition refusal naming the shell and its remedy, never this message.
  * Finalize and numbering fail AFTER the clone committed, and the partial
  * company is deliberately left resumable — the refusal must say so, or the
  * operator reads "nothing was created" while a company with their name on
