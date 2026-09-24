@@ -69,7 +69,6 @@
     "engine/src/worker/backup-scheduler.test.ts": 14,
     "engine/src/worker/overhead-scheduler.test.ts": 1,
     "schema/canonical-baseline.test.ts": 57,
-    "schema/ledger-dimension-fk-indexes.test.mjs": 1,
     "schema/migrations/generated/0293_stock_count_line_subject_unique.integration.test.ts": 1,
     "scripts/bootstrap-migration-pool.integration.test.ts": 2,
     "scripts/ci-pipeline-integrity.test.mjs": 9,
