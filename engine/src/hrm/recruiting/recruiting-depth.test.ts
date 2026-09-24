@@ -17,6 +17,7 @@ import {
 import { pgTextArray, pgUuidArray } from "./depth.ts";
 import { matchTags } from "./pools.ts";
 import { ANONYMIZED_DISPLAY_NAME, retentionScopeMatches } from "./retention.ts";
+import { requireCompensation } from "./requisitions.ts";
 
 // The token signer reads the secret live from process.env (never a stored
 // constant): pin a test-only secret and restore it afterwards.
@@ -30,6 +31,16 @@ test.after(() => {
 const ID_A = "11111111-1111-4111-8111-111111111111";
 const ID_B = "22222222-2222-4222-8222-222222222222";
 const ID_C = "33333333-3333-4333-8333-333333333333";
+
+test("requisition compensation refuses a reversed exact-decimal range", () => {
+  assert.throws(
+    () => requireCompensation({ min: "120000.0001", max: "120000.0000", currency: "USD", basis: "annual" }),
+    (error: unknown) => error instanceof Error && error.message.includes("minimum is no greater"),
+  );
+  assert.deepEqual(requireCompensation({ min: "120000.0000", max: "120000.0001", currency: "USD", basis: "annual" }), {
+    min: "120000.0000", max: "120000.0001", currency: "USD", basis: "annual",
+  });
+});
 
 test("booking tokens verify for their purpose and row, and nowhere else", () => {
   const token = createRecruitingToken({ purpose: "book", rowId: ID_A });
