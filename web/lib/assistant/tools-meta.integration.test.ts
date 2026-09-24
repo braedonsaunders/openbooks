@@ -96,6 +96,27 @@ test('describe_capabilities answers from the live catalog for a minimal reader',
   }
 });
 
+test('describe_capabilities groups featureless assistant and application tools by their domain', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const authz = {
+      user: userFor(org.orgId, 'domain-modules'),
+      permissions: new Set(['assistant.use', 'assistant.write', 'admin.setup.manage', 'close.reopen']),
+      allowedSubsidiaryIds: null,
+    };
+    await withOrgContext(org.orgId, async () => {
+      const result = await executeAssistantTool(authz, 'describe_capabilities', {});
+      assert.ok(result.ok, JSON.stringify(result));
+      if (!result.ok) return;
+      const groups = (result.data as CapabilityData).groups;
+      assert.ok(groups.find((group) => group.module === 'setup')?.tools.some((tool) => tool.name === 'get_company_settings'));
+      assert.ok(groups.find((group) => group.module === 'close')?.tools.some((tool) => tool.name === 'request_period_reopen'));
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test('find_tools searches the live gated catalog and names activated modules', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
