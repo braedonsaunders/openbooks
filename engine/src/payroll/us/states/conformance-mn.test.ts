@@ -188,7 +188,7 @@ test("MN refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 52, wages: "1000", basis: "resident",
       certificate: cert(),
     }),
-    /2027 Minnesota income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Minnesota income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
   assert.equal(D(mnAnnualTax(U("4700"), "single", MN_RATES_2026)), money("0"));
 });

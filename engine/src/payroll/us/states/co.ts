@@ -32,6 +32,7 @@
  *
  * All arithmetic is exact bigint. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, type PayrollCertificate,
@@ -98,7 +99,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = coRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for Colorado withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for Colorado withholding: ${P}`);
   }
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };

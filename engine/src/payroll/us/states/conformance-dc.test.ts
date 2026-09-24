@@ -300,7 +300,7 @@ test("DC refuses a year it has not transcribed", () => {
       payDate: "2025-06-15", periodsPerYear: 52, wages: "1000",
       basis: "resident", certificate: cert({ allowances: "0" }),
     }),
-    /2025 District of Columbia income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2025 District of Columbia income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });
 

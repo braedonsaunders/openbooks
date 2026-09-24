@@ -76,6 +76,6 @@ test("HI refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 52, wages: "500",
       basis: "resident", certificate: cert({ filing_status: "single", allowances: "3" }),
     }),
-    /2027 Hawaii income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Hawaii income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

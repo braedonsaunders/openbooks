@@ -92,6 +92,6 @@ test("RI refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 52, wages: "2195",
       basis: "resident", certificate: cert({ allowances: "1" }),
     }),
-    /2027 Rhode Island income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Rhode Island income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

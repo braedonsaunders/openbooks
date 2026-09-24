@@ -92,6 +92,6 @@ test("LA refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 52, wages: "700",
       basis: "resident", certificate: cert({ standard_deduction: "1" }),
     }),
-    /2027 Louisiana income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Louisiana income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

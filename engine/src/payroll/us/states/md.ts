@@ -47,6 +47,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCode, certificateCount, certificateFlag,
@@ -289,7 +290,7 @@ export function mdCounty(code: string): MdCounty {
     ?? MD_COUNTY_BY_CODE.get(padded.toUpperCase())
     ?? MD_COUNTY_BY_CODE.get(padded.toLowerCase());
   if (!county) {
-    throw new Error(
+    throw new PayrollError(
       `"${code}" is not a Maryland county published in Withholding Tax Facts `
       + `January 2026–December 2026 (${RATES_MODULE}). The Comptroller lists `
       + "23 counties and Baltimore City (codes 01–24). An unknown code is not "
@@ -332,7 +333,7 @@ export function mdAnnualCombinedTax(input: {
     }
     taxAtFloor = taxAtFloor + mulRateCents(U(band.upTo!) - U(band.over), combined);
   }
-  throw new Error(`no Maryland withholding band covers taxable wages of ${D(input.taxable)}`);
+  throw new PayrollError(`no Maryland withholding band covers taxable wages of ${D(input.taxable)}`);
 }
 
 /**
@@ -396,7 +397,7 @@ export function mdFrederickLocal(taxable: bigint, schedule: MdSchedule): bigint 
       return mulRateCents(taxable, pctToRate(band.percent));
     }
   }
-  throw new Error(`no Frederick local band covers taxable wages of ${D(taxable)}`);
+  throw new PayrollError(`no Frederick local band covers taxable wages of ${D(taxable)}`);
 }
 
 function bmin(a: bigint, b: bigint): bigint {
@@ -433,7 +434,7 @@ export function mdLumpSumBonus(input: {
       ? null
       : input.county.rate === "graduated" ? "3.20" : input.county.rate;
   if (localPercent == null) {
-    throw new Error(
+    throw new PayrollError(
       "Maryland lump-sum bonus withholding needs the employee's county of residence "
       + "(Guide p. 9: highest state rate plus the highest local rate for the county "
       + "of residence). A missing county is not a zero local rate.",
@@ -447,7 +448,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = mdRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for Maryland withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for Maryland withholding: ${P}`);
   }
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
@@ -578,7 +579,7 @@ function requireCounty(
 ): MdCounty {
   const raw = certificateCode(certificate, "residence_county");
   if (raw == null || raw.trim() === "" || /^n\/?a$/i.test(raw.trim())) {
-    throw new Error(
+    throw new PayrollError(
       `Maryland ${why} needs the MW507 county of residence (nonresidents enter the `
       + "Maryland county of employment). The Employer Withholding Guide does not "
       + "name a default local rate when the county is blank — Tax Facts lists a "

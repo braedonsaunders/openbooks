@@ -28,6 +28,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateCount, certificateFlag, type PayrollCertificate,
@@ -297,7 +298,7 @@ export function wvPercentageMethod(input: {
     return aboveFloor && atOrUnderCeiling;
   });
   if (!band) {
-    throw new Error(
+    throw new PayrollError(
       `no West Virginia ${input.schedule} ${period} line covers taxable wages of ${D(taxable)}`,
     );
   }

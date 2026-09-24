@@ -15,6 +15,7 @@
  * $8,600 otherwise).
  */
 
+import { PayrollError } from "../error.ts";
 import type {
   PayrollEditionScaffold, PayrollTaxYearSupport,
 } from "../tax-years.ts";
@@ -191,18 +192,18 @@ export function ratesForPayDate(payDate: string): YearRates {
   const year = Number(payDate.slice(0, 4));
   const rates = BY_YEAR[year];
   if (!rates) {
-    throw new Error(
-      `no US federal payroll rates for ${year} — add the Pub 15-T edition to `
-      + "engine/src/payroll/us/rates.ts (scripts/payroll-new-tax-year.ts scaffolds it)",
+    throw new PayrollError(
+      `no US federal payroll rates for pay date ${payDate} — rates for ${year} aren't `
+      + "available in this pack version; update the pack",
     );
   }
   // A scaffolded-but-unfilled edition is refused LOUDER than a missing one: the
   // module exists, so every "is the year loaded?" check that looked only for
   // presence would have said yes and withheld from placeholder tables.
   if (rates.status !== "published") {
-    throw new Error(
-      `the ${year} Pub 15-T tables are scaffolded but not transcribed — placeholder values remain `
-      + "in engine/src/payroll/us/rates.ts; fill them in and flip the edition to published",
+    throw new PayrollError(
+      `the ${year} Pub 15-T tables are not available in this pack version — a pay date in `
+      + `${year} cannot be calculated; update the pack`,
     );
   }
   return rates;

@@ -39,6 +39,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateCount, certificateFlag, type PayrollCertificate,
@@ -263,7 +264,7 @@ export function inCounty(year: number, code: string): InCounty {
   }
   const county = IN_COUNTY_BY_CODE.get(code) ?? IN_COUNTY_BY_CODE.get(code.padStart(2, "0"));
   if (!county || year !== 2026) {
-    throw new Error(
+    throw new PayrollError(
       `"${code}" is not an Indiana county code published in Departmental Notice #1 for ${year} `
       + `(${RATES_MODULE}). The notice lists all 92 counties by two-digit code (01–92); an `
       + "unknown code is not a zero rate.",
@@ -305,7 +306,7 @@ export function inPeriodTaxable(input: {
   const rates = inRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for Indiana withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for Indiana withholding: ${P}`);
   }
   const factors: Record<string, string> = {};
   const annualExemption =

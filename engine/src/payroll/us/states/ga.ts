@@ -46,6 +46,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import { certificateAmount, certificateChoice, certificateCount, certificateFlag }
   from "../../certificates.ts";
@@ -170,7 +171,7 @@ export function gaEditionForPayDate(payDate: string): GaEdition {
     payDate >= candidate.effectiveFrom
     && (candidate.effectiveTo == null || payDate < candidate.effectiveTo));
   if (!edition) {
-    throw new Error(
+    throw new PayrollError(
       `no Georgia withholding edition is loaded for a pay date of ${payDate} — ${RATES_MODULE}`,
     );
   }

@@ -16,6 +16,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, type PayrollCertificate,
@@ -138,19 +139,19 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = alRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for Alabama withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for Alabama withholding: ${P}`);
   }
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
   const code = (certificateChoice(input.certificate, "exemption") ?? "0") as AlExemption;
   if (code !== "0" && code !== "S" && code !== "MS" && code !== "M" && code !== "H") {
-    throw new Error(`Alabama exemption "${code}" is not 0, S, MS, M, or H`);
+    throw new PayrollError(`Alabama exemption "${code}" is not 0, S, MS, M, or H`);
   }
   const dependents = certificateCount(input.certificate, "dependents") ?? 0;
   const periodFederal = input.federalIncomeTax;
   if (periodFederal == null || periodFederal.trim() === "") {
-    throw new Error(
+    throw new PayrollError(
       "Alabama withholding (ALDOR formula line 2B) requires this period's federal "
       + "income tax withheld from the current Pub 15-T calculation. The engine will not assume $0.",
     );

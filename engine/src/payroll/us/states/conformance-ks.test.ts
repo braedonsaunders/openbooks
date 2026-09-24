@@ -85,6 +85,6 @@ test("KS refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 24, wages: "2000",
       basis: "resident", certificate: cert({ filing_status: "married", allowances: "3" }),
     }),
-    /2027 Kansas income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Kansas income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

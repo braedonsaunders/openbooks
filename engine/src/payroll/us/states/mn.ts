@@ -22,6 +22,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
@@ -170,7 +171,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = mnRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for Minnesota withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for Minnesota withholding: ${P}`);
   }
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };

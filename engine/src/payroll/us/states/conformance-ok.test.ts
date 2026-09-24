@@ -82,6 +82,6 @@ test("OK refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 24, wages: "1825",
       basis: "resident", certificate: cert({ filing_status: "married", allowances: "2" }),
     }),
-    /2027 Oklahoma income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Oklahoma income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

@@ -90,6 +90,6 @@ test("ID refuses a pre-sunset 2026 pay date and an untranscribed year", () => {
       payDate: "2027-01-15", periodsPerYear: 26, wages: "1212",
       basis: "resident", certificate: cert({ filing_status: "single" }),
     }),
-    /2027 Idaho income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Idaho income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

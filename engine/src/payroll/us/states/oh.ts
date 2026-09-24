@@ -74,6 +74,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import { certificateAmount, certificateCount } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -513,7 +514,7 @@ export function ohSchoolDistrict(payDate: string, code: string): OhSchoolDistric
   const year = Number(payDate.slice(0, 4));
   const districts = SCHOOL_DISTRICTS_BY_YEAR[year];
   if (!districts) {
-    throw new Error(
+    throw new PayrollError(
       `the ${year} Ohio school district income tax rates are not loaded — transcribe "School `
       + `Districts With an Income Tax" for ${year} from tax.ohio.gov into ${RATES_MODULE}. `
       + "Loaded years: " + Object.keys(SCHOOL_DISTRICTS_BY_YEAR).join(", ") + ". Never carry a "
@@ -522,7 +523,7 @@ export function ohSchoolDistrict(payDate: string, code: string): OhSchoolDistric
     );
   }
   if (!/^\d{4}$/.test(code)) {
-    throw new Error(
+    throw new PayrollError(
       `"${code}" is not an Ohio school district number — the Department numbers every district `
       + "with four digits (Form IT 4, \"School district number (####)\"). Look the employee's "
       + "district up in The Finder at tax.ohio.gov.",
@@ -572,7 +573,7 @@ export function ohEditionFor(periodEnd: string): OhEdition {
     periodEnd >= candidate.effectiveFrom
     && (candidate.effectiveTo == null || periodEnd < candidate.effectiveTo));
   if (!edition) {
-    throw new Error(
+    throw new PayrollError(
       `no Ohio withholding table is loaded for a payroll period ending ${periodEnd}. This pack `
       + `carries the sets effective ${OH_TRANSCRIBED_FROM} onwards; the Department revises them `
       + "mid-year and keys each set to the payroll period's END date, so an earlier period needs "
@@ -593,7 +594,7 @@ export function ohEditionFor(periodEnd: string): OhEdition {
  */
 function requirePeriodEnd(input: UsStateWithholdingInput): string {
   if (!input.periodEnd) {
-    throw new Error(
+    throw new PayrollError(
       "Ohio withholding tables are keyed to the PAYROLL PERIOD END DATE, not the pay date — the "
       + "Department's 2026 tables apply to \"any payroll ending on or after Aug. 1, 2026\" "
       + "regardless of when it is paid. Supply the period end date; substituting the pay date "
@@ -609,7 +610,7 @@ function requirePeriodEnd(input: UsStateWithholdingInput): string {
 
 function periodsGuard(periodsPerYear: number): void {
   if (!Number.isInteger(periodsPerYear) || periodsPerYear < 1 || periodsPerYear > 2000) {
-    throw new Error(`invalid pay periods per year for Ohio withholding: ${periodsPerYear}`);
+    throw new PayrollError(`invalid pay periods per year for Ohio withholding: ${periodsPerYear}`);
   }
 }
 
@@ -644,7 +645,7 @@ export function ohOptionalComputerFormula(input: {
   const band = edition.formula.find((candidate) =>
     candidate.upTo == null || taxable <= U(candidate.upTo));
   if (!band) {
-    throw new Error(
+    throw new PayrollError(
       `no Ohio withholding band covers annual taxable wages of ${D(taxable)} — ${RATES_MODULE}`,
     );
   }
@@ -673,7 +674,7 @@ export function ohPercentageMethod(input: {
   const edition = ohEditionFor(input.periodEnd);
   const period = payPeriodFor(input.periodsPerYear);
   if (period == null || !OH_PRINTED_PERIODS.includes(period)) {
-    throw new Error(
+    throw new PayrollError(
       `Ohio prints percentage-method tables for ${OH_PRINTED_PERIODS.join(", ")} payroll periods, `
       + `and this payroll runs ${input.periodsPerYear} periods a year. Use the optional computer `
       + "formula, which annualizes and answers for any frequency.",
@@ -684,7 +685,7 @@ export function ohPercentageMethod(input: {
   const taxable = max0(U(input.wages) - exemption);
   const row = edition.printedTables[key].find((candidate) =>
     candidate.upTo == null || taxable <= U(candidate.upTo));
-  if (!row) throw new Error(`no Ohio ${key} line covers ${D(taxable)} — ${RATES_MODULE}`);
+  if (!row) throw new PayrollError(`no Ohio ${key} line covers ${D(taxable)} — ${RATES_MODULE}`);
   return D(U(row.base) + mulRateCents(taxable - U(row.over), row.rate));
 }
 
@@ -823,7 +824,7 @@ export function ohMunicipalWithholding(input: {
   municipality: string;
 }): string {
   if (input.rate == null || input.rate === "") {
-    throw new Error(
+    throw new PayrollError(
       `no income tax rate has been entered for ${input.municipality} (Ohio). Ohio municipalities `
       + "set their own rates by ordinance and the Department publishes no annual withholding rate "
       + "table for them, so the rate is employer-entered: record it against the jurisdiction "

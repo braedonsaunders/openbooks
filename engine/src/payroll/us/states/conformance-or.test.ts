@@ -363,11 +363,11 @@ test("OR refuses a year it has not transcribed, and never extrapolates", () => {
       payDate: "2027-01-15", periodsPerYear: 1, wages: "25000", basis: "resident",
       certificate: cert(),
     }),
-    /2027 Oregon income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Oregon income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
   assert.throws(
     () => orRatesForPayDate("2025-12-31"),
-    /2025 Oregon income tax withholding tables are not loaded/,
+    /2025 Oregon income tax withholding tables are not available in this pack version.*update the pack/,
   );
 });
 

@@ -20,6 +20,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
@@ -106,7 +107,7 @@ export function idRatesForPayDate(payDate: string): IdYearRates {
     refuseUntranscribedYear(ID_WITHHOLDING, year);
   }
   if (payDate < ID_SUNSET_EDITION_FROM) {
-    throw new Error(
+    throw new PayrollError(
       `Idaho income tax withholding for pay dates before ${ID_SUNSET_EDITION_FROM} is not loaded — `
       + "the April 2025 Table for Percentage Computation Method still subtracted Idaho Child Tax "
       + `Credit allowances. Transcribe that earlier edition into ${RATES_MODULE} if a `

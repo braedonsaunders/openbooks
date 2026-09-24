@@ -198,7 +198,7 @@ const bmin = (a: bigint, b: bigint): bigint => (a < b ? a : b);
  */
 function truncRatio4(num: bigint, den: bigint, decimals: number): bigint {
   if (num <= ZERO) return ZERO;
-  if (den <= ZERO) throw new Error("ratio denominator must be greater than zero");
+  if (den <= ZERO) throw new PayrollError("ratio denominator must be greater than zero");
   return (num * 10n ** BigInt(decimals)) / den;
 }
 

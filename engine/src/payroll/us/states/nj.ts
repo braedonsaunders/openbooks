@@ -61,6 +61,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
@@ -663,7 +664,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     // conformance test pins it. Refusing is the only defensible answer: the
     // rate for a wage the schedule does not cover is not something an engine
     // gets to invent, and withholding nothing would be a silent zero.
-    throw new Error(
+    throw new PayrollError(
       `no New Jersey Rate Table "${table}" line covers taxable wages of ${D(taxable)} on a `
       + `${period} payroll. The state's printed table leaves a gap there; see ${RATES_MODULE} `
       + "and the conformance test, and confirm the bracket with the Division of Taxation before "

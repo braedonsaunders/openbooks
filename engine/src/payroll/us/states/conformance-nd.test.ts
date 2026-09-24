@@ -84,6 +84,6 @@ test("ND refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 52, wages: "1800",
       basis: "resident", certificate: cert({ filing_status: "single" }),
     }),
-    /2027 North Dakota income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 North Dakota income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

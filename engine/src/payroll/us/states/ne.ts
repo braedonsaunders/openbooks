@@ -22,6 +22,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
@@ -142,14 +143,14 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
   if (input.employerEmployeeCount == null) {
-    throw new Error(
+    throw new PayrollError(
       "Nebraska employer employee count is required to determine whether the "
       + "special withholding procedure applies; payroll must resolve it from the paying legal entity",
     );
   }
   const employerEmployeeCount = input.employerEmployeeCount;
   if (!Number.isInteger(employerEmployeeCount) || employerEmployeeCount < 0) {
-    throw new Error(
+    throw new PayrollError(
       `Nebraska employer employee count must be a non-negative integer, got ${employerEmployeeCount}`,
     );
   }
@@ -184,7 +185,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const ordinary = periodTax + extra;
   const taxQualifiedDeductions = U(input.taxQualifiedDeductions ?? "0");
   if (taxQualifiedDeductions < 0n) {
-    throw new Error("Nebraska tax-qualified deductions cannot be negative");
+    throw new PayrollError("Nebraska tax-qualified deductions cannot be negative");
   }
   const specialMinimumBase = max0(wages - taxQualifiedDeductions);
   const specialMinimum = specialProcedure && !lesserWithholdingDocumented

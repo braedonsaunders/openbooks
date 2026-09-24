@@ -15,6 +15,7 @@
  * Revenu Québec administers — QPP/QPIP and the federal abatement side of
  * Quebec employment ARE implemented).
  */
+import { PayrollError } from "../error.ts";
 import {
   bmax, bmin, D, divIntCents, max0, mulInt, mulRatioCents, mulRateCents, r2, rate6, truncCents, U,
 } from "./decimal";
@@ -234,14 +235,14 @@ function baseShare(amount: bigint, plan: PensionPlanRates): bigint {
 export function calculateT4127(input: T4127Input): T4127Result {
   const rates = ratesForPayDate(input.payDate);
   const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) throw new Error(`invalid pay periods per year: ${P}`);
+  if (!Number.isInteger(P) || P < 1 || P > 2000) throw new PayrollError(`invalid pay periods per year: ${P}`);
   const PM = input.cppMonths ?? 12;
-  if (!Number.isInteger(PM) || PM < 0 || PM > 12) throw new Error(`invalid CPP months: ${PM}`);
+  if (!Number.isInteger(PM) || PM < 0 || PM > 12) throw new PayrollError(`invalid CPP months: ${PM}`);
   const province = input.province;
   const isQuebec = province === "QC";
   const isOutside = province === "ZZ";
   const prov = rates.provinces[province];
-  if (!prov && !isQuebec && !isOutside) throw new Error(`unknown province: ${province}`);
+  if (!prov && !isQuebec && !isOutside) throw new PayrollError(`unknown province: ${province}`);
 
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };

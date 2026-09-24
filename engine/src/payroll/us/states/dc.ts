@@ -94,6 +94,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateCount, certificateFlag, type PayrollCertificate,
@@ -252,7 +253,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = dcRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for District of Columbia withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for District of Columbia withholding: ${P}`);
   }
   // FR-230 prints percentage-method tables for the eight DC_PERIODS (Table 1
   // plus the pp. 10–11 tables). Any other P has no published table to look
@@ -305,7 +306,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   if (!bracket) {
     // Unreachable: the top bracket has no ceiling, so every taxable amount
     // matches. The throw keeps the lookup total instead of trusting that.
-    throw new Error(
+    throw new PayrollError(
       `no District of Columbia bracket covers ${D(taxable)} for a ${period} payroll`,
     );
   }

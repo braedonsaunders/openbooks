@@ -38,6 +38,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulInt, mulRateCents, rate6, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
@@ -381,7 +382,7 @@ export function orTransitWithholding(input: {
   district: string;
 }): string {
   if (input.rate == null || input.rate === "") {
-    throw new Error(
+    throw new PayrollError(
       `no transit payroll-tax rate has been entered for ${input.district} (Oregon). `
       + "Publication 150-206-436 (Rev. 12-31-25) does not publish TriMet or Lane "
       + "Transit District rates or an employee-withholding computation for them, "
@@ -396,7 +397,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = orRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for Oregon withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for Oregon withholding: ${P}`);
   }
 
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -434,7 +435,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // stale answer on OR-W-4 (which has no federal-tax question).
   const periodFederal = input.federalIncomeTax;
   if (periodFederal == null || periodFederal.trim() === "") {
-    throw new Error(
+    throw new PayrollError(
       "Oregon withholding (150-206-436) requires this period's federal income tax "
       + "from the current Pub 15-T calculation as an input to BASE (FAQ 1: not "
       + "FICA; FAQ 11: yes, the program must subtract it, up to the printed cap). "

@@ -49,6 +49,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import { certificateAmount, certificateCount, certificateFlag } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -124,7 +125,7 @@ export function miRatesForPayDate(payDate: string): MiYearRates {
 
 function periodsGuard(periodsPerYear: number): void {
   if (!Number.isInteger(periodsPerYear) || periodsPerYear < 1 || periodsPerYear > 2000) {
-    throw new Error(`invalid pay periods per year for Michigan withholding: ${periodsPerYear}`);
+    throw new PayrollError(`invalid pay periods per year for Michigan withholding: ${periodsPerYear}`);
   }
 }
 
@@ -300,7 +301,7 @@ export function miDetroitResidentRate(input: {
   if (input.otherCityNonresidentRate == null) return rates.detroit.residentRate;
   const reduced = U(rates.detroit.residentRate) - U(input.otherCityNonresidentRate);
   if (reduced < 0n) {
-    throw new Error(
+    throw new PayrollError(
       "the other city's nonresident income tax rate is higher than Detroit's 2.4% resident rate, "
       + "which the Michigan City Income Tax Act does not permit — check the rate entered for the "
       + `work city (${input.otherCityNonresidentRate}).`,
@@ -337,20 +338,20 @@ export function miCityWithholding(input: {
   supplemental?: string;
 }): { tax: string; factors: Record<string, string> } {
   if (!MI_TAXING_CITIES.includes(input.city)) {
-    throw new Error(
+    throw new PayrollError(
       `"${input.city}" is not a Michigan city that levies an income tax. The Michigan City Income `
       + `Tax Act admits exactly ${MI_TAXING_CITIES.length}: ${MI_TAXING_CITIES.join(", ")}. `
       + "Correct the employee's work or residence city.",
     );
   }
   if (input.rate == null || input.rate === "") {
-    throw new Error(
+    throw new PayrollError(
       `no income tax rate has been entered for ${input.city} (Michigan). ${MI_CITY_RATE_SOURCE} `
       + "Withholding nothing would under-withhold every employee the city's tax reaches.",
     );
   }
   if (input.exemptionPerYear == null || input.exemptionPerYear === "") {
-    throw new Error(
+    throw new PayrollError(
       `no annual exemption value has been entered for ${input.city} (Michigan). A city's income `
       + "tax is levied on compensation AFTER an exemption allowance, and the allowance is not the "
       + "same in every city — Detroit's is $600 a year. Withholding on the full wage would "

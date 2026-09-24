@@ -464,7 +464,7 @@ test("Ohio refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodEnd: "2027-01-15", periodsPerYear: 26, wages: "3000",
       basis: "resident", certificate: cert("us_oh_it4"),
     }),
-    /2027 Ohio income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Ohio income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });
 
@@ -990,7 +990,7 @@ test("no engine in this tranche will calculate a year it has not transcribed", (
     })],
   ];
   for (const [state, run] of cases) {
-    assert.throws(run, /2027 .* withholding tables are not loaded/, state);
+    assert.throws(run, /2027 .* withholding tables are not available in this pack version.*update the pack/, state);
     assert.throws(run, /Never extrapolate the prior year/, state);
   }
 });

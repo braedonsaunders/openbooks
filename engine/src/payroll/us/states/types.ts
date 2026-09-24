@@ -32,6 +32,7 @@
  * INTERFACE (this module), the edition/refusal discipline, and money.ts. The
  * generic layer above knows only the interface.
  */
+import { PayrollError } from "../../error.ts";
 import type { ResolvedCertificate } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 
@@ -214,32 +215,30 @@ export interface UsStateWithholdingEngine {
 
 /**
  * The refusal every state engine raises for a year it has not transcribed.
- * Shared so the sentence is identical across states and names the same three
- * things: what is missing, where it goes, and how to scaffold it.
+ * Shared so the sentence is identical across states: what is missing, and
+ * the operator remedy — rates for a new year arrive with a pack update,
+ * never a scaffold script. The "never extrapolate" warning stays because it
+ * constrains the OPERATOR too (do not pay into the year on last year's
+ * tables by hand).
  */
 export function refuseUntranscribedYear(
-  engine: Pick<UsStateWithholdingEngine, "state" | "label" | "ratesModule" | "editions">,
+  engine: Pick<UsStateWithholdingEngine, "state" | "label" | "editions">,
   year: number,
 ): never {
   const published = engine.editions
     .filter((edition) => edition.status === "published")
     .map((edition) => edition.year)
     .sort((a, b) => a - b);
-  const draft = engine.editions
-    .filter((edition) => edition.status === "draft" && !published.includes(edition.year))
-    .map((edition) => edition.year);
-  if (draft.includes(year)) {
-    throw new Error(
-      `the ${year} ${engine.label} withholding tables are scaffolded but not transcribed — `
-      + `placeholder values remain in ${engine.ratesModule}. Fill them in from the state's own `
-      + "publication and flip the edition to published before paying into " + year + ".",
+  if (engine.editions.some((edition) => edition.year === year && edition.status === "draft")) {
+    throw new PayrollError(
+      `the ${year} ${engine.label} withholding tables are not available in this pack version — `
+      + `a pay date in ${year} cannot be calculated; update the pack before paying into ${year}.`,
     );
   }
-  throw new Error(
-    `${year} ${engine.label} withholding tables are not loaded — `
-    + (published.length > 0 ? `loaded years: ${published.join(", ")}. ` : "no years are loaded. ")
-    + `Transcribe the ${year} edition of the state's published withholding schedules into `
-    + `${engine.ratesModule}. Never extrapolate the prior year: a state's brackets, allowance `
+  throw new PayrollError(
+    `the ${year} ${engine.label} withholding tables are not available in this pack version `
+    + (published.length > 0 ? `(loaded years: ${published.join(", ")}); ` : "; ")
+    + "update the pack. Never extrapolate the prior year: a state's brackets, allowance "
     + "amounts and rates all move independently.",
   );
 }
@@ -249,7 +248,7 @@ export function refuseUnprintedPeriod(
   engine: Pick<UsStateWithholdingEngine, "label" | "printedPeriods">,
   periodsPerYear: number,
 ): never {
-  throw new Error(
+  throw new PayrollError(
     `${engine.label} publishes withholding tables for `
     + `${(engine.printedPeriods ?? []).join(", ")} pay periods, and this payroll runs `
     + `${periodsPerYear} periods a year. The state's method is a per-period TABLE lookup, not a `

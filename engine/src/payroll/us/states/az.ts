@@ -36,6 +36,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateFlag, type PayrollCertificate,
@@ -119,14 +120,14 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   const printed = certificateChoice(input.certificate, "withholding_percent");
   if (printed == null) {
-    throw new Error(
+    throw new PayrollError(
       "Arizona Form A-4 withholding percentage is missing — the form and A.R.S. "
       + "§ 43-401(E) prescribe 2.0% of gross taxable wages when no A-4 is on file, "
       + "and that default lives on the certificate. The engine will not invent a percent.",
     );
   }
   if (!(rates.printedPercents as readonly string[]).includes(printed)) {
-    throw new Error(
+    throw new PayrollError(
       `Arizona Form A-4 does not offer a ${printed}% withholding election — `
       + `printed percents: ${rates.printedPercents.join(", ")}`,
     );

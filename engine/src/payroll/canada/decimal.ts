@@ -4,6 +4,7 @@
  * multiplication here rounds half-up straight to the cent in one step —
  * never round-to-4dp-then-round-to-2dp, which double-rounds at the edge.
  */
+import { PayrollError } from "../error.ts";
 import { fromUnits, roundDiv, toUnits } from "../../money/money";
 
 /** Money string → bigint units (1e4 scale). */
@@ -17,12 +18,12 @@ const CENT = 100n; // cents quantum inside 1e4 units
 /** Parse a statutory rate (≤6 decimal places) to an exact 1e6-scaled bigint. */
 export function rate6(value: string | number): bigint {
   const raw = String(value).trim();
-  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) throw new Error(`not a decimal rate: "${value}"`);
+  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) throw new PayrollError(`not a decimal rate: "${value}"`);
   const negative = raw.startsWith("-");
   const unsigned = raw.replace(/^[-+]/, "");
   const [whole = "0", fraction = ""] = unsigned.split(".");
   if (fraction.length > 6 && /[1-9]/.test(fraction.slice(6))) {
-    throw new Error(`rate loses precision beyond 6 decimal places: "${value}"`);
+    throw new PayrollError(`rate loses precision beyond 6 decimal places: "${value}"`);
   }
   const units = BigInt(whole || "0") * RATE6 + BigInt((fraction + "000000").slice(0, 6));
   return negative ? -units : units;
@@ -40,25 +41,25 @@ export function mulRateCents(u: bigint, rate: string | number): bigint {
 
 /** amount × (num/den) with the ratio unrounded, result rounded to the cent. */
 export function mulRatioCents(u: bigint, num: bigint, den: bigint): bigint {
-  if (den <= 0n) throw new Error("ratio denominator must be greater than zero");
+  if (den <= 0n) throw new PayrollError("ratio denominator must be greater than zero");
   return roundDiv(u * num, den * CENT) * CENT;
 }
 
 /** amount × integer (e.g. P × per-period amount) — exact, no rounding needed. */
 export function mulInt(u: bigint, n: number): bigint {
-  if (!Number.isInteger(n) || n < 0) throw new Error(`not a non-negative integer: ${n}`);
+  if (!Number.isInteger(n) || n < 0) throw new PayrollError(`not a non-negative integer: ${n}`);
   return u * BigInt(n);
 }
 
 /** amount ÷ integer, rounded half-up to the cent (annual → per-period). */
 export function divIntCents(u: bigint, n: number): bigint {
-  if (!Number.isInteger(n) || n <= 0) throw new Error(`not a positive integer: ${n}`);
+  if (!Number.isInteger(n) || n <= 0) throw new PayrollError(`not a positive integer: ${n}`);
   return roundDiv(u, BigInt(n) * CENT) * CENT;
 }
 
 /** Truncate (drop, never round) to the cent — CPP per-period exemption rule. */
 export function truncCents(u: bigint): bigint {
-  if (u < 0n) throw new Error("truncCents expects a non-negative amount");
+  if (u < 0n) throw new PayrollError("truncCents expects a non-negative amount");
   return (u / CENT) * CENT;
 }
 

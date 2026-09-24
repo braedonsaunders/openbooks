@@ -88,6 +88,6 @@ test("AR exempt is zero and a year it has not transcribed is refused", () => {
       payDate: "2027-01-15", periodsPerYear: 12, wages: "2127",
       basis: "resident", certificate: cert({ exemptions: "2" }),
     }),
-    /2027 Arkansas income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Arkansas income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

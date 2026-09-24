@@ -104,6 +104,8 @@
  * returned HTTP 200 with a "404 - Page not found" body (recorded, not
  * cited). No vendor, law-firm, OECD or other-ERP source is cited anywhere.
  */
+import { PayrollError } from "../error.ts";
+
 export interface IeUscBand {
   /** Width of the band in euro; null for the top balance band. */
   readonly width: string | null;
@@ -212,11 +214,12 @@ const RATES_2026_OCT: IeEditionRates = {
  */
 export function ratesForPayDate(payDate: string): IeEditionRates {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
-    throw new Error(`IE payroll: pay date is not an ISO date: "${payDate}"`);
+    throw new PayrollError(`IE payroll: pay date is not an ISO date: "${payDate}"`);
   }
   if (payDate < "2026-01-01" || payDate > "2026-12-31") {
-    throw new Error(
-      `IE payroll: no transcribed tables for pay date ${payDate} — 2026 only`,
+    throw new PayrollError(
+      `IE payroll: no tables for pay date ${payDate} — rates for ${payDate.slice(0, 4)} aren't `
+      + "available in this pack version; update the pack",
     );
   }
   return payDate < "2026-10-01" ? RATES_2026_JAN : RATES_2026_OCT;

@@ -17,6 +17,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
@@ -110,14 +111,14 @@ export function deAnnualTax(taxable: bigint): bigint {
       return U(band.base) + mulRateCents(max0(taxable - U(band.over)), band.rate);
     }
   }
-  throw new Error("Delaware tax computation table is incomplete");
+  throw new PayrollError("Delaware tax computation table is incomplete");
 }
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = deRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for Delaware withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for Delaware withholding: ${P}`);
   }
   const annualP = deAnnualPeriods(P, rates.dailyPeriods);
   const factors: Record<string, string> = {};

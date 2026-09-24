@@ -205,6 +205,6 @@ test("IA refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 26, wages: "2100", basis: "resident",
       certificate: cert(),
     }),
-    /2027 Iowa income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Iowa income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

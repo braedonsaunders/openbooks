@@ -38,6 +38,7 @@
  *     band, so the band itself is never derived here).
  */
 
+import { PayrollError } from "../../error.ts";
 import { QC_EXTRA_EDITIONS } from "./editions.ts";
 
 /** Bracket: annual taxable income up to `upTo` (null = top) at `rate` with constant `k`. */
@@ -138,16 +139,15 @@ export function qcRatesForPayDate(payDate: string): QcEditionRates {
   const forYear = QC_EDITIONS.filter((edition) => edition.year === year);
   const edition = forYear.find((candidate) => payDate >= candidate.effectiveFrom);
   if (!edition) {
-    throw new Error(
-      `no TP-1015.F-V constants for pay date ${payDate} — add the Revenu Québec edition to `
-      + "engine/src/payroll/canada/quebec/rates.ts",
+    throw new PayrollError(
+      `no TP-1015.F-V constants for pay date ${payDate} — rates for ${year} aren't `
+      + "available in this pack version; update the pack",
     );
   }
   if (edition.status !== "published") {
-    throw new Error(
-      `the ${year} TP-1015.F-V constants are scaffolded but not transcribed — placeholder values `
-      + "remain in engine/src/payroll/canada/quebec/rates-" + year + ".ts; fill them in from the "
-      + "published guide and flip the edition to published",
+    throw new PayrollError(
+      `the ${year} TP-1015.F-V constants are not available in this pack version — a pay date in `
+      + `${year} cannot be calculated; update the pack`,
     );
   }
   return edition;

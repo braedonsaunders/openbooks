@@ -219,8 +219,14 @@ test("engine refuses pay dates outside 2026 on both sides", () => {
     situacionFamiliar: "3" as const,
     birthYear: 1990,
   };
-  assert.throws(() => calculateEsIrpf2026({ ...base, payDate: "2025-12-31" }), /2026 only/);
-  assert.throws(() => calculateEsIrpf2026({ ...base, payDate: "2027-01-01" }), /2026 only/);
+  assert.throws(
+    () => calculateEsIrpf2026({ ...base, payDate: "2025-12-31" }),
+    /rates for 2025 aren't available in this pack version; update the pack/,
+  );
+  assert.throws(
+    () => calculateEsIrpf2026({ ...base, payDate: "2027-01-01" }),
+    /rates for 2027 aren't available in this pack version; update the pack/,
+  );
   assert.throws(
     () => calculateEsSeguridadSocial2026({ payDate: "2025-12-31", grupo: 7, base: "2000" }),
     /2026 only/,
