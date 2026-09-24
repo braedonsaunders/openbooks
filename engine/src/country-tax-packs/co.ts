@@ -109,6 +109,8 @@ export const COLOMBIA_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 19,
         role: "standard",
         rates: [{ ratePercent: 19, effectiveFrom: "2017-01-01", sourceId: "suin_ley1819_art184_19pct" }],
+        // Renglones 28/58 name the "tarifa general" in words, not numbers.
+        returnBoxes: ["28", "58"],
       },
       {
         code: "CO-VAT-RED5",
@@ -123,6 +125,9 @@ export const COLOMBIA_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 0,
         role: "zero",
         rates: [{ ratePercent: 0, effectiveFrom: "2017-01-01", sourceId: "dian_form300_exentos_applicability" }],
+        // Renglón 35 carries the exentas (E.T. arts. 477, 478, 481), the
+        // 0%-with-refund band — "exentas" names it in words, not numbers.
+        returnBoxes: ["35"],
       },
     ],
   },
