@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
@@ -18,6 +18,50 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fix
 // with a merged_into pointer; the same pair re-runs as a no-op.
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+const routeStateKey = Symbol.for("openbooks.project-merge-route-test");
+const routeState: { gate: unknown } = { gate: null };
+;(globalThis as typeof globalThis & Record<symbol, unknown>)[routeStateKey] = routeState;
+const routeAuthz = `
+  const state = globalThis[Symbol.for('openbooks.project-merge-route-test')]
+  export async function guardPermission() { return state.gate }
+  export function guardSubsidiaryScope(gate, subsidiaryId) {
+    const scope = gate.allowedSubsidiaryIds
+    if (scope === null || (subsidiaryId !== null && scope.has(subsidiaryId))) return null
+    return Response.json({ error: 'out of scope' }, { status: 404 })
+  }
+`;
+const routeHooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    if (specifier.startsWith("@/") && context.parentURL?.includes("/web/app/api/projects/merge/")) {
+      return nextResolve(
+        new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href,
+        context,
+      );
+    }
+    if (
+      specifier === "../../../../lib/authz" &&
+      context.parentURL?.includes("/web/app/api/projects/merge/")
+    ) {
+      return { shortCircuit: true, format: "module", url: "mock:project-merge-authz" };
+    }
+    return nextResolve(specifier, context);
+  },
+  load(url, _context, nextLoad) {
+    if (url === "mock:project-merge-authz") {
+      return { shortCircuit: true, format: "module", source: routeAuthz };
+    }
+    return nextLoad(url, _context);
+  },
+});
+const mergeRouteUrl = new URL("../../../web/app/api/projects/merge/route.ts", import.meta.url);
+const { POST: postMergeRoute } = await import(
+  `${mergeRouteUrl.href}?project-merge-route-test`
+) as typeof import("../../../web/app/api/projects/merge/route.ts");
+routeHooks.deregister();
 
 async function seedProject(
   orgId: string,
@@ -280,10 +324,53 @@ test("merge enforces the caller subsidiary scope inside the locked transaction",
   }
 });
 
-test("merge routes pass the caller scope into the locked merge", () => {
-  const route = readFileSync(new URL("../../../web/app/api/projects/merge/route.ts", import.meta.url), "utf8");
-  assert.match(route, /previewProjectMerge\(gate\.user\.orgId, survivorId, duplicateId, gate\.allowedSubsidiaryIds\)/);
-  assert.match(route, /allowedSubsidiaryIds: gate\.allowedSubsidiaryIds,/);
+test("merge route forwards a scope that narrows after the precheck to the locked service", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-R1", "Route survivor");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-R2", "Route duplicate");
+    const featureWrite = await db.execute<{ id: string }>(sql`
+      update orgs
+         set settings = jsonb_set(
+           coalesce(settings, '{}'::jsonb), '{features}',
+           coalesce(settings->'features', '{}'::jsonb) || '{"projects":true}'::jsonb, true)
+       where id = ${org.orgId}
+       returning id
+    `);
+    assert.equal(featureWrite.rows.length, 1, "the route fixture enables Projects for its organization");
+
+    class ScopeThatNarrowsAfterRoutePrecheck extends Set<string> {
+      checks = 0;
+      override has(value: string): boolean {
+        this.checks++;
+        return this.checks <= 2 && super.has(value);
+      }
+    }
+    const scope = new ScopeThatNarrowsAfterRoutePrecheck([org.subsidiaryId]);
+    routeState.gate = {
+      user: { orgId: org.orgId, id: actor },
+      permissions: new Set(["projects.manage"]),
+      allowedSubsidiaryIds: scope,
+    };
+
+    const response = await postMergeRoute(new Request("http://openbooks.test/api/projects/merge", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ survivorId: survivor, duplicateId: duplicate }),
+    }));
+    assert.equal(response.status, 422, "the locked service rechecks the narrowed caller scope");
+    assert.match((await response.json()).error, /outside the caller subsidiary scope/);
+    assert.equal(scope.checks, 3, "the route checks both rows, then the locked service rechecks the pair");
+    const row = await db.execute<{ is_active: boolean; custom: Record<string, unknown> }>(sql`
+      select is_active, custom from projects where id = ${duplicate} and org_id = ${org.orgId}
+    `);
+    assert.equal(row.rows[0]?.is_active, true, "the refused route request moves or deactivates nothing");
+    assert.equal(row.rows[0]?.custom?.["merged_into"], undefined);
+  } finally {
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
 });
 
 test("merge moves posted journal lines in open periods through the amend path", async () => {
