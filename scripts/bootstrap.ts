@@ -1697,7 +1697,7 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "b3738d09a836ba824febc892bac3a081cb162b9a4fafe1561edbc28a17f9a1f0",
-    to: "8a941cc3890f3159392c37dd7c94848d2fa3b7b60df9bf7684cc075fa6fa50d4",
+    to: "d91d0842bd8c0741eddb06ec4e16969bc216a79f0b2fc7fa3cb5a1a85aa2024e",
     strategy: "reapply",
     reason:
       "unshipped 0338 corrective revision: posted_document_status_guard trusted a raw "
@@ -1710,7 +1710,7 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "3d46141b8540f29d28d1905acad92a0d3478c6b0b7297e85e2b3654783a3ffab",
-    to: "8a941cc3890f3159392c37dd7c94848d2fa3b7b60df9bf7684cc075fa6fa50d4",
+    to: "d91d0842bd8c0741eddb06ec4e16969bc216a79f0b2fc7fa3cb5a1a85aa2024e",
     strategy: "reapply",
     reason:
       "unshipped 0338 corrective revision: posted_document_status_guard trusted a raw "
@@ -1719,6 +1719,18 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "through openbooks_sandbox_wipe_allowed(org_id). A database recorded at the "
       + "G4+G5 (673890cb9) body re-runs the current file: every statement is CREATE OR REPLACE / "
       + "DROP TRIGGER IF EXISTS + CREATE TRIGGER, so reapply converges idempotently.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "8a941cc3890f3159392c37dd7c94848d2fa3b7b60df9bf7684cc075fa6fa50d4",
+    to: "d91d0842bd8c0741eddb06ec4e16969bc216a79f0b2fc7fa3cb5a1a85aa2024e",
+    strategy: "reapply",
+    reason:
+      "unshipped 0338 gains its G11 section (the monthly GL aggregate follows book "
+      + "rehomes under amend) after the raw-wipe-GUC correction 06a5b82a7. Every 0338 "
+      + "statement is CREATE OR REPLACE / DROP ... IF EXISTS + CREATE, so a database "
+      + "recorded at the corrected body re-runs the current file idempotently. Each "
+      + "later 0338 revision re-points every earlier digest here to its own.",
   },
 ];
 

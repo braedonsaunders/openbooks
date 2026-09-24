@@ -199,3 +199,88 @@ end $$;
 
 COMMENT ON FUNCTION public.je_guard() IS
   'openbooks:je_guard:v6 - kernel guard for journal entry mutations; v6 (0338/G5) fences the delete branch with the soft-close-aware period_module_blocks_write, the same predicate as the sibling amend branch, instead of the closed-only period_module_is_closed; otherwise identical to v5';
+
+-- ---------------------------------------------------------------------------
+-- Section G6: the GL monthly aggregate follows book rehomes under amend.
+-- ---------------------------------------------------------------------------
+-- The entry trigger watched status and posting_date only, so an amend-path
+-- book_id rehome on a posted entry (same status, same date) moved no
+-- activity between book buckets: the old book kept the amounts and the new
+-- book showed nothing. Amend is supposed to allow the rehome (0168's
+-- same-status-amend branch fences both the old and the new org/period/book,
+-- which only makes sense if the triple may change), so the aggregate
+-- follows instead of the guard refusing: the trigger now also watches
+-- book_id, and the month-move leg subtracts with the OLD book and adds
+-- with the new one (entry_delta gains an optional book override; the
+-- four-argument form keeps working through the default). Subsidiary needs
+-- no entry-level handling (the aggregate keys the LINE subsidiary, and the
+-- line trigger already moves those buckets) and currency is not a bucket
+-- dimension. Heals only forward drift: past rehomes are undetectable
+-- post-hoc, so no historical rebuild ships here.
+DROP FUNCTION IF EXISTS public.openbooks_gl_activity_entry_delta(uuid, uuid, date, integer);
+DROP FUNCTION IF EXISTS public.openbooks_gl_activity_entry_delta(uuid, uuid, date, integer, uuid);
+CREATE FUNCTION public.openbooks_gl_activity_entry_delta(p_entry uuid, p_org uuid, p_month date, p_sign integer, p_book uuid DEFAULT NULL) RETURNS void
+    LANGUAGE sql
+    AS $$
+  insert into gl_month_activity as g (org_id, account_id, book_id, month, subsidiary_id, debit_total, credit_total, line_count)
+  select p_org, l.account_id, coalesce(p_book, e.book_id), p_month, l.subsidiary_id,
+         p_sign * coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0),
+         p_sign * coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0),
+         p_sign * count(*)
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+   where l.entry_id = p_entry and l.org_id = p_org and e.org_id = p_org
+   group by l.account_id, coalesce(p_book, e.book_id), l.subsidiary_id
+   order by l.account_id, coalesce(p_book, e.book_id), l.subsidiary_id
+  on conflict (org_id, account_id, book_id, month, subsidiary_id) do update
+    set debit_total = g.debit_total + excluded.debit_total,
+        credit_total = g.credit_total + excluded.credit_total,
+        line_count = g.line_count + excluded.line_count;
+$$;;
+
+CREATE OR REPLACE FUNCTION public.openbooks_gl_activity_entry() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_old_in boolean;
+  v_new_in boolean;
+  v_old_month date;
+  v_new_month date;
+  v_old_book uuid;
+  v_new_book uuid;
+begin
+  if tg_op = 'DELETE' and public.openbooks_sandbox_wipe_allowed(old.org_id) then
+    return null;
+  end if;
+  if tg_op = 'INSERT' then
+    if new.status in ('posted', 'reversed') then
+      perform openbooks_gl_activity_entry_delta(new.id, new.org_id, date_trunc('month', new.posting_date)::date, 1);
+    end if;
+    return null;
+  end if;
+  if tg_op = 'DELETE' then
+    if old.status in ('posted', 'reversed') then
+      perform openbooks_gl_activity_entry_delta(old.id, old.org_id, date_trunc('month', old.posting_date)::date, -1);
+    end if;
+    return null;
+  end if;
+  v_old_in := old.status in ('posted', 'reversed');
+  v_new_in := new.status in ('posted', 'reversed');
+  v_old_month := date_trunc('month', old.posting_date)::date;
+  v_new_month := date_trunc('month', new.posting_date)::date;
+  v_old_book := old.book_id;
+  v_new_book := new.book_id;
+  if v_old_in and not v_new_in then
+    perform openbooks_gl_activity_entry_delta(old.id, old.org_id, v_old_month, -1);
+  elsif v_new_in and not v_old_in then
+    perform openbooks_gl_activity_entry_delta(new.id, new.org_id, v_new_month, 1);
+  elsif v_old_in and v_new_in and (v_old_month <> v_new_month or v_old_book is distinct from v_new_book) then
+    perform openbooks_gl_activity_entry_delta(old.id, old.org_id, v_old_month, -1, v_old_book);
+    perform openbooks_gl_activity_entry_delta(new.id, new.org_id, v_new_month, 1);
+  end if;
+  return null;
+end $$;
+;
+
+DROP TRIGGER IF EXISTS gl_activity_entry ON public.journal_entries;
+CREATE TRIGGER gl_activity_entry AFTER INSERT OR DELETE OR UPDATE OF status, posting_date, book_id ON public.journal_entries FOR EACH ROW EXECUTE FUNCTION public.openbooks_gl_activity_entry();
