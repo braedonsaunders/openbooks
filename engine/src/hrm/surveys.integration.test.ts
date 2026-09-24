@@ -288,6 +288,31 @@ test("survey lifecycle and answer refusals fire by name", { skip: !DB }, async (
       }),
       (e: unknown) => e instanceof HrmSurveysError && /not on this survey/.test(e.message),
     );
+    await assert.rejects(
+      submitResponse({
+        token: opened.deliveries[0]!.token,
+        today: "2026-09-21",
+        answers: [
+          { questionId: scaleId, value: 3 },
+          { questionId: scaleId, value: 5 },
+        ],
+      }),
+      (e: unknown) => e instanceof HrmSurveysError && /answered more than once/.test(e.message),
+    );
+    const untouched = (await db.execute<{ responses: string; responded_at: string | null }>(sql`
+      select (select count(*)::text from hrm_survey_responses where org_id = ${h.org.orgId} and survey_id = ${survey.id}) as responses,
+             responded_at::text as responded_at
+        from hrm_survey_invitations where org_id = ${h.org.orgId} and id = ${opened.deliveries[0]!.invitationId}
+    `)).rows[0]!;
+    assert.equal(untouched.responses, "0");
+    assert.equal(untouched.responded_at, null);
+    await assert.rejects(db.execute(sql`
+      insert into hrm_survey_responses (org_id, survey_id, answers)
+      values (${h.org.orgId}, ${survey.id}, ${JSON.stringify([
+        { questionId: scaleId, kind: "scale", value: 3 },
+        { questionId: scaleId, kind: "scale", value: 5 },
+      ])}::jsonb)
+    `));
     // Closing freezes the survey: submit and re-close both refused.
     const closed = await closeSurvey({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id });
     assert.equal(closed.status, "closed");

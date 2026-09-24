@@ -1,0 +1,1 @@
+The migration validates only newly inserted survey responses; it does not rewrite or reinterpret append-only historical response evidence.

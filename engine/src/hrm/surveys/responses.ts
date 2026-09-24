@@ -269,6 +269,16 @@ export async function submitResponse(input: {
     if (!Array.isArray(input.answers) || input.answers.length === 0) {
       throw new HrmSurveysError("VALIDATION", "answer at least one question before submitting");
     }
+    const seenQuestions = new Set<string>();
+    for (const answer of input.answers) {
+      if (seenQuestions.has(answer.questionId)) {
+        throw new HrmSurveysError(
+          "VALIDATION",
+          `question ${answer.questionId} was answered more than once — submit one answer per survey question`,
+        );
+      }
+      seenQuestions.add(answer.questionId);
+    }
     const byId = new Map(questions.map((q) => [q.id, q]));
     const stored: { questionId: string; kind: string; driverKey: string | null; value: number | null; raw: unknown }[] = [];
     for (const answer of input.answers) {
