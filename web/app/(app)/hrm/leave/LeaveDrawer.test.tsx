@@ -56,6 +56,12 @@ registerHooks({
         url: "data:text/javascript,export async function promptDialog(){return null}",
       };
     }
+    if (specifier === "./confirm" || (typeof specifier === "string" && specifier.endsWith("/lib/confirm"))) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function confirmDialog(){return globalThis.__leaveConfirmVerdict}",
+      };
+    }
     return next(specifier, context);
   },
 });
@@ -132,14 +138,14 @@ function installFetch(script: Script, manageable: boolean, own: "two" | "one" | 
   };
 }
 
-async function mountFiling(requestId: string | null = null) {
+async function mountFiling(requestId: string | null = null, onClose: () => void = () => {}) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <LeaveDrawer requestId={requestId} canWithdrawCancel onClose={() => {}} />
+        <LeaveDrawer requestId={requestId} canWithdrawCancel onClose={onClose} />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -370,6 +376,30 @@ test("a rejected filing request shows failure and releases the submit button", a
 
   assert.equal(buttonNamed("New request").disabled, false, "the submit button must be available for retry");
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /The request could not be filed/);
+});
+
+test("filing Cancel keeps edited values until discard is confirmed", async (t) => {
+  (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
+  (globalThis as Record<string, unknown>).__leaveConfirmVerdict = false;
+  const restoreFetch = installFetch({ posts: [] }, false, "one");
+  t.after(restoreFetch);
+  let closes = 0;
+  const { unmount } = await mountFiling(null, () => { closes += 1 });
+  t.after(unmount);
+
+  const reason = document.querySelector("textarea#leave-reason") as HTMLTextAreaElement;
+  await act(async () => {
+    setInput(reason, "Keep this leave request draft");
+    await tick();
+  });
+  await click(buttonNamed("Cancel"));
+
+  assert.equal(closes, 0, "declining discard keeps the drawer open");
+  assert.equal((document.querySelector("textarea#leave-reason") as HTMLTextAreaElement).value, "Keep this leave request draft");
+
+  (globalThis as Record<string, unknown>).__leaveConfirmVerdict = true;
+  await click(buttonNamed("Cancel"));
+  assert.equal(closes, 1, "confirmed discard closes the drawer");
 });
 
 test("a single own employment preselects, and none explains instead of an empty picker", async (t) => {
