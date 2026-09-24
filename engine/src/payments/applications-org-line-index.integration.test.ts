@@ -1,3 +1,4 @@
+// source-pin-contract: published migration 0150 is executed from its immutable bytes, and EXPLAIN proves small-tenant OR probes use the org-leading composite indexes, idempotent on rerun
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
