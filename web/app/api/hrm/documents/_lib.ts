@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import {
   HrmDocumentsError,
   HrmOrgChartError,
@@ -47,6 +48,11 @@ export function hrmDocumentsErrorResponse(e: unknown): NextResponse {
     // cannot be probed across tenants; missing grants are forbidden.
     const status = /not visible in this organization/.test(e.message) ? 404 : 403;
     return NextResponse.json({ error: e.message }, { status });
+  }
+  if (e instanceof UnrestrictedScopeError) {
+    // Org-wide policy/config writes by subsidiary-restricted callers: the
+    // record itself is visible, so the refusal names its remedy as a 403.
+    return NextResponse.json({ error: e.message }, { status: 403 });
   }
   console.error("[hrm] documents endpoint failed:", e);
   return NextResponse.json({ error: "internal error" }, { status: 500 });

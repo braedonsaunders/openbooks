@@ -21,12 +21,15 @@ const {
   loadActorPerson,
   loadApprovalPerson,
   loadPartyEmployerSubsidiaries,
+  requireEmploymentRowInScope,
   requireHrmEmploymentApprove,
   requireHrmEmploymentManage,
   requireHrmEmploymentRead,
   requirePartyInScope,
+  requireRowSubjectInScope,
   requireUnrestrictedHrmScope,
 } = await import("./authorization.ts");
+const { UnrestrictedScopeError } = await import("../organization/subsidiary-scope.ts");
 
 interface FakeUser {
   isSuperAdmin: boolean;
@@ -379,15 +382,66 @@ test("party lens refuses a delinked subject to restricted actors", async () => {
   );
 });
 
-test("unrestricted-scope gate refuses restricted actors by name with the remedy", async () => {
+test("employment-row gate checks that employment, never the party's other employments", async () => {
+  const state = emptyState();
+  const exec = fakeExec(state);
+  const foreign = seedEmployment(state, ORG, SUB_B);
+  const actor = seedUser(state, ["hrm.documents.read"]);
+  state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A] });
+  await assert.rejects(
+    requireEmploymentRowInScope(exec, ORG, actor, foreign.id),
+    /not visible in this organization/,
+  );
+  await assert.rejects(requireEmploymentRowInScope(exec, ORG, actor, randomUUID()), /not visible in this organization/);
+  state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A, SUB_B] });
+  await requireEmploymentRowInScope(exec, ORG, actor, foreign.id);
+});
+
+test("row dispatcher uses the employment link when present, the party lens otherwise", async () => {
+  const state = emptyState();
+  const exec = fakeExec(state);
+  // One person employed by both entities: the B-employment row is out of
+  // an A-only actor's reach even though the party lens would admit them.
+  const sharedParty = randomUUID();
+  const empA: FakeEmployment = {
+    id: randomUUID(),
+    orgId: ORG,
+    workerPartyId: sharedParty,
+    employerSubsidiaryId: SUB_A,
+    revision: 1,
+  };
+  const empB: FakeEmployment = {
+    id: randomUUID(),
+    orgId: ORG,
+    workerPartyId: sharedParty,
+    employerSubsidiaryId: SUB_B,
+    revision: 1,
+  };
+  state.employments.set(`${ORG}:${empA.id}`, empA);
+  state.employments.set(`${ORG}:${empB.id}`, empB);
+  const actor = seedUser(state, ["hrm.documents.read"]);
+  state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A] });
+  await requireRowSubjectInScope(exec, ORG, actor, { employmentId: empA.id, partyId: sharedParty });
+  await assert.rejects(
+    requireRowSubjectInScope(exec, ORG, actor, { employmentId: empB.id, partyId: sharedParty }),
+    /not visible in this organization/,
+  );
+  await requireRowSubjectInScope(exec, ORG, actor, { employmentId: null, partyId: sharedParty });
+  await assert.rejects(
+    requireRowSubjectInScope(exec, ORG, actor, { employmentId: null, partyId: randomUUID() }),
+    /not visible in this organization/,
+  );
+});
+
+test("unrestricted-scope gate delegates to the canonical 403", async () => {
   const state = emptyState();
   const exec = fakeExec(state);
   const actor = seedUser(state, ["hrm.documents.manage"]);
   state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A] });
   await assert.rejects(
-    requireUnrestrictedHrmScope(exec, ORG, actor, "Retention schedules"),
-    /organization-wide scope/,
+    requireUnrestrictedHrmScope(exec, ORG, actor),
+    (e: unknown) => e instanceof UnrestrictedScopeError && /requires unrestricted subsidiary access/.test(e.message),
   );
   state.restrictions.set(actor, { mode: "all" });
-  await requireUnrestrictedHrmScope(exec, ORG, actor, "Retention schedules");
+  await requireUnrestrictedHrmScope(exec, ORG, actor);
 });
