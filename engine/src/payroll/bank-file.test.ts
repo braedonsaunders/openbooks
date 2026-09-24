@@ -28,6 +28,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
@@ -682,10 +683,8 @@ async function payrollOrg(
   const country = spec.country;
   const currency = spec.currency;
   const region = country === "US" ? "TX" : "ON";
-  // The bank rail and the payroll entity must describe the same jurisdiction.
-  // NACHA fixtures are US/USD; CPA-005 fixtures remain CA/CAD. Keeping that
-  // invariant before createPayRun means every commit consumes the calculation
-  // it was just given, rather than changing the run currency after Calculate.
+  // Each rail matches its payroll jurisdiction: NACHA is US/USD; CPA-005 is
+  // CA/CAD, so Calculate and Commit use the same currency.
   if (rail === "nacha") {
     await db.execute(sql`
       insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2)
@@ -723,6 +722,9 @@ async function payrollOrg(
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedComponentsTolerantly(org.orgId, actorId, country);
+  if (country === "CA") {
+    await seedOntarioEhtFixture(org.orgId, actorId);
+  }
   if (country === "US") {
     for (const slot of ["fit", "fica", "futa", "suta", "state_income_tax", "local_income_tax"]) {
       await setPackSlotAccount(org.orgId, actorId, country, slot, accounts.craPayable);

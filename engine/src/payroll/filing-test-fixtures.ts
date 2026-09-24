@@ -16,6 +16,24 @@ export interface AdoptionFixture {
   employeeName: string;
 }
 
+/** Seed an explicit ON EHT rate for shared, low-payroll Canadian fixtures. */
+export async function seedOntarioEhtFixture(orgId: string, actorId: string, annualExemption = "1000000"): Promise<void> {
+  await db.execute(sql`
+    insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                         rate_values, created_by, updated_by)
+    values (${orgId}, 'CA', 'ca_eht', 'ON', 2026,
+            ${JSON.stringify({ rate: "1.95", annualExemption })}::jsonb,
+            ${actorId}, ${actorId})
+  `);
+}
+
+export async function seedCanadianPayrollComponentsForTest(
+  orgId: string, actorId: string | null, country: string,
+): Promise<void> {
+  await seedPayrollComponents(orgId, actorId, country);
+  if (country === "CA" && actorId) await seedOntarioEhtFixture(orgId, actorId);
+}
+
 async function seedEmployee(
   fx: { orgId: string; actorId: string; scheduleId: string },
   options: { name: string; hiredOn?: string } = { name: "Terry Worker" },
@@ -92,6 +110,8 @@ export async function seedAdoption(
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
+  // Shared Ontario fixtures configure EHT so unrelated tests reach their own behavior.
+  await seedOntarioEhtFixture(org.orgId, actorId);
 
   const scheduleId = randomUUID();
   await db.execute(sql`

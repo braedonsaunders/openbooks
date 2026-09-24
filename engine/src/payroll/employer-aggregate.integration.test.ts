@@ -14,18 +14,10 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
-/**
- * Employer-aggregate levies, run-wiring half.
- *
- * The pure arithmetic is pinned without a database beside the assessor;
- * these tests prove the WIRING end to end with synthetic CA-pack
- * declarations only — no pack content changes, the mutation is confined to
- * each test and restored in `finally` (the ZZ-pack precedent). A failure
- * here is about priors resolution, factor merge, fences, or staleness, and
- * never about a jurisdiction's figures.
- */
+/** Integration wiring for synthetic CA-pack employer-aggregate declarations. */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -100,6 +92,7 @@ async function seedHarness(orgId: string, actorId: string): Promise<{ ehtPayable
       },
     })}::jsonb where id = ${orgId}`);
   await seedPayrollComponents(orgId, actorId, "CA");
+  await seedOntarioEhtFixture(orgId, actorId);
   await setPackSlotAccount(orgId, actorId, "CA", "eht", ehtPayable);
   return { ehtPayable };
 }
