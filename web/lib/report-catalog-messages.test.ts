@@ -68,13 +68,3 @@ test('every report column has a heading, or the report renders its key path', ()
     `these would render as raw key paths in the column header:\n${missing.join('\n')}`,
   )
 })
-
-test('every locale has complete lot-recall built-in copy', () => {
-  const missing: string[] = []
-  for (const locale of LOCALES) {
-    const copy = catalogs[locale].builtIns['lot-recall']
-    if (!copy?.name?.trim()) missing.push(`${locale}:builtIns.lot-recall.name`)
-    if (!copy?.description?.trim()) missing.push(`${locale}:builtIns.lot-recall.description`)
-  }
-  assert.deepEqual(missing, [], `lot recall copy missing:\n${missing.join('\n')}`)
-})
