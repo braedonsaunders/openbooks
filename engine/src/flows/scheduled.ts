@@ -300,7 +300,9 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
       from flows flow
       join orgs organization on organization.id = flow.org_id
      where flow.enabled and organization.env_kind = 'production'
-       and coalesce((organization.settings->'features'->>'flows')::boolean, true)
+       -- Registry fallback shape: a non-boolean stored value falls back to
+       -- the default instead of throwing 22P02 like the previous cast.
+       and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
        and flow.graph::text like '%"scheduled"%'
   `));
 
@@ -399,7 +401,9 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
        where occ.status in ('open', 'firing')
          and occ.attempt_count < ${MAX_FLOW_OCCURRENCE_ATTEMPTS}
          and occ.updated_at < ${staleBefore}
-         and coalesce((organization.settings->'features'->>'flows')::boolean, true)
+         -- Registry fallback shape (non-boolean stored values fall back to
+         -- the default instead of throwing 22P02).
+         and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
        order by occ.updated_at
        limit ${RECOVERY_BATCH}
     `));

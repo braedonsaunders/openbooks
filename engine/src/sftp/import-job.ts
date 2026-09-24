@@ -359,7 +359,7 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
       join orgs o on o.id = sc.org_id
      where sc.is_active
        and o.env_kind = 'production'
-       and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
+       and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
        ${orgId ? sql`and sc.org_id = ${orgId}` : sql``}
        ${scheduleId ? sql`and sc.id = ${scheduleId}` : sql``}
   `));

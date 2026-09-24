@@ -15,6 +15,7 @@ import {
 } from "./ap-capture.ts";
 import { getDocumentCaptureRuntimeConfig } from "./ap-capture-config.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { getS3Blob, refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { runRecordFlows } from "../flows/index.ts";
 
@@ -890,10 +891,8 @@ export async function materializeCapture(input: {
     }
     // Stored captures and existing bills stay. Turning Equipment off must
     // refuse a materialize that would persist equipment_charge.
-    const equipmentOn = (await tx.execute<{ enabled: boolean }>(sql`
-      select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
-        from orgs where id = ${input.orgId}
-    `)).rows[0]?.enabled === true;
+    // Canonical switchboard read (::boolean casts threw on non-boolean imports).
+    const equipmentOn = await orgFeatureEnabled(input.orgId, "equipment", tx as SqlExecutor);
     if (!equipmentOn) {
       const itemIds = [...new Set(
         capture.lines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),

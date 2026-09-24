@@ -664,8 +664,11 @@ export async function runDueCloseAutomations(): Promise<number> {
       join close_automation_rules a on a.org_id = r.org_id and a.trigger = 'deadline_approaching' and a.is_active
       join orgs organization on organization.id = r.org_id and organization.env_kind = 'production'
      where r.status in ('in_progress','review','approved') and r.target_close_date <= current_date + 91
-       and coalesce((organization.settings->'features'->>'advancedClose')::boolean, false)
-       and coalesce((organization.settings->'features'->>'flows')::boolean, true)
+       -- Registry fallback shape (non-boolean stored values fall back to the
+       -- default instead of throwing 22P02); the explicit conjunction is the
+       -- advancedClose parentKey ['flows'] chain.
+       and case (organization.settings->'features'->>'advancedClose') when 'true' then true when 'false' then false else false end
+       and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
   `));
   for (const run of due.rows) {
     await withOrgContext(run.org_id, async () => {

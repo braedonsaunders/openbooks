@@ -35,7 +35,9 @@ async function refuseUnexecutedRun(scheduleId: string, orgId: string): Promise<N
            sv.id as server_id,
            sv.is_active as server_active,
            o.env_kind,
-           coalesce((o.settings->'features'->>'bankFeeds')::boolean, false) as feeds_on
+           -- Registry fallback shape (non-boolean stored values fall back to
+           -- the default instead of throwing 22P02).
+           case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end as feeds_on
       from sftp_import_schedules sc
       left join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id
       join orgs o on o.id = sc.org_id

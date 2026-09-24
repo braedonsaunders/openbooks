@@ -102,6 +102,7 @@
       "description": "Subcontractor compliance (COIs, lien waivers) and year-end information returns.",
       "dependsOn": [
         "money",
+        "organization",
         "platform"
       ]
     },
@@ -159,6 +160,7 @@
       "description": "Leads, prospects and pipeline math.",
       "dependsOn": [
         "money",
+        "organization",
         "platform"
       ]
     },
@@ -500,6 +502,7 @@
         "fx",
         "ledger",
         "money",
+        "organization",
         "platform",
         "projects",
         "qbd",

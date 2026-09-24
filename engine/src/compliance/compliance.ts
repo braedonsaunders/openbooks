@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import { businessTimeZone, businessToday, formatInZone } from "../platform/business-date.ts";
 import { add, cmp, neg } from "../money/money.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
 /**
  * Subcontractor compliance engine — the control that decides whether a
@@ -583,11 +584,9 @@ export async function complianceFeatureEnabled(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<boolean> {
-  const r = (await runner.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'subcontractorCompliance')::boolean, false) as enabled
-      from orgs where id = ${orgId}
-  `));
-  return Boolean(r.rows[0]?.enabled);
+  // Canonical switchboard read: the previous inline ::boolean cast threw
+  // 22P02 on a non-boolean stored value.
+  return orgFeatureEnabled(orgId, "subcontractorCompliance", runner as SqlExecutor);
 }
 
 // ---------------------------------------------------------------------------

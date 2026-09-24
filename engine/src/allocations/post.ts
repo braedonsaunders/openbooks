@@ -107,9 +107,13 @@ export async function allocationsAtPostingEnabled(
   runner: PostRunner,
   orgId: string,
 ): Promise<boolean> {
-  const r = await runner.execute<{ a: boolean | null; p: boolean | null }>(sql`
-    select (settings->'features'->>'allocations')::boolean as a,
-           (settings->'features'->>'allocationsAtPosting')::boolean as p
+  // Explicit-'true' reads (never a ::boolean cast): a non-boolean stored
+  // value refuses instead of throwing 22P02 like the previous casts did on
+  // import artifacts. The explicit conjunction is the allocationsAtPosting
+  // parentKey ['allocations'] chain.
+  const r = await runner.execute<{ a: boolean; p: boolean }>(sql`
+    select case (settings->'features'->>'allocations') when 'true' then true else false end as a,
+           case (settings->'features'->>'allocationsAtPosting') when 'true' then true else false end as p
       from orgs where id = ${orgId}`);
   return r.rows[0]?.a === true && r.rows[0]?.p === true;
 }

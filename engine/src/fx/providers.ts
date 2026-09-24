@@ -804,16 +804,21 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
          select 1 from orgs organization
           where organization.id = fx_provider_configs.org_id
             and organization.env_kind = 'production'
+            -- Registry fallback shape with the data-dependent default inlined:
+            -- an explicit boolean wins, anything else (absent or a
+            -- non-boolean import artifact, which threw 22P02 under the
+            -- previous ::boolean cast) falls back to the org's own FX data —
+            -- the same rule dataDependentFeatureDefault applies.
             and (
-             coalesce((organization.settings->'features'->>'multiCurrency')::boolean, false)
-             or (
-               (organization.settings->'features'->>'multiCurrency') is null
-               and (
+             case (organization.settings->'features'->>'multiCurrency')
+               when 'true' then true
+               when 'false' then false
+               else (
                  exists(select 1 from journal_lines jl
                          where jl.org_id = organization.id and jl.fx_rate <> 1)
                  or exists(select 1 from fx_rates f where f.org_id = organization.id)
                )
-             )
+             end
        )
        )
      order by next_sync_at limit 20

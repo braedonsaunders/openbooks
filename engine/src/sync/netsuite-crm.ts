@@ -7,6 +7,7 @@ import { ensureCrmDefaults } from '../crm/crm.ts'
 import { weightAmount } from '../crm/crm-math.ts'
 import { canonicalDecimal } from '../money/exact-decimal.ts'
 import { normalizeMoney } from '../money/money.ts'
+import { orgFeatureEnabled } from '../organization/org-feature-lock.ts'
 
 export interface CrmImportReport {
   accountStatuses: number
@@ -283,10 +284,8 @@ async function importNativeActivities(orgId: string, actorId: string, creds: Net
 
 /** Idempotent CRM import from the tenant's stored NetSuite connection. */
 export async function importNetSuiteCrm(orgId: string, connectionId?: string): Promise<CrmImportReport> {
-  const enabled = (await db.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'crm')::boolean, true) as enabled
-      from orgs where id = ${orgId}`))
-  if (enabled.rows[0]?.enabled !== true) throw new Error('CRM feature is disabled')
+  // Canonical switchboard read (::boolean casts threw on non-boolean imports).
+  if (!(await orgFeatureEnabled(orgId, 'crm'))) throw new Error('CRM feature is disabled')
   const creds = await credentials(orgId, connectionId)
   const actor = (await db.execute<{ id: string }>(sql`select id from users where org_id=${orgId} and is_active order by role='controller' desc, created_at limit 1`))
   const actorId = actor.rows[0]?.id

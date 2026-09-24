@@ -54,7 +54,9 @@ export async function tick(): Promise<void> {
       select id, settings->'overheadRateLifecycle'->>'cadence' as cadence
         from orgs
        where settings->'overheadRateLifecycle'->>'mode' = 'scheduled'
-         and coalesce((settings->'features'->>'projects')::boolean, true)`));
+         -- Registry fallback shape (non-boolean stored values fall back to
+         -- the default instead of throwing 22P02).
+         and case (settings->'features'->>'projects') when 'true' then true when 'false' then false else true end`));
     for (const org of orgs.rows) {
       const cadence = org.cadence === "quarterly" ? "quarterly" : "monthly";
       const today = await businessToday(org.id);

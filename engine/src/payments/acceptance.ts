@@ -18,6 +18,7 @@ import { paymentControlDeps } from "./payment-accounts.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
 /**
  * Customer payment acceptance — hosted checkout links on posted invoices.
@@ -1230,15 +1231,11 @@ interface LinkWithContext {
   expiresOn: string | null;
 }
 
-/** Registry default is off — absence must not enable hosted checkout. */
+/** Registry default is off — absence must not enable hosted checkout. Resolved
+ * through the canonical switchboard: the previous inline ::boolean cast threw
+ * 22P02 on a non-boolean stored value. */
 export async function onlinePaymentsFeatureEnabled(orgId: string): Promise<boolean> {
-  const result = await withBypassContext(async () =>
-    db.execute<{ enabled: boolean }>(sql`
-      select coalesce((settings->'features'->>'onlinePayments')::boolean, false) as enabled
-        from orgs where id = ${orgId}
-    `),
-  );
-  return result.rows[0]?.enabled === true;
+  return withBypassContext(() => orgFeatureEnabled(orgId, "onlinePayments"));
 }
 
 export async function paymentLinkOrgId(token: string): Promise<string | null> {

@@ -3,6 +3,7 @@ import { db, withBypass, withOrg } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { addCalendarDays, parseIsoDate, businessToday } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
@@ -98,11 +99,10 @@ const OPTIONAL_KIND_FEATURE: Record<string, { key: string; defaultEnabled: boole
 export async function isRecurringKindEnabled(orgId: string, kind: string): Promise<boolean> {
   const feature = OPTIONAL_KIND_FEATURE[kind];
   if (!feature) return true;
-  const r = (await db.execute<{ enabled: boolean | null }>(sql`
-    select (settings->'features'->>${feature.key})::boolean as enabled from orgs where id = ${orgId}
-  `));
-  const stored = r.rows[0]?.enabled;
-  return typeof stored === "boolean" ? stored : feature.defaultEnabled;
+  // Canonical switchboard read: the previous inline ::boolean cast threw
+  // 22P02 on a non-boolean stored value, and the local default table is
+  // pinned to the registry defaults above.
+  return orgFeatureEnabled(orgId, feature.key);
 }
 
 function toIso(d: Date): string {
@@ -275,13 +275,16 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         join orgs o on o.id = rs.org_id and o.env_kind = 'production'
         join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
        where rs.is_active and rs.next_run_on <= ${scanCutoff}
+         -- Feature reads use the registry's fallback shape (a non-boolean stored
+         -- value falls back to the registry default instead of throwing
+         -- 22P02 like the previous ::boolean casts did on import artifacts).
          and case d.kind
-           when 'quote' then coalesce((o.settings->'features'->>'orders')::boolean, true)
-           when 'sales_order' then coalesce((o.settings->'features'->>'orders')::boolean, true)
-           when 'purchase_order' then coalesce((o.settings->'features'->>'orders')::boolean, true)
-           when 'expense_report' then coalesce((o.settings->'features'->>'expenses')::boolean, true)
-           when 'pay_run' then coalesce((o.settings->'features'->>'payroll')::boolean, false)
-           when 'project_charge' then coalesce((o.settings->'features'->>'projects')::boolean, true)
+           when 'quote' then case (o.settings->'features'->>'orders') when 'true' then true when 'false' then false else true end
+           when 'sales_order' then case (o.settings->'features'->>'orders') when 'true' then true when 'false' then false else true end
+           when 'purchase_order' then case (o.settings->'features'->>'orders') when 'true' then true when 'false' then false else true end
+           when 'expense_report' then case (o.settings->'features'->>'expenses') when 'true' then true when 'false' then false else true end
+           when 'pay_run' then case (o.settings->'features'->>'payroll') when 'true' then true when 'false' then false else false end
+           when 'project_charge' then case (o.settings->'features'->>'projects') when 'true' then true when 'false' then false else true end
            else true
          end
        order by rs.next_run_on
@@ -529,10 +532,8 @@ async function generateFromTemplate(
   }
   // Stored templates and existing generated documents stay. Turning Equipment
   // off must refuse a generate that would persist equipment_charge.
-  const equipmentOn = (await db.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
-      from orgs where id = ${orgId}
-  `)).rows[0]?.enabled === true;
+  // Canonical switchboard read (::boolean casts threw on non-boolean imports).
+  const equipmentOn = await orgFeatureEnabled(orgId, "equipment");
   if (!equipmentOn) {
     const itemIds = [...new Set(
       lineRes.rows.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),

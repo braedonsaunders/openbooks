@@ -3,6 +3,7 @@ import { db, withOrg } from "../platform/db.ts";
 import { civilDayIndex, isoFromCivilDayIndex } from "../platform/business-date.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 
@@ -28,13 +29,15 @@ export class AdvancedSubscriptionError extends Error {
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
+// Resolved through the canonical feature switchboard (orgFeatureEnabled):
+// the previous inline SQL re-implemented the registry defaults and the
+// subscriptionBilling→advancedSubscriptions dependency, and its ::boolean
+// casts threw 22P02 on non-boolean imports. advancedSubscriptions declares
+// requiresAll ['subscriptionBilling'], so one resolver call covers both.
 async function assertEnabled(orgId: string): Promise<void> {
-  const result = await db.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'subscriptionBilling')::boolean, false)
-           and coalesce((settings->'features'->>'advancedSubscriptions')::boolean, false) as enabled
-      from orgs where id = ${orgId}
-  `);
-  if (!result.rows[0]?.enabled) throw new AdvancedSubscriptionError("Advanced subscriptions feature is disabled");
+  if (!(await orgFeatureEnabled(orgId, "advancedSubscriptions"))) {
+    throw new AdvancedSubscriptionError("Advanced subscriptions feature is disabled");
+  }
 }
 
 function pad(n: number): string { return String(n).padStart(2, "0"); }
@@ -541,10 +544,8 @@ async function assertCommercialRefs(
       }
     }
     if (storedItemId !== input.itemId) {
-      const equipmentOn = (await db.execute<{ enabled: boolean }>(sql`
-        select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
-          from orgs where id = ${orgId}
-      `)).rows[0]?.enabled === true;
+      // Canonical switchboard read (::boolean casts threw on non-boolean imports).
+      const equipmentOn = await orgFeatureEnabled(orgId, "equipment");
       if (!equipmentOn && row.rows[0].kind === "equipment_charge") {
         throw new AdvancedSubscriptionError("Equipment is disabled", 404);
       }
