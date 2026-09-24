@@ -163,7 +163,13 @@ const CA_DE4: PayrollCertificate = {
   label: "Employee's Withholding Allowance Certificate (California)",
   scope: { level: "region", region: "CA" },
   purpose: "withholding",
-  citation: "California EDD Form DE 4, Rev. 56 (1-26); California Withholding Schedules 2026, Method B",
+  // EDD Form DE 4 requires a new exempt claim by February 15 each year.
+  validity: {
+    kind: "following_year_date", monthDay: "02-15",
+    appliesWhen: { field: "exempt", values: ["true"] },
+  },
+  citation: "California EDD Form DE 4, Rev. 56 (1-26), https://edd.ca.gov/siteassets/files/pdf_pub_ctr/de4.pdf; "
+    + "California Employer's Guide DE 44 (2026)",
   summary:
     "Since 2020 the federal W-4 sets federal withholding only — California requires its own DE 4. "
     + "With no DE 4 on file the employer must withhold at single with zero allowances.",
