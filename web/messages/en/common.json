@@ -300,5 +300,10 @@
       "delegated": "Delegated",
       "escalated": "Escalated"
     }
+  },
+  "customFields": {
+    "noOptions": "No options defined",
+    "selectRecord": "Select a record…",
+    "loadFailed": "Could not load records"
   }
 }

@@ -300,5 +300,10 @@
     "retryRun": "Relancer l’approbation",
     "retried": "Approbation relancée — la nouvelle étape est dans la liste de travail",
     "retryFailed": "La relance a échoué"
+  },
+  "customFields": {
+    "noOptions": "Aucune option définie",
+    "selectRecord": "Sélectionner un enregistrement…",
+    "loadFailed": "Impossible de charger les enregistrements"
   }
 }

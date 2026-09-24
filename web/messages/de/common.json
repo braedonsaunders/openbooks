@@ -300,5 +300,10 @@
     "retryRun": "Freigabe erneut anstoßen",
     "retried": "Freigabe neu angestoßen — der neue Schritt liegt auf der Arbeitsliste",
     "retryFailed": "Erneutes Anstoßen fehlgeschlagen"
+  },
+  "customFields": {
+    "noOptions": "Keine Optionen definiert",
+    "selectRecord": "Datensatz auswählen…",
+    "loadFailed": "Datensätze konnten nicht geladen werden"
   }
 }

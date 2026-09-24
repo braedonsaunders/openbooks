@@ -300,5 +300,10 @@
     "retryRun": "Reintentar aprobación",
     "retried": "Aprobación reimpulsada; la nueva etapa está en la lista de trabajo",
     "retryFailed": "Falló el reintento"
+  },
+  "customFields": {
+    "noOptions": "No hay opciones definidas",
+    "selectRecord": "Seleccionar un registro…",
+    "loadFailed": "No se pudieron cargar los registros"
   }
 }

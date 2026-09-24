@@ -156,6 +156,7 @@ function MultiSelectInput({
   value: string[]
   onChange: (arr: string[]) => void
 }) {
+  const tFields = useTranslations('common.customFields')
   const toggle = (opt: string) => {
     if (value.includes(opt)) onChange(value.filter((v) => v !== opt))
     else onChange([...value, opt])
@@ -163,7 +164,7 @@ function MultiSelectInput({
   return (
     <div role="group" aria-label={label} className="flex flex-wrap gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-800">
       {options.length === 0 ? (
-        <span className="text-xs text-slate-400">No options defined</span>
+        <span className="text-xs text-slate-400">{tFields('noOptions')}</span>
       ) : (
         options.map((opt) => (
           <label
@@ -197,6 +198,7 @@ function ReferenceInput({
   onChange: (v: unknown) => void
 }) {
   const table = def.config.referenceTable
+  const tFields = useTranslations('common.customFields')
   const [options, setOptions] = useState<{ value: string; label: string; hint?: string }[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -212,7 +214,7 @@ function ReferenceInput({
     }
     fetch(`/api/forms/options?${searchParams.toString()}`)
       .then(async (r) => {
-        if (!r.ok) throw new Error(await readApiErrorMessage(r, 'Could not load records'))
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, tFields('loadFailed')))
         return r.json()
       })
       .then((data) => {
@@ -224,7 +226,7 @@ function ReferenceInput({
         setLoadError(message)
         toast.error(message)
       })
-  }, [table, def.config.referenceFilter])
+  }, [table, def.config.referenceFilter, tFields])
 
   return (
     <SearchSelect
@@ -233,7 +235,7 @@ function ReferenceInput({
       value={value}
       onChange={(v) => onChange(v)}
       options={options}
-      placeholder={loadError ?? 'Select a record…'}
+      placeholder={loadError ?? tFields('selectRecord')}
     />
   )
 }
