@@ -12,8 +12,9 @@ const stateKey = Symbol.for("openbooks.analytics-config-write-guard-test");
 interface RouteState {
   executed: string[];
   updateRowCount: number;
+  allowedSubsidiaryIds: Set<string> | null;
 }
-const state: RouteState = { executed: [], updateRowCount: 1 };
+const state: RouteState = { executed: [], updateRowCount: 1, allowedSubsidiaryIds: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 /** Flatten drizzle SQL chunks into text for deterministic scripted replies. */
@@ -33,14 +34,6 @@ function sqlText(query: unknown): string {
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksAnalyticsConfigSqlText = sqlText;
 
 const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
-      export async function guardPermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' } }
-      }
-    `,
-  ],
   [
     "mock:features",
     `
@@ -81,15 +74,23 @@ const mockSources = new Map<string, string>([
 // the real modules enforce, so every bad-body case behind them would report
 // green untested.
 const mockUrls = new Map<string, string>([
-  ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:features"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
 ]);
+let dbRealUrl = ''
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    if (specifier === "../../../../../lib/authz") {
+      const real = nextResolve(specifier, context).url;
+      return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}` };
+    }
+    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+      dbRealUrl = nextResolve(specifier, context).url
+      return { url: "mock:db", shortCircuit: true }
     }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -97,7 +98,7 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source: url === "mock:db" ? `export * from ${JSON.stringify(dbRealUrl)};\n${source}` : source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
@@ -109,6 +110,7 @@ hooks.deregister();
 function reset(updateRowCount: number): void {
   state.executed = [];
   state.updateRowCount = updateRowCount;
+  state.allowedSubsidiaryIds = null;
 }
 
 function put(body: Record<string, unknown>): Promise<Response> {
@@ -128,6 +130,15 @@ const VALID = {
   sequentialMinCount: 3,
   sequentialMinDays: 7,
 };
+
+test("restricted actors cannot write org-wide analytics settings", async () => {
+  reset(1);
+  state.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  const response = await put({ expectedRevision: 0, values: VALID });
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.deepEqual(state.executed, [], "the configuration and audit are untouched");
+});
 
 test("a zero-row update refuses with a named 409 and writes no audit", async () => {
   reset(0);

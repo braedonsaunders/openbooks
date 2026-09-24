@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../lib/authz'
 import { OrgEmailConfigConflictError, readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/src/delivery/email-config.ts'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { isEmailProvider } from '@openbooks/emails'
@@ -23,6 +23,8 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   let body: Record<string, unknown>
   try {
     const parsedBody = await parseJsonBody(req, jsonObject);

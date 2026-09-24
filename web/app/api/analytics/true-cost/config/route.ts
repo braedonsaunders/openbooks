@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
+import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { DEFAULT_PROFILE, type TrueCostConfig, type TrueCostProfile, type CustomCategory } from "../../../../../lib/analytics/true-cost-data";
 import { ALLOCATION_BASES, ALLOCATION_METHODS, RATE_FORMATS, COMPOSITE_METHODS, type AllocationBase, type AllocationMethod, type RateFormat, type CompositeMethod } from "../../../../../lib/analytics/true-cost-engine";
@@ -195,6 +196,8 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardFeaturePermission("admin.setup.manage", "projects");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { expectedRevision?: unknown; activeProfileId?: string; profiles?: unknown[] } | null;

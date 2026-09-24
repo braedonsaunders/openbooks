@@ -8,6 +8,7 @@ import {
   can,
   guardPermission,
   guardSubsidiaryScope,
+  guardUnrestrictedScope,
   subsidiaryScopeAllows,
   subsidiariesInScope,
 } from '../../../../../lib/authz'
@@ -233,6 +234,8 @@ export async function PUT(req: Request) {
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data

@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { FEATURE_BY_KEY, acquireFeatureGateLock, featureDisableBlocked, featureRequirements } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { normalizeCountryCode } from '../../../../../lib/countries'
@@ -57,6 +57,8 @@ export const dynamic = 'force-dynamic'
 export async function PUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const { orgId, id: actorId } = gate.user
 
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -592,6 +594,8 @@ export async function PUT(req: Request) {
 export async function POST() {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const { orgId, id: actorId } = gate.user
 
   await db.transaction(async (tx) => {

@@ -13,12 +13,12 @@ import { sql } from "drizzle-orm";
 // strict account validation and all-or-nothing evidenced writes against real
 // PostgreSQL. Only the authorization seam is a test double.
 const stateKey = Symbol.for("openbooks.overhead-route-test");
-const routeState = { gate: null as null | { user: { orgId: string; id: string } } };
+const routeState = { gate: null as null | { user: { orgId: string; id: string }; allowedSubsidiaryIds?: Set<string> | null } };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.overhead-route-test')]
-  export async function guardPermission() { return state.gate }
+  export async function guardPermission() { return state.gate && { ...state.gate, allowedSubsidiaryIds: state.gate.allowedSubsidiaryIds ?? null } }
   export function can() { return true }
   export function guardUnrestrictedScope(authz) {
     if (authz?.allowedSubsidiaryIds == null) return null
@@ -37,7 +37,8 @@ const hooks = registerHooks({
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead/route")) {
-      return { shortCircuit: true, url: "mock:overhead-authz" };
+      const real = nextResolve(specifier, context).url;
+      return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; ${mockAuthz}`)}` };
     }
     return nextResolve(specifier, context);
   },
@@ -94,6 +95,22 @@ function post(body: unknown): Promise<Response> {
     body: JSON.stringify(body),
   }));
 }
+
+test("restricted actors cannot change org-wide overhead application settings", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Setup Admin", "admin"));
+    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
+    const response = await post({ action: "set-application", mode: "net_zero_pair", accountId: org.accounts.adjustment });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    assert.equal(await storedApplication(org.orgId), null);
+    assert.equal(await applicationAudits(org.orgId), 0);
+  } finally {
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("set-application refuses a nonexistent posting account", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
