@@ -273,7 +273,7 @@ async function applyCustomRecord(
 
   const searchText =
     nextData !== undefined
-      ? await buildSearchText(sections, nextData, record.record_number)
+      ? await buildSearchText(user.orgId, sections, nextData, record.record_number)
       : undefined;
 
   const written = (await db.execute<Record<string, unknown>>(sql`
@@ -356,7 +356,7 @@ async function createCustomRecordAttempt(
     `custrec:${typeKey}`,
     recordNumberPrefix(typeKey),
   );
-  const searchText = await buildSearchText(sections, data, recordNumber);
+  const searchText = await buildSearchText(user.orgId, sections, data, recordNumber);
 
   const r = await db.execute<{ id: string }>(sql`
     insert into custom_records (org_id, type_id, type_key, record_number, data, search_text, created_by, updated_by)

@@ -42,7 +42,7 @@ const mockSources = new Map<string, string>([
         return { id: 'record-type-1', status: 'published' }
       }
 
-      export async function buildSearchText(_sections, data) {
+      export async function buildSearchText(_orgId, _sections, data) {
         state.searchData = structuredClone(data)
         return 'record search text'
       }

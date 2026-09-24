@@ -257,6 +257,7 @@ export async function loadRecordWorkspace(
     : total
 
   const labels = await resolveEntityLabels(
+    authz.user.orgId,
     sections,
     rows.rows.map((r) => (r.data ?? {}) as Record<string, unknown>),
   )

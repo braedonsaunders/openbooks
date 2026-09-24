@@ -28,17 +28,22 @@ export interface SubsidiaryOption {
 export async function subsidiaryOptions(
   includeInactive = false,
   includeElimination = false,
+  orgId?: string,
 ): Promise<SubsidiaryOption[]> {
   // Defense in depth: RLS already pins this to one org in production, but the
   // local/test superuser role bypasses RLS — without the explicit predicate
   // this list silently spans tenants (and pooled-scratch leftovers), which
   // corrupts every subtree the consolidation resolver builds from it.
-  const ambient = ambientTenantOrgId();
+  const tenant = orgId ?? ambientTenantOrgId();
+  // No ambient tenant means there is no safe list to return. The superuser
+  // role used by dev/test bypasses RLS, so an omitted context cannot fall
+  // back to an all-tenant read.
+  if (!tenant) return [];
   const r = (await db.execute<Omit<SubsidiaryOption, "depth">>(sql`
     select id, parent_id as "parentId", name, base_currency as "baseCurrency",
            country, is_elimination as "isElimination", is_active as "isActive"
       from subsidiaries
-     ${ambient ? sql`where org_id = ${ambient}` : sql``}
+     where org_id = ${tenant}
      order by name`));
   const rows = r.rows.filter((s) => (includeInactive || s.isActive) && (includeElimination || !s.isElimination));
   const byParent = new Map<string | null, typeof rows>();
@@ -72,12 +77,12 @@ export async function subsidiaryUiOptions(
   includeElimination = false,
 ): Promise<SubsidiaryOption[]> {
   if (!(await subsidiaryFeatureEnabled(orgId))) return [];
-  return subsidiaryOptions(includeInactive, includeElimination);
+  return subsidiaryOptions(includeInactive, includeElimination, orgId);
 }
 
 /** The org's root subsidiary id. */
-export async function rootSubsidiaryId(): Promise<string> {
-  return (await rootSubsidiary()).id;
+export async function rootSubsidiaryId(orgId: string): Promise<string> {
+  return (await rootSubsidiary(orgId)).id;
 }
 
 /**
@@ -85,9 +90,9 @@ export async function rootSubsidiaryId(): Promise<string> {
  * subsidiary picker off) create against the root, and the create form must
  * show its NAME — never the raw id as a label.
  */
-export async function rootSubsidiary(): Promise<{ id: string; name: string }> {
+export async function rootSubsidiary(orgId: string): Promise<{ id: string; name: string }> {
   const r = (await db.execute<{ id: string; name: string }>(sql`
-    select id, name from subsidiaries where parent_id is null limit 1`));
+    select id, name from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`));
   if (!r.rows[0]) throw new Error("org has no root subsidiary");
   return r.rows[0];
 }

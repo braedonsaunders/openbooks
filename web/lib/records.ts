@@ -208,6 +208,7 @@ export function inTypeAudience(
  * Used by the list page's cell formatting and the search-text builder.
  */
 export async function resolveEntityLabels(
+  orgId: string,
   sections: FormSection[],
   dataRows: FieldValueMap[],
 ): Promise<{ parties: Map<string, string>; accounts: Map<string, string> }> {
@@ -233,13 +234,15 @@ export async function resolveEntityLabels(
     partyIds.size > 0
       ? (db.execute<{ id: string; display_name: string }>(sql`
           select id, display_name from parties
-           where id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...partyIds])}::jsonb))
+           where org_id = ${orgId}
+             and id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...partyIds])}::jsonb))
         `))
       : Promise.resolve({ rows: [] as { id: string; display_name: string }[] }),
     accountIds.size > 0
       ? (db.execute<{ id: string; number: string | null; name: string }>(sql`
           select id, number, name from accounts
-           where id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...accountIds])}::jsonb))
+           where org_id = ${orgId}
+             and id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...accountIds])}::jsonb))
         `))
       : Promise.resolve({ rows: [] as { id: string; number: string | null; name: string }[] }),
   ])
@@ -256,11 +259,12 @@ export async function resolveEntityLabels(
  * on every save; the module list searches it with a single ILIKE.
  */
 export async function buildSearchText(
+  orgId: string,
   sections: FormSection[],
   data: FieldValueMap,
   recordNumber: string,
 ): Promise<string> {
-  const labels = await resolveEntityLabels(sections, [data])
+  const labels = await resolveEntityLabels(orgId, sections, [data])
   const parts: string[] = [recordNumber]
   for (const section of sections) {
     if (section.repeating) {
