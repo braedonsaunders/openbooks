@@ -39,12 +39,15 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
  * - every table's json/jsonb `custom` column is nulled for masked clones
  *   (tenant-authored payload that may hide PII without a named column);
  * - file_blobs is not copied at all for masked clones;
- * - files/file_versions storage_kind carries the tombstone, never 'db'/'s3'.
+ * - files/file_versions storage_kind carries the tombstone, never 'db'/'s3';
+ * - flow_runs.occurrence_key is cleared on every copy (OM-13-CLONE: a global
+ *   dedup unique the clone must not adopt), so it never reaches any sandbox.
  */
 function isCoveredByConstruction(table: string, column: string, udtName: string): boolean {
   if (column === "custom" && (udtName === "json" || udtName === "jsonb")) return true;
   if (table === "file_blobs" && column === "bytes") return true;
   if ((table === "files" || table === "file_versions") && column === "storage_kind") return true;
+  if (table === "flow_runs" && column === "occurrence_key") return true;
   return false;
 }
 
@@ -537,6 +540,10 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "document_lines.base_unit",
   "document_lines.description",
   "document_lines.extra_dims",
+  // OM-13-CLONE: pricing provenance stamped at pricing time (price-schedule
+  // references and the resolved unit price) — business configuration, never
+  // identity, contact, credential, or person-assessing prose.
+  "document_lines.price_basis",
   "document_lines.rate_presentation",
   "document_lines.settlement_type",
   "document_lines.unit",
@@ -636,8 +643,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "field_ticket_labor_snapshots.source_system",
   "field_ticket_policies.period",
   "field_ticket_policies.scope",
-  "field_ticket_signature_requests.message",
-  "field_ticket_signature_requests.token_digest",
   "field_ticket_signatures.comment",
   "field_ticket_signatures.role",
   "field_ticket_signatures.signer_name",
@@ -688,7 +693,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "flow_run_effects.effect_key",
   "flow_runs.context",
   "flow_runs.error",
-  "flow_runs.occurrence_key",
   "flow_runs.status",
   "flow_runs.subject_kind",
   "flow_runs.trigger",
@@ -823,11 +827,9 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "hrm_document_categories.key",
   "hrm_document_categories.label",
   "hrm_document_events.kind",
-  "hrm_document_signers.decline_reason",
-  "hrm_document_signers.evidence",
-  "hrm_document_signers.role",
-  "hrm_document_signers.status",
-  "hrm_document_signers.token_hash",
+  // OM-13-CLONE: hrm_document_signers is excluded from the clone plan
+  // (bearer-equivalent signing tokens), so its columns left the derived
+  // surface and their allow-list entries were removed with them.
   "hrm_document_templates.body_template",
   "hrm_document_templates.category_key",
   "hrm_document_templates.merge_fields",
@@ -1022,7 +1024,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "hrm_scorecards.shared_notes",
   "hrm_succession_candidates.readiness",
   "hrm_succession_plans.status",
-  "hrm_survey_invitations.token_hash",
   "hrm_survey_questions.driver_key",
   "hrm_survey_questions.kind",
   "hrm_survey_questions.options",
@@ -1337,12 +1338,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "payment_instructions.end_to_end_id",
   "payment_instructions.payment_reference",
   "payment_instructions.status",
-  "payment_links.currency",
-  "payment_links.memo",
-  "payment_links.provider",
-  "payment_links.status",
-  "payment_links.token_hash",
-  "payment_links.token_sealed",
   "payment_mandates.mandate_reference",
   "payment_mandates.scheme",
   "payment_mandates.status",
@@ -1644,18 +1639,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_resources.name",
   "schedule_resources.role",
   "schedule_task_assignments.role",
-  "scheduler_outbox.error",
-  "scheduler_outbox.kind",
-  "scheduler_outbox.occurrence_key",
-  "scheduler_outbox.payload",
-  "scheduler_outbox.status",
-  "scheduler_outbox.terminal_failed_by",
-  "scheduler_outbox_terminal_audit.detail",
-  "scheduler_outbox_terminal_audit.event",
-  "scheduler_outbox_terminal_audit.kind",
-  "scheduler_outbox_terminal_audit.marked_by",
-  "scheduler_outbox_terminal_audit.occurrence_key",
-  "scheduler_outbox_terminal_audit.reason",
   "script_runs.error_message",
   "script_runs.logs",
   "script_runs.status",
@@ -1858,8 +1841,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "time_entries.rejection_reason",
   "time_entries.status",
   "time_entries.wage_currency",
-  "time_kiosks.device_token_hash",
-  "time_kiosks.name",
   "time_types.classification",
   "time_types.name",
   "timesheet_weeks.rejection_reason",
