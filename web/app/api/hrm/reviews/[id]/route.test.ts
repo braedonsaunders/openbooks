@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import nodeTest from "node:test";
+import test from "node:test";
 import { NextResponse } from "next/server";
 
 interface RouteState {
@@ -12,12 +12,6 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-review-item-route-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
 
 const routeState: RouteState = {
   authz: { user: { id: "user-1", orgId: "org-1" } },
@@ -123,26 +117,24 @@ const mockUrls = new Map<string, string>([
 ]);
 
 let itemRoute: typeof import("./route.ts") | undefined;
-if (!isVitest) {
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      if (specifier === "server-only") {
-        return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-      }
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-review-item";
-  itemRoute = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
-}
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-review-item";
+itemRoute = (await import(routeUrl)) as typeof import("./route.ts");
+hooks.deregister();
 
 const REVIEW_ID = "00000000-0000-4000-8000-000000000051";
 const ANSWER_ID = "00000000-0000-4000-8000-000000000052";
@@ -164,21 +156,23 @@ function patchRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("review item route carries identity without a permission shortcut", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /getAuthz\(\)/);
-    assert.doesNotMatch(source, /guardPermission/);
-  });
-} else {
-  test("an unknown id never reaches the service", async () => {
-    reset();
-    const bad = { params: Promise.resolve({ id: "nope" }) };
-    assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "share" }), bad)).status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("unauthenticated and disabled-feature requests are refused before loading review data", async () => {
+  reset();
+  routeState.authz = null;
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), params)).status, 401);
+  routeState.authz = { user: { id: "user-1", orgId: "org-1" } };
+  routeState.featureOn = false;
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), params)).status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("an unknown id never reaches the service", async () => {
+  reset();
+  const bad = { params: Promise.resolve({ id: "nope" }) };
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "share" }), bad)).status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
 
   test("detail resolves through the privacy scope", async () => {
     reset();
@@ -256,4 +250,3 @@ if (isVitest) {
     assert.equal(response.status, 409);
     assert.equal(routeState.mapped[0]!.error, refusal);
   });
-}
