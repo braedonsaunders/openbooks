@@ -28,8 +28,23 @@ export const SANDBOX_CYCLE_BREAKERS: Record<string, readonly string[]> = {
  * and explicit: inferred references without an enforcing trigger must not
  * reintroduce the deferrable documents↔journal_entries cycle.
  */
-const TRIGGER_INSERT_PARENTS: Readonly<Record<string, string>> = {
+const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
   subsidiary_id: "subsidiaries",
+};
+const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
+  // Cross-row checks in field_ticket_labor_line_integrity_guard read these
+  // parents immediately. Several related tables participate in deferrable FK
+  // cycles, so their trigger dependencies must also order the cyclic tail.
+  field_ticket_labor_lines: [
+    "field_ticket_labor_snapshots",
+    "documents",
+    "parties",
+    "items",
+    "time_types",
+    "project_tasks",
+    "users",
+    "time_entries",
+  ],
 };
 
 /** Tables never copied into a sandbox: sandbox-management tables, real-world
@@ -419,8 +434,15 @@ export function insertionOrder(cat: Catalog): string[] {
       }
     }
     for (const column of t.columns) {
-      const ref = TRIGGER_INSERT_PARENTS[column.name];
+      const ref = TRIGGER_INSERT_COLUMN_PARENTS[column.name];
       if (!ref || ref === t.name || !inSet.has(ref)) continue;
+      if (!children.get(ref)!.has(t.name)) {
+        children.get(ref)!.add(t.name);
+        indeg.set(t.name, (indeg.get(t.name) ?? 0) + 1);
+      }
+    }
+    for (const ref of TRIGGER_INSERT_TABLE_PARENTS[t.name] ?? []) {
+      if (ref === t.name || !inSet.has(ref)) continue;
       if (!children.get(ref)!.has(t.name)) {
         children.get(ref)!.add(t.name);
         indeg.set(t.name, (indeg.get(t.name) ?? 0) + 1);
@@ -440,7 +462,92 @@ export function insertionOrder(cat: Catalog): string[] {
       if ((indeg.get(child) ?? 0) === 0) queue.push(child);
     }
   }
-  for (const n of names) if (!seen.has(n)) order.push(n); // cyclic tail → deferred FKs
+  // A deferrable FK cycle can leave a large tail. Sorting that tail in catalog
+  // order loses immediate trigger dependencies even though their parent rows
+  // must already exist when each BEFORE trigger runs. Re-sort the remainder
+  // using only non-deferrable FKs and declared trigger parents; the remaining
+  // cycles in this stricter graph are genuine and may safely stay at the end.
+  const cyclicTail = names.filter((n) => !seen.has(n));
+  const tailSet = new Set(cyclicTail);
+  const immediateChildren = new Map(cyclicTail.map((n) => [n, new Set<string>()]));
+  const addImmediateEdge = (parent: string, child: string) => {
+    if (!tailSet.has(parent) || !tailSet.has(child) || parent === child) return;
+    const siblings = immediateChildren.get(parent)!;
+    if (!siblings.has(child)) {
+      siblings.add(child);
+    }
+  };
+  for (const t of cat.tables) {
+    for (const ref of Object.values(t.hardFks)) addImmediateEdge(ref, t.name);
+    for (const ref of TRIGGER_INSERT_TABLE_PARENTS[t.name] ?? []) addImmediateEdge(ref, t.name);
+    for (const column of t.columns) {
+      const ref = TRIGGER_INSERT_COLUMN_PARENTS[column.name];
+      if (ref) addImmediateEdge(ref, t.name);
+    }
+  }
+  // Collapse genuine immediate-dependency cycles so that acyclic dependants
+  // of such a cycle still follow it. A plain Kahn pass followed by catalog
+  // order would otherwise strand a trigger child beside its cyclic parents.
+  let nextIndex = 0;
+  const index = new Map<string, number>();
+  const lowLink = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const components: string[][] = [];
+  const visit = (node: string) => {
+    index.set(node, nextIndex);
+    lowLink.set(node, nextIndex);
+    nextIndex += 1;
+    stack.push(node);
+    onStack.add(node);
+    for (const child of immediateChildren.get(node) ?? []) {
+      if (!index.has(child)) {
+        visit(child);
+        lowLink.set(node, Math.min(lowLink.get(node)!, lowLink.get(child)!));
+      } else if (onStack.has(child)) {
+        lowLink.set(node, Math.min(lowLink.get(node)!, index.get(child)!));
+      }
+    }
+    if (lowLink.get(node) === index.get(node)) {
+      const component: string[] = [];
+      let member: string;
+      do {
+        member = stack.pop()!;
+        onStack.delete(member);
+        component.push(member);
+      } while (member !== node);
+      components.push(component);
+    }
+  };
+  for (const n of cyclicTail) if (!index.has(n)) visit(n);
+  const componentFor = new Map<string, number>();
+  components.forEach((members, component) => members.forEach((member) => componentFor.set(member, component)));
+  const componentChildren = new Map(components.map((_, component) => [component, new Set<number>()]));
+  const componentIndeg = new Map(components.map((_, component) => [component, 0]));
+  for (const [parent, childrenForParent] of immediateChildren) {
+    for (const child of childrenForParent) {
+      const parentComponent = componentFor.get(parent)!;
+      const childComponent = componentFor.get(child)!;
+      if (parentComponent === childComponent || componentChildren.get(parentComponent)!.has(childComponent)) continue;
+      componentChildren.get(parentComponent)!.add(childComponent);
+      componentIndeg.set(childComponent, componentIndeg.get(childComponent)! + 1);
+    }
+  }
+  const componentOrder = (component: number) => Math.min(...components[component]!.map((n) => names.indexOf(n)));
+  const componentQueue = components.map((_, component) => component)
+    .filter((component) => componentIndeg.get(component) === 0)
+    .sort((a, b) => componentOrder(a) - componentOrder(b));
+  while (componentQueue.length) {
+    const component = componentQueue.shift()!;
+    order.push(...components[component]!.sort((a, b) => names.indexOf(a) - names.indexOf(b)));
+    for (const child of componentChildren.get(component) ?? []) {
+      componentIndeg.set(child, componentIndeg.get(child)! - 1);
+      if (componentIndeg.get(child) === 0) {
+        componentQueue.push(child);
+        componentQueue.sort((a, b) => componentOrder(a) - componentOrder(b));
+      }
+    }
+  }
   return order;
 }
 

@@ -96,6 +96,29 @@ test("sandbox insertion opens the deferred document-ledger cycle at the declared
   assert.ok(order.indexOf("documents") < order.indexOf("journal_entries"));
 });
 
+test("sandbox insertion orders trigger-required parents inside a deferrable FK cycle", () => {
+  const laborLines = table("NO ACTION");
+  laborLines.name = "field_ticket_labor_lines";
+  laborLines.fks = { snapshot_id: "field_ticket_labor_snapshots", field_ticket_id: "documents" };
+  laborLines.hardFks = {};
+  const snapshots = table("NO ACTION");
+  snapshots.name = "field_ticket_labor_snapshots";
+  snapshots.fks = { field_ticket_id: "documents" };
+  snapshots.hardFks = {};
+  const documents = table("NO ACTION");
+  documents.name = "documents";
+  documents.fks = { labor_snapshot_id: "field_ticket_labor_snapshots" };
+  documents.hardFks = {};
+
+  const order = insertionOrder({
+    tables: [laborLines, snapshots, documents],
+    tenantTables: [laborLines, snapshots, documents],
+    rebaseSet: new Set(),
+  });
+  assert.ok(order.indexOf("documents") < order.indexOf("field_ticket_labor_lines"));
+  assert.ok(order.indexOf("field_ticket_labor_snapshots") < order.indexOf("field_ticket_labor_lines"));
+});
+
 /**
  * The boundary guard that makes the wipe's one remaining raw-SQL interpolation
  * (PARENT_FILTER's org id) provably safe: a value that passes here is a
