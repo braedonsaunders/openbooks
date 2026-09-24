@@ -998,6 +998,170 @@ test(
 );
 
 test(
+  "manual match creation and unmatching write line audit rows with actor and target",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      const [bankLineId] = await postBankJournal(org, actor, ["100.0000"], "match-deposit");
+      await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "100",
+          currency: "CAD",
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "100",
+              description: "Customer deposit",
+              bankTransactionId: "match-deposit-100",
+            },
+          ],
+        },
+        ctx,
+      );
+      const lineId = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and bank_transaction_id = 'match-deposit-100'
+      `)).rows[0]!.id;
+      const { id: reconciliationId } = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
+        ctx,
+      );
+
+      await createMatch(
+        { reconciliationId, statementLineId: lineId, journalLineIds: [bankLineId!] },
+        ctx,
+      );
+      await unmatchStatementLine({ reconciliationId, statementLineId: lineId }, ctx);
+
+      const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
+        select changes, actor_id from audit_log
+         where org_id = ${org.orgId}
+           and table_name = 'bank_statement_lines'
+           and row_id = ${lineId}
+           and action = 'update'
+         order by id
+      `));
+      assert.deepEqual(
+        audits.rows.map((row) => row.changes),
+        [
+          {
+            operation: "match",
+            reconciliationId,
+            matchedBy: "manual",
+            journalLineIds: [bankLineId],
+            before: { matchStatus: "unmatched" },
+            after: { matchStatus: "matched" },
+          },
+          {
+            operation: "unmatch",
+            reconciliationId,
+            journalLineIds: [bankLineId],
+            before: { matchStatus: "matched" },
+            after: { matchStatus: "unmatched" },
+          },
+        ],
+      );
+      for (const row of audits.rows) assert.equal(row.actor_id, actor);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "auto-match writes one audit row per run carrying the matched pairs",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      await postBankJournal(org, actor, ["100.0000"], "auto-first");
+      await postBankJournal(org, actor, ["50.0000"], "auto-second");
+      await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "150",
+          currency: "CAD",
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "100",
+              description: "First deposit",
+              bankTransactionId: "auto-100",
+            },
+            {
+              postedOn: org.date,
+              amount: "50",
+              description: "Second deposit",
+              bankTransactionId: "auto-50",
+            },
+          ],
+        },
+        ctx,
+      );
+      const lineIds = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
+         order by bank_transaction_id
+      `)).rows.map((row) => row.id);
+      const { id: reconciliationId } = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "150" },
+        ctx,
+      );
+
+      const result = await autoMatch(reconciliationId, ctx);
+      assert.equal(result.matched, 2);
+
+      // Batched, not per-pair: exactly one row even for two matches.
+      const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
+        select changes, actor_id from audit_log
+         where org_id = ${org.orgId}
+           and table_name = 'reconciliations'
+           and row_id = ${reconciliationId}
+           and changes->>'operation' = 'auto_match'
+      `));
+      assert.equal(audits.rows.length, 1);
+      const changes = audits.rows[0]!.changes as {
+        operation: string;
+        matched: number;
+        pairs: { statementLineId: string; journalLineId: string; confidence: string }[];
+      };
+      assert.equal(changes.operation, "auto_match");
+      assert.equal(changes.matched, 2);
+      assert.deepEqual(
+        changes.pairs.map((pair) => pair.statementLineId).sort(),
+        [...lineIds].sort(),
+      );
+      for (const pair of changes.pairs) assert.equal(pair.confidence, "0.9");
+      assert.equal(audits.rows[0]!.actor_id, actor);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "a re-exported ID-less file with different bytes imports flagged, never skips",
   async () => {
     const org = await createScratchOrg();
