@@ -118,7 +118,7 @@ export function ItemRatesEditor({
       setLoadState('failed')
     })
   }, [itemId, t])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { void Promise.resolve().then(load) }, [load])
 
   const tierTypes = useMemo(
     () => itemKind === 'labor' && baseUnit === 'hour'
