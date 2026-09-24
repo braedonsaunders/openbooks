@@ -283,6 +283,10 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
     },
     async write(rows, _mode, ctx: WriteCtx) {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+      const allowedSubsidiaryIds = ctx.allowedSubsidiaryIds
+      if (allowedSubsidiaryIds === undefined) {
+        throw new Error('prior payroll register import requires an explicit subsidiary scope')
+      }
       const all = await slots()
       const componentSlots = all.filter((slot) => slot.kind !== 'total')
 
@@ -336,7 +340,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
             outcome.errors.push({ row: rowNo, message: employee.error, field: 'employee' })
             continue
           }
-          const scopeError = await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds)
+          const scopeError = await employeeWriteScopeError(ctx.orgId, employee.id, allowedSubsidiaryIds)
           if (scopeError) {
             outcome.failed++
             outcome.errors.push({ row: rowNo, message: scopeError, field: 'employee' })
@@ -420,6 +424,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
                 periodStart: checked.periodStart,
                 periodEnd: checked.periodEnd,
                 payDate: checked.payDate,
+                allowedSubsidiaryIds,
               }),
             )
           }
@@ -427,7 +432,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
           touchedRegisters.add(registerId)
 
           const result = await savePriorStub(
-            { orgId: ctx.orgId, actorId: ctx.actorId, registerId, row: stub },
+            { orgId: ctx.orgId, actorId: ctx.actorId, registerId, row: stub, allowedSubsidiaryIds },
             all,
           )
           if (result.created) outcome.created++
@@ -452,7 +457,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
             valuedRows,
           }))
           for (const registerId of touchedRegisters) {
-            await recordUnmappedColumns(ctx.orgId, registerId, columns)
+            await recordUnmappedColumns(ctx.orgId, registerId, columns, allowedSubsidiaryIds)
           }
         }
         for (const [column, valuedRows] of [...unmappedCounts.entries()].sort()) {

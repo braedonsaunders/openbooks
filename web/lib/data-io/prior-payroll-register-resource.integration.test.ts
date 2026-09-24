@@ -27,6 +27,18 @@ const {
   seedFlowActors,
 } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
+test("prior register imports refuse when the caller scope is missing", async () => {
+  const resource = priorPayrollRegisterResource("scope-required-org");
+  await assert.rejects(
+    resource.write([], "insert", {
+      orgId: "scope-required-org",
+      actorId: "scope-required-actor",
+      dryRun: false,
+    }),
+    /requires an explicit subsidiary scope/,
+  );
+});
+
 /**
  * The prior-payroll-register resource ran NO date or amount validation in its
  * dry-run branch, and committed the register header BEFORE the stub save that

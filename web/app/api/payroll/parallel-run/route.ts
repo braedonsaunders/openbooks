@@ -187,6 +187,7 @@ export async function POST(req: Request) {
       actorId: gate.user.id,
       registerId: body.registerId,
       payRunDocumentId: body.payRunDocumentId,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     // The result is returned in full, including `blockedReason` and the
     // tolerances in force. A caller that only reads `status` still cannot

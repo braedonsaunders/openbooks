@@ -77,6 +77,7 @@ async function importFixture(): Promise<ImportFixture> {
     periodStart: "2026-07-05",
     periodEnd: "2026-07-18",
     payDate: "2026-07-21",
+    allowedSubsidiaryIds: null,
   });
   return {
     orgId: org.orgId,
@@ -563,6 +564,7 @@ test("a filed comparison stores its header, its findings and its audit row toget
       orgId: org.orgId, actorId,
       name: "Mirror register — 2026-07-18",
       periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21",
+      allowedSubsidiaryIds: null,
     });
     await savePriorStub({
       orgId: org.orgId, actorId, registerId,
@@ -574,8 +576,17 @@ test("a filed comparison stores its header, its findings and its audit row toget
       },
     }, slots);
 
+    await assert.rejects(
+      runParallelComparison({
+        orgId: org.orgId, actorId, registerId, payRunDocumentId: run.documentId,
+        allowedSubsidiaryIds: new Set(),
+      }),
+      /does not exist/i,
+      "an explicit restricted lens cannot be widened at the service boundary",
+    );
     const filed = await runParallelComparison({
       orgId: org.orgId, actorId, registerId, payRunDocumentId: run.documentId,
+      allowedSubsidiaryIds: null,
     });
     assert.equal(filed.comparison.status, "clean");
     assert.equal(filed.comparison.counts.difference, 0);
@@ -670,6 +681,7 @@ test("a comparison whose findings cannot be stored files nothing at all", { skip
       runParallelComparison({
         orgId: f.orgId, actorId: f.actorId,
         registerId: f.registerId, payRunDocumentId: documentId,
+        allowedSubsidiaryIds: null,
       }),
     );
 
