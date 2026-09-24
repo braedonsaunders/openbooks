@@ -89,7 +89,8 @@
     "setDefaultFailed": "无法保存默认视图",
     "useSystemDefault": "使用组织默认",
     "manage": "管理视图",
-    "newView": "新建视图…"
+    "newView": "新建视图…",
+    "renderFailed": "无法呈现此视图。"
   },
   "designer": {
     "title": "表单与视图",

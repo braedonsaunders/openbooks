@@ -89,7 +89,8 @@
     "setDefaultFailed": "Could not save the default view",
     "useSystemDefault": "Use the org default",
     "manage": "Manage views",
-    "newView": "New view…"
+    "newView": "New view…",
+    "renderFailed": "This view could not be rendered."
   },
   "designer": {
     "title": "Forms & Views",

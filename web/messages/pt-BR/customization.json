@@ -89,7 +89,8 @@
     "setDefaultFailed": "Não foi possível salvar a visualização padrão",
     "useSystemDefault": "Usar o padrão da organização",
     "manage": "Gerenciar visualizações",
-    "newView": "Nova visualização…"
+    "newView": "Nova visualização…",
+    "renderFailed": "Não foi possível renderizar esta exibição."
   },
   "designer": {
     "title": "Formulários e visualizações",

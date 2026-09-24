@@ -89,7 +89,8 @@
     "setDefaultFailed": "Impossible d’enregistrer la vue par défaut",
     "useSystemDefault": "Utiliser la vue de l’organisation",
     "manage": "Gérer les vues",
-    "newView": "Nouvelle vue…"
+    "newView": "Nouvelle vue…",
+    "renderFailed": "Cette vue n'a pas pu être affichée."
   },
   "designer": {
     "title": "Formulaires & vues",
