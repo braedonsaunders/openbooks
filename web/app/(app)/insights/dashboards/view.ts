@@ -60,7 +60,10 @@ export interface DashboardsData {
   currentParams: Record<string, string | string[] | undefined>
   emptyTitle: string
   emptyDescription: string
+  filteredEmptyTitle: string
+  filteredEmptyDescription: string
   isEmpty: boolean
+  isFilteredEmpty: boolean
   hasRows: boolean
   columnName: string
   columnCards: string
@@ -136,8 +139,11 @@ export async function loadDashboards(
     currentParams: sp,
     emptyTitle: t('dashboards.emptyTitle'),
     emptyDescription: t('dashboards.emptyDescription'),
+    filteredEmptyTitle: t('cards.filterEmptyTitle'),
+    filteredEmptyDescription: t('cards.filterEmptyDescription'),
     isEmpty: total === 0,
-    hasRows: total > 0,
+    isFilteredEmpty: total > 0 && filteredTotal === 0,
+    hasRows: filteredTotal > 0,
     columnName: tCommon('labels.name'),
     columnCards: t('dashboards.cardsColumn'),
     columnStatus: tCommon('labels.status'),
@@ -197,6 +203,14 @@ export function dashboardsSpec(data: DashboardsData): PageSpec {
           action: data.canCreate ? 'new-dashboard' : null,
         }),
         when: f('isEmpty'),
+      },
+      {
+        ...widgetBlock('empty-state', {
+          title: data.filteredEmptyTitle,
+          description: data.filteredEmptyDescription,
+          action: null,
+        }),
+        when: f('isFilteredEmpty'),
       },
       {
         ...table({
