@@ -25,6 +25,7 @@ import {
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   payPeriodFor,
   refuseUnprintedPeriod,
@@ -182,6 +183,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
+  if (certificateFlag(input.certificate, "military_spouse_exempt")) {
+    const militarySpouseCertificate = input.supportingCertificates?.us_ok_ow9mse;
+    requireMilitarySpouseEligibility(militarySpouseCertificate, "Oklahoma", [
+      { key: "employee_is_not_servicemember", description: "the employee is not a military servicemember" },
+      { key: "spouse_is_servicemember", description: "the employee's spouse is a military servicemember" },
+      { key: "current_orders_assign_ok", description: "current military orders assign the spouse to Oklahoma" },
+      { key: "employee_domiciled_outside_ok", description: "the employee's domicile is a state other than Oklahoma" },
+      { key: "spouses_share_tax_domicile", description: "the employee and servicemember share the same state of domicile for tax purposes" },
+      { key: "latest_spouse_les_on_file", description: "the latest servicemember Leave and Earnings Statement is on file and confirms the Oklahoma assignment" },
+      { key: "current_military_id_on_file", description: "the employee's current military spouse ID is on file" },
+    ]);
+    trace("OK_MILITARY_SPOUSE_EXEMPT", 1n);
+    return { state: "OK", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  }
+
   if (certificateFlag(input.certificate, "exempt")) {
     trace("OK_EXEMPT", 1n);
     return { state: "OK", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
@@ -235,6 +251,7 @@ export const OK_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: OK_TAX_YEAR_EDITIONS,
   printedPeriods: OK_PERIODS,
+  supportingCertificateKeys: ["us_ok_ow9mse"],
   compute,
 };
 
@@ -307,12 +324,40 @@ export const OK_CERTIFICATE: PayrollCertificate = {
     },
     {
       key: "exempt",
-      label: "Exempt from Oklahoma withholding",
+      label: "Line 7 — Exempt because no Oklahoma tax is expected",
       kind: "flag",
       help:
-        "A current exempt claim on Form OK-W-4 withholds zero. Dating any "
-        + "year-end lapse is certificate administration.",
+        "The employee had a right to a full refund of Oklahoma income tax withheld last year "
+        + "because there was no tax liability and expects a full refund this year for the same reason.",
     },
+    {
+      key: "military_spouse_exempt",
+      label: "Line 8 — Exempt under the Military Spouses Residency Relief Act",
+      kind: "flag",
+      help: "Requires a current Form OW-9-MSE and the employer's supporting records.",
+    },
+  ],
+};
+
+/** Oklahoma Form OW-9-MSE, the annual supporting certification for OK-W-4 line 8. */
+export const OK_OW9MSE_CERTIFICATE: PayrollCertificate = {
+  key: "us_ok_ow9mse",
+  form: "OW-9-MSE",
+  label: "Annual Withholding Tax Exemption Certification for Military Spouse",
+  scope: { level: "region", region: "OK" },
+  purpose: "exemption",
+  validity: { kind: "calendar_year_end" },
+  citation: "Oklahoma Tax Commission Form OW-9-MSE (Rev. 2-2024), https://oklahoma.gov/content/dam/ok/en/tax/documents/forms/businesses/general/OW-9-MSE.pdf",
+  summary: "File a new OW-9-MSE every calendar year with OK-W-4 line 8. The employer must retain the latest spouse LES and current military spouse ID.",
+  storage: "certificate_rows",
+  fields: [
+    { key: "employee_is_not_servicemember", label: "Employee is not a military servicemember", kind: "flag", required: true, help: "OW-9-MSE question 1 must be YES." },
+    { key: "spouse_is_servicemember", label: "Employee's spouse is a military servicemember", kind: "flag", required: true, help: "OW-9-MSE question 2 must be YES." },
+    { key: "current_orders_assign_ok", label: "Current military orders assign the spouse to Oklahoma", kind: "flag", required: true, help: "OW-9-MSE question 3 must be YES." },
+    { key: "employee_domiciled_outside_ok", label: "Employee's domicile is a state other than Oklahoma", kind: "flag", required: true, help: "OW-9-MSE question 4; enter the state of domicile on the form." },
+    { key: "spouses_share_tax_domicile", label: "Employee and spouse share the same state of domicile for tax purposes", kind: "flag", required: true, help: "OW-9-MSE question 5 must be YES." },
+    { key: "latest_spouse_les_on_file", label: "Latest servicemember LES is on file and confirms Oklahoma assignment", kind: "flag", required: true, help: "OTC requires the employer to verify and retain the latest LES and match its assignment location to the form." },
+    { key: "current_military_id_on_file", label: "Current military spouse ID is on file", kind: "flag", required: true, help: "OTC requires a current Military ID that identifies the employee as a military spouse." },
   ],
 };
 
