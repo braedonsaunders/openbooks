@@ -193,7 +193,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-comp-plan-dialog': { props: ['dialog'] },
   'hrm-compliance-actions': { props: ['acknowledgeLabel', 'actionKind', 'approveLabel', 'canManage', 'entryKind', 'resolveLabel', 'rowId', 'rowStatus', 'submitLabel', 'voidLabel'] },
   'hrm-compliance-generate': { props: ['cancelLabel', 'closeHref', 'formatLabel', 'formats', 'generateLabel', 'projectLabel', 'projects', 'title', 'weekLabel'] },
-  'hrm-crew-workspace': { props: ['batchId', 'equipment', 'equipmentOn', 'initialLines', 'locked', 'signLabel', 'signatureRequired', 'status', 'tasks', 'timeTypes', 'workers'] },
+  'hrm-crew-workspace': { props: ['batchId', 'create', 'equipment', 'equipmentOn', 'initialLines', 'locked', 'signLabel', 'signatureRequired', 'status', 'tasks', 'timeTypes', 'workers'] },
   'hrm-cycle-dialog': { props: ['create'] },
   'hrm-cycle-drawer': { props: ['detail', 'missingDetail'] },
   'hrm-documents-drawer': { props: ['drawer'] },

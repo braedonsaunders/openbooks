@@ -22,6 +22,7 @@ import {
 import { can, getAuthz, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { listCrewBatches, getBatchDetail } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
 
@@ -51,6 +52,11 @@ export interface CrewPageData {
   rows: Record<string, unknown>[]
   drawerOpen: boolean
   workspace: Record<string, unknown> | null
+  createForm: {
+    workers: { id: string; name: string }[]
+    projects: { id: string; name: string }[]
+    defaultWorkedOn: string
+  } | null
   setupHref: string
   setupLabel: string
   canSetup: boolean
@@ -85,6 +91,32 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
     projectId: sp.project ?? null,
   })
   const batchId = sp.batch ?? null
+  // Unsaved-create: ?new=1 opens the create workspace over no persisted
+  // row. Opening writes nothing — the batch is persisted only by the form's
+  // explicit Create (one POST to /api/time/crew-batches). Gated on
+  // time.crew.enter exactly like that POST, so the button and the drawer
+  // agree; an existing ?batch= wins over ?new=.
+  const creating = sp.new === '1' && can(authed, 'time.crew.enter') && !batchId
+  let createForm: CrewPageData['createForm'] = null
+  if (creating) {
+    const [partyRows, projectRows, today] = await Promise.all([
+      db.execute<{ id: string; name: string }>(sql`
+        select p.id::text as id, p.display_name as name from parties p
+         where p.org_id = ${orgId} and p.is_active order by p.display_name limit 500`),
+      db.execute<{ id: string; code: string | null; name: string | null }>(sql`
+        select id::text as id, code, name from projects
+         where org_id = ${orgId} and is_active order by name nulls last, code nulls last limit 200`),
+      businessToday(orgId),
+    ])
+    createForm = {
+      workers: partyRows.rows,
+      projects: projectRows.rows.map((project) => ({
+        id: project.id,
+        name: [project.code, project.name].filter(Boolean).join(' · ') || project.id,
+      })),
+      defaultWorkedOn: today,
+    }
+  }
   let workspace: CrewPageData['workspace'] = null
   if (batchId) {
     const detail = await getBatchDetail(orgId, batchId)
@@ -152,7 +184,7 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
       value: status,
       label: statusLabel(status),
     })),
-    currentParams: { segment: sp.segment, project: sp.project, batch: sp.batch },
+    currentParams: { segment: sp.segment, project: sp.project, batch: sp.batch, new: sp.new },
     listTitle: t('field.batchesTitle'),
     columns: {
       foreman: t('field.foremanLabel'),
@@ -174,8 +206,9 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
       workers: batch.workerCount,
       href: `/time/crew?batch=${batch.id}`,
     })),
-    drawerOpen: workspace !== null,
+    drawerOpen: workspace !== null || createForm !== null,
     workspace,
+    createForm,
     setupHref: '/time/setup',
     setupLabel: t('field.setupLink'),
     // The Setup page requires time.manage (time/setup/view.ts) — a reader
@@ -234,7 +267,7 @@ export function crewSpec(data: CrewPageData, basePath: string = '/time/crew'): P
             ],
             empty: { title: f('emptyTitle'), description: f('emptyDescription') },
           }),
-          widgetBlock('hrm-crew-workspace', { ...(data.workspace ?? {}), batchId: data.workspace?.batchId ?? '' }, f('drawerOpen')),
+          widgetBlock('hrm-crew-workspace', { ...(data.workspace ?? {}), batchId: data.workspace?.batchId ?? '', create: data.createForm }, f('drawerOpen')),
         ],
       }),
     ],
