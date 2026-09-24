@@ -339,7 +339,9 @@
     },
     "exit": {
       "title": "Austrittsdatensatz",
-      "empty": "Noch kein Austrittsdatensatz."
+      "empty": "Noch kein Austrittsdatensatz.",
+      "interview": "Austrittsgespräch am {date} mit {name}",
+      "interviewNoName": "Austrittsgespräch am {date}"
     },
     "benefits": {
       "title": "Leistungen",
@@ -899,6 +901,10 @@
     "exitVoluntaryNo": "Nein, unfreiwillig",
     "exitDestination": "Ziel",
     "exitNotes": "Notizen",
+    "exitInterviewDate": "Datum des Austrittsgesprächs",
+    "exitInterviewer": "Gesprächsführer",
+    "exitInterviewerPlaceholder": "Gesprächsführer auswählen",
+    "exitInterviewerFailed": "Die Liste der Gesprächsführer konnte nicht geladen werden.",
     "saveExit": "Austrittsdatensatz speichern",
     "recordExit": "Austritt erfassen",
     "continuous": {

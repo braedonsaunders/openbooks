@@ -339,7 +339,9 @@
     },
     "exit": {
       "title": "Exit record",
-      "empty": "No exit record yet."
+      "empty": "No exit record yet.",
+      "interview": "Exit interview on {date} with {name}",
+      "interviewNoName": "Exit interview on {date}"
     },
     "benefits": {
       "title": "Benefits",
@@ -954,6 +956,10 @@
     "exitVoluntaryNo": "No, involuntary",
     "exitDestination": "Destination",
     "exitNotes": "Notes",
+    "exitInterviewDate": "Interview date",
+    "exitInterviewer": "Interviewer",
+    "exitInterviewerPlaceholder": "Select the interviewer",
+    "exitInterviewerFailed": "The interviewer list could not be loaded.",
     "saveExit": "Save exit record",
     "recordExit": "Record exit",
     "continuous": {

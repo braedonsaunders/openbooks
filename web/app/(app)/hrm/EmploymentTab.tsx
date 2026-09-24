@@ -62,6 +62,9 @@ type ExitRecord = {
   id: string
   reasonKind: string
   isVoluntary: boolean
+  interviewHeldOn: string | null
+  interviewerPartyId: string | null
+  interviewerName: string | null
   destination: string | null
   notes: string | null
   revision: number
@@ -521,6 +524,16 @@ export function EmploymentTab({
                 {exit.record.isVoluntary ? t('performance.exitVoluntaryYes') : t('performance.exitVoluntaryNo')}
                 {exit.record.destination ? ` · ${exit.record.destination}` : null}
               </p>
+              {exit.record.interviewHeldOn ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {exit.record.interviewerName
+                    ? t('employment.exit.interview', {
+                        date: exit.record.interviewHeldOn,
+                        name: exit.record.interviewerName,
+                      })
+                    : t('employment.exit.interviewNoName', { date: exit.record.interviewHeldOn })}
+                </p>
+              ) : null}
               {exit.record.notes ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">{exit.record.notes}</p>
               ) : null}

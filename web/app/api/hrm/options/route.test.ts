@@ -93,6 +93,11 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return [{ positionId: 'position-1', label: 'ENG-1042 · Engineer · open' }]
       }
+      export async function listPeopleOptions(args) {
+        state.calls.push({ fn: 'people', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return [{ partyId: 'party-1', label: 'Alice Holder' }]
+      }
     `,
   ],
   [
@@ -335,4 +340,20 @@ if (isVitest) {
     assert.equal(response.status, 403);
     assert.deepEqual(routeState.calls, []);
   });
+
+  test("F3-40: people forwards the pin under its own key for the exit-interviewer picker", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000033";
+  const response = await optionsRoute!.GET(getRequest(`?source=people&include=${include}`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ partyId: "party-1", label: "Alice Holder" }],
+  });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "people",
+      args: { orgId: "org-1", actorId: "user-1", q: undefined, includePartyId: include },
+    },
+  ]);
+});
 }

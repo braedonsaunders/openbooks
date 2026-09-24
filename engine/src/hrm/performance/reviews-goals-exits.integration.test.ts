@@ -19,7 +19,7 @@ import {
   submitReview,
 } from "./reviews.ts";
 import { createGoal, setGoalStatus, updateGoalProgress } from "./goals.ts";
-import { recordExit, updateExitRecord } from "./exits.ts";
+import { listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
 
 /**
  * HR-7 review transitions, goals and exits over the real 0196 tables —
@@ -428,6 +428,17 @@ test("exits refuse unterminated employments, duplicates, and unpaired interviews
       notes: "Left for growth",
     });
     assert.equal(exit.reasonKind, "resignation");
+    // F3-40: the interview reads back with the interviewer's name, never a
+    // raw party uuid — the record and the list agree.
+    assert.equal(exit.interviewerName, `Person ${h.managerPartyId.slice(0, 8)}`);
+    const listed = await listExitRecords({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      employmentId: leaverEmploymentId,
+    });
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0]?.interviewHeldOn, "2026-07-01");
+    assert.equal(listed[0]?.interviewerName, exit.interviewerName);
     // A second record for the same employment is a correction, not a row.
     await assert.rejects(
       recordExit({

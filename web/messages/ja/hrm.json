@@ -339,7 +339,9 @@
     },
     "exit": {
       "title": "退職記録",
-      "empty": "退職記録はまだありません。"
+      "empty": "退職記録はまだありません。",
+      "interview": "面談（{date}、{name}）",
+      "interviewNoName": "面談（{date}）"
     },
     "benefits": {
       "title": "福利厚生",
@@ -899,6 +901,10 @@
     "exitVoluntaryNo": "いいえ、会社都合",
     "exitDestination": "転職先",
     "exitNotes": "備考",
+    "exitInterviewDate": "面談実施日",
+    "exitInterviewer": "面談者",
+    "exitInterviewerPlaceholder": "面談者を選択",
+    "exitInterviewerFailed": "面談者の一覧を読み込めませんでした。",
     "saveExit": "退職記録を保存",
     "recordExit": "退職を記録",
     "continuous": {
