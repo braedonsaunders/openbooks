@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { cmp } from "../../money/money.ts";
+import { certificateCount, type ResolvedCertificate } from "../certificates.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers CA_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
@@ -10,6 +11,23 @@ import { calculateTp1015 } from "./quebec/tp1015.ts";
 import type { Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
+import { PayrollPackError } from "../payroll-error.ts";
+
+/** TD1ON dependant claims that drive Ontario's T4127 factor Y. */
+export function t4127OntarioDependantInputs(
+  certificate: ResolvedCertificate | null,
+): Pick<T4127Input, "disabledDependants" | "dependantsUnder19"> {
+  if (!certificate) {
+    throw new PayrollPackError(
+      "Ontario income tax requires the TD1ON certificate declaration — restore the Ontario "
+      + "certificate in the Canada payroll pack before calculating",
+    );
+  }
+  return {
+    disabledDependants: certificateCount(certificate, "disabled_dependants") ?? 0,
+    dependantsUnder19: certificateCount(certificate, "dependants_under_19") ?? 0,
+  };
+}
 
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the factor
@@ -121,6 +139,9 @@ export async function computeCaStatutory(
   assertRegionSupported(region);
 
   const ytd = await employeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
+  const ontarioDependantInputs = region === "ON"
+    ? t4127OntarioDependantInputs(ctx.certificateFor("ca_td1_ON"))
+    : {};
 
   const t4127Input: T4127Input = {
     payDate: run.pay_date!, province: region as Province, periodsPerYear: P,
@@ -133,6 +154,7 @@ export async function computeCaStatutory(
     authorizedFederalCredits: empFact("CA", emp, "authorized_federal_credits") ?? undefined,
     authorizedProvincialCredits: empFact("CA", emp, "authorized_provincial_credits") ?? undefined,
     additionalTaxPerPeriod: empFact("CA", emp, "additional_tax_per_period") ?? undefined,
+    ...ontarioDependantInputs,
     federalClaim: empFact("CA", emp, "federal_claim_amount") ?? undefined,
     federalClaimCode: empFact("CA", emp, "federal_claim_amount") == null && empFact("CA", emp, "federal_claim_code") != null
       ? Number(empFact("CA", emp, "federal_claim_code")) : undefined,

@@ -11,10 +11,10 @@
  *
  * Two things this declaration buys immediately:
  *
- *   1. the TD1 family becomes a CERTIFICATE rather than a scatter of columns —
- *      declared, not migrated (`storage: "profile_columns"`, every field naming
- *      the `employee_payroll_profiles` column that already holds the answer), so
- *      the engine, the API and the editor ask one question of both storages;
+ *   1. the TD1 family becomes a CERTIFICATE rather than a scatter of columns.
+ *      Existing claim fields still map to their `employee_payroll_profiles`
+ *      columns; Ontario's factor-Y dependant claims are effective-dated row
+ *      fields on TD1ON. The engine, API and editor use the same declaration;
  *   2. a Québec resident working in Ontario is REFUSED BY NAME instead of being
  *      silently withheld Ontario only. Nobody has established whether a province
  *      requires an employer to withhold from a resident's out-of-province wages,
@@ -148,19 +148,20 @@ const TD1: PayrollCertificate = {
 
 /**
  * The PROVINCIAL certificate, one per province, generated from the same three
- * columns.
+ * claim columns, with the two TD1ON factor-Y counts added only for Ontario.
  *
  * Every province publishes its own form — TD1ON, TD1BC, TD1AB — and Québec
  * publishes TP-1015.3-V instead, which is a genuinely different form filed with
  * a different authority. They are declared as fourteen certificates rather than
  * one because that is fourteen forms an employee can be holding, and a product
  * that calls the Québec form "TD1" cannot help somebody fill it in. They are
- * GENERATED rather than typed out because the three answers the pack reads are
- * the same three on all of them, and typing them fourteen times is fourteen
+ * GENERATED rather than typed out because the three claim answers the pack
+ * reads are the same on all forms, and typing them fourteen times is fourteen
  * chances to disagree.
  */
 function provincialCertificate(province: string): PayrollCertificate {
   const quebec = province === "QC";
+  const ontario = province === "ON";
   const name = PROVINCE_NAMES[province] ?? province;
   return {
     key: `ca_td1_${province}`,
@@ -184,7 +185,10 @@ function provincialCertificate(province: string): PayrollCertificate {
         + "uses (line 10); a Québec employee files BOTH forms."
       : `Sets the ${name} claim amount the provincial half of the T4127 calculation uses `
         + "(factor TCP). An employee who files nothing is withheld at the basic personal amount.",
-    storage: "profile_columns",
+    // Ontario's TD1ON additionally has employee-filed dependant counts, so it
+    // is served through certificate rows while the existing columns remain
+    // fallback reads for its original claim fields.
+    storage: ontario ? "certificate_rows" : "profile_columns",
     fields: [
       // TP-1015.3-V identifies the claim by an AMOUNT, and the Québec
       // calculation (canada/quebec/tp1015.ts) reads only that amount — the
@@ -220,6 +224,24 @@ function provincialCertificate(province: string): PayrollCertificate {
         help: "Provincial or territorial non-refundable credits an authority has authorized in "
           + "writing (T4127 factor K3P). Only with the letter.",
       },
+      ...(ontario ? [
+        {
+          key: "disabled_dependants",
+          label: "Eligible dependants with a disability — count",
+          kind: "count" as const, min: "0", max: "1000", default: "0",
+          help: "The number of eligible dependants with a disability claimed on TD1ON. This count "
+            + "feeds the Ontario tax reduction (T4127 factor Y) and is effective-dated with the "
+            + "employee's filed TD1ON.",
+        },
+        {
+          key: "dependants_under_19",
+          label: "Eligible dependants under 19 — count",
+          kind: "count" as const, min: "0", max: "1000", default: "0",
+          help: "The number of eligible dependants under age 19 claimed on TD1ON. This count feeds "
+            + "the Ontario tax reduction (T4127 factor Y) and is effective-dated with the "
+            + "employee's filed TD1ON.",
+        },
+      ] : []),
     ],
   };
 }
