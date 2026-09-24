@@ -157,6 +157,17 @@ for (const file of routes) {
     orgWideConfigReaders.push({ file, target });
   }
 }
+for (const file of globSync("web/app/**/view.ts", { cwd: root }).sort()) {
+  const source = readFileSync(join(root, file), "utf8");
+  if (!/\bbank_match_rules\b/.test(source)) continue;
+  assert.match(source, /guardUnrestrictedScope\s*\(/,
+    `${file} reads org-wide banking rules without an unrestricted-scope guard`);
+  const guardAt = source.indexOf("if (guardUnrestrictedScope(authz)) forbidden()");
+  const firstReadAt = source.search(/\bdb\.execute(?:<[^>]+>)?\s*\(/);
+  assert.ok(guardAt >= 0 && firstReadAt >= 0 && guardAt < firstReadAt,
+    `${file} must refuse restricted readers before loading banking-rule pickers or seed data`);
+  orgWideConfigReaders.push({ file, target: "bank_match_rules and banking-rule pickers" });
+}
 
 // Keep an inventory of other config-table readers as they are discovered.
 // Some have purpose-built scoped projections (for example flow execution
@@ -186,7 +197,7 @@ for (const row of writes) console.log(`  ${row.file}: ${row.tables.join(", ")}`)
 console.log(`org-wide connector scope: ${connectorRoutes.length} route(s), reads and writes guarded`);
 console.log(`org-wide settings scope: ${orgSettingsWrites.length} route writer(s), mutation handlers guarded`);
 for (const row of orgSettingsWrites) console.log(`  ${row.file}: ${row.target}`);
-console.log(`org-wide settings readers: ${orgWideConfigReaders.length} route reader(s), unrestricted handlers guarded`);
+console.log(`org-wide settings readers: ${orgWideConfigReaders.length} read surface(s), unrestricted handlers guarded`);
 for (const row of orgWideConfigReaders) console.log(`  ${row.file}: ${row.target}`);
 console.log(`org-wide config table readers inventoried: ${tableReaders.length}`);
 for (const row of tableReaders) console.log(`  ${row.file}: ${row.target}`);

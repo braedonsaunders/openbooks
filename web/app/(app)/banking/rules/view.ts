@@ -3,8 +3,9 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { forbidden } from 'next/navigation'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { guardUnrestrictedScope, requirePermission } from '../../../../lib/authz'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import type { BankRuleView } from './RuleDrawer'
 
@@ -59,6 +60,7 @@ export async function loadBankingRules(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BankingRulesData> {
   const authz = await requirePermission('banking.reconcile')
+  if (guardUnrestrictedScope(authz)) forbidden()
   const t = await getTranslations('banking')
   const openId = pickString(sp.rule)
   const fromLine = pickString(sp.fromLine)
