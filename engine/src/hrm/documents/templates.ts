@@ -9,6 +9,7 @@ import {
 } from "../authorization.ts";
 import { assertCategoryDeclared } from "./categories.ts";
 import { HrmDocumentsError } from "./errors.ts";
+import { DOCUMENT_MERGE_FIELDS } from "./documents.ts";
 
 /**
  * HR-19 document templates (Setup-style authoring in the service so the
@@ -119,6 +120,13 @@ export function validateTemplateInput(input: {
     throw new HrmDocumentsError("VALIDATION", "mergeFields must be the declared list of merge keys");
   }
   const mergeFields = input.mergeFields.map((f) => String(f));
+  const unsupportedFields = mergeFields.filter((field) => !DOCUMENT_MERGE_FIELDS.includes(field as (typeof DOCUMENT_MERGE_FIELDS)[number]));
+  if (unsupportedFields.length > 0) {
+    throw new HrmDocumentsError(
+      "VALIDATION",
+      `mergeFields contains unsupported keys: ${unsupportedFields.join(", ")} — choose only declared document merge fields`,
+    );
+  }
   const signerRoles = Array.isArray(input.signerRoles) ? input.signerRoles.map((r) => String(r)) : [];
   for (const role of signerRoles) {
     if (role !== "employee" && role !== "manager" && role !== "hr") {
