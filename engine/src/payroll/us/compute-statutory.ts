@@ -182,6 +182,7 @@ export async function computeUsStatutory(
     nonresidentAlien,
     ficaExempt: bool(empFact("US", emp, "fica_exempt")),
     futaExempt: bool(empFact("US", emp, "futa_exempt")),
+    suiExempt: bool(empFact("US", emp, "sui_exempt")),
     futaEffectiveRate: config.futaRate(region) ?? undefined,
     futaRegion: region,
     sui,

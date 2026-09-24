@@ -78,6 +78,7 @@ export interface Pub15TInput {
   /** Statutory exemptions (e.g. F-1 students, some family employment). */
   ficaExempt?: boolean;
   futaExempt?: boolean;
+  suiExempt?: boolean;
 
   /** Employer-configured effective FUTA rate for this state/account. */
   futaEffectiveRate?: string;
@@ -285,10 +286,10 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
         : input.futaEffectiveRate;
       futa = mulRateCents(futaTaxable, rate);
     }
-    if (input.sui) {
-      const suiTaxable = cappedSlice(futaWages, U(input.sui.wageBase), opt(ytd.suiWages));
-      suta = mulRateCents(suiTaxable, input.sui.rate);
-    }
+  }
+  if (!input.suiExempt && input.sui) {
+    const suiTaxable = cappedSlice(futaWages, U(input.sui.wageBase), opt(ytd.suiWages));
+    suta = mulRateCents(suiTaxable, input.sui.rate);
   }
   trace("FUTA", futa);
   trace("SUTA", suta);

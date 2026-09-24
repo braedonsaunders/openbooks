@@ -91,10 +91,17 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
     },
     {
       key: "futa_exempt", kind: "flag",
-      label: "FUTA/SUI exempt",
-      refusalReason: "No refusal: absent means unemployment tax is computed normally.",
+      label: "FUTA exempt",
+      refusalReason: "No refusal: absent means federal unemployment tax is computed normally.",
       required: false,
       producer: { kind: "exemption_flag", column: "futa_exempt" },
+    },
+    {
+      key: "sui_exempt", kind: "flag",
+      label: "SUI exempt",
+      refusalReason: "No refusal: absent means state unemployment insurance is computed normally.",
+      required: false,
+      producer: { kind: "exemption_flag", column: "sui_exempt" },
     },
     {
       key: "residence_region", kind: "code",

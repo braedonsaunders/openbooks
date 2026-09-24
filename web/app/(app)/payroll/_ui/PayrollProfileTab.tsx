@@ -165,6 +165,7 @@ export function PayrollProfileTab({
     w4_allowances: null,
     fica_exempt: false,
     futa_exempt: false,
+    sui_exempt: false,
     // Pack-declared employee facts (0191): a new employment answers nothing
     // until somebody does — the generic extra-column state binds whatever
     // the selected pack declares, so no per-country fields here.

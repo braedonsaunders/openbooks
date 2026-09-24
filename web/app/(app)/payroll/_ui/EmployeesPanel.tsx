@@ -155,6 +155,7 @@ export type ProfileRow = {
   w4_allowances: number | null
   fica_exempt: boolean
   futa_exempt: boolean
+  sui_exempt: boolean
   /** Pack-declared employee facts (0191), served by GET /api/payroll/profiles. */
   pl_rok_urodzenia: number | null
   es_ano_nacimiento: number | null
@@ -269,6 +270,7 @@ export function ProfileEditor(props: {
   const [w4Allowances, setW4Allowances] = useState(p.w4_allowances == null ? '' : String(p.w4_allowances))
   const [ficaExempt, setFicaExempt] = useState(p.fica_exempt)
   const [futaExempt, setFutaExempt] = useState(p.futa_exempt)
+  const [suiExempt, setSuiExempt] = useState(p.sui_exempt)
   const [vacationPercent, setVacationPercent] = useState(p.vacation_percent ?? '')
   const [vacationMethod, setVacationMethod] = useState<'accrue' | 'pay_each_period'>(p.vacation_method)
   const [isActive, setIsActive] = useState(p.is_active)
@@ -338,6 +340,7 @@ export function ProfileEditor(props: {
     w4_pre_2020: [w4Pre2020, setW4Pre2020],
     fica_exempt: [ficaExempt, setFicaExempt],
     futa_exempt: [futaExempt, setFutaExempt],
+    sui_exempt: [suiExempt, setSuiExempt],
     cpp_exempt: [cppExempt, setCppExempt],
     ei_exempt: [eiExempt, setEiExempt],
     tax_exempt: [taxExempt, setTaxExempt],
@@ -498,6 +501,7 @@ export function ProfileEditor(props: {
           w4Allowances: keptCount('w4_allowances', w4Allowances),
           ficaExempt: declaredColumns.has('fica_exempt') && ficaExempt,
           futaExempt: declaredColumns.has('futa_exempt') && futaExempt,
+          suiExempt: declaredColumns.has('sui_exempt') && suiExempt,
           vacationPercent: vacationPercent || null,
           vacationMethod,
           filingAccountId: filingAccountId || null,

@@ -338,6 +338,7 @@ export const employeePayrollProfiles = pgTable(
     /** US statutory exemptions (F-1 students, some family employment). */
     ficaExempt: boolean("fica_exempt").notNull().default(false),
     futaExempt: boolean("futa_exempt").notNull().default(false),
+    suiExempt: boolean("sui_exempt").notNull().default(false),
     /** Vacation pay percent (4.00 = 4%) and whether it accrues or pays out. */
     vacationPercent: numeric("vacation_percent", { precision: 7, scale: 4 }),
     vacationMethod: text("vacation_method", {

@@ -271,7 +271,7 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   statutoryRates: US_PACK_RATES,
   taxYears: US_TAX_YEARS,
   certificates: () => US_CERTIFICATES,
-  // FICA and FUTA exemption are profile FACTS the US engine reads straight
+  // FICA, FUTA, and SUI coverage are profile FACTS the US engine reads straight
   // off the profile columns (compute-statutory.ts): no employee-filed form
   // sets them, so no certificate declares them. The CA pack needs no member
   // here — its exemptions are TD1 flag fields.
@@ -285,10 +285,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       column: "futa_exempt",
-      label: "FUTA/SUI exempt",
-      help: "No federal or state unemployment tax is computed for this employee: "
+      label: "FUTA exempt",
+      help: "No federal unemployment tax is computed for this employee: "
         + "the employment is exempt under 26 U.S.C. §3306(c). Income tax and "
-        + "FICA withholding are unaffected.",
+        + "FICA withholding and state unemployment coverage are unaffected.",
+    },
+    {
+      column: "sui_exempt",
+      label: "SUI exempt",
+      help: "No state unemployment insurance contribution is due for this employment under the applicable state coverage rule. Federal unemployment coverage is independent.",
     },
   ],
   withholding: () => US_WITHHOLDING,

@@ -120,6 +120,7 @@ function render(
           w4_allowances: null,
           fica_exempt: false,
           futa_exempt: false,
+          sui_exempt: false,
           pl_rok_urodzenia: null,
           es_ano_nacimiento: null,
           es_grupo_cotizacion: null,
