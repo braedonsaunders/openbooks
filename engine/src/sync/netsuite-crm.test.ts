@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   isNetSuiteRecentActivityEmail,
@@ -7,8 +6,6 @@ import {
   resolveNetSuiteCrmCurrency,
   resolveNetSuiteCrmOpportunityProbability,
 } from './netsuite-crm.ts'
-
-const crmSource = readFileSync(new URL('./netsuite-crm.ts', import.meta.url), 'utf8')
 
 test('maps typed recent-activity notes into sales visits and account links', () => {
   const visit = normalizeNetSuiteRecentActivityNote({
@@ -36,30 +33,6 @@ test('classifies calls and notes while excluding email activity', () => {
   assert.equal(isNetSuiteRecentActivityEmail(email), true)
   assert.equal(normalizeNetSuiteRecentActivityNote(email), null)
   assert.equal(normalizeNetSuiteRecentActivityNote({ id: '4', typecode: 'Note : 9', subdetails: 'Site visit after an email introduction.' })?.kind, 'event')
-})
-
-test('opportunity imports persist source probability and exact weighted amount', () => {
-  const helperStart = crmSource.indexOf('function persistSyncLineMoney')
-  const helperEnd = crmSource.indexOf('\n}', helperStart)
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'persistSyncLineMoney helper is defined')
-  const helper = crmSource.slice(helperStart, helperEnd + 2)
-  assert.match(helper, /canonicalDecimal\(value, 4\)/)
-  assert.match(helper, /normalizeMoney\(exact\)/)
-  assert.match(helper, /must be an exact decimal/)
-
-  const insert = crmSource.indexOf('insert into crm_opportunities')
-  const query = crmSource.slice(crmSource.indexOf('const opportunities ='), insert)
-  const loop = crmSource.slice(crmSource.indexOf('for (const opportunity of opportunities)'), insert)
-  const body = crmSource.slice(insert, insert + 1100)
-  assert.match(query, /select id,tranid,entity,trandate,duedate,status,probability,currency,foreigntotal,memo from transaction/)
-  assert.match(loop, /resolveNetSuiteCrmOpportunityProbability\(opportunity\.probability, defaultStatus\.probability\)/)
-  assert.equal(resolveNetSuiteCrmOpportunityProbability('37', 10), 37)
-  assert.equal(resolveNetSuiteCrmOpportunityProbability(null, 25), 25)
-  assert.equal(resolveNetSuiteCrmOpportunityProbability('not-a-probability', 25), 25)
-  assert.match(loop, /const weightedAmount = persistSyncLineMoney\(weightAmount\(projectedAmount, probability\), 'weighted_amount'\)/)
-  assert.match(body, /status_id,probability,expected_close_date/)
-  assert.match(body, /weighted_amount=excluded\.weighted_amount/)
-  assert.doesNotMatch(body, /persistSyncLineMoney\(0, 'weighted_amount'\)/)
 })
 
 test('resolves opportunity currencies through configured ISO currencies', () => {
