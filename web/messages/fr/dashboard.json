@@ -215,6 +215,12 @@
     "systemBadge": "Par défaut de l'entreprise"
   },
   "persona": {
+    "reviewDue": "Évaluation à réaliser",
+    "attentionHrmItems": "Dossiers RH en attente",
+    "attentionPayrollSetup": "La paie nécessite des comptes de contrôle",
+    "attentionBankLines": "Lignes bancaires non rapprochées",
+    "attentionCloseRuns": "Clôtures ouvertes",
+    "calendarPayrollRemittance": "Versement des retenues de paie en attente",
     "nothingWaiting": "Rien ne vous attend.",
     "noBalances": "Aucun solde calculable.",
     "nobodyOut": "Personne absent.",
