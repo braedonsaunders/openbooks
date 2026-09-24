@@ -42,7 +42,6 @@
     "web/lib/apps/zip.test.ts": 2,
     "web/lib/cash/core.test.ts": 6,
     "web/lib/cash/open-items-current-projection.test.ts": 2,
-    "web/lib/crm-status-display.test.ts": 2,
     "web/lib/customization/list-view-default-refusal.test.tsx": 2
   }
 }
