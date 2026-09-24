@@ -6,6 +6,8 @@
  * source field-ticket header, then compares them to one OpenBooks tenant using
  * exact numeric(19,4) arithmetic. Missing source layers are reported as
  * unproven gates; they are never silently omitted from the denominator.
+ * A present-but-empty source layer is likewise unproven: an empty population
+ * compares nothing, so it can never read as agreement.
  *
  * Customer data is written outside the repository by default.
  *
@@ -41,6 +43,11 @@ import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
+import {
+  emptyPopulationGate,
+  isEmptyCrewPopulation,
+  isEmptyPopulation,
+} from "./parity-gates.ts";
 import { sourceClient } from "../sync/source-client.ts";
 import { resolveProjectFinancials } from "../projects/financials.ts";
 import { loadProjectType } from "../projects/type.ts";
@@ -968,6 +975,11 @@ if (!sourceProjects) {
     mismatchCount: null,
     detail: `missing ${paths.sourceProjects}`,
   };
+} else if (isEmptyPopulation(sourceProjects)) {
+  // A present-but-empty export with an empty tenant compares nothing, so the
+  // untouched counters below would read "exact" with source=0. Empty is
+  // unproven, never agreement.
+  gates.projectIdentity = emptyPopulationGate(target.projects.length, paths.sourceProjects);
 } else {
   const sourceById = new Map(
     sourceProjects.map((row) => [String(row.id), row]),
@@ -1052,6 +1064,8 @@ if (!sourceInvoices) {
     mismatchCount: null,
     detail: `missing ${paths.sourceInvoices}`,
   };
+} else if (isEmptyPopulation(sourceInvoices)) {
+  gates.invoiceHeadersAndTotals = emptyPopulationGate(target.invoices.length, paths.sourceInvoices);
 } else {
   const targetBySourceId = new Map(
     target.invoices
@@ -1152,6 +1166,8 @@ if (!sourceProjectGl) {
     mismatchCount: null,
     detail: `missing ${paths.sourceProjectGl}`,
   };
+} else if (isEmptyPopulation(sourceProjectGl)) {
+  gates.projectGlByAccountCategory = emptyPopulationGate(target.projectGl.length, paths.sourceProjectGl);
 } else {
   const sourceAmounts = new Map<string, bigint>();
   for (const row of sourceProjectGl) {
@@ -1219,6 +1235,8 @@ if (!fieldTicketHeaders) {
     mismatchCount: null,
     detail: `missing ${paths.fieldTicketHeaders}`,
   };
+} else if (isEmptyPopulation(fieldTicketHeaders)) {
+  gates.fieldTicketHeaders = emptyPopulationGate(target.tickets.length, paths.fieldTicketHeaders);
 } else {
   const bySourceId = new Map(
     target.tickets
@@ -1270,7 +1288,7 @@ if (!fieldTicketHeaders) {
 
 const sourceProjectCount = sourceProjects?.length ?? null;
 const sourceFinancialCount = sourceProjectFinancials?.length ?? null;
-if (sourceProjectFinancials && sourceProjectCount !== null) {
+if (sourceProjectFinancials && sourceProjectCount !== null && sourceProjectFinancials.length > 0) {
   const availableFinancialCount = sourceProjectFinancials.length;
   const targetBySourceProject = new Map(
     target.projects
@@ -1398,6 +1416,11 @@ if (sourceProjectFinancials && sourceProjectCount !== null) {
     mismatchCount: availableMismatches,
     detail: `Compared source TotalJobCost, TotalJobPrice, InvoicedToDate, gross margin, and any explicit invoiceable/overhead measures to the penny for every available row; source export covers ${availableFinancialCount}/${sourceProjectCount} projects`,
   };
+} else if (isEmptyPopulation(sourceProjectFinancials)) {
+  gates.sourceProjectFinancialMeasures = emptyPopulationGate(
+    target.projects.length,
+    paths.sourceProjectFinancials,
+  );
 } else {
   gates.sourceProjectFinancialMeasures = {
     status: "unproven",
@@ -1418,6 +1441,8 @@ if (!sourceInvoiceLines) {
     mismatchCount: null,
     detail: `missing ${paths.sourceInvoiceLines}`,
   };
+} else if (isEmptyPopulation(sourceInvoiceLines)) {
+  gates.invoiceLines = emptyPopulationGate(target.invoiceLines.length, paths.sourceInvoiceLines);
 } else {
   const sourceDetail = sourceInvoiceLines.filter(
     (row) =>
@@ -1583,6 +1608,8 @@ if (!fieldTicketCrew) {
     mismatchCount: null,
     detail: `missing ${paths.fieldTicketCrew} or ticket headers`,
   };
+} else if (isEmptyCrewPopulation(fieldTicketCrew)) {
+  gates.fieldTicketCrewAndHours = emptyPopulationGate(target.ticketCrew.length, paths.fieldTicketCrew);
 } else {
   const currentSourceTicketIds = new Set(
     fieldTicketHeaders!.map((ticket) => String(ticket.id)),
