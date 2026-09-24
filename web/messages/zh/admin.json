@@ -5490,6 +5490,31 @@
       "approvalSave": "保存设置"
     }
   },
+  "email": {
+    "title": "邮件投递",
+    "description": "配置您的邮件服务商，以便投递定时报告和通知。",
+    "enableDelivery": "启用邮件投递",
+    "enableHint": "定时报告和测试发送将使用下面的服务商。",
+    "provider": "服务商",
+    "selectProvider": "选择服务商…",
+    "fromName": "发件人名称",
+    "fromEmail": "发件人邮箱",
+    "replyTo": "回复地址（可选）",
+    "secretSet": "已设置",
+    "secretStored": "•••••••••• 已保存",
+    "replace": "替换",
+    "keepExisting": "保留现有凭据",
+    "saveSettings": "保存设置",
+    "saving": "保存中…",
+    "saved": "邮件设置已保存",
+    "saveFailed": "邮件设置保存失败",
+    "testTitle": "发送测试邮件",
+    "testHint": "请先保存设置 — 测试将使用已存储的服务商。",
+    "sendTest": "发送测试",
+    "sending": "发送中…",
+    "testSent": "已通过{provider}发送测试 ({messageId})",
+    "testFailed": "测试邮件发送失败"
+  },
   "aiLedger": {
     "title": "AI 治理",
     "description": "各项能力、其自主性上限，以及每个 AI 辅助答复的不可变记录。",

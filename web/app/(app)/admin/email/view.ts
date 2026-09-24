@@ -39,12 +39,13 @@ export interface EmailSettingsData {
 
 export async function loadEmailSettings(): Promise<EmailSettingsData> {
   const authz = await requirePermission('admin.setup.manage')
+  const t = await getTranslations('admin')
   const tHub = await getTranslations('admin.hub')
   const config = await readOrgEmailConfigView(authz.user.orgId)
 
   return {
-    title: 'Email delivery',
-    description: 'Configure your email provider so scheduled reports and notifications can be delivered.',
+    title: t('email.title'),
+    description: t('email.description'),
     backHref: '/admin',
     backLabel: tHub('title'),
     initial: config,

@@ -5490,6 +5490,31 @@
       "approvalSave": "設定を保存"
     }
   },
+  "email": {
+    "title": "メール配信",
+    "description": "スケジュールされたレポートや通知を配信できるよう、メールプロバイダーを設定してください。",
+    "enableDelivery": "メール配信を有効にする",
+    "enableHint": "スケジュールされたレポートとテスト送信には、以下のプロバイダーが使用されます。",
+    "provider": "プロバイダー",
+    "selectProvider": "プロバイダーを選択…",
+    "fromName": "差出人名",
+    "fromEmail": "差出人メールアドレス",
+    "replyTo": "返信先（任意）",
+    "secretSet": "設定済み",
+    "secretStored": "•••••••••• 保存済み",
+    "replace": "置き換える",
+    "keepExisting": "既存の認証情報を保持する",
+    "saveSettings": "設定を保存",
+    "saving": "保存中…",
+    "saved": "メール設定を保存しました",
+    "saveFailed": "メール設定を保存できませんでした",
+    "testTitle": "テストメールを送信",
+    "testHint": "先に設定を保存してください — テストでは保存済みのプロバイダーが使用されます。",
+    "sendTest": "テストを送信",
+    "sending": "送信中…",
+    "testSent": "{provider} 経由でテストを送信しました ({messageId})",
+    "testFailed": "テストメールを送信できませんでした"
+  },
   "aiLedger": {
     "title": "AIガバナンス",
     "description": "能力、その自律性の上限、AI支援の回答ごとの不変の記録。",

@@ -5490,6 +5490,31 @@
       "approvalSave": "Enregistrer"
     }
   },
+  "email": {
+    "title": "Envoi d'e-mails",
+    "description": "Configurez votre fournisseur d'e-mails pour que les rapports planifiés et les notifications puissent être envoyés.",
+    "enableDelivery": "Activer l'envoi d'e-mails",
+    "enableHint": "Les rapports planifiés et les envois de test utilisent le fournisseur ci-dessous.",
+    "provider": "Fournisseur",
+    "selectProvider": "Sélectionnez un fournisseur…",
+    "fromName": "Nom de l'expéditeur",
+    "fromEmail": "E-mail de l'expéditeur",
+    "replyTo": "Répondre à (facultatif)",
+    "secretSet": "défini",
+    "secretStored": "•••••••••• enregistré",
+    "replace": "Remplacer",
+    "keepExisting": "Conserver l'identifiant existant",
+    "saveSettings": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Paramètres d'e-mail enregistrés",
+    "saveFailed": "Impossible d'enregistrer les paramètres d'e-mail",
+    "testTitle": "Envoyer un e-mail de test",
+    "testHint": "Enregistrez d'abord vos paramètres — le test utilise le fournisseur enregistré.",
+    "sendTest": "Envoyer le test",
+    "sending": "Envoi en cours…",
+    "testSent": "Test envoyé via {provider} ({messageId})",
+    "testFailed": "Impossible d'envoyer l'e-mail de test"
+  },
   "aiLedger": {
     "title": "Gouvernance IA",
     "description": "Capacités, leurs plafonds d'autonomie et le registre immuable de chaque réponse assistée par IA.",

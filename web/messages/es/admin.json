@@ -5490,6 +5490,31 @@
       "approvalSave": "Guardar ajustes"
     }
   },
+  "email": {
+    "title": "Entrega de correo",
+    "description": "Configura tu proveedor de correo para que los informes programados y las notificaciones puedan entregarse.",
+    "enableDelivery": "Habilitar la entrega de correo",
+    "enableHint": "Los informes programados y los envíos de prueba usan el proveedor indicado abajo.",
+    "provider": "Proveedor",
+    "selectProvider": "Selecciona un proveedor…",
+    "fromName": "Nombre del remitente",
+    "fromEmail": "Correo del remitente",
+    "replyTo": "Responder a (opcional)",
+    "secretSet": "definida",
+    "secretStored": "•••••••••• guardada",
+    "replace": "Reemplazar",
+    "keepExisting": "Conservar la credencial existente",
+    "saveSettings": "Guardar ajustes",
+    "saving": "Guardando…",
+    "saved": "Ajustes de correo guardados",
+    "saveFailed": "No se pudieron guardar los ajustes de correo",
+    "testTitle": "Enviar un correo de prueba",
+    "testHint": "Guarda primero tus ajustes — la prueba usa el proveedor guardado.",
+    "sendTest": "Enviar prueba",
+    "sending": "Enviando…",
+    "testSent": "Prueba enviada vía {provider} ({messageId})",
+    "testFailed": "No se pudo enviar el correo de prueba"
+  },
   "aiLedger": {
     "title": "Gobernanza de IA",
     "description": "Capacidades, sus techos de autonomía y el registro inmutable de cada respuesta asistida por IA.",

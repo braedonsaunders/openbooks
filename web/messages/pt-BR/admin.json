@@ -5490,6 +5490,31 @@
       "approvalSave": "Salvar ajustes"
     }
   },
+  "email": {
+    "title": "Entrega de e-mail",
+    "description": "Configure seu provedor de e-mail para que relatórios agendados e notificações possam ser entregues.",
+    "enableDelivery": "Habilitar entrega de e-mail",
+    "enableHint": "Relatórios agendados e envios de teste usam o provedor abaixo.",
+    "provider": "Provedor",
+    "selectProvider": "Selecione um provedor…",
+    "fromName": "Nome do remetente",
+    "fromEmail": "E-mail do remetente",
+    "replyTo": "Responder para (opcional)",
+    "secretSet": "definida",
+    "secretStored": "•••••••••• salva",
+    "replace": "Substituir",
+    "keepExisting": "Manter a credencial existente",
+    "saveSettings": "Salvar ajustes",
+    "saving": "Salvando…",
+    "saved": "Ajustes de e-mail salvos",
+    "saveFailed": "Não foi possível salvar os ajustes de e-mail",
+    "testTitle": "Enviar um e-mail de teste",
+    "testHint": "Salve seus ajustes primeiro — o teste usa o provedor guardado.",
+    "sendTest": "Enviar teste",
+    "sending": "Enviando…",
+    "testSent": "Teste enviado via {provider} ({messageId})",
+    "testFailed": "Não foi possível enviar o e-mail de teste"
+  },
   "aiLedger": {
     "title": "Governança de IA",
     "description": "Capacidades, seus tetos de autonomia e o registro imutável de cada resposta assistida por IA.",
