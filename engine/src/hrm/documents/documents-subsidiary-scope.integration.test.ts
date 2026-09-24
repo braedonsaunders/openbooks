@@ -25,6 +25,7 @@ import {
 } from "./documents.ts";
 import { saveCategory } from "./categories.ts";
 import { saveTemplate } from "./templates.ts";
+import { listRetentionActions, saveSchedule } from "./retention.ts";
 
 /**
  * H-HRMDOCS two-entity regressions (integration partition): an HR actor
@@ -38,7 +39,7 @@ import { saveTemplate } from "./templates.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function enableFeatures(orgId: string): Promise<void> {
-  for (const feature of ["hrm", "hrmDocuments"]) {
+  for (const feature of ["hrm", "hrmDocuments", "hrmDocumentRetention"]) {
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
@@ -287,6 +288,31 @@ test("an A-restricted manager cannot read, download, send, hold or void B's docu
       documentId: h.docAId,
     });
     assert.equal(detail.id, h.docAId);
+  });
+});
+
+test("retention action pending and history lists expose only visible document subjects", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const schedule = await saveSchedule({
+      orgId: h.org.orgId, actorId: h.adminId, categoryKey: "contract",
+      retainYears: 7, fromEvent: "completion", action: "anonymize",
+    });
+    await db.execute(sql`
+      insert into hrm_retention_actions
+        (org_id, document_id, schedule_id, due_on, action, blocked_reason, executed_at)
+      values
+        (${h.org.orgId}, ${h.docAId}, ${schedule.id}, current_date, 'anonymize', 'A subject reason', null),
+        (${h.org.orgId}, ${h.docBId}, ${schedule.id}, current_date, 'anonymize', 'B private reason', null),
+        (${h.org.orgId}, ${h.docBId}, ${schedule.id}, current_date, 'anonymize', 'B history reason', now())
+    `);
+    for (const pendingOnly of [true, false]) {
+      const visible = await listRetentionActions({
+        orgId: h.org.orgId, actorId: h.managerAId, pendingOnly,
+      });
+      assert.ok(visible.every((action) => action.documentId !== h.docBId));
+      assert.equal(visible.some((action) => action.documentId === h.docAId), true);
+      assert.ok(visible.every((action) => !action.blockedReason?.includes('B private')));
+    }
   });
 });
 

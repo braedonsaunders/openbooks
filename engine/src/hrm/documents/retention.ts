@@ -3,10 +3,12 @@ import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import {
+  requireAggregateDocumentsRead,
   requireHrmDocumentsManage,
   requireHrmDocumentsRead,
   requireUnrestrictedHrmScope,
 } from "../authorization.ts";
+import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { HrmDocumentsError } from "./errors.ts";
 import { assertCategoryDeclared } from "./categories.ts";
 import { HRM_DOCUMENTS_FEATURE_KEY } from "./documents.ts";
@@ -475,7 +477,8 @@ export async function listRetentionActions(query: {
   actorId: string;
   pendingOnly?: boolean;
 }): Promise<RetentionActionDTO[]> {
-  await requireHrmDocumentsRead(db, query.orgId, query.actorId);
+  const allowed = await requireAggregateDocumentsRead(db, query.orgId, query.actorId);
+  const employmentInScope = allowed === null ? sql`` : subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed);
   const rows = (await db.execute<{
     id: string;
     document_id: string;
@@ -486,12 +489,22 @@ export async function listRetentionActions(query: {
     executed_by: string | null;
     blocked_reason: string | null;
   }>(sql`
-    select id, document_id, schedule_id, due_on::text as due_on,
-           executed_at::text as executed_at, action, executed_by, blocked_reason
-      from hrm_retention_actions
-     where org_id = ${query.orgId}
-       ${query.pendingOnly ? sql`and executed_at is null` : sql``}
-     order by due_on desc
+    select a.id, a.document_id, a.schedule_id, a.due_on::text as due_on,
+           a.executed_at::text as executed_at, a.action, a.executed_by, a.blocked_reason
+      from hrm_retention_actions a
+      join hrm_documents d on d.org_id = a.org_id and d.id = a.document_id
+     where a.org_id = ${query.orgId}
+       ${query.pendingOnly ? sql`and a.executed_at is null` : sql``}
+       ${allowed === null ? sql`` : sql`and (
+         (d.employment_id is not null and exists (
+           select 1 from worker_employments e
+            where e.org_id = d.org_id and e.id = d.employment_id ${employmentInScope}
+         )) or (d.employment_id is null and exists (
+           select 1 from worker_employments e
+            where e.org_id = d.org_id and e.worker_party_id = d.party_id ${employmentInScope}
+         ))
+       )`}
+     order by a.due_on desc
      limit 200
   `)).rows;
   return rows.map((r) => ({
