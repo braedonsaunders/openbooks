@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
-  requireHrmCertificationsManage,
-  requireHrmCertificationsRead,
+  requireAggregateCertificationsManage,
+  requireAggregateCertificationsRead,
 } from "../authorization.ts";
+import { businessToday } from "../../platform/business-date.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
   HRM_CERTIFICATIONS_FEATURE,
@@ -88,22 +89,38 @@ export async function resolveSubject(
   orgId: string,
   subjectKind: RequirementSubjectKind,
   subjectId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  asOf: string,
 ): Promise<string> {
+  const ids = allowedSubsidiaryIds === null ? null : `{${[...allowedSubsidiaryIds].join(",")}}`;
   let name: string | null = null;
   if (subjectKind === "project") {
     const rows = (await exec.execute<{ name: string }>(sql`
       select name from projects where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
+        and (${ids}::uuid[] is null or subsidiary_id = any(${ids}::uuid[]))
+      for share
     `)).rows;
     name = rows[0]?.name ?? null;
   } else if (subjectKind === "equipment") {
     const rows = (await exec.execute<{ name: string }>(sql`
       select coalesce(name, serial_number, id::text) as name from equipment_units
        where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
+         and (${ids}::uuid[] is null or subsidiary_id = any(${ids}::uuid[]))
+      for share
     `)).rows;
     name = rows[0]?.name ?? null;
   } else if (subjectKind === "position") {
     const rows = (await exec.execute<{ code: string }>(sql`
-      select position_code as code from positions where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
+      select p.position_code as code from positions p
+       where p.org_id = ${orgId}::uuid and p.id = ${subjectId}::uuid
+         and exists (
+           select 1 from position_versions v
+            where v.org_id = p.org_id and v.position_id = p.id
+              and v.recorded_until is null and v.effective_from <= ${asOf}::date
+              and (v.effective_to is null or v.effective_to > ${asOf}::date)
+              and (${ids}::uuid[] is null or v.employer_subsidiary_id = any(${ids}::uuid[]))
+         )
+      for share of p
     `)).rows;
     name = rows[0]?.code ?? null;
   } else {
@@ -171,9 +188,9 @@ export async function setRequirement(
     throw new HrmQualificationError(`Unknown severity ${String(severity)} — use one of ${SEVERITIES.join(", ")}.`);
   }
   return runInCallerTransaction(exec, async (tx) => {
-    await requireHrmCertificationsManage(tx, orgId, actorId);
+    const allowed = await requireAggregateCertificationsManage(tx, orgId, actorId);
     await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification requirements");
-    const subjectName = await resolveSubject(tx, orgId, input.subjectKind, subjectId);
+    const subjectName = await resolveSubject(tx, orgId, input.subjectKind, subjectId, allowed, await businessToday(orgId));
     const type = (await tx.execute<{ id: string; code: string }>(sql`
       select id, code from hrm_qualification_types
        where org_id = ${orgId}::uuid and id = ${typeId}::uuid and is_active
@@ -228,8 +245,19 @@ export async function removeRequirement(exec: SqlExecutor, input: RemoveRequirem
   const actorId = requireId(input.actorId, "actorId");
   const requirementId = requireId(input.requirementId, "requirementId");
   return runInCallerTransaction(exec, async (tx) => {
-    await requireHrmCertificationsManage(tx, orgId, actorId);
+    const allowed = await requireAggregateCertificationsManage(tx, orgId, actorId);
     await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification requirements");
+    const target = (await tx.execute<{ subject_kind: RequirementSubjectKind; subject_id: string }>(sql`
+      select subject_kind, subject_id::text as subject_id
+        from hrm_qualification_requirements
+       where org_id = ${orgId}::uuid and id = ${requirementId}::uuid
+    `)).rows[0];
+    if (!target) {
+      throw new HrmQualificationError(
+        "The requirement was not found in this organization — it may belong to another org or have been removed; refresh and try again.",
+      );
+    }
+    await resolveSubject(tx, orgId, target.subject_kind, target.subject_id, allowed, await businessToday(orgId));
     const rows = (await tx.execute<{ id: string }>(sql`
       delete from hrm_qualification_requirements
        where org_id = ${orgId}::uuid and id = ${requirementId}::uuid
@@ -258,8 +286,9 @@ export async function listRequirements(
 ): Promise<QualificationRequirement[]> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
-  await requireHrmCertificationsRead(exec, orgId, actorId);
+  const allowed = await requireAggregateCertificationsRead(exec, orgId, actorId);
   await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification requirements");
+  const asOf = await businessToday(orgId);
   const kind = input.subjectKind ?? null;
   if (kind !== null && !SUBJECT_KINDS.includes(kind)) {
     throw new HrmQualificationError(`Unknown requirement subject ${String(kind)} — use one of ${SUBJECT_KINDS.join(", ")}.`);
@@ -270,6 +299,14 @@ export async function listRequirements(
   const out: QualificationRequirement[] = [];
   const kinds = kind ? [kind] : [...SUBJECT_KINDS];
   for (const k of kinds) {
+    const ids = allowed === null ? null : `{${[...allowed].join(",")}}`;
+    const scope = k === "project"
+      ? sql`and exists (select 1 from projects p where p.org_id = r.org_id and p.id = r.subject_id and (${ids}::uuid[] is null or p.subsidiary_id = any(${ids}::uuid[])))`
+      : k === "equipment"
+        ? sql`and exists (select 1 from equipment_units e where e.org_id = r.org_id and e.id = r.subject_id and (${ids}::uuid[] is null or e.subsidiary_id = any(${ids}::uuid[])))`
+        : k === "position"
+          ? sql`and exists (select 1 from position_versions v where v.org_id = r.org_id and v.position_id = r.subject_id and v.recorded_until is null and v.effective_from <= ${asOf}::date and (v.effective_to is null or v.effective_to > ${asOf}::date) and (${ids}::uuid[] is null or v.employer_subsidiary_id = any(${ids}::uuid[])))`
+          : sql`and exists (select 1 from hrm_work_classifications c where c.org_id = r.org_id and c.id = r.subject_id)`;
     const rows = (await exec.execute<RequirementRow>(sql`
       select r.id, r.subject_kind, r.subject_id::text,
              ${subjectNameSql(k)} as subject_name,
@@ -280,6 +317,7 @@ export async function listRequirements(
           on t.org_id = r.org_id and t.id = r.type_id
        where r.org_id = ${orgId}::uuid and r.subject_kind = ${k}
          and (${subjectId}::uuid is null or r.subject_id = ${subjectId}::uuid)
+         ${scope}
        order by r.subject_id, t.code
     `)).rows;
     for (const row of rows) {

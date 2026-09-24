@@ -18,6 +18,9 @@ import {
   verifyQualification,
 } from "./qualifications.ts";
 import { createQualificationType, declareCategory } from "./types.ts";
+import { listRequirements, removeRequirement, setRequirement } from "./requirements.ts";
+import { checkAssignment } from "./gating.ts";
+import { listAlerts } from "./alerts.ts";
 
 /**
  * Qualifications hang off employments, so every HR read and mutation
@@ -184,6 +187,126 @@ test("an unrestricted holder keeps the full surface", { skip: !DB }, async () =>
       orgId: f.org.orgId, actorId: f.adminId, qualificationId: f.qualB1.id, reason: "certificate on file",
     });
     assert.equal(verified.storedStatus, "valid");
+  } finally {
+    await dropScratchOrg(f.org.orgId);
+  }
+});
+
+test("qualification alerts, requirements, and public gate honor the actor's subsidiary lens", { skip: !DB }, async () => {
+  const f = await fixture();
+  try {
+    const projectA = randomUUID();
+    const projectB = randomUUID();
+    for (const [id, subsidiaryId, code] of [
+      [projectA, f.org.subsidiaryId, "QUAL-A"],
+      [projectB, f.branchId, "QUAL-B"],
+    ] as const) {
+      await db.execute(sql`
+        insert into projects (id, org_id, subsidiary_id, code, name, status)
+        values (${id}, ${f.org.orgId}, ${subsidiaryId}, ${code}, ${code}, 'active')
+      `);
+    }
+    const equipmentId = randomUUID();
+    await db.execute(sql`
+      insert into equipment_units (id, org_id, subsidiary_id, unit_number, name, status, purchase_price)
+      values (${equipmentId}, ${f.org.orgId}, ${f.branchId}, ${`EQ-${equipmentId.slice(0, 8)}`}, 'Branch equipment', 'active', 0)
+    `);
+    const positionId = randomUUID();
+    await db.execute(sql`
+      insert into positions (id, org_id, position_code, revision)
+      values (${positionId}, ${f.org.orgId}, ${`POS-${positionId.slice(0, 8)}`}, 1)
+    `);
+    await db.execute(sql`
+      insert into position_versions
+        (org_id, position_id, version_no, title, employer_subsidiary_id, planned_fte, status, effective_from, recorded_at)
+      values (${f.org.orgId}, ${positionId}, 1, 'Branch role', ${f.branchId}, 1, 'open', '2020-01-01', now())
+    `);
+    const classificationId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_work_classifications (id, org_id, code, name, trade)
+      values (${classificationId}, ${f.org.orgId}, ${`GLOBAL-${classificationId.slice(0, 8)}`}, 'Organization classification', 'General')
+    `);
+    const typeId = f.typeId;
+    await setRequirement(db, {
+      orgId: f.org.orgId, actorId: f.adminId, subjectKind: "project", subjectId: projectA, typeId,
+    });
+    const requirementB = await setRequirement(db, {
+      orgId: f.org.orgId, actorId: f.adminId, subjectKind: "project", subjectId: projectB, typeId,
+    });
+    await setRequirement(db, {
+      orgId: f.org.orgId, actorId: f.adminId, subjectKind: "equipment", subjectId: equipmentId, typeId,
+    });
+    await setRequirement(db, {
+      orgId: f.org.orgId, actorId: f.adminId, subjectKind: "position", subjectId: positionId, typeId,
+    });
+    await setRequirement(db, {
+      orgId: f.org.orgId, actorId: f.adminId, subjectKind: "classification", subjectId: classificationId, typeId,
+    });
+    const requirements = await listRequirements(db, { orgId: f.org.orgId, actorId: f.hrId, subjectKind: "project" });
+    assert.deepEqual(requirements.map((row) => row.subjectId), [projectA]);
+    const allVisibleRequirements = await listRequirements(db, { orgId: f.org.orgId, actorId: f.hrId });
+    assert.deepEqual(
+      allVisibleRequirements.map((row) => row.subjectId).sort(),
+      [projectA, classificationId].sort(),
+      "project, equipment, and position scopes filter in SQL; classifications are explicitly organization-wide",
+    );
+    await assertNotFound(
+      setRequirement(db, {
+        orgId: f.org.orgId, actorId: f.hrId, subjectKind: "project", subjectId: projectB, typeId,
+      }),
+      "create a requirement on another subsidiary's project",
+    );
+    await assertNotFound(
+      removeRequirement(db, { orgId: f.org.orgId, actorId: f.hrId, requirementId: requirementB.id }),
+      "remove a requirement on another subsidiary's project",
+    );
+    await assertNotFound(
+      setRequirement(db, {
+        orgId: f.org.orgId, actorId: f.hrId, subjectKind: "equipment", subjectId: equipmentId, typeId,
+      }),
+      "create a requirement on another subsidiary's equipment",
+    );
+    await assertNotFound(
+      setRequirement(db, {
+        orgId: f.org.orgId, actorId: f.hrId, subjectKind: "position", subjectId: positionId, typeId,
+      }),
+      "create a requirement on another subsidiary's position",
+    );
+
+    await db.execute(sql`
+      insert into hrm_qualification_alerts (org_id, qualification_id, lead_days, due_on, channel)
+      values (${f.org.orgId}, ${f.qualA.id}, 30, '2026-12-31', 'inbox'),
+             (${f.org.orgId}, ${f.qualB1.id}, 14, '2026-12-31', 'inbox')
+    `);
+    const alerts = await listAlerts(db, { orgId: f.org.orgId, actorId: f.hrId });
+    assert.deepEqual(alerts.map((row) => row.qualificationId), [f.qualA.id]);
+    assert.deepEqual(
+      await listAlerts(db, { orgId: f.org.orgId, actorId: f.hrId, employmentId: f.empB }),
+      [],
+      "a named out-of-scope employment returns the same empty list as no matching alerts",
+    );
+
+    await assertNotFound(
+      checkAssignment(db, {
+        orgId: f.org.orgId, actorId: f.hrId, employmentId: f.empB,
+        subjectKind: "project", subjectId: projectA,
+      }),
+      "check an out-of-scope employment",
+    );
+    await assertNotFound(
+      checkAssignment(db, {
+        orgId: f.org.orgId, actorId: f.hrId, employmentId: f.empA,
+        subjectKind: "project", subjectId: projectB,
+      }),
+      "check an out-of-scope subject",
+    );
+    await assertNotFound(
+      checkAssignment(db, {
+        orgId: f.org.orgId, actorId: f.hrId, employmentId: f.empA,
+        subjectKind: "equipment", subjectId: equipmentId,
+      }),
+      "check another subsidiary's equipment",
+    );
   } finally {
     await dropScratchOrg(f.org.orgId);
   }

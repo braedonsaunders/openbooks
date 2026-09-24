@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { requireHrmCertificationsRead } from "../authorization.ts";
+import { requireAggregateCertificationsRead } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
   HRM_CERTIFICATIONS_FEATURE,
@@ -233,12 +233,10 @@ async function notifyHolders(
   const managerPartyIds = (await exec.execute<{ party_id: string }>(sql`
     select distinct m.worker_party_id::text as party_id
       from reporting_relationships r
-      join worker_employments holder
-        on holder.org_id = r.org_id and holder.id = r.employment_id
       join worker_employments m
         on m.org_id = r.org_id and m.id = r.manager_employment_id
      where r.org_id = ${orgId}::uuid
-       and holder.worker_party_id = ${row.holder_party_id}::uuid
+       and r.employment_id = ${row.employment_id}::uuid
        and r.kind = 'line' and r.recorded_until is null
        and r.effective_from <= ${today}::date
        and (r.effective_to is null or r.effective_to > ${today}::date)
@@ -284,8 +282,9 @@ export async function listAlerts(
 ): Promise<QualificationAlert[]> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
-  await requireHrmCertificationsRead(exec, orgId, actorId);
+  const allowed = await requireAggregateCertificationsRead(exec, orgId, actorId);
   await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification alerts");
+  const allowedIds = allowed === null ? null : `{${[...allowed].join(",")}}`;
   const rows = (await exec.execute<{
     id: string;
     qualification_id: string;
@@ -306,7 +305,10 @@ export async function listAlerts(
         on q.org_id = a.org_id and q.id = a.qualification_id
       join hrm_qualification_types t
         on t.org_id = a.org_id and t.id = q.type_id
+      join worker_employments e
+        on e.org_id = q.org_id and e.id = q.employment_id
      where a.org_id = ${orgId}::uuid
+       and (${allowedIds}::uuid[] is null or e.employer_subsidiary_id = any(${allowedIds}::uuid[]))
        and (${input.employmentId ?? null}::uuid is null or q.employment_id = ${input.employmentId ?? null}::uuid)
        and (${input.unsentOnly !== true}::boolean or a.sent_at is null)
      order by a.due_on, t.code
