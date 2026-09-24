@@ -264,7 +264,7 @@ function RecurringPanel() {
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
-  const load = () => {
+  const load = useCallback(() => {
     setLoadState("loading");
     setRows([]);
     return fetch("/api/recurring").then(async (r) => {
@@ -273,8 +273,8 @@ function RecurringPanel() {
       setRows(body.schedules ?? []);
       setLoadState("loaded");
     }).catch(() => setLoadState("failed"));
-  };
-  useEffect(() => { void Promise.resolve().then(load); }, []);
+  }, [common]);
+  useEffect(() => { void Promise.resolve().then(load); }, [load]);
 
   const create = async () => {
     setError(null);
