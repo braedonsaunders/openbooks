@@ -753,7 +753,8 @@
           "futa": "FUTA à payer",
           "suta": "Chômage d’État à payer",
           "state_income_tax": "Impôt d’État sur le revenu à payer",
-          "local_income_tax": "Impôt local sur le revenu à payer"
+          "local_income_tax": "Impôt local sur le revenu à payer",
+          "transit_payroll_tax": "Taxe sur la masse salariale transport en commun à payer"
         }
       },
       "NL": {

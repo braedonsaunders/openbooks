@@ -753,7 +753,8 @@
           "futa": "FUTA未払金",
           "suta": "州失業保険税未払金",
           "state_income_tax": "州所得税未払金",
-          "local_income_tax": "地方所得税未払金"
+          "local_income_tax": "地方所得税未払金",
+          "transit_payroll_tax": "公共交通給与税未払金"
         }
       },
       "NL": {
