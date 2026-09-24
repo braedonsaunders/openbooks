@@ -466,6 +466,22 @@ export function JournalDrawer({
     if (editable) setDirty(true)
   }
 
+  // A dirty editor never closes silently: the X button (via beforeClose)
+  // and Cancel both ask first, so typed work survives a stray click.
+  async function confirmDiscard() {
+    if (mode !== 'edit' || !dirty) return true
+    return confirmDialog({
+      message: tc('feedback.unsavedChanges'),
+      confirmLabel: tc('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
+  async function cancelWithConfirm() {
+    if (!(await confirmDiscard())) return
+    cancel()
+  }
+
   // -- optimistic-concurrency fence -----------------------------------------
   // The journal PATCH route refuses any write without an exact revision token.
   // RSC props carry updated_at as a lossy Date that can never satisfy that
@@ -923,6 +939,7 @@ export function JournalDrawer({
   return (
     <TransactionDrawer
       closeHref={returnHref}
+      beforeClose={confirmDiscard}
       recordId={String(doc.id)}
       // Unsaved-create hides the evidence tabs: both panels read the
       // persisted row the drawer has not written yet, so mounting them
@@ -945,7 +962,7 @@ export function JournalDrawer({
       description={mode === 'edit' ? tc('feedback.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
         canEditStatus && canPost ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>
             {mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}
           </Button>
         ) : null

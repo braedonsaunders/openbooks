@@ -612,6 +612,22 @@ export function OrderDrawer({
     if (editable) setDirty(true)
   }
 
+  // A dirty editor never closes silently: the X button (via beforeClose)
+  // and Cancel both ask first, so typed work survives a stray click.
+  async function confirmDiscard() {
+    if (mode !== 'edit' || !dirty) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
+  async function cancelWithConfirm() {
+    if (!(await confirmDiscard())) return
+    cancel()
+  }
+
   /** Reset every field back to the loaded document (used by Cancel). */
   function resetForm() {
     setPartyId(doc.party_id ?? '')
@@ -1053,6 +1069,7 @@ export function OrderDrawer({
   return (
     <TransactionDrawer
       closeHref={closeHref ?? meta.base}
+      beforeClose={confirmDiscard}
       recordId={createMode ? 'new' : String(doc.id)}
       canEditAttachments={createMode ? false : canManage}
       panelClassName={docTypeMeta(kind).surfaceCls}
@@ -1081,7 +1098,7 @@ export function OrderDrawer({
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
         canManage && canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>
             {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
           </Button>
         ) : null

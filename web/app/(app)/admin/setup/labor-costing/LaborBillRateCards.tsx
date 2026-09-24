@@ -27,6 +27,7 @@ import {
   Textarea,
 } from "@openbooks/ui";
 import { TransactionDrawer } from "../../../../../components/transaction-drawer";
+import { confirmDialog } from "../../../../../lib/confirm";
 import { HeaderFields } from "../../../../../components/transaction-form/header-fields";
 import { CustomFieldInput } from "../../../../../components/custom-field-input";
 import type { CustomFieldDefClient } from "../../../../../components/custom-field-inputs";
@@ -337,6 +338,30 @@ function RateCardDrawer(
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(() => cloneCard(card));
+  // No dirty flag lives here — the draft starts as a clone of the card, so
+  // divergence from a fresh clone IS the unsaved-edits signal.
+  const dirty = editing && JSON.stringify(draft) !== JSON.stringify(cloneCard(card));
+
+  // A dirty editor never closes silently: the X button (via beforeClose)
+  // and Cancel both ask first, so typed work survives a stray click.
+  async function confirmDiscard() {
+    if (!dirty) return true;
+    return confirmDialog({
+      message: common("feedback.unsavedChanges"),
+      confirmLabel: common("confirm.discardChanges"),
+      tone: "danger",
+    });
+  }
+
+  function cancelEdit() {
+    setDraft(cloneCard(card));
+    setEditing(false);
+  }
+
+  async function cancelWithConfirm() {
+    if (!(await confirmDiscard())) return;
+    cancelEdit();
+  }
   const layout = props.layout ?? defaultFormLayout("labor_rate_card");
   const itemOptions = useMemo(
     () => props.items.map((x) => ({ id: x.id, name: x.name })),
@@ -404,6 +429,7 @@ function RateCardDrawer(
   return (
     <TransactionDrawer
       closeHref={props.closeHref}
+      beforeClose={confirmDiscard}
       recordId={card.id}
       targetTable="item_rate_versions"
       canEditAttachments
@@ -424,8 +450,7 @@ function RateCardDrawer(
               variant="outline"
               disabled={busy}
               onClick={() => {
-                setDraft(cloneCard(card));
-                setEditing(false);
+                void cancelWithConfirm();
               }}
             >
               {common("actions.cancel")}

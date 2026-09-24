@@ -449,6 +449,22 @@ export function PaymentDrawer({
     if (editable) setDirty(true)
   }
 
+  // A dirty editor never closes silently: the X button (via beforeClose)
+  // and Cancel both ask first, so typed work survives a stray click.
+  async function confirmDiscard() {
+    if (mode !== 'edit' || !dirty) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
+  async function cancelWithConfirm() {
+    if (!(await confirmDiscard())) return
+    cancel()
+  }
+
   /** Reset every field back to the loaded document (used by Cancel). */
   function resetForm() {
     setPartyId(doc.party_id ?? '')
@@ -735,6 +751,7 @@ export function PaymentDrawer({
   return (
     <TransactionDrawer
       closeHref={returnHref}
+      beforeClose={confirmDiscard}
       recordId={String(doc.id)}
       // Unsaved-create hides the evidence tabs: both panels read the
       // persisted row the drawer has not written yet, so mounting them
@@ -758,7 +775,7 @@ export function PaymentDrawer({
         canEditStatus ? (
           mode === 'edit' ? (
             <>
-              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => cancel()}>
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => cancelWithConfirm()}>
                 {tCommon('actions.cancel')}
               </Button>
               <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => save()}>
