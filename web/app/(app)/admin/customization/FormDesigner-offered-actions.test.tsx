@@ -120,3 +120,32 @@ test("a full-vocabulary kind is still offered every action", async (t) => {
   assert.ok(typeof post === "string" && labels.includes(post));
   assert.ok(typeof del === "string" && labels.includes(del));
 });
+
+test("every removable header group exposes the translated delete action", async (t) => {
+  globalThis.__designerRouter = { push() {}, refresh() {} };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <FormDesigner recordType="vendor_bill" def={null} headerDefs={[]} lineDefs={[]} subsidiaryEnabled={false} />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+
+  const addGroup = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Add group"));
+  assert.ok(addGroup);
+  await act(async () => {
+    addGroup.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  const groupInputs = [...document.querySelectorAll<HTMLInputElement>('input[placeholder="Group label"]')];
+  assert.ok(groupInputs.length > 1);
+  assert.ok(groupInputs.every((input) => input.parentElement?.querySelector('button[aria-label="Delete"]')));
+});
