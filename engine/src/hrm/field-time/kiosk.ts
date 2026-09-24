@@ -214,7 +214,7 @@ export async function identifyByPin(input: {
   // The kiosk device carries no session: scope the PIN read and the lockout
   // writes to the kiosk's org, or under FORCE RLS the lookup resolves
   // nothing and every worker meets pin_not_set.
-  return withOrgTransaction(input.kiosk.orgId, async () => {
+  const result = await withOrgTransaction(input.kiosk.orgId, async () => {
     // Employment before PIN: a customer or vendor must meet not_employee,
     // never a PIN prompt — and a PIN row alone never makes someone a worker.
     if (!(await hasActiveEmployment(input.kiosk.orgId, input.employeePartyId))) {
@@ -225,8 +225,9 @@ export async function identifyByPin(input: {
     }
     const row = (await db.execute<{ pin_hash: string; failed_attempts: number; locked_until: string | null }>(sql`
       select pin_hash, failed_attempts, locked_until::text as locked_until
-        from worker_clock_pins
-       where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`)).rows[0];
+       from worker_clock_pins
+       where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}
+       for update`)).rows[0];
     if (!row) {
       refuse(
         "pin_not_set",
@@ -249,22 +250,28 @@ export async function identifyByPin(input: {
            set failed_attempts = ${attempts}, locked_until = ${locked}::timestamptz, updated_at = now()
          where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`);
       if (locked) {
-        refuse(
-          "pin_locked",
-          `Too many wrong PINs — kiosk sign-in for this worker unlocks at ${locked}; ask a manager to reset the PIN`,
-        );
+        return {
+          kind: "refused",
+          code: "pin_locked",
+          message: `Too many wrong PINs — kiosk sign-in for this worker unlocks at ${locked}; ask a manager to reset the PIN`,
+        } as const;
       }
-      refuse(
-        "pin_wrong",
-        `Wrong PIN — ${MAX_ATTEMPTS - attempts} attempts remain before kiosk sign-in locks for ${LOCK_MINUTES} minutes`,
-      );
+      return {
+        kind: "refused",
+        code: "pin_wrong",
+        message: `Wrong PIN — ${MAX_ATTEMPTS - attempts} attempts remain before kiosk sign-in locks for ${LOCK_MINUTES} minutes`,
+      } as const;
     }
     await db.execute(sql`
       update worker_clock_pins
          set failed_attempts = 0, locked_until = null, updated_at = now()
        where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`);
-    return input.employeePartyId;
+    return { kind: "identified", employeePartyId: input.employeePartyId } as const;
   });
+  // Throw only after the transaction commits: refusal exceptions abort the
+  // transaction, which would otherwise roll back the failed-attempt count.
+  if (result.kind === "refused") refuse(result.code, result.message);
+  return result.employeePartyId;
 }
 
 /** Set (or reset, clearing lockout) a worker's kiosk PIN. */
