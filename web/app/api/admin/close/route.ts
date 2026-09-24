@@ -597,14 +597,18 @@ export async function POST(req: Request) {
       const packageId = text(body, "packageId", true)!;
       const periodId = text(body, "periodId", true)!;
       const bookId = text(body, "bookId", true)!;
-      if (!isUuid(packageId) || !isUuid(periodId) || !isUuid(bookId))
+      // The send intent key comes from the request (one dialog instance,
+      // rotated after success): a double-click reuses it and dedupes in
+      // BullMQ and in the email worker, instead of sending both mails.
+      const idempotencyKey = text(body, "idempotencyKey", true)!;
+      if (!isUuid(packageId) || !isUuid(periodId) || !isUuid(bookId) || !isUuid(idempotencyKey))
         throw new CloseError("invalid send target");
       try {
-        const { enqueueCloseDelivery } = await import("@openbooks/jobs");
-        // The sender travels as the render principal (see senderId), and the
-        // manual trigger marks this as an explicit Send now so the worker
-        // delivers regardless of the package's cadence (see manualTrigger).
-        await enqueueCloseDelivery({ orgId, packageId, periodId, bookId, senderId: actorId, manualTrigger: true });
+        const { closeDeliveryManualJobId, enqueueCloseDelivery } = await import("@openbooks/jobs");
+        await enqueueCloseDelivery(
+          { orgId, packageId, periodId, bookId, senderId: actorId, manualTrigger: true, idempotencyKey },
+          { jobId: closeDeliveryManualJobId({ packageId, periodId, bookId, idempotencyKey }) },
+        );
       } catch {
         throw new CloseError("the delivery queue is unavailable");
       }

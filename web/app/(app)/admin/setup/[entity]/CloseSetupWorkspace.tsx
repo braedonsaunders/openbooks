@@ -730,12 +730,16 @@ function PackageDrawer({ row, props }: { row?: PackageRow; props: Props }) {
   const [sendPeriod, setSendPeriod] = useState("");
   const [sendBook, setSendBook] = useState(props.selectedBookId || props.books[0]?.id || "");
   const [sending, setSending] = useState(false);
+  // One send-intent key per dialog instance, rotated after success: a
+  // double-click reuses the key and dedupes in BullMQ and the email worker.
+  const [sendKey, setSendKey] = useState(() => crypto.randomUUID());
   async function sendNow() {
     if (!draft.id || !sendPeriod || !sendBook) return;
     setSending(true);
     try {
-      await post({ action: "send-package", packageId: draft.id, periodId: sendPeriod, bookId: sendBook });
+      await post({ action: "send-package", packageId: draft.id, periodId: sendPeriod, bookId: sendBook, idempotencyKey: sendKey });
       toast.success(t("packages.sendQueued"));
+      setSendKey(crypto.randomUUID());
     } catch { toast.error(t("errors.actionFailed")); } finally { setSending(false); }
   }
   const delivery = ((draft.delivery ?? {}));
