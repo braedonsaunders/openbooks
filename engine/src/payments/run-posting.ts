@@ -9,6 +9,8 @@ import { postPaymentWithApplications } from "./payment-posting.ts";
 import { paymentRunComplianceDecisions } from "./run-readiness.ts";
 import { type PostingClaim, assertPostingClaimLive } from "./run-claim.ts";
 import { queueAutomaticRemittance } from "./run-remittance.ts";
+import { PAYMENT_RUN_POSTING_EVENTS } from "./run-posting-events.ts";
+export { PAYMENT_RUN_POSTING_EVENT_TYPES } from "./run-posting-events.ts";
 /**
  * A posting claim that has made no progress for this long is treated as
  * abandoned: a new poster may recover it, fencing the old worker at its next
@@ -70,7 +72,7 @@ async function claimPaymentRunForPosting(
       await db.insert(schema.paymentEvents).values({
         orgId,
         paymentRunId: runId,
-        eventType: "run_posting_recovered",
+        eventType: PAYMENT_RUN_POSTING_EVENTS.recovered,
         fromStatus: "processing",
         toStatus: "processing",
         details: { reason: "the previous posting claim stopped making progress" },
@@ -113,7 +115,7 @@ async function claimPaymentRunForPosting(
     await db.insert(schema.paymentEvents).values({
       orgId,
       paymentRunId: runId,
-      eventType: "run_posting_started",
+      eventType: PAYMENT_RUN_POSTING_EVENTS.started,
       fromStatus: locked.status,
       toStatus: "processing",
       actorId: userId,
@@ -264,7 +266,7 @@ async function postClaimedPaymentInstruction(
       orgId,
       paymentRunId: runId,
       paymentInstructionId: instruction.id,
-      eventType: "instruction_sent",
+      eventType: PAYMENT_RUN_POSTING_EVENTS.instructionSent,
       fromStatus: "pending",
       toStatus: "sent",
       actorId: userId,
@@ -340,7 +342,9 @@ async function finishPaymentRunPosting(
     await db.insert(schema.paymentEvents).values({
       orgId,
       paymentRunId: runId,
-      eventType: status === "partially_failed" ? "run_posting_failed" : "run_posting_completed",
+      eventType: status === "partially_failed"
+        ? PAYMENT_RUN_POSTING_EVENTS.failed
+        : PAYMENT_RUN_POSTING_EVENTS.completed,
       fromStatus: "processing",
       toStatus: status,
       details: tally.pending > 0 ? { ...details, incompleteInstructions: tally.pending } : details,
@@ -379,7 +383,7 @@ async function releaseFailedPaymentRunPosting(
     await db.insert(schema.paymentEvents).values({
       orgId,
       paymentRunId: runId,
-      eventType: "run_posting_failed",
+      eventType: PAYMENT_RUN_POSTING_EVENTS.failed,
       fromStatus: "processing",
       toStatus: "partially_failed",
       details: { error: error instanceof Error ? error.message : String(error) },

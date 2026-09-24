@@ -119,7 +119,7 @@ async function mountBuilder(selectedBills = [bill()]) {
 }
 
 test('selected bill total retains exact ledger precision beyond JavaScript safe integers', async (t) => {
-  const { host, root } = await mountBuilder([bill('9007199254740992.00'), bill('1.00')])
+  const { host, root } = await mountBuilder([bill('9007199254740992.0000'), bill('1.0000')])
   t.after(async () => {
     await act(async () => root.unmount())
     host.remove()
