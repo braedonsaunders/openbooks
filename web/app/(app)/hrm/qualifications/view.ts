@@ -27,7 +27,8 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
  * requirements), the ledger table by worker with status and type filter
  * chips, a drawer per qualification with evidence and events, and route
  * sub-tabs for Requirements (with the coverage matrix: rows = crew,
- * cols = required types, cells = status chips, six types per view) and
+ * cols = required types, cells = status chips, one column per required
+ * type with horizontal scroll) and
  * Alerts. Renders when hrmCertifications is on and the actor holds
  * hrm.certifications.read — the loader 404s otherwise.
  */
@@ -154,7 +155,7 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
               }),
               panel({
                 title: f('coverageTitle'),
-                bodyClassName: 'min-h-0 overflow-y-auto p-0',
+                bodyClassName: 'min-h-0 overflow-auto p-0',
                 blocks: [
                   widgetBlock('filter-chips', {
                     basePath: '/hrm/qualifications',
@@ -170,12 +171,12 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
                     rowKey: item('employmentId'),
                     columns: [
                       column(f('columns.worker'), text(item('workerName'))),
-                      column(f('coverageTypes.0.code'), badge(item('cells.0.label'), { variant: item('cells.0.variant') })),
-                      column(f('coverageTypes.1.code'), badge(item('cells.1.label'), { variant: item('cells.1.variant') })),
-                      column(f('coverageTypes.2.code'), badge(item('cells.2.label'), { variant: item('cells.2.variant') })),
-                      column(f('coverageTypes.3.code'), badge(item('cells.3.label'), { variant: item('cells.3.variant') })),
-                      column(f('coverageTypes.4.code'), badge(item('cells.4.label'), { variant: item('cells.4.variant') })),
-                      column(f('coverageTypes.5.code'), badge(item('cells.5.label'), { variant: item('cells.5.variant') })),
+                      // One column per required type, in loader order: the
+                      // matrix never hides the 7th+ type, and the panel
+                      // scrolls horizontally past the viewport width.
+                      ...data.coverageTypes.map((type, index) =>
+                        column(type.code, badge(item(`cells.${index}.label`), { variant: item(`cells.${index}.variant`) })),
+                      ),
                     ],
                     empty: { title: f('coverageEmpty') },
                   }),
