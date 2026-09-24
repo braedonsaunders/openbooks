@@ -16,6 +16,14 @@ export type ScriptJobData = {
   /** Who pressed Run now (absent for cron ticks). */
   actorId?: string
   /**
+   * The caller's run key for interactive bulk runs (E02). The worker
+   * re-checks the durable claim under this key because BullMQ dedupe only
+   * covers live jobs: a redelivered duplicate reconciles onto the recorded
+   * outcome instead of executing the script twice. Absent on scheduled runs
+   * (occurrence keys) and on jobs enqueued before the key existed.
+   */
+  idempotencyKey?: string
+  /**
    * Immutable occurrence identity for scheduled runs (the scheduler's
    * occurrence key: script + scheduled fire time). The worker forwards it
    * as the run's journal idempotency scope, so a recovery retry of the same

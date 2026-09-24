@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { SCRIPTS_QUEUE, getBlockingConnection, type ScriptJobData } from "@openbooks/jobs";
 import { withOrgContext } from "../platform/db.ts";
 import { runBulkScript, runScheduledScript, type ScriptOutcome } from "../scripting/scripting.ts";
+import { completeBulkRunKey, readBulkRunClaim } from "../scripting/bulk-run-claim.ts";
 
 /**
  * Execute one `scripts` queue payload — the exact code the worker callback
@@ -44,17 +45,37 @@ export async function processScriptJobData(
   // A queue handler runs in a bare callback with no request store, so the
   // job's own tenant is the only legal scope for its queries. Without it the
   // connection layer denies by default and the script reads an empty org.
-  const outcome = await withOrgContext(
-    d.orgId,
-    () =>
-      d.kind === "bulk"
-        ? runBulkScript(d.scriptId, d.orgId, { actorId: d.actorId ?? null })
-        : runScheduledScript(d.scriptId, d.orgId, {
-            actorId: d.actorId ?? null,
-            idempotencyScope: scheduledScopeFromJob(d.kind, d, jobMeta?.jobId),
-            occurrenceRunId: d.occurrenceRunId,
-          }),
+  const outcome = await withOrgContext(d.orgId, () =>
+    d.kind === "bulk"
+      ? runBulkScriptClaimed(d)
+      : runScheduledScript(d.scriptId, d.orgId, {
+          actorId: d.actorId ?? null,
+          idempotencyScope: scheduledScopeFromJob(d.kind, d, jobMeta?.jobId),
+          occurrenceRunId: d.occurrenceRunId,
+        }),
   );
+  return outcome;
+}
+
+/**
+ * Bulk runs execute under the caller's run-key claim (E02). A redelivered
+ * duplicate whose claim already completed reconciles onto the recorded
+ * outcome without executing the script again; anything else runs and then
+ * completes the claim idempotently. Jobs without a key (scheduled kinds
+ * never reach here; pre-key Run-now jobs) run unclaimed, as before.
+ */
+async function runBulkScriptClaimed(d: ScriptJobData): Promise<ScriptOutcome> {
+  const key = d.idempotencyKey;
+  const actorId = d.actorId ?? null;
+  if (!key || !actorId) {
+    return runBulkScript(d.scriptId, d.orgId, { actorId });
+  }
+  const claim = await readBulkRunClaim({ orgId: d.orgId, actorId, scriptId: d.scriptId, key });
+  if (claim.status === "completed") {
+    return claim.response as ScriptOutcome;
+  }
+  const outcome = await runBulkScript(d.scriptId, d.orgId, { actorId });
+  await completeBulkRunKey({ orgId: d.orgId, actorId, scriptId: d.scriptId, key, response: outcome });
   return outcome;
 }
 
