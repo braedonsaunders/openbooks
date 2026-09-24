@@ -29,6 +29,7 @@ import type { FeatureState } from "@openbooks/engine/src/organization/feature-re
 import { canRunTool } from "../assistant/gate";
 import { AssistantToolFailure, mapMcpError, mcpErrorStatus } from "./errors";
 import { MCP_SKILLS } from "./skills";
+import { withAwaitedToolAudit } from "./audited-catalog";
 import type { OpenBooksMcpRequestContext } from "./types";
 
 const VERSION = process.env.OPENBOOKS_VERSION || "development";
@@ -52,10 +53,9 @@ function auditHook(requestContext: OpenBooksMcpRequestContext) {
     // A mutating tool's fresh execution already committed its durable evidence
     // inside its own idempotency claim transaction (via context.requestAudit);
     // the consumed marker suppresses a duplicate row. Everything else — read
-    // tools, replays, failures — is evidenced here. The registrar awaits this
-    // hook before returning the tool result, so the event is durable before a
-    // response can escape. A persistence failure is intentionally propagated
-    // and fails the request closed rather than returning unaudited evidence.
+    // tools, replays, failures — is evidenced by our awaited handler wrapper.
+    // The vendored registrar does not await its audit callback, so do not rely
+    // on the registrar to keep this write ahead of the response.
     if (!takeClaimedCommandEvidence(requestContext.auth.audit)) {
       await insertApiKeyEvent(transportEvent(
         requestContext.auth.audit,
@@ -177,13 +177,22 @@ export async function createOpenBooksMcpServer(
 
   const options = {
     context,
-    audit: auditHook(requestContext),
+    // The appkit registrar currently invokes this callback without awaiting it.
+    // Tool catalogs below wrap execution and persist their own awaited evidence.
+    audit: () => {},
     mapError: mapMcpError,
     errorStatusCode: mcpErrorStatus,
   };
-  registerToolCatalog(server, assistantCatalog(features), options);
-  registerToolCatalog(server, applicationCatalog(features), options);
-  registerToolCatalog(server, await appCatalog(context, features), options);
+  const awaitedAudit = auditHook(requestContext);
+  const describeError = (error: unknown) => ({
+    summary: mapMcpError(error)?.message ?? "tool failed",
+    statusCode: mcpErrorStatus(error),
+  });
+  const audited = (catalog: readonly McpCatalogTool<ApplicationContext>[]) =>
+    withAwaitedToolAudit(catalog, awaitedAudit, describeError);
+  registerToolCatalog(server, audited(assistantCatalog(features)), options);
+  registerToolCatalog(server, audited(applicationCatalog(features)), options);
+  registerToolCatalog(server, audited(await appCatalog(context, features)), options);
 
   registerStaticResources(server, [
     {
