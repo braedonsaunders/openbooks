@@ -1,81 +1,89 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { WIDGET_NAMES } from '../../../../components/viewspec/registry-names'
+import type { AgingData } from './view'
+
+const { registerHooks } = await import('node:module')
+registerHooks({
+  resolve(specifier, context, next) {
+    // Platform boundary, not our own module: lets the unit partition import
+    // the pure spec builder without a Next server runtime.
+    if (specifier === 'server-only') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export default {}',
+      }
+    }
+    return next(specifier, context)
+  },
+})
+
+const { agingSpec } = await import('./view')
 
 // P1 (fleet 8): the aging screen gains an Intacct-style reporting-currency
-// selector plus a convert-from basis toggle. The loader must parse both
-// through the shared screen/export resolver, map an underived-spot refusal
-// to the rates banner, label the surface with basis + as-of, and always show
-// the document's own currency and txn-currency open on detail rows.
-const source = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
+// selector plus a convert-from basis toggle. These tests pin the spec half:
+// the selector reaches the page as a registry widget carrying the screen
+// selection, and it hides with the paper when rates block the report. (The
+// loader half — parsing screen/export params, the spot refusal, basis and
+// as-of labels, drill targets — needs a database and has no unit interface.)
+function dataWithSelection(): AgingData {
+  return {
+    currencyOptions: [
+      { value: 'USD', label: 'USD' },
+      { value: 'EUR', label: 'EUR' },
+    ],
+    currencyValue: 'EUR',
+    currencyBasisValue: 'transaction',
+    labelCurrency: 'Currency',
+    labelConvertFrom: 'Convert from',
+    labelBase: 'Base',
+    labelTransaction: 'Transaction',
+    ratesBlocked: null,
+    ratesReady: true,
+  } as unknown as AgingData
+}
 
-test('the loader parses currency through the shared screen/export resolver', () => {
-  assert.match(
-    source,
-    /resolveAgingCurrencyParams\(sp, scope\)/,
-    'screen and export must agree on what a URL means — one resolver, not two parsers',
+function blocksOf(spec: unknown): Record<string, unknown>[] {
+  const found: Record<string, unknown>[] = []
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item)
+      return
+    }
+    if (typeof node === 'object' && node !== null) {
+      found.push(node as Record<string, unknown>)
+      for (const value of Object.values(node)) visit(value)
+    }
+  }
+  visit((spec as { header: unknown }).header)
+  return found
+}
+
+test('the currency selector reaches the page as a registry widget carrying the screen selection', () => {
+  const blocks = blocksOf(agingSpec(dataWithSelection()))
+  const selector = blocks.find((block) => block.widget === 'currency-basis')
+  assert.ok(selector, 'the selector must be on the page as a currency-basis widget')
+  assert.ok(
+    WIDGET_NAMES.has('currency-basis'),
+    'currency-basis must be a renderable registry name — the spec names it by string key, never by direct import',
   )
+  const props = selector.props as Record<string, unknown>
+  assert.deepEqual(props.currencies, [
+    { value: 'USD', label: 'USD' },
+    { value: 'EUR', label: 'EUR' },
+  ])
+  assert.equal(props.currency, 'EUR', 'the selector must carry the reporting currency')
+  assert.equal(props.currencyBasis, 'transaction', 'the selector must carry the convert-from basis')
 })
 
-test('an underived spot becomes the rates banner, never an SSR throw', () => {
-  assert.match(
-    source,
-    /instanceof AgingRatesUnavailableError/,
-    'the loader must recognize the typed spot refusal',
-  )
-  assert.match(
-    source,
-    /if \(\!\(e instanceof AgingRatesUnavailableError\)\) throw e/,
-    'only the spot refusal converts — every other error still throws',
-  )
-})
-
-test('the surface labels basis and as-of in the UI, not in a comment', () => {
-  assert.match(
-    source,
-    /fromTransaction.*fromBase|fromBase.*fromTransaction/s,
-    'the period phrase must name which leg converted',
-  )
-  assert.match(source, /inCurrency/, 'the period phrase must name the reporting currency')
-})
-
-test('detail rows always show the document currency and txn open', () => {
-  assert.match(
-    source,
-    /labelDocCurrency.*labelTxnOpen|txnOpen/,
-    'detail rows carry doc currency and unconverted txn open whatever basis is selected',
-  )
-  assert.match(
-    source,
-    /widget\('currency-basis'/,
-    'the selector control must be on the page',
-  )
-  assert.match(
-    source,
-    /widget\('currency-basis', \{[\s\S]*?\}, f\('ratesReady'\)\)/,
-    'the selector hides with the paper when rates block the report',
-  )
-})
-
-test('drill-downs reproduce the screen selection, not the defaults', () => {
-  assert.match(source, /currencyBasis,/, 'bucket drill targets carry the basis')
-  assert.match(source, /currency: target/, 'bucket drill targets carry the reporting currency')
-})
-
-test('the selector renders through the registry, not a direct import', () => {
-  // The page reaches the control only as widget('currency-basis', …) in the
-  // spec, resolved via WIDGET_REGISTRY at render. A direct import anywhere
-  // outside the registry would make the registry entry a lie.
-  assert.ok(WIDGET_NAMES.has('currency-basis'), 'currency-basis must be a renderable registry name')
-  assert.match(
-    readFileSync(new URL('../../../../components/viewspec/widgets-controls.tsx', import.meta.url), 'utf8'),
-    /'currency-basis': \(props\)/,
-    'the registry must own the currency-basis entry',
-  )
-  assert.doesNotMatch(
-    source,
-    /import .*currency-basis/,
-    'the aging view must not import the control directly — the spec names it by string key',
+test('the currency selector hides with the paper when rates block the report', () => {
+  const blocked = { ...dataWithSelection(), ratesBlocked: { code: 'rates-not-derived' }, ratesReady: false }
+  const blocks = blocksOf(agingSpec(blocked as unknown as AgingData))
+  const selector = blocks.find((block) => block.widget === 'currency-basis')
+  assert.ok(selector, 'the selector must still be in the spec')
+  assert.deepEqual(
+    selector.when,
+    { $: 'ratesReady' },
+    'the selector hides exactly when the notice is set — no converting beside the banner',
   )
 })
