@@ -3,8 +3,10 @@
 import { useMoney } from '@/components/money-provider'
 import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import Link from 'next/link'
+import { useLocale, useTranslations } from 'next-intl'
 import { Drawer } from '@openbooks/ui'
 import { SlidersHorizontal, Landmark, ArrowUpRight } from 'lucide-react'
+import { formatCivilDate } from '@/lib/format'
 import { Panel } from '../../analytics/_ui/Panel'
 import { CategoryManager, type CatOption, type AccountOption } from '../../analytics/_ui/CategoryManager'
 import type { ForecastCategory } from '../../../../lib/cash/core'
@@ -46,13 +48,15 @@ export function CashForecastConfigDrawer({
   initialCategories?: ForecastCategory[]
 }) {
   const { money } = useMoney()
+  const t = useTranslations('banking.cash.config')
+  const locale = useLocale()
   const items: { label: string; value: string; note: string }[] = [
-    { label: 'Forecast horizon', value: `${horizonWeeks} weeks`, note: 'Weeks of cash projected forward from today' },
-    { label: 'As-of date', value: asOf, note: 'Anchor for open balances and predictions' },
-    { label: 'Prediction method', value: 'Statistical → Due date → Global avg', note: 'Per-party average pay/collect days (+½σ buffer), floored at the due date' },
-    { label: 'Overdue push', value: '+7 / +14 / +28 days', note: 'Overdue items pushed forward by how overdue they are (≤30 / ≤60 / >60 days)' },
-    { label: 'Business-day snap', value: 'On', note: 'Predicted dates on a weekend move to the next business day' },
-    { label: 'Global collect / pay days', value: `${dso}d / ${dpo}d`, note: 'Fallback averages used when a party has no payment history' },
+    { label: t('horizonLabel'), value: t('horizonValue', { weeks: horizonWeeks }), note: t('horizonNote') },
+    { label: t('asOfLabel'), value: formatCivilDate(asOf, locale), note: t('asOfNote') },
+    { label: t('methodLabel'), value: t('methodValue'), note: t('methodNote') },
+    { label: t('overdueLabel'), value: t('overdueValue'), note: t('overdueNote') },
+    { label: t('snapLabel'), value: t('snapOn'), note: t('snapNote') },
+    { label: t('dsoLabel'), value: t('dsoValue', { dso, dpo }), note: t('dsoNote') },
   ]
 
   return (
@@ -61,7 +65,7 @@ export function CashForecastConfigDrawer({
         <CategoryManager vendorOptions={vendorOptions} accountOptions={accountOptions} subsidiaryOptions={subsidiaryOptions} initialCategories={initialCategories} />
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Panel title="Forecast Model" icon={SlidersHorizontal} bodyClassName="p-0">
+          <Panel title={t('modelTitle')} icon={SlidersHorizontal} bodyClassName="p-0">
             <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
               {items.map((i) => (
                 <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
@@ -76,29 +80,29 @@ export function CashForecastConfigDrawer({
           </Panel>
 
           <Panel
-            title="AP payment rule"
+            title={t('apTitle')}
             icon={Landmark}
-            hint="Configured on the AP cockpit"
+            hint={t('apHint')}
             bodyClassName="p-0"
           >
             <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
               <li className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Weekly pay cap</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Most payables paid per week; the rest defers</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{t('capLabel')}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('capNote')}</p>
                 </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{compareMoney(weeklyCap, '0.0000') > 0 ? money(weeklyCap) : 'Unlimited'}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">{compareMoney(weeklyCap, '0.0000') > 0 ? money(weeklyCap) : t('capUnlimited')}</span>
               </li>
               <li className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Restrict to safe capacity</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Never pay beyond the cash available that week</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{t('restrictLabel')}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('restrictNote')}</p>
                 </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{restrictToSafe ? 'On' : 'Off'}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{restrictToSafe ? t('restrictOn') : t('restrictOff')}</span>
               </li>
               <li className="px-4 py-3">
                 <Link href={('/ap')} className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400">
-                  Configure on the AP cockpit <ArrowUpRight size={12} />
+                  {t('apLink')} <ArrowUpRight size={12} />
                 </Link>
               </li>
             </ul>
