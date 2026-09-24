@@ -269,6 +269,7 @@ export async function appendStatutoryHolidayEarningLines(
     orgId: string; documentId: string; employeePartyId: string;
     emp: Record<string, string | null>;
     country: string;
+    subsidiaryId: string | null;
     province: string;
     run: Record<string, string>;
     payRate: Awaited<ReturnType<typeof resolvePayRate>>;
@@ -283,7 +284,7 @@ export async function appendStatutoryHolidayEarningLines(
   },
 ): Promise<void> {
   const {
-    orgId, documentId, employeePartyId, emp, country, province, run, payRate,
+    orgId, documentId, employeePartyId, emp, country, subsidiaryId, province, run, payRate,
     statHolidayPay, oneOffRun, need, lines, allowedSubsidiaryIds, holidayEligibility,
   } = args;
   if (!oneOffRun && statHolidayPay) {
@@ -294,6 +295,7 @@ export async function appendStatutoryHolidayEarningLines(
       employeeName: emp.display_name ?? employeePartyId,
       emp,
       country,
+      subsidiaryId,
       province,
       periodStart: run.period_start!,
       periodEnd: run.period_end!,

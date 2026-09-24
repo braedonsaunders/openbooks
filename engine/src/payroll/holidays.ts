@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
 import {
@@ -950,6 +951,9 @@ export interface StatutoryHolidayEarningLine {
 
 export interface StatutoryHolidayPayInput {
   orgId: string;
+  /** Paying legal employer for effective-dated employer facts. */
+  subsidiaryId?: string | null;
+  country?: string;
   employeePartyId: string;
   employeeName: string;
   /** 'CA-ON', 'CA', 'US-TX' — from `jurisdictionKey(country, province)`. */
@@ -1032,7 +1036,21 @@ export async function resolveStatutoryHolidayPay(
     // never the current one applied backwards. Refuses by name where the
     // governing statute has not been transcribed.
     const rule = statutoryHolidayPayRule(input.jurisdiction, holiday.date)!;
-    const window = lookbackWindow(rule, holiday.date);
+    let employerWeekStartsOn: string | null = null;
+    if (rule.lookbackEnds.kind === "week_before" && rule.lookbackEnds.employerWeekStartsOnFact) {
+      if (!input.country || !input.subsidiaryId) {
+        throw new PayrollHolidayError(
+          `${input.employeeName}: ${holiday.name} needs the paying legal employer to resolve its selected work week — `
+          + "assign the run to its legal employer, then set the work-week start in Payroll Setup → Employer facts",
+        );
+      }
+      employerWeekStartsOn = await resolveStoredEmployerFact({
+        tx, orgId: input.orgId, subsidiaryId: input.subsidiaryId, country: input.country,
+        factKey: rule.lookbackEnds.employerWeekStartsOnFact, asOf: holiday.date,
+      });
+    }
+    const selectedWeekStartsOn = employerWeekStartsOn === null ? undefined : Number(employerWeekStartsOn);
+    const window = lookbackWindow(rule, holiday.date, selectedWeekStartsOn);
     const earnings = await lookbackEarnings(tx, input, window);
     // The QUALIFYING window is day-based in every statute that declares one
     // ("the 30 calendar days preceding the statutory holiday"; "30 days worked
@@ -1076,7 +1094,7 @@ export async function resolveStatutoryHolidayPay(
       );
     }
     const commissionWindow = lookbackBasis.kind === "fixed_divisor" && lookbackBasis.commission
-      ? commissionWindowOf(rule, holiday.date, lookbackBasis.commission.lookbackWeeks)
+      ? commissionWindowOf(rule, holiday.date, lookbackBasis.commission.lookbackWeeks, selectedWeekStartsOn)
       : null;
 
     // Which days count is the rule's own declaration, twice over: the
@@ -1178,12 +1196,17 @@ export async function resolveStatutoryHolidayPay(
 export function lookbackWindowEnd(
   rule: PayrollHolidayPayRule,
   holidayDate: string,
+  employerWeekStartsOn?: number,
 ): string {
   const boundary = rule.lookbackEnds;
   if (boundary.kind === "day_before") return shiftDays(holidayDate, -1);
   // Back up to the first day of the holiday's own week, then take the day
   // before it: the last day of the preceding week.
-  const intoWeek = (weekdayOf(holidayDate) - boundary.weekStartsOn + 7) % 7;
+  const weekStartsOn = employerWeekStartsOn ?? boundary.weekStartsOn;
+  if (!Number.isInteger(weekStartsOn) || weekStartsOn < 0 || weekStartsOn > 6) {
+    throw new PayrollHolidayError(`invalid employer work-week start day: ${weekStartsOn}`);
+  }
+  const intoWeek = (weekdayOf(holidayDate) - weekStartsOn + 7) % 7;
   return shiftDays(holidayDate, -(intoWeek + 1));
 }
 
@@ -1198,9 +1221,10 @@ export function lookbackWindowEnd(
 export function lookbackWindow(
   rule: PayrollHolidayPayRule,
   holidayDate: string,
+  employerWeekStartsOn?: number,
 ): { from: string; to: string } {
   const basis = holidayPayLookbackBasis(rule.basis);
-  const to = lookbackWindowEnd(rule, holidayDate);
+  const to = lookbackWindowEnd(rule, holidayDate, employerWeekStartsOn);
   switch (basis.kind) {
     case "fixed_divisor":
     case "percent_of_earnings":
@@ -1218,8 +1242,9 @@ const spanBefore = (to: string, days: number) => ({
 });
 
 /** The commission earner's own window, on the same boundary as the rule's. */
-const commissionWindowOf = (rule: PayrollHolidayPayRule, holidayDate: string, weeks: number) =>
-  spanBefore(lookbackWindowEnd(rule, holidayDate), weeks * 7);
+const commissionWindowOf = (
+  rule: PayrollHolidayPayRule, holidayDate: string, weeks: number, employerWeekStartsOn?: number,
+) => spanBefore(lookbackWindowEnd(rule, holidayDate, employerWeekStartsOn), weeks * 7);
 
 /** Earnings from committed stubs, pro-rated where a pay period straddles the
  *  window. Categories follow the components' system keys, which is what makes

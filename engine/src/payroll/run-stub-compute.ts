@@ -271,7 +271,9 @@ export async function calculateStub(
   // upgrade). Skipped on an off-cycle bonus run, which pays only its one-off
   // lines.
   await appendStatutoryHolidayEarningLines(tx, {
-    orgId, documentId, employeePartyId, emp, country, province, run, payRate,
+    orgId, documentId, employeePartyId, emp, country,
+    subsidiaryId: ctx.runContext.subsidiaryId || null,
+    province, run, payRate,
     statHolidayPay: ctx.statHolidayPay, oneOffRun, need: ctx.need, lines,
     allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
     holidayEligibility: ctx.holidayEligibility,

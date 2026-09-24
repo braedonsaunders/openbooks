@@ -148,6 +148,7 @@ export async function statutoryHolidayLinesForStub(
     /** The profile record — its labour_jurisdiction overrides the region. */
     emp: Record<string, string | null>;
     country: string;
+    subsidiaryId: string | null;
     province: string | null;
     periodStart: string;
     periodEnd: string;
@@ -162,7 +163,7 @@ export async function statutoryHolidayLinesForStub(
 ): Promise<StatutoryHolidayEarningLine[]> {
   const {
     orgId, documentId, employeePartyId, employeeName,
-    emp, country, province, periodStart, periodEnd, payRate, need,
+    emp, country, subsidiaryId, province, periodStart, periodEnd, payRate, need,
     allowedSubsidiaryIds,
     holidayEligibility,
   } = args;
@@ -212,6 +213,8 @@ export async function statutoryHolidayLinesForStub(
     : "0";
   return resolveStatutoryHolidayPay(tx, {
     orgId,
+    country,
+    subsidiaryId,
     employeePartyId,
     employeeName,
     jurisdiction: employeeJurisdiction,

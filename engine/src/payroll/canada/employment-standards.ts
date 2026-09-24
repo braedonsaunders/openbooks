@@ -118,16 +118,16 @@ const ENDS_DAY_BEFORE: PayrollHolidayLookbackBoundary = { kind: "day_before" };
  * window ends on the Saturday before the holiday's own week, so the part-week
  * the holiday sits in is excluded. Sunday-start, which is the Canada Labour
  * Code's own definition of a week (s. 166) and Ontario's statutory fallback
- * where an employer has selected no work week of its own.
- *
- * NOT expressible here, and named rather than hidden: Ontario s. 1 and Quebec
- * s. 1(12) both let the EMPLOYER select the seven-day period. An employer whose
- * work week starts on a Monday has a window shifted by one day from this one.
- * Nothing records that election yet; when it does, it belongs beside the pay
- * schedule and overrides `weekStartsOn` for that employer.
+ * where an employer has selected no work week of its own. Ontario s. 1 and
+ * Quebec s. 1(12) let the employer select the seven-day period; their rules
+ * declare the effective-dated `work_week_start` employer fact below, which
+ * the generic calculation uses for those boundaries.
  */
 const ENDS_WEEK_BEFORE: PayrollHolidayLookbackBoundary = {
   kind: "week_before", weekStartsOn: 0,
+};
+const ENDS_SELECTED_WORK_WEEK_BEFORE: PayrollHolidayLookbackBoundary = {
+  ...ENDS_WEEK_BEFORE, employerWeekStartsOnFact: "work_week_start",
 };
 
 /** The pack's only transcription of a jurisdiction's formula: offered for
@@ -172,7 +172,7 @@ const ON_HOLIDAY_PAY: PayrollHolidayPayRule = {
   premium: { multiplier: "1.5", plusHolidayPay: true },
   // "the four work weeks BEFORE THE WORK WEEK with the public holiday" — the
   // part-week the holiday falls in is outside the window.
-  lookbackEnds: ENDS_WEEK_BEFORE,
+  lookbackEnds: ENDS_SELECTED_WORK_WEEK_BEFORE,
 };
 
 /**
@@ -191,7 +191,7 @@ const QC_HOLIDAY_PAY: PayrollHolidayPayRule = {
   qualifying: { lastAndFirstScheduledShift: true },
   premium: { multiplier: "1", plusHolidayPay: true },
   // s. 62: "the four complete weeks of pay PRECEDING THE WEEK of the holiday".
-  lookbackEnds: ENDS_WEEK_BEFORE,
+  lookbackEnds: ENDS_SELECTED_WORK_WEEK_BEFORE,
 };
 
 /**

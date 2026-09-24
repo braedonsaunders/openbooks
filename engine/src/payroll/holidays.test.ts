@@ -828,6 +828,12 @@ test("a lookback ends where its own statute says, and the two differ by days", (
     lookbackWindow(ruleFor("CA-ON"), "2026-07-01"),
     { from: "2026-05-31", to: "2026-06-27" },
   );
+  assert.deepEqual(lookbackWindow(ruleFor("CA-ON"), "2026-01-08"), {
+    from: "2025-12-07", to: "2026-01-03",
+  });
+  assert.deepEqual(lookbackWindow(ruleFor("CA-ON"), "2026-01-08", 1), {
+    from: "2025-12-08", to: "2026-01-04",
+  });
   // The Canada Labour Code s. 196 and Quebec s. 62 are worded the same way.
   assert.deepEqual(
     lookbackWindow(ruleFor("CA"), "2026-07-01"),
@@ -1147,8 +1153,6 @@ test("Prince Edward Island's five per cent counts vacation and prior holidays in
 });
 
 test("Yukon splits on STANDARD hours, not on whether the hours vary", () => {
-  // s. 30(1) v s. 30(2): a perfectly regular twenty-hour week takes the
-  // percentage arm in Yukon and the normal-day arm everywhere else.
   const fullTime = computeStatutoryHolidayPay(ruleFor("CA-YT"), payContext({
     schedule: pattern("8"), hourlyRate: "28.00", employmentDays: 400,
     earnings: { ...emptyLookbackEarnings(), regular: "2240.00" },
@@ -1164,10 +1168,6 @@ test("Yukon splits on STANDARD hours, not on whether the hours vary", () => {
   }));
   assert.equal(partTime.holidayPay, "160.0000");
   assert.match(partTime.basis, /less than the 40/);
-  // Two weeks, not four — the shortest lookback of any Canadian jurisdiction —
-  // and s. 30(2) counts them "immediately preceding the WEEK in which the
-  // general holiday occurs", so it stops on the Saturday before Canada Day's
-  // week rather than on June 30.
   assert.deepEqual(
     lookbackWindow(ruleFor("CA-YT"), "2026-07-01"),
     { from: "2026-06-14", to: "2026-06-27" },
