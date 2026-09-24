@@ -1118,6 +1118,46 @@ export async function reopenLine(query: {
 // separation. The decider is never the proposer.
 // ---------------------------------------------------------------------------
 
+/**
+ * Pure separation-of-duties invariant for line decisions. Both identity
+ * legs must hold: the decider is neither the proposing user nor a second
+ * login for the proposer's person. An unresolvable proposer — a legacy
+ * line with no proposed_by, a deleted proposing user, or a null party on
+ * either side — is a named refusal (re-propose the line), never a pass:
+ * an identity that cannot be checked cannot be cleared.
+ */
+export function assertLineDeciderSeparation(args: {
+  proposedBy: string | null;
+  proposerPartyId: string | null;
+  deciderUserId: string;
+  deciderPartyId: string | null;
+}): void {
+  if (args.proposedBy === null) {
+    throw new CompensationError(
+      "REFUSED",
+      "this line names no proposer — separation of duties cannot be verified; re-propose the line before deciding",
+    );
+  }
+  if (args.proposedBy === args.deciderUserId) {
+    throw new CompensationError(
+      "REFUSED",
+      "the proposer cannot decide their own line — separation of duties; a second approver decides",
+    );
+  }
+  if (args.proposerPartyId === null || args.deciderPartyId === null) {
+    throw new CompensationError(
+      "REFUSED",
+      "the line proposer can't be verified — re-propose the line so separation of duties can be checked",
+    );
+  }
+  if (args.proposerPartyId === args.deciderPartyId) {
+    throw new CompensationError(
+      "REFUSED",
+      "the proposer cannot decide their own line — separation of duties; a second approver decides",
+    );
+  }
+}
+
 async function decideLine(
   orgId: string,
   actorId: string,
@@ -1141,18 +1181,14 @@ async function decideLine(
         `a ${line.status} line cannot be decided — only proposed lines decide`,
       );
     }
-    if (line.proposed_by !== null) {
-      const proposer = (await db.execute<{ party_id: string | null }>(sql`
-        select party_id from users where id = ${line.proposed_by}`)).rows[0]?.party_id ?? null;
-      const decider = (await db.execute<{ party_id: string | null }>(sql`
-        select party_id from users where id = ${actorId}`)).rows[0]?.party_id ?? null;
-      if (proposer !== null && decider !== null && proposer === decider) {
-        throw new CompensationError(
-          "REFUSED",
-          "the proposer cannot decide their own line — separation of duties; a second approver decides",
-        );
-      }
-    }
+    assertLineDeciderSeparation({
+      proposedBy: line.proposed_by,
+      proposerPartyId: (await db.execute<{ party_id: string | null }>(sql`
+        select party_id from users where id = ${line.proposed_by}`)).rows[0]?.party_id ?? null,
+      deciderUserId: actorId,
+      deciderPartyId: (await db.execute<{ party_id: string | null }>(sql`
+        select party_id from users where id = ${actorId}`)).rows[0]?.party_id ?? null,
+    });
     if (decision === "rejected" && (reason === null || reason.trim().length === 0)) {
       throw new CompensationError("INVALID_INPUT", "a rejection needs its reason — the manager reads it");
     }
