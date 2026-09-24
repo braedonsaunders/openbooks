@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -264,3 +264,27 @@ test("draft lifecycle still works: header edit then post", { skip: !DB }, async 
     await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
     assert.equal(await statusOf(entry), "posted");
   }));
+
+test("amend-delete in a soft_closed period is refused like an amend-update", { skip: !DB }, async () => {
+  // G5: the DELETE branch fenced with period_module_is_closed (true only
+  // for state = 'closed') while the sibling amend-UPDATE branch uses the
+  // soft-close-aware period_module_blocks_write, so an amend-delete in a
+  // soft_closed period went through. Both branches must refuse.
+  await fixture(async (org) => {
+    const entry = await postBalanced(org, "GUARD-DEL-SOFT");
+    await db.execute(sql`insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, reason)
+      values (${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', 'soft_closed', 'G5 regression probe')`);
+    // The entry delete is attempted with its lines still attached: the
+    // BEFORE-trigger fence must fire before the line back-reference is
+    // ever consulted. Pre-fix the fence let it through and the delete died
+    // on the foreign key instead.
+    await assert.rejects(
+      withOrgTransaction(org.orgId, async () => {
+        await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+        await db.execute(sql`delete from journal_entries where id = ${entry}`);
+      }),
+      (error: unknown) => errorChainMatches(error, /period is closed for GL posting/),
+    );
+    assert.equal(await statusOf(entry), "posted");
+  });
+});
