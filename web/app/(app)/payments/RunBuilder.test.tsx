@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { sum } from '@openbooks/engine/src/money/money.ts'
-
-const source = readFileSync(new URL('./RunBuilder.tsx', import.meta.url), 'utf8')
 
 declare global {
   var __runTestRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -67,32 +63,17 @@ const messages = (await import("../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../components/money-provider");
 const { RunBuilder } = await import("./RunBuilder");
 
-test('payment-run selected totals preserve exact per-currency ledger decimals', () => {
-  assert.doesNotMatch(
-    source,
-    /\+ Number\(bill\.open\)/,
-    'selected payment totals must not cross the JavaScript floating-point boundary',
-  )
-  assert.match(source, /sum\(amounts\)/)
-  assert.equal(
-    sum(['9007199254740992.0000', '1.0001']),
-    '9007199254740993.0001',
-  )
-})
-
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-const BILL_ID = randomUUID();
-
-function bill() {
+function bill(open = "2500.00") {
   return {
-    id: BILL_ID,
+    id: randomUUID(),
     document_number: "BILL-00003",
     vendor: "AWS",
     document_date: "2026-12-01",
     due_date: "2026-12-20",
     reference_number: null,
-    open: "2500.00",
+    open,
     currency: "USD",
     has_bank: true,
   };
@@ -109,7 +90,7 @@ function profile() {
   };
 }
 
-async function mountBuilder() {
+async function mountBuilder(selectedBills = [bill()]) {
   globalThis.__runTestRouter = { push() {}, refresh() {} };
   globalThis.__runTestToasts = [];
   const host = document.createElement("div");
@@ -120,14 +101,14 @@ async function mountBuilder() {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <RunBuilder
-            bills={[bill()]}
+            bills={selectedBills}
             bankProfiles={[profile()]}
             sp={{}}
             sort="due"
             dir="asc"
             toolbar={null}
             pagination={null}
-            preselected={[bill()]}
+            preselected={selectedBills}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -136,6 +117,18 @@ async function mountBuilder() {
   });
   return { host, root };
 }
+
+test('selected bill total retains exact ledger precision beyond JavaScript safe integers', async (t) => {
+  const { host, root } = await mountBuilder([bill('9007199254740992.00'), bill('1.00')])
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+
+  const total = document.querySelector('strong')
+  assert.ok(total, 'the selected amount is emphasized in the summary')
+  assert.match(total.textContent ?? '', /9,007,199,254,740,993\.00/)
+})
 
 async function chooseProfile() {
   // Open the bank-profile dropdown and pick the only profile. The menu
