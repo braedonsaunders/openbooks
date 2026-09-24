@@ -204,3 +204,58 @@ test('draft refuses an uncreatable stage instead of silently creating a lead', {
     await dropScratchOrg(f.orgId)
   }
 })
+
+async function customerRoleActive(orgId: string, partyId: string): Promise<boolean> {
+  return (await withBypassContext(() => db.execute(sql`
+    select 1 from customer_roles where org_id = ${orgId} and party_id = ${partyId} and is_active`))).rows.length > 0
+}
+
+async function inCustomerPicker(orgId: string, partyId: string): Promise<boolean> {
+  // The customer pickers join parties to ACTIVE customer roles; an ex-customer
+  // must vanish from them the moment the demotion commits.
+  return (await withBypassContext(() => db.execute(sql`
+    select 1 from parties p join customer_roles r on r.org_id = p.org_id and r.party_id = p.id and r.is_active
+     where p.org_id = ${orgId} and p.id = ${partyId}`))).rows.length > 0
+}
+
+test('PATCH demotion back to prospect deactivates the customer role in the same transaction', { skip: !DB }, async () => {
+  const f = await fixture()
+  try {
+    const promoted = await patch(f.partyId, { lifecycleStage: 'customer' })
+    assert.equal(promoted.status, 200, JSON.stringify(promoted.json))
+    assert.equal(await customerRoleActive(f.orgId, f.partyId), true)
+    assert.equal(await inCustomerPicker(f.orgId, f.partyId), true)
+
+    const demoted = await patch(f.partyId, { lifecycleStage: 'prospect', stageReason: 'lost the deal' })
+    assert.equal(demoted.status, 200, JSON.stringify(demoted.json))
+    assert.equal((await profile(f.partyId)).lifecycle_stage, 'prospect')
+    assert.equal(await customerRoleActive(f.orgId, f.partyId), false)
+    assert.equal(await inCustomerPicker(f.orgId, f.partyId), false)
+    assert.deepEqual(await stageEvents(f.partyId), [
+      { from_stage: 'lead', to_stage: 'customer', source_kind: 'manual' },
+      { from_stage: 'customer', to_stage: 'prospect', source_kind: 'manual' },
+    ])
+  } finally {
+    await dropScratchOrg(f.orgId)
+  }
+})
+
+test('PATCH demotion of a customer with an in-flight order is refused by name', { skip: !DB }, async () => {
+  const f = await fixture()
+  try {
+    const promoted = await patch(f.partyId, { lifecycleStage: 'customer' })
+    assert.equal(promoted.status, 200, JSON.stringify(promoted.json))
+    await withBypassContext(() => db.execute(sql`
+      insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, total)
+      values (${f.orgId}, 'sales_order', 'SO-GUARD-1', '2026-01-05', 'USD', 'pending_approval', ${f.partyId}, '100.0000')`))
+
+    const demoted = await patch(f.partyId, { lifecycleStage: 'prospect', stageReason: 'lost the deal' })
+    assert.equal(demoted.status, 422, JSON.stringify(demoted.json))
+    assert.match(demoted.json?.error ?? '', /in flight|open balance/i)
+    // The refusal changed nothing: still a customer with an active role.
+    assert.equal((await profile(f.partyId)).lifecycle_stage, 'customer')
+    assert.equal(await customerRoleActive(f.orgId, f.partyId), true)
+  } finally {
+    await dropScratchOrg(f.orgId)
+  }
+})
