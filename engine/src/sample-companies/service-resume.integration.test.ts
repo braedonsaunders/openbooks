@@ -526,8 +526,8 @@ async function fakeSuccessfulSimulate(runDir: string): Promise<RunManifest> {
           documentDate: manifest.startDate,
           memo: `Resume coverage ${i}`,
           lines: [
-            { accountId: world.accounts.bank!, amount: 100 },
-            { accountId: world.accounts.ar!, amount: -100 },
+            { accountId: world.accounts.bank!, amount: "100" },
+            { accountId: world.accounts.ar!, amount: "-100" },
           ],
         },
         { post: true },

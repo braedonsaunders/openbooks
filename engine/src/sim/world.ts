@@ -543,7 +543,7 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
         documentDate: window.startDate,
         memo: "Opening balances",
         referenceNumber: "OPENING",
-        lines: openingBalanceLines(world.accounts, scale).map((l) => ({ accountId: l.accountId, amount: l.amount })),
+        lines: openingBalanceLines(world.accounts, scale).map((l) => ({ accountId: l.accountId, amount: String(l.amount) })),
       },
       { post: true },
     ),
