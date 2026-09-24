@@ -3,7 +3,7 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
+import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
@@ -23,6 +23,7 @@ export interface AutomationBuilderData {
   automation: BuilderAutomation
   runs: BuilderRun[]
   canSimulate: boolean
+  canManage: boolean
   saveFailed: string
   title: string
   description: string
@@ -60,6 +61,9 @@ export async function loadAutomationBuilder(id: string): Promise<AutomationBuild
       createdAt: String(r.createdAt),
     })),
     canSimulate: await isFeatureEnabled(authz.user.orgId, 'automationSimulator'),
+    // automations.read opens the page; only automations.manage may change the
+    // recipe. The builder island renders its mutating controls from this.
+    canManage: can(authz, 'automations.manage'),
     saveFailed: t('builder.saveFailed'),
     title: automation.name,
     description: t('builder.description'),
@@ -79,6 +83,7 @@ export function automationBuilderSpec(data: AutomationBuilderData): PageSpec {
           automation: data.automation,
           runs: data.runs,
           canSimulate: data.canSimulate,
+          canManage: data.canManage,
           saveFailed: data.saveFailed,
           backHref: data.backHref,
           backLabel: data.backLabel,

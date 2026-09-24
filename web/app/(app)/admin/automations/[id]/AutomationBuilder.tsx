@@ -102,6 +102,7 @@ export function AutomationBuilder({
   automation,
   runs,
   canSimulate,
+  canManage,
   saveFailed,
   backHref,
   backLabel,
@@ -109,6 +110,7 @@ export function AutomationBuilder({
   automation: BuilderAutomation
   runs: BuilderRun[]
   canSimulate: boolean
+  canManage: boolean
   saveFailed: string
   backHref: string
   backLabel: string
@@ -128,6 +130,11 @@ export function AutomationBuilder({
   const [simSteps, setSimSteps] = useState<{ index: number; kind: string; status: string; output?: string; error?: string }[] | null>(null)
 
   const kind = String(trigger.kind ?? 'manual')
+  // Readers (automations.read without automations.manage) see the whole
+  // recipe but change nothing: every input below takes disabled={ro} and
+  // every mutating button renders only for managers. Simulate stays: its
+  // API is read-guarded, so running it changes no stored state.
+  const ro = !canManage
 
   async function patch(body: Record<string, unknown>, success: string) {
     setBusy(true)
@@ -216,6 +223,9 @@ export function AutomationBuilder({
       {automation.errorMessage ? (
         <p className="text-sm text-red-600 dark:text-red-400">{automation.errorMessage}</p>
       ) : null}
+      {canManage ? null : (
+        <p className="text-sm text-slate-600 dark:text-slate-300">{t('builder.readOnlyNotice')}</p>
+      )}
       <div className="inline-flex items-center gap-2">
         <Button variant={tab === 'build' ? 'default' : 'outline'} onClick={() => setTab('build')}>{t('builder.buildTab')}</Button>
         <Button variant={tab === 'runs' ? 'default' : 'outline'} onClick={() => setTab('runs')}>{t('builder.runsTab')}</Button>
@@ -227,8 +237,8 @@ export function AutomationBuilder({
             <h2 className="text-sm font-semibold">{t('builder.nameTitle')}</h2>
             <div className="mt-2 grid gap-2">
               <Label htmlFor="ab-name">{t('list.nameLabel')}</Label>
-              <Input id="ab-name" value={name} onChange={(e) => setName(e.target.value)} />
-              <div><Button disabled={busy} onClick={() => patch({ name }, t('builder.saved'))}>{t('builder.saveName')}</Button></div>
+              <Input id="ab-name" value={name} onChange={(e) => setName(e.target.value)} disabled={ro} />
+              {canManage ? <div><Button disabled={busy} onClick={() => patch({ name }, t('builder.saved'))}>{t('builder.saveName')}</Button></div> : null}
             </div>
           </section>
 
@@ -236,7 +246,7 @@ export function AutomationBuilder({
             <h2 className="text-sm font-semibold">{t('builder.triggerTitle')}</h2>
             <div className="mt-2 grid gap-2">
               <Label htmlFor="ab-trigger-kind">{t('list.triggerLabel')}</Label>
-              <Select id="ab-trigger-kind" value={kind} onChange={(e) => setTrigger({ kind: e.target.value })}>
+              <Select id="ab-trigger-kind" value={kind} onChange={(e) => setTrigger({ kind: e.target.value })} disabled={ro}>
                 {TRIGGER_KINDS.map((k) => {
                   const unavailable = (UNAVAILABLE_TRIGGER_KINDS as readonly string[]).includes(k)
                   return (
@@ -252,57 +262,57 @@ export function AutomationBuilder({
               {kind === 'schedule' ? (
                 <>
                   <Label htmlFor="ab-cron">{t('builder.cronLabel')}</Label>
-                  <Input id="ab-cron" value={String(trigger.cron ?? '')} onChange={(e) => setTriggerField('cron', e.target.value)} placeholder="0 9 * * MON" />
+                  <Input id="ab-cron" value={String(trigger.cron ?? '')} onChange={(e) => setTriggerField('cron', e.target.value)} placeholder="0 9 * * MON" disabled={ro} />
                   <Label htmlFor="ab-tz">{t('builder.timezoneLabel')}</Label>
-                  <Input id="ab-tz" value={String(trigger.timezone ?? 'UTC')} onChange={(e) => setTriggerField('timezone', e.target.value)} />
+                  <Input id="ab-tz" value={String(trigger.timezone ?? 'UTC')} onChange={(e) => setTriggerField('timezone', e.target.value)} disabled={ro} />
                 </>
               ) : null}
               {kind === 'date_relative' ? (
                 <>
                   <Label htmlFor="ab-entity">{t('builder.entityLabel')}</Label>
-                  <Input id="ab-entity" value={String(trigger.entity ?? '')} onChange={(e) => setTriggerField('entity', e.target.value)} />
+                  <Input id="ab-entity" value={String(trigger.entity ?? '')} onChange={(e) => setTriggerField('entity', e.target.value)} disabled={ro} />
                   <Label htmlFor="ab-datefield">{t('builder.dateFieldLabel')}</Label>
-                  <Input id="ab-datefield" value={String(trigger.dateField ?? '')} onChange={(e) => setTriggerField('dateField', e.target.value)} />
+                  <Input id="ab-datefield" value={String(trigger.dateField ?? '')} onChange={(e) => setTriggerField('dateField', e.target.value)} disabled={ro} />
                   <Label htmlFor="ab-offset">{t('builder.offsetLabel')}</Label>
-                  <Input id="ab-offset" value={String(trigger.offsetDays ?? 0)} onChange={(e) => setTriggerField('offsetDays', e.target.value)} />
+                  <Input id="ab-offset" value={String(trigger.offsetDays ?? 0)} onChange={(e) => setTriggerField('offsetDays', e.target.value)} disabled={ro} />
                   <Label htmlFor="ab-direction">{t('builder.directionLabel')}</Label>
-                  <Select id="ab-direction" value={String(trigger.direction ?? 'before')} onChange={(e) => setTriggerField('direction', e.target.value)}>
+                  <Select id="ab-direction" value={String(trigger.direction ?? 'before')} onChange={(e) => setTriggerField('direction', e.target.value)} disabled={ro}>
                     <option value="before">{t('builder.before')}</option>
                     <option value="after">{t('builder.after')}</option>
                   </Select>
                   <Label htmlFor="ab-attime">{t('builder.atTimeLabel')}</Label>
-                  <Input id="ab-attime" value={String(trigger.atTime ?? '09:00')} onChange={(e) => setTriggerField('atTime', e.target.value)} placeholder="09:00" />
+                  <Input id="ab-attime" value={String(trigger.atTime ?? '09:00')} onChange={(e) => setTriggerField('atTime', e.target.value)} placeholder="09:00" disabled={ro} />
                 </>
               ) : null}
               {kind === 'field_change' ? (
                 <>
                   <Label htmlFor="ab-fc-entity">{t('builder.entityLabel')}</Label>
-                  <Input id="ab-fc-entity" value={String(trigger.entity ?? '')} onChange={(e) => setTriggerField('entity', e.target.value)} />
+                  <Input id="ab-fc-entity" value={String(trigger.entity ?? '')} onChange={(e) => setTriggerField('entity', e.target.value)} disabled={ro} />
                   <Label htmlFor="ab-fc-field">{t('builder.fieldLabel')}</Label>
-                  <Input id="ab-fc-field" value={String(trigger.field ?? '')} onChange={(e) => setTriggerField('field', e.target.value)} />
+                  <Input id="ab-fc-field" value={String(trigger.field ?? '')} onChange={(e) => setTriggerField('field', e.target.value)} disabled={ro} />
                   <Label htmlFor="ab-fc-to">{t('builder.changedToLabel')}</Label>
-                  <Input id="ab-fc-to" value={String(trigger.to ?? '')} onChange={(e) => setTriggerField('to', e.target.value)} />
+                  <Input id="ab-fc-to" value={String(trigger.to ?? '')} onChange={(e) => setTriggerField('to', e.target.value)} disabled={ro} />
                 </>
               ) : null}
               {kind === 'event' ? (
                 <>
                   <Label htmlFor="ab-ev-subject">{t('builder.subjectKindLabel')}</Label>
-                  <Input id="ab-ev-subject" value={String(trigger.subjectKind ?? '')} onChange={(e) => setTriggerField('subjectKind', e.target.value)} />
+                  <Input id="ab-ev-subject" value={String(trigger.subjectKind ?? '')} onChange={(e) => setTriggerField('subjectKind', e.target.value)} disabled={ro} />
                   <Label htmlFor="ab-ev-kind">{t('builder.eventKindLabel')}</Label>
-                  <Input id="ab-ev-kind" value={String(trigger.eventKind ?? '')} onChange={(e) => setTriggerField('eventKind', e.target.value)} />
+                  <Input id="ab-ev-kind" value={String(trigger.eventKind ?? '')} onChange={(e) => setTriggerField('eventKind', e.target.value)} disabled={ro} />
                 </>
               ) : null}
               {kind === 'document' ? (
                 <>
                   <Label htmlFor="ab-doc-event">{t('builder.eventKindLabel')}</Label>
-                  <Select id="ab-doc-event" value={String(trigger.event ?? 'signed')} onChange={(e) => setTriggerField('event', e.target.value)}>
+                  <Select id="ab-doc-event" value={String(trigger.event ?? 'signed')} onChange={(e) => setTriggerField('event', e.target.value)} disabled={ro}>
                     <option value="uploaded">{t('builder.documentUploaded')}</option>
                     <option value="signed">{t('builder.documentSigned')}</option>
                     <option value="created_from_template">{t('builder.documentTemplated')}</option>
                   </Select>
                 </>
               ) : null}
-              <div><Button disabled={busy} onClick={() => patch({ trigger }, t('builder.saved'))}>{t('builder.saveTrigger')}</Button></div>
+              {canManage ? <div><Button disabled={busy} onClick={() => patch({ trigger }, t('builder.saved'))}>{t('builder.saveTrigger')}</Button></div> : null}
             </div>
           </section>
 
@@ -318,12 +328,13 @@ export function AutomationBuilder({
                     value={typeof rules[key] === 'string' ? (rules[key] as string) : ''}
                     onChange={(e) => setRuleField(key, e.target.value)}
                     placeholder={t('builder.ruleBlank')}
+                    disabled={ro}
                   />
                 </div>
               ))}
               <div className="grid gap-1">
                 <Label htmlFor="ab-cond-mode">{t('builder.conditionsMode')}</Label>
-                <Select id="ab-cond-mode" value={condMode} onChange={(e) => setCondMode(e.target.value as 'all' | 'any')}>
+                <Select id="ab-cond-mode" value={condMode} onChange={(e) => setCondMode(e.target.value as 'all' | 'any')} disabled={ro}>
                   <option value="all">{t('builder.conditionsAll')}</option>
                   <option value="any">{t('builder.conditionsAny')}</option>
                 </Select>
@@ -332,25 +343,27 @@ export function AutomationBuilder({
                 <div key={i} className="grid grid-cols-[1fr_130px_1fr_auto] items-end gap-2">
                   <div className="grid gap-1">
                     <Label htmlFor={`ab-leaf-field-${i}`}>{t('builder.fieldLabel')}</Label>
-                    <Input id={`ab-leaf-field-${i}`} value={leaf.field} onChange={(e) => updateLeaf(i, { field: e.target.value })} />
+                    <Input id={`ab-leaf-field-${i}`} value={leaf.field} onChange={(e) => updateLeaf(i, { field: e.target.value })} disabled={ro} />
                   </div>
                   <div className="grid gap-1">
                     <Label htmlFor={`ab-leaf-op-${i}`}>{t('builder.opLabel')}</Label>
-                    <Select id={`ab-leaf-op-${i}`} value={leaf.op} onChange={(e) => updateLeaf(i, { op: e.target.value })}>
+                    <Select id={`ab-leaf-op-${i}`} value={leaf.op} onChange={(e) => updateLeaf(i, { op: e.target.value })} disabled={ro}>
                       {CONDITION_OPS.map((op) => <option key={op} value={op}>{op}</option>)}
                     </Select>
                   </div>
                   <div className="grid gap-1">
                     <Label htmlFor={`ab-leaf-value-${i}`}>{t('builder.valueLabel')}</Label>
-                    <Input id={`ab-leaf-value-${i}`} value={leaf.value} onChange={(e) => updateLeaf(i, { value: e.target.value })} disabled={leaf.op === 'is_null'} />
+                    <Input id={`ab-leaf-value-${i}`} value={leaf.value} onChange={(e) => updateLeaf(i, { value: e.target.value })} disabled={leaf.op === 'is_null' || ro} />
                   </div>
-                  <Button variant="outline" onClick={() => setLeaves((prev) => prev.filter((_, j) => j !== i))}>{t('builder.remove')}</Button>
+                  {canManage ? <Button variant="outline" onClick={() => setLeaves((prev) => prev.filter((_, j) => j !== i))}>{t('builder.remove')}</Button> : null}
                 </div>
               ))}
+              {canManage ? (
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setLeaves((prev) => [...prev, { field: '', op: 'eq', value: '' }])}>{t('builder.addCondition')}</Button>
                 <Button disabled={busy} onClick={() => patch({ rules, conditions: fromLeaves(condMode, leaves) }, t('builder.saved'))}>{t('builder.saveWhoWhen')}</Button>
               </div>
+              ) : null}
             </div>
           </section>
 
@@ -361,17 +374,22 @@ export function AutomationBuilder({
                 <div key={i} className="grid gap-2 rounded-md border p-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold tabular-nums">#{i + 1}</span>
-                    <Select aria-label={t('builder.actionKindLabel')} value={String(action.kind ?? '')} onChange={(e) => updateAction(i, { kind: e.target.value })}>
+                    <Select aria-label={t('builder.actionKindLabel')} value={String(action.kind ?? '')} onChange={(e) => updateAction(i, { kind: e.target.value })} disabled={ro}>
                       {ACTION_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
                     </Select>
+                    {canManage ? (
+                    <>
                     <Button variant="outline" onClick={() => moveAction(i, -1)}>↑</Button>
                     <Button variant="outline" onClick={() => moveAction(i, 1)}>↓</Button>
                     <Button variant="outline" onClick={() => setActions((prev) => prev.filter((_, j) => j !== i))}>{t('builder.remove')}</Button>
+                    </>
+                    ) : null}
                   </div>
                   <Textarea
                     aria-label={t('builder.actionJsonLabel')}
                     value={JSON.stringify(action, null, 2)}
                     rows={4}
+                    disabled={ro}
                     onChange={(e) => {
                       try {
                         updateAction(i, JSON.parse(e.target.value) as Record<string, unknown>)
@@ -383,10 +401,12 @@ export function AutomationBuilder({
                   />
                 </div>
               ))}
+              {canManage ? (
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setActions((prev) => [...prev, { kind: 'send_notification', to: 'manager', body: '' }])}>{t('builder.addAction')}</Button>
                 <Button disabled={busy} onClick={() => patch({ actions }, t('builder.saved'))}>{t('builder.saveActions')}</Button>
               </div>
+              ) : null}
             </div>
           </section>
 
