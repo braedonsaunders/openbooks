@@ -21,7 +21,7 @@ import { fillOfficialTaxPdf } from '../../../../../../lib/tax-official-pdf'
 import { getFileBlob } from '../../../../../../lib/file-cabinet'
 import { isMaskedFileContentError } from '../../../../../../lib/file-storage'
 import { csvResponse, jsonResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
-import { parseAdjustments } from '../tax-return-params'
+import { AdjustmentParamError, parseAdjustments } from '../tax-return-params'
 
 export const runtime = 'nodejs'
 
@@ -45,9 +45,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     return NextResponse.json({ error: 'invalid format' }, { status: 422 })
   }
 
+  let adjustments: Record<string, string>
+  try {
+    adjustments = parseAdjustments(p)
+  } catch (e: unknown) {
+    if (e instanceof AdjustmentParamError) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
+    throw e
+  }
   try {
     const t = (await getTranslations('tax')) as unknown as Translator
-    const result = await computeTaxReturn(gate.user.orgId, code, from, to, parseAdjustments(p))
+    const result = await computeTaxReturn(gate.user.orgId, code, from, to, adjustments)
     const stamp = await businessToday(gate.user.orgId)
     const filename = `${safeName(code)}-${from}-${to}-${stamp}`
 

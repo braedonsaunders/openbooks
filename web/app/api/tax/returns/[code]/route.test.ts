@@ -142,6 +142,45 @@ test("GET passes the declared translation policy and registration pin", async ()
   });
 });
 
+test("GET refuses a decimal-comma adjustment by name instead of computing it as zero", async () => {
+  routeState.calls.length = 0;
+
+  const response = await get(
+    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=12,34",
+  );
+
+  assert.equal(response.status, 400);
+  const body = (await response.json()) as { error: string };
+  assert.ok(body.error.includes("adjustment 109"), body.error);
+  // The remedy rewrites with "." — never a silent 1234 (a 100x money error).
+  assert.ok(body.error.includes("12.34"), body.error);
+  assert.equal(routeState.calls.length, 0);
+});
+
+test("GET refuses a non-numeric adjustment by name", async () => {
+  routeState.calls.length = 0;
+
+  const response = await get(
+    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=abc",
+  );
+
+  assert.equal(response.status, 400);
+  const body = (await response.json()) as { error: string };
+  assert.ok(body.error.includes("adjustment 109"), body.error);
+  assert.equal(routeState.calls.length, 0);
+});
+
+test("GET passes a well-formed adjustment to the engine verbatim", async () => {
+  routeState.calls.length = 0;
+
+  const response = await get(
+    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=12.34",
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls[0]!.adjustments, { 109: "12.34" });
+});
+
 test("GET fails closed on an explicitly empty subsidiary filter", async () => {
   routeState.calls.length = 0;
 
