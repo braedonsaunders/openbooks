@@ -79,6 +79,7 @@ const FORM = {
   notice_key: null,
   has_official: false,
 };
+type FilingFormFixture = Omit<typeof FORM, "notice_key"> & { notice_key: string | null };
 
 const CHOOSE_ONE =
   'tax return "CA_GST34" has 2 registrations active in this period — choose one: 123456789 (2026-07-01 to 2026-07-31), 987654321 (2026-07-01 to 2026-07-31)';
@@ -108,7 +109,7 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-async function mount(canSave = true, forms = [FORM]) {
+async function mount(canSave = true, forms: FilingFormFixture[] = [FORM]) {
   globalThis.__taxToasts = [];
   globalThis.__taxRouter = { push() {}, refresh() {} };
   const host = document.createElement("div");
@@ -176,6 +177,23 @@ test("changing filing forms resets edited dates to the current business month", 
     await click(option as HTMLButtonElement);
     assert.equal(from.value, "2026-07-01");
     assert.equal(to.value, "2026-07-31");
+  } finally {
+    await unmount();
+    restoreFetch();
+  }
+});
+
+test("a newly declared filing form displays its own submission notice", async () => {
+  const newForm = {
+    ...FORM,
+    code: "XX_FORM_1",
+    name: "Exemplia filing",
+    notice_key: "submission.gst34Notice",
+  };
+  const restoreFetch = scriptFetch(() => Response.json({ obligations: [] }));
+  const { unmount } = await mount(true, [newForm]);
+  try {
+    assert.match(document.body.textContent ?? "", /GST34 is normally entered in CRA Account/);
   } finally {
     await unmount();
     restoreFetch();
