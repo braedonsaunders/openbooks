@@ -1371,19 +1371,20 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
       (
         await resolveSurcharge(link.orgId, {
           provider: link.provider,
-          amount: row.openBalance,
+          amount: link.amount ?? row.openBalance,
           currency: link.currency,
           onDate: await businessToday(link.orgId),
           configuredRuleId: config?.surcharge_rule_id ?? null,
         })
       ).amount;
+    const invoiceAmount = link.amount ?? row.openBalance;
     return {
       orgName: row.orgName,
       documentNumber: row.documentNumber,
       partyName: row.partyName,
-      invoiceAmount: row.openBalance,
+      invoiceAmount,
       surchargeAmount,
-      totalAmount: add(row.openBalance, surchargeAmount),
+      totalAmount: add(invoiceAmount, surchargeAmount),
       currency: link.currency,
       status: cmp(row.openBalance, "0") <= 0 ? "paid" : "active",
       provider: link.provider,
@@ -1448,6 +1449,7 @@ export async function createCheckoutSession(
     if (!doc.rows[0]) throw new PaymentAcceptanceError("invoice not found");
     const openBalance = doc.rows[0].open_balance;
     if (cmp(openBalance, "0") <= 0) throw new PaymentAcceptanceError("invoice is already paid");
+    const invoiceAmount = link.amount ?? openBalance;
 
     const config = await loadProviderConfig(link.orgId, link.provider);
     if (!config?.is_enabled || !config.acceptance_enabled) throw new PaymentAcceptanceError("provider is not configured");
@@ -1473,7 +1475,7 @@ export async function createCheckoutSession(
       } else {
         const resolvedSurcharge = await resolveSurcharge(link.orgId, {
           provider: link.provider,
-          amount: openBalance,
+          amount: invoiceAmount,
           currency: link.currency,
           onDate: await businessToday(link.orgId),
           configuredRuleId: config.surcharge_rule_id,
@@ -1483,7 +1485,7 @@ export async function createCheckoutSession(
     } else {
       const resolvedSurcharge = await resolveSurcharge(link.orgId, {
         provider: link.provider,
-        amount: openBalance,
+        amount: invoiceAmount,
         currency: link.currency,
         onDate: await businessToday(link.orgId),
         configuredRuleId: config.surcharge_rule_id,
@@ -1501,7 +1503,7 @@ export async function createCheckoutSession(
        order by created_at desc limit 1
     `));
     const open = existing.rows[0];
-    if (open?.event_payload?.redirectUrl && open.event_payload.invoiceAmount === openBalance && open.event_payload.surchargeAmount === surcharge.amount) {
+    if (open?.event_payload?.redirectUrl && open.event_payload.invoiceAmount === invoiceAmount && open.event_payload.surchargeAmount === surcharge.amount) {
       return { redirectUrl: open.event_payload.redirectUrl };
     }
 
@@ -1511,7 +1513,7 @@ export async function createCheckoutSession(
       {
         linkToken: link.token,
         description: `Invoice ${doc.rows[0].document_number}`,
-        invoiceAmount: openBalance,
+        invoiceAmount,
         surchargeAmount: surcharge.amount,
         currency: link.currency,
         returnUrl,
@@ -1522,8 +1524,8 @@ export async function createCheckoutSession(
       insert into payment_attempts
         (org_id, link_id, provider, external_ref, status, amount, surcharge_amount, event_payload, created_by, updated_by)
       values (${link.orgId}, ${link.id}, ${link.provider}, ${session.externalRef}, 'initiated',
-              ${openBalance}, ${surcharge.amount},
-              ${JSON.stringify({ redirectUrl: session.redirectUrl, invoiceAmount: openBalance, surchargeAmount: surcharge.amount, feeIncomeAccountId: surcharge.feeIncomeAccountId })}::jsonb,
+              ${invoiceAmount}, ${surcharge.amount},
+              ${JSON.stringify({ redirectUrl: session.redirectUrl, invoiceAmount, surchargeAmount: surcharge.amount, feeIncomeAccountId: surcharge.feeIncomeAccountId })}::jsonb,
               null, null)
       on conflict (org_id, provider, external_ref) do nothing
     `);

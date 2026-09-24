@@ -1181,6 +1181,62 @@ test("pay page shows the stored link surcharge even after surcharge rules change
   }
 });
 
+test("pay page and checkout keep the link's principal quote after a partial payment", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-QUOTE-AFTER-PAYMENT");
+    const openLineId = (await db.execute<{ id: string }>(sql`
+      select jl.id from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id
+       where je.source_document_id = ${fx.invoiceId} and jl.org_id = ${org.orgId}
+         and jl.is_open_item
+    `)).rows[0]!.id;
+    const partial = await createPaymentDocument({ allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: fx.userId,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+      fxRate: "1",
+    });
+    await updateDraftPayment(partial.id, {
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      allocations: [sameCurrencyAllocation(openLineId, "50")],
+    }, fx.userId, org.orgId);
+    await db.execute(sql`
+      update documents set status = 'approved', submitted_by = ${fx.userId}, submitted_at = now()
+       where id = ${partial.id} and org_id = ${org.orgId}
+    `);
+    await postPaymentWithApplications(partial.id, undefined, fx.userId);
+
+    const page = await publicPaymentPage(fx.link.token);
+    assert.ok(page);
+    assert.equal(page.invoiceAmount, "100.0000");
+    assert.equal(page.surchargeAmount, "3.0000");
+    assert.equal(page.totalAmount, "103.0000");
+
+    await createCheckoutSession(fx.link.token, `https://app.test/pay/${fx.link.token}`, async () => ({
+      status: 200,
+      json: async () => ({ id: "cs_quoted_after_partial_payment", url: "https://checkout.stripe.test/cs_quoted_after_partial_payment" }),
+    }));
+    const attempt = (await db.execute<{ amount: string; surcharge_amount: string; invoice_amount: string }>(sql`
+      select amount, surcharge_amount, event_payload->>'invoiceAmount' as invoice_amount
+        from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
+    `)).rows[0]!;
+    assert.deepEqual(attempt, {
+      amount: "100.0000",
+      surcharge_amount: "3.0000",
+      invoice_amount: "100.0000",
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("hosted checkout reads the quoted fee account from payment-link audit evidence", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
