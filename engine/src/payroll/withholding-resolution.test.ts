@@ -392,6 +392,41 @@ test("higher_rate with a missing rate BLOCKS rather than picking a side", () => 
   assert.match(blocking[0]!.message, /rate has not been entered/);
 });
 
+test("higher_rate compares EVERY work-side levy, not just the first", () => {
+  // PA DCED Local Withholding Tax FAQs: "the applicable EIT rate owed and to
+  // be withheld is always the higher of the two rates" — the total resident
+  // rate against the work-location nonresident rate. With two work-side codes
+  // the comparison is against the higher work rate: the first work levy loses
+  // to residence here, but the second beats it, so the second is withheld.
+  const resolved = resolve({
+    workRegion: "HIGHER", residenceRegion: "HIGHER",
+    workSubRegions: ["111111", "333333"], residenceSubRegions: ["222222"],
+    subRegionRates: {
+      "111111:nonresident": "0.0050",
+      "333333:nonresident": "0.0160",
+      "222222:resident": "0.0100",
+    },
+  });
+  const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
+  assert.equal(subs.length, 1);
+  assert.equal(subs[0]!.subRegion, "333333");
+  assert.equal(subs[0]!.basis, "resident");
+});
+
+test("higher_rate with a missing rate on the SECOND work levy still BLOCKS", () => {
+  // The maximum over the work side is unanswerable when ANY work-side rate is
+  // unentered — the missing one might be the winner.
+  const resolved = resolve({
+    workRegion: "HIGHER", residenceRegion: "HIGHER",
+    workSubRegions: ["111111", "333333"], residenceSubRegions: ["222222"],
+    subRegionRates: { "111111:nonresident": "0.0050", "222222:resident": "0.0100" },
+  });
+  const blocking = resolved.gaps.filter((gap) => gap.severity === "blocking");
+  assert.equal(blocking.length, 1);
+  assert.match(blocking[0]!.message, /Municipality 333333/);
+  assert.match(blocking[0]!.message, /rate has not been entered/);
+});
+
 /* --------------------------------------------------------------------- */
 /* Rate comparison                                                        */
 /* --------------------------------------------------------------------- */
