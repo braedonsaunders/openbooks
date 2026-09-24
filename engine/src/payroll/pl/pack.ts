@@ -24,7 +24,7 @@ import { PL_CERTIFICATES } from "./certificates.ts";
 import { computePlStatutory, PL_FACTOR_LABELS } from "./compute-statutory.ts";
 import { plPackFilings } from "./filings.ts";
 import { PL_JURISDICTIONS } from "./jurisdictions.ts";
-import { peselBirthYear } from "./pesel.ts";
+import { isValidPesel, peselBirthYear } from "./pesel.ts";
 import { PL_TAX_YEARS } from "./rates.ts";
 import { PL_WITHHOLDING } from "./withholding.ts";
 import { PL_EMPLOYEE_FACTS } from "./employee-facts.ts";
@@ -151,16 +151,20 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
   name: "Poland",
   // gov.pl (ustawa o ewidencji ludności): "Numer PESEL to jedenastocyfrowy
   // symbol numeryczny" — an 11-digit number carrying birth date, serial,
-  // sex and a check digit. Length and digit shape only; the check digit is
-  // NOT enforced (unsourced here). Needed for the PIT-11.
+  // sex and a check digit. Its date and checksum are verified before storage
+  // or derivation. Needed for the PIT-11.
   employeeIdentifier: {
     label: "PESEL",
     pattern: "\\d{11}",
-    formatHelp: "11 digits",
+    formatHelp: "11 digits with a valid encoded date and check digit",
     example: "44051401359",
     requiredForPayroll: true,
     neededFor: "PIT-11",
-    citation: "gov.pl: 'Numer PESEL to jedenastocyfrowy symbol numeryczny' (11-digit number)",
+    citation: "Ustawa o ewidencji ludności, art. 15 ust. 2; Rozporządzenie MSW z 4 stycznia 2012 r., §7",
+    validator: {
+      validate: isValidPesel,
+      refusalReason: "check the encoded birth date and the final control digit",
+    },
     numericEntry: true,
   },
   installable: true,
