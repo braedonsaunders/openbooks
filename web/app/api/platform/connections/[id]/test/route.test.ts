@@ -268,7 +268,7 @@ for (const [name, config] of refusedConnectorUrls) {
 
     const response = await call();
 
-    assert.equal(response.status, 404);
+    assert.equal(response.status, 422);
     const body = (await response.json()) as { errorCode?: string; error?: string };
     assert.equal(body.errorCode, "CONNECTOR_URL_REFUSED");
     assert.match(String(body.error), /loopback|link-local|metadata|http/i);

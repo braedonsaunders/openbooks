@@ -66,9 +66,11 @@ export async function POST(
   }
   const urlError = await connectionConfigUrlRefusal(conn.config);
   if (urlError) {
+    // A refused connector URL is a validation refusal on a found connection
+    // (fix the connector URL and retry), never a missing connection.
     return NextResponse.json(
       { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
-      { status: 404 },
+      { status: 422 },
     );
   }
 
