@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
@@ -50,6 +49,18 @@ const workspace = {
 } as unknown as PropertyWorkspace;
 
 const permissions = { manage: false, account: false, bill: false };
+
+const { JSDOM } = await import("jsdom");
+const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost:4800/property-management" });
+const globals = globalThis as Record<string, unknown>;
+const domWindow = dom.window as unknown as Record<string, unknown>;
+for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+  if (globals[key] === undefined) globals[key] = domWindow[key];
+}
+(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+
 
 test("CAM allocation rows format exact amounts in their property's currency", () => {
   const calls: MoneyCall[] = [];
@@ -104,23 +115,38 @@ test("an invoiced CAM pool exposes replacement billing only for released nonzero
   }
 });
 
-// F-t07-007: a refused CAM Finalize (422 naming the blocking open period)
-// surfaced nowhere on the record — the shared act() toasted and returned
-// null, so the pool card sat unchanged. The finalize call must hand the
-// server's reason back to the pool card, which pins it as an alert until
-// the next finalize attempt.
-const camSource = readFileSync(new URL("./CamTable.tsx", import.meta.url), "utf8");
-const workspaceSource = readFileSync(
-  new URL("./PropertyManagementWorkspace.tsx", import.meta.url),
-  "utf8",
-);
-const typesSource = readFileSync(new URL("./types.ts", import.meta.url), "utf8");
+test("a refused CAM finalize displays the server remedy on its pool card", async (t) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  const remedy = "Open the accounting period before finalizing CAM actuals.";
+  const actAction = async (
+    _payload: Record<string, unknown>,
+    _success: string,
+    onError?: (message: string) => void,
+  ) => {
+    onError?.(remedy);
+    return null;
+  };
 
-test("a refused CAM finalize pins its reason on the pool card", () => {
-  assert.match(typesSource, /onError\?: \(message: string\) => void/);
-  assert.match(workspaceSource, /onError\?\.?\(message\)/);
-  assert.match(camSource, /const \[poolError, setPoolError\]/);
-  assert.match(camSource, /finalizeCam[\s\S]{0,300}\(message\) => setPoolError\(\{ poolId: pool\.id, message \}\)/);
-  assert.match(camSource, /<p role="alert"[\s\S]*?\{poolError/);
-  assert.match(camSource, /setPoolError\(null\)/);
+  await act(async () => {
+    root.render(createElement(CamTable, {
+      data: workspace,
+      money: value => String(value),
+      busy: false,
+      permissions: { manage: false, account: true, bill: false },
+      act: actAction,
+    }));
+  });
+  const finalize = [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === "Finalize");
+  assert.ok(finalize, "an account user can finalize an open CAM pool");
+  await act(async () => {
+    finalize!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+
+  assert.equal(host.querySelector('[role="alert"]')?.textContent, remedy);
 });
