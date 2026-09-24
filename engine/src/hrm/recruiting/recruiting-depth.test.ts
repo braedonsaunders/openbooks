@@ -151,6 +151,10 @@ test("availability windows must be ordered, dated, and zoned", () => {
     () => validateAvailabilityWindows([{ startsAt: "2026-10-01T09:00:00Z", endsAt: "2026-10-01T10:00:00Z", timezone: "" }]),
     /needs a timezone/,
   );
+  assert.throws(
+    () => validateAvailabilityWindows([{ startsAt: "2026-10-01T09:00:00Z", endsAt: "2026-10-01T10:00:00Z", timezone: "Mars/Olympus" }]),
+    /invalid IANA timezone/,
+  );
 });
 
 const CLAUSES: OfferClause[] = [
