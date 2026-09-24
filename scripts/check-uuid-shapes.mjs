@@ -37,6 +37,7 @@
  *
  *   node scripts/check-uuid-shapes.mjs
  */
+import { execFileSync } from "node:child_process";
 import { globSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -170,10 +171,21 @@ export function findWeakUuidShapes(source) {
   return hits;
 }
 
+/** Git-tracked paths, so local untracked or ignored scratch files never gate CI. */
+function trackedFiles(root) {
+  try {
+    return new Set(execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean));
+  } catch {
+    return null;
+  }
+}
+
 export function scanTree(root = ROOT) {
+  const tracked = trackedFiles(root);
   const files = [...new Set(GLOBS.flatMap((pattern) => globSync(pattern, { cwd: root })))]
     .filter(
       (file) =>
+        (tracked === null || tracked.has(file)) &&
         !file.includes("node_modules") &&
         basename(file) !== SELF &&
         !file.startsWith("schema/migrations/generated/"),
