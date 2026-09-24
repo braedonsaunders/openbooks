@@ -35,6 +35,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
+import { confirmDialog } from '../../../../../lib/confirm'
 import { buildFeatureTree, featureToggleRefusalMessage, type FeatureTreeNode } from './feature-tree'
 
 type Feature = {
@@ -137,12 +138,13 @@ export function FeaturesWorkspace({
       if (state[key] && status?.blocked) return // locked — shouldn't reach here
       // Confirm before hiding real records.
       if (status && status.impacts.length > 0) {
-        const ok = window.confirm(
-          t('setup.features.confirmDisable', {
+        const ok = await confirmDialog({
+          message: t('setup.features.confirmDisable', {
             name: t(`features.${key}.title`),
             items: impactText(status.impacts),
           }),
-        )
+          tone: 'danger',
+        })
         if (!ok) return
       }
     }
