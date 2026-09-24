@@ -40,9 +40,10 @@ export type { ReportRunResult } from '@openbooks/reports'
 const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/
 const PLAIN_NUMBER = /^-?\d+(?:[.,]\d+)?$/
 
-/** Neutralise one CSV cell against formula injection. Exported for the
- *  page-streaming CSV writer so chunked output guards exactly like
- *  {@link reportResultToCsv}. */
+/** Neutralise one export string cell against formula injection. Exported for
+ *  the page-streaming CSV writer and both XLSX writers so every surface
+ *  guards exactly like {@link reportResultToCsv}: a memo such as
+ *  `=HYPERLINK(…)` must never reach a spreadsheet as a live formula. */
 export function guardCsvCell<T extends string | number | null | undefined>(v: T): T | string {
   if (typeof v === 'string' && CSV_FORMULA_PREFIX.test(v) && !PLAIN_NUMBER.test(v)) {
     return `'${v}`
@@ -85,11 +86,13 @@ const MIN_COL_WIDTH = 10
 const MAX_SHEET_NAME = 31
 
 /** Display length of one export cell for column-width measurement: nulls and
- *  objects contribute nothing, everything else its string form. Shared by the
- *  buffered builder (which measures assigned cells) and the streaming writer
- *  (whose pre-pass measures raw page cells it immediately releases). */
+ *  objects contribute nothing, everything else its string form. Strings are
+ *  measured post-guard (see guardCsvCell) so the streaming pre-pass — which
+ *  measures raw page cells it immediately releases — matches the buffered
+ *  builder, which measures assigned (already guarded) cells. */
 export function xlsxExportCellLength(v: unknown): number {
-  const s = v === null || v === undefined || typeof v === 'object' ? '' : String(v)
+  const guarded = typeof v === 'string' ? guardCsvCell(v) : v
+  const s = guarded === null || guarded === undefined || typeof guarded === 'object' ? '' : String(guarded)
   return s.length
 }
 
@@ -148,18 +151,19 @@ export async function reportResultToXlsx(
     const headerRowNum = 4
     group.columns.forEach((c, i) => {
       const cell = ws.getCell(headerRowNum, i + 1)
-      cell.value = c
+      cell.value = guardCsvCell(c)
       cell.font = { bold: true, color: { argb: 'ff374151' } }
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'fff1f5f9' } }
       cell.border = { bottom: { style: 'thin', color: { argb: 'ffd1d5db' } } }
       cell.alignment = { horizontal: 'left' }
     })
 
-    // Data rows.
+    // Data rows. Strings ride the shared CSV guard so a memo that looks
+    // like a formula is stored as text, never as a live formula.
     let dataRow = headerRowNum + 1
     for (const row of group.rows) {
       for (let i = 0; i < group.columns.length; i++) {
-        const v = row[i]
+        const v = guardCsvCell(row[i])
         const cell = ws.getCell(dataRow, i + 1)
         cell.value = v === null || v === undefined ? '' : v
         if (typeof cell.value === 'number') {
@@ -319,7 +323,7 @@ export function createStreamingXlsxExport(opts: {
     if (group.subtitle) setStreamingCell(ws, 3, 1, group.subtitle, { muted: true, italic: true })
     group.columns.forEach((c, i) => {
       const cell = ws.getCell(XLSX_HEADER_ROW, i + 1)
-      cell.value = c
+      cell.value = guardCsvCell(c)
       cell.font = { bold: true, color: { argb: 'ff374151' } }
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'fff1f5f9' } }
       cell.border = { bottom: { style: 'thin', color: { argb: 'ffd1d5db' } } }
@@ -337,7 +341,7 @@ export function createStreamingXlsxExport(opts: {
       if (!sheet) throw new Error(`Streaming XLSX export has no group ${groupIndex}`)
       for (const row of rows) {
         for (let i = 0; i < sheet.columns; i++) {
-          const v = row[i]
+          const v = guardCsvCell(row[i])
           const cell = sheet.ws.getCell(sheet.nextRow, i + 1)
           cell.value = v === null || v === undefined ? '' : v
           if (typeof cell.value === 'number') {
@@ -365,7 +369,7 @@ function setStreamingCell(
   fmt: { bold?: boolean; italic?: boolean; muted?: boolean; size?: number },
 ): void {
   const cell = ws.getCell(row, col)
-  cell.value = value
+  cell.value = guardCsvCell(value)
   cell.font = {
     bold: fmt.bold,
     italic: fmt.italic,
@@ -615,11 +619,12 @@ export async function statementSheetToXlsx(
     views: [{ state: 'frozen', ySplit: 5 }],
   })
 
-  // Title block (rows 1-3, centred across the used columns).
+  // Title block (rows 1-3, centred across the used columns). Company and
+  // title text is operator-authored, so it rides the shared guard.
   const centre = (row: number, text: string, fmt: { bold?: boolean; size?: number; muted?: boolean }) => {
     ws.mergeCells(row, 1, row, lastCol)
     const cell = ws.getCell(row, 1)
-    cell.value = text
+    cell.value = guardCsvCell(text)
     cell.alignment = { horizontal: 'center' }
     cell.font = { bold: fmt.bold, size: fmt.size, color: fmt.muted ? { argb: 'ff6b7280' } : undefined }
   }
@@ -630,11 +635,11 @@ export async function statementSheetToXlsx(
 
   // Header row (row 5): blank account column + right-aligned column labels.
   const headerRow = 5
-  ws.getCell(headerRow, 1).value = sheet.accountLabel
+  ws.getCell(headerRow, 1).value = guardCsvCell(sheet.accountLabel)
   ws.getCell(headerRow, 1).font = { bold: true, color: { argb: 'ff374151' } }
   sheet.columns.forEach((c, i) => {
     const cell = ws.getCell(headerRow, i + 2)
-    cell.value = c.label
+    cell.value = guardCsvCell(c.label)
     cell.font = { bold: true, color: { argb: 'ff374151' } }
     cell.alignment = { horizontal: 'right' }
     cell.border = { bottom: { style: 'thin', color: { argb: 'ffd1d5db' } } }
@@ -647,7 +652,8 @@ export async function statementSheetToXlsx(
     const bold = row.kind === 'section' || isSub || isTotal
 
     const labelCell = ws.getCell(r, 1)
-    labelCell.value = row.kind === 'section' ? row.label.toUpperCase() : row.label
+    // Account labels are user-authored chart-of-accounts text.
+    labelCell.value = guardCsvCell(row.kind === 'section' ? row.label.toUpperCase() : row.label)
     labelCell.font = { bold }
     labelCell.alignment = { indent: row.kind === 'account' ? Math.min(1 + (row.indent ?? 0), 8) : 0 }
 
@@ -663,7 +669,9 @@ export async function statementSheetToXlsx(
         // accounting formatting. Callers that already have a number retain
         // the existing numeric cell behaviour, provided it is finite.
         const value = statementCellValue(v)
-        cell.value = value
+        // Non-canonical text survives statementCellValue untouched, so it
+        // rides the guard too; numbers and plain numeric strings pass through.
+        cell.value = typeof value === 'string' ? guardCsvCell(value) : value
         cell.numFmt = sheet.columns[i]!.kind === 'variance_pct' ? PCT_FMT : AMOUNT_FMT
         cell.alignment = { horizontal: 'right' }
         cell.font = { bold }
@@ -699,7 +707,9 @@ function setCell(
   fmt: { bold?: boolean; italic?: boolean; muted?: boolean; size?: number },
 ): void {
   const cell = ws.getCell(row, col)
-  cell.value = value
+  // Title-block text is operator-authored (custom report titles), so it rides
+  // the same guard as data cells.
+  cell.value = guardCsvCell(value)
   cell.font = {
     bold: fmt.bold,
     italic: fmt.italic,
