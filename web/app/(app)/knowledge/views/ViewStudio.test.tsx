@@ -175,6 +175,25 @@ test('an existing view still opens as saved', async (t) => {
   assert.match(body, /All changes saved/, 'an unedited persisted view is honestly saved')
 })
 
+test('a rejected preview request shows failure and releases the preview button', async (t) => {
+  await mountStudio(t, true)
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    if (String(input) === '/api/reports/run') throw new Error('network unavailable')
+    return Response.json({ result: null })
+  }) as typeof fetch
+  const refresh = [...document.querySelectorAll('button')].find(
+    (button) => button.textContent?.trim() === 'Refresh',
+  ) as HTMLButtonElement | undefined
+  assert.ok(refresh, 'the live preview action must be available')
+  await act(async () => {
+    refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+  })
+  assert.equal(refresh.disabled, false, 'a rejected preview request must leave the action available for retry')
+  assert.match(document.body.textContent ?? '', /Preview failed/, 'the preview failure must be visible')
+})
+
 test('the saved claim appears only after the create read-back', async (t) => {
   await mountStudio(t, true)
   const save = [...document.querySelectorAll('button')].find(
