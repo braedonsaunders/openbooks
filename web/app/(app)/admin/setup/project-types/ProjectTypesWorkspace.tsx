@@ -236,7 +236,7 @@ export function ProjectTypesWorkspace({
     setBusy(true)
     const res = await fetch(`/api/admin/setup/project-types?id=${draft.id}`, { method: 'DELETE' })
     setBusy(false)
-    if (!res.ok) return toast.error((await res.json()).error ?? 'Delete failed')
+    if (!res.ok) return toast.error((await res.json().catch(() => null))?.error ?? 'Delete failed')
     const nextList = list.filter((x) => x.id !== draft.id)
     setList(nextList)
     setSelId(nextList[0]?.id ?? 'new')

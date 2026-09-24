@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Ban, Bolt, Eye, Plus, Trash2, Wand2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { Button, Drawer, Input, Label, Select, SearchSelect, UrlDrawer, cn } from '@openbooks/ui'
 import { ConditionBuilder } from '../../../../components/conditions/ConditionBuilder'
 import { SplitLinesEditor, type AllocationLine, type CodingConfig } from '../../../../components/allocations/SplitLinesEditor'
@@ -66,19 +67,24 @@ export function RunRulesButton({ accounts }: { accounts: AccountOpt[] }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId }),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('runFailed'))
-        return
-      }
-      if (data.matched === 0 && data.excluded === 0 && data.suggested === 0) {
-        toast.info(t('runNoneMatched', { scanned: data.scanned }))
+      // The status is checked before the body is read: a non-JSON failure
+      // (proxy page, empty 502) must toast the named failure, never a
+      // SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('runFailed')))
+      const data = (await res.json().catch(() => null)) as {
+        matched?: number; excluded?: number; suggested?: number; scanned?: number;
+      } | null
+      if (!data) throw new Error(t('runFailed'))
+      if ((data.matched ?? 0) === 0 && (data.excluded ?? 0) === 0 && (data.suggested ?? 0) === 0) {
+        toast.info(t('runNoneMatched', { scanned: data.scanned ?? 0 }))
       } else {
-        toast.success(t('runDone', { matched: data.matched, excluded: data.excluded }))
-        if (data.suggested > 0) toast.info(t('runSuggested', { suggested: data.suggested }))
+        toast.success(t('runDone', { matched: data.matched ?? 0, excluded: data.excluded ?? 0 }))
+        if ((data.suggested ?? 0) > 0) toast.info(t('runSuggested', { suggested: data.suggested ?? 0 }))
       }
       setOpen(false)
       router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('runFailed'))
     } finally {
       setBusy(false)
     }
@@ -253,36 +259,38 @@ export function RuleDrawer({
   async function save() {
     if (!canSave) return
     setBusy(true)
-    const res = await fetch('/api/banking/rules', {
-      method: creating ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, isActive, ...draftBody }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('saveFailed'))
+    try {
+      const res = await fetch('/api/banking/rules', {
+        method: creating ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, isActive, ...draftBody }),
+      })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('saveFailed')))
+      toast.success(creating ? t('created') : t('saved'))
+      router.push(closeHref)
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('saveFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    toast.success(creating ? t('created') : t('saved'))
-    router.push(closeHref)
-    router.refresh()
   }
 
   async function remove() {
     if (!rule?.id) return
     if (!confirm(t('deleteConfirm'))) return
     setBusy(true)
-    const res = await fetch(`/api/banking/rules/${rule.id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const data = await res.json()
-      toast.error(data.error ?? t('deleteFailed'))
+    try {
+      const res = await fetch(`/api/banking/rules/${rule.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('deleteFailed')))
+      toast.success(t('deleted'))
+      router.push(closeHref)
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('deleteFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    toast.success(t('deleted'))
-    router.push(closeHref)
-    router.refresh()
   }
 
   return (

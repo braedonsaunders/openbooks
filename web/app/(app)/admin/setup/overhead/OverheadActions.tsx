@@ -65,7 +65,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
     const res = await fetch('/api/admin/setup/overhead', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     })
-    if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'failed')
   }
 
   async function publish() {

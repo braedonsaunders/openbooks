@@ -102,7 +102,7 @@ export function LaborCostingWizard(props: {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
-        if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'failed')
       }
       if (exactFallbackRate !== null && compareDecimal(exactFallbackRate, '0') > 0) {
         await call('POST', {

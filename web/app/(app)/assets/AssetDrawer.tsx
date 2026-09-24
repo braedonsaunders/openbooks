@@ -322,7 +322,7 @@ export function AssetDrawer({
       body: JSON.stringify({ ...(includeForm ? payloadBody : {}), ...extra, expectedUpdatedAt: includeForm ? revision : a.updated_at }),
     })
     if (!res.ok) {
-      const err = (await res.json()).error ?? t('drawer.saveFailed')
+      const err = (await res.json().catch(() => null))?.error ?? t('drawer.saveFailed')
       throw new Error(err === 'invalid_subsidiary' ? t('errors.invalidSubsidiary') : err)
     }
     const saved = await res.json() as AssetPayload
@@ -422,7 +422,7 @@ export function AssetDrawer({
     if (res.ok) {
       toast.success(t('drawer.deleted')); router.push('/assets'); router.refresh()
     } else {
-      toast.error((await res.json()).error ?? t('drawer.saveFailed')); setBusy(false)
+      toast.error((await res.json().catch(() => null))?.error ?? t('drawer.saveFailed')); setBusy(false)
     }
   }
 

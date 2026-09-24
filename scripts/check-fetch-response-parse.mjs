@@ -52,6 +52,14 @@
  *          fetch acknowledges its status") with its own census and its
  *          own allow-list. Catching it here would let a site pass by
  *          deleting its status check, which is the opposite of the intent.
+ *   viol5  the parse sits in the FAILURE branch itself — the taken side of
+ *          a negative status test, or the else side of a positive one —
+ *          with no same-chain `.catch()` and no guarded-parse try/catch
+ *          refuge. guardedBeforeParse excuses the site (the parse cannot
+ *          run on success), but on a non-JSON error body the parse throws
+ *          before the branch can name anything: the same lost refusal, one
+ *          branch later. Derived from the branch structure, never a hand
+ *          list; the sanctioned shapes stay clean.
  *
  * Compliant rewrites, in order of preference:
  *
@@ -626,6 +634,44 @@ function statusReadAnywhere(parseFn, sourceFile, name, idents) {
   return found;
 }
 
+/**
+ * A bare parse nested in the FAILURE branch — the taken side of a negative
+ * status test (`if (!res.ok) { ... await res.json() ... }`) or the else side
+ * of a positive one (`if (res.ok) { ... } else { ... await res.json() ... }`).
+ * guardedBeforeParse excuses it (the parse cannot run on the success path),
+ * but on a non-JSON error body (proxy page, empty 502) the parse itself
+ * throws a SyntaxError before the branch can toast anything — the same lost
+ * refusal, one branch later. The sanctioned shapes (same-chain `.catch()`,
+ * the guarded-parse try/catch refuge, readApiErrorMessage) stay excused;
+ * only the bare parse flags, derived from the branch structure, never a
+ * hand list.
+ */
+function failureBranchBareParse(jsonCall, name) {
+  let current = jsonCall;
+  while (current) {
+    const parent = current.parent;
+    if (!parent) return false;
+    if (ts.isIfStatement(parent)) {
+      if (parent.thenStatement === current && thenBranchGuards(parent.expression, name)) return true;
+      if (parent.elseStatement === current && !elseBranchSawOk(parent.expression, name)) return true;
+      // A branch the receiver's status decides belongs to the existing
+      // rules; an unrelated inner `if` must not stop the climb to an
+      // outer failure branch.
+      if (statusReadsIn(parent.expression, name).length > 0) return false;
+      current = parent;
+      continue;
+    }
+    if (ts.isConditionalExpression(parent)) {
+      if (parent.whenTrue === current) return false;
+      if (parent.whenFalse === current && !elseBranchSawOk(parent.condition, name)) return true;
+      return false;
+    }
+    if (isFunctionLike(parent)) return false;
+    current = parent;
+  }
+  return false;
+}
+
 export function auditRepository(files, readSource = (file) => readFileSync(file, "utf8")) {
   const violations = [];
   const syntaxErrors = [];
@@ -674,6 +720,12 @@ export function auditRepository(files, readSource = (file) => readFileSync(file,
           return;
         }
         if (excusedAsGuardedParse(node, name)) {
+          ts.forEachChild(node, visit);
+          return;
+        }
+        if (failureBranchBareParse(node, name)) {
+          const line = sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+          violations.push({ path: file, line, fn: namedEnclosingFunction(node) });
           ts.forEachChild(node, visit);
           return;
         }
@@ -752,7 +804,11 @@ function main() {
         `Check the status first, then read the failure through readApiErrorMessage from web/lib/api-error.ts:\n` +
         `\n` +
         `  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'fallback'))\n` +
-        `  const body = await res.json()\n`,
+        `  const body = await res.json()\n` +
+        `\n` +
+        `A parse nested in the failure branch itself (if (!res.ok) { ... await res.json() ... })\n` +
+        `flags too: give it a same-chain .catch(() => null) and read the refusal off the\n` +
+        `nullable body, so a proxy page toasts the fallback instead of throwing.\n`,
     );
     for (const site of newViolations) console.error(`  ${site.path}:${site.line} (${site.fn})`);
   }

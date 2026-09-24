@@ -22,7 +22,7 @@ export function SignTicketForm(props: { token: string; alreadySigned: boolean; s
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: props.token, signature, name: name.trim(), comment: comment.trim() || null }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Signing failed')
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Signing failed')
       setState('done')
     } catch (e) {
       setError((e as Error).message)
