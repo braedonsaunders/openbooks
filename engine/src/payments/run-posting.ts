@@ -249,7 +249,7 @@ async function postClaimedPaymentInstruction(
         undefined,
         userId,
         "ui",
-        { deferEffects: true },
+        { deferEffects: true, runClaim: { runId, token: claim.token } },
       );
     }
     const sent = await db.execute<{ id: string }>(sql`

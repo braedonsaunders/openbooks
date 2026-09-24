@@ -164,6 +164,8 @@ export const paymentRunItems = pgTable(
     grossAmount: money("gross_amount").notNull(),
     discountAmount: money("discount_amount").notNull().default("0"),
     creditAmount: money("credit_amount").notNull().default("0"),
+    /** Exact target open lines and amounts for this source credit open line. */
+    creditTargetAllocations: jsonb("credit_target_allocations").$type<Array<{ toLineId: string; amount: string }>>(),
     paymentAmount: money("payment_amount").notNull(),
     currency: currencyCode("currency").notNull(),
     fxRate: fxRate("fx_rate").notNull().default("1"),

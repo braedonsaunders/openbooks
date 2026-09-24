@@ -36,22 +36,108 @@ type SettlementApplication = {
   controlAdjustment: string;
 };
 
+async function assertPaymentRunComposition(
+  runId: string,
+  paymentDocId: string,
+  allocations: AllocationInput[],
+  creditAllocations: CreditAllocationInput[],
+  discountAmount: string,
+  orgId: string,
+): Promise<void> {
+  const rows = (await db.execute<{
+    source_open_line_id: string; source_document_id: string; kind: string;
+    gross_amount: string; credit_amount: string; discount_amount: string;
+    credit_target_allocations: Array<{ toLineId: string; amount: string }> | null;
+  }>(sql`
+    select source_open_line_id, source_document_id, kind, gross_amount::text,
+           credit_amount::text, discount_amount::text, credit_target_allocations
+      from payment_run_items
+     where payment_run_id = ${runId} and payment_instruction_id = (
+       select id from payment_instructions
+        where payment_run_id = ${runId} and payment_document_id = ${paymentDocId}
+          and org_id = ${orgId}
+     ) and org_id = ${orgId} and status = 'selected'
+     order by kind, source_open_line_id
+     for update
+  `)).rows;
+  const cashItems = rows.filter((row) => row.kind !== "credit");
+  const creditItems = rows.filter((row) => row.kind === "credit");
+  const actualCash = new Map(allocations.map((allocation) => [allocation.openLineId, allocation]));
+  const expectedDiscount = cashItems.reduce((total, row) => total + toUnits(row.discount_amount), 0n);
+  let cashMatches = actualCash.size === cashItems.length;
+  for (const item of cashItems) {
+    const allocation = actualCash.get(item.source_open_line_id);
+    if (!allocation) { cashMatches = false; continue; }
+    const planned = fromUnits(toUnits(item.gross_amount) - toUnits(item.credit_amount));
+    if (toUnits(allocation.sourceTransactionAmount) !== toUnits(planned)
+        || toUnits(allocation.targetTransactionAmount) !== toUnits(planned)) cashMatches = false;
+  }
+  const expectedCredits = creditItems.flatMap((item) => {
+    if (!Array.isArray(item.credit_target_allocations)) return [];
+    return item.credit_target_allocations.map((target) => ({
+      fromLineId: item.source_open_line_id,
+      toLineId: target.toLineId,
+      amount: target.amount,
+      sourceDocumentId: item.source_document_id,
+    }));
+  });
+  const creditKey = (item: CreditAllocationInput) =>
+    `${item.fromLineId}:${item.toLineId}:${toUnits(item.amount)}:${item.sourceDocumentId}`;
+  const actualCreditKeys = creditAllocations.map(creditKey).sort();
+  const expectedCreditKeys = expectedCredits.map(creditKey).sort();
+  const creditMatches = creditItems.every((item) => Array.isArray(item.credit_target_allocations))
+    && actualCreditKeys.length === expectedCreditKeys.length
+    && actualCreditKeys.every((key, index) => key === expectedCreditKeys[index]);
+  if (!cashMatches || !creditMatches || toUnits(discountAmount) !== expectedDiscount) {
+    throw new PaymentError(
+      "payment composition differs from the approved run items; release the run and re-plan before posting",
+    );
+  }
+}
+
 /** Post the payment, applications, realized FX, and links as one atomic unit. */
 export async function postPaymentWithApplications(
   paymentDocId: string,
   allocations?: AllocationInput[],
   userId?: string,
   auditSource: "ui" | "api" | "mcp" | "assistant" | "flows" = "ui",
-  options: { deferEffects?: boolean } = {},
+  options: { deferEffects?: boolean; runClaim?: { runId: string; token: string } } = {},
 ): Promise<{ entryId: string }> {
   const [preflight] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
   if (!preflight || !isPaymentKind(preflight.kind)) throw new PaymentError("payment document not found");
 
   let affectedInvoicesAfterCommit: string[] = [];
   const result = await withOrg(preflight.orgId, async () => {
-    // Match the kernel's organization -> book lock order. Holding a shared
-    // book/advisory lock before upgrading the organization lock can deadlock
-    // with setup's feature fence followed by an exclusive book edit.
+    // Claims are locked before the payment row, matching run posting's
+    // run → instruction → document order. This also prevents a direct caller
+    // from holding the organization fence while waiting on a run poster.
+    const liveClaims = (await db.execute<{
+      run_id: string; claim_token: string | null; run_status: string;
+      instruction_id: string; instruction_status: string;
+    }>(sql`
+      select run.id as run_id, run.posting_claim_token as claim_token, run.status as run_status,
+             instruction.id as instruction_id, instruction.status as instruction_status
+        from payment_instructions instruction
+        join payment_runs run on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
+       where instruction.payment_document_id = ${paymentDocId}
+         and instruction.org_id = ${preflight.orgId}
+         and instruction.status in ('pending', 'approved', 'generated')
+         and run.status in ('draft', 'pending_approval', 'approved', 'processing',
+                            'generated', 'delivered', 'partially_failed', 'confirmed', 'settled', 'returned')
+       order by run.id, instruction.id
+       for update of run, instruction
+    `)).rows;
+    if (options.runClaim) {
+      const authorized = liveClaims.length === 1
+        && liveClaims[0]!.run_id === options.runClaim.runId
+        && liveClaims[0]!.claim_token === options.runClaim.token
+        && liveClaims[0]!.run_status === "processing"
+        && liveClaims[0]!.instruction_status === "pending";
+      if (!authorized) throw new PaymentError("payment run posting claim is no longer live");
+    } else if (liveClaims.length > 0) {
+      throw new PaymentError("payment is claimed by a payment run; post it through that run");
+    }
+    // Match the kernel's organization → book lock order before touching GL.
     await db.execute(sql`select id from orgs where id = ${preflight.orgId} for update`);
     // Serialize both the payment aggregate and every application endpoint.
     await db.execute(sql`select id from documents where id = ${paymentDocId} and org_id = ${preflight.orgId} for update`);
@@ -92,6 +178,9 @@ export async function postPaymentWithApplications(
     const storedAllocations = custom.allocations ?? [];
     const allocs = allocations ?? storedAllocations;
     const creditAllocs = custom.creditAllocations ?? [];
+    if (options.runClaim) {
+      await assertPaymentRunComposition(options.runClaim.runId, paymentDocId, allocs, creditAllocs, custom.discountAmount ?? "0", preflight.orgId);
+    }
     // A payment is the CASH frame: its total is the bank line by contract, so
     // a payment settling only credits would be a 0.00 receipt sitting in the
     // payments list, the collected/paid tiles, remittance advice and bank

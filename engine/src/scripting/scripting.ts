@@ -16,6 +16,7 @@ import { createScriptJournal, type ScriptJournalResult } from "../ledger/journal
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { PAYMENT_SYSTEM_CUSTOM_FIELD_SET } from "../platform/payment-system-fields.ts";
 
 /**
  * User scripting: REAL JavaScript (ES2023), executed in a QuickJS sandbox —
@@ -137,6 +138,18 @@ const BEFORE_POST_PROTECTED_CUSTOM_FIELDS = new Set([
   "feeIncomeAccountId",
   "taxProviderAddresses",
 ]);
+
+/** Payment instructions are approved financial evidence, never flow/script
+ * writable metadata. These keys are checked again against run items at post. */
+export const PAYMENT_PROTECTED_CUSTOM_FIELDS = PAYMENT_SYSTEM_CUSTOM_FIELD_SET;
+
+export function paymentCustomMutationError(value: unknown): string | null {
+  if (!isRecord(value)) return "payment scripts may only set custom to an object";
+  const protectedKey = Object.keys(value).find((key) => PAYMENT_PROTECTED_CUSTOM_FIELDS.has(key));
+  return protectedKey
+    ? `scripts may not mutate payment-system custom field "custom.${protectedKey}"`
+    : null;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -993,6 +1006,21 @@ export async function runScript(
             return {
               status: "error",
               abortReason: customError,
+              logs,
+              durationMs: Date.now() - started,
+            };
+          }
+        }
+        if (
+          (ctx.trigger === "before_submit" || ctx.trigger === "before_post")
+          && k === "custom"
+          && ["vendor_payment", "customer_payment"].includes(String(ctx.document?.kind))
+        ) {
+          const paymentError = paymentCustomMutationError(v);
+          if (paymentError) {
+            return {
+              status: "error",
+              abortReason: paymentError,
               logs,
               durationMs: Date.now() - started,
             };
