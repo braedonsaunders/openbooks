@@ -14,19 +14,26 @@ const captured: unknown[] = [];
 (globalThis as Record<string, unknown>).__sourceIdMapCapture = captured;
 
 function splitQuery(query: unknown): { text: string; values: unknown[] } {
+  // This repo's drizzle shapes chunks as: literal SQL text in StringChunk
+  // { value: [...] } wrappers, bound values as bare inline strings (never
+  // statement text), and nested fragments as SQL { queryChunks }.
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
   const textParts: string[] = [];
   const values: unknown[] = [];
   const visit = (chunk: unknown): void => {
-    if (typeof chunk === "string") {
-      textParts.push(chunk);
+    if (
+      typeof chunk === "string" ||
+      typeof chunk === "number" ||
+      typeof chunk === "boolean" ||
+      typeof chunk === "bigint"
+    ) {
+      values.push(chunk);
       return;
     }
     if (chunk && typeof chunk === "object") {
       const record = chunk as { value?: unknown; queryChunks?: unknown[] };
-      if ("value" in record) {
-        if (Array.isArray(record.value)) values.push(...record.value);
-        else values.push(record.value);
+      if (Array.isArray(record.value) && record.value.every((part) => typeof part === "string")) {
+        textParts.push(record.value.join(""));
         return;
       }
       if (Array.isArray(record.queryChunks)) {

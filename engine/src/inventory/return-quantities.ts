@@ -32,7 +32,10 @@ export function postedReturnEvidenceScope(input: {
     prior.org_id = ${input.orgId}
     and prior.kind = ${input.returnKind}
     and prior.status = 'posted'
-    and credit_line.custom #>> ${["inventoryReturn", input.evidenceKey]} = ${input.sourceId}
+    and credit_line.custom #>> ARRAY[${sql.join(
+      ["inventoryReturn", input.evidenceKey].map((segment) => sql`${segment}`),
+      sql`, `,
+    )}] = ${input.sourceId}
     and not exists (
       select 1 from inventory_movements reversal
        where reversal.org_id = prior.org_id
