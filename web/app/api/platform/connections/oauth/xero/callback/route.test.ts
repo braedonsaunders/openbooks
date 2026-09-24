@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sealJson } from "@openbooks/engine/src/platform/secrets.ts";
@@ -13,6 +12,7 @@ interface CallbackState {
   connection: Record<string, unknown>;
   updated: Record<string, unknown> | null;
   identityError: string | null;
+  exchangeRedirectUri: string | null;
 }
 const secrets = sealJson({ clientId: "xero-client", clientSecret: "xero-secret" });
 const state: CallbackState = {
@@ -31,6 +31,7 @@ const state: CallbackState = {
   },
   updated: null,
   identityError: null,
+  exchangeRedirectUri: null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -61,7 +62,8 @@ const mockSources = new Map<string, string>([
     "mock:xero",
     `
       const state = globalThis[Symbol.for("openbooks.xero-oauth-callback-test")]
-      export async function exchangeCode() {
+      export async function exchangeCode(app) {
+        state.exchangeRedirectUri = app.redirectUri
         return { accessToken: "at", refreshToken: "rt", expiresAt: "2099-01-01T00:00:00.000Z" }
       }
       export async function listConnections() { return state.tenants }
@@ -135,7 +137,6 @@ const xero_oauth_callback_flowUrl = '../../_flow.ts?xero-oauth-callback-flow'
 const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(xero_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
 hooks.deregister();
 
-const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
 
 function reset(): void {
   state.tenants = [
@@ -153,6 +154,7 @@ function reset(): void {
   };
   state.updated = null;
   state.identityError = null;
+  state.exchangeRedirectUri = null;
 }
 
 async function callback(init: { state: string; cookie?: string | null }): Promise<Response> {
@@ -192,6 +194,17 @@ test("a matching cookie is required; replay after the cookie is cleared is badst
   assert.equal(replay.headers.get("location"), "https://books.example/sync?oauth=badstate");
 });
 
+test("Xero token exchange uses the configured callback URI", async () => {
+  reset();
+  state.tenants = [{ tenantId: "only", tenantName: "Only" }];
+  const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
+
+  const response = await callback({ state: sealed, cookie: nonce });
+
+  assert.equal(response.headers.get("location"), "https://books.example/sync?oauth=connected");
+  assert.equal(state.exchangeRedirectUri, "https://books.example/api/platform/connections/oauth/xero/callback");
+});
+
 test("Xero callback refuses an ambiguous first-tenant bind by name", async () => {
   reset();
   const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
@@ -216,15 +229,4 @@ test("a Postgres 22P02 connection id in state is notfound, not an unhandled 500"
   const res = await callback({ state: sealed, cookie: nonce });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=notfound");
   assert.equal(state.updated, null);
-});
-
-test("the Xero callback never reads origin from the request URL", () => {
-  assert.match(routeSource, /connectionOauthRedirectUri\('xero'\)/);
-  assert.match(routeSource, /connectionOauthBounce/);
-  assert.match(routeSource, /pinProviderChoice/);
-  assert.doesNotMatch(routeSource, /new URL\(`\/sync\?oauth=\$\{status\}`, req\.url\)/);
-  assert.doesNotMatch(routeSource, /url\.origin/);
-  assert.doesNotMatch(routeSource, /trustedRequestOrigin/);
-  assert.match(routeSource, /pinProviderChoice\(tenants,/);
-  assert.match(routeSource, /storageIdentityError/);
 });
