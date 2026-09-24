@@ -72,6 +72,25 @@ test("VA $8,750 / $930 / $800 / 5.75% are the publication's own figures", () => 
   );
 });
 
+test("VA daily payrolls annualize with the conversion table's 300, whichever daily P the caller uses", () => {
+  // The interface marks daily as 260 or 365 worked days, but the Pay Period
+  // Conversion Table prints Daily = 300. Daily $100, no exemptions:
+  // $100 × 300 = $30,000; T = $30,000 − $8,750 = $21,250, over $17,000:
+  // W = $720 + 5.75% × $4,250 = $720 + $244.38 = $964.38; ÷ 300 = $3.21.
+  // Annualizing by 260 would give $2.82, by 365 $3.67 — both wrong cents.
+  assert.equal(VA_RATES_2026.dailyPeriods, 300);
+  for (const periodsPerYear of [260, 365]) {
+    const result = VA_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear, wages: "100.00", basis: "resident",
+      certificate: cert(),
+    });
+    assert.equal(result.factors.VA_ANNUAL_WAGES, money("30000"), `P=${periodsPerYear}`);
+    assert.equal(result.factors.VA_TAXABLE, money("21250"), `P=${periodsPerYear}`);
+    assert.equal(result.factors.VA_ANNUAL_TAX, money("964.38"), `P=${periodsPerYear}`);
+    assert.equal(result.tax, money("3.21"), `P=${periodsPerYear}`);
+  }
+});
+
 test("VA with no VA-4 withholds as if no exemptions", () => {
   // "If you do not file this form, your employer must withhold Virginia
   // income tax as if you had no exemptions."
