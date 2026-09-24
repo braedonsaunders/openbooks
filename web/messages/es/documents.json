@@ -167,6 +167,7 @@
       "body": "Los archivos y carpetas seleccionados se moverán a la Papelera. Puedes restaurarlos más tarde."
     },
     "deleted": "{count} movidos a la Papelera",
+    "partialDeleted": "{done} movidos a la Papelera — {skipped} omitidos ({reasons})",
     "deleteFailed": "No se pudo eliminar la selección",
     "downloadFailed": "No se pudo descargar la selección",
     "nothingDownloadable": "Selecciona archivos para descargar"

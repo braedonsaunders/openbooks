@@ -19,11 +19,15 @@ function idList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && isUuid(x)) : []
 }
 
+type BulkItemResult = { id: string; kind: 'file' | 'folder'; ok: boolean; error?: string }
+
 /**
  * Bulk file/folder actions. Body:
  *   { action: 'delete' | 'move', fileIds?, folderIds?, targetFolderId? }
  * Access is checked per item (unauthorized items are skipped, not fatal); the
- * response reports how many succeeded.
+ * response reports how many succeeded AND the verdict per requested id, so
+ * the caller can keep exactly the refused rows selected instead of reporting
+ * a partial bulk as full success.
  */
 export async function POST(req: Request) {
   const gate = await requireSession()
@@ -60,35 +64,41 @@ export async function POST(req: Request) {
   const result = await inDbTransaction(async (tx) => {
     let done = 0
     let skipped = 0
+    const results: BulkItemResult[] = []
     const audit = { actorId: gate.user.id, executor: tx, viewer }
+    const record = (id: string, kind: 'file' | 'folder', ok: boolean, error?: string) => {
+      if (ok) done++
+      else skipped++
+      results.push(error ? { id, kind, ok, error } : { id, kind, ok })
+    }
 
     if (action === 'move') {
       for (const id of fileIds) {
-        if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'editor')) { skipped++; continue }
-        if (await moveFile(orgId, id, targetFolderId!, gate.user.id, audit)) done++
-        else skipped++
+        if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'editor')) { record(id, 'file', false, 'forbidden'); continue }
+        if (await moveFile(orgId, id, targetFolderId!, gate.user.id, audit)) record(id, 'file', true)
+        else record(id, 'file', false, 'failed')
       }
       for (const id of folderIds) {
-        if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
-        if (await moveFolder(orgId, id, targetFolderId!, gate.user.id, audit)) done++
-        else skipped++
+        if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), 'manager')) { record(id, 'folder', false, 'forbidden'); continue }
+        if (await moveFolder(orgId, id, targetFolderId!, gate.user.id, audit)) record(id, 'folder', true)
+        else record(id, 'folder', false, 'failed')
       }
     } else {
       // delete → trash
       for (const id of fileIds) {
-        if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
-        if (await deleteFile(orgId, id, audit)) done++
-        else skipped++
+        if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), 'manager')) { record(id, 'file', false, 'forbidden'); continue }
+        if (await deleteFile(orgId, id, audit)) record(id, 'file', true)
+        else record(id, 'file', false, 'failed')
       }
       for (const id of folderIds) {
-        if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), 'manager')) { skipped++; continue }
+        if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), 'manager')) { record(id, 'folder', false, 'forbidden'); continue }
         const res = await deleteFolder(orgId, id, audit)
-        if (res.ok) done++
-        else skipped++
+        if (res.ok) record(id, 'folder', true)
+        else record(id, 'folder', false, res.reason === 'not found' ? 'not_found' : res.reason ?? 'failed')
       }
     }
 
-    return { done, skipped }
+    return { done, skipped, results }
   })
 
   return NextResponse.json({ ok: true, ...result })

@@ -41,6 +41,7 @@ import {
 import { SortTh } from '../../../components/sortable-th'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
+import { readApiBulkFailures, readApiErrorMessage } from '../../../lib/api-error'
 
 export interface FolderRow {
   id: string
@@ -196,14 +197,35 @@ export function FileList({
           folderIds: selectedFolderIds(),
         }),
       })
-      if (res.ok) {
-        const { done } = (await res.json()) as { done: number }
+      // The status is checked before the body is parsed: a refused bulk
+      // (403/422) or a non-JSON error body must name the refusal, never a
+      // SyntaxError from res.json().
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, tb('deleteFailed')))
+        return
+      }
+      const body = await res.json().catch(() => null)
+      const failures = readApiBulkFailures(body, tb('deleteFailed'))
+      const done =
+        body !== null && typeof body === 'object' && !Array.isArray(body) && typeof (body as { done?: unknown }).done === 'number'
+          ? (body as { done: number }).done
+          : 0
+      if (failures.length === 0) {
         toast.success(tb('deleted', { count: done }))
         clearSelection()
-        router.refresh()
       } else {
-        toast.error(tb('deleteFailed'))
+        // A partial bulk is reported as partial: the toast names how many
+        // moved and how many were refused (with each reason), and exactly
+        // the refused rows stay selected — the trashed ones must not look
+        // untouched, and the refused ones must not look trashed.
+        const failedIds = new Set(failures.map((failure) => failure.id))
+        setSelected(
+          (prev) => new Set([...prev].filter((key) => failedIds.has(key.slice(key.indexOf(':') + 1)))),
+        )
+        const reasons = [...new Set(failures.map((failure) => failure.error))].join(', ')
+        toast.error(tb('partialDeleted', { done, skipped: failures.length, reasons }))
       }
+      router.refresh()
     } finally {
       setBulkBusy(false)
     }

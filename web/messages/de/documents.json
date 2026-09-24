@@ -167,6 +167,7 @@
       "body": "Die ausgewählten Dateien und Ordner werden in den Papierkorb verschoben. Sie können sie später wiederherstellen."
     },
     "deleted": "{count} in den Papierkorb verschoben",
+    "partialDeleted": "{done} in den Papierkorb verschoben — {skipped} übersprungen ({reasons})",
     "deleteFailed": "Auswahl konnte nicht gelöscht werden",
     "downloadFailed": "Auswahl konnte nicht heruntergeladen werden",
     "nothingDownloadable": "Wählen Sie Dateien zum Herunterladen aus"
