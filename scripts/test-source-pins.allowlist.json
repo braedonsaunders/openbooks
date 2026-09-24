@@ -88,7 +88,6 @@
     "web/app/(app)/me/checklists/me-checklists.test.ts": 3,
     "web/app/(app)/me/compensation/me-compensation.test.ts": 3,
     "web/app/(app)/me/me-documents-surveys.test.ts": 4,
-    "web/app/(app)/me/me.test.ts": 6,
     "web/app/(app)/me/profile/me-profile.test.ts": 3,
     "web/app/(app)/me/reviews/me-reviews.test.ts": 4,
     "web/app/(app)/me/team/me-team.test.ts": 3,
