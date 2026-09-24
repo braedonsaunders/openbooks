@@ -43,7 +43,8 @@
     "showSchema": "Afficher le schéma",
     "browseRows": "Parcourir les lignes",
     "insertTableName": "Insérer le nom de la table",
-    "insertSelectTemplate": "Insérer un modèle SELECT"
+    "insertSelectTemplate": "Insérer un modèle SELECT",
+    "keyColumn": "Clé primaire ou unique"
   },
   "history": {
     "count": "{count, plural, one {# requête} other {# requêtes}}",

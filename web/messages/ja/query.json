@@ -43,7 +43,8 @@
     "showSchema": "スキーマを表示",
     "browseRows": "行を参照",
     "insertTableName": "テーブル名を挿入",
-    "insertSelectTemplate": "SELECTテンプレートを挿入"
+    "insertSelectTemplate": "SELECTテンプレートを挿入",
+    "keyColumn": "主キーまたは一意キー"
   },
   "history": {
     "count": "{count, plural, one {# 件のクエリ} other {# 件のクエリ}}",

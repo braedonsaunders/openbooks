@@ -9,6 +9,7 @@ export interface SchemaColumn {
   name: string
   type: string
   nullable: boolean
+  isKey: boolean
 }
 export interface SchemaTable {
   name: string
@@ -187,8 +188,18 @@ export function SchemaBrowser({
                         >
                           <Columns3 size={12} className="shrink-0 text-slate-400" />
                           <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300">{col.name}</span>
-                          {!col.nullable ? (
-                            <KeyRound size={10} className="shrink-0 text-amber-500 opacity-70" />
+                          {col.isKey ? (
+                            <span
+                              data-column-key={col.name}
+                              title={t('schema.keyColumn')}
+                              className="shrink-0"
+                            >
+                              <KeyRound
+                                size={10}
+                                aria-label={t('schema.keyColumn')}
+                                className="text-amber-500 opacity-70"
+                              />
+                            </span>
                           ) : null}
                           <span className="shrink-0 font-mono text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 dark:text-slate-500">
                             {col.type}

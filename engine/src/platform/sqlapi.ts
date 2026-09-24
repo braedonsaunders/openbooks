@@ -381,6 +381,7 @@ export interface SchemaColumn {
   name: string;
   type: string;
   nullable: boolean;
+  isKey: boolean;
 }
 
 export interface SchemaTable {
@@ -407,13 +408,33 @@ export async function listSchema(orgId: string): Promise<SchemaTable[]> {
       data_type: string;
       is_nullable: string;
       ordinal_position: number;
+      is_key: boolean;
     }>(
       `select c.table_name,
               t.table_type,
               c.column_name,
               c.data_type,
               c.is_nullable,
-              c.ordinal_position
+              c.ordinal_position,
+              exists (
+                select 1
+                  from pg_catalog.pg_index i
+                  join pg_catalog.pg_class r on r.oid = i.indrelid
+                  join pg_catalog.pg_namespace n on n.oid = r.relnamespace
+                  join pg_catalog.pg_attribute a
+                    on a.attrelid = r.oid
+                   and a.attname = c.column_name
+                   and not a.attisdropped
+                  cross join lateral unnest(i.indkey) as index_column(attnum)
+                 where n.nspname = c.table_schema
+                   and r.relname = c.table_name
+                   and index_column.attnum = a.attnum
+                   and i.indisunique
+                   and i.indisvalid
+                   and i.indisready
+                   and i.indpred is null
+                   and i.indexprs is null
+              ) as is_key
          from information_schema.columns c
          join information_schema.tables t
            on t.table_schema = c.table_schema
@@ -439,6 +460,7 @@ export async function listSchema(orgId: string): Promise<SchemaTable[]> {
         name: row.column_name,
         type: row.data_type,
         nullable: row.is_nullable === "YES",
+        isKey: row.is_key,
       });
     }
     return [...byTable.values()];

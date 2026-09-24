@@ -122,6 +122,8 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
     assert.ok(byName.has('accounts'))
     assert.ok(byName.has('journal_entries'))
     assert.ok(catalog.length > 0)
+    const accountId = byName.get('accounts')?.columns.find((column) => column.name === 'id')
+    assert.equal(accountId?.isKey, false, 'a governed view column is not a declared unique key')
     assert.equal(
       byName.get('party_bank_accounts')?.columns.some((column) => column.name === 'account_number_encrypted'),
       false,

@@ -43,7 +43,8 @@
     "showSchema": "Mostrar esquema",
     "browseRows": "Explorar filas",
     "insertTableName": "Insertar nombre de tabla",
-    "insertSelectTemplate": "Insertar plantilla SELECT"
+    "insertSelectTemplate": "Insertar plantilla SELECT",
+    "keyColumn": "Clave primaria o única"
   },
   "history": {
     "count": "{count, plural, one {# consulta} other {# consultas}}",

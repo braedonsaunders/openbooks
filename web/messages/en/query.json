@@ -43,7 +43,8 @@
     "showSchema": "Show schema",
     "browseRows": "Browse rows",
     "insertTableName": "Insert table name",
-    "insertSelectTemplate": "Insert SELECT template"
+    "insertSelectTemplate": "Insert SELECT template",
+    "keyColumn": "Primary or unique key"
   },
   "history": {
     "count": "{count, plural, one {# query} other {# queries}}",
