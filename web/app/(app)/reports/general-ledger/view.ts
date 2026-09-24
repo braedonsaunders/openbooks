@@ -26,6 +26,7 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { getAuthz, can } from '@/lib/authz'
 import { dimensionOptions, generalLedger } from '../../../../lib/reports'
+import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
@@ -158,6 +159,7 @@ export async function loadGeneralLedger(
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
   const authz = await getAuthz()
   const canSeePayroll = !!authz && can(authz, 'payroll.read')
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
   const [gl, opts, org] = subView
     ? await Promise.all([
         generalLedger(period.from, period.to, {
@@ -166,10 +168,10 @@ export async function loadGeneralLedger(
           bookId: selectedBook?.id,
           canSeePayroll,
         }),
-        dimensionOptions(undefined, dims.projectId, dims.subsidiaryIds),
+        dimensionOptions(undefined, dims.projectId, optionScope),
         orgInfo(),
       ])
-    : [null, await dimensionOptions(undefined, dims.projectId, dims.subsidiaryIds), await orgInfo()]
+    : [null, await dimensionOptions(undefined, dims.projectId, optionScope), await orgInfo()]
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)

@@ -23,6 +23,7 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { getAuthz, can } from '@/lib/authz'
 import { dimensionOptions, journalReport } from '../../../../lib/reports'
+import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
@@ -147,13 +148,14 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
   const authz = await getAuthz()
   const canSeePayroll = !!authz && can(authz, 'payroll.read')
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
   const [journal, opts, org] = subView
     ? await Promise.all([
         journalReport(period.from, period.to, { dims, bookId: selectedBook?.id, canSeePayroll }),
-        dimensionOptions(undefined, undefined, dims.subsidiaryIds),
+        dimensionOptions(undefined, undefined, optionScope),
         orgInfo(),
       ])
-    : [null, await dimensionOptions(), await orgInfo()]
+    : [null, await dimensionOptions(undefined, undefined, optionScope), await orgInfo()]
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
 
   return {
