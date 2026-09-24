@@ -330,9 +330,15 @@ function recordScopeFilePredicate(
   ))`
 }
 
+/** A live file belongs to the org and is not in the trash. Shared by metadata,
+ * byte, list, and export readers so a stale manifest cannot revive a trashed row. */
+export function liveFilePredicate(orgId: string): SQL {
+  return sql`fi.org_id = ${orgId} and not fi.is_inactive`
+}
+
 /** The shared file-row fence used by lists and every folder file-count projection. */
 function visibleFileRowPredicate(orgId: string, viewer: FileViewer, scope: ReadScope): SQL {
-  return sql`fi.org_id = ${orgId} and not fi.is_inactive
+  return sql`${liveFilePredicate(orgId)}
     and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
     and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}`
 }
@@ -1691,7 +1697,7 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
            fo.name as "folderName"
       from files fi
       left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
-     where fi.id = ${id} and fi.org_id = ${orgId}
+     where fi.id = ${id} and ${liveFilePredicate(orgId)}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
        and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
   `))
@@ -2294,7 +2300,7 @@ export async function getFileBlob(
        and fv.id = coalesce(${versionId ?? null}, fi.current_version_id)
       left join file_blobs fb on fb.version_id = fv.id
       left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
-     where fi.id = ${id} and fi.org_id = ${orgId}
+     where fi.id = ${id} and ${liveFilePredicate(orgId)}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
        and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
   `))

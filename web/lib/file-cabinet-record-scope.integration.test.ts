@@ -12,7 +12,8 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { attachExisting, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
+const { attachExisting, deleteFile, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
+const { buildZip } = await import('./file-zip')
 
 /**
  * Cabinet reads never apply the caller's subsidiary fence to record-folder
@@ -65,6 +66,33 @@ test('cabinet reads hide record-folder files outside the caller fence', { skip: 
     assert.ok(await getFile(org.orgId, fileId, { ...restricted, allowedSubsidiaryIds: null }))
     assert.ok(await getFileBlob(org.orgId, fileId, { ...restricted, allowedSubsidiaryIds: null }))
     assert.ok(await getFolder(org.orgId, folderId, { ...restricted, allowedSubsidiaryIds: null }))
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('trash hides metadata and every pinned or ZIP byte read', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const actorId = await createScratchUser(org.orgId, 'Cabinet reader', 'clerk')
+    const folderId = randomUUID()
+    const fileId = randomUUID()
+    const versionId = randomUUID()
+    await db.execute(sql`insert into folders (id, org_id, name) values (${folderId}, ${org.orgId}, 'Trash reader')`)
+    await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+      values (${fileId}, ${org.orgId}, ${folderId}, 'trashed.txt', 'text/plain', 4)`)
+    await db.execute(sql`insert into file_versions (id, file_id, version_number, content_type, size_bytes, storage_kind)
+      values (${versionId}, ${fileId}, 1, 'text/plain', 4, 'db')`)
+    await db.execute(sql`insert into file_blobs (version_id, bytes) values (${versionId}, decode('64617461', 'hex'))`)
+    await db.execute(sql`update files set current_version_id = ${versionId} where id = ${fileId}`)
+    const viewer = { userId: actorId, isAdmin: false, baseline: 'viewer' as const }
+    const manifest = [{ id: fileId, path: 'Trash reader/trashed.txt' }]
+
+    assert.equal(await deleteFile(org.orgId, fileId), true)
+    assert.equal(await getFile(org.orgId, fileId, viewer), null)
+    assert.equal(await getFileBlob(org.orgId, fileId, viewer), null)
+    assert.equal(await getFileBlob(org.orgId, fileId, viewer, versionId), null)
+    assert.equal((await buildZip(org.orgId, viewer, manifest)).included, 0)
   } finally {
     await dropScratchOrg(org.orgId)
   }
