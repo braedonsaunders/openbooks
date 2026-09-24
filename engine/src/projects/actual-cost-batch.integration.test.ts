@@ -256,3 +256,35 @@ test("the batched reader resolves per-type profiles and plans actual-cost sorts 
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("the batched reader refuses an unresolved group per row instead of a fake zero", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { healthy, orphaned } = await withBypassContext(async () => {
+      const healthy = await seedProject(db, org, "JOB-ROW-A", [
+        { entryNumber: "ROW-A-1", amount: "500.0000", status: "posted" },
+      ], "0");
+      // A type whose account-group keys match nothing: the row must carry
+      // the named refusal, never a zero cost, while the rest resolves.
+      const orphanType = await seedProjectType(db, org, {
+        source: "account_group", dimension: "labor_pool", groupKeys: ["ghost_pool"],
+      }, "time_and_materials");
+      const orphaned = await seedProject(db, org, "JOB-ROW-B", [
+        { entryNumber: "ROW-B-1", amount: "500.0000", status: "posted" },
+      ], "0", orphanType);
+      return { healthy, orphaned };
+    });
+
+    await withOrgContext(org.orgId, async () => {
+      const batch = await resolveProjectActualCosts(org.orgId, [healthy, orphaned]);
+      assert.equal(batch.costs.get(healthy), "500.0000");
+      assert.ok(!batch.costs.has(orphaned), "the unresolved row carries no cost, not a fake zero");
+      assert.match(
+        batch.profileErrors.get(orphaned) ?? "",
+        /actualCost\.source 'account_group' is unresolved: groupKeys \[ghost_pool\] resolve to no active accounts/,
+      );
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
