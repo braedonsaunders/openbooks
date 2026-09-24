@@ -74,11 +74,10 @@ export interface QcEditionRates {
   /** Labour-sponsored funds credit rate on Q (FTQ) and Q1 (Fondaction). */
   labourFundsCreditRate: string;
   /**
-   * The Q/Q1 NOTE's cap on the year's share purchases. The formula itself
-   * carries no cap term — 0.15 × P × Q legitimately annualizes past $5,000
-   * (the guide's own Appendix 1 has P × (Q + Q1) = $6,500 against $5,000 of
-   * actual purchases) — so this is documentation for the employer's input
-   * discipline, never something the engine silently clamps.
+   * The Q/Q1 annual purchase cap. The TP-1015 equation applies 0.15 × P × Q
+   * and 0.15 × P × Q1 without a cap term, so compute-statutory caps the
+   * combined annualized authorized purchases before passing them to the tax
+   * engines.
    */
   labourFundsAnnualPurchaseCap: string;
   /** Variable CS ratio: first-additional QPP rate over the total QPP rate. */

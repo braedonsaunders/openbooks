@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { cmp } from "../../money/money.ts";
+import { add, cmp, div, fromUnits, mulDecimal, mulPercent, toUnits } from "../../money/money.ts";
 import { certificateCount, type ResolvedCertificate } from "../certificates.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers CA_EMPLOYEE_FACTS, so every read below resolves
@@ -8,7 +8,8 @@ import { empFact } from "../employee-facts.ts";
 import "./employee-facts.ts";
 import { calculateT4127, type T4127Input } from "./t4127.ts";
 import { calculateTp1015 } from "./quebec/tp1015.ts";
-import type { Province } from "./rates.ts";
+import { qcRatesForPayDate } from "./quebec/rates.ts";
+import { ratesForPayDate, type Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { PayrollPackError } from "../payroll-error.ts";
@@ -142,6 +143,27 @@ export async function computeCaStatutory(
   const ontarioDependantInputs = region === "ON"
     ? t4127OntarioDependantInputs(ctx.certificateFor("ca_td1_ON"))
     : {};
+  const qcCertificate = region === "QC" ? ctx.certificateFor("ca_td1_QC") : null;
+  const sharePurchases = qcCertificate?.answers ?? {};
+  const requestedFtqSharesPerPeriod = sharePurchases.ftq_shares_per_period ?? "0";
+  const requestedFondactionSharesPerPeriod = sharePurchases.fondaction_shares_per_period ?? "0";
+  const fundPurchaseCap = region === "QC"
+    ? toUnits(qcRatesForPayDate(run.pay_date!).labourFundsAnnualPurchaseCap)
+    : null;
+  const annualFtqShares = toUnits(requestedFtqSharesPerPeriod) * BigInt(P);
+  const annualFondactionShares = toUnits(requestedFondactionSharesPerPeriod) * BigInt(P);
+  const annualFundShares = annualFtqShares + annualFondactionShares;
+  const annualEligibleShares = fundPurchaseCap === null || annualFundShares <= fundPurchaseCap
+    ? annualFundShares : fundPurchaseCap;
+  const eligibleAnnualFtqShares = annualEligibleShares === annualFundShares
+    ? annualFtqShares
+    : (annualFtqShares * annualEligibleShares + annualFundShares / 2n) / annualFundShares;
+  const ftqSharesPerPeriod = region === "QC"
+    ? div(fromUnits(eligibleAnnualFtqShares), String(P))
+    : requestedFtqSharesPerPeriod;
+  const fondactionSharesPerPeriod = region === "QC"
+    ? div(fromUnits(annualEligibleShares - eligibleAnnualFtqShares), String(P))
+    : requestedFondactionSharesPerPeriod;
 
   const t4127Input: T4127Input = {
     payDate: run.pay_date!, province: region as Province, periodsPerYear: P,
@@ -149,6 +171,12 @@ export async function computeCaStatutory(
     pensionDeductions: deduction("pension_f"),
     alimonyDeductions: deduction("alimony"),
     unionDues: deduction("union_dues"),
+    labourFundsCreditFederal: region === "QC"
+      ? mulPercent(
+        add(ftqSharesPerPeriod, fondactionSharesPerPeriod),
+        mulDecimal(ratesForPayDate(run.pay_date!).federal.lcf.rate, "100"), 2,
+      )
+      : undefined,
     prescribedZoneDeduction: empFact("CA", emp, "prescribed_zone_deduction") ?? undefined,
     authorizedAnnualDeductions: empFact("CA", emp, "authorized_annual_deductions") ?? undefined,
     authorizedFederalCredits: empFact("CA", emp, "authorized_federal_credits") ?? undefined,
@@ -191,6 +219,8 @@ export async function computeCaStatutory(
       qpp: statutory.cpp, qpp2: statutory.cpp2,
       pensionable,
       personalCredits: empFact("CA", emp, "provincial_claim_amount") ?? undefined,
+      ftqSharesPerPeriod,
+      fondactionSharesPerPeriod,
       authorizedAnnualCredits: empFact("CA", emp, "authorized_provincial_credits") ?? undefined,
       taxExempt: bool(empFact("CA", emp, "tax_exempt")),
       ytd: { nonPeriodic: ytd.non_periodic, csb: ytd.qc_csb },
