@@ -33,6 +33,7 @@ import {
 import type { Authz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { hrmTalentViewTabs } from '../../../../lib/hrm/workspace-tabs'
+import { translateTalentCode } from './talent-labels.ts'
 
 /**
  * HR-17 continuous-performance tabs on /hrm/performance: Calibration (the
@@ -315,6 +316,7 @@ export async function loadContinuousTab(
           listSuccessionPlans({ orgId: authz.user.orgId, actorId: authz.user.id }),
         ])
         const base = `/hrm/performance?tab=talent&cycle=${cycleId}`
+        const talentLabel = (key: string) => t(key as never)
         const visible = reviews.filter(
           (r) => (!perfFilter || r.performanceKey === perfFilter) && (!potFilter || r.potentialKey === potFilter),
         )
@@ -353,7 +355,7 @@ export async function loadContinuousTab(
             employee: r.employeeName,
             performance: r.performanceKey,
             potential: r.potentialKey,
-            loss: `${r.impactOfLoss} / ${r.riskOfLoss}`,
+            loss: `${translateTalentCode('loss', r.impactOfLoss, talentLabel)} / ${translateTalentCode('loss', r.riskOfLoss, talentLabel)}`,
             ready: r.promotionReady ? t('performance.continuous.talent.readyYes') : t('performance.continuous.talent.readyNo'),
           })),
           reviewsEmpty: t('performance.continuous.talent.reviewsEmpty'),
@@ -369,8 +371,11 @@ export async function loadContinuousTab(
             id: p.id,
             position: `${p.positionCode} · ${p.positionTitle}`,
             incumbent: p.incumbentName ?? '—',
-            candidates: p.candidates.map((c) => `${c.employeeName} (${c.readiness})`).join(', ') || '—',
-            status: p.status,
+            candidates: p.candidates.map((c) => {
+              const readiness = translateTalentCode('readiness', c.readiness, talentLabel)
+              return `${c.employeeName} (${readiness})`
+            }).join(', ') || '—',
+            status: translateTalentCode('planStatus', p.status, talentLabel),
           })),
           dialog: {
             employments: directory.employments.map((e) => ({ value: e.id, label: e.name })),
@@ -381,7 +386,10 @@ export async function loadContinuousTab(
             potLabel: t('performance.continuous.talent.colPotential'),
             impactLabel: t('performance.continuous.talent.impactLabel'),
             riskLabel: t('performance.continuous.talent.riskLabel'),
-            lossOptions: ['low', 'medium', 'high'].map((v) => ({ value: v, label: v })),
+            lossOptions: (['low', 'medium', 'high'] as const).map((v) => ({
+              value: v,
+              label: translateTalentCode('loss', v, talentLabel),
+            })),
             promotionLabel: t('performance.continuous.talent.promotionLabel'),
             notesLabel: t('performance.continuous.talent.notesLabel'),
             submitLabel: t('performance.continuous.talent.submitLabel'),
