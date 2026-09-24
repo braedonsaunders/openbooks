@@ -4780,6 +4780,14 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
+  // Tax provision version label: "v{version}" is the version abbreviation
+  // every locale writes the same way (a numbered revision, not a word).
+  'fr:tax.provisions.versionLabel|v{version}',
+  'es:tax.provisions.versionLabel|v{version}',
+  'de:tax.provisions.versionLabel|v{version}',
+  'ja:tax.provisions.versionLabel|v{version}',
+  'zh:tax.provisions.versionLabel|v{version}',
+  'pt-BR:tax.provisions.versionLabel|v{version}',
   // HR-16 report columns: these headings are the same word in the target
   // language, reviewed one by one — Version/Status/Name/Error/Action/Code
   // are borrowed or identical forms, not untranslated English.
@@ -5621,7 +5629,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "purchaseOrders": 55,
   "records": 185,
   "shell": 145,
-  "tax": 151,
+  "tax": 153,
 }
 
 test('I14 items/inventory/reports/sync/login/small-catalog copy ships translated in every locale', () => {

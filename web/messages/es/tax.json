@@ -109,6 +109,8 @@
     "description": "ASC 740 / IAS 12 — impuesto corriente y diferido, provisión de valoración y conciliación de tipos.",
     "empty": "Sin provisiones. Calcule la primera provisión anual para empezar.",
     "emptyNoGrant": "Aún no hay cálculos de provisión. Solo quienes tengan acceso de creación de informes en toda la organización pueden calcular la primera provisión.",
+    "fiscalYearLabel": "Ejercicio {year}",
+    "versionLabel": "v{version}",
     "columns": {
       "fiscalYear": "Ejercicio",
       "version": "Versión",

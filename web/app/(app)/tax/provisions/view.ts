@@ -80,8 +80,8 @@ export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
     rows: runs.map((run) => ({
       id: run.id,
       href: `/tax/provisions/${run.id}`,
-      fiscalYearLabel: `FY${run.fiscalYear}`,
-      versionLabel: `v${run.version}`,
+      fiscalYearLabel: t('fiscalYearLabel', { year: run.fiscalYear }),
+      versionLabel: t('versionLabel', { version: run.version }),
       statusLabel: t(`status.${run.status}`),
       statusVariant: STATUS_VARIANT[run.status] ?? 'secondary',
       totalExpense: m(run.totalExpense),
