@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { installTaxReturnPacks, TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../lib/authz'
 import { planTaxReturnLibraryChange } from '../../../../lib/setup/tax-return-library'
 
 export const runtime = 'nodejs'
@@ -25,6 +25,10 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  // Installing or resetting reference jurisdiction packs rewrites the
+  // org-wide return library used by every entity.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
