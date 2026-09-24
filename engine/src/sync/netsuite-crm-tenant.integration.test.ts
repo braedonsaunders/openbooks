@@ -35,6 +35,16 @@ test(
           items = [{ key: "17", name: "Customer", entitytype: "CUSTOMER" }];
         } else if (query.includes("from customer")) {
           items = [{ id: "NS-CUST-1", stage: customerStage, entitystatus: "17", datecreated: "01/15/2026" }];
+        } else if (query.includes("from transaction where type='Opprtnty'")) {
+          items = [{
+            id: "NS-OPP-1",
+            tranid: "OPP-17",
+            entity: "NS-CUST-1",
+            probability: "37",
+            currency: "CAD",
+            foreigntotal: "100.01",
+            memo: "Hydraulic press",
+          }];
         } else if (query.includes("from recentactivity")) {
           items = [{
             id: "1845",
@@ -82,9 +92,11 @@ test(
 
       const first = await importNetSuiteCrm(orgA.orgId, undefined, transport);
       assert.equal(first.accounts, 1);
+      assert.equal(first.opportunities, 1);
       assert.equal(first.activities.recentActivityNote, 1);
       const again = await importNetSuiteCrm(orgA.orgId, undefined, transport);
       assert.equal(again.accounts, 1);
+      assert.equal(again.opportunities, 1);
       assert.equal(again.activities.recentActivityNote, 1);
       customerStage = "prospect";
       await Promise.all([
@@ -94,6 +106,7 @@ test(
       customerStage = "customer";
       const other = await importNetSuiteCrm(orgB.orgId, undefined, transport);
       assert.equal(other.accounts, 1);
+      assert.equal(other.opportunities, 1);
 
       const profiles = await db.execute<{ orgId: string; partyId: string; stage: string }>(sql`
         select org_id as "orgId", party_id as "partyId", lifecycle_stage as stage
@@ -113,6 +126,26 @@ test(
          where e.org_id = ${orgA.orgId} and p.party_id = ${parties[orgA.orgId]}
            and e.to_stage = 'prospect' and e.source_kind = 'import'`);
       assert.deepEqual(transition.rows, [{ fromStage: "customer", toStage: "prospect" }]);
+
+      const opportunities = await db.execute<{
+        orgId: string;
+        probability: number;
+        currency: string;
+        projectedAmount: string;
+        weightedAmount: string;
+      }>(sql`
+        select org_id as "orgId", probability, currency,
+               projected_amount::text as "projectedAmount",
+               weighted_amount::text as "weightedAmount"
+          from crm_opportunities
+         where custom -> 'netsuite' ->> 'id' = 'NS-OPP-1'`);
+      assert.deepEqual(
+        opportunities.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
+        [
+          { orgId: orgA.orgId, probability: 37, currency: "CAD", projectedAmount: "100.0100", weightedAmount: "37.0037" },
+          { orgId: orgB.orgId, probability: 37, currency: "CAD", projectedAmount: "100.0100", weightedAmount: "37.0037" },
+        ].sort((a, b) => a.orgId.localeCompare(b.orgId)),
+      );
 
       const activities = await db.execute<{ orgId: string; id: string; subject: string }>(sql`
         select org_id as "orgId", id, subject from crm_activities
