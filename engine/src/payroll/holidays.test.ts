@@ -1006,6 +1006,7 @@ test("a normal-day jurisdiction REFUSES when no schedule is recorded", () => {
   for (const jurisdiction of ["CA", "CA-ON", "CA-QC", "CA-BC", "CA-AB", "CA-SK", "CA-NL", "CA-PE"]) {
     assert.doesNotThrow(() => computeStatutoryHolidayPay(ruleFor(jurisdiction), payContext({
       hourlyRate: "25.00", daysWorked: 20, daysWorkedInQualifyingWindow: 20,
+      ...(jurisdiction === "CA-NL" ? { hoursWorkedInLookback: "160" } : {}),
       earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
     })), `${jurisdiction} needs no schedule`);
   }
@@ -1054,7 +1055,7 @@ test("Newfoundland pays DOUBLE for the day worked, instead of stacking", () => {
   // election — the only jurisdiction in the country where working the holiday
   // REPLACES the day's holiday pay rather than adding to it.
   const worked = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
-    daysWorked: 15, hoursWorked: "8", hourlyRate: "25.00", employmentDays: 400,
+    daysWorked: 15, hoursWorkedInLookback: "120", hoursWorked: "8", hourlyRate: "25.00", employmentDays: 400,
     earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
   }));
   // The 8 hours are already on the stub at 1.0×, so the uplift is one more
@@ -1064,7 +1065,7 @@ test("Newfoundland pays DOUBLE for the day worked, instead of stacking", () => {
 
   // Not worked: an average day over the three-week window. $3,000 ÷ 15 = $200.
   const rested = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
-    daysWorked: 15, hourlyRate: "25.00", employmentDays: 400,
+    daysWorked: 15, hoursWorkedInLookback: "120", hourlyRate: "25.00", employmentDays: 400,
     earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
   }));
   assert.equal(rested.holidayPay, "200.0000");
@@ -1072,6 +1073,19 @@ test("Newfoundland pays DOUBLE for the day worked, instead of stacking", () => {
     lookbackWindow(ruleFor("CA-NL"), "2026-07-01"),
     { from: "2026-06-10", to: "2026-06-30" },
   );
+});
+
+test("Newfoundland uses the current hourly rate times average lookback hours", () => {
+  // LSA s. 15(3): the holiday is paid at the employee's current rate, even
+  // where that rate changed during the three-week hours lookback.
+  const result = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
+    daysWorked: 10,
+    hoursWorkedInLookback: "75.0000",
+    hourlyRate: "30.00",
+    employmentDays: 400,
+    earnings: { ...emptyLookbackEarnings(), regular: "1500.00" },
+  }));
+  assert.equal(result.holidayPay, "225.0000");
 });
 
 test("Nova Scotia's fifteen-of-thirty test bites, and stacks the premium", () => {

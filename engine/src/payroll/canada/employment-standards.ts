@@ -364,14 +364,10 @@ const NB_HOLIDAY_PAY: PayrollHolidayPayRule = {
 /**
  * Newfoundland and Labrador, Labour Standards Act, RSNL 1990 c L-2, ss. 15–19.
  *
- * s. 15: the employee's hourly rate of pay multiplied by the AVERAGE NUMBER OF
- * HOURS worked in a day over the three weeks immediately preceding the holiday.
- * Declared as `average_day` over three weeks — wages ÷ days worked — which is
- * arithmetically identical for an employee on one hourly rate throughout the
- * window, and is what the province's own guidance restates. The two diverge for
- * an employee whose rate changed mid-window; NL is the only jurisdiction whose
- * statute is worded rate-times-hours rather than wages-over-days, and this
- * shape cannot express the difference.
+ * s. 15(3): the employee's current hourly rate multiplied by the average number
+ * of hours worked in a day over the three weeks immediately preceding the
+ * holiday. This differs from historical wages per worked day after a rate
+ * change, so both current rate and approved lookback hours are explicit inputs.
  *
  * s. 19(1): not entitled where the holiday falls within thirty days of the
  * start of employment, or where the employee fails WITHOUT JUST CAUSE to work
@@ -386,8 +382,7 @@ const NB_HOLIDAY_PAY: PayrollHolidayPayRule = {
  */
 const NL_HOLIDAY_PAY: PayrollHolidayPayRule = {
   citation: "Labour Standards Act (Newfoundland and Labrador), RSNL 1990 c L-2, ss. 15–19",
-  // s. 15 averages "the number of hours WORKED in a day": days worked.
-  basis: { kind: "average_day", lookbackWeeks: 3, counting: "worked" },
+  basis: { kind: "average_hours_day", lookbackWeeks: 3 },
   include: { overtime: false, vacationPay: true, holidayPay: true },
   qualifying: { minEmploymentDays: 30, lastAndFirstScheduledShift: true },
   premium: { multiplier: "2", plusHolidayPay: false },

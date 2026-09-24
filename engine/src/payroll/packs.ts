@@ -1178,6 +1178,11 @@ export type PayrollHolidayLookbackBoundary =
  */
 export type PayrollHolidayPayLookbackBasis =
   | {
+      /** Current hourly rate × average hours worked per day in the window. */
+      kind: "average_hours_day";
+      lookbackWeeks: number;
+    }
+  | {
       kind: "fixed_divisor";
       divisor: number;
       lookbackWeeks: number;

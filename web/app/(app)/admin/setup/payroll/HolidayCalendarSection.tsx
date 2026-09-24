@@ -222,6 +222,9 @@ function describeBasis(
   if (basis.kind === 'percent_of_earnings') {
     return `${basis.percent}% of ${included} over the ${basis.lookbackWeeks} weeks ${before}.`
   }
+  if (basis.kind === 'average_hours_day') {
+    return `current hourly rate × average hours worked per day over the ${basis.lookbackWeeks} weeks ${before}.`
+  }
   const window = basis.lookbackDays !== undefined
     ? `${basis.lookbackDays} calendar days`
     : `${basis.lookbackWeeks ?? 4} weeks`

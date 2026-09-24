@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
-import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
+import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
 import {
   employmentJurisdictionsOf,
   holidayPayLookbackBasis,
@@ -598,6 +598,8 @@ export interface HolidayPayContext {
    * `countHolidayQualifyingDays` is what produces it.
    */
   daysWorked: number;
+  /** Approved hours actually worked in the pay basis window. */
+  hoursWorkedInLookback?: string;
   /**
    * The same count over the QUALIFYING window, when the rule declares one that
    * is a different length from the pay window (BC: 15 of the 30 days before) —
@@ -841,15 +843,21 @@ export function computeStatutoryHolidayPay(
       + `${basisRule.lookbackWeeks} weeks before the holiday`;
   } else {
     const base = holidayPayBase(context.earnings, rule.include);
-    const window = basisRule.lookbackDays !== undefined
+    const window = basisRule.kind === "average_day" && basisRule.lookbackDays !== undefined
       ? `${basisRule.lookbackDays} days`
-      : `${basisRule.lookbackWeeks} weeks`;
-    const counted = describeDayCounting(basisRule.counting);
+      : `${basisRule.lookbackWeeks ?? 4} weeks`;
+    const counted = basisRule.kind === "average_hours_day"
+      ? "worked"
+      : describeDayCounting(basisRule.counting);
     if (context.daysWorked <= 0) {
       // An average-day jurisdiction with a zero denominator is undefined, not
       // zero. Paying nothing here would be a real entitlement quietly lost, so
       // it stops the run and names the employee.
-      if (cmp(base, "0") === 0) {
+      if (
+        basisRule.kind === "average_hours_day"
+          ? cmp(context.hoursWorkedInLookback ?? "0", "0") === 0 && cmp(base, "0") === 0
+          : cmp(base, "0") === 0
+      ) {
         return deny(`no wages were earned in the ${window} before the holiday`);
       }
       throw new PayrollHolidayError(
@@ -859,9 +867,36 @@ export function computeStatutoryHolidayPay(
         + "calculating",
       );
     }
-    holidayPay = divideExact(base, context.daysWorked);
-    basis = `${base} earned in the ${window} before the holiday ÷ ${context.daysWorked} `
-      + `days ${counted}`;
+    if (basisRule.kind === "average_hours_day") {
+      if (context.hoursWorkedInLookback === undefined) {
+        throw new PayrollHolidayError(
+          `${context.employee}: ${context.holiday.name} needs approved hours worked in the `
+          + `${window} before the holiday to calculate the statutory average — correct the `
+          + "approved timesheets before calculating",
+        );
+      }
+      if (cmp(context.hourlyRate, "0") <= 0) {
+        throw new PayrollHolidayError(
+          `${context.employee}: ${context.holiday.name} uses the current hourly rate for its `
+          + "average-hours holiday pay, but no current regular rate is recorded — set the "
+          + "employee's pay rate before calculating",
+        );
+      }
+      holidayPay = roundMoney(
+        mulRatio(
+          context.hourlyRate,
+          toUnits(context.hoursWorkedInLookback),
+          BigInt(context.daysWorked) * 10_000n,
+        ),
+        2,
+      );
+      basis = `${context.hourlyRate} current hourly rate × ${context.hoursWorkedInLookback} hours `
+        + `worked in the ${window} before the holiday ÷ ${context.daysWorked} days worked`;
+    } else {
+      holidayPay = divideExact(base, context.daysWorked);
+      basis = `${base} earned in the ${window} before the holiday ÷ ${context.daysWorked} `
+        + `days ${counted}`;
+    }
   }
   if (irregularBecause !== null) basis = `${irregularBecause}, so ${basis}`;
 
@@ -1087,6 +1122,9 @@ export async function resolveStatutoryHolidayPay(
       holiday,
       earnings,
       daysWorked,
+      hoursWorkedInLookback: lookbackBasis.kind === "average_hours_day"
+        ? await hoursWorkedInLookback(tx, input, window)
+        : undefined,
       daysWorkedInQualifyingWindow,
       employmentDays: hiredOn ? daysBetween(hiredOn, holiday.date) : null,
       employmentWeeks: hiredOn ? Math.floor(daysBetween(hiredOn, holiday.date) / 7) : null,
@@ -1166,6 +1204,7 @@ export function lookbackWindow(
   switch (basis.kind) {
     case "fixed_divisor":
     case "percent_of_earnings":
+    case "average_hours_day":
       return spanBefore(to, basis.lookbackWeeks * 7);
     case "average_day":
       return spanBefore(to, basis.lookbackDays ?? (basis.lookbackWeeks ?? 4) * 7);
@@ -1439,6 +1478,22 @@ async function hoursOn(
        and status = 'approved' and worked_on = ${date}
   `));
   return roundMoney(rows.rows[0]?.hours ?? "0", 2);
+}
+
+/** Approved time in a statute's average-hours lookback; timesheets own hours. */
+async function hoursWorkedInLookback(
+  tx: Pick<typeof db, "execute">,
+  input: StatutoryHolidayPayInput,
+  window: { from: string; to: string },
+): Promise<string> {
+  const rows = (await tx.execute<{ hours: string }>(sql`
+    select coalesce(sum(hours), 0)::text as hours
+      from time_entries
+     where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
+       and status = 'approved' and hours > 0
+       and worked_on between ${window.from} and ${window.to}
+  `));
+  return rows.rows[0]?.hours ?? "0";
 }
 
 // ---------------------------------------------------------------------------
