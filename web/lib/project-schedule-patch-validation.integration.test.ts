@@ -38,11 +38,11 @@ test('schedule task patches refuse impossible dates and malformed resource ids',
       `)
 
       await assert.rejects(
-        updateScheduleTask(org.orgId, projectId, taskId, { startDate: '2026-02-30' }, actor),
+        updateScheduleTask(org.orgId, projectId, taskId, { startDate: '2026-02-30' }, actor, null),
         (error: unknown) => error instanceof ScheduleError && /valid date/.test(error.message),
       )
       await assert.rejects(
-        updateScheduleTask(org.orgId, projectId, taskId, { resourceAssignments: [{ resourceId: 'not-a-uuid', units: 1 }] }, actor),
+        updateScheduleTask(org.orgId, projectId, taskId, { resourceAssignments: [{ resourceId: 'not-a-uuid', units: 1 }] }, actor, null),
         (error: unknown) => error instanceof ScheduleError && /valid resource/.test(error.message),
       )
       const untouched = (await db.execute<{ start: string | null; n: number }>(sql`
@@ -53,7 +53,7 @@ test('schedule task patches refuse impossible dates and malformed resource ids',
       assert.equal(untouched.n, 0)
 
       // Real values still apply.
-      await updateScheduleTask(org.orgId, projectId, taskId, { startDate: '2026-02-27', endDate: '2026-02-28' }, actor)
+      await updateScheduleTask(org.orgId, projectId, taskId, { startDate: '2026-02-27', endDate: '2026-02-28' }, actor, null)
       assert.equal((await db.execute<{ start: string }>(sql`
         select schedule_start::text as start from project_tasks where id=${taskId} and org_id=${org.orgId}`)).rows[0]!.start, '2026-02-27')
     } finally {

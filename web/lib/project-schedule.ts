@@ -1,7 +1,12 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import {
+  lockProjectForScope,
+  ScopeNotFoundError,
+  withScopeSnapshot,
+} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import type {
   ScheduleData,
@@ -49,6 +54,29 @@ async function assertProjectSchedulingEnabledTx(tx: ScheduleTransaction, orgId: 
   }
 }
 
+/**
+ * Lock the project row and assert the caller's subsidiary scope INSIDE the
+ * write transaction (canonical shape 1: lockProjectForScope). The route's
+ * pre-read cannot go stale this way — a concurrent projects/[id] PATCH
+ * moving the project to another subsidiary serializes against this lock, so
+ * the check sees the latest committed subsidiary. A missing, cross-org, or
+ * out-of-scope project answers exactly like the route's own 404.
+ */
+async function assertProjectScopeInTx(
+  tx: ScheduleTransaction | SqlExecutor,
+  orgId: string,
+  projectId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  mode: 'update' | 'share' = 'update',
+): Promise<void> {
+  try {
+    await lockProjectForScope(tx, orgId, projectId, allowedSubsidiaryIds, mode)
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) throw new ScheduleError('not found', 404)
+    throw error
+  }
+}
+
 const str = (value: unknown) => (value == null ? null : String(value))
 const num = (value: unknown) => (value == null ? 0 : Number(value))
 
@@ -81,9 +109,26 @@ function toTask(row: Row): ScheduleTask {
   }
 }
 
-/** Load the whole plan for one project. */
-export async function loadProjectSchedule(orgId: string, projectId: string): Promise<ScheduleData> {
+/**
+ * Load the whole plan for one project, inside the caller's scope snapshot:
+ * the project row is share-locked first, so a concurrent rehome cannot move
+ * rows between the seven reads of one response, and an out-of-scope project
+ * answers exactly like a missing one.
+ */
+export async function loadProjectSchedule(
+  orgId: string,
+  projectId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<ScheduleData> {
   await assertProjectSchedulingEnabled(orgId)
+  return withScopeSnapshot(orgId, async () => {
+    await assertProjectScopeInTx(db, orgId, projectId, allowedSubsidiaryIds, 'share')
+    return loadProjectScheduleSnapshot(orgId, projectId)
+  })
+}
+
+/** The seven plan reads, pinned to the snapshot the wrapper opened. */
+async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Promise<ScheduleData> {
   const [tasks, dependencies, calendars, resources, assignments, baselines, baselineTasks] =
     await Promise.all([
       db.execute(sql`
@@ -191,9 +236,11 @@ export class ScheduleError extends Error {
   }
 }
 
+type Executor = Pick<typeof db, 'execute'>
+
 /** Confirm a task belongs to this org AND this project before touching it. */
-async function assertTaskInProject(orgId: string, projectId: string, taskId: string) {
-  const r = (await db.execute<Row>(sql`
+async function assertTaskInProject(orgId: string, projectId: string, taskId: string, exec: Executor = db) {
+  const r = (await exec.execute<Row>(sql`
     select 1 from project_tasks
      where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`))
   if (!r.rows[0]) throw new ScheduleError('task not found', 404)
@@ -304,8 +351,6 @@ async function assertParentInProjectTree(
 }
 
 /** `exec` lets callers run the patch inside an open transaction. */
-type Executor = Pick<typeof db, 'execute'>
-
 async function applyTaskPatch(
   orgId: string,
   projectId: string,
@@ -409,10 +454,12 @@ export async function updateScheduleTask(
   taskId: string,
   patch: ScheduleTaskPatchInput,
   userId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertTaskInProject(orgId, projectId, taskId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
+    await assertTaskInProject(orgId, projectId, taskId, tx)
     await applyTaskPatch(orgId, projectId, taskId, patch, userId, tx)
   }))
 }
@@ -426,11 +473,13 @@ export async function batchUpdateScheduleTasks(
   projectId: string,
   updates: Array<{ id: string } & ScheduleTaskPatchInput>,
   userId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   await assertProjectSchedulingEnabled(orgId)
-  for (const update of updates) await assertTaskInProject(orgId, projectId, update.id)
   await db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
+    for (const update of updates) await assertTaskInProject(orgId, projectId, update.id, tx)
     for (const { id, ...patch } of updates) {
       await applyTaskPatch(orgId, projectId, id, patch, userId, tx)
     }
@@ -442,9 +491,11 @@ export async function createScheduleTask(
   projectId: string,
   input: ScheduleTaskPatchInput & { name: string },
   userId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     // A crafted display order reaches an integer column: fail closed instead
     // of escaping as a cast error.
     let order: number | null = null
@@ -471,18 +522,24 @@ export async function createScheduleTask(
   }))
 }
 
-export async function deleteScheduleTask(orgId: string, projectId: string, taskId: string) {
+export async function deleteScheduleTask(
+  orgId: string,
+  projectId: string,
+  taskId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
   await assertProjectSchedulingEnabled(orgId)
-  await assertTaskInProject(orgId, projectId, taskId)
-  // A task with posted time is job-costing history; refuse rather than orphan it.
-  const timeEntries = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from time_entries
-     where org_id = ${orgId} and project_task_id = ${taskId}`))
-  if ((timeEntries.rows[0]?.n ?? 0) > 0) {
-    throw new ScheduleError('task has time entries and cannot be deleted', 409)
-  }
   await db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
+    await assertTaskInProject(orgId, projectId, taskId, tx)
+    // A task with posted time is job-costing history; refuse rather than orphan it.
+    const timeEntries = (await tx.execute<{ n: number }>(sql`
+      select count(*)::int as n from time_entries
+       where org_id = ${orgId} and project_task_id = ${taskId}`))
+    if ((timeEntries.rows[0]?.n ?? 0) > 0) {
+      throw new ScheduleError('task has time entries and cannot be deleted', 409)
+    }
     await tx.execute(sql`
       delete from schedule_dependencies
        where org_id = ${orgId} and (predecessor_id = ${taskId} or successor_id = ${taskId})`)
@@ -503,10 +560,9 @@ export async function createScheduleDependency(
   projectId: string,
   input: { predecessorId: string; successorId: string; type?: string; lagDays?: number },
   userId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   await assertProjectSchedulingEnabled(orgId)
-  await assertTaskInProject(orgId, projectId, input.predecessorId)
-  await assertTaskInProject(orgId, projectId, input.successorId)
   // The storage CHECK only knows FS/SS/FF/SF and an integer lag: reject
   // anything else here so a crafted value fails closed instead of escaping
   // as a PostgreSQL error (a 500).
@@ -523,34 +579,54 @@ export async function createScheduleDependency(
 
   // Refuse loops at the boundary: a cycle makes the critical path undefined for
   // the whole project, and the UI can only prevent the ones it can see.
-  const existing = (await db.execute<Row>(sql`
-    select id, predecessor_id, successor_id, type, lag_days from schedule_dependencies
-     where org_id = ${orgId} and project_id = ${projectId}`))
-  const dependencies: ScheduleDependency[] = existing.rows.map((row) => ({
-    id: String(row.id),
-    predecessorId: String(row.predecessor_id),
-    successorId: String(row.successor_id),
-    type: (row.type as ScheduleDependency['type']) ?? 'FS',
-    lagDays: num(row.lag_days),
-  }))
-  if (wouldCreateDependencyCycle(dependencies, input.predecessorId, input.successorId)) {
-    throw new ScheduleError('that dependency would create a loop in the schedule', 409)
-  }
-
-  await db.execute(sql`
-    insert into schedule_dependencies (org_id, project_id, predecessor_id, successor_id, type, lag_days, created_by, updated_by)
-    values (${orgId}, ${projectId}, ${input.predecessorId}, ${input.successorId},
-            ${type}, ${lagDays}, ${userId}, ${userId})
-    on conflict (predecessor_id, successor_id)
-      do update set type = excluded.type, lag_days = excluded.lag_days, updated_at = now(), updated_by = ${userId}
-      where schedule_dependencies.org_id = ${orgId}`)
+  // The lock and the write share one transaction: a concurrent project
+  // rehome between the route's pre-read and this insert cannot move the
+  // dependency onto another subsidiary's plan. The upsert is the save
+  // contract for re-dragging an existing link (same endpoints keep one row,
+  // latest type/lag wins) — a conflict that is expected, never a dropped
+  // write.
+  await db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
+    await assertTaskInProject(orgId, projectId, input.predecessorId, tx)
+    await assertTaskInProject(orgId, projectId, input.successorId, tx)
+    const existing = (await tx.execute<Row>(sql`
+      select id, predecessor_id, successor_id, type, lag_days from schedule_dependencies
+       where org_id = ${orgId} and project_id = ${projectId}`))
+    const dependencies: ScheduleDependency[] = existing.rows.map((row) => ({
+      id: String(row.id),
+      predecessorId: String(row.predecessor_id),
+      successorId: String(row.successor_id),
+      type: (row.type as ScheduleDependency['type']) ?? 'FS',
+      lagDays: num(row.lag_days),
+    }))
+    if (wouldCreateDependencyCycle(dependencies, input.predecessorId, input.successorId)) {
+      throw new ScheduleError('that dependency would create a loop in the schedule', 409)
+    }
+    await tx.execute(sql`
+      insert into schedule_dependencies (org_id, project_id, predecessor_id, successor_id, type, lag_days, created_by, updated_by)
+      values (${orgId}, ${projectId}, ${input.predecessorId}, ${input.successorId},
+              ${type}, ${lagDays}, ${userId}, ${userId})
+      on conflict (predecessor_id, successor_id)
+        do update set type = excluded.type, lag_days = excluded.lag_days, updated_at = now(), updated_by = ${userId}
+        where schedule_dependencies.org_id = ${orgId}`)
+  })
 }
 
-export async function deleteScheduleDependency(orgId: string, projectId: string, id: string) {
+export async function deleteScheduleDependency(
+  orgId: string,
+  projectId: string,
+  id: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
   await assertProjectSchedulingEnabled(orgId)
-  await db.execute(sql`
-    delete from schedule_dependencies
-     where id = ${id} and org_id = ${orgId} and project_id = ${projectId}`)
+  await db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
+    await tx.execute(sql`
+      delete from schedule_dependencies
+       where id = ${id} and org_id = ${orgId} and project_id = ${projectId}`)
+  })
 }
 
 /** Capture the current plan as a baseline. */
@@ -559,9 +635,11 @@ export async function createScheduleBaseline(
   projectId: string,
   input: { name: string; description?: string; kind?: string; isPrimary?: boolean },
   userId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   await db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     if (input.isPrimary) {
       await tx.execute(sql`
         update schedule_baselines set is_primary = false, updated_at = now(), updated_by = ${userId}
@@ -584,9 +662,15 @@ export async function createScheduleBaseline(
   })
 }
 
-export async function deleteScheduleBaseline(orgId: string, projectId: string, baselineId: string) {
+export async function deleteScheduleBaseline(
+  orgId: string,
+  projectId: string,
+  baselineId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
   await db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     await tx.execute(sql`
       delete from schedule_baseline_tasks
        where org_id = ${orgId} and baseline_id = ${baselineId}`)
@@ -608,9 +692,11 @@ export async function upsertScheduleCalendar(
     isDefault?: boolean
   },
   userId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     if (input.id) {
       const existing = await tx.execute(sql`
         select 1 from schedule_calendars
@@ -648,9 +734,15 @@ export async function upsertScheduleCalendar(
   }))
 }
 
-export async function deleteScheduleCalendar(orgId: string, projectId: string, calendarId: string) {
+export async function deleteScheduleCalendar(
+  orgId: string,
+  projectId: string,
+  calendarId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
   await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     const existing = await tx.execute(sql`
       select 1 from schedule_calendars
        where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}`)
@@ -693,6 +785,7 @@ export async function upsertScheduleResource(
     costRate?: string | number | null
   },
   userId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   const costRate = input.costRate === undefined
     ? undefined
@@ -702,6 +795,7 @@ export async function upsertScheduleResource(
   }
   return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     if (input.id) {
       const existing = await tx.execute(sql`
         select 1 from schedule_resources
@@ -736,9 +830,15 @@ export async function upsertScheduleResource(
   }))
 }
 
-export async function deleteScheduleResource(orgId: string, projectId: string, resourceId: string) {
+export async function deleteScheduleResource(
+  orgId: string,
+  projectId: string,
+  resourceId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
   await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     const existing = await tx.execute(sql`
       select 1 from schedule_resources
        where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}`)

@@ -6,8 +6,9 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string }
     permissions: Set<string>
-    allowedSubsidiaryIds: null
+    allowedSubsidiaryIds: Set<string> | null
   } | null
+  projectSubsidiary: string | null
   calendarArgs: unknown[] | null
   resourceArgs: unknown[] | null
 }
@@ -15,6 +16,7 @@ interface RouteState {
 const stateKey = Symbol.for('openbooks.project-schedule-route-test')
 const state: RouteState = {
   authz: null,
+  projectSubsidiary: null,
   calendarArgs: null,
   resourceArgs: null,
 }
@@ -59,9 +61,10 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
       export const db = {
         async execute() {
-          return { rows: [{ id: '00000000-0000-0000-0000-000000000001', subsidiary_id: null }] }
+          return { rows: [{ id: '00000000-0000-0000-0000-000000000001', subsidiary_id: state.projectSubsidiary }] }
         },
       }
     `,
@@ -143,7 +146,7 @@ test('cross-project delete attempts fail closed with the authorized project boun
   }))
   assert.ok(calendarResponse)
   assert.equal(calendarResponse.status, 404)
-  assert.deepEqual(state.calendarArgs, [ORG_ID, PROJECT_A, FOREIGN_ID])
+  assert.deepEqual(state.calendarArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, null])
 
   state.resourceArgs = null
   const resourceResponse = await POST(new Request('http://openbooks.test/api/project-schedule', {
@@ -152,5 +155,26 @@ test('cross-project delete attempts fail closed with the authorized project boun
   }))
   assert.ok(resourceResponse)
   assert.equal(resourceResponse.status, 404)
-  assert.deepEqual(state.resourceArgs, [ORG_ID, PROJECT_A, FOREIGN_ID])
+  assert.deepEqual(state.resourceArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, null])
+})
+
+test('the route forwards the caller subsidiary scope to subordinate writes', async () => {
+  const scope = new Set(['00000000-0000-0000-0000-0000000000aa'])
+  state.authz = {
+    user: { orgId: ORG_ID, id: '00000000-0000-0000-0000-000000000011' },
+    permissions: new Set(['projects.manage']),
+    allowedSubsidiaryIds: scope,
+  }
+  // The project sits inside the caller's lens, so the pre-read passes and
+  // the service receives the exact scope to recheck under its row lock.
+  state.projectSubsidiary = '00000000-0000-0000-0000-0000000000aa'
+
+  state.calendarArgs = null
+  const response = await POST(new Request('http://openbooks.test/api/project-schedule', {
+    method: 'POST',
+    body: JSON.stringify({ projectId: PROJECT_A, action: 'deleteCalendar', id: FOREIGN_ID }),
+  }))
+  assert.ok(response)
+  assert.equal(response.status, 404)
+  assert.deepEqual(state.calendarArgs, [ORG_ID, PROJECT_A, FOREIGN_ID, scope])
 })
