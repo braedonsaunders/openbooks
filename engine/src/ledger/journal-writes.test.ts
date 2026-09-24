@@ -50,6 +50,32 @@ test("leading-dot amounts post like the kernel reads them", () => {
   assert.equal(v.lines[1]!.amount, "-0.5000");
 });
 
+test("ledger-scale amounts share one bound on every path", () => {
+  // numeric(19,4) holds fifteen whole digits: a 14-digit line posts, a
+  // 16-digit line is refused with the same message the UI draft uses.
+  const v = validateJournalInput({
+    documentDate: "2026-07-16",
+    lines: [
+      { accountId: A, amount: "20000000000000" },
+      { accountId: B, amount: "-20000000000000" },
+    ],
+  });
+  assert.equal(v.lines[0]!.amount, "20000000000000.0000");
+  assert.throws(
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: A, amount: "1000000000000000" },
+          { accountId: B, amount: "-1000000000000000" },
+        ],
+      }),
+    (error: unknown) =>
+      error instanceof JournalWriteError &&
+      /at most 15 whole digits fit the ledger/.test(error.message),
+  );
+});
+
 test("account codes are accepted in place of ids", () => {
   const v = validateJournalInput({
     documentDate: "2026-07-16",

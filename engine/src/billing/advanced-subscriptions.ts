@@ -254,6 +254,8 @@ function exactMoney(value: unknown, label: string): string {
   // Component quantity/unit_price are numeric(19,4): a wider figure would die
   // in Postgres as a raw storage failure (HTTP 500 — the route rethrows
   // unknown errors), so refuse it here with a named 422 and nothing written.
+  // (Kept on a local bound: the only callers are DB-backed plan writes with
+  // no pure entry point to regress the shared bound through — see A-S30.)
   if (wholeDigits(exact) > 15) {
     throw new AdvancedSubscriptionError(`${label} is out of range — at most 15 whole digits fit the ledger`);
   }

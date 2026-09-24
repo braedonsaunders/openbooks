@@ -5,7 +5,7 @@ import type { ContributedLine } from "../allocations/types.ts";
 import { db, schema } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
-import { abs, cmp, isZero, normalizeMoney, sum } from "../money/money.ts";
+import { fitsLedgerRange, isZero, normalizeMoney, sum } from "../money/money.ts";
 // Named export, NOT the default: under ESM/tsx the default import resolves to
 // the module namespace (no .parse), so computeNextRunAt silently returned
 // null and scheduled scripts never ran. CronExpressionParser.parse works
@@ -1746,8 +1746,6 @@ export interface CustomGlLineRunEvidence {
 
 const CUSTOM_GL_LINE_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_CUSTOM_GL_LINE_AMOUNT = "10000000000000.0000";
-
 interface ParsedCustomGlLine {
   accountId?: string;
   accountCode?: string;
@@ -1833,9 +1831,11 @@ export async function resolveCustomGlLines(
         `custom_gl_lines script "${scriptName}" line ${lineNo}: amount must be nonzero`,
       );
     }
-    if (cmp(abs(amount), MAX_CUSTOM_GL_LINE_AMOUNT) > 0) {
+    // One shared ledger bound (money.ts MAX_LEDGER_WHOLE_DIGITS): script
+    // journals and UI drafts refuse the same figures with the same message.
+    if (!fitsLedgerRange(amount)) {
       throw new CustomGlLinesError(
-        `custom_gl_lines script "${scriptName}" line ${lineNo}: amount out of range`,
+        `custom_gl_lines script "${scriptName}" line ${lineNo}: amount is out of range — at most 15 whole digits fit the ledger`,
       );
     }
     const accountId = customGlLineId(scriptName, index, "accountId", entry.accountId);

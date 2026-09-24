@@ -207,13 +207,22 @@ test('well-formed quantities survive editor validation untouched', () => {
 test('a line amount wider than its ledger column fails closed with its line number', () => {
   // document_lines.amount is numeric(19,4): fifteen whole digits. A pasted
   // 16-digit amount cleared the format check and died in Postgres with a
-  // storage error (a 500). The column maximum itself must still save.
+  // storage error (a 500). The column maximum itself must still save, and a
+  // 14-digit line saves here exactly as it posts through the script paths.
   assert.throws(
     () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: '9999999999999999' }]),
-    (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /Line 1/.test(e.message),
+    (e: unknown) =>
+      e instanceof DocumentEditError &&
+      e.status === 422 &&
+      /Line 1/.test(e.message) &&
+      /at most 15 whole digits fit the ledger/.test(e.message),
   )
-  const ok = validateEditableDocumentLines([{ accountId: 'acc-1', amount: '999999999999999.9999' }])
+  const ok = validateEditableDocumentLines([
+    { accountId: 'acc-1', amount: '999999999999999.9999' },
+    { accountId: 'acc-2', amount: '20000000000000' },
+  ])
   assert.equal(ok[0]!.amount, '999999999999999.9999')
+  assert.equal(ok[1]!.amount, '20000000000000')
 })
 
 test('a malformed or impossible edit date fails closed before any write', { skip: !env.OPENBOOKS_DB_URL }, async () => {
