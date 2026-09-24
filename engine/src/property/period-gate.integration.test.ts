@@ -164,12 +164,12 @@ test("rent levelling refuses a source-owned imported lock", { skip: !DB }, async
   }
 });
 
-async function seedDepositLease(org: ScratchOrg, tag: string): Promise<string> {
+async function seedDepositLease(org: ScratchOrg, tag: string, subsidiaryId = org.subsidiaryId): Promise<string> {
   await enableProperty(org);
   const propertyId = randomUUID();
   await db.execute(sql`insert into managed_properties
     (id,org_id,subsidiary_id,location_id,code,name,property_type,status,currency,rent_income_account_id,deposit_liability_account_id,default_bank_account_id)
-    values(${propertyId},${org.orgId},${org.subsidiaryId},${org.locationId},
+    values(${propertyId},${org.orgId},${subsidiaryId},${org.locationId},
       ${`DEP-F2-${tag}`},${`Gate deposits ${tag}`},'commercial','active','CAD',${org.accounts.revenue},${org.accounts.deferred},${org.accounts.bank})`);
   const leaseId = randomUUID();
   await db.execute(sql`insert into property_leases(id,org_id,property_id,tenant_id,lease_number,status,starts_on)
@@ -221,6 +221,45 @@ test("deposit recording refuses a source-owned imported lock", { skip: !DB }, as
       }),
       /An open GL period is required/,
       "a deposit into an imported lock must be refused: it is new activity, not replay",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("deposit period refusal follows the property's subsidiary instead of the lease", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const propertySubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${propertySubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Deposit period branch', 'CAD', 'CA')`);
+    const leaseId = await seedDepositLease(org, "property-branch", propertySubsidiaryId);
+    await setPeriodLockState({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      subsidiaryId: propertySubsidiaryId,
+      module: "gl",
+      state: "closed",
+      actorId,
+      reason: "The property subsidiary period is closed",
+    });
+
+    await assert.rejects(
+      recordSecurityDeposit({
+        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId,
+        occurredOn: org.date, kind: "received", amount: "100",
+      }),
+      /An open GL period is required/,
+    );
+    assert.deepEqual(
+      (await db.execute<{ journals: number; deposits: number }>(sql`
+        select (select count(*)::int from journal_entries where org_id = ${org.orgId}) as journals,
+               (select count(*)::int from security_deposit_transactions where org_id = ${org.orgId}) as deposits`)).rows[0],
+      { journals: 0, deposits: 0 },
+      "the property-scoped period refusal leaves no posting or subledger row",
     );
   } finally {
     await dropScratchOrg(org.orgId);

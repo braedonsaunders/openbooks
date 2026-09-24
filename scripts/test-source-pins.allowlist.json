@@ -19,7 +19,6 @@
     "engine/src/projects/merge.integration.test.ts": 1,
     "engine/src/projects/overhead-adjustments.test.ts": 1,
     "engine/src/projects/types.test.ts": 3,
-    "engine/src/property/management.test.ts": 1,
     "engine/src/provisioning/bootstrap-safety.test.ts": 4,
     "engine/src/receivables/dunning.test.ts": 2,
     "engine/src/records/numbering.integration.test.ts": 1,

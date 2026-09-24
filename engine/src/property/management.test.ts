@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import {
   PropertyManagementError,
   emptyRefToNull,
@@ -23,8 +20,6 @@ import {
   overlapDayCount,
   prorateLeaseCharge,
 } from "./management.ts";
-
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 test("blank optional refs coerce to null instead of failing uuid validation", () => {
   assert.equal(emptyRefToNull(""), null);
@@ -102,26 +97,6 @@ test("deposit corrections reverse the subledger sign without deleting evidence",
   assert.equal(depositReversalKind("adjustment_decrease"), "adjustment_increase");
   assert.equal(depositReversalKind("applied"), "adjustment_increase");
   assert.throws(() => depositReversalKind("delete"), /Unsupported deposit transaction type/);
-});
-
-test("deposit period-close lookup follows the property's subsidiary", () => {
-  const source = readFileSync(
-    join(repoRoot, "engine/src/property/management.ts"),
-    "utf8",
-  );
-  // The shared period gate takes its subsidiary from the deposit context
-  // row, which selects the PROPERTY's subsidiary (p.subsidiary_id) — never
-  // the lease row. A lease stamped onto the wrong entity must neither
-  // inherit nor escape that entity's period locks.
-  for (const fn of ["export async function recordSecurityDeposit", "export async function reverseSecurityDepositTransaction"]) {
-    const start = source.indexOf(fn);
-    assert.ok(start >= 0, `${fn} is defined`);
-    const next = source.indexOf("export async function", start + fn.length);
-    const body = source.slice(start, next < 0 ? undefined : next);
-    assert.match(body, /subsidiaryIds: \[row\.subsidiary_id\]/);
-  }
-  assert.match(source, /select l\.tenant_id,p\.subsidiary_id,/);
-  assert.doesNotMatch(source, /l\.subsidiary_id,'gl'/);
 });
 
 test("deposit balance cannot mistake an unsupported transaction for a decrease", () => {
