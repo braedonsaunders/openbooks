@@ -492,15 +492,17 @@
     },
     "segmentsLabel": "Mostrar",
     "templates": {
+
       "title": "Plantillas de listas", "description": "Listas de incorporación, salida y transferencia reutilizables. Al abrir una lista se fija su plantilla, de modo que los cambios posteriores nunca reescriben el historial.",
       "newTemplate": "Nueva plantilla", "editTemplate": "Editar plantilla", "createTemplate": "Crear una plantilla", "createDescription": "Defina a quién cubre esta lista y agregue sus pasos en orden.", "editDescription": "Edite la definición reutilizable. Las listas ya abiertas conservan su instantánea original.",
       "template": "Plantilla", "name": "Nombre", "kind": "Tipo", "scope": "Aplica a", "status": "Estado", "active": "Activo", "retired": "Retirado", "subsidiary": "Filial empleadora", "department": "Departamento", "allSubsidiaries": "Todas las filiales", "allDepartments": "Todos los departamentos", "allEmployees": "Todos los empleados", "limitedScope": "Alcance limitado",
       "steps": "Pasos", "stepsDescription": "Trabajo ordenado que se copia en cada lista nueva.", "addStep": "Agregar paso", "newStep": "Nuevo paso", "editStep": "Editar paso", "deleteStep": "Eliminar paso", "stepTitle": "Título del paso", "stepDescription": "Descripción", "owner": "Responsable", "namedOwner": "Persona designada", "dueOffset": "Vence en (días)", "evidence": "Evidencia", "required": "Obligatorio",
-      "saveBeforeSteps": "Guarde primero los detalles de la plantilla y agregue al menos un paso antes de usarla para una lista.", "noSteps": "Esta plantilla no está lista. Agregue al menos un paso antes de poder seleccionarla para una lista.", "noneEligible": "Ninguna plantilla lista cubre a este empleado, este tipo y esta fecha.", "loadFailed": "No se pudieron cargar las plantillas.", "saveFailed": "No se pudo guardar la plantilla.", "stepSaveFailed": "No se pudo guardar el paso de la plantilla.", "stepDeleteFailed": "No se pudo eliminar el paso de la plantilla.",
+      "saveBeforeSteps": "Guarde primero los detalles de la plantilla y agregue al menos un paso antes de usarla para una lista.", "noSteps": "Esta plantilla no está lista. Agregue al menos un paso antes de poder seleccionarla para una lista.", "noneEligible": "Ninguna plantilla lista cubre a este empleado, este tipo y esta fecha.", "loadFailed": "No se pudieron cargar las plantillas.", "saveFailed": "No se pudo guardar la plantilla.", "stepSaveFailed": "No se pudo guardar el paso de la plantilla.", "stepDeleteFailed": "No se pudo eliminar el paso de la plantilla.", "stepOffsetInvalid": "El desplazamiento de vencimiento debe ser un número entero de días entre -3650 y 3650.",
       "created": "Plantilla creada. Agregue sus pasos antes de abrir una lista.", "updated": "Plantilla actualizada.", "stepCreated": "Paso agregado.", "stepUpdated": "Paso actualizado.", "stepDeleted": "Paso eliminado.", "confirmDeleteStep": "¿Eliminar el paso «{title}»? Las listas abiertas conservan su instantánea.", "stepSummary": "{owner} · vence {days} días después de la fecha de vigencia", "search": "Buscar plantillas", "empty": "Ninguna plantilla coincide con esta búsqueda.", "backToChecklists": "Volver a las listas",
       "kinds": { "onboarding": "Incorporación", "offboarding": "Salida", "transfer": "Transferencia" },
       "owners": { "manager": "Mánager", "hr": "RR. HH.", "employee": "Empleado", "named_party": "Persona designada" },
       "evidenceKinds": { "none": "Ninguna", "acknowledgement": "Acuse de recibo", "attachment": "Adjunto" }
+
     }
   },
   "leave": {

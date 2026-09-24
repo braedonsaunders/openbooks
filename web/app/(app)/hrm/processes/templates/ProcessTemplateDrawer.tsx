@@ -7,6 +7,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { confirmDialog } from '../../../../../lib/confirm'
 
 type Option = { value: string; label: string }
 type Kind = 'onboarding' | 'offboarding' | 'transfer'
@@ -108,6 +109,16 @@ export function ProcessTemplateDrawer({
 
   async function saveStep() {
     if (!template || !stepDraft?.title.trim()) return
+    // The offset posts as days, not a date: a non-integer or out-of-range
+    // value refuses by name instead of posting NaN.
+    if (
+      !Number.isInteger(stepDraft.dueOffsetDays) ||
+      stepDraft.dueOffsetDays < -3650 ||
+      stepDraft.dueOffsetDays > 3650
+    ) {
+      toast.error(t('stepOffsetInvalid'))
+      return
+    }
     setBusy(true)
     const editing = Boolean(stepDraft.id)
     const response = await fetch(
@@ -136,7 +147,15 @@ export function ProcessTemplateDrawer({
   }
 
   async function removeStep(step: Step) {
-    if (!template || !confirm(t('confirmDeleteStep', { title: step.title }))) return
+    if (!template) return
+    if (
+      !(await confirmDialog({
+        message: t('confirmDeleteStep', { title: step.title }),
+        confirmLabel: tc('actions.delete'),
+        tone: 'danger',
+      }))
+    )
+      return
     setBusy(true)
     const response = await fetch(`/api/hrm/process-templates/${template.id}/steps/${step.id}`, { method: 'DELETE' })
     setBusy(false)
@@ -300,7 +319,19 @@ export function ProcessTemplateDrawer({
                 ) : null}
                 <div>
                   <Label htmlFor="step-offset">{t('dueOffset')}</Label>
-                  <Input id="step-offset" type="number" value={stepDraft.dueOffsetDays} onChange={(event) => setStepDraft({ ...stepDraft, dueOffsetDays: Number(event.target.value) })} />
+                  <Input
+                    id="step-offset"
+                    type="number"
+                    value={stepDraft.dueOffsetDays}
+                    onChange={(event) => {
+                      const parsed = Number(event.target.value)
+                      // A non-numeric keystroke never becomes NaN in the
+                      // draft: the last good value stays, and saveStep
+                      // refuses anything outside the whole-day range by name.
+                      if (!Number.isFinite(parsed)) return
+                      setStepDraft({ ...stepDraft, dueOffsetDays: parsed })
+                    }}
+                  />
                 </div>
                 <div>
                   <Label htmlFor="step-evidence">{t('evidence')}</Label>
