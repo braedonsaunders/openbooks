@@ -18,12 +18,12 @@
 
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../../platform/db.ts";
+import { db, withOrg, withOrgTransaction, withTransactionSavepoint } from "../../platform/db.ts";
 import { runRecordFlows } from "../../flows/index.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { subsidiaryScopeAllows } from "../../organization/subsidiary-scope.ts";
 import { keyedFingerprint } from "../../platform/secrets.ts";
-import { FieldTimeError, refuse } from "./errors.ts";
+import { FieldTimeError, isUniqueViolation, refuse } from "./errors.ts";
 import {
   FIELD_TIME_CREW_ENTRY_FEATURE,
   FIELD_TIME_EQUIPMENT_FEATURE,
@@ -290,20 +290,44 @@ export async function createBatch(input: {
       );
     }
   }
-  return withOrgTransaction(input.orgId, async () => {
-    await assertProjectInScope(input.orgId, input.projectId, input.allowedSubsidiaryIds);
-    await assertForemanOnProject(input.orgId, input.foremanPartyId, input.projectId, input.canManageAll);
-    const id = (await db.execute<{ id: string }>(sql`
-      insert into crew_time_batches
-        (org_id, foreman_party_id, project_id, worked_on, status, notes, created_by, updated_by)
-      values
-        (${input.orgId}, ${input.foremanPartyId}, ${input.projectId}, ${input.workedOn}::date,
-         'draft', ${input.notes?.trim() || null}, ${input.actorUserId}, ${input.actorUserId})
-      returning id::text as id`)).rows[0]?.id;
-    if (!id) throw new FieldTimeError("batch_not_stored", "The crew batch was not stored — no row was written; retry");
-    await appendEvent(input.orgId, id, "created", input.actorUserId, null);
-    return id;
-  });
+  try {
+    return await withOrgTransaction(input.orgId, async () => {
+      await assertProjectInScope(input.orgId, input.projectId, input.allowedSubsidiaryIds);
+      await assertForemanOnProject(input.orgId, input.foremanPartyId, input.projectId, input.canManageAll);
+      // The insert runs behind a savepoint: a double-submit retry collides
+      // on the foreman/day business key, and rolling back only to the
+      // savepoint keeps the caller's transaction usable for the
+      // existing-batch lookup below (a bare failure would abort it).
+      const id = await withTransactionSavepoint(db, async () =>
+        (await db.execute<{ id: string }>(sql`
+          insert into crew_time_batches
+            (org_id, foreman_party_id, project_id, worked_on, status, notes, created_by, updated_by)
+          values
+            (${input.orgId}, ${input.foremanPartyId}, ${input.projectId}, ${input.workedOn}::date,
+             'draft', ${input.notes?.trim() || null}, ${input.actorUserId}, ${input.actorUserId})
+          returning id::text as id`)).rows[0]?.id,
+      );
+      if (!id) throw new FieldTimeError("batch_not_stored", "The crew batch was not stored — no row was written; retry");
+      await appendEvent(input.orgId, id, "created", input.actorUserId, null);
+      return id;
+    });
+  } catch (error) {
+    // A foreman's double-submit (retry or timeout) collides on the
+    // foreman/day business key: name the existing batch instead of
+    // leaking a PG unique violation.
+    if (!isUniqueViolation(error)) throw error;
+    const existing = (await withOrg(input.orgId, () => db.execute<{ id: string }>(sql`
+      select id::text as id from crew_time_batches
+       where org_id = ${input.orgId} and foreman_party_id = ${input.foremanPartyId}
+         and project_id = ${input.projectId} and worked_on = ${input.workedOn}::date
+       limit 1`))).rows[0];
+    refuse(
+      "batch_already_exists",
+      existing?.id
+        ? `A batch already exists for this foreman, project and day (batch ${existing.id}) — open it instead of creating a duplicate`
+        : "A batch already exists for this foreman, project and day — open it instead of creating a duplicate",
+    );
+  }
 }
 
 /** Replace a draft/rejected batch's lines. Anything later refuses. */

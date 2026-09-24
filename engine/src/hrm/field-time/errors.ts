@@ -30,3 +30,20 @@ export function isForeignKeyViolation(error: unknown): boolean {
   }
   return false;
 }
+
+/**
+ * True when the error is PostgreSQL unique violation 23505, walking the
+ * driver cause chain like isForeignKeyViolation: a double-submit retry
+ * surfaces as a wrapped driver error, never a bare pg error.
+ */
+export function isUniqueViolation(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  for (let cur: unknown = error; cur !== null && typeof cur === "object";) {
+    if (seen.has(cur)) return false;
+    seen.add(cur);
+    const record = cur as { code?: unknown; cause?: unknown };
+    if (record.code === "23505") return true;
+    cur = record.cause;
+  }
+  return false;
+}
