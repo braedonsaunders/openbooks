@@ -143,9 +143,15 @@ test('expense assistant reads: list, detail, overview, approvals', { skip: !proc
       assert.equal(overview.ok, true, JSON.stringify(overview));
       assert.ok(overview.ok);
       const pipeline = (overview.data as { pipeline: { draftCount: number; pendingCount: number } }).pipeline;
-      // The hub readout is org-wide like the screen: both drafts count, hidden included.
-      assert.equal(pipeline.draftCount, 2);
+      // Dashboard summaries and lists use the same subsidiary boundary as the drawer.
+      assert.equal(pipeline.draftCount, 1);
       assert.equal(pipeline.pendingCount, 1);
+      const dashboard = overview.data as {
+        topSpenders: { employeeName: string }[];
+        queue: { documentNumber: string }[];
+      };
+      assert.ok(dashboard.topSpenders.every((spender) => spender.employeeName !== 'Hidden Spender'));
+      assert.ok(dashboard.queue.every((item) => item.documentNumber !== 'EXP-1004'));
 
       const approvals = await executeAssistantTool(restricted, 'expense_approvals', {});
       assert.equal(approvals.ok, true, JSON.stringify(approvals));

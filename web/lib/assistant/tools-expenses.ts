@@ -210,7 +210,7 @@ const expenseOverview: AssistantToolDef = {
     if (await featureOff(authz.user.orgId)) return { ok: false, error: FEATURE_ERROR };
     // expensesDashboard is the expenses home loader: same queries, same
     // org-wide population, same expenses.read gate as the screen.
-    const dashboard = await expensesDashboard(authz.user.orgId);
+    const dashboard = await expensesDashboard(authz.user.orgId, authz.allowedSubsidiaryIds);
     return { ok: true, data: { ...dashboard, href: "/expenses" } };
   },
 };

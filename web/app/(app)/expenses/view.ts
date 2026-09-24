@@ -49,7 +49,7 @@ export async function loadExpenses(): Promise<ExpensesData> {
     description: t('dashboard.description'),
     canCreate: can(authz, 'expenses.create'),
     tabs: await groupTabs('purchasing', '/expenses', { orgId: authz.user.orgId }),
-    data: await expensesDashboard(authz.user.orgId),
+    data: await expensesDashboard(authz.user.orgId, authz.allowedSubsidiaryIds),
   }
 }
 

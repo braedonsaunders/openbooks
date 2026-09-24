@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { fromUnits, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 /**
@@ -144,7 +145,10 @@ export function aggregateExpenseSummary({
   }
 }
 
-export async function expensesDashboard(orgId: string): Promise<ExpensesDashboardData> {
+export async function expensesDashboard(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<ExpensesDashboardData> {
   const to = await businessToday(orgId)
   const monthStart = startOfMonth(to)
   const from = addCalendarMonthsStart(to, -11)
@@ -164,6 +168,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
         coalesce(sum(total) filter (where status = 'posted' and posting_date >= ${monthStart}), 0) as posted_month_total
       from documents
       where org_id = ${orgId} and kind = 'expense_report' and voided_at is null
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
     `),
     // Top spenders — expense reports by employee, current vs prior window
     // (verbatim Spend Velocity query 7).
@@ -175,6 +180,8 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
         and d.posting_date >= ${priorFrom} and d.posting_date <= ${to}
       group by 1, 2
       having sum(d.total) > 0
@@ -197,6 +204,8 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
+          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
           and d.posting_date >= ${priorFrom} and d.posting_date <= ${to}
         group by d.party_id, p.display_name
         having sum(d.total) > 0
@@ -212,6 +221,8 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and d.voided_at is null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
         and d.kind = 'expense_report'
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
@@ -235,6 +246,8 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
         join documents d on d.id = e.source_document_id and d.org_id = e.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
         where l.org_id = ${orgId} and d.voided_at is null
+          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+          ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
           and d.kind = 'expense_report'
           and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
           and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
@@ -251,6 +264,8 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and d.voided_at is null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
         and d.kind in ('expense_report', 'vendor_bill')
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
         and e.posting_date >= ${from} and e.posting_date <= ${to}
@@ -264,6 +279,8 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
         and d.status in ('pending_approval', 'draft', 'approved')
       order by case d.status when 'pending_approval' then 0 when 'approved' then 1 else 2 end,
         d.document_date asc
