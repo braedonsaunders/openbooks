@@ -8,6 +8,7 @@ import {
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
 import { assertRatingInScale, parseRatingScale, type RatingScale } from "./performance-math.ts";
+import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
 
 /**
@@ -224,8 +225,7 @@ async function loadMissing(
  */
 function employmentScopeFilter(allowed: Set<string> | null, alias: string): ReturnType<typeof sql> {
   if (allowed === null) return sql``;
-  const ids = [...allowed].map((id) => sql`${id}::uuid`);
-  return sql`and ${sql.raw(alias)}.employer_subsidiary_id in (${sql.join(ids, sql`, `)})`;
+  return sql`and ${employerSubsidiaryScope(allowed, `${alias}.employer_subsidiary_id`)}`;
 }
 
 /** A cycle's declared subsidiary, read leniently — extra envelope keys never fail the scope read. */
@@ -670,10 +670,7 @@ export async function closeCalibrationSession(args: {
           join worker_employments we on we.org_id = e.org_id and we.id = r.employment_id
          where e.org_id = ${orgId} and e.session_id = ${id}
            and e.calibrated_rating is not null
-           and we.employer_subsidiary_id not in (${sql.join(
-             [...allowed].map((sid) => sql`${sid}::uuid`),
-             sql`, `,
-           )})
+           and not ${employerSubsidiaryScope(allowed, "we.employer_subsidiary_id")}
       `)).rows[0];
       if (outside && Number(outside.n) > 0) {
         throw new HrmPerformanceError(

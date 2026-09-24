@@ -373,6 +373,25 @@ test("my reviews splits subject and reviewer inboxes", { skip: !DB }, async () =
   }
 });
 
+test("an HR reader with an empty subsidiary scope sees no cycle reviews", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    await db.execute(sql`
+      update app_roles
+         set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb
+       where org_id = ${h.org.orgId} and key = 'hrm_read_hr'
+    `);
+    const detail = await getCycleDetail({ orgId: h.org.orgId, actorId: h.hrId, cycleId: h.cycleId });
+    assert.deepEqual(detail.reviews, []);
+    assert.equal(detail.totalSelf, 0);
+    assert.equal(detail.submittedSelf, 0);
+    assert.equal(detail.totalManager, 0);
+    assert.equal(detail.submittedManager, 0);
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
 test("turnover divides terminations by average headcount per period", { skip: !DB }, async () => {
   const h = await setupHarness();
   try {

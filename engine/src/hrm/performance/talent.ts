@@ -5,6 +5,7 @@ import { requireAggregatePerformanceManage } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
 import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
+import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 
 /**
  * Governed HRM talent reviews and succession plans (0228, HR-17).
@@ -51,10 +52,7 @@ function requireId(field: string, value: unknown): string {
  */
 function employmentScopeFilter(allowed: Set<string> | null, alias: string): ReturnType<typeof sql> {
   if (allowed === null) return sql``;
-  const ids = [...allowed].map((id) => sql`${id}::uuid`);
-  // One parameter per id: bare JS arrays must never be interpolated into
-  // ANY() (they bind as row constructors, not PostgreSQL arrays).
-  return sql`and ${sql.raw(alias)}.employer_subsidiary_id in (${sql.join(ids, sql`, `)})`;
+  return sql`and ${employerSubsidiaryScope(allowed, `${alias}.employer_subsidiary_id`)}`;
 }
 
 /** The latest live version's employer: positions carry subsidiary on their versions, not the header. */
@@ -353,10 +351,7 @@ export async function listTalentDirectory(args: {
       : sql`and exists (select 1 from position_versions v
                          where v.org_id = pos.org_id and v.position_id = pos.id
                            and v.recorded_until is null
-                           and v.employer_subsidiary_id in (${sql.join(
-                             [...allowed].map((id) => sql`${id}::uuid`),
-                             sql`, `,
-                           )}))`;
+                           and ${employerSubsidiaryScope(allowed, "v.employer_subsidiary_id")})`;
     const positions = (await db.execute<{ id: string; code: string; title: string }>(sql`
       select pos.id, pos.position_code as code,
              coalesce((select v.title from position_versions v
@@ -648,10 +643,7 @@ export async function listSuccessionPlans(args: { orgId: string; actorId: string
                          where v.org_id = hrm_succession_plans.org_id
                            and v.position_id = hrm_succession_plans.position_id
                            and v.recorded_until is null
-                           and v.employer_subsidiary_id in (${sql.join(
-                             [...allowed].map((id) => sql`${id}::uuid`),
-                             sql`, `,
-                           )}))`;
+                           and ${employerSubsidiaryScope(allowed, "v.employer_subsidiary_id")})`;
     const rows = (await db.execute<{ id: string }>(sql`
       select id from hrm_succession_plans where org_id = ${orgId} ${planScope} order by created_at
     `)).rows;

@@ -13,6 +13,7 @@ import {
   requireAggregatePerformanceRead,
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
+import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
 
 /**
@@ -727,10 +728,7 @@ export async function listOneOnOneDirectory(args: {
       const scopeFilter =
         readScope === null
           ? sql``
-          : sql`and e.employer_subsidiary_id in (${sql.join(
-              [...readScope].map((id) => sql`${id}::uuid`),
-              sql`, `,
-            )})`;
+          : sql`and ${employerSubsidiaryScope(readScope, "e.employer_subsidiary_id")}`;
       const rows = (await db.execute<{ id: string; name: string }>(sql`
         select e.id, coalesce(p.display_name, '—') as name
           from worker_employments e

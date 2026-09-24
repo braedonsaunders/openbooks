@@ -6,6 +6,7 @@ import { requireHrmPerformanceOnEmployment, requireHrmRetentionRead } from "../a
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn, mathRefusal } from "./errors.ts";
 import { parseCivilDay } from "./performance-math.ts";
+import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 
 /**
  * Governed HRM exit records (0196, HR-7): one per terminated employment.
@@ -546,15 +547,10 @@ export async function listExitRecords(args: {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireHrmRetentionRead(db, orgId, actorId);
     if (allowed !== null && allowed.size === 0) return [];
-    // One parameter per id: bare JS arrays must never be interpolated into
-    // ANY() (they bind as row constructors, not PostgreSQL arrays).
     const scopeFilter =
       allowed === null
         ? sql``
-        : sql`and e.employer_subsidiary_id in (${sql.join(
-            [...allowed].map((id) => sql`${id}::uuid`),
-            sql`, `,
-          )})`;
+        : sql`and ${employerSubsidiaryScope(allowed, "e.employer_subsidiary_id")}`;
     const rows = (await db.execute<StoredExit>(sql`
       select x.id,
              x.employment_id as "employmentId",
