@@ -10,6 +10,7 @@ import {
   withOrgTransaction,
 } from "../platform/db.ts";
 import { PostingError, type PostingDeps, type PostDocumentOptions } from "./posting-contracts.ts";
+import { assertCustomerInvoiceCredit } from "./posting-invoice-credit.ts";
 import { prepareDocumentPosting } from "./posting-prepare.ts";
 import { commitDocumentPosting } from "./posting-commit.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
@@ -97,6 +98,13 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
     entryId: string;
   }> => {
     const prepared = await prepareDocumentPosting(documentId, deps, options);
+    if (prepared.doc.kind === "customer_invoice" && !deps.migration) {
+      // The receivable appears here, not at order issue: direct invoices and
+      // partial billing can exceed the approved commitment, so the credit
+      // gate re-evaluates in the same unit, before the balance commits. The
+      // customer_roles row lock serializes concurrent posts per customer.
+      await assertCustomerInvoiceCredit(db, prepared.doc);
+    }
     const entryId = await commitDocumentPosting(prepared, options);
     return { prepared, entryId };
   };

@@ -602,7 +602,8 @@ test(
       const actorId = await createScratchUser(orgId, "Term Auditor", "admin");
       await db.execute(sql`
         insert into customer_roles (org_id, party_id, ar_account_id, credit_limit, currency, is_on_hold, created_by, updated_by)
-        values (${orgId}, ${fx.org.customerId}, ${fx.org.accounts.ar}, '0', 'CAD', false, ${actorId}, ${actorId})`);
+        -- No credit limit: lease billing is contractual execution, not a sales commitment, so the invoice-posting credit gate leaves it alone.
+        values (${orgId}, ${fx.org.customerId}, ${fx.org.accounts.ar}, null, 'CAD', false, ${actorId}, ${actorId})`);
 
       const requestId = `lease-create-${randomUUID()}`;
       const lease = await createPropertyLease({

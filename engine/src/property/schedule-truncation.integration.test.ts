@@ -28,7 +28,8 @@ async function seedTruncationOrg() {
      where id = ${org.orgId}`);
   await db.execute(sql`
     insert into customer_roles (org_id, party_id, ar_account_id, credit_limit, currency, is_on_hold, created_by, updated_by)
-    values (${org.orgId}, ${org.customerId}, ${org.accounts.ar}, '0', 'CAD', false, ${actorId}, ${actorId})`);
+    -- No credit limit: lease billing is contractual execution, not a sales commitment, so the invoice-posting credit gate leaves it alone.
+    values (${org.orgId}, ${org.customerId}, ${org.accounts.ar}, null, 'CAD', false, ${actorId}, ${actorId})`);
   const propertyId = randomUUID();
   await db.execute(sql`
     insert into managed_properties
