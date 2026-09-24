@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, env, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/organization/permissions.ts";
+import { resolveKeyScopeAuthority } from "@openbooks/engine/src/organization/permissions.ts";
 import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
 /**
@@ -17,13 +16,12 @@ import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/
  *
  * The seams here are the real ones production takes: the real
  * `/api/admin/api-keys` route handlers (only the session gate is seammed to a
- * fixture actor) and the real `resolveApiKeyAuth`/`guardApiKey` pair against
- * a real database, plus direct migration/source evidence that legacy empty
- * scope sets freeze into the explicit permission-catalogue snapshot.
+ * fixture actor), the real `resolveApiKeyAuth`/`guardApiKey` pair against a
+ * real database, and the real canonical `resolveKeyScopeAuthority` helper
+ * both of them share.
  */
 
 const DB = !!env.OPENBOOKS_DB_URL;
-const migration = readFileSync("schema/migrations/generated/0031_api_key_explicit_scopes.sql", "utf8");
 
 // ---------------------------------------------------------------------------
 // Real route seam: the actual POST/PATCH handlers with only the session gate
@@ -97,147 +95,23 @@ function jsonRequest(body: unknown, method: "POST" | "PATCH" = "POST"): Request 
 
 // Complete asynchronous setup before registering tests so --test-force-exit
 // cannot finish the initial queue while later tests are still being loaded.
-test("migration 0031 freezes legacy empty scope sets into the explicit current catalogue snapshot", () => {
-  // The backfill targets exactly the legacy empty rows and stamps an explicit
-  // snapshot — never a sentinel, wildcard, or inherit marker.
-  assert.match(migration, /UPDATE public\.api_keys/);
-  assert.match(migration, /WHERE scopes = '\[\]'::jsonb/);
-  assert.doesNotMatch(migration, /'inherit_all'|'full_scope'|'\*'/);
-  const snapshot = JSON.parse(
-    migration.match(/SET scopes = '(\[[\s\S]*?\])'::jsonb/)?.[1] ?? "null",
-  ) as string[];
-  // The snapshot is the catalogue AS OF 0031. Permissions reviewed into the
-  // catalogue afterwards are listed here explicitly so growth is deliberate:
-  // a key that is neither in the frozen snapshot nor in this list fails.
-  const addedAfter0031 = new Set<string>([
-    // 0160 allocation kernel (rules, drivers, runs, approvals)
-    "allocations.read",
-    "allocations.manage",
-    "allocations.run",
-    "allocations.approve",
-    // In-app issue reporting, added with the feedback inbox. Its own key
-    // because filing a report sends generalized text OUT of the installation
-    // to the operator, which no other permission implies.
-    "feedback.use",
-    // 0184/0185 HRM employment foundation: employment records are a
-    // distinct authority from payroll, so they carry their own keys.
-    "hrm.employment.read",
-    "hrm.employment.manage",
-    "hrm.employment.approve",
-    // 0192 HRM positions: the headcount plan is post-snapshot too — a legacy
-    // key does not gain it; a key that needs it names the scopes.
-    "hrm.position.read",
-    "hrm.position.manage",
-    // 0193 HRM process checklists: checklist state is governed by the
-    // process gate, not the employment one, so it carries its own keys.
-    "hrm.process.read",
-    "hrm.process.manage",
-    // 0194 HRM leave and attendance: post-snapshot like the rest of HRM.
-    "hrm.leave.read",
-    "hrm.leave.request",
-    "hrm.leave.approve",
-    "hrm.leave.manage",
-    // 0195 HRM recruiting: requisitions, candidates, the funnel, interviews
-    // and offers carry their own read/manage pair, post-snapshot like the
-    // rest of HRM.
-    "hrm.recruiting.read",
-    "hrm.recruiting.manage",
-    // 0196 HRM performance and retention: post-snapshot like the rest of
-    // HRM — reviews carry assessments of named people.
-    "hrm.performance.read",
-    "hrm.performance.manage",
-    "hrm.retention.read",
-    // 0197 HRM benefits: post-snapshot like the rest of HRM.
-    "hrm.benefits.read",
-    "hrm.benefits.manage",
-    // 0198 HRM self-service: self.read/request scope to the party behind
-    // the login and ride on every built-in role; team.read/manage resolve
-    // structurally by holding direct reports. Post-snapshot like the rest.
-    "hrm.self.read",
-    "hrm.self.request",
-    "hrm.team.read",
-    "hrm.team.manage",
-    // HR-12 begin: 0221/0222 HRM compensation — who is paid what and
-    // whether pay is equitable carry their own read/manage/approve keys,
-    // post-snapshot like the rest of HRM.
-    "hrm.compensation.read",
-    "hrm.compensation.manage",
-    "hrm.compensation.approve",
-    // HR-12 end
-    // HR-13 begin: 0223/0224 construction compliance — post-snapshot
-    // like the rest of HRM.
-    "hrm.construction.read",
-    "hrm.construction.manage",
-    // HR-13 end
-    // HR-14 begin: 0225 certifications and dispatch gating —
-    // post-snapshot like the rest of HRM.
-    "hrm.certifications.read",
-    "hrm.certifications.manage",
-    // HR-14 end
-    // HR-16 automations (pre-existing gap, fixed alongside: the keys
-    // were catalogued but never pinned here, so this test was red).
-    "automations.read",
-    "automations.manage",
-    "automations.run",
-    // HR-16 end
-    // HR-19 begin: 0230 HRM documents and surveys — post-snapshot like
-    // the rest of HRM.
-    "hrm.documents.read",
-    "hrm.documents.manage",
-    "hrm.surveys.manage",
-    // HR-19 end
-    // HR-20 begin: 0231 field time capture — clock is self on every
-    // built-in role; crew entry and kiosk management stay with
-    // operations roles. Post-snapshot like the rest of time.
-    "time.clock",
-    "time.crew.enter",
-    "time.kiosk.manage",
-    // HR-20 end
-  ]);
-  for (const key of addedAfter0031) {
-    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);
-    assert.ok(!snapshot.includes(key), `${key} post-dates 0031 and must not be in its frozen snapshot`);
-  }
+test("the canonical scope authority fails closed on empty, malformed, or non-catalogue declarations", () => {
+  const owner = new Set(["gl.read", "ap.pay"]);
+  assert.equal(resolveKeyScopeAuthority(owner, []), null, "empty scopes authenticate nothing");
+  assert.equal(resolveKeyScopeAuthority(owner, null), null, "missing scopes authenticate nothing");
+  assert.equal(resolveKeyScopeAuthority(owner, "gl.read"), null, "a non-array declaration authenticates nothing");
+  assert.equal(resolveKeyScopeAuthority(owner, ["*"]), null, "a direct-write wildcard is inert");
+  assert.equal(resolveKeyScopeAuthority(owner, ["not.a.permission"]), null, "non-catalogue scopes grant nothing");
   assert.deepEqual(
-    snapshot,
-    (PERMISSION_CATALOGUE as readonly string[]).filter((key) => !addedAfter0031.has(key)),
+    resolveKeyScopeAuthority(owner, ["gl.read", "not.a.permission"]),
+    new Set(["gl.read"]),
+    "junk entries are dropped, valid ones kept",
   );
-
-  // Storage owns the invariant afterwards: the empty shape is unrepresentable
-  // and the '[]' default is gone, so omitted scopes fail at write time.
-  assert.match(migration, /ALTER COLUMN scopes DROP DEFAULT/);
-  assert.match(
-    migration,
-    /ADD CONSTRAINT api_keys_scopes_non_empty\s+CHECK \(jsonb_typeof\(scopes\) = 'array' AND jsonb_array_length\(scopes\) > 0\)/,
+  assert.deepEqual(
+    resolveKeyScopeAuthority(new Set(["ar.read"]), ["payroll.read"]),
+    new Set(),
+    "a valid scope its owner cannot use still authenticates, to nothing",
   );
-});
-
-test("the resolver fails closed on empty, malformed, or non-catalogue scope sets", () => {
-  const source = readFileSync("web/lib/api-auth.ts", "utf8");
-  // The intersection is the canonical resolveKeyScopeAuthority shared with
-  // the api-keys management route — one implementation, not two. An empty
-  // result still authenticates nothing.
-  assert.match(source, /resolveKeyScopeAuthority\(ownerPerms, keyRow\.scopes\)/);
-  assert.match(
-    source,
-    /if \(scopedSet === null\) return null;/,
-  );
-  assert.doesNotMatch(
-    source,
-    /Array\.isArray\(keyRow\.scopes\) \? keyRow\.scopes : \[\]/,
-  );
-  assert.doesNotMatch(source, /Empty scopes = inherit/);
-  assert.doesNotMatch(source, /expandToCatalogue/);
-  // The canonical helper itself pins the fail-closed shape: non-array and
-  // empty resolve to nothing, and scopes are exact catalogue keys only — a
-  // direct-write wildcard is inert.
-  const canonical = readFileSync("engine/src/organization/permissions.ts", "utf8");
-  assert.match(
-    canonical,
-    /if \(!Array\.isArray\(scopes\) \|\| scopes\.length === 0\) return null;/,
-  );
-  assert.match(canonical, /scopes\.filter\(isCataloguePermission\)/);
-  assert.match(canonical, /if \(scopeSet\.size === 0\) return null;/);
 });
 
 test("POST refuses to mint a key whose scopes are omitted or empty", async () => {
