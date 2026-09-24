@@ -166,6 +166,44 @@ test('read tool executes through executeAssistantTool with the stored schema', {
   assert.deepEqual((result as { ok: true; data: unknown }).data, { status: 200, body: { echo: 'hello' } })
 }))
 
+test('installation refuses a tool outside the admin grant before creating the app', { skip: !DB }, async () => withFixture(async (fx) => {
+  const key = `${APP_KEY}-denied`
+  await assert.rejects(
+    withBypass(() => installApp(fx.orgId, fx.adminId, {
+      manifest: {
+        key,
+        name: 'Denied Tool Fixture',
+        version: '1.0.0',
+        permissions: ['records.read'],
+        frontend: { entry: 'frontend/index.html' },
+        endpoints: [{ name: 'lookup', file: 'backend/lookup.js' }],
+        tools: [{
+          key: 'lookup',
+          title: 'Look up',
+          description: 'Echoes the query.',
+          inputSchema: {
+            type: 'object',
+            properties: { q: { type: 'string', description: 'Query', maxLength: 200 } },
+            required: ['q'],
+          },
+          handler: 'lookup',
+          requiredPermissions: ['records.read'],
+        }],
+      },
+      grantedPermissions: [],
+      files: [
+        { path: 'frontend/index.html', content: '<html></html>' },
+        { path: 'backend/lookup.js', content: 'function handler() { return { status: 200, body: {} } }' },
+      ],
+    })),
+    /invalid app tools:.*records\.read.*not granted/,
+  )
+  const rows = await withBypass(() => db.execute<{ count: string }>(sql`
+    select count(*)::text as count from apps where org_id = ${fx.orgId} and key = ${key}
+  `))
+  assert.equal(rows.rows[0]!.count, '0')
+}))
+
 test('registry exposes installed tools only to actors holding the grant intersection', { skip: !DB }, async () => withFixture(async (fx) => {
   const adminTools = await buildToolRegistryAsync(fx.adminAuthz)
   assert.ok(READ_TOOL in adminTools, 'admin sees the read tool')

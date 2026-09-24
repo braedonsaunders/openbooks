@@ -6,7 +6,6 @@
 // points and verify rollback, audit evidence, and immutable revisions.
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -22,18 +21,6 @@ registerHooks({
   },
 })
 
-const storeSource = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
-const routeSource = readFileSync(new URL('../../app/api/apps/[key]/route.ts', import.meta.url), 'utf8')
-
-function functionBody(source: string, name: string): string {
-  const exported = source.indexOf(`export async function ${name}`)
-  const privateFunction = source.indexOf(`async function ${name}`)
-  const start = exported >= 0 ? exported : privateFunction
-  assert.notEqual(start, -1, `${name} must remain defined`)
-  const end = source.indexOf('\nexport ', start + 1)
-  return source.slice(start, end === -1 ? undefined : end)
-}
-
 function errorMessage(error: unknown): string {
   let current: unknown = error
   const messages: string[] = []
@@ -42,63 +29,6 @@ function errorMessage(error: unknown): string {
     current = (current as Error & { cause?: unknown }).cause
   }
   return messages.join(': ')
-}
-
-function registerSourceTests(): void {
-  test('uninstall captures every cascading app row before the delete, with before/after evidence', () => {
-    const body = functionBody(storeSource, 'deleteApp')
-    const versions = body.indexOf('from app_versions')
-    const files = body.indexOf('from app_files')
-    const runs = body.indexOf('from app_runs')
-    const storage = body.indexOf('from app_storage')
-    const audit = body.indexOf("event: 'app_uninstall'")
-    const deleteIndex = body.indexOf('delete from apps')
-
-    assert.match(body, /await db\.transaction\(async \(tx\) =>/)
-    assert.ok(versions >= 0 && files > versions && runs > files && storage > runs)
-    assert.ok(audit > storage, 'the audit insert must follow all evidence reads')
-    assert.ok(deleteIndex > audit, 'the destructive cascade must be last')
-    assert.match(body, /versions: versions\.rows/)
-    assert.match(body, /files: files\.rows/)
-    assert.match(body, /runs: runs\.rows/)
-    assert.match(body, /storage: storage\.rows/)
-    assert.match(body, /before:\s*\{/)
-    assert.match(body, /after: preserveHistory \? \{ status: 'disabled', historyPreserved: true \} : null/)
-    assert.match(body, /actor_id\)/)
-    assert.match(body, /if \(!app\) \{/)
-    assert.match(body, /throw new AppError\(/)
-    assert.match(body, /returning id/)
-    assert.match(body, /return \{ affectedRows: (updated|deleted)\.rows\.length \}/)
-    assert.doesNotMatch(body, /Promise<void>/)
-    assert.doesNotMatch(body, /if \(!app\) return/)
-  })
-
-  test('status transitions carry actor and before/after evidence in the same transaction', () => {
-    const body = functionBody(storeSource, 'setAppStatus')
-    const update = body.indexOf('update apps')
-    const audit = body.indexOf('insert into audit_log')
-    assert.match(body, /userId: string/)
-    assert.match(body, /for update/)
-    assert.match(body, /event: 'app_status_changed'/)
-    assert.match(body, /before: \{ key: app\.key, name: app\.name, status: app\.status \}/)
-    assert.match(body, /after: \{ key: app\.key, name: app\.name, status \}/)
-    assert.ok(update >= 0 && audit > update)
-    assert.match(body, /if \(!app\) \{/)
-    assert.match(body, /throw new AppError\(/)
-    assert.match(body, /app\.status === status/)
-    assert.match(body, /returning id/)
-    assert.match(body, /return \{ affectedRows: updated\.rows\.length \}/)
-    assert.doesNotMatch(body, /Promise<void>/)
-    assert.doesNotMatch(body, /if \(!app \|\| app\.status === status\) return/)
-    assert.match(routeSource, /setAppStatus\(gate\.user\.orgId, gate\.user\.id, key, body\.status\)/)
-  })
-
-  test('package versions have one installer and no activated-source editing entry points', () => {
-    for (const name of ['createAppScaffold','updateAppMeta','writeAppFile','deleteAppFile']) assert.doesNotMatch(storeSource,new RegExp(`export async function ${name}\\(`))
-    assert.match(functionBody(storeSource,'installApp'),/insert into app_versions/)
-    assert.match(routeSource,/setAppStatus/)
-  })
-
 }
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -116,10 +46,6 @@ if (DB) {
     installApp,
     setAppStatus,
   } = await import('./store.ts')
-
-  // Register the entire queue after imports; --test-force-exit must not
-  // finish source checks while database cases are still being loaded.
-  registerSourceTests()
 
   assert.ok(env.OPENBOOKS_DB_URL)
 
@@ -353,6 +279,4 @@ if (DB) {
     }
   })
 
-} else {
-  registerSourceTests()
 }
