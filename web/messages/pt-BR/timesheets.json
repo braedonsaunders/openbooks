@@ -80,7 +80,7 @@
   "field": {
     "title": "Ponto em campo",
     "description": "Bata ponto pelo celular ou quiosque — os pares caem no timesheet semanal.",
-    "timesheetsTab": "Timesheets",
+    "timesheetsTab": "Quadro de horas",
     "clockTab": "Ponto",
     "crewTab": "Equipe",
     "openSetup": "Abrir configuração de folhas de horas",
