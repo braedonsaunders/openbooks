@@ -772,7 +772,8 @@
         "description": "Contas de passivo para os valores que o pacote do Reino Unido retém e apropria. Cada escolha vale para todos os componentes da rubrica (partes do funcionário e do empregador juntas).",
         "slots": {
           "paye": "PAYE a recolher (imposto de renda)",
-          "nic": "National Insurance a recolher (classe 1 de funcionário e empregador)"
+          "nic": "National Insurance a recolher (classe 1 de funcionário e empregador)",
+          "student-loans": "Deduções de empréstimo estudantil e de pós-graduação a recolher"
         }
       },
       "IE": {

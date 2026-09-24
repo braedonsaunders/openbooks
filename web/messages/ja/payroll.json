@@ -772,7 +772,8 @@
         "description": "イギリスパックが源泉徴収・計上する金額の負債勘定。各選択は対象項目の従業員負担・事業主負担の両方に適用されます。",
         "slots": {
           "paye": "PAYE未払金（所得税）",
-          "nic": "National Insurance未払金（従業員・事業主負担クラス1）"
+          "nic": "National Insurance未払金（従業員・事業主負担クラス1）",
+          "student-loans": "学生ローン・大学院ローン控除未払金"
         }
       },
       "IE": {
