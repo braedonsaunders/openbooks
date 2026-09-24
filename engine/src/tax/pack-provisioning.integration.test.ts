@@ -2,12 +2,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import pg from "pg";
+import { COUNTRY_TAX_PACKS } from "../country-tax-packs/index.ts";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
-import { provisionTaxPacks } from "./pack-provisioning.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { countryPackHash, provisionTaxPacks } from "./pack-provisioning.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const RUNTIME_DB = process.env.OPENBOOKS_RUNTIME_DB_URL;
+
+function hasCauseMessage(error: unknown, expected: string): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { message?: unknown; cause?: unknown };
+    if (typeof candidate.message === "string" && candidate.message.includes(expected)) return true;
+    current = candidate.cause;
+  }
+  return false;
+}
 
 test(
   "country tax packs install atomically, idempotently, and remain tenant isolated",
@@ -179,6 +190,100 @@ test(
       });
     } finally {
       await withBypass(() => dropScratchOrg(target.orgId));
+    }
+  },
+);
+
+test(
+  "installed tax pack evidence refuses edits and deletion but permits superseding",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Tax Pack Steward", "admin"),
+      );
+      const pack = COUNTRY_TAX_PACKS.find((entry) => entry.code === "CA_INDIRECT_TAX");
+      assert.ok(pack, "the maintained Canada pack is needed to seed valid installation evidence");
+      const contentHash = countryPackHash(pack);
+      await withOrgTransaction(org.orgId, () => db.execute(sql`
+        insert into tax_country_pack_installations
+          (org_id, pack_code, country, version, content_hash, manifest, installed_by)
+        values
+          (${org.orgId}, ${pack.code}, ${pack.country}, ${pack.version}, ${contentHash},
+           ${JSON.stringify(pack)}::jsonb, ${actorId})
+      `));
+      const installation = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          id: string;
+          pack_code: string;
+          version: string;
+          content_hash: string;
+          manifest: Record<string, unknown>;
+        }>(sql`
+          select id, pack_code, version, content_hash, manifest
+            from tax_country_pack_installations
+           where org_id = ${org.orgId} and status = 'active'
+        `)).rows[0],
+      );
+      assert.ok(installation, "pack provisioning should persist its installation evidence");
+
+      await assert.rejects(
+        withOrgTransaction(org.orgId, () => db.execute(sql`
+          update tax_country_pack_installations
+             set content_hash = ${"f".repeat(64)}
+           where id = ${installation.id} and org_id = ${org.orgId}
+        `)),
+        (error: unknown) => hasCauseMessage(
+          error,
+          "country tax pack installation may only transition from active to superseded",
+        ),
+      );
+      await assert.rejects(
+        withOrgTransaction(org.orgId, () => db.execute(sql`
+          delete from tax_country_pack_installations
+           where id = ${installation.id} and org_id = ${org.orgId}
+        `)),
+        (error: unknown) => hasCauseMessage(
+          error,
+          "country tax pack installation evidence is immutable",
+        ),
+      );
+
+      await withOrgTransaction(org.orgId, () => db.execute(sql`
+        update tax_country_pack_installations
+           set status = 'superseded', superseded_at = now(), superseded_by = ${actorId}
+         where id = ${installation.id} and org_id = ${org.orgId}
+      `));
+      const superseded = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          pack_code: string;
+          version: string;
+          content_hash: string;
+          manifest: Record<string, unknown>;
+          superseded_by: string | null;
+          superseded_at: boolean;
+        }>(sql`
+          select status, pack_code, version, content_hash, manifest,
+                 superseded_by, superseded_at is not null as superseded_at
+            from tax_country_pack_installations
+           where id = ${installation.id} and org_id = ${org.orgId}
+        `)).rows[0],
+      );
+      assert.deepEqual(superseded, {
+        status: "superseded",
+        pack_code: installation.pack_code,
+        version: installation.version,
+        content_hash: installation.content_hash,
+        manifest: installation.manifest,
+        superseded_by: actorId,
+        superseded_at: true,
+      });
+    } finally {
+      // dropScratchOrg exercises the one authorized delete case: explicit
+      // sandbox teardown under the sandbox_wipe transaction flag.
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
 );

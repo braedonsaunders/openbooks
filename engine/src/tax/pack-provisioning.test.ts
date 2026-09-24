@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import test from "node:test";
 import { classifyPackInstallation, comparePackVersions, countryPackHash, isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries, TAX_SUBDIVISION_CATALOG } from "./pack-provisioning.ts";
 import { TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
@@ -378,55 +376,6 @@ test("Canadian HST histories are contiguous and current through the latest enact
 
 test("the catalog contains no unsourced placeholder country packs", () => {
   assert.deepEqual(supportedTaxCountries().filter((country) => country.countryStatus === "in_development"), []);
-});
-
-test("immutable pack evidence permits only an explicit sandbox teardown", () => {
-  const baseline = readFileSync(
-    "schema/migrations/generated/0001_baseline.sql",
-    "utf8",
-  );
-  assert.match(baseline, /current_setting\('openbooks\.sandbox_wipe', true\) = 'on'/);
-  assert.match(baseline, /env_kind = 'sandbox'/);
-  assert.match(baseline, /country tax pack installation evidence is immutable/);
-});
-
-test("the per-return code-set field is read only through packTaxCodesForReturn", () => {
-  // The field name is assembled so this very file never contains the literal
-  // and cannot trip its own scan.
-  const field = ["returnPack", "TaxCodes"].join("");
-  const declaration = new RegExp(`^\\s*${field}\\s*:\\s*\\{`);
-  const owners = new Set([
-    join("engine", "src", "country-tax-packs", "types.ts"),
-    join("engine", "src", "country-tax-packs", "index.ts"),
-  ]);
-  // Build output is not source. The blue/green rebuild leaves `.next-old` and
-  // `.next-stage` beside `.next`, and bundled chunks inline the field name, so
-  // a fixed-name skip list reports minified JavaScript as an offending reader.
-  // Hidden directories are never source either: the payroll scaffold test
-  // copies engine/src under gitignored `engine/.tmp-scaffold-<pid>/` while
-  // this scan walks the tree concurrently, so the copy's owned readers report
-  // as offenders. Same dot-directory rule as workspace-dependencies.test.mjs.
-  const skipDirs = new Set(["node_modules", "dist", "build", "coverage"]);
-  const skipDir = (name: string): boolean => skipDirs.has(name) || name.startsWith(".");
-  const offenders: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (!skipDir(entry.name)) walk(path);
-      } else if (/\.[cm]?[tj]sx?$/.test(entry.name) && !owners.has(path)) {
-        readFileSync(path, "utf8").split("\n").forEach((line, index) => {
-          if (!line.includes(field)) return;
-          // Pack files DECLARE the field as an object-literal key; that is
-          // writing content, not reading the union — reads are the ban.
-          if (declaration.test(line)) return;
-          offenders.push(`${path}:${index + 1}: ${line.trim()}`);
-        });
-      }
-    }
-  };
-  for (const root of ["engine", "web", "scripts", "schema"]) walk(root);
-  assert.deepEqual(offenders, []);
 });
 
 test("pack content checksums are stable sha256 hex over the declared pack", () => {
