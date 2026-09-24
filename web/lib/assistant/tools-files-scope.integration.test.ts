@@ -28,7 +28,7 @@ const { getAuthz } = await import('../authz')
 const { executeAssistantTool } = await import('./registry')
 
 test('assistant file tools hide record-folder files outside the caller fence', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   // createScratchUser seeds app_roles outside any bypass of its own; scope
   // the call (and every seed write below) explicitly now that importing the
   // assistant modules has replaced the ambient test bypass process-wide.

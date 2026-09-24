@@ -44,9 +44,9 @@ async function fixture(action:(org:Awaited<ReturnType<typeof createScratchOrg>>,
 async function pipeline(org:Awaited<ReturnType<typeof createScratchOrg>>,actor:string,currencies:string[]){
  for(const currency of currencies){
   const id=randomUUID();
-  await db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,owner_user_id,status_id,currency,is_active,projected_amount,weighted_amount,expected_close_date)
+  await withBypassContext(() => (db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,owner_user_id,status_id,currency,is_active,projected_amount,weighted_amount,expected_close_date)
    select ${id},${org.orgId},${id},'Currency-specific work',${org.customerId},${actor},id,${currency},true,100,50,'2026-07-15'
-   from crm_opportunity_statuses where org_id=${org.orgId} and is_default and not is_closed limit 1`);
+   from crm_opportunity_statuses where org_id=${org.orgId} and is_default and not is_closed limit 1`)));
  }
 }
 

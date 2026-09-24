@@ -290,7 +290,7 @@ const HARNESS_FEATURES = [
 ];
 
 test("assistant read-tool contract harness", DB_ONLY, async (t) => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   const sizes: { tool: string; bytes: number; outcome: string }[] = [];
   try {
     const flags = Object.fromEntries(HARNESS_FEATURES.map((key) => [key, true]));

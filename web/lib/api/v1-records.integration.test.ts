@@ -20,9 +20,9 @@ const {
 } = await import('./v1-records')
 
 test('reserved v1 aliases refuse before list, body parsing, or item commands', async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   try {
-    const actor = (await seedFlowActors(org.orgId)).adminId
+    const actor = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId
     const generated = generateApiKey()
     await withBypassContext(async () => {
       await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"apiAccess":true}'::jsonb, true) where id = ${org.orgId}`)
@@ -47,6 +47,7 @@ test('reserved v1 aliases refuse before list, body parsing, or item commands', a
       v1DeleteAliasedRecord(request('DELETE'), 'records', 'record-1'),
     ]))
 
+    assert.ok(responses.length > 0, 'the iterated collection must contain expected rows')
     for (const response of responses) {
       assert.equal(response.status, 404)
       assert.equal((await response.json() as {error:string}).error, 'not_found')

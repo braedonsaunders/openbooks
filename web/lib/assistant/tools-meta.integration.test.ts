@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { FEATURES } = await import('../features');
 const { buildToolRegistry, executeAssistantTool } = await import('./registry');
@@ -31,10 +31,10 @@ const { resolvedFeatureState } = await import('../features');
 /** Switch optional modules on, mirroring the contract harness feature flags. */
 async function enableFeatures(orgId: string, keys: string[]): Promise<void> {
   const flags = Object.fromEntries(keys.map((key) => [key, true]));
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(flags)}::jsonb)
     where id = ${orgId}
-  `);
+  `)));
 }
 
 function userFor(orgId: string, tag: string): SessionUser {
@@ -65,7 +65,7 @@ function toolNames(data: CapabilityData): Set<string> {
 }
 
 test('describe_capabilities answers from the live catalog for a minimal reader', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const authz = { user: userFor(org.orgId, 'min'), permissions: new Set(['assistant.use']), allowedSubsidiaryIds: null };
     await withOrgContext(org.orgId, async () => {
@@ -118,7 +118,7 @@ test('describe_capabilities groups featureless assistant and application tools b
 });
 
 test('find_tools searches the live gated catalog and names activated modules', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableFeatures(org.orgId, ['inventory']);
     const authz = {
@@ -155,7 +155,7 @@ test('find_tools searches the live gated catalog and names activated modules', {
 });
 
 test('find_tools serves a module slice, an overview, and stable errors', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableFeatures(org.orgId, ['payroll']);
     const authz = {
@@ -190,7 +190,7 @@ test('find_tools serves a module slice, an overview, and stable errors', { skip:
 });
 
 test('find_tools activates modules through the chat ToolSet hook only', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableFeatures(org.orgId, ['payroll']);
     const authz = {
@@ -227,7 +227,7 @@ test('find_tools activates modules through the chat ToolSet hook only', { skip: 
 });
 
 test('describe_capabilities widens with the caller permissions', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const authz = {
       user: userFor(org.orgId, 'gl'),

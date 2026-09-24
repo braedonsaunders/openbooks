@@ -11,7 +11,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { purchasingHome } = await import('./purchasing')
@@ -32,7 +32,7 @@ async function seedBill(
   const documentId = randomUUID()
   const entryId = randomUUID()
   const controlLineId = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into documents(
       id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
       posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance
@@ -41,8 +41,8 @@ async function seedBill(
       ${org.subsidiaryId}, ${input.posted}, ${input.posted}, 'CAD',
       '1', 'draft', ${input.total}, 0, ${input.total}, ${input.total}
     )
-  `)
-  await db.execute(sql`
+  `)))
+  await withBypassContext(() => (db.execute(sql`
     insert into journal_entries(
       id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
       status, origin, source_document_id
@@ -50,8 +50,8 @@ async function seedBill(
       ${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${input.number},
       ${input.posted}, ${org.periodId}, 'draft', 'manual', ${documentId}
     )
-  `)
-  await db.execute(sql`
+  `)))
+  await withBypassContext(() => (db.execute(sql`
     insert into journal_lines(
       id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id,
       is_open_item, amount, currency, txn_amount, fx_rate, due_date
@@ -62,13 +62,13 @@ async function seedBill(
       (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId},
        ${org.vendorId}, false, ${input.total}, 'CAD',
        ${input.total}, '1', ${input.due})
-  `)
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`)
-  await db.execute(sql`
+  `)))
+  await withBypassContext(() => (db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`)))
+  await withBypassContext(() => (db.execute(sql`
     update documents
        set status = 'posted', posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}
      where id = ${documentId} and org_id = ${org.orgId}
-  `)
+  `)))
   return { documentId, controlLineId }
 }
 

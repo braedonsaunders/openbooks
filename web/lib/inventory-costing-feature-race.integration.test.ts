@@ -14,16 +14,16 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PUT } = await import("../app/api/items/[id]/costing/route");
 
 for (const field of ["cogsAccountId", "adjustmentAccountId", "varianceAccountId", "receivedNotBilledAccountId"] as const) {
   test(`costing profile refuses ${field} aliasing its asset account`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
     try {
-      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
       state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["items.manage"]), allowedSubsidiaryIds: null } as Authz;
       const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
         from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
@@ -49,11 +49,11 @@ for (const field of ["cogsAccountId", "adjustmentAccountId", "varianceAccountId"
 }
 
 test("costing profile write rechecks Inventory after a concurrent disable", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   const writer = await pool.connect();
   let pending: Promise<Awaited<ReturnType<typeof PUT>>> | undefined;
   try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
     state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["items.manage"]), allowedSubsidiaryIds: null } as Authz;
     const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
       from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
@@ -70,7 +70,7 @@ test("costing profile write rechecks Inventory after a concurrent disable", { sk
     }), { params: Promise.resolve({ id: org.items.fifo }) });
     await writer.query("begin");
     await writer.query("select set_config('app.bypass_rls','on',true)");
-    await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"inventory\":false}'::jsonb) where id=$1", [org.orgId]);
+    await withBypassContext(() => (writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"inventory\":false}'::jsonb) where id=$1", [org.orgId])));
     await writer.query("select id from items where org_id=$1 and id=$2 for update", [org.orgId, org.items.fifo]);
     const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
     pending = request();
@@ -85,7 +85,7 @@ test("costing profile write rechecks Inventory after a concurrent disable", { sk
     const response = await pending;
     assert.equal(response.status, 422, JSON.stringify(await response.json()));
     assert.deepEqual(await evidence(), before);
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,inventory}','true'::jsonb) where id=${org.orgId}`);
+    await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,inventory}','true'::jsonb) where id=${org.orgId}`)));
     const allowed = await request();
     assert.equal(allowed.status, 200, JSON.stringify(await allowed.json()));
   } finally {

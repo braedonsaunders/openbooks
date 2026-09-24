@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   return next(specifier, context)
 } })
-const { db, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrg, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
 const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -84,7 +84,7 @@ async function convertedWith(f: Fixture, accountId: string) {
 
 test('WIP conversion refuses missing frozen account despite available chart revenue without writes', enabled, async () => fixture('missing', async (f) => {
   await refused(f, /line 1 has no configured income account/)
-  await db.execute(sql`update items set income_account_id=${f.org.accounts.revenue} where org_id=${f.org.orgId} and id=${f.org.items.service}`)
+  await withBypassContext(() => (db.execute(sql`update items set income_account_id=${f.org.accounts.revenue} where org_id=${f.org.orgId} and id=${f.org.items.service}`)))
   await wip.transitionPrebill(f.org.orgId, f.actor, f.prebill, 'void', 'Correct source accounting configuration')
   const replacement = await wip.createPrebill(f.org.orgId, f.actor, { projectId: f.project, periodEnd: f.org.date })
   await wip.transitionPrebill(f.org.orgId, f.actor, replacement.id, 'submit')
@@ -94,28 +94,28 @@ test('WIP conversion refuses missing frozen account despite available chart reve
 
 for (const kind of ['inactive', 'summary'] as const) {
   test(`WIP conversion refuses ${kind} frozen account without writes`, enabled, async () => fixture('revenue', async (f) => {
-    if (kind === 'inactive') await db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)
-    else await db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)
+    if (kind === 'inactive') await withBypassContext(() => (db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)))
+    else await withBypassContext(() => (db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)))
     await refused(f, /line 1 requires an active, non-summary account in this organization/)
   }))
 }
 
 test('WIP conversion refuses a foreign organization account snapshot without writes', enabled, async () => fixture('revenue', async (f) => {
-  const other = await createScratchOrg()
+  const other = await withBypassContext(() => (createScratchOrg()))
   try {
     // Defer the existing FK inside this fixture transaction so the service's
     // independent tenant check is exercised before restoring the valid source.
     await withOrgTransaction(f.org.orgId, async () => {
       await db.execute(sql`set constraints wip_prebill_line_income_org_fk deferred`)
-      await db.execute(sql`update wip_prebill_lines set income_account_id=${other.accounts.revenue} where org_id=${f.org.orgId} and prebill_id=${f.prebill}`)
+      await withOrg(f.org.orgId, () => db.execute(sql`update wip_prebill_lines set income_account_id=${other.accounts.revenue} where org_id=${f.org.orgId} and prebill_id=${f.prebill}`))
       await refused(f, /line 1 requires an active, non-summary account in this organization/)
-      await db.execute(sql`update wip_prebill_lines set income_account_id=${f.org.accounts.revenue} where org_id=${f.org.orgId} and prebill_id=${f.prebill}`)
+      await withOrg(f.org.orgId, () => db.execute(sql`update wip_prebill_lines set income_account_id=${f.org.accounts.revenue} where org_id=${f.org.orgId} and prebill_id=${f.prebill}`))
     })
   } finally { await dropScratchOrg(other.orgId) }
 }))
 
 test('WIP conversion preserves approved account when source item policy changes and retries idempotently', enabled, async () => fixture('revenue', async (f) => {
-  await db.execute(sql`update items set income_account_id=${f.org.accounts.recognized} where org_id=${f.org.orgId} and id=${f.org.items.service}`)
+  await withBypassContext(() => (db.execute(sql`update items set income_account_id=${f.org.accounts.recognized} where org_id=${f.org.orgId} and id=${f.org.items.service}`)))
   await convertedWith(f, f.org.accounts.revenue)
 }))
 

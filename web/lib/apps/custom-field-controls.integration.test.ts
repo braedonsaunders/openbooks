@@ -90,7 +90,7 @@ test('app field installation rechecks a feature after a competing disable commit
   await holder.query("select set_config('app.bypass_rls','on',true)");
   const pid=(await holder.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
   await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
-  await holder.query(`update orgs set settings=jsonb_set(settings,'{features}','{"projects":false}'::jsonb) where id=$1`,[org.orgId]);
+  await withBypassContext(() => (holder.query(`update orgs set settings=jsonb_set(settings,'{features}','{"projects":false}'::jsonb) where id=$1`,[org.orgId])));
   pending=withOrgContext(org.orgId,()=>installApp(org.orgId,actor,bundle({targetTable:'projects'})));pending.catch(()=>{});
   let waiting=false;
   for(let attempt=0;attempt<100;attempt++){

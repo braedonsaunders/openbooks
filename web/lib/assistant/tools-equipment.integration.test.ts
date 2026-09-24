@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
@@ -42,7 +42,7 @@ function reader(orgId: string, subsidiaryIds: Set<string> | null, perms: string[
 }
 
 test('equipment reads: register KPIs, unit metrics, and subsidiary isolation', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   const hidden = randomUUID();
   const unitId = randomUUID();
   try {
@@ -84,7 +84,7 @@ test('equipment reads: register KPIs, unit metrics, and subsidiary isolation', {
 });
 
 test('equipment reads refuse while the feature is off', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await withOrgContext(org.orgId, async () => {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"equipment":false}'::jsonb) where id=${org.orgId}`);

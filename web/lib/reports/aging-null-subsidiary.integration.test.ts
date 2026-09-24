@@ -11,7 +11,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { agingByParty } = await import('./aging')
 const { partnerBalances } = await import('./statements')
@@ -33,7 +33,7 @@ async function seedPostedInvoice(
 ) {
   const documentId = randomUUID()
   const entryId = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into documents(
       id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
       posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance
@@ -42,10 +42,10 @@ async function seedPostedInvoice(
       ${input.subsidiaryId}, ${org.date}, ${org.date}, 'CAD',
       '1', 'draft', ${input.total}, 0, ${input.total}, ${input.total}
     )
-  `)
+  `))
   // The posting kernel resolves a null header exactly once, stamping every
   // leg with the root subsidiary — emulate that stamping here.
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into journal_entries(
       id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
       status, origin, source_document_id, created_by, updated_by
@@ -53,8 +53,8 @@ async function seedPostedInvoice(
       ${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${input.number},
       ${org.date}, ${org.periodId}, 'draft', 'manual', ${documentId}, ${actorId}, ${actorId}
     )
-  `)
-  await db.execute(sql`
+  `))
+  await withBypassContext(() => db.execute(sql`
     insert into journal_lines(
       id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id,
       is_open_item, amount, currency, txn_amount, fx_rate
@@ -63,13 +63,13 @@ async function seedPostedInvoice(
        ${org.customerId}, true, ${input.total}, 'CAD', ${input.total}, '1'),
       (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId},
        ${org.customerId}, false, ${`-${input.total}`}, 'CAD', ${`-${input.total}`}, '1')
-  `)
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`)
-  await db.execute(sql`
+  `))
+  await withBypassContext(() => db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`))
+  await withBypassContext(() => db.execute(sql`
     update documents
        set status = 'posted', posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}
      where id = ${documentId} and org_id = ${org.orgId}
-  `)
+  `))
 }
 
 test('unrestricted consolidated aging includes root-owned null-subsidiary invoices', { skip: !env.OPENBOOKS_DB_URL }, async () => {
@@ -77,14 +77,12 @@ test('unrestricted consolidated aging includes root-owned null-subsidiary invoic
   const actorId = await withBypass(() => createScratchUser(scratch.orgId, 'AR clerk', 'admin'))
   try {
     const branchId = randomUUID()
-    await withBypass(async () => {
-      await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${branchId}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'AR branch', 'CAD', 'CA')
-      `)
-      await seedPostedInvoice(scratch, actorId, { number: 'INV-BRANCH', subsidiaryId: branchId, total: '100' })
-      await seedPostedInvoice(scratch, actorId, { number: 'INV-ROOT-NULL', subsidiaryId: null, total: '400' })
-    })
+      `))
+    await seedPostedInvoice(scratch, actorId, { number: 'INV-BRANCH', subsidiaryId: branchId, total: '100' })
+    await seedPostedInvoice(scratch, actorId, { number: 'INV-ROOT-NULL', subsidiaryId: null, total: '400' })
 
     const asOf = scratch.date
     const root = scratch.subsidiaryId

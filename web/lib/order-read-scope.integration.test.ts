@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withBypassContext, withOrg, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
 import type { Authz } from './authz'
 
@@ -39,7 +39,7 @@ function deferred<T>() {
 
 for (const kind of ['quote', 'sales_order', 'purchase_order'] as const) {
   test(`${kind} read never discloses another subsidiary after a concurrent draft rehome`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg()
+    const org = await withBypassContext(() => (createScratchOrg()))
     try {
       // Seed writes run under bypass: the handlers import trips the
       // process-wide request-org resolver, so ambient writes are RLS-enforced.
@@ -79,10 +79,10 @@ for (const kind of ['quote', 'sales_order', 'purchase_order'] as const) {
         writing = withOrgTransaction(org.orgId, async () => {
           const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid
           writerPid.resolve(pid)
-          await db.execute(sql`update documents set subsidiary_id=${other},memo='Private B-only terms',updated_at=now()
-            where id=${orderId} and org_id=${org.orgId}`)
-          await db.execute(sql`update document_lines set description='Private B-only line'
-            where document_id=${orderId} and org_id=${org.orgId}`)
+          await withOrg(org.orgId, () => db.execute(sql`update documents set subsidiary_id=${other},memo='Private B-only terms',updated_at=now()
+            where id=${orderId} and org_id=${org.orgId}`))
+          await withOrg(org.orgId, () => db.execute(sql`update document_lines set description='Private B-only line'
+            where document_id=${orderId} and org_id=${org.orgId}`))
         }).finally(() => { writerDone = true })
         writerOutcome = writing.then(() => null, error => { writerPid.resolve(-1); return error })
         const pid = await writerPid.promise

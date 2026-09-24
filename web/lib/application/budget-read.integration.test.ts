@@ -17,7 +17,7 @@ registerHooks({
 const { listApplicationBudgets } = await import('./budgets')
 
 test('disabled budgets are refused with the Features-page remedy', async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   const context = {
     authz: { user: { orgId: org.orgId }, permissions: new Set(['budgets.read']), allowedSubsidiaryIds: null },
     source: 'api', requestId: 'budget-read-feature-test', apiKeyId: null,

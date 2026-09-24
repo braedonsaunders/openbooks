@@ -19,9 +19,9 @@ interface RouteState {
 const routeState: RouteState = { authz: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockAuthz = `
+const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.close-run-subsidiary-authz-test')]
-  export async function guardPermission(_permission) {
+  export async function guardFeaturePermission(_permission, _feature) {
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
@@ -32,8 +32,8 @@ const hooks = registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/close/runs/route")) {
-      return { url: "mock:close-run-authz", shortCircuit: true };
+    if (specifier === "../../../../lib/feature-gates" && context.parentURL?.includes("/api/close/runs/route")) {
+      return { url: "mock:close-run-feature-gates", shortCircuit: true };
     }
     if (specifier.startsWith("@/") && context.parentURL) {
       const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
@@ -60,8 +60,8 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === "mock:close-run-authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
+    if (url === "mock:close-run-feature-gates") {
+      return { format: "module", source: mockFeatureGates, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -71,7 +71,7 @@ const routeUrl = "../app/api/close/runs/route.ts?close-run-subsidiary-authz";
 const { POST } = (await import(routeUrl)) as typeof import("../app/api/close/runs/route.ts");
 hooks.deregister();
 
-const { db, env } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db, env } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts",
 );
@@ -102,16 +102,16 @@ test(
   "close-run creation is fail-closed at the subsidiary authorization boundary",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actors = await seedFlowActors(org.orgId);
+    const org = await withBypassContext(() => (createScratchOrg()));
+    const actors = await withBypassContext(() => (seedFlowActors(org.orgId)));
     const otherSubsidiaryId = randomUUID();
     try {
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into subsidiaries
           (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values
           (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Restricted Branch', 'CAD', 'CA',
-           '{}'::jsonb, false, true, '{}'::jsonb)`);
+           '{}'::jsonb, false, true, '{}'::jsonb)`)));
 
       const validBody = { periodId: org.periodId, bookId: org.bookId };
 
