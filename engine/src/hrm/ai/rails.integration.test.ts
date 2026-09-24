@@ -12,6 +12,7 @@ import {
 import { logDecision, syncCapabilities, updateCapability } from "./governance.ts";
 import {
   checkPayrollFinalizeAllowed,
+  flagsForEmployment,
   listFlags,
   runAnomalyScan,
   scanAnomalies,
@@ -451,6 +452,122 @@ test("inbox adapters surface blocking checks and overdue reviews through the act
        where id = ${org.orgId}`);
     assert.deepEqual(await payrollAnomalyBlockAdapter.list(ctx), []);
     assert.deepEqual(await aiCapabilityReviewAdapter.list(ctx), []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("flag reads and transitions see only the flag employment's employer", { skip: !DB }, async () => {
+  const { org, adminId } = await setup();
+  try {
+    // Two legal entities, one employment each. The org keeps a single
+    // root subsidiary (subsidiaries_org_root), so the second is a child.
+    const subB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    const seedEmployment = async (subsidiary: string, name: string): Promise<string> => {
+      const partyId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${partyId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+      const employmentId = randomUUID();
+      await db.execute(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${employmentId}, ${org.orgId}, ${partyId}, ${subsidiary}, 1)`);
+      return employmentId;
+    };
+    const empA = await seedEmployment(org.subsidiaryId, "Entity A Worker");
+    const empB = await seedEmployment(subB, "Entity B Worker");
+    const seedFlag = async (employmentId: string | null, kind: string, severity: string): Promise<string> => {
+      const rows = (await db.execute<{ id: string }>(sql`
+        insert into payroll_anomaly_flags
+          (org_id, pay_period_from, pay_period_to, employment_id, kind, severity,
+           detail, explanation, status, created_by)
+        values (${org.orgId}, '2026-09-01', '2026-09-30', ${employmentId},
+                ${kind}, ${severity}, '{"key":"scope-probe"}'::jsonb,
+                ${`${kind} explanation with entity pay detail`}, 'open', ${adminId})
+        returning id::text as id`)).rows;
+      return rows[0]!.id;
+    };
+    const flagA = await seedFlag(empA, "retro_spike", "warn");
+    const flagB = await seedFlag(empB, "terminated_with_pay", "block");
+    const flagNull = await seedFlag(null, "duplicate_entry", "warn");
+
+    // Two restricted readers over entity A under different grants.
+    const scopedHr = await createScratchUser(org.orgId, "Scoped HR", "scoped_hr");
+    await grant(org.orgId, scopedHr, "hrm.employment.read");
+    const scopedTime = await createScratchUser(org.orgId, "Scoped time", "scoped_time");
+    await grant(org.orgId, scopedTime, "time.approve");
+    for (const roleKey of ["scoped_hr", "scoped_time"]) {
+      await db.execute(sql`
+        update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+         where org_id = ${org.orgId} and key = ${roleKey}`);
+    }
+
+    // List: each scoped reader sees only entity A's flag. The
+    // unattributable (null-employment) flag fails closed for both.
+    for (const actorId of [scopedHr, scopedTime]) {
+      const visible = await listFlags(db, { orgId: org.orgId, actorId });
+      assert.deepEqual(
+        visible.map((f) => f.id).sort(),
+        [flagA].sort(),
+        `scoped reader must see exactly entity A's flag`,
+      );
+    }
+    // The unrestricted admin sees all three.
+    const all = await listFlags(db, { orgId: org.orgId, actorId: adminId });
+    assert.deepEqual(all.map((f) => f.id).sort(), [flagA, flagB, flagNull].sort());
+
+    // Per-employment chips inherit the lens.
+    assert.deepEqual(
+      (await flagsForEmployment(db, { orgId: org.orgId, actorId: scopedHr, employmentId: empB })).map((f) => f.id),
+      [],
+    );
+
+    // Transition: touching entity B's flag answers exactly like a missing
+    // flag — the refusal must never confirm the row exists elsewhere.
+    await assert.rejects(
+      transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: flagB, to: "acknowledged", reason: "reviewed" }),
+      /matched no row/,
+    );
+    await assert.rejects(
+      transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: flagNull, to: "acknowledged", reason: "reviewed" }),
+      /matched no row/,
+    );
+    const missingId = randomUUID();
+    await assert.rejects(
+      transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: missingId, to: "acknowledged", reason: "reviewed" }),
+      /matched no row/,
+    );
+    // The in-scope flag still transitions.
+    const done = await transitionFlag(db, {
+      orgId: org.orgId, actorId: scopedHr, flagId: flagA, to: "acknowledged", reason: "confirmed with payroll",
+    });
+    assert.equal(done.status, "acknowledged");
+
+    // The inbox projects the same lens: a payroll manager scoped to A sees
+    // none of B's blocks (and none of their explanation and pay detail),
+    // while one scoped to B still sees B's block.
+    const { payrollAnomalyBlockAdapter } = await import(
+      "../../inbox/adapters/ai-rails.ts"
+    );
+    const scopedPayrollA = await createScratchUser(org.orgId, "Scoped payroll A", "scoped_payroll_a");
+    await grant(org.orgId, scopedPayrollA, "payroll.manage");
+    const scopedPayrollB = await createScratchUser(org.orgId, "Scoped payroll B", "scoped_payroll_b");
+    await grant(org.orgId, scopedPayrollB, "payroll.manage");
+    await db.execute(sql`
+      update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+       where org_id = ${org.orgId} and key = 'scoped_payroll_a'`);
+    await db.execute(sql`
+      update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subB] })}::jsonb
+       where org_id = ${org.orgId} and key = 'scoped_payroll_b'`);
+    const inboxCtx = (actorId: string) => ({ orgId: org.orgId, actorId, asOf: "2026-09-30T00:00:00Z" });
+    assert.deepEqual(await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollA)), []);
+    assert.deepEqual(
+      (await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollB))).map((item) => item.source),
+      [{ kind: "payroll_anomaly_flag", id: flagB }],
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

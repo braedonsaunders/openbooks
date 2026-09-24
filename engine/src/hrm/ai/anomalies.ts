@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import {
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { AiRailsError, finalizeBlockedRefusal } from "./errors.ts";
@@ -770,26 +775,34 @@ export async function listFlags(
   },
 ): Promise<FlagRow[]> {
   await assertFlagReadScope(exec, input.orgId, input.actorId);
+  // Legal-entity lens: a flag is visible only through its employment's
+  // employer subsidiary. Flags with no employment cannot be attributed,
+  // so the predicate fails them closed for restricted callers (a null
+  // subsidiary matches no allowlist) while unrestricted callers see all.
+  const allowed = await actorAllowedSubsidiaryIds(exec, input.orgId, input.actorId);
   const rows = (await exec.execute<FlagRow>(sql`
-    select id::text as id, kind, severity, status,
-           employment_id::text as "employmentId",
-           pay_period_from::text as "payPeriodFrom",
-           pay_period_to::text as "payPeriodTo",
-           explanation, detail, reason
-      from payroll_anomaly_flags
-     where org_id = ${input.orgId}::uuid
-       and (${input.periodFrom ?? null}::date is null or pay_period_from = ${input.periodFrom ?? null}::date)
-       and (${input.periodTo ?? null}::date is null or pay_period_to = ${input.periodTo ?? null}::date)
+    select f.id::text as id, f.kind, f.severity, f.status,
+           f.employment_id::text as "employmentId",
+           f.pay_period_from::text as "payPeriodFrom",
+           f.pay_period_to::text as "payPeriodTo",
+           f.explanation, f.detail, f.reason
+      from payroll_anomaly_flags f
+      left join worker_employments e
+        on e.org_id = f.org_id and e.id = f.employment_id
+     where f.org_id = ${input.orgId}::uuid
+       and (${input.periodFrom ?? null}::date is null or f.pay_period_from = ${input.periodFrom ?? null}::date)
+       and (${input.periodTo ?? null}::date is null or f.pay_period_to = ${input.periodTo ?? null}::date)
        -- Every optional filter is CAST. An untyped null parameter makes
        -- PostgreSQL refuse the whole statement with "could not determine
        -- data type of parameter", so leaving severity, kind or status
        -- unset threw instead of matching everything -- which is the
        -- default state of the checks list.
-       and (${input.severity ?? null}::text is null or severity = ${input.severity ?? null}::text)
-       and (${input.kind ?? null}::text is null or kind = ${input.kind ?? null}::text)
-       and (${input.status ?? null}::text is null or status = ${input.status ?? null}::text)
-       and (${input.employmentId ?? null}::uuid is null or employment_id = ${input.employmentId ?? null}::uuid)
-     order by severity, pay_period_from desc, id`)).rows;
+       and (${input.severity ?? null}::text is null or f.severity = ${input.severity ?? null}::text)
+       and (${input.kind ?? null}::text is null or f.kind = ${input.kind ?? null}::text)
+       and (${input.status ?? null}::text is null or f.status = ${input.status ?? null}::text)
+       and (${input.employmentId ?? null}::uuid is null or f.employment_id = ${input.employmentId ?? null}::uuid)
+       ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
+     order by f.severity, f.pay_period_from desc, f.id`)).rows;
   return rows;
 }
 
@@ -833,10 +846,24 @@ export async function transitionFlag(
     );
   }
   await assertFlagReadScope(exec, orgId, actorId);
-  const current = (await exec.execute<{ severity: string; status: string }>(sql`
-    select severity, status from payroll_anomaly_flags
-     where org_id = ${orgId}::uuid and id = ${flagId}::uuid`)).rows[0];
-  if (!current) {
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  // Locked read: the scope check and the write below are one atomic unit
+  // on the public path (resolveFlag wraps this in a transaction), so a
+  // concurrent rehome of the flag's employment cannot move the flag
+  // between the check and the update.
+  const current = (await exec.execute<{
+    severity: string; status: string; employerSubsidiaryId: string | null;
+  }>(sql`
+    select f.severity, f.status,
+           e.employer_subsidiary_id::text as "employerSubsidiaryId"
+      from payroll_anomaly_flags f
+      left join worker_employments e
+        on e.org_id = f.org_id and e.id = f.employment_id
+     where f.org_id = ${orgId}::uuid and f.id = ${flagId}::uuid
+     for update of f`)).rows[0];
+  // Unknown, cross-org, and out-of-scope flags answer exactly alike: the
+  // refusal must never confirm which half failed.
+  if (!current || !subsidiaryScopeAllows(allowed, current.employerSubsidiaryId)) {
     throw new AiRailsError(
       "ai_flag_missing",
       `flag ${flagId} matched no row — it is missing or outside this organization; reload and retry`,
