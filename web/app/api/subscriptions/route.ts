@@ -485,8 +485,13 @@ export async function POST(req: Request) {
         if (nextBillOn !== undefined) sets.push(sql`next_bill_on = ${nextBillOn}`);
         if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
         const outcome = await db.transaction(async (tx) => {
+          // Lock the subscription row FIRST — the same row lock the billing
+          // engine's claim and billOne take — so the guard-max re-read, the
+          // boundary validation, and the write below are atomic against a
+          // concurrent tick. Without it an edit validated against a pre-bill
+          // cursor commits after the tick and rewinds into billed service.
           const before = (await tx.execute<Record<string, unknown>>(sql`
-            select * from subscriptions where id = ${body.id} and org_id = ${orgId}
+            select * from subscriptions where id = ${body.id} and org_id = ${orgId} for update
           `));
           if (!before.rows[0]) return null;
           // Resolve the cursor move against the unbilled boundary — the end
