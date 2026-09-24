@@ -494,7 +494,6 @@ export function ImportWizard() {
                 if (format === 'xlsx') setFormat('csv')
               }}
               rows={5}
-              placeholder="code,name&#10;HST-BC,HST British Columbia"
               className="w-full rounded-md border border-border bg-background p-2 font-mono text-xs"
             />
           </div>

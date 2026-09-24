@@ -187,7 +187,7 @@ async function chooseImportSource(): Promise<void> {
   const resourceSelect = ([...document.querySelectorAll('select')] as HTMLSelectElement[]).find((candidate) =>
     [...candidate.options].some((option) => option.value === 'customers'),
   )
-  assert.ok(resourceSelect, 'an import resource is available')
+  assert.ok(resourceSelect, 'an import resource is available'); assert.equal((document.querySelector('textarea') as HTMLTextAreaElement)?.placeholder, '')
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set?.call(resourceSelect, 'customers')
     resourceSelect.dispatchEvent(new window.Event('change', { bubbles: true }))
