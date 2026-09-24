@@ -174,6 +174,7 @@ export async function appendRetroSettlementLines(
         sequence: line.sequence,
         vacationable: line.vacationable,
         nonPeriodic: line.nonPeriodic,
+        supplementalWageCategory: line.supplementalWageCategory,
       });
     }
   }
@@ -250,6 +251,7 @@ export async function appendDerivedEarningLines(
           insurable: line.insurable,
           vacationable: line.vacationable,
           nonPeriodic: line.nonPeriodic,
+          supplementalWageCategory: line.supplementalWageCategory,
         });
       }
     }
@@ -414,6 +416,7 @@ export async function applyAssignedComponentLines(
       insurable: c.insurable as boolean, vacationable: c.vacationable as boolean,
       programApplicability: programApplicabilityFromExclusions(c.program_exclusions),
       nonPeriodic: c.non_periodic as boolean, taxTreatment: c.tax_treatment as string,
+      supplementalWageCategory: c.supplemental_wage_category as Line["supplementalWageCategory"],
       protectionBase: c.protection_base as string,
       protectionMaxPercent: c.protection_max_percent as string | null,
       protectionPriority: Number(c.protection_priority ?? 100),
@@ -439,9 +442,12 @@ export async function applyRunLineAdjustments(
 ): Promise<void> {
   const { orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines } = args;
   const adjustments = (await tx.execute<Record<string, unknown>>(sql`
-    select a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*
+    select a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
+           ec.supplemental_wage_category
       from pay_run_adjustments a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
+      join pay_component_earning_classifications ec
+        on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
        and a.employee_party_id = ${employeePartyId} and a.adjustment_type = 'line'
      order by c.sequence, a.created_at
@@ -474,6 +480,7 @@ export async function applyRunLineAdjustments(
           ? adj.kind === "earning"
             && payrollPack(country).retroactivePayTreatment === "non_periodic"
           : (adj.non_periodic as boolean),
+      supplementalWageCategory: adj.supplemental_wage_category as Line["supplementalWageCategory"],
       taxTreatment: adj.tax_treatment as string,
       // A one-off garnishment entered for a single run is still a protected
       // deduction, and still belongs to (or outside) the protected base.

@@ -98,6 +98,20 @@ class SetupWriteRefusal extends Error {
 }
 type SetupTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
+async function savePayComponentEarningClassification(
+  tx: Pick<typeof db, 'execute'>,
+  orgId: string,
+  componentId: string,
+  supplementalWageCategory: unknown,
+): Promise<void> {
+  const result = await tx.execute(sql`
+    update pay_component_earning_classifications
+       set supplemental_wage_category = ${supplementalWageCategory == null ? null : String(supplementalWageCategory)}
+     where org_id = ${orgId} and pay_component_id = ${componentId}
+    returning pay_component_id`)
+  if (!result.rows.length) throw new Error('pay component classification is missing')
+}
+
 /** Recheck authoritative entity and field gates on the same transaction/connection
  * that writes configuration. Take this fence before any row or book locks. */
 async function setupWriteTransaction<T>(
@@ -617,8 +631,12 @@ export async function validateEntityIntegrity(
     // treatments the scope declares rather than surfacing a constraint name.
     const currentComponent = rowId
       ? (((await executor.execute(sql`
-          select country, tax_treatment from pay_components
-           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+          select c.country, c.tax_treatment, c.kind, c.non_periodic,
+                 ec.supplemental_wage_category
+            from pay_components c
+            join pay_component_earning_classifications ec
+              on ec.org_id = c.org_id and ec.pay_component_id = c.id
+           where c.id = ${rowId} and c.org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !currentComponent) return 'not found'
     const componentCountry = body.country !== undefined
@@ -627,11 +645,26 @@ export async function validateEntityIntegrity(
     const componentTreatment = body.taxTreatment !== undefined
       ? (body.taxTreatment ? String(body.taxTreatment) : null)
       : ((currentComponent?.tax_treatment as string | null) ?? null)
+    const supplementalWageCategory = body.supplementalWageCategory !== undefined
+      ? (body.supplementalWageCategory ? String(body.supplementalWageCategory) : null)
+      : ((currentComponent?.supplemental_wage_category as string | null) ?? null)
+    const componentKind = String(body.kind ?? currentComponent?.kind ?? '')
+    const nonPeriodic = body.nonPeriodic === undefined
+      ? currentComponent?.non_periodic === true
+      : coerceBoolean(body.nonPeriodic)
     const treatmentProblem = payComponentTreatmentProblem({
       country: componentCountry,
       taxTreatment: componentTreatment,
     })
     if (treatmentProblem) return treatmentProblem
+    if (supplementalWageCategory !== null && supplementalWageCategory !== '') {
+      if (componentKind !== 'earning' || !nonPeriodic) {
+        return 'supplemental-wage-category-requires-non-periodic-earning'
+      }
+      if (!['bonus_or_stock_option', 'other'].includes(supplementalWageCategory)) {
+        return 'invalid-supplemental-wage-category'
+      }
+    }
   }
   if (entity.key === 'pay-schedules') {
     // `anchor_period_end` is a REQUIRED field the engine derives every period
@@ -1712,9 +1745,13 @@ export async function createSetupRecord(
   // folded rule objects always are (see hrm-rule-slots.ts).
   const slotted = applyRuleSlotColumns(entity.key, body, built.cols)
   if ('error' in slotted) return { status: 400, body: { error: slotted.error } }
+  const supplementalWageCategory = slotted.cols.find((column) => column.column === 'supplemental_wage_category')?.value
   let cols = entity.key === 'fx-rates'
     ? slotted.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : [...slotted.cols]
+  if (entity.key === 'pay-components') {
+    cols = cols.filter((column) => column.column !== 'supplemental_wage_category')
+  }
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
       cols = persistFxRateCols(cols)
@@ -1835,7 +1872,12 @@ export async function createSetupRecord(
     const memberIds = members && Array.isArray(body[members.key])
       ? [...new Set((body[members.key] as unknown[]).map(String).filter((v) => UUID_RE.test(v)))]
       : undefined
-    const match = setupCreateMatch(memberIds === undefined ? {} : { members: memberIds })
+    const match = setupCreateMatch({
+      ...(memberIds === undefined ? {} : { members: memberIds }),
+      ...(entity.key === 'pay-components'
+        ? { earningClassification: { supplementalWageCategory: supplementalWageCategory ?? null } }
+        : {}),
+    })
     const claimMatch = { orgId, table: entity.table, key: requestId, match, orgScoped: entity.orgScoped }
     const newId = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
       // The claim resolves before the insert and the member sync below, so
@@ -1855,6 +1897,9 @@ export async function createSetupRecord(
         throw new Error('not found')
       }
       const id = String(insertedRow.id)
+      if (entity.key === 'pay-components' && supplementalWageCategory !== undefined) {
+        await savePayComponentEarningClassification(tx, orgId, id, supplementalWageCategory)
+      }
       if (members && Array.isArray(body[members.key])) {
         await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
       }
@@ -2311,9 +2356,13 @@ export async function updateSetupRecord(
 
   const slottedUpdate = applyRuleSlotColumns(entity.key, body, built.cols)
   if ('error' in slottedUpdate) return { status: 400, body: { error: slottedUpdate.error } }
+  const supplementalWageCategoryUpdate = slottedUpdate.cols.find((column) => column.column === 'supplemental_wage_category')?.value
   let updateCols = entity.key === 'fx-rates'
     ? slottedUpdate.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : slottedUpdate.cols
+  if (entity.key === 'pay-components') {
+    updateCols = updateCols.filter((column) => column.column !== 'supplemental_wage_category')
+  }
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
       updateCols = persistFxRateCols(updateCols)
@@ -2373,6 +2422,9 @@ export async function updateSetupRecord(
           return true
         }
         return false
+      }
+      if (entity.key === 'pay-components' && body.supplementalWageCategory !== undefined) {
+        await savePayComponentEarningClassification(tx, orgId, id, supplementalWageCategoryUpdate)
       }
       const members = multirefField(entity)
       if (members && Array.isArray(body[members.key])) {

@@ -39,6 +39,7 @@ import {
 } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
+import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
 
 /**
  * The generic setup-entity list, split into a loader and a spec.
@@ -237,7 +238,7 @@ export async function loadSetupEntity(
       : entity
     ? await Promise.all([
         (db.execute(sql`
-      select * from ${sql.raw(entity.table)} ${rowFilter}
+      select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)),
         (db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`)),

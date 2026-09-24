@@ -2,6 +2,7 @@ import type { db } from "../platform/db.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
 import type { PayrollAssessedOn, PayrollTaxBaseKey } from "./packs.ts";
 import type { StatutoryRateResolution } from "./statutory-rates.ts";
+import type { UsSupplementalWageAmount } from "./supplemental-wages.ts";
 
 /** One line in the stub set `calculateStub` builds before the statutory pass. */
 export interface StubLine {
@@ -149,6 +150,8 @@ export interface PayrollStatutoryComputeContext {
    */
   income: string;
   nonPeriodic: string;
+  /** Classified taxable US supplemental wages; unclassified entries remain null for named refusal. */
+  supplementalWageAmounts?: readonly UsSupplementalWageAmount[];
   pensionable: string;
   insurable: string;
   /**

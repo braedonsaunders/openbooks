@@ -18,6 +18,7 @@ import {
 } from "../setup/registry";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { capList } from "./tools-shared";
+import { setupReadProjection, setupReadSource } from "../setup/read-shape";
 
 /**
  * Read tools for the Setup registry (/admin/setup) and the Features
@@ -111,7 +112,7 @@ const listSetupRecordsTool: AssistantToolDef = {
     const orderBy = entity.orderBy ?? (entity.naturalKey ? toSnake(entity.naturalKey) : idColumn);
     const [rowsRes, countRes] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
-        select ${sql.raw(selectCols.join(", "))} from ${sql.raw(entity.table)} ${rowFilter}
+        select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)} ${rowFilter}
          order by ${sql.raw(orderBy)}
          limit ${limit}`),
       db.execute<{ n: number }>(sql`
@@ -129,6 +130,9 @@ const listSetupRecordsTool: AssistantToolDef = {
         items: rowsRes.rows.map((row) => ({
           id: row[idColumn],
           ...Object.fromEntries(entity.columns.map((c) => [c.key, row[toSnake(c.key)]])),
+          ...(entity.key === 'pay-components'
+            ? { supplementalWageCategory: row.supplemental_wage_category }
+            : {}),
         })),
       },
     };

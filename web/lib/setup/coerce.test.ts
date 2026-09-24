@@ -118,6 +118,8 @@ test('setup updates distinguish omitted boolean controls from explicit changes',
   assert.ok('cols' in built)
   assert.equal(built.cols.find(entry => entry.column === 'taxable')!.value, false)
   assert.equal(built.cols.find(entry => entry.column === 'non_periodic')!.value, true)
+  const category = buildRow(entity, { name: 'Metadata update', kind: 'earning', nonPeriodic: true, supplementalWageCategory: 'bonus_or_stock_option' }, { forCreate: false })
+  assert.equal('cols' in category && category.cols.find(entry => entry.column === 'supplemental_wage_category')?.value, 'bonus_or_stock_option')
   for (const column of ['pensionable', 'insurable', 'vacationable', 'is_active', 'include_in_disposable_earnings']) assert.ok(!built.cols.some(entry => entry.column === column))
 })
 

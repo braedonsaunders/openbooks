@@ -20,6 +20,7 @@ import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-
 import { setupEntityForFeatureState, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
+import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 import { RateBookDrawer, type RateBookLine, type RateBookItemOption } from './RateBookDrawer'
@@ -151,7 +152,7 @@ export async function SetupEntitySection({
 
   const [rowsRes, countRes, refOptions] = await Promise.all([
     (db.execute(sql`
-      select * from ${sql.raw(entity.table)} ${rowFilter}
+      select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)),
     (db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`)),
@@ -171,7 +172,7 @@ export async function SetupEntitySection({
       ? { creating: true, row: (null) }
       : await (async () => {
           const selected = ((await db.execute(sql`
-            select * from ${sql.raw(entity.table)}
+            select ${setupReadProjection(entity)} from ${setupReadSource(entity)}
              where ${sql.raw(idColumn)} = ${openRow}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              limit 1`)))

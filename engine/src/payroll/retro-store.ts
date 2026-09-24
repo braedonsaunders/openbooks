@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, sum } from "../money/money.ts";
+import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
 import { payrollTaxYear } from "./packs.ts";
 import { calculatePayRun, type CapturedStub } from "./run-calculation.ts";
 import type { PayRunCalculationError } from "./run-calculation-evidence.ts";
@@ -803,6 +804,7 @@ export interface RetroStubEarningLine {
   vacationable: boolean;
   /** The PACK's declared retroactive treatment, resolved by the caller. */
   nonPeriodic: boolean;
+  supplementalWageCategory: UsSupplementalWageCategory | null;
   sequence: number;
 }
 
@@ -838,11 +840,12 @@ export async function retroEarningLinesForStub(
       component_id: string | null; description: string;
       project_id: string | null; department_id: string | null; amount: string;
       vacationable: boolean | null; is_active: boolean | null; component_name: string | null;
+      supplemental_wage_category: string | null;
       source_period_start: string; source_period_end: string; delta: string;
     }>(sql`
     select st.id as settlement_id,
            a.component_id, a.description, a.project_id, a.department_id, a.amount,
-           c.vacationable, c.is_active, c.name as component_name,
+           c.vacationable, c.is_active, c.name as component_name, ec.supplemental_wage_category,
            st.source_period_start::text as source_period_start,
            st.source_period_end::text as source_period_end,
            st.delta
@@ -850,6 +853,8 @@ export async function retroEarningLinesForStub(
       join payroll_retro_allocations a on a.settlement_id = st.id and a.org_id = st.org_id
       left join parties ep on ep.id = st.employee_party_id and ep.org_id = st.org_id
       left join pay_components c on c.id = a.component_id and c.org_id = st.org_id
+      left join pay_component_earning_classifications ec
+        on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where st.org_id = ${input.orgId}
        and st.retro_pay_run_document_id = ${input.payRunDocumentId}
        and st.employee_party_id = ${input.employeePartyId}
@@ -880,6 +885,7 @@ export async function retroEarningLinesForStub(
       amount: row.amount,
       vacationable: row.vacationable === true,
       nonPeriodic: input.nonPeriodic,
+      supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
       sequence: sequence++,
     });
   }

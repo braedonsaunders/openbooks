@@ -23,6 +23,7 @@ import {
   pickString,
 } from '../../../../../lib/list-params'
 import { loadRefOptions } from '../../../../../lib/setup/ref-options'
+import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
 import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
 import { FxProviderPage } from './FxProviderPage'
@@ -184,7 +185,7 @@ export async function SetupDrawerSlot({
       ? { creating: true, row: (null), members: [] as string[] }
       : await (async () => {
           const selected = ((await db.execute(sql`
-            select * from ${sql.raw(entity.table)}
+            select ${setupReadProjection(entity)} from ${setupReadSource(entity)}
              where ${sql.raw(idColumn)} = ${rowParam}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              limit 1`)))

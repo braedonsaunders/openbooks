@@ -48,6 +48,7 @@ import type { ResolvedWithholdingLevy } from "../withholding-resolution.ts";
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
 import { D, mulRateCents, rate6, U } from "../canada/decimal.ts";
+import type { UsSupplementalWageAmount, UsSupplementalWageCategory } from "../supplemental-wages.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
 import {
   miCityWithholding,
@@ -74,6 +75,10 @@ export class UsWithholdingError extends PayrollError {}
 export interface UsSupplementalFlatMethod {
   kind: "flat";
   rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+  categoryRates?: readonly {
+    category: UsSupplementalWageCategory;
+    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+  }[];
   requiresRegularWithholding?: boolean;
   rounding?: "whole_dollar";
 }
@@ -119,6 +124,28 @@ const US_DEFAULT_SEPARATE_SUPPLEMENTAL_METHODS = Object.fromEntries(
 
 export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
   ...US_DEFAULT_SEPARATE_SUPPLEMENTAL_METHODS,
+  CA: {
+    kind: "flat",
+    rates: [],
+    // California DE 44 Rev. 52 (4-26), p. 18 distinguishes bonuses/stock
+    // options from other supplemental wages when the payment is separate.
+    categoryRates: [
+      {
+        category: "bonus_or_stock_option",
+        rates: [{
+          effectiveFrom: "2026-01-01", rate: "0.1023",
+          source: "https://edd.ca.gov/pdf_pub_ctr/de44.pdf",
+        }],
+      },
+      {
+        category: "other",
+        rates: [{
+          effectiveFrom: "2026-01-01", rate: "0.066",
+          source: "https://edd.ca.gov/pdf_pub_ctr/de44.pdf",
+        }],
+      },
+    ],
+  } as const,
   AL: {
     kind: "flat",
     // Alabama Withholding Tax Tables / Booklet A, January 2026, p. 3.
@@ -323,6 +350,8 @@ export interface UsWithholdingInput {
   federalTaxExempt?: boolean;
   /** Supplemental wages this period. */
   supplemental?: string;
+  /** Per-category taxable supplemental amounts, sourced from earning components. */
+  supplementalWageAmounts?: readonly UsSupplementalWageAmount[];
   /** Whether supplemental wages were paid with regular wages or separately. */
   supplementalPaymentTiming?: "combined" | "separate";
   /** Committed same-year regular-wage withholding history for conditional flat methods. */
@@ -404,6 +433,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     ]));
   let separateFlatRate: string | undefined;
   let separateFlatWholeDollar = false;
+  let separateCategoryAmounts: { category: UsSupplementalWageCategory; amount: string; rate: string }[] | undefined;
   let combinedFlatRate: string | undefined;
   let combinedFlatHonorsCertificateExemption = false;
   if (supplemental > 0n && input.supplementalPaymentTiming == null) {
@@ -448,18 +478,54 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           + "provide that history or the regular-period basis required by the aggregate method before calculating — refused by name",
         );
       }
-      const applicable = method.rates
-        .filter((rate) => rate.effectiveFrom <= input.payDate)
-        .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
-        .at(-1);
-      if (!applicable) {
-        throw new UsWithholdingError(
-          `${levy.label} has no transcribed separate-supplemental flat rate for ${input.payDate}; `
-          + "transcribe the official rate effective on the payment date before calculating — refused by name",
-        );
+      if (method.categoryRates && method.categoryRates.length > 0) {
+        const categories = input.supplementalWageAmounts;
+        const categoryTotal = categories?.reduce((total, item) => total + U(item.amount), 0n) ?? 0n;
+        if (!categories || categories.length === 0 || categoryTotal !== supplemental) {
+          throw new UsWithholdingError(
+            `${levy.label} separate supplemental withholding needs earning-component amounts classified by the published wage category; `
+            + "set each non-periodic earning component to Bonus or stock option or Other supplemental wage and recalculate — refused by name",
+          );
+        }
+        const grouped = new Map<UsSupplementalWageCategory, bigint>();
+        for (const item of categories) {
+          if (item.category === null) {
+            throw new UsWithholdingError(
+              `${levy.label} separate supplemental wages include an unclassified earning component; `
+              + "classify it as Bonus or stock option or Other supplemental wage in pay-component setup — refused by name",
+            );
+          }
+          grouped.set(item.category, (grouped.get(item.category) ?? 0n) + U(item.amount));
+        }
+        separateCategoryAmounts = [];
+        for (const [category, amount] of grouped) {
+          const categoryMethod = method.categoryRates.find((entry) => entry.category === category);
+          const applicable = categoryMethod?.rates
+            .filter((rate) => rate.effectiveFrom <= input.payDate)
+            .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+            .at(-1);
+          if (!applicable) {
+            throw new UsWithholdingError(
+              `${levy.label} has no separate-supplemental rate for ${category} effective on ${input.payDate}; `
+              + "transcribe the official category rate before calculating — refused by name",
+            );
+          }
+          separateCategoryAmounts.push({ category, amount: D(amount), rate: applicable.rate });
+        }
+      } else {
+        const applicable = method.rates
+          .filter((rate) => rate.effectiveFrom <= input.payDate)
+          .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+          .at(-1);
+        if (!applicable) {
+          throw new UsWithholdingError(
+            `${levy.label} has no transcribed separate-supplemental flat rate for ${input.payDate}; `
+            + "transcribe the official rate effective on the payment date before calculating — refused by name",
+          );
+        }
+        separateFlatRate = applicable.rate;
+        separateFlatWholeDollar = "rounding" in method && method.rounding === "whole_dollar";
       }
-      separateFlatRate = applicable.rate;
-      separateFlatWholeDollar = "rounding" in method && method.rounding === "whole_dollar";
     } else {
       throw new UsWithholdingError(
         `${levy.label} separately paid supplemental method ${method.kind} is declared but its calculator is not available in this pack version — update the pack before calculating; refused by name`,
@@ -491,7 +557,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     // returns null ONLY for a state with no wage income tax at all.
     const engine = requireUsStateWithholding(levy.region);
     if (!engine) return null;
-    if (separateFlatRate) {
+    if (separateFlatRate || separateCategoryAmounts) {
       // Flat-rate supplemental methods do not consume the employee's regular
       // certificate exemptions. The state engine still computes the regular
       // leg with no bonus; this dispatch computes the separately taxed bonus
@@ -518,10 +584,21 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         socialInsuranceDeducted: input.socialInsuranceDeducted,
         ytd: input.ytd,
       });
-      const rawSupplementalTax = mulRateCents(supplemental, separateFlatRate);
+      const rawSupplementalTax = separateCategoryAmounts
+        ? separateCategoryAmounts.reduce(
+          (total, item) => total + mulRateCents(U(item.amount), item.rate),
+          0n,
+        )
+        : mulRateCents(supplemental, separateFlatRate!);
       const supplementalTax = separateFlatWholeDollar
         ? roundDiv(rawSupplementalTax, 10_000n) * 10_000n
         : rawSupplementalTax;
+      const categoryRateFactors = Object.fromEntries(
+        (separateCategoryAmounts ?? []).map((item) => [
+          `US_SUPPLEMENTAL_RATE_${item.category.toUpperCase()}`,
+          item.rate,
+        ]),
+      );
       return {
         code: engine.state,
         label: engine.label,
@@ -530,7 +607,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         factors: {
           ...regular.factors,
           US_SUPPLEMENTAL_METHOD: "flat",
-          US_SUPPLEMENTAL_RATE: separateFlatRate,
+          ...(separateFlatRate ? { US_SUPPLEMENTAL_RATE: separateFlatRate } : {}),
+          ...categoryRateFactors,
           US_SUPPLEMENTAL_TAX: D(supplementalTax),
         },
       };

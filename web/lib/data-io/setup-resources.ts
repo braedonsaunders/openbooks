@@ -8,9 +8,10 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { COUNTRY_CODES } from '../countries'
 import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
-import { buildRow, idColumn } from '../setup/coerce'
+import { buildRow, coerceBoolean, idColumn } from '../setup/coerce'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
-import { auditSetupChange as audit } from '../setup/audit'
+import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
+import { setupReadProjection, setupReadSource } from '../setup/read-shape'
 import {
   enforceExportRowLimit,
   exportCell,
@@ -163,13 +164,13 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
     async read() {
       const fields = setupFields(await gatedSetupEntity(entity, orgId))
       const resolver = new RefResolver(orgId)
-      const cols = fields.map((f) => sql.raw(toSnake(f.key)))
+      const cols = fields.map((f) => toSnake(f.key))
       const resourceLabel = setupDescriptor(entity).label
       const result = entity.dataSource
         ? { rows: await jsonBackedRows(entity.dataSource, orgId, resourceLabel) }
         : (await db.execute(sql`
-        select ${sql.join(cols, sql`, `)}
-          from ${sql.raw(entity.table)}
+        select ${setupReadProjection(entity, cols)}
+          from ${setupReadSource(entity)}
          ${entity.orgScoped ? sql`where org_id = ${orgId}` : sql``}
          order by ${sql.raw(idColumn(entity))}
          limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, unknown>[] }
@@ -250,6 +251,15 @@ async function writeSetup(
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: `${unavailable} is not available` })
         continue
+      }
+      if (entity.key === 'pay-components' && src.supplementalWageCategory != null && src.supplementalWageCategory !== '') {
+        const kind = String(src.kind ?? '')
+        const nonPeriodic = coerceBoolean(src.nonPeriodic)
+        if (kind !== 'earning' || !nonPeriodic) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: 'supplemental wage category requires a non-periodic earning' })
+          continue
+        }
       }
 
       // Resolve reference columns (natural key → uuid) before coercion.
@@ -334,6 +344,10 @@ async function writeSetup(
           outcome.errors.push({ row: rowNo, message: built.error })
           continue
         }
+        const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
+        const storageCols = entity.key === 'pay-components'
+          ? built.cols.filter((column) => column.column !== 'supplemental_wage_category')
+          : built.cols
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
             // The import route owns an outer org transaction. A nested
@@ -343,13 +357,10 @@ async function writeSetup(
             await tx.execute(sql`savepoint setup_import_row`)
             try {
               const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``
-              const before = (await tx.execute(sql`
-                select * from ${sql.raw(entity.table)}
-                 where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}
-                 for update`)) as { rows: Record<string, unknown>[] }
-              if (!before.rows[0]) throw new Error('row no longer exists')
+              const before = await loadSetupAuditRow(entity, ctx.orgId, existingId, tx, true)
+              if (!before) throw new Error('row no longer exists')
 
-              const setParts = built.cols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+              const setParts = storageCols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
               if (entity.actorCols) {
                 setParts.push(sql`updated_by = ${ctx.actorId}`)
                 setParts.push(sql`updated_at = now()`)
@@ -360,6 +371,14 @@ async function writeSetup(
                    where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}
                   returning *`)) as { rows: Record<string, unknown>[] }
                 if (!updated.rows[0]) throw new Error('row no longer exists')
+                if (entity.key === 'pay-components' && src.supplementalWageCategory !== undefined) {
+                  const classification = await tx.execute(sql`
+                    update pay_component_earning_classifications
+                       set supplemental_wage_category = ${supplementalWageCategory == null ? null : String(supplementalWageCategory)}
+                     where org_id = ${ctx.orgId} and pay_component_id = ${existingId}
+                    returning pay_component_id`)
+                  if (!classification.rows.length) throw new Error('pay component classification is missing')
+                }
                 await audit(
                   {
                     orgId: entity.orgScoped ? ctx.orgId : null,
@@ -368,8 +387,8 @@ async function writeSetup(
                     action: 'update',
                     changes: {
                       source: 'import',
-                      before: before.rows[0],
-                      after: updated.rows[0],
+                      before,
+                      after: await loadSetupAuditRow(entity, ctx.orgId, existingId, tx),
                     },
                     actorId: ctx.actorId,
                   },
@@ -392,13 +411,17 @@ async function writeSetup(
           outcome.errors.push({ row: rowNo, message: built.error })
           continue
         }
+        const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
+        const storageCols = entity.key === 'pay-components'
+          ? built.cols.filter((column) => column.column !== 'supplemental_wage_category')
+          : built.cols
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
             // See the update branch: this savepoint is required when the
             // caller already owns the import's outer transaction.
             await tx.execute(sql`savepoint setup_import_row`)
             try {
-              const cols = [...built.cols]
+              const cols = [...storageCols]
               if (entity.orgScoped) cols.push({ column: 'org_id', value: ctx.orgId })
               if (entity.actorCols) {
                 cols.push({ column: 'created_by', value: ctx.actorId })
@@ -415,13 +438,21 @@ async function writeSetup(
               const inserted = ins.rows[0]
               const rowId = String(inserted?.[idColumn(entity)] ?? '')
               if (!inserted || !rowId) throw new Error('insert did not return a row')
+              if (entity.key === 'pay-components' && supplementalWageCategory !== undefined) {
+                const classification = await tx.execute(sql`
+                  update pay_component_earning_classifications
+                     set supplemental_wage_category = ${supplementalWageCategory == null ? null : String(supplementalWageCategory)}
+                   where org_id = ${ctx.orgId} and pay_component_id = ${rowId}
+                  returning pay_component_id`)
+                if (!classification.rows.length) throw new Error('pay component classification is missing')
+              }
               await audit(
                 {
                   orgId: entity.orgScoped ? ctx.orgId : null,
                   table: entity.table,
                   rowId,
                   action: 'insert',
-                  changes: { source: 'import', before: null, after: inserted },
+                  changes: { source: 'import', before: null, after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx) },
                   actorId: ctx.actorId,
                 },
                 tx,
