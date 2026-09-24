@@ -2246,8 +2246,11 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         subsidiary_id: string | null;
         reversal_entry_id: string | null;
         void_requested_at: Date | null;
+        void_reason: string | null;
+        void_reversal_date: string | null;
       }>(sql`
-        select id, status, subsidiary_id, reversal_entry_id, void_requested_at
+        select id, status, subsidiary_id, reversal_entry_id, void_requested_at,
+               void_reason, void_reversal_date
           from documents
          where id = ${input.documentId}
            and org_id = ${input.orgId}
@@ -2265,6 +2268,28 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         throw new RevenueRecognitionCancellationError(
           `customer invoice is ${doc.status}; only a posted invoice can be cancelled`,
         );
+      }
+
+      // A retry may resume only the exact controlled-void request created by
+      // this cancellation. Durable audit evidence binds its reason and date;
+      // an unrelated pending void must never be completed as a side effect.
+      if (doc.void_requested_at) {
+        const evidence = await tx.execute(sql`
+          select 1 from audit_log
+           where org_id = ${input.orgId}
+             and table_name = 'performance_obligations'
+             and row_id = ${input.documentId}
+             and request_id = 'revenue_recognition_cancellation'
+             and changes->>'mode' = 'revenue_recognition_cancellation'
+             and changes->>'reason' = ${reason}
+             and changes->>'reversalDate' = ${reversalDate}
+           limit 1
+        `);
+        if (!evidence.rows[0]) {
+          throw new RevenueRecognitionCancellationError(
+            'this invoice already has a different pending void request — resume or reject that request before cancelling recognition',
+          );
+        }
       }
 
       const affectedContracts=(await tx.execute<{contract_id:string}>(sql`select distinct o.contract_id from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id where o.org_id=${input.orgId} and dl.document_id=${input.documentId} order by o.contract_id`)).rows;
@@ -2450,21 +2475,23 @@ export async function cancelRevenueRecognitionForInvoice(input: {
                 and obligation.status <> 'cancelled'
            )
       `);
-      await tx.execute(sql`
-        insert into audit_log
-          (org_id, table_name, row_id, action, changes, actor_id, request_id)
-        values (
-          ${input.orgId}, 'performance_obligations', ${input.documentId},
-          'update',
-          ${JSON.stringify({
-            mode: "revenue_recognition_cancellation",
-            reason,
-            reversalDate,
-            obligationIds,
-          })}::jsonb,
-          ${input.actorId}, 'revenue_recognition_cancellation'
-        )
-      `);
+      if (!doc.void_requested_at) {
+        await tx.execute(sql`
+          insert into audit_log
+            (org_id, table_name, row_id, action, changes, actor_id, request_id)
+          values (
+            ${input.orgId}, 'performance_obligations', ${input.documentId},
+            'update',
+            ${JSON.stringify({
+              mode: "revenue_recognition_cancellation",
+              reason,
+              reversalDate,
+              obligationIds,
+            })}::jsonb,
+            ${input.actorId}, 'revenue_recognition_cancellation'
+          )
+        `);
+      }
       if (doc.status === "voided") {
         return {
           status: "cancelled" as const,
@@ -2484,6 +2511,27 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         requestDocumentVoid,
       } = await import("../ledger/document-void.ts");
       if (doc.void_requested_at) {
+        const pending = await tx.execute<{ run_id: string }>(sql`
+          select run.id as run_id
+            from flow_runs run
+            join flow_gates gate
+              on gate.run_id = run.id and gate.org_id = run.org_id
+           where run.org_id = ${input.orgId}
+             and run.subject_id = ${input.documentId}
+             and run.trigger = 'before_void'
+             and run.status = 'waiting'
+             and gate.status in ('pending', 'escalated')
+           order by run.started_at desc, run.id desc
+           limit 1
+        `);
+        if (pending.rows[0]) {
+          return {
+            status: "pending_approval" as const,
+            recognitionReversalEntryIds: reversalIds,
+            invoiceReversalEntryId: null,
+            runId: pending.rows[0].run_id,
+          };
+        }
         const invoiceReversalEntryId =
           await completeRequestedDocumentVoid(input.documentId, input.orgId);
         return {

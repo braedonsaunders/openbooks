@@ -11,10 +11,111 @@ import {
 import {
   createScratchOrg,
   dropScratchOrg,
+  seedApprovalFlow,
   seedFlowActors,
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test(
+  "retrying recognition cancellation resumes its pending void approval without completing it",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actors = await seedFlowActors(org.orgId);
+    const documentId = randomUUID();
+    try {
+      await seedRecognitionTermPeriods(org);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, due_date, currency, fx_rate, status,
+           subtotal, tax_total, total, is_final_invoice, custom, extra_dims,
+           created_by, updated_by)
+        values
+          (${documentId}, ${org.orgId}, 'customer_invoice', 'REV-CANCEL-PENDING',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           ${org.date}, 'CAD', 1, 'draft', 1200, 0, 1200, false,
+           '{}'::jsonb, '{}'::jsonb, ${actors.adminId}, ${actors.adminId})
+      `);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id,
+           quantity, unit_price, amount, tax_amount, is_billable,
+           quantity_fulfilled, quantity_billed, custom, tax_overridden,
+           extra_dims, created_by, updated_by)
+        values
+          (${randomUUID()}, ${org.orgId}, ${documentId}, 1,
+           ${org.items.service}, ${org.accounts.revenue}, 1, 1200, 1200, 0,
+           false, 0, 0, '{}'::jsonb, false, '{}'::jsonb,
+           ${actors.adminId}, ${actors.adminId})
+      `);
+      await db.execute(sql`
+        update documents set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}
+      `);
+      await postDocument(documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      }, { audit: { actorId: actors.adminId, source: "test" } });
+      const recognized = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
+      assert.equal(recognized.posted, 1);
+
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "customer_invoice",
+        trigger: "before_void",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+      });
+      const request = {
+        documentId,
+        orgId: org.orgId,
+        actorId: actors.adminId,
+        reason: "Customer contract terminated before the remaining service term",
+        reversalDate: "2026-07-31",
+        allowedSubsidiaryIds: null,
+      };
+      const first = await cancelRevenueRecognitionForInvoice(request);
+      assert.equal(first.status, "pending_approval");
+      assert.ok(first.runId);
+
+      const retry = await cancelRevenueRecognitionForInvoice(request);
+      assert.equal(retry.status, "pending_approval");
+      assert.equal(retry.runId, first.runId);
+      assert.equal(retry.recognitionReversalEntryIds[0], first.recognitionReversalEntryIds[0]);
+
+      const state = await db.execute<{
+        status: string;
+        is_requested: boolean;
+        obligation_status: string;
+        cancellation_evidence: number;
+        gate_status: string;
+      }>(sql`
+        select document.status, document.void_requested_at is not null as is_requested,
+               obligation.status as obligation_status,
+               (select count(*)::int from audit_log audit
+                 where audit.org_id = ${org.orgId}
+                   and audit.row_id = ${documentId}
+                   and audit.request_id = 'revenue_recognition_cancellation'
+                   and audit.changes->>'reason' = ${request.reason}) as cancellation_evidence,
+               gate.status as gate_status
+          from documents document
+          join document_lines line on line.document_id = document.id and line.org_id = document.org_id
+          join performance_obligations obligation on obligation.document_line_id = line.id and obligation.org_id = line.org_id
+          join flow_gates gate on gate.run_id = ${first.runId} and gate.org_id = document.org_id
+         where document.id = ${documentId} and document.org_id = ${org.orgId}
+      `);
+      assert.deepEqual(state.rows, [{
+        status: "posted",
+        is_requested: true,
+        obligation_status: "cancelled",
+        cancellation_evidence: 1,
+        gate_status: "pending",
+      }]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /** Provision every month covered by the service item's 12-month term. */
 async function seedRecognitionTermPeriods(
