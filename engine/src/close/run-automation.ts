@@ -375,6 +375,9 @@ export async function runCloseAutomations(
       } else if (rule.action === "assign") {
         if (!context.taskId)
           throw new CloseError("assignment automation requires a task event");
+        // Capture while narrowed: property narrowing does not survive the
+        // awaits below, and an undefined task must never reach the update.
+        const assignTaskId: string = context.taskId;
         async function resolveUser(
           userValue: unknown,
           roleValue: unknown,
@@ -408,9 +411,21 @@ export async function runCloseAutomations(
           throw new CloseError(
             "assignment automation resolved no owner or reviewer",
           );
-        await db.execute(sql`update close_run_tasks set owner_id = coalesce(${ownerId}, owner_id),
-          reviewer_id = coalesce(${reviewerId}, reviewer_id), updated_at = now(), updated_by = ${context.actorId ?? null}
-          where id = ${context.taskId} and run_id = ${context.runId} and org_id = ${context.orgId}`);
+        // Route through the canonical assignment so automation writes the
+        // same task audit event as every other task write. A vanished task
+        // throws by name and lands in the automation result as failed —
+        // never a silent success on zero matched rows.
+        const { assignCloseTaskTx } = await import("./tasks.ts");
+        await db.transaction(async (tx) => {
+          await assignCloseTaskTx(tx, {
+            orgId: context.orgId,
+            runId: context.runId,
+            taskId: assignTaskId,
+            ownerId,
+            reviewerId,
+            actorId: context.actorId ?? null,
+          });
+        });
       } else if (rule.action === "run_check") {
         await refreshCloseRun(context.orgId, context.runId, context.actorId);
       } else if (rule.action === "complete_task") {
