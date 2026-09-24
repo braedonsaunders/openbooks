@@ -6,6 +6,7 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { BUDGET_KINDS, loadBudgetScenario } from '../../../../lib/budgets'
 import { BudgetMutationError } from '../../../../lib/budget-mutations'
+import { scenarioOutOfScopeSubsidiaryNames } from '../../../../lib/budget-scope'
 
 export const runtime = 'nodejs'
 
@@ -15,7 +16,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const scenario = await loadBudgetScenario(id, gate.user.orgId)
-  return scenario ? NextResponse.json(scenario) : NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!scenario) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  // Reads reveal only scenarios wholly within scope: a scenario carrying
+  // lines outside the caller's subsidiaries answers as missing — name,
+  // description and status stay inside the scope that owns them.
+  if ((await scenarioOutOfScopeSubsidiaryNames(id, gate.user.orgId, gate.allowedSubsidiaryIds)).length > 0) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
+  return NextResponse.json(scenario)
 }
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('budgets.manage', 'budgets')
@@ -58,6 +66,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       `))
       const before = locked.rows[0]
       if (!before) throw new BudgetMutationError('not_found', 404)
+      // A rename/re-scope the caller cannot read answers as missing: the
+      // scenario's lines escape their scope, so there is nothing in-scope
+      // to rename — same shape as GET above, never an existence oracle.
+      if ((await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)).length > 0) {
+        throw new BudgetMutationError('not_found', 404)
+      }
       if (before.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
       if (Number(before.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
       const nextBookId = bookId ?? before.book_id
@@ -133,6 +147,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       `))
       const row = locked.rows[0]
       if (!row) throw new BudgetMutationError('not_found', 404)
+      // Same shape as PATCH: deleting a scenario the caller cannot read
+      // answers as missing.
+      if ((await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)).length > 0) {
+        throw new BudgetMutationError('not_found', 404)
+      }
       if (row.status !== 'draft') throw new BudgetMutationError('only_drafts_can_be_deleted', 409)
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

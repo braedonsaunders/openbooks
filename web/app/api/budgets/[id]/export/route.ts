@@ -24,6 +24,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     select name, fiscal_year from budget_scenarios where id = ${id} and org_id = ${gate.user.orgId}
   `))
   if (!scenario.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  // The exported title and filename carry the scenario's name and year, so
+  // a scenario with NOTHING visible to the caller answers as missing: its
+  // rows would all filter out, leaving only the header as a disclosure
+  // oracle for a scenario the caller must not learn exists. A scenario
+  // with visible lines keeps the house redacted view — 200 with only the
+  // caller's rows, title included (the scenario is already list-visible).
+  if (gate.allowedSubsidiaryIds !== null) {
+    const visible = (await db.execute<{ n: string }>(sql`
+      select count(*) as n from budget_lines
+       where org_id = ${gate.user.orgId} and scenario_id = ${id}
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
+    `))
+    if (Number(visible.rows[0]?.n ?? 0) === 0) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+  }
   interface BudgetExportRow extends Record<string, unknown> {
     number: string | null
     account_name: string

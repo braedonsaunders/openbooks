@@ -145,7 +145,11 @@ function dimensionWhere(alias: string, dims: BudgetDimensions) {
     and ${col('class_id')} is not distinct from ${dims.classId}`
 }
 
-export async function loadBudgetScenario(id: string, orgId: string): Promise<BudgetScenario | null> {
+export async function loadBudgetScenario(
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<BudgetScenario | null> {
   const result = (await db.execute<BudgetScenarioRow>(sql`
     select bs.id, bs.name, bs.description, bs.fiscal_year, bs.kind, bs.status,
            bs.revision, bs.book_id, b.name as book_name, b.code as book_code,
@@ -156,6 +160,14 @@ export async function loadBudgetScenario(id: string, orgId: string): Promise<Bud
   `))
   const row = result.rows[0]
   if (!row) return null
+  // Reads reveal only scenarios wholly within scope: when the caller passes
+  // their scope, a scenario carrying out-of-scope lines loads as missing.
+  if (allowedSubsidiaryIds !== undefined) {
+    const { scenarioOutOfScopeSubsidiaryNames } = await import('./budget-scope')
+    if ((await scenarioOutOfScopeSubsidiaryNames(id, orgId, allowedSubsidiaryIds)).length > 0) {
+      return null
+    }
+  }
   return {
     id: row.id,
     name: row.name,
@@ -254,9 +266,9 @@ async function loadWorksheetSlice(
 export async function loadBudgetWorkspace(
   id: string,
   orgId: string,
-  opts: { q?: string; page: number; perPage: number; dims: BudgetDimensions },
+  opts: { q?: string; page: number; perPage: number; dims: BudgetDimensions; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<BudgetWorkspace | null> {
-  const scenario = await loadBudgetScenario(id, orgId)
+  const scenario = await loadBudgetScenario(id, orgId, opts.allowedSubsidiaryIds)
   if (!scenario) return null
 
   const slice = await loadWorksheetSlice(orgId, scenario.fiscalYear, opts.dims, opts)

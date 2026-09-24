@@ -6,6 +6,7 @@ import { subsidiariesInScope } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from '../../../../../lib/budget-mutations'
+import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
 
 export const runtime = 'nodejs'
 
@@ -71,6 +72,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!rootId || !subsidiariesInScope(gate, [rootId])) {
       return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
     }
+  }
+  // Scenario owner-scope gate: the cells below are individually scoped,
+  // but the save bumps the WHOLE scenario's revision — a caller whose scope
+  // misses any of the scenario's lines is refused by name instead.
+  const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, gate.user.orgId, gate.allowedSubsidiaryIds)
+  if (outOfScope.length > 0) {
+    const refusal = outOfScopeScenarioError(outOfScope)
+    return NextResponse.json({ error: refusal.message }, { status: refusal.status })
   }
   try {
     return NextResponse.json(await saveBudgetCells({
