@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { formatCount, formatPercent01 } from '../../../../lib/format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   column,
@@ -89,6 +90,7 @@ export async function loadOrders(): Promise<OrdersData> {
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const t = await getTranslations('reports.orders')
   const tr = await getTranslations('reports')
+  const locale = await getLocale()
   const orgId = authz.user.orgId
   const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)
 
@@ -146,7 +148,7 @@ export async function loadOrders(): Promise<OrdersData> {
         .reduce((a: number, r) => a + Number(r.n), 0)
       const conv = convByKind.get(kind) ?? 0
       const denom = open + conv
-      const rate = denom > 0 ? Math.round((conv / denom) * 100) : 0
+      const rate = formatPercent01(denom > 0 ? conv / denom : 0, locale)
       const typeLabel = t(`kinds.${kind}`)
       const target = (
         scope: 'open' | 'converted' | 'conversion' | 'voided',
@@ -155,15 +157,15 @@ export async function loadOrders(): Promise<OrdersData> {
       return {
         kind,
         typeLabel,
-        openCount: open.toLocaleString('en-CA'),
+        openCount: formatCount(open, locale),
         openCountDrill: target('open', columnLabel.open),
         openValue: formatMoney(openValue),
         openValueDrill: target('open', columnLabel.openValue),
-        converted: conv.toLocaleString('en-CA'),
+        converted: formatCount(conv, locale),
         convertedDrill: target('converted', columnLabel.converted),
-        convRate: `${rate}%`,
+        convRate: rate,
         convRateDrill: target('conversion', columnLabel.convRate),
-        voided: voided.toLocaleString('en-CA'),
+        voided: formatCount(voided, locale),
         voidedDrill: target('voided', columnLabel.voided),
       }
     }),
