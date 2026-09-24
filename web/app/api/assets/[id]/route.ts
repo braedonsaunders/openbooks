@@ -58,6 +58,9 @@ interface ExistingAsset extends Record<string, unknown> {
 /** Raised inside the save transaction when a posting won the basis race. */
 class PostedBasisEditConflict extends Error {}
 
+/** A concurrent disappearance during DELETE is the only transaction refusal mapped to 404. */
+class AssetDeleteNotFoundError extends Error {}
+
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 })
 }
@@ -627,9 +630,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const gone = (await tx.execute<{ id: string }>(sql`
       delete from fixed_assets where id = ${id} and org_id = ${user.orgId} returning id
     `))
-    if (gone.rows.length !== 1) throw new Error('asset not found')
+    if (gone.rows.length !== 1) throw new AssetDeleteNotFoundError()
     return gone.rows[0]!.id
-  }).catch(() => null)
+  }).catch((error: unknown) => {
+    if (error instanceof AssetDeleteNotFoundError) return null
+    throw error
+  })
   if (statusConflict) {
     return NextResponse.json(
       { error: `Only draft assets can be deleted (status: ${statusConflict}). Dispose of or write off the asset instead.` },

@@ -19,9 +19,10 @@ const FORMULA_ID = "00000000-0000-4000-8000-00000000d022";
 
 interface RouteState {
   queries: string[];
+  deleteFailure: boolean;
 }
 
-const state: RouteState = { queries: [] };
+const state: RouteState = { queries: [], deleteFailure: false };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function inspect(query: unknown): { text: string; params: unknown[] } {
@@ -83,11 +84,15 @@ const mockDb = `
   function respond(query) {
     const seen = inspect(query)
     const text = seen.text
+    if (text.includes('delete from fixed_assets')) {
+      if (state.deleteFailure) throw new Error('asset delete trigger failed')
+      return { rows: [{ id: '${ASSET_ID}' }] }
+    }
     if (text.includes('from fixed_assets')) {
       // The pre-transaction existence read sees the row; the in-transaction
       // row lock finds nothing, proving a clean save passes validation and
       // reaches the lock.
-      if (text.includes('for update')) return { rows: [] }
+      if (text.includes('for update')) return { rows: state.deleteFailure ? [${JSON.stringify(EXISTING)}] : [] }
       return { rows: [${JSON.stringify(EXISTING)}] }
     }
     return { rows: [] }
@@ -156,7 +161,7 @@ const routeUrl = "./route.ts?asset-patch-parity-test";
 const routeModule = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { PATCH } = routeModule;
+const { PATCH, DELETE } = routeModule;
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   return PATCH(
@@ -180,6 +185,20 @@ test("a clean save passes validation and reaches the row lock", async () => {
   // No validation fires; the mocked lock finds no row.
   assert.equal(status, 422);
   assert.equal(error, "asset not found");
+});
+
+test("DELETE preserves database and trigger failures instead of reporting not found", async () => {
+  state.deleteFailure = true;
+  try {
+    await assert.rejects(
+      DELETE(new Request(`http://openbooks.test/api/assets/${ASSET_ID}`, { method: "DELETE" }), {
+        params: Promise.resolve({ id: ASSET_ID }),
+      }),
+      (error: unknown) => error instanceof Error && error.message === "asset delete trigger failed",
+    );
+  } finally {
+    state.deleteFailure = false;
+  }
 });
 
 const cases: [Record<string, unknown>, string][] = [
