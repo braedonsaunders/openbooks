@@ -530,7 +530,7 @@ test('profile POST validates pack-declared employee facts against the declaratio
 test('profile POST derives the PL birth year from the PESEL and refuses contradictions', { skip: !DB }, async () => {
   // Decided, not re-decided: a declared field, the PESEL deriving and
   // prefilling it, a contradicting saved value refusing naming both — and
-  // no PESEL (or an uncited century band) leaving the field to stand
+  // no PESEL leaving the declared field to stand
   // alone. The pack's example PESEL 44051401359 encodes 1944.
   const { org, employeeId, scheduleId } = await fixture()
   try {
@@ -567,14 +567,15 @@ test('profile POST derives the PL birth year from the PESEL and refuses contradi
     // An agreeing year saves.
     const agreed = await post({ ...base, sin: '44051401359', plRokUrodzenia: 1944 })
     assert.equal(agreed.status, 200, await agreed.clone().text())
+    // Invalid date/check-digit input is refused before it can overwrite the
+    // sealed identifier or change the derived birth year.
+    const invalid = await post({ ...base, sin: '44051401350', plRokUrodzenia: 1990 })
+    assert.equal(invalid.status, 422, await invalid.clone().text())
+    assert.match(((await invalid.json()) as { error: string }).error, /PESEL.*control digit/i)
+    assert.equal(await storedYear(), 1944)
     // Clearing the identifier leaves the declared field to stand alone.
     const cleared = await post({ ...base, sin: '', plRokUrodzenia: 1990 })
     assert.equal(cleared.status, 200, await cleared.clone().text())
-    assert.equal(await storedYear(), 1990)
-    // An uncited century band derives nothing: month 99 carries no cited
-    // century, so the field stands alone and saves unchallenged.
-    const uncited = await post({ ...base, sin: '00994101359', plRokUrodzenia: 1990 })
-    assert.equal(uncited.status, 200, await uncited.clone().text())
     assert.equal(await storedYear(), 1990)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))

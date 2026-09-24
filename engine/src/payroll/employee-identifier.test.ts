@@ -42,6 +42,14 @@ test("every pack accepts its real identifier formats", () => {
   }
 });
 
+test("the PL pack refuses PESEL values with an invalid date or control digit", () => {
+  for (const value of ["44051401350", "44023101353"]) {
+    const verdict = validatePackEmployeeIdentifier("PL", value);
+    assert.equal(verdict.valid, false, `PL must refuse invalid PESEL ${value}`);
+    assert.match(verdict.message ?? "", /PESEL.*(birth date|control digit)/i);
+  }
+});
+
 test("a Corsican NIR validates with its 2A/2B department intact", () => {
   const north = validatePackEmployeeIdentifier("FR", "254022A03300522");
   assert.equal(north.valid, true, `2A NIR must validate: ${north.message}`);

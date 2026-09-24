@@ -14,6 +14,7 @@ import type {
 import { PayrollPackError } from "../payroll-error.ts";
 import { payrollSupportedTaxYears } from "../tax-years.ts";
 import { PL_TAX_YEARS } from "./rates.ts";
+import { isValidPesel } from "./pesel.ts";
 
 /**
  * The PL pack's PIT-11 builder: one employee information return per employee
@@ -251,6 +252,7 @@ export async function pit11Slip(
       + "for employees with committed PL pay stubs in that year",
     );
   }
+  await loadValidPesel(orgId, rowId);
   return {
     formCode: "PL_PIT11",
     formName: "PIT-11 — Informacja o przychodach z innych źródeł oraz o dochodach i pobranych zaliczkach na podatek dochodowy",
@@ -340,13 +342,25 @@ export async function pit11ConfidentialFields(
 ): Promise<{ label: string; fingerprint: string }[]> {
   const employeePartyId = rowId;
   if (!PIT11_ROW_UUID_RE.test(employeePartyId)) return [];
-  const rows = (await db.execute<{ sin_encrypted: string | null }>(sql`
-    select sin_encrypted from employee_payroll_profiles
-     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-  `));
-  const pesel = unsealSecret(rows.rows[0]?.sin_encrypted ?? null);
+  const pesel = await loadValidPesel(orgId, employeePartyId);
   return [{
     label: "PESEL",
-    fingerprint: pesel ? keyedFingerprint("pl.pesel", pesel) : "",
+    fingerprint: keyedFingerprint("pl.pesel", pesel),
   }];
+}
+
+/** PIT-11 requires a legally valid PESEL even for profiles saved before validation existed. */
+async function loadValidPesel(orgId: string, employeePartyId: string): Promise<string> {
+  const rows = await db.execute<{ sin_encrypted: string | null }>(sql`
+    select sin_encrypted from employee_payroll_profiles
+     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+  `);
+  const pesel = unsealSecret(rows.rows[0]?.sin_encrypted ?? null);
+  if (!pesel || !isValidPesel(pesel)) {
+    throw new PayrollError(
+      `cannot issue or amend this employee's PIT-11 because the PESEL is ${pesel ? "invalid" : "missing"} — `
+      + "save a valid 11-digit PESEL with a valid encoded birth date and control digit",
+    );
+  }
+  return pesel;
 }

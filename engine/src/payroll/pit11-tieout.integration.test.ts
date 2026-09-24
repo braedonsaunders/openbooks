@@ -3,13 +3,20 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../platform/db.ts";
+import { sealSecret } from "../platform/secrets.ts";
 import { add } from "../money/money.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
-import { parsePit11RowId, pit11Population, pit11Slips, pit11Slip } from "./pl/pit11.ts";
+import {
+  parsePit11RowId,
+  pit11ConfidentialFields,
+  pit11Population,
+  pit11Slips,
+  pit11Slip,
+} from "./pl/pit11.ts";
 import {
   createScratchOrg,
   dropScratchOrgReporting,
@@ -129,6 +136,13 @@ test(
       const marek = await makeEmployee(
         org.orgId, org.subsidiaryId, actorId, scheduleId, "Marek Nowak", 1985, "72000",
       );
+      const employeesWithPesel = [[anna, "90010100009"], [marek, "85010100005"]] as const;
+      for (const [employeeId, pesel] of employeesWithPesel) {
+        await db.execute(sql`
+          update employee_payroll_profiles
+             set sin_encrypted = ${sealSecret(pesel)}, sin_last3 = ${pesel.slice(-3)}
+           where org_id = ${org.orgId} and employee_party_id = ${employeeId}`);
+      }
 
       const committed: string[] = [];
       for (const [start, end, payDate] of [
@@ -259,6 +273,20 @@ test(
       await assert.rejects(
         () => pit11Slip(org.orgId, 2026, randomUUID()),
         /no 2026 PIT-11 matches the requested employee/,
+      );
+      // An imported or legacy profile can bypass current save validation.
+      // Filing must still refuse that record rather than transmit a bad PESEL.
+      await db.execute(sql`
+        update employee_payroll_profiles
+           set sin_encrypted = ${sealSecret("44051401350")}
+         where org_id = ${org.orgId} and employee_party_id = ${anna}`);
+      await assert.rejects(
+        () => pit11Slip(org.orgId, 2026, anna),
+        /cannot issue or amend this employee's PIT-11 because the PESEL is invalid/,
+      );
+      await assert.rejects(
+        () => pit11ConfidentialFields(org.orgId, 2026, anna),
+        /cannot issue or amend this employee's PIT-11 because the PESEL is invalid/,
       );
     } finally {
       await dropScratchOrgReporting(org.orgId);

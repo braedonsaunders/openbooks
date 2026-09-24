@@ -523,10 +523,10 @@ export interface PayrollProfileExemptionFlag {
  * one that rejects, so the generic layer tests the value AS GIVEN against
  * the pack's own pattern and never a stripped derivative.
  *
- * Each pack declares its own LENGTH and CHARACTER SHAPE, and only what its
- * authority states: no pack invents a checksum. A validator that rejects a
- * valid identifier is the defect being fixed, so patterns err toward
- * accepting and the agency rejects.
+ * Each pack declares its own length and character shape, and may also supply
+ * an authority-backed semantic validator for a defined checksum or embedded
+ * date. The generic layer enforces that validator without naming any
+ * country's identifier rules.
  */
 export interface PayrollEmployeeIdentifier {
   /**
@@ -580,6 +580,14 @@ export interface PayrollEmployeeIdentifier {
    * never another vendor's documentation.
    */
   citation: string;
+  /**
+   * Optional country-specific validation beyond the declared text shape.
+   * A pack uses this when its authority requires a checksum or semantic date.
+   */
+  validator?: {
+    validate: (canonical: string) => boolean;
+    refusalReason: string;
+  };
   /**
    * True when the value is digits only (mobile numeric keyboard hint). A
    * pack whose authority presents the value with separators declares false.
@@ -1703,6 +1711,13 @@ export function validatePackEmployeeIdentifier(
       valid: false,
       saved: null,
       message: `Invalid ${declaration.label}: expected ${declaration.formatHelp} (e.g. ${declaration.example})`,
+    };
+  }
+  if (declaration.validator && !declaration.validator.validate(canonical)) {
+    return {
+      valid: false,
+      saved: null,
+      message: `Invalid ${declaration.label}: ${declaration.validator.refusalReason}`,
     };
   }
   return { valid: true, saved: canonical, message: null };
