@@ -33,11 +33,14 @@ export type {
 export { FIELD_TYPES, isResponseValueField } from './field-types'
 export type { FieldOptionsSource, FieldTypeMeta, FileMeta } from './field-types'
 
-export { evaluateFormulaTree, evaluateLogicRule, resolveDefaultValue } from './evaluator'
+export { evaluateFormulaTree, evaluateLogicRule, FormulaEvaluationError, resolveDefaultValue } from './evaluator'
 export type { EvalContext, FieldValueMap, RowMap } from './evaluator'
 
 export { validateResponse } from './validator'
 export type { ValidationError } from './validator'
+
+export { canonicalDecimal, compareExactDecimals, parseExactDecimalParts, renderExactDecimal } from './decimals'
+export type { ExactDecimal } from './decimals'
 
 export {
   MAX_FLOW_EDGES,

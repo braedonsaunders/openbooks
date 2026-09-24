@@ -20,6 +20,7 @@
 import {
   evaluateFormulaTree,
   formSectionSchema,
+  FormulaEvaluationError,
   lintFormSchema,
   validateResponse,
   type FieldType,
@@ -410,6 +411,22 @@ export function withComputedFormulas(
     formulaRows[section.id] = sectionRows.map((_row, rowIndex) => rowValues(section.id, rowIndex))
   }
 
+  // A formula that cannot evaluate (divide-by-zero, garbage operand)
+  // persists as null — a visibly blank field — never as a silent 0 that
+  // reads like a real amount. The named refusal stays available to previews
+  // through evaluateFormulaTree itself.
+  function evaluateToBlank(
+    expr: Parameters<typeof evaluateFormulaTree>[0],
+    ctx: Parameters<typeof evaluateFormulaTree>[1],
+  ): number | string | null {
+    try {
+      return evaluateFormulaTree(expr, ctx)
+    } catch (error) {
+      if (error instanceof FormulaEvaluationError) return null
+      throw error
+    }
+  }
+
   function resolveHeaderField(fieldId: string): unknown {
     const formula = headerFormulas.get(fieldId)
     if (!formula) return values[fieldId]
@@ -418,7 +435,7 @@ export function withComputedFormulas(
     if (resolving.has(key)) return null
     resolving.add(key)
     const result = formula.formula
-      ? evaluateFormulaTree(formula.formula, { values: headerValues, rows: formulaRows })
+      ? evaluateToBlank(formula.formula, { values: headerValues, rows: formulaRows })
       : null
     resolving.delete(key)
     headerMemo.set(fieldId, result)
@@ -438,7 +455,7 @@ export function withComputedFormulas(
     if (resolving.has(key)) return null
     resolving.add(key)
     const result = formula.formula
-      ? evaluateFormulaTree(formula.formula, {
+      ? evaluateToBlank(formula.formula, {
           values: rowValues(sectionId, rowIndex),
           rows: formulaRows,
         })
