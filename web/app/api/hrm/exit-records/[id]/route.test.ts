@@ -143,85 +143,92 @@ function patchRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("exit item route gates reads on retention and writes on manage", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.retention\.read"\)/);
-    assert.match(source, /guardPermission\("hrm\.performance\.manage"\)/);
-  });
-} else {
-  test("an unknown id never reaches the service", async () => {
-    reset();
-    const bad = { params: Promise.resolve({ id: "nope" }) };
-    assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ reasonKind: "resignation" }), bad)).status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), params)).status, 404);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ reasonKind: "resignation" }), params)).status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("detail resolves through the retention gate", async () => {
-    reset();
-    const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "detail", args: { orgId: "org-1", actorId: "user-1", exitId: EXIT_ID } },
-    ]);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("correction forwards the revision with only the supplied fields", async () => {
-    reset();
-    const response = await itemRoute!.PATCH(
-      patchRequest({ expectedRevision: 3, wouldRehire: true, notes: "missed" }),
-      params,
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "update",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          exitId: EXIT_ID,
-          expectedRevision: 3,
-          wouldRehire: true,
-          notes: "missed",
-        },
+test("an unknown id never reaches the service", async () => {
+  reset();
+  const bad = { params: Promise.resolve({ id: "nope" }) };
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ reasonKind: "resignation" }), bad)).status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("detail resolves through the retention gate", async () => {
+  reset();
+  const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [
+    { fn: "detail", args: { orgId: "org-1", actorId: "user-1", exitId: EXIT_ID } },
+  ]);
+});
+
+test("correction forwards the revision with only the supplied fields", async () => {
+  reset();
+  const response = await itemRoute!.PATCH(
+    patchRequest({ expectedRevision: 3, wouldRehire: true, notes: "missed" }),
+    params,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "update",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        exitId: EXIT_ID,
+        expectedRevision: 3,
+        wouldRehire: true,
+        notes: "missed",
       },
-    ]);
-  });
+    },
+  ]);
+});
 
-  test("a correction without the read revision never reaches the service", async () => {
-    reset();
-    const response = await itemRoute!.PATCH(patchRequest({ notes: "missed" }), params);
-    assert.equal(response.status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a correction without the read revision never reaches the service", async () => {
+  reset();
+  const response = await itemRoute!.PATCH(patchRequest({ notes: "missed" }), params);
+  assert.equal(response.status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("corrections refuse hostile payloads at the real boundary", async () => {
-    reset();
-    for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
-      const refused = await itemRoute!.PATCH(
-        new Request(`http://openbooks.test/api/hrm/exit-records/${EXIT_ID}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body,
-        }),
-        params,
-      );
-      assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
-    }
-    assert.deepEqual(routeState.calls, []);
-  });
-
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("exit interview needs both the held date and the interviewer");
-    routeState.serviceThrow = refusal;
-    const response = await itemRoute!.PATCH(
-      patchRequest({ expectedRevision: 1, interviewHeldOn: "2026-07-01" }),
+test("corrections refuse hostile payloads at the real boundary", async () => {
+  reset();
+  for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
+    const refused = await itemRoute!.PATCH(
+      new Request(`http://openbooks.test/api/hrm/exit-records/${EXIT_ID}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body,
+      }),
       params,
     );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+    assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+  }
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("exit interview needs both the held date and the interviewer");
+  routeState.serviceThrow = refusal;
+  const response = await itemRoute!.PATCH(
+    patchRequest({ expectedRevision: 1, interviewHeldOn: "2026-07-01" }),
+    params,
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
