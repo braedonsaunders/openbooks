@@ -6,7 +6,6 @@ import { can, getAuthz } from '../../../../lib/authz'
 import {
   attachmentReadPermission,
   attachmentTargetInScope,
-  attachmentTargetVisible,
   canMutateFiles,
   fileViewer,
   isAllowedContentType,
@@ -68,10 +67,9 @@ export async function POST(req: Request) {
     if (!isAttachableTargetTable(targetTable)) {
       return NextResponse.json({ error: 'unsupported targetTable' }, { status: 422 })
     }
-    if (!canMutateFiles(gate, targetTable)) {
-      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    }
-    if (!(await attachmentTargetVisible(gate, targetTable, targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId)
+    if (!target || !attachmentTargetInScope(gate, target)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!canMutateFiles(gate, targetTable, target.kind)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     if (!isAllowedContentType(file.type)) {
       return NextResponse.json({ error: `unsupported file type: ${file.type || 'unknown'}` }, { status: 415 })
     }
@@ -106,10 +104,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unsupported targetTable' }, { status: 422 })
   }
   const targetTable = String(body.targetTable)
-  if (!canMutateFiles(gate, targetTable)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
-  if (!(await attachmentTargetVisible(gate, targetTable, targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId)
+  if (!target || !attachmentTargetInScope(gate, target)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!canMutateFiles(gate, targetTable, target.kind)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   // The file must belong to the caller's org and be visible to them —
   // blocks cross-org links and attaching out of someone else's private folder.
   if (!(await getFile(gate.user.orgId, fileId, fileViewer(gate)))) {

@@ -37,7 +37,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
   const permission = attachmentReadPermission(link.targetTable, target.kind)
   if (!permission) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!can(gate, permission) || !canMutateFiles(gate, link.targetTable)) {
+  if (!can(gate, permission) || !canMutateFiles(gate, link.targetTable, target.kind)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
