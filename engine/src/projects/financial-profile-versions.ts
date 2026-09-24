@@ -144,6 +144,9 @@ export function assertValidProjectFinancialProfile(
     "laborCost.source",
   );
   if (labor.groupKeys !== undefined) strings(labor.groupKeys, "laborCost.groupKeys");
+  if (labor.source === "account_group" && (typeof labor.dimension !== "string" || !labor.dimension)) {
+    throw new Error("laborCost.dimension is required when laborCost.source is 'account_group'");
+  }
 
   const overhead = object(profile.overhead, "overhead");
   oneOf(
