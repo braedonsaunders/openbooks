@@ -10,7 +10,7 @@ import {
 } from '@openbooks/engine/src/records/control-accounts.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
-import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope, subsidiaryScopeAllows, type Authz } from '../../../../lib/authz'
 import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
 import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -45,6 +45,23 @@ async function expenseReport(id: string, authz: Authz) {
 }
 
 /**
+ * Locked recheck for the submit/post/recall writes. The expenseReport probe
+ * above can authorize report A while a concurrent A→B rehome lands before
+ * the write commits; this runs under the document row lock inside the write
+ * transaction, so the verdict sees the latest committed subsidiary and the
+ * rehome blocks until the write commits.
+ */
+async function lockedExpenseInScope(documentId: string, authz: Authz): Promise<boolean> {
+  if (!isUuid(documentId)) return false
+  const locked = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from documents
+         where id = ${documentId} and kind = 'expense_report' and org_id = ${authz.user.orgId}
+         for update`,
+  )).rows[0]
+  return !!locked && subsidiaryScopeAllows(authz.allowedSubsidiaryIds, locked.subsidiaryId)
+}
+
+/**
  * Recall a submitted or approved-but-unposted expense report to draft,
  * cancelling its open approval gates and runs. Decided gates stand as
  * history; only open ('pending'/'escalated') gates and live
@@ -59,6 +76,7 @@ async function recallExpenseReport(input: {
   actorId: string
   expectedUpdatedAt: unknown
   isAdmin: boolean
+  allowedSubsidiaryIds: ReadonlySet<string> | null
 }): Promise<{ cancelledGates: number; cancelledRuns: number }> {
   const expectedRevision = requireDocumentEditRevision(input.expectedUpdatedAt)
   return withOrgTransaction(input.orgId, async () => {
@@ -67,16 +85,20 @@ async function recallExpenseReport(input: {
       submittedBy: string | null
       createdBy: string | null
       voidRequestedAt: string | null
+      subsidiaryId: string | null
       revision: string
     }>(sql`
       select status, submitted_by as "submittedBy", created_by as "createdBy",
              void_requested_at as "voidRequestedAt",
+             subsidiary_id as "subsidiaryId",
              ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "revision"
         from documents
        where id = ${input.documentId} and kind = 'expense_report' and org_id = ${input.orgId}
        for update
     `)).rows[0]
-    if (!locked) throw new DocumentEditError(404, 'expense report not found')
+    if (!locked || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, locked.subsidiaryId)) {
+      throw new DocumentEditError(404, 'expense report not found')
+    }
     if (locked.status !== 'pending_approval' && locked.status !== 'approved') {
       throw new DocumentEditError(
         422,
@@ -173,14 +195,19 @@ export async function POST(req: Request) {
         // inside it: without the wrapper the submission's own transaction
         // would commit its before_submit script effects before the 422.
         // The catch below answers the same 422 after the rollback.
-        const { runId, autoApproved } = await withOrgTransaction(user.orgId, async () => {
-          const submission = await submitAndReleaseIfUngated('expense_report', documentId, user.id)
-          if (submission.flowError) {
-            throw new ApprovalRoutingError(submission.flowError)
+        // The scope is rechecked under the document lock first (the inner
+        // submit joins this transaction): a rehome that lands after the
+        // expenseReport probe blocks here instead of riding the submit.
+        const submission = await withOrgTransaction(user.orgId, async () => {
+          if (!(await lockedExpenseInScope(documentId, authz))) return null
+          const inner = await submitAndReleaseIfUngated('expense_report', documentId, user.id)
+          if (inner.flowError) {
+            throw new ApprovalRoutingError(inner.flowError)
           }
-          return submission
+          return inner
         })
-        return NextResponse.json({ ok: true, requestId: runId, autoApproved })
+        if (!submission) return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
+        return NextResponse.json({ ok: true, requestId: submission.runId, autoApproved: submission.autoApproved })
       }
       case 'post': {
         if (!can(authz, 'ap.post')) {
@@ -198,9 +225,17 @@ export async function POST(req: Request) {
           )
         }
         const deps = { control: await loadRequiredControlAccounts(user.orgId) }
-        const entryId = await postDocument(body.documentId, deps, {
-          audit: { actorId: user.id, source: 'ui' },
+        const documentId: string = body.documentId
+        // Post joins this transaction: the scope is rechecked under the
+        // document lock first, so a rehome that lands after the
+        // expenseReport probe blocks here instead of riding the post.
+        const entryId = await withOrgTransaction(user.orgId, async () => {
+          if (!(await lockedExpenseInScope(documentId, authz))) return null
+          return postDocument(documentId, deps, {
+            audit: { actorId: user.id, source: 'ui' },
+          })
         })
+        if (!entryId) return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         return NextResponse.json({ ok: true, entryId })
       }
       case 'recall': {
@@ -217,6 +252,7 @@ export async function POST(req: Request) {
             actorId: user.id,
             expectedUpdatedAt: body.expectedUpdatedAt,
             isAdmin: user.isSuperAdmin || user.roles.some((role) => role.key === 'admin'),
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
           })
           return NextResponse.json({ ok: true, ...outcome })
         } catch (e) {
