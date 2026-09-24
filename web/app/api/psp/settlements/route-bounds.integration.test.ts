@@ -26,6 +26,7 @@ registerHooks({
         }
         export function can() { return true }
         export function guardSubsidiaryScope() { return null }
+        export function guardUnrestrictedScope() { return null }
       `);
     if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
@@ -69,7 +70,7 @@ async function fixture(): Promise<{ orgId: string; batchId: string; date: string
   const { batchId } = await withBypassContext(() =>
     importSettlementBatch(org.orgId, actor, parsed as never, accounts),
   );
-  await withBypassContext(() => postSettlementBatch(org.orgId, batchId, actor));
+  await withBypassContext(() => postSettlementBatch(org.orgId, batchId, actor, null));
   return { orgId: org.orgId, batchId, date: org.date };
 }
 

@@ -87,7 +87,7 @@ test(
         accounts,
       );
       await assert.rejects(
-        postSettlementBatch(org.orgId, batchId, actor),
+        postSettlementBatch(org.orgId, batchId, actor, null),
         (error) => {
           assert.ok(error instanceof PspSettlementError);
           assert.match(error.message, /subsidiary/);
@@ -105,7 +105,7 @@ test(
         ...accounts,
         subsidiaryId: secondSub,
       });
-      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor);
+      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor, null);
       assert.ok(entryId);
       const after = await batchState(org.orgId, batchId);
       assert.equal(after.status, "posted");
@@ -140,7 +140,7 @@ test(
           clearingAccountId: org.accounts.clearing,
         },
       );
-      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor);
+      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor, null);
       const after = await batchState(org.orgId, batchId);
       assert.equal(after.status, "posted");
       assert.equal(after.subsidiaryId, org.subsidiaryId);

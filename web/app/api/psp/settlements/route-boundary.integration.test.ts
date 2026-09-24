@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { Pool } from "pg";
 
 /**
  * PSP settlement boundary: a malformed batch id on post/reverse must fail
@@ -40,6 +41,10 @@ registerHooks({
               if (subsidiaryId == null && opts.orgWideNull) return null;
               return { status: 404, json: async () => ({ error: 'not found' }) };
             }
+            export function guardUnrestrictedScope(authz){
+              if (authz.allowedSubsidiaryIds === null) return null;
+              return { status: 403, json: async () => ({ error: 'requires unrestricted subsidiary access' }) };
+            }
           `),
       };
     }
@@ -54,6 +59,8 @@ registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
+const { withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { importSettlementBatch, parseStripeBalanceTransactions, postSettlementBatch } = await import("@openbooks/engine/src/payments/psp-settlement.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -65,6 +72,112 @@ const json = (body: unknown) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+
+test("post rechecks the locked batch after a concurrent subsidiary rehome", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
+  try {
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    const subsidiaryB = randomUUID();
+    await withBypassContext(() => db.execute(sql`
+      insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, tax_ids, is_elimination, is_active, custom)
+      values (${subsidiaryB}, ${org.orgId}, 'Other Entity', 'CAD', 'CA', ${org.subsidiaryId}, '{}'::jsonb, false, true, '{}'::jsonb)
+    `));
+    const parsed = parseStripeBalanceTransactions([
+      { id: "race-charge", type: "charge", amount: 10000, currency: "cad", fee: 0, net: 10000 },
+    ], `psp-rehome-${org.orgId}`, org.date);
+    const imported = await withOrgContext(org.orgId, () => importSettlementBatch(org.orgId, actorId, parsed, {
+      bankAccountId: org.accounts.bank,
+      feeAccountId: org.accounts.freight,
+      clearingAccountId: org.accounts.clearing,
+      subsidiaryId: org.subsidiaryId,
+    }));
+    state.user = { orgId: org.orgId, id: actorId };
+    state.allowed = new Set([org.subsidiaryId]);
+    await holder.query("begin");
+    await holder.query("select set_config('app.bypass_rls', 'on', true)");
+    const held = await holder.query("select id from psp_settlement_batches where id = $1 for update", [imported.batchId]);
+    assert.equal(held.rows.length, 1);
+    let settled = false;
+    const pending = withOrgContext(org.orgId, () => POST(json({ action: "post", batchId: imported.batchId })))
+      .then((response) => { settled = true; return response; });
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    assert.equal(settled, false, "POST must wait on the batch row lock");
+    const waiting = (await holder.query(`select count(*)::int as n from pg_stat_activity
+      where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
+        and query ilike '%psp_settlement_batches%for update%'`)).rows[0].n as number;
+    assert.ok(waiting > 0, "POST reached the locked batch row");
+    await holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [subsidiaryB, imported.batchId]);
+    await holder.query("commit");
+    const response = await pending;
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "not found" });
+    const batch = (await withBypassContext(() => db.execute(sql`
+      select status, subsidiary_id from psp_settlement_batches where org_id = ${org.orgId} and id = ${imported.batchId}
+    `))).rows[0] as { status: string; subsidiary_id: string };
+    assert.deepEqual(batch, { status: "draft", subsidiary_id: subsidiaryB });
+  } finally {
+    await holder.query("rollback").catch(() => undefined);
+    holder.release();
+    state.user = { orgId: "", id: "" };
+    state.allowed.clear();
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("reverse rechecks the locked batch after a concurrent subsidiary rehome", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
+  try {
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    const subsidiaryB = randomUUID();
+    await withBypassContext(() => db.execute(sql`
+      insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, tax_ids, is_elimination, is_active, custom)
+      values (${subsidiaryB}, ${org.orgId}, 'Other Entity', 'CAD', 'CA', ${org.subsidiaryId}, '{}'::jsonb, false, true, '{}'::jsonb)
+    `));
+    const parsed = parseStripeBalanceTransactions([
+      { id: "reverse-race-charge", type: "charge", amount: 10000, currency: "cad", fee: 0, net: 10000 },
+    ], `psp-reverse-rehome-${org.orgId}`, org.date);
+    const imported = await withOrgContext(org.orgId, () => importSettlementBatch(org.orgId, actorId, parsed, {
+      bankAccountId: org.accounts.bank,
+      feeAccountId: org.accounts.freight,
+      clearingAccountId: org.accounts.clearing,
+      subsidiaryId: org.subsidiaryId,
+    }));
+    await postSettlementBatch(org.orgId, imported.batchId, actorId, null);
+    state.user = { orgId: org.orgId, id: actorId };
+    state.allowed = new Set([org.subsidiaryId]);
+    await holder.query("begin");
+    await holder.query("select set_config('app.bypass_rls', 'on', true)");
+    const held = await holder.query("select id from psp_settlement_batches where id = $1 for update", [imported.batchId]);
+    assert.equal(held.rows.length, 1);
+    let settled = false;
+    const pending = withOrgContext(org.orgId, () => POST(json({
+      action: "reverse", batchId: imported.batchId, reversalDate: org.date, reason: "duplicate payout",
+    }))).then((response) => { settled = true; return response; });
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    assert.equal(settled, false, "POST must wait on the batch row lock");
+    const waiting = (await holder.query(`select count(*)::int as n from pg_stat_activity
+      where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
+        and query ilike '%psp_settlement_batches%for update%'`)).rows[0].n as number;
+    assert.ok(waiting > 0, "POST reached the locked batch row");
+    await holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [subsidiaryB, imported.batchId]);
+    await holder.query("commit");
+    const response = await pending;
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "not found" });
+    const batch = (await withBypassContext(() => db.execute(sql`
+      select status, subsidiary_id, reversal_entry_id from psp_settlement_batches where org_id = ${org.orgId} and id = ${imported.batchId}
+    `))).rows[0] as { status: string; subsidiary_id: string; reversal_entry_id: string | null };
+    assert.deepEqual(batch, { status: "posted", subsidiary_id: subsidiaryB, reversal_entry_id: null });
+  } finally {
+    await holder.query("rollback").catch(() => undefined);
+    holder.release();
+    state.user = { orgId: "", id: "" };
+    state.allowed.clear();
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test("post/reverse answer a malformed batch id with 404, never a 500", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg());

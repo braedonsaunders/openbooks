@@ -15,7 +15,8 @@ import {
   type PspProvider,
 } from "@openbooks/engine/src/payments/psp-settlement.ts";
 import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
+import { can, getAuthz, guardSubsidiaryScope, guardUnrestrictedScope } from "../../../../lib/authz";
+import { ScopeNotFoundError, UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
@@ -109,6 +110,8 @@ export async function POST(req: Request) {
   try {
     switch (body.action) {
       case "saveConfig": {
+        const scopeDenied = guardUnrestrictedScope(authz);
+        if (scopeDenied) return scopeDenied;
         await savePspProviderConfig(
           orgId,
           {
@@ -123,6 +126,7 @@ export async function POST(req: Request) {
             apiKey: body.apiKey ?? null,
           },
           userId,
+          authz.allowedSubsidiaryIds,
         );
         return NextResponse.json({ ok: true });
       }
@@ -189,16 +193,7 @@ export async function POST(req: Request) {
         if (typeof body.batchId !== "string" || !isUuid(body.batchId)) {
           return NextResponse.json({ error: "not found" }, { status: 404 });
         }
-        if (authz.allowedSubsidiaryIds) {
-          const batch = (await db.execute<{ subsidiaryId: string | null }>(sql`
-            select subsidiary_id as "subsidiaryId"
-              from psp_settlement_batches
-             where id = ${body.batchId} and org_id = ${orgId}
-          `)).rows[0];
-          const denied = guardSubsidiaryScope(authz, batch?.subsidiaryId ?? null);
-          if (denied) return denied;
-        }
-        const posted = await postSettlementBatch(orgId, body.batchId, userId);
+        const posted = await postSettlementBatch(orgId, body.batchId, userId, authz.allowedSubsidiaryIds);
         return NextResponse.json(posted);
       }
       case "reverse": {
@@ -229,15 +224,6 @@ export async function POST(req: Request) {
         if (typeof body.batchId !== "string" || !isUuid(body.batchId)) {
           return NextResponse.json({ error: "not found" }, { status: 404 });
         }
-        if (authz.allowedSubsidiaryIds) {
-          const batch = (await db.execute<{ subsidiaryId: string | null }>(sql`
-            select subsidiary_id as "subsidiaryId"
-              from psp_settlement_batches
-             where id = ${body.batchId} and org_id = ${orgId}
-          `)).rows[0];
-          const denied = guardSubsidiaryScope(authz, batch?.subsidiaryId ?? null);
-          if (denied) return denied;
-        }
         const reversed = await reverseSettlementBatch(
           orgId,
           body.batchId,
@@ -246,6 +232,7 @@ export async function POST(req: Request) {
             reversalDate: String(body.reversalDate),
             reason: String(body.reason),
           },
+          authz.allowedSubsidiaryIds,
         );
         return NextResponse.json(reversed);
       }
@@ -253,6 +240,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    if (e instanceof UnrestrictedScopeError) {
+      return NextResponse.json({ error: "requires unrestricted subsidiary access" }, { status: 403 });
+    }
     const status = e instanceof PspSettlementError ? 422 : 500;
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
