@@ -552,6 +552,12 @@
       "cheque": "Chèque",
       "help": "Comment cet employé est payé. Laissez le défaut du tiers sauf si cette personne est payée différemment des autres — un chèque pour quelqu’un sans coordonnées bancaires au dossier, par exemple. La paie répartit le jour de paie entre les deux rails et finance chacun séparément.",
       "inherit": "Utiliser le défaut du tiers"
+    },
+    "certificates": {
+      "saved": "Certificat enregistré",
+      "save": "Enregistrer le certificat",
+      "saving": "Enregistrement…",
+      "effectiveFrom": "Date d’effet"
     }
   },
   "setupWizard": {

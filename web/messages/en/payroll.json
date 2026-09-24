@@ -552,6 +552,12 @@
       "cheque": "Cheque",
       "help": "How this employee is paid. Leave it on the party default unless this person is paid differently from the rest — a cheque for someone with no bank details on file, for instance. The pay run splits the payday between the two rails and funds each separately.",
       "inherit": "Use the party default"
+    },
+    "certificates": {
+      "saved": "Certificate saved",
+      "save": "Save certificate",
+      "saving": "Saving…",
+      "effectiveFrom": "Effective from"
     }
   },
   "setupWizard": {

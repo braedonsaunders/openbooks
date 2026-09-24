@@ -37,6 +37,19 @@ export interface AnomalyFlagDisplay {
   runDocumentId: string | null;
 }
 
+/**
+ * The flag drawer's fact rows. The display object carries the VALUES
+ * (severityLabel is the resolved severity, e.g. "Block"); the four terms
+ * below name the rows, so the drawer never shows one fact under another's
+ * heading.
+ */
+export interface AnomalyDrawerTerms {
+  severityTerm: string;
+  kindTerm: string;
+  employmentTerm: string;
+  statusTerm: string;
+}
+
 export interface AnomalyChecksData {
   tabs: Awaited<ReturnType<typeof groupTabs>>;
   title: string;
@@ -71,7 +84,7 @@ export interface AnomalyChecksData {
   stats: { blocking: number; warnings: number; acknowledged: number; falsePositiveRate: string };
   rows: AnomalyFlagDisplay[];
   truncated: boolean;
-  dialogFlag: (AnomalyFlagDisplay & { transitionLabels: { acknowledge: string; resolve: string; falsePositive: string; reasonLabel: string; reasonPlaceholder: string; submitLabel: string; failedLabel: string } }) | null;
+  dialogFlag: (AnomalyFlagDisplay & AnomalyDrawerTerms & { transitionLabels: { acknowledge: string; resolve: string; falsePositive: string; reasonLabel: string; reasonPlaceholder: string; submitLabel: string; failedLabel: string } }) | null;
   dialogCloseHref: string;
   dialogOpen: boolean;
   canScan: boolean;
@@ -190,6 +203,10 @@ export async function loadAnomalyChecks(
     if (found) {
       dialogFlag = {
         ...toDisplay(t, found, (found.employmentId && labels.get(found.employmentId)) || null, currentParams),
+        severityTerm: t('anomalies.columns.severity'),
+        kindTerm: t('anomalies.columns.kind'),
+        employmentTerm: t('anomalies.columns.employment'),
+        statusTerm: t('anomalies.columns.status'),
         transitionLabels: {
           acknowledge: t('anomalies.transitions.acknowledge'),
           resolve: t('anomalies.transitions.resolve'),

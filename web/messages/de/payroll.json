@@ -552,6 +552,12 @@
       "cheque": "Scheck",
       "help": "Wie dieser Mitarbeiter bezahlt wird. Belassen Sie es beim Partnerstandard, es sei denn, diese Person wird anders bezahlt als die übrigen — etwa ein Scheck für jemanden ohne hinterlegte Bankdaten. Der Lohnlauf teilt den Zahltag auf beide Wege auf und finanziert jeden separat.",
       "inherit": "Partnerstandard verwenden"
+    },
+    "certificates": {
+      "saved": "Zertifikat gespeichert",
+      "save": "Zertifikat speichern",
+      "saving": "Speichern…",
+      "effectiveFrom": "Gültig ab"
     }
   },
   "setupWizard": {
