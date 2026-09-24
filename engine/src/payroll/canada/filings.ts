@@ -109,7 +109,7 @@ async function t4Population(orgId: string, taxYear: number): Promise<PayrollFili
       { label: "Employment income", value: summary.employmentIncome, money: true },
       {
         label: "CPP (employee + employer)",
-        value: add(add(summary.employeeCpp, summary.employeeCpp2), summary.employerCpp),
+        value: add(add(add(summary.employeeCpp, summary.employeeCpp2), summary.employerCpp), summary.employerCpp2),
         money: true,
       },
       { label: "EI (employee + employer)", value: add(summary.employeeEi, summary.employerEi), money: true },

@@ -248,7 +248,7 @@ const GOLDEN_SUMMARY = {
   employmentIncome: "54500.00",
   employeeCpp: "3200.50",
   employeeCpp2: "188.00",
-  employerCpp: "3388.50",
+  employerCpp: "3200.50", employerCpp2: "188.00",
   employeeEi: "834.20",
   employerEi: "1167.88",
   incomeTax: "9100.75",
@@ -319,7 +319,7 @@ const T4_AMENDED_XML = `<?xml version="1.0" encoding="UTF-8"?>
    <TOT_EMPT_INC_AMT>54500.00</TOT_EMPT_INC_AMT>
    <TOT_EMPE_CPP_AMT>3200.50</TOT_EMPE_CPP_AMT>
    <TOT_EMPE_CPP2_AMT>188.00</TOT_EMPE_CPP2_AMT>
-   <TOT_EMPR_CPP_AMT>3388.50</TOT_EMPR_CPP_AMT>
+   <TOT_EMPR_CPP_AMT>3200.50</TOT_EMPR_CPP_AMT><tot_empr_cppe_amt>188.00</tot_empr_cppe_amt>
    <TOT_EMPE_EIP_AMT>834.20</TOT_EMPE_EIP_AMT>
    <TOT_EMPR_EIP_AMT>1167.88</TOT_EMPR_EIP_AMT>
    <TOT_ITX_DDCT_AMT>9100.75</TOT_ITX_DDCT_AMT>

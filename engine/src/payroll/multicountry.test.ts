@@ -372,7 +372,7 @@ const t4 = (slips: (T4Slip & { sin: string })[]): string => renderT4Xml({
     slips,
     summary: {
       slips: slips.length, employmentIncome: "50000", employeeCpp: "3500", employeeCpp2: "200",
-      employerCpp: "3500", employeeEi: "900", employerEi: "1260", incomeTax: "8000",
+      employerCpp: "3500", employerCpp2: "0", employeeEi: "900", employerEi: "1260", incomeTax: "8000",
       remitted: "0",
     },
   }],
