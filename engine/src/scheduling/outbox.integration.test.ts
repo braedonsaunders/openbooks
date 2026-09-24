@@ -30,6 +30,7 @@ import {
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 import {
+  appendOccurrenceEvents,
   claimDueScriptOccurrence,
   recoverLostScriptOccurrences,
   runDueScripts,
@@ -1726,6 +1727,40 @@ test("the scheduler sweep routes allocation_run rows to the allocation processor
     );
   } finally {
     await db.execute(sql`delete from scheduler_outbox where occurrence_key = ${occurrenceKey}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("appendOccurrenceEvents reports a missing row instead of dropping logs silently (B3-SCH-01)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scriptId = randomUUID();
+    await db.execute(sql`
+      insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
+      values (${scriptId}, ${org.orgId}, 'Scratch events', 'scheduled',
+              'function main(ctx) { return "events"; }', '*/5 * * * *',
+              ${new Date(Date.now() + 3_600_000)}, 2000, true)
+    `);
+    const occurrenceId = (await db.execute<{ id: string }>(sql`
+      insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
+      values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued', '[]'::jsonb, now())
+      returning id
+    `)).rows[0]!.id;
+    // A live row appends and reports applied, and the event is readable back.
+    assert.equal(await appendOccurrenceEvents(occurrenceId, org.orgId, [{ event: "enqueued" }]), true);
+    const logs = (await db.execute<{ logs: { event: string }[] }>(sql`
+      select logs from script_runs where id = ${occurrenceId}
+    `)).rows[0]!.logs;
+    assert.deepEqual(logs, [{ event: "enqueued" }]);
+    // A wrong-org row and a deleted row both report not-applied.
+    const other = await createScratchOrg();
+    try {
+      assert.equal(await appendOccurrenceEvents(occurrenceId, other.orgId, [{ event: "enqueued" }]), false);
+    } finally {
+      await dropScratchOrg(other.orgId);
+    }
+    assert.equal(await appendOccurrenceEvents(randomUUID(), org.orgId, [{ event: "enqueued" }]), false);
+  } finally {
     await dropScratchOrg(org.orgId);
   }
 });
