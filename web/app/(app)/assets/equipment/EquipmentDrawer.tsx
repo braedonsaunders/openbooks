@@ -11,6 +11,9 @@ import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { confirmDialog } from '../../../../lib/confirm'
+import { useViewerFormat } from '../../../../lib/viewer-format'
+import { formatExactPercent } from '../../../../lib/format'
+import { equipmentRoiPercent } from '../../../../lib/equipment-roi'
 type Opt = { id: string; name: string; code?: string | null; number?: string | null };
 
 // Every stable refusal code POST /api/equipment can emit. The
@@ -89,6 +92,7 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
   createMode?: boolean
 }) {
   const { money } = useMoney()
+  const viewer = useViewerFormat()
   const t = useTranslations('assets.equipment'); const common = useTranslations('common'); const router = useRouter()
   const e = payload.unit; const m = payload.metrics
   const [mode, setMode] = useState<'view'|'edit'>(createMode ? 'edit' : 'view'); const [actionsOpen, setActionsOpen] = useState(false)
@@ -234,16 +238,14 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
   }
   const editable = mode === 'edit' && canManage
   const input = (label: string, value: string, set: (v:string)=>void, props = {}) => <div className="space-y-1.5"><Label>{label}</Label>{editable ? <Input value={value} onChange={(ev) => set(ev.target.value)} {...props}/> : <p className="text-sm">{value || '—'}</p>}</div>
-  const roi = Number(e.purchase_price) > 0
-    ? ((Number(m.billed_revenue) - Number(m.recovery) - Number(m.direct_costs) - Number(m.depreciation)) / Number(e.purchase_price)) * 100
-    : 0
+  const roi = equipmentRoiPercent(m.billed_revenue, m.recovery, m.direct_costs, m.depreciation, e.purchase_price)
   const utilization = Number(e.capacity_quantity) > 0 ? Math.min(100, Number(m.usage) / Number(e.capacity_quantity) * 100) : 0
   return <UrlDrawer open closeHref={closeHref} size="2xl" title={<span className="flex items-center gap-2">{name || t('new')}<Badge variant={status === 'active' ? 'success' : 'secondary'}>{t(`statuses.${status}`)}</Badge></span>}
     description={createMode ? t('create.description') : undefined}
     headerActions={mode === 'edit' ? <><Button size="sm" variant="outline" disabled={busy} onClick={cancel}>{common('actions.cancel')}</Button><Button size="sm" disabled={busy || (createMode && !name.trim())} onClick={() => save()}>{busy ? common('actions.saving') : createMode ? t('create.create') : common('actions.save')}</Button></> : canManage && !createMode ? <><Button size="sm" variant="outline" onClick={() => setMode('edit')}>{common('actions.edit')}</Button><Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1" trigger={<Button size="sm" variant="outline" onClick={() => setActionsOpen(!actionsOpen)}>{common('labels.actions')}<ChevronDown size={14}/></Button>}><div className="grid gap-1">{status !== 'active' ? <Button variant="ghost" className="justify-start" onClick={() => save({status:'active'})}>{t('activate')}</Button> : <Button variant="ghost" className="justify-start" onClick={() => save({status:'inactive'})}>{t('deactivate')}</Button>} {fixedAssetsEnabled && !e.fixed_asset_id ? <Button variant="ghost" className="justify-start" disabled={busy} onClick={capitalize}>{t('capitalize')}</Button> : null} {status === 'draft' ? <Button variant="ghost" className="justify-start text-red-600" onClick={remove}>{common('actions.delete')}</Button> : null}</div></Popover></> : undefined}>
     <div className="space-y-6">
       <ActionAlert error={refusal} fallbackMessage={t('saveFailed')} />
-      <KpiStrip items={[{label:t('metrics.purchasePrice'),value:money(e.purchase_price)},{label:t('metrics.recovery'),value:money(m.recovery)},{label:t('metrics.billedRevenue'),value:money(m.billed_revenue)},{label:t('metrics.roi'),value:`${roi.toFixed(1)}%`},{label:t('metrics.utilization'),value:`${utilization.toFixed(1)}%`}]} />
+      <KpiStrip items={[{label:t('metrics.purchasePrice'),value:money(e.purchase_price)},{label:t('metrics.recovery'),value:money(m.recovery)},{label:t('metrics.billedRevenue'),value:money(m.billed_revenue)},{label:t('metrics.roi'),value:formatExactPercent(roi, viewer.locale)},{label:t('metrics.utilization'),value:`${utilization.toFixed(1)}%`}]} />
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {input(common('labels.name'), name, setName)}{input(t('number'), unitNumber, setUnitNumber, createMode ? { placeholder: t('create.unitNumberHint') } : {})}{input(t('serial'), serialNumber, setSerialNumber)}
         <div className="space-y-1.5"><Label>{common('labels.status')}</Label>{editable && !createMode ? <Select value={status} onChange={(x)=>setStatus(x.target.value)}>{['draft','active','inactive','retired'].map(s=><option key={s} value={s}>{t(`statuses.${s}`)}</option>)}</Select> : <p className="text-sm">{t(`statuses.${status}`)}</p>}</div>

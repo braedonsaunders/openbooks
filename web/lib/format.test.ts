@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCivilDate, formatCount, formatPercent01, monthLabel, monthYearLabel, shortDateLabel, trendWeekLabel, viewerDateTime, viewerNumber } from './format';
+import { countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCivilDate, formatCount, formatExactPercent, formatPercent01, monthLabel, monthYearLabel, shortDateLabel, trendWeekLabel, viewerDateTime, viewerNumber } from './format';
 
 // Intl uses narrow/no-break spaces in some locales; compare on plain spaces.
 const nbsp = (s: string): string => s.replace(/[\u00a0\u202f]/g, " ");
@@ -102,6 +102,12 @@ test("percents localize placement instead of concatenating %", () => {
   assert.equal(nbsp(formatPercent01(0.125, "de")), "13 %");
   assert.equal(nbsp(formatPercent01(0.125, "fr")), "13 %");
   assert.equal(nbsp(formatPercent01(0, "de")), "0 %");
+});
+
+test("exact decimal percentages localize without passing the value through Number", () => {
+  assert.equal(nbsp(formatExactPercent("0.2", "en")), "0.2%");
+  assert.equal(nbsp(formatExactPercent("0.2", "fr-CA")), "0,2 %");
+  assert.equal(nbsp(formatExactPercent("-1234.5", "de")), "-1.234,5 %");
 });
 
 test("civil dates render medium in the operator locale without shifting days", () => {

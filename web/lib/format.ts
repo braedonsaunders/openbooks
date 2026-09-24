@@ -138,6 +138,43 @@ export function viewerNumber(value: number, locale: string, options?: Intl.Numbe
   return new Intl.NumberFormat(locale, options).format(value);
 }
 
+/** Localize an already rounded exact decimal as a percentage without
+ * converting its digits through IEEE-754. */
+export function formatExactPercent(value: string, locale: string, fractionDigits = 1): string {
+  const fixed = fixedDecimal(value, fractionDigits)
+  const negative = fixed.startsWith('-')
+  const [whole = '0', fraction = ''] = fixed.replace(/^-/, '').split('.')
+  const templateFormatter = new Intl.NumberFormat(locale, {
+    style: 'percent',
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  })
+  const template = templateFormatter.formatToParts(negative ? -1 : 1)
+  const isNumberPart = (part: Intl.NumberFormatPart) =>
+    part.type === 'integer' || part.type === 'group' || part.type === 'decimal' || part.type === 'fraction'
+  const first = template.findIndex(isNumberPart)
+  const last = template.findLastIndex(isNumberPart)
+  if (first < 0 || last < first) throw new Error('percent formatter did not produce a numeric value')
+
+  const integerParts = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).formatToParts(BigInt(whole))
+  const decimal = template.find((part) => part.type === 'decimal')?.value
+  const fractionParts = fractionDigits > 0
+    ? [
+        ...(decimal ? [{ type: 'decimal' as const, value: decimal }] : []),
+        ...[...fraction].map((digit) => ({
+          type: 'fraction' as const,
+          value: new Intl.NumberFormat(locale, { useGrouping: false }).format(Number(digit)),
+        })),
+      ]
+    : []
+  return [
+    ...template.slice(0, first).map((part) => part.value),
+    ...integerParts.map((part) => part.value),
+    ...fractionParts.map((part) => part.value),
+    ...template.slice(last + 1).map((part) => part.value),
+  ].join('')
+}
+
 /**
  * A civil YYYY-MM-DD date as a medium date in the operator locale, anchored
  * at UTC noon so the civil day never shifts with the server timezone.
@@ -150,3 +187,4 @@ export function formatCivilDate(isoDate: string, locale: string): string {
     timeZone: "UTC",
   });
 }
+import { fixedDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
