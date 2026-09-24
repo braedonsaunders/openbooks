@@ -315,6 +315,13 @@ export async function collectionsFindings(
 
   const overduePolicy = byKey.get("overdue_customer_balance");
   const holdPolicy = byKey.get("credit_hold_candidate");
+  // Invoices with no customer, keyed by document: filled from the overdue
+  // invoices below and the broken promises further down, then reported once
+  // as a data-quality finding — never merged into a pseudo-customer.
+  const customerlessDocs = new Map<
+    string,
+    { docNumber: string | null; dueDate: string | null; expectedPayDate: string | null; openBalance: string }
+  >();
   if (overduePolicy?.enabled || holdPolicy?.enabled) {
     const customers = await loaders.overdueCustomers(orgId, today);
     const invoices = overduePolicy?.enabled ? await loaders.overdueInvoices(orgId, today, 5) : [];
@@ -324,17 +331,29 @@ export async function collectionsFindings(
       list.push(invoice);
       invoicesByParty.set(partyKey(invoice.partyId), list);
     }
+    for (const invoice of invoicesByParty.get("unassigned") ?? []) {
+      customerlessDocs.set(invoice.docId, {
+        docNumber: invoice.docNumber,
+        dueDate: invoice.dueDate,
+        expectedPayDate: customerlessDocs.get(invoice.docId)?.expectedPayDate ?? null,
+        openBalance: invoice.openBalance,
+      });
+    }
     const overdueThreshold = overduePolicy?.enabled
       ? absoluteUnits(effectiveDetectorMateriality(overduePolicy, agentThreshold))
       : null;
-    const ranked = customers
+    // Invoices with no customer are not a customer: they never join the
+    // per-customer call list, take no reminder draft, and borrow no email.
+    // They are reported once, below, as a data-quality finding.
+    const identified = customers.filter((customer) => customer.partyId !== null);
+    const ranked = identified
       .filter((customer) => overdueThreshold !== null && absoluteUnits(customer.overdueBalance) >= overdueThreshold)
       .sort((a, b) => {
         const diff = toUnits(b.overdueBalance) - toUnits(a.overdueBalance);
         return diff === 0n ? 0 : diff > 0n ? 1 : -1;
       });
     const rankedKeys = new Set(ranked.map((customer) => partyKey(customer.partyId)));
-    for (const customer of customers) {
+    for (const customer of identified) {
       if (overduePolicy?.enabled && rankedKeys.has(partyKey(customer.partyId))) {
         const threshold = effectiveDetectorMateriality(overduePolicy, agentThreshold);
         {
@@ -466,6 +485,20 @@ export async function collectionsFindings(
       byParty.set(partyKey(row.partyId), list);
     }
     for (const [key, docs] of byParty) {
+      if (key === "unassigned") {
+        // No customer to group by or promise against: these join the
+        // data-quality finding below instead of a pseudo-customer group.
+        for (const doc of docs) {
+          const seen = customerlessDocs.get(doc.docId);
+          customerlessDocs.set(doc.docId, {
+            docNumber: doc.docNumber,
+            dueDate: seen?.dueDate ?? doc.dueDate,
+            expectedPayDate: doc.expectedPayDate,
+            openBalance: doc.openBalance,
+          });
+        }
+        continue;
+      }
       const total = docs.reduce((sum, doc) => sum + toUnits(doc.openBalance), 0n);
       if (total < absoluteUnits(threshold)) continue;
       const oldest = docs.map((doc) => doc.expectedPayDate).sort()[0]!;
@@ -504,6 +537,43 @@ export async function collectionsFindings(
         })),
       });
     }
+  }
+
+  if (customerlessDocs.size > 0 && (overduePolicy?.enabled || promisePolicy?.enabled)) {
+    const docs = [...customerlessDocs.entries()];
+    const total = fromUnits(docs.reduce((sum, [, doc]) => sum + toUnits(doc.openBalance), 0n));
+    const dueDates = docs.map(([, doc]) => doc.dueDate).filter((date): date is string => date !== null).sort();
+    findings.push({
+      agentKey: "collections",
+      findingType: "invoices_without_customer",
+      fingerprint: "collections-no-customer",
+      severity: "warning",
+      confidence: "1.0000",
+      materiality: total,
+      subjectType: "documents",
+      subjectId: null,
+      summary: {
+        reason: "invoices_without_customer",
+        count: docs.length,
+        total,
+        oldestDue: dueDates[0] ?? null,
+        review:
+          "Assign each invoice its customer in AR, then rescan — no reminder can be addressed " +
+          "and no payment behaviour attributed without one.",
+        href: arCockpitHref(),
+      },
+      evidence: docs.map(([docId, doc]) => ({
+        kind: "customerless_invoice",
+        sourceType: "document",
+        sourceId: docId,
+        data: {
+          documentNumber: doc.docNumber,
+          dueDate: doc.dueDate,
+          expectedPayDate: doc.expectedPayDate,
+          openBalance: doc.openBalance,
+        },
+      })),
+    });
   }
 
   return findings;
