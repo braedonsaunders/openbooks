@@ -234,6 +234,37 @@ test("an enabled scheduled flow with an invalid graph counts as an error, not a 
   });
 });
 
+test("an enabled scheduled flow with an invalid cron counts as an error, not a clean tick", { skip: !DB }, async () => {
+  await withOrgFixture(async ({ org, actors }) => {
+    // Structurally valid (passes the scan's '"scheduled"' prefilter and the
+    // graph parse) but unparseable as a cron: before the fix dueScheduledNodes
+    // answered null and the tick moved on silently, exactly like "not due".
+    const nodes: AutomationGraph["nodes"] = [
+      {
+        id: "trig",
+        position: { x: 0, y: 0 },
+        data: { kind: "trigger", trigger: { trigger: "scheduled", cron: "not-a-cron" } },
+      },
+      {
+        id: "notify_1",
+        position: { x: 0, y: 1 },
+        data: {
+          kind: "action",
+          action: { action: "notify", to: [{ type: "user", userId: actors.approver1Id }], title: "Scheduled probe" },
+        },
+      },
+    ];
+    await seedFlow(org.orgId, { schemaVersion: 1, nodes, edges: [{ id: "e1", source: "trig", target: "notify_1" }] });
+
+    const result = await runDueScheduledFlows(NOW);
+    assert.equal(result.fired, 0);
+    assert.equal(result.errors, 1, "the unparseable cron must surface in errors, never as not-due");
+    // Nothing claimed, no run, no occurrence, cursor untouched.
+    assert.equal(await countRuns(org.orgId), 0);
+    assert.equal((await loadOccurrences(org.orgId)).length, 0);
+  });
+});
+
 test("a normal scheduled occurrence runs exactly once and advances the cursor", { skip: !DB }, async () => {
   await withOrgFixture(async ({ org, actors }) => {
     const flowId = await seedFlow(org.orgId, scheduledNotifyGraph(actors.approver1Id));
