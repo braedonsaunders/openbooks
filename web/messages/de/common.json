@@ -265,7 +265,10 @@
     "deletePlaceholder": "Beschreiben Sie, warum die gebuchte Transaktion gelöscht werden muss",
     "voidTitle": "Diese Buchung ungültig machen?",
     "correctionCreated": "Korrekturentwurf erstellt",
-    "voidPlaceholder": "Beschreiben Sie, warum die Buchung storniert werden muss"
+    "voidPlaceholder": "Beschreiben Sie, warum die Buchung storniert werden muss",
+    "voidReversalPeriodTitle": "In welche Periode soll storniert werden?",
+    "voidReversalPeriodLabel": "Stornoperiode",
+    "voidReversalPeriodRegular": "Reguläre Periode (Standard)"
   },
   "approvalFlow": {
     "pendingWith": "Ausstehend bei {names}",

@@ -265,7 +265,10 @@
     "reason": "Motif de la modification",
     "placeholder": "Décrivez ce qui a changé et pourquoi",
     "deletePlaceholder": "Expliquez pourquoi la suppression de l’écriture comptabilisée est nécessaire",
-    "voidPlaceholder": "Expliquez pourquoi la transaction doit être contrepassée"
+    "voidPlaceholder": "Expliquez pourquoi la transaction doit être contrepassée",
+    "voidReversalPeriodTitle": "Contrepasser dans quelle période ?",
+    "voidReversalPeriodLabel": "Période de contrepassation",
+    "voidReversalPeriodRegular": "Période courante (par défaut)"
   },
   "approvalFlow": {
     "pendingWith": "En attente de {names}",

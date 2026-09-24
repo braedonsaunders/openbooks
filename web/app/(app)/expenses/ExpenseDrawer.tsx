@@ -29,6 +29,7 @@ import {
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { promptVoidReversalPeriod } from '../../../lib/void-reversal-period'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
@@ -804,6 +805,14 @@ export function ExpenseDrawer({
       confirmLabel: tCommon('actions.void'),
     })
     if (!reason) return
+    const reversal = await promptVoidReversalPeriod(doc.id, {
+      title: tCommon('amendment.voidReversalPeriodTitle'),
+      label: tCommon('amendment.voidReversalPeriodLabel'),
+      regularOption: tCommon('amendment.voidReversalPeriodRegular'),
+      confirm: tCommon('actions.void'),
+      cancel: tCommon('confirm.cancel'),
+    })
+    if (reversal.cancelled) return
     setBusy(true)
     try {
       const res = await fetch(`/api/documents/${doc.id}/void`, {
@@ -811,7 +820,11 @@ export function ExpenseDrawer({
         headers: { 'Content-Type': 'application/json' },
         // The void API fences on the exact revision like every other document
         // write: without it every void answers 409 and the button is dead.
-        body: JSON.stringify({ reason, expectedUpdatedAt: documentRevisionRef.current }),
+        body: JSON.stringify({
+          reason,
+          expectedUpdatedAt: documentRevisionRef.current,
+          ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
+        }),
       })
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('toasts.actionFailed')))
       const data = (await res.json().catch(() => ({}))) as { status?: string }

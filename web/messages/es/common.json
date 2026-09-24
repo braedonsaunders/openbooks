@@ -265,7 +265,10 @@
     "reason": "Motivo del cambio",
     "placeholder": "Describa qué cambió y por qué",
     "deletePlaceholder": "Describa por qué es necesario eliminar la transacción contabilizada",
-    "voidPlaceholder": "Describa por qué debe revertirse la transacción"
+    "voidPlaceholder": "Describa por qué debe revertirse la transacción",
+    "voidReversalPeriodTitle": "¿En qué período se hace la reversión?",
+    "voidReversalPeriodLabel": "Período de reversión",
+    "voidReversalPeriodRegular": "Período normal (predeterminado)"
   },
   "approvalFlow": {
     "pendingWith": "Pendiente de {names}",

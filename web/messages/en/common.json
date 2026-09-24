@@ -265,7 +265,10 @@
     "reason": "Reason for change",
     "placeholder": "Describe what changed and why",
     "deletePlaceholder": "Describe why deleting the posted transaction is necessary",
-    "voidPlaceholder": "Describe why the transaction must be reversed"
+    "voidPlaceholder": "Describe why the transaction must be reversed",
+    "voidReversalPeriodTitle": "Reverse into which period?",
+    "voidReversalPeriodLabel": "Reversal period",
+    "voidReversalPeriodRegular": "Regular period (default)"
   },
   "approvalFlow": {
     "pendingWith": "Pending with {names}",

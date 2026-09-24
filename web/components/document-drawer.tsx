@@ -43,6 +43,7 @@ import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from '@openbooks/e
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 import { confirmDialog } from '../lib/confirm'
 import { promptDialog } from '../lib/prompt'
+import { promptVoidReversalPeriod } from '../lib/void-reversal-period'
 import { runClientScripts } from '../lib/client-scripts'
 import { displayLineDecimal } from '../lib/line-grid-decimal'
 import type { DocKindConfig } from '../lib/document-kinds'
@@ -2040,12 +2041,24 @@ export function DocumentDrawer({
       confirmLabel: tCommon('actions.void'),
     })
     if (!reason) return
+    const reversal = await promptVoidReversalPeriod(doc.id, {
+      title: tCommon('amendment.voidReversalPeriodTitle'),
+      label: tCommon('amendment.voidReversalPeriodLabel'),
+      regularOption: tCommon('amendment.voidReversalPeriodRegular'),
+      confirm: tCommon('actions.void'),
+      cancel: tCommon('confirm.cancel'),
+    })
+    if (reversal.cancelled) return
     await execute(
       () =>
         fetchAction(`/api/documents/${doc.id}/void`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason, expectedUpdatedAt: documentRevision }),
+          body: JSON.stringify({
+            reason,
+            expectedUpdatedAt: documentRevision,
+            ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
+          }),
         }),
       {
         fallbackMessage: t('toasts.actionFailed'),

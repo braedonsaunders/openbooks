@@ -265,7 +265,10 @@
     "deletePlaceholder": "Descreva por que é necessário excluir a transação lançada",
     "voidTitle": "Anular esta transação?",
     "correctionCreated": "Rascunho de correção criado",
-    "voidPlaceholder": "Descreva por que a transação deve ser revertida"
+    "voidPlaceholder": "Descreva por que a transação deve ser revertida",
+    "voidReversalPeriodTitle": "Reverter em qual período?",
+    "voidReversalPeriodLabel": "Período de reversão",
+    "voidReversalPeriodRegular": "Período normal (padrão)"
   },
   "approvalFlow": {
     "pendingWith": "Pendente com {names}",

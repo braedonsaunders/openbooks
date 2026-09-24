@@ -72,6 +72,12 @@ export type DocumentVoidInput = {
   actorId: string;
   reason: string;
   reversalDate?: string | null;
+  /**
+   * Explicit adjustment-period override for the reversal journals. Regular
+   * periods always resolve by reversal date; only an adjustment period may
+   * be named, and it must cover the reversal date. Null omits the override.
+   */
+  reversalPeriodId?: string | null;
   source?: FlowEventSource;
   expectedUpdatedAt?: string | null;
 };
@@ -89,6 +95,44 @@ function validateDate(value: string): string {
     throw new DocumentVoidError("reversalDate must be a valid YYYY-MM-DD date");
   }
   return value;
+}
+
+/**
+ * Resolve an explicit adjustment-period reversal override. Only an
+ * adjustment period of this org covering the reversal date qualifies —
+ * regular periods always resolve by date, so naming one is refused rather
+ * than silently ignored. Runs at request time (fail fast) and again at
+ * completion (authoritative: the period may have changed while gates waited).
+ */
+async function resolveVoidReversalPeriod(
+  executor: { execute: typeof db.execute },
+  orgId: string,
+  reversalPeriodId: string,
+  reversalDate: string,
+): Promise<string> {
+  if (!UUID_SHAPE.test(reversalPeriodId)) {
+    throw new DocumentVoidError(
+      `reversal period ${reversalPeriodId} is not a valid period reference — name an adjustment period covering ${reversalDate}, or omit the override to reverse in the regular covering period`,
+      422,
+      "reversal-period-uncovered",
+    );
+  }
+  const row = (await executor.execute<{ id: string }>(sql`
+    select id
+      from accounting_periods
+     where id = ${reversalPeriodId} and org_id = ${orgId}
+       and is_adjustment
+       and starts_on <= ${reversalDate} and ends_on >= ${reversalDate}
+     limit 1
+  `)).rows[0];
+  if (!row) {
+    throw new DocumentVoidError(
+      `reversal period ${reversalPeriodId} is not an adjustment period covering ${reversalDate} — name an adjustment period covering the reversal date, or omit the override to reverse in the regular covering period`,
+      422,
+      "reversal-period-uncovered",
+    );
+  }
+  return row.id;
 }
 
 type DocumentRow = typeof schema.documents.$inferSelect & { revision: string };
@@ -165,6 +209,9 @@ export async function requestDocumentVoid(
   // Business-meaningful default date — the org's business day via a sim-clock-
   // aware instant, not the server's UTC day.
   const reversalDate = validateDate(input.reversalDate ?? (await businessToday(input.orgId)));
+  const reversalPeriodId = input.reversalPeriodId != null && input.reversalPeriodId !== ""
+    ? await resolveVoidReversalPeriod(db, input.orgId, input.reversalPeriodId, reversalDate)
+    : null;
   return withOrgTransaction(input.orgId, async () => {
     const current = await loadDocument(input.documentId, input.orgId);
     // The aggregate lock precedes the read and comparison. A waiter observes
@@ -188,6 +235,7 @@ export async function requestDocumentVoid(
              void_requested_at = now(),
              void_requested_by = ${input.actorId},
              void_reversal_date = ${reversalDate},
+             void_reversal_period_id = ${reversalPeriodId},
              updated_at = now(),
              updated_by = ${input.actorId}
        where id = ${input.documentId} and org_id = ${input.orgId}
@@ -212,6 +260,7 @@ export async function requestDocumentVoid(
           source: input.source ?? "ui",
           reason,
           reversalDate,
+          reversalPeriodId,
           before: { voidRequestedAt: null, voidRequestedBy: null },
           after: { voidRequestedAt: "now", voidRequestedBy: input.actorId },
         })}::jsonb,
@@ -763,8 +812,17 @@ export async function completeRequestedDocumentVoid(
         // through the shared covering-period resolver (default calendar,
         // regular periods only): a void can no longer land in an adjustment
         // period by date. An adjustment-period reversal names its period
-        // explicitly through the document override instead.
-        const period = await resolveCoveringPeriod(tx, orgId, reversalDate);
+        // explicitly through the stored document override, revalidated here —
+        // the validation at request time fails fast, but this one is
+        // authoritative: the period may have closed or changed while gates
+        // waited. The openness fence below then applies to the override
+        // period exactly as it does to a date-resolved one.
+        const overridePeriodId = doc.void_reversal_period_id
+          ? String(doc.void_reversal_period_id)
+          : null;
+        const period = overridePeriodId
+          ? { id: await resolveVoidReversalPeriod(tx, orgId, overridePeriodId, reversalDate) }
+          : await resolveCoveringPeriod(tx, orgId, reversalDate);
         if (!period) {
           throw new DocumentVoidError(
             `no accounting period covers ${reversalDate} — generate the period covering that date, then void again`,
@@ -1151,6 +1209,7 @@ export async function rejectRequestedDocumentVoid(
          set void_requested_at = null,
              void_requested_by = null,
              void_reversal_date = null,
+             void_reversal_period_id = null,
              void_reason = null,
              updated_at = now(),
              updated_by = ${actorId}
