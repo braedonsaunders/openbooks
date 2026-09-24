@@ -2,6 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { guardedFetch } from "./ssrf-guard.ts";
 
 /**
  * SuiteQL REST client — Token-Based Auth (OAuth 1.0a HMAC-SHA256).
@@ -61,8 +62,8 @@ class NetSuiteRedirectRefused extends Error {}
  * browser-style opaque one), so any redirect with a Location is refused
  * outright rather than followed.
  */
-async function netsuiteFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
-  const res = await fetch(url, { ...init, redirect: "manual" });
+async function netsuiteFetch(url: string | URL, init: RequestInit = {}, transport: typeof fetch = guardedFetch): Promise<Response> {
+  const res = await transport(url, { ...init, redirect: "manual" });
   const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
   if (location !== null) {
     throw new NetSuiteRedirectRefused(
@@ -115,6 +116,7 @@ async function suiteqlPage(
   query: string,
   limit: number,
   offset: number,
+  transport: typeof fetch,
 ): Promise<Response> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 4; attempt++) {
@@ -131,7 +133,7 @@ async function suiteqlPage(
         },
         body: JSON.stringify({ q: query }),
         signal: ctl.signal,
-      });
+      }, transport);
       if ((res.status === 429 || res.status >= 500) && attempt < 4) {
         lastErr = new Error(`SuiteQL HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
         const retryAfter = Number(res.headers.get("retry-after") ?? 0);
@@ -154,12 +156,13 @@ export async function suiteql<T = Record<string, unknown>>(
   query: string,
   creds: NetSuiteCreds,
   limit = 1000,
+  transport: typeof fetch = guardedFetch,
 ): Promise<T[]> {
   const url = `${creds.host}/services/rest/query/v1/suiteql`;
   const rows: T[] = [];
   let offset = 0;
   for (;;) {
-    const res = await suiteqlPage(creds, url, query, limit, offset);
+    const res = await suiteqlPage(creds, url, query, limit, offset, transport);
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`SuiteQL HTTP ${res.status}: ${body.slice(0, 500)}`);
@@ -181,6 +184,7 @@ export async function netsuiteRestlet<T = unknown>(
   params: Record<string, unknown>,
   creds: NetSuiteCreds,
   method: "GET" | "POST" = "GET",
+  transport: typeof fetch = guardedFetch,
 ): Promise<T> {
   const accountHost = creds.account.replaceAll("_", "-").toLowerCase();
   const endpoint = `https://${accountHost}.restlets.api.netsuite.com/app/site/hosting/restlet.nl`;
@@ -211,7 +215,7 @@ export async function netsuiteRestlet<T = unknown>(
         },
         ...(method === "POST" ? { body: JSON.stringify(params) } : {}),
         signal: ctl.signal,
-      });
+      }, transport);
       if ((response.status === 429 || response.status >= 500) && attempt < 4) {
         lastError = new Error(`RESTlet HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
         const retryAfter = Number(response.headers.get("retry-after") ?? 0);
@@ -238,6 +242,7 @@ export async function netsuiteRecords<T = Record<string, unknown>>(
   recordType: string,
   creds: NetSuiteCreds,
   limit = 1000,
+  transport: typeof fetch = guardedFetch,
 ): Promise<T[]> {
   const endpoint = `${creds.host}/services/rest/record/v1/${encodeURIComponent(recordType)}`;
   const rows: T[] = [];
@@ -246,7 +251,7 @@ export async function netsuiteRecords<T = Record<string, unknown>>(
     const query = { limit, offset };
     const res = await netsuiteFetch(`${endpoint}?limit=${limit}&offset=${offset}`, {
       headers: { Authorization: oauthHeader(creds, "GET", endpoint, query), Accept: "application/json" },
-    });
+    }, transport);
     if (!res.ok) throw new Error(`SuiteTalk ${recordType} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
     const data = await res.json() as { items?: T[]; hasMore?: boolean };
     rows.push(...(data.items ?? []));
@@ -260,12 +265,13 @@ export async function netsuiteRecord<T = Record<string, unknown>>(
   recordType: string,
   id: string | number,
   creds: NetSuiteCreds,
+  transport: typeof fetch = guardedFetch,
 ): Promise<T> {
   const endpoint = `${creds.host}/services/rest/record/v1/${encodeURIComponent(recordType)}/${encodeURIComponent(String(id))}`;
   const query = { expandSubResources: "true" };
   const res = await netsuiteFetch(`${endpoint}?expandSubResources=true`, {
     headers: { Authorization: oauthHeader(creds, "GET", endpoint, query), Accept: "application/json" },
-  });
+  }, transport);
   if (!res.ok) throw new Error(`SuiteTalk ${recordType}/${id} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
   return await res.json() as T;
 }
@@ -311,6 +317,7 @@ async function netsuiteSoapRequest(
   creds: NetSuiteCreds,
   endpointVersion: string,
   timeoutMs = 180_000,
+  transport: typeof fetch = guardedFetch,
 ): Promise<string> {
   const url = `${creds.host}/services/NetSuitePort_${endpointVersion}`;
   let lastError: unknown;
@@ -333,7 +340,7 @@ async function netsuiteSoapRequest(
         },
         body: envelope,
         signal: ctl.signal,
-      });
+      }, transport);
       const text = await response.text();
       if (!response.ok) {
         throw new Error(
@@ -394,6 +401,7 @@ export async function netsuiteSoapTransactionIdsForFile(
   fileId: string,
   creds: NetSuiteCreds,
   endpointVersion = "2022_1",
+  transport: typeof fetch = guardedFetch,
 ): Promise<string[]> {
   if (!/^\d+$/.test(fileId)) throw new Error("NetSuite file id must be numeric");
   const transactionIds = new Set<string>();
@@ -417,6 +425,7 @@ export async function netsuiteSoapTransactionIdsForFile(
       creds,
       endpointVersion,
       60_000,
+      transport,
     );
     let page = parseSoapTransactionSearchPage(pageText);
     for (const transactionId of page.transactionIds) {
@@ -437,6 +446,7 @@ export async function netsuiteSoapTransactionIdsForFile(
         creds,
         endpointVersion,
         60_000,
+        transport,
       );
       page = parseSoapTransactionSearchPage(pageText);
       for (const transactionId of page.transactionIds) {
@@ -460,6 +470,7 @@ export async function netsuiteSoapFileGet(
   fileId: string,
   creds: NetSuiteCreds,
   endpointVersion = "2022_1",
+  transport: typeof fetch = guardedFetch,
 ): Promise<{ name: string; bytes: Buffer }> {
   if (!/^\d+$/.test(fileId)) throw new Error("NetSuite file id must be numeric");
   const url = `${creds.host}/services/NetSuitePort_${endpointVersion}`;
@@ -499,7 +510,7 @@ export async function netsuiteSoapFileGet(
         headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: "get" },
         body: envelope,
         signal: ctl.signal,
-      });
+      }, transport);
       const text = await response.text();
       if (!response.ok) {
         throw new Error(`SuiteTalk SOAP HTTP ${response.status}: ${text.slice(0, 500)}`);

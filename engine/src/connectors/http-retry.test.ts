@@ -32,7 +32,7 @@ test("a stalled socket times out by name instead of hanging", async () => {
   try {
     const started = Date.now();
     await assert.rejects(
-      fetchWithConnectorRetry(`${origin}/stall`, {}, { describe: "QBO", timeoutMs: 50, maxAttempts: 2 }),
+      fetchWithConnectorRetry(`${origin}/stall`, {}, { describe: "QBO", timeoutMs: 50, maxAttempts: 2, transport: fetch }),
       /QBO request failed after 2 attempts/,
     );
     assert.ok(Date.now() - started < 10_000, "the socket deadline must bound a stalled call");
@@ -56,7 +56,7 @@ test("a 429 retries honoring Retry-After, then succeeds", async () => {
   const origin = await listen(flaky);
   try {
     const started = Date.now();
-    const res = await fetchWithConnectorRetry(`${origin}/limited`, {}, { describe: "QBO", maxAttempts: 3 });
+    const res = await fetchWithConnectorRetry(`${origin}/limited`, {}, { describe: "QBO", maxAttempts: 3, transport: fetch });
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { ok: true });
     assert.equal(requests, 2, "one retry after the 429, then success");
@@ -75,7 +75,7 @@ test("a persistent 5xx is returned after the bounded attempts, never retried for
   });
   const origin = await listen(broken);
   try {
-    const res = await fetchWithConnectorRetry(`${origin}/down`, {}, { describe: "QBO", maxAttempts: 2 });
+    const res = await fetchWithConnectorRetry(`${origin}/down`, {}, { describe: "QBO", maxAttempts: 2, transport: fetch });
     assert.equal(res.status, 500);
     assert.equal(requests, 2, "bounded attempts, then the caller refuses on the status");
   } finally {
@@ -93,7 +93,7 @@ test("a redirect refusal is never retried", async () => {
   const origin = await listen(redirector);
   try {
     await assert.rejects(
-      fetchWithConnectorRetry(`${origin}/moved`, { redirect: "error" }, { describe: "QBO", maxAttempts: 4 }),
+      fetchWithConnectorRetry(`${origin}/moved`, { redirect: "error" }, { describe: "QBO", maxAttempts: 4, transport: fetch }),
       /redirect/i,
     );
     assert.equal(requests, 1, "a deterministic redirect must stay exactly one request");

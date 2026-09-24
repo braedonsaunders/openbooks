@@ -35,6 +35,7 @@ const tokens = {
   refreshToken: "refresh-token",
   expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
 };
+const mockedTransport: typeof fetch = (input, init) => globalThis.fetch(input, init);
 
 // Every credentialed surface of the Dynamics client: the OAuth token endpoints
 // POST the client_secret in the body, every API call carries a bearer token.
@@ -55,11 +56,11 @@ test("every credentialed Dynamics request opts out of redirect-following", async
   }) as typeof fetch;
 
   try {
-    await exchangeCode(app, "auth-code");
-    await clientCredentialsToken(app);
-    await refreshTokens(app, "refresh-token");
-    await listCompanies(tokens.accessToken, app.aadTenantId, "PROD");
-    await new DynamicsClient(app, "PROD", "company-id", tokens).list("items");
+    await exchangeCode(app, "auth-code", mockedTransport);
+    await clientCredentialsToken(app, mockedTransport);
+    await refreshTokens(app, "refresh-token", mockedTransport);
+    await listCompanies(tokens.accessToken, app.aadTenantId, "PROD", mockedTransport);
+    await new DynamicsClient(app, "PROD", "company-id", tokens, undefined, mockedTransport).list("items");
 
     assert.deepEqual(seen.map(({ url }) => new URL(url).href), [
       "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token",
@@ -123,12 +124,12 @@ test("Dynamics OAuth and API calls refuse every redirect class without forwardin
     return originalFetch(rewritten, init);
   };
 
-  const client = new DynamicsClient(app, "PROD", "company-id", tokens);
+  const client = new DynamicsClient(app, "PROD", "company-id", tokens, undefined, mockedTransport);
   try {
-    await assert.rejects(exchangeCode(app, "auth-code"), /HTTP 301 redirect.*credential-capture/s);
-    await assert.rejects(clientCredentialsToken(app), /redirect/i);
-    await assert.rejects(refreshTokens(app, "refresh-token"), /redirect/i);
-    await assert.rejects(listCompanies(tokens.accessToken, app.aadTenantId, "PROD"), /redirect/i);
+    await assert.rejects(exchangeCode(app, "auth-code", mockedTransport), /HTTP 301 redirect.*credential-capture/s);
+    await assert.rejects(clientCredentialsToken(app, mockedTransport), /redirect/i);
+    await assert.rejects(refreshTokens(app, "refresh-token", mockedTransport), /redirect/i);
+    await assert.rejects(listCompanies(tokens.accessToken, app.aadTenantId, "PROD", mockedTransport), /redirect/i);
     await assert.rejects(client.list("items"), /redirect/i);
 
     // Exactly one hop per call reaches the allowlisted origin — never a
@@ -177,17 +178,17 @@ test("normal non-redirected Dynamics responses pass through end to end", async (
   };
 
   try {
-    const exchanged = await exchangeCode(app, "auth-code");
+    const exchanged = await exchangeCode(app, "auth-code", mockedTransport);
     assert.equal(exchanged.accessToken, "at");
     assert.equal(exchanged.refreshToken, "rt");
-    const appOnly = await clientCredentialsToken(app);
+    const appOnly = await clientCredentialsToken(app, mockedTransport);
     assert.equal(appOnly.accessToken, "at");
     assert.equal(appOnly.refreshToken, "");
-    const refreshed = await refreshTokens(app, "refresh-token");
+    const refreshed = await refreshTokens(app, "refresh-token", mockedTransport);
     assert.equal(refreshed.refreshToken, "rt");
-    const companies = await listCompanies(tokens.accessToken, app.aadTenantId, "PROD");
+    const companies = await listCompanies(tokens.accessToken, app.aadTenantId, "PROD", mockedTransport);
     assert.deepEqual(companies, [{ id: "company-id", name: "CRONUS", displayName: "CRONUS Canada" }]);
-    const rows = await new DynamicsClient(app, "PROD", "company-id", tokens).list<{ No: string }>("items");
+    const rows = await new DynamicsClient(app, "PROD", "company-id", tokens, undefined, mockedTransport).list<{ No: string }>("items");
     assert.deepEqual(rows, [{ No: "10000" }]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -216,7 +217,7 @@ test("Dynamics OData pagination refuses absolute and protocol-relative foreign n
         return Promise.resolve(new Response(JSON.stringify({ value: [{ No: "stolen" }] }), { status: 200 }));
       }) as typeof fetch;
 
-      const client = new DynamicsClient(app, "PROD", "company-id", tokens);
+      const client = new DynamicsClient(app, "PROD", "company-id", tokens, undefined, mockedTransport);
       await assert.rejects(client.list<{ No: string }>("items"), /origin/i);
       assert.equal(seen.length, 1, "pagination must be rejected before a second fetch");
       assert.equal(attackerRequests, 0, "the foreign origin must never receive a request");
@@ -247,7 +248,7 @@ test("Dynamics OData pagination follows same-origin relative and absolute nextLi
         return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
       }) as typeof fetch;
 
-      const rows = await new DynamicsClient(app, "PROD", "company-id", tokens).list<{ No: string }>("items");
+      const rows = await new DynamicsClient(app, "PROD", "company-id", tokens, undefined, mockedTransport).list<{ No: string }>("items");
       assert.deepEqual(rows, [{ No: "10000" }, { No: "10001" }]);
       assert.deepEqual(seen, [baseItemsUrl, expectedNextLink]);
     }
@@ -289,7 +290,7 @@ test("Dynamics OData pagination never forwards bearer tokens across a redirect h
   };
 
   try {
-    await assert.rejects(new DynamicsClient(app, "PROD", "company-id", tokens).list("items"), /redirect/i);
+    await assert.rejects(new DynamicsClient(app, "PROD", "company-id", tokens, undefined, mockedTransport).list("items"), /redirect/i);
     assert.deepEqual(redirectorRequests.map(({ path }) => path), [
       "/v2.0/tenant-id/PROD/api/v2.0/companies(company-id)/items",
       "/v2.0/tenant-id/PROD/api/v2.0/companies(company-id)/items?page=2",
@@ -325,7 +326,7 @@ test("expired delegated Dynamics tokens refresh; they never mint client-credenti
       refreshToken: "delegated-rt",
       expiresAt: "1970-01-01T00:00:00.000Z",
     };
-    const rows = await new DynamicsClient(app, "PROD", "company-id", expired).list("companyInformation");
+    const rows = await new DynamicsClient(app, "PROD", "company-id", expired, undefined, mockedTransport).list("companyInformation");
     assert.deepEqual(rows, [{ displayName: "CRONUS" }]);
     assert.deepEqual(grants, ["refresh_token"]);
   } finally {

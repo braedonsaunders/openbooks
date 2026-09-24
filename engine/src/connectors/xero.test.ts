@@ -30,6 +30,7 @@ const tokens = {
   refreshToken: "refresh-token",
   expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
 };
+const mockedTransport: typeof fetch = (input, init) => globalThis.fetch(input, init);
 
 // Every credentialed surface of the Xero client: the OAuth token endpoints
 // carry the Basic-auth client secret, every API call carries a bearer token
@@ -50,10 +51,10 @@ test("every credentialed Xero request opts out of redirect-following", async () 
   }) as typeof fetch;
 
   try {
-    await exchangeCode(app, "auth-code");
-    await refreshTokens(app, "refresh-token");
-    await listConnections(tokens.accessToken);
-    await new XeroClient(app, "tenant-id", tokens).get("Invoices");
+    await exchangeCode(app, "auth-code", mockedTransport);
+    await refreshTokens(app, "refresh-token", mockedTransport);
+    await listConnections(tokens.accessToken, mockedTransport);
+    await new XeroClient(app, "tenant-id", tokens, undefined, mockedTransport).get("Invoices");
 
     assert.deepEqual(seen.map(({ url }) => new URL(url).href), [
       "https://identity.xero.com/connect/token",
@@ -118,11 +119,11 @@ test("Xero OAuth and API calls refuse every redirect class without forwarding cr
     return originalFetch(rewritten, init);
   };
 
-  const client = new XeroClient(app, "tenant-id", tokens);
+  const client = new XeroClient(app, "tenant-id", tokens, undefined, mockedTransport);
   try {
-    await assert.rejects(exchangeCode(app, "auth-code"), /HTTP 301 redirect.*credential-capture/s);
-    await assert.rejects(refreshTokens(app, "refresh-token"), /redirect/i);
-    await assert.rejects(listConnections(tokens.accessToken), /redirect/i);
+    await assert.rejects(exchangeCode(app, "auth-code", mockedTransport), /HTTP 301 redirect.*credential-capture/s);
+    await assert.rejects(refreshTokens(app, "refresh-token", mockedTransport), /redirect/i);
+    await assert.rejects(listConnections(tokens.accessToken, mockedTransport), /redirect/i);
     await assert.rejects(client.get("Invoices"), /redirect/i);
 
     // Exactly one hop per call reaches the allowlisted origin — never a

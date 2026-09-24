@@ -38,6 +38,7 @@ const liveTokens = {
   refreshToken: "refresh-token",
   expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
 };
+const mockedTransport: typeof fetch = (input, init) => globalThis.fetch(input, init);
 
 /** Remap every allowlisted Intuit origin onto a local test server so the
  *  client exercises its real URL construction and credential placement
@@ -87,10 +88,10 @@ test("QBO token exchange, refresh, and API calls refuse redirects without forwar
   const redirectModes = remapIntuitOrigins(originalFetch, qboOrigin);
 
   try {
-    await assert.rejects(exchangeCode(app, "auth-code"), /fetch failed|redirect/i);
-    await assert.rejects(refreshTokens(app, liveTokens.refreshToken), /fetch failed|redirect/i);
+    await assert.rejects(exchangeCode(app, "auth-code", mockedTransport), /fetch failed|redirect/i);
+    await assert.rejects(refreshTokens(app, liveTokens.refreshToken, mockedTransport), /fetch failed|redirect/i);
 
-    const client = new QboClient(app, REALM_ID, liveTokens);
+    const client = new QboClient(app, REALM_ID, liveTokens, undefined, mockedTransport);
     await assert.rejects(client.queryAll("Account"), /fetch failed|redirect/i);
     await assert.rejects(client.report("TrialBalance"), /fetch failed|redirect/i);
     await assert.rejects(client.preferences(), /fetch failed|redirect/i);
@@ -141,12 +142,12 @@ test("a 429 retries then succeeds; a persistent 5xx refuses by name after the bo
 
   try {
     // 429 then 200: the exchange rides the retry and succeeds.
-    const exchanged = await exchangeCode(app, "auth-code");
+    const exchanged = await exchangeCode(app, "auth-code", mockedTransport);
     assert.equal(exchanged.accessToken, "at-retry");
     assert.equal(tokenRequests, 2, "one retry after the 429, then success");
 
     // Persistent 500: four bounded attempts, then a named refusal.
-    await assert.rejects(refreshTokens(app, "rt-old"), /QBO token refresh HTTP 500/);
+    await assert.rejects(refreshTokens(app, "rt-old", mockedTransport), /QBO token refresh HTTP 500/);
     assert.equal(tokenRequests, 6, "four bounded attempts for the failing refresh, then refusal");
   } finally {
     globalThis.fetch = originalFetch;
@@ -192,18 +193,18 @@ test("normal Intuit responses pass: token exchange, refresh rotation, and bearer
   const redirectModes = remapIntuitOrigins(originalFetch, intuitOrigin);
 
   try {
-    const exchanged = await exchangeCode(app, "auth-code");
+    const exchanged = await exchangeCode(app, "auth-code", mockedTransport);
     assert.equal(exchanged.accessToken, "at-new");
     assert.equal(exchanged.refreshToken, "rt-new");
     // The -60s safety skew keeps expiry strictly inside the real window.
     const expiresInMs = new Date(exchanged.expiresAt).getTime() - Date.now();
     assert.ok(expiresInMs > 3_500_000 && expiresInMs <= 3_600_000, "expiry must be ISO and ~59 minutes out");
 
-    const rotated = await refreshTokens(app, "rt-old");
+    const rotated = await refreshTokens(app, "rt-old", mockedTransport);
     assert.equal(rotated.accessToken, "at-new");
     assert.equal(rotated.refreshToken, "rt-new");
 
-    const client = new QboClient(app, REALM_ID, { ...exchanged, accessToken: "access-token" });
+    const client = new QboClient(app, REALM_ID, { ...exchanged, accessToken: "access-token" }, undefined, mockedTransport);
     const accounts = await client.queryAll<{ Id: string; Name: string }>("Account");
     assert.deepEqual(accounts.map((a) => a.Name), ["Checking", "Savings"]);
 

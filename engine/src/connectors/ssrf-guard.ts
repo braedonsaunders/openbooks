@@ -18,11 +18,16 @@
  */
 
 import { lookup as dnsLookup } from "node:dns/promises";
-import { request as httpRequest, type IncomingMessage, type RequestOptions } from "node:http";
+import { request as httpRequest, type ClientRequest, type IncomingMessage, type RequestOptions } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 
 type LookupFunction = NonNullable<RequestOptions["lookup"]>;
+type ConnectorRequest = (
+  url: URL,
+  options: RequestOptions,
+  callback: (response: IncomingMessage) => void,
+) => Pick<ClientRequest, "on" | "write" | "end">;
 
 export const CONNECTOR_URL_REFUSED =
   "Connector URL must use http or https and every resolved address must be public unicast. IANA special-purpose, RFC1918, loopback, link-local, metadata, ULA, unspecified, and non-http(s) addresses are refused.";
@@ -298,7 +303,7 @@ function sanitizeStatusText(value: string | undefined): string {
 export async function guardedFetch(
   input: string | URL | Request,
   init: RequestInit = {},
-  opts: { lookup?: AddressLookup } = {},
+  opts: { lookup?: AddressLookup; request?: ConnectorRequest } = {},
 ): Promise<Response> {
   const normalizedInit: RequestInit & { duplex?: string } = { ...init };
   if (
@@ -322,7 +327,7 @@ export async function guardedFetch(
     headers[key] = value;
   });
   const bodyBytes = await req.arrayBuffer();
-  const send = target.protocol === "https:" ? httpsRequest : httpRequest;
+  const send: ConnectorRequest = opts.request ?? (target.protocol === "https:" ? httpsRequest : httpRequest);
   const incoming: IncomingMessage = await new Promise((resolve, reject) => {
     const out = send(
       target,

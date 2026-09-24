@@ -22,6 +22,8 @@ export interface ConnectorRetryOptions {
   maxAttempts?: number;
   /** Names the connector in the exhaustion refusal, e.g. "QBO". */
   describe: string;
+  /** Test transport; production callers use the shared pinned guard. */
+  transport?: typeof fetch;
 }
 
 /**
@@ -79,7 +81,7 @@ export async function fetchWithConnectorRetry(
     if (init.signal?.aborted) ctrl.abort();
     else init.signal?.addEventListener("abort", onExternalAbort, { once: true });
     try {
-      const res = await fetch(url, { ...init, signal: ctrl.signal });
+      const res = await (opts.transport ?? guardedFetch)(url, { ...init, signal: ctrl.signal });
       if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs(res, attempt)));
         continue;
@@ -101,3 +103,4 @@ export async function fetchWithConnectorRetry(
     `${opts.describe} request failed after ${maxAttempts} attempts: ${cause} — retry, and ask your administrator if it persists`,
   );
 }
+import { guardedFetch } from "./ssrf-guard.ts";
