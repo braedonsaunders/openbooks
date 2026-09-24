@@ -184,6 +184,16 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
       source: "https://revenue.nebraska.gov/sites/revenue.nebraska.gov/files/doc/business/Cir_En_2025/2026cir_en_whole.pdf",
     }],
   } as const,
+  VA: {
+    kind: "flat",
+    // Virginia Employer Withholding Instructions, p. 19: 5.75% is the
+    // separate-supplemental election when regular wages had tax withheld.
+    rates: [{
+      effectiveFrom: "2025-07-02", rate: "0.0575",
+      source: "https://www.tax.virginia.gov/sites/default/files/vatax-pdf/employer-withholding-instructions.pdf",
+    }],
+    requiresRegularWithholding: true,
+  } as const,
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
 
 /**

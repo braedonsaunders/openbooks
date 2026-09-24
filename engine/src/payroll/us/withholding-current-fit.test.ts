@@ -354,6 +354,24 @@ test('Arkansas combined bonus uses the bonus rate beside the regular formula', (
   assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '39.0000')
 })
 
+test('Virginia separate supplemental flat election requires regular withholding history', () => {
+  // Virginia Employer Withholding Instructions, p. 19, allows the 5.75% flat
+  // separate-payment method when regular wages had tax withheld.
+  const input = {
+    levy: levy('VA', 'us_va_va4'), payDate: '2026-06-01', periodEnd: PERIOD_END,
+    periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
+    supplementalPaymentTiming: 'separate' as const, federalIncomeTax: '0.00',
+    certificateFor: () => certificate('us_va_va4', {}), tenantRates: () => undefined,
+  }
+  const result = computeUsWithholding({ ...input, regularWageTaxWithheldThisYear: true })
+  assert.equal(result?.tax, '28.7500')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.0575')
+  assert.throws(
+    () => computeUsWithholding(input),
+    /VA income tax cannot use its separate-supplemental flat rate without committed evidence of regular-wage withholding.*refused by name/,
+  )
+})
+
 test('US regional and subregional methods receive exact, sourced allocation facts', () => {
   const allocation = {
     region: 'MI', subRegion: 'DETROIT', workShare: '0.250000', source: 'approved work-location record',
