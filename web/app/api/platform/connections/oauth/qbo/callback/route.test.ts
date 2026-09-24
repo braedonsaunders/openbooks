@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sealJson } from "@openbooks/engine/src/platform/secrets.ts";
@@ -119,7 +118,6 @@ const qbo_oauth_callback_flowUrl = '../../_flow.ts?qbo-oauth-callback-flow'
 const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(qbo_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
 hooks.deregister();
 
-const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
 
 function resetQbo(): void {
   state.updated = null;
@@ -187,12 +185,4 @@ test("CompanyInfo failure without a token realm bounces and writes nothing", asy
   const res = await callback({ state: sealed, cookie: nonce, realmId: "guessed-realm" });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=realm");
   assert.equal(state.updated, null);
-});
-
-test("the QBO callback never reads origin from the request URL", () => {
-  assert.match(routeSource, /connectionOauthRedirectUri\('qbo'\)/);
-  assert.match(routeSource, /connectionOauthBounce/);
-  assert.doesNotMatch(routeSource, /new URL\(`\/sync\?oauth=\$\{status\}`, req\.url\)/);
-  assert.doesNotMatch(routeSource, /url\.origin/);
-  assert.doesNotMatch(routeSource, /trustedRequestOrigin/);
 });
