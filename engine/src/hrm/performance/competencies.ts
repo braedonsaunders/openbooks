@@ -1,10 +1,13 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { businessToday } from "../../platform/business-date.ts";
 import {
   loadApprovalPerson,
+  loadManagedEmploymentIds,
   requireAggregatePerformanceManage,
   requireAggregatePerformanceRead,
+  requireHrmPerformanceOnEmployment,
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
@@ -64,16 +67,40 @@ async function assertCompetenciesFeature(db: SqlExecutor, orgId: string): Promis
   }
 }
 
-async function requireCompetenciesRead(db: SqlExecutor, orgId: string, actorId: string): Promise<void> {
+/**
+ * The actor's HR scope for competency reads: the allowed employer set
+ * (null = unrestricted), or undefined when the actor holds no HR grant
+ * at all. The grant alone is never the whole answer — every caller
+ * applies the returned Set to the subject it reads.
+ */
+async function performanceReadScope(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null | undefined> {
   try {
-    await requireAggregatePerformanceRead(db, orgId, actorId);
-    return;
+    return await requireAggregatePerformanceRead(db, orgId, actorId);
   } catch {
+    return undefined;
+  }
+}
+
+async function requireCompetenciesRead(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  // Framework and level reads are org configuration with no per-subject
+  // rows, so those callers await the grant and ignore the scope;
+  // per-subject reads (the profile below) must apply it.
+  const scope = await performanceReadScope(db, orgId, actorId);
+  if (scope === undefined) {
     throw new HrmPerformanceError(
       "FORBIDDEN",
       "competency frameworks need hrm.performance.read — ask an administrator to grant it in /admin/roles",
     );
   }
+  return scope;
 }
 
 export interface CompetencyLevelDTO {
@@ -437,6 +464,38 @@ export interface CompetencyProfileRow {
  * the subject, and the line manager may read it — the same audience as
  * the review itself.
  */
+/**
+ * Subject-relation half of the competency profile audience: the subject
+ * themselves, or their line manager as of today — the same rule as the
+ * other performance reads. Strangers keep the grant refusal, so the
+ * profile keeps hiding for readers without the performance grant.
+ */
+async function requireProfileRelation(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<void> {
+  const person = await loadApprovalPerson(db, orgId, actorId);
+  const subject = (await db.execute<{ workerPartyId: string }>(sql`
+    select worker_party_id as "workerPartyId" from worker_employments
+     where org_id = ${orgId} and id = ${employmentId}
+  `)).rows[0];
+  if (!subject) {
+    throw new HrmPerformanceError(
+      "NOT_FOUND",
+      `competency profile for employment ${employmentId} is not visible in this organization — check the id or the organization`,
+    );
+  }
+  if (person.partyId !== null && person.partyId === subject.workerPartyId) return;
+  const managed = await loadManagedEmploymentIds(db, orgId, actorId, await businessToday(orgId));
+  if (managed.includes(employmentId)) return;
+  throw new HrmPerformanceError(
+    "FORBIDDEN",
+    "competency frameworks need hrm.performance.read — ask an administrator to grant it in /admin/roles",
+  );
+}
+
 export async function competencyProfileForEmployment(args: {
   orgId: string;
   actorId: string;
@@ -447,7 +506,17 @@ export async function competencyProfileForEmployment(args: {
   const employmentId = requireId("employmentId", args.employmentId);
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
-    await requireCompetenciesRead(db, orgId, actorId);
+    // Subject plus allowed-employer fence before any profile read: HR
+    // reads only employments inside their allowed subsidiaries (the
+    // returned Set is the fence, never discarded); everyone else only
+    // their own employment or a direct report's — the same audience as
+    // the review itself.
+    const scope = await performanceReadScope(db, orgId, actorId);
+    if (scope === undefined) {
+      await requireProfileRelation(db, orgId, actorId, employmentId);
+    } else {
+      await requireHrmPerformanceOnEmployment(db, orgId, actorId, employmentId, "hrm.performance.read");
+    }
     const reviews = (await db.execute<{ id: string; cycle_id: string }>(sql`
       select r.id, r.cycle_id
         from hrm_reviews r
