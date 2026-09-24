@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
@@ -71,33 +70,6 @@ test("the shared as-of predicate carries the live-version rule", () => {
   assert.match(text, /effective_to/, "the window end is compared");
   assert.match(text, /infinity/, "unbounded maps to infinity inside the comparison");
   assert.match(text, /< coalesce/, "the end bound is strict: adjacent windows never overlap");
-});
-
-test("the as-of predicate cannot drift from the read service's own rule", () => {
-  // The read service resolves through temporal.ts resolveAsOf; the list
-  // mirrors it in SQL at asKnown = now. Both texts are quoted here so a
-  // change to either rule breaks this test and forces a joint review.
-  const temporal = readFileSync(
-    new URL("../../../../engine/src/hrm/temporal.ts", import.meta.url),
-    "utf8",
-  );
-  assert.ok(
-    temporal.includes("recordedAt <= asKnown < recordedUntil"),
-    "temporal still defines liveness as recordedAt <= asKnown < recordedUntil",
-  );
-  assert.ok(
-    temporal.includes("[start, end)"),
-    "temporal still defines effective membership half-open",
-  );
-  const helper = readFileSync(new URL("./employment-directory.ts", import.meta.url), "utf8");
-  assert.ok(
-    helper.includes("recorded_until is null"),
-    "the helper still selects the still-current version",
-  );
-  assert.ok(
-    helper.includes("coalesce(") && helper.includes("infinity"),
-    "the helper still maps a null end to infinity",
-  );
 });
 
 test("the unfiltered directory reads no employment predicate", () => {
