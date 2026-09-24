@@ -213,9 +213,16 @@ async function loadCycleRow(db: SqlExecutor, orgId: string, cycleId: string): Pr
   };
 }
 
+/** True when the cycle's declared employer is inside a restricted HR scope. */
+function cycleVisibleToHr(cycle: ReadCycleDTO, allowed: Set<string> | null): boolean {
+  return allowed === null || cycle.appliesTo.employerSubsidiaryId === null ||
+    allowed.has(cycle.appliesTo.employerSubsidiaryId);
+}
+
 /**
- * Cycles with progress. HR sees every cycle with org-wide counts; a
- * structural viewer (manager with reports, no grant) sees only the cycles
+ * Cycles with progress. HR sees cycles within their legal-entity scope;
+ * org-wide cycles retain only counts from that HR reader's visible reviews.
+ * A structural viewer (manager with reports, no grant) sees cycles
  * containing their own readable reviews, with counts over that slice.
  */
 export async function listCycleProgress(args: {
@@ -237,6 +244,7 @@ export async function listCycleProgress(args: {
     const out: CycleProgressDTO[] = [];
     for (const { id } of cycles) {
       const cycle = await loadCycleRow(db, orgId, id);
+      if (granted && !cycleVisibleToHr(cycle, allowed)) continue;
       const progress = await cycleProgress(db, orgId, id, visible);
       // A structural viewer sees only cycles they participate in; HR sees all.
       if (!granted && progress.totalSelf + progress.totalManager === 0) continue;
@@ -283,6 +291,12 @@ export async function getCycleDetail(args: {
     const allowed = granted ? await actorAllowedSubsidiaryIds(db, orgId, actorId) : null;
     const visible = await readableReviewIds(db, orgId, actorId, granted, allowed);
     const cycle = await loadCycleRow(db, orgId, cycleId);
+    if (granted && !cycleVisibleToHr(cycle, allowed)) {
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        `review cycle ${cycleId} is not visible in this organization — check the id or the organization`,
+      );
+    }
     const progress = await cycleProgress(db, orgId, cycleId, visible);
     if (!granted && progress.totalSelf + progress.totalManager === 0) {
       throw new HrmPerformanceError(
