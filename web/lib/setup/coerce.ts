@@ -276,14 +276,14 @@ export function pgErrorCode(e: unknown): string | undefined {
 export function scaleShapeCheckRefusal(
   entityKey: string,
   e: unknown,
-): { status: 422; body: { error: string; code: 'invalid' } } | null {
+): { status: 400; body: { error: string; code: 'invalid' } } | null {
   if (entityKey !== 'hrm-review-templates') return null
   if (pgErrorCode(e) !== '23514') return null
   const error = e as { constraint?: unknown; cause?: { constraint?: unknown } }
   const constraint = error?.cause?.constraint ?? error?.constraint
   if (constraint !== 'hrm_review_templates_scale_shape') return null
   return {
-    status: 422,
+    status: 400,
     body: {
       error:
         'the review template rating scale min and max must be numbers with min below max — fix the scale fields before saving',

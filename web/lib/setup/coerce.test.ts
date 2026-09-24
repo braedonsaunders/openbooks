@@ -228,7 +228,7 @@ test('a residual scale-shape CHECK refusal names the remedy, never the CHECK', (
     cause: { constraint: 'hrm_review_templates_scale_shape', message: 'raw CHECK text' },
   })
   assert.deepEqual(scaleShapeCheckRefusal('hrm-review-templates', checkError), {
-    status: 422,
+    status: 400,
     body: {
       error:
         'the review template rating scale min and max must be numbers with min below max — fix the scale fields before saving',

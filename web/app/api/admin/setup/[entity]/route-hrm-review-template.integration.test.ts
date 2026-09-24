@@ -180,7 +180,7 @@ test("string scale bounds from the drawer save as numbers; garbage is refused by
     }),
     call("hrm-review-templates"),
   );
-  assert.equal(refused.status, 422);
+  assert.equal(refused.status, 400);
   const body = (await refused.json()) as { error: string };
   assert.match(body.error, /ratingScaleMin/);
 });

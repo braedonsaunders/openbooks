@@ -1598,14 +1598,14 @@ export async function createSetupRecord(
   // HR-18: recruiting-depth create defaults fold before the generic coercion.
   const recruitingBody = foldRecruitingSetupCreate(entity.key, rawBody)
   // The review-template fold is the one input boundary that refuses: a
-  // scale bound no decimal reading accepts fails here as a 422 before
+  // scale bound no decimal reading accepts fails here as a 400 before
   // buildRow or the storage CHECK ever sees it.
   let reviewFolded: Record<string, unknown>
   try {
     reviewFolded = normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, recruitingBody))))
   } catch (error) {
     if (error instanceof HrmReviewTemplateScaleError) {
-      return { status: 422, body: { error: error.message, code: 'invalid' } }
+      return { status: 400, body: { error: error.message, code: 'invalid' } }
     }
     throw error
   }
@@ -1918,7 +1918,7 @@ export async function updateSetupRecord(
     reviewFolded = normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))
   } catch (error) {
     if (error instanceof HrmReviewTemplateScaleError) {
-      return { status: 422, body: { error: error.message, code: 'invalid' } }
+      return { status: 400, body: { error: error.message, code: 'invalid' } }
     }
     throw error
   }
