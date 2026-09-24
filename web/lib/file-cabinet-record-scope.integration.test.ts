@@ -297,7 +297,9 @@ test('cabinet reads hide files attached to out-of-fence records', { skip: !proce
       orgId: org.orgId, resourceType: 'file', resourceId: onlyA,
       principalType: 'user', principalId: bUserId, access: 'viewer', actorId,
     })
-    assert.ok(await getFile(org.orgId, onlyA, viewerB))
+    const sharedAcrossFence = await getFile(org.orgId, onlyA, viewerB)
+    assert.ok(sharedAcrossFence)
+    assert.deepEqual(sharedAcrossFence.attachments, [], 'a direct file grant does not expose an out-of-scope target identity')
     assert.equal(await getFile(org.orgId, onlyB, viewerA), null)
     const afterGrant = await listFiles(org.orgId, viewerB, { folderId: commonId })
     assert.equal((await getFolder(org.orgId, commonId, viewerB))?.fileCount, afterGrant.total)
