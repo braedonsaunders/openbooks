@@ -50,6 +50,12 @@
     "failedTitle": "This app couldn't be opened.",
     "failedHint": "Try refreshing. If it keeps happening, contact your administrator."
   },
+  "bridge": {
+    "previewDraftRefusal": "Draft preview does not execute backend actions or access live data",
+    "unknownMethod": "Unknown bridge method: {method}",
+    "callFailed": "Bridge call failed",
+    "callFailedWithStatus": "Bridge call failed (status {status})"
+  },
   "runtime": {
     "notFoundTitle": "App not found",
     "notInstalled": "This app is not installed, or has no active version.",

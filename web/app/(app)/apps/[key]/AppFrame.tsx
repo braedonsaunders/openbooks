@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { readApiErrorMessage } from '@/lib/api-error'
 import {
   makeBridgeResult,
@@ -29,6 +30,7 @@ export function AppFrame({
   previewDraftId?: string
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const t = useTranslations('apps')
   // Relay bridge calls from THIS iframe to the server, post results back.
   useEffect(() => {
     async function onMessage(e: MessageEvent) {
@@ -39,9 +41,9 @@ export function AppFrame({
       const post = (ok: boolean, payload: unknown) =>
         iframe.contentWindow?.postMessage(makeBridgeResult(req.id, ok, payload), '*')
 
-      if (previewDraftId) { post(false, 'Draft preview does not execute backend actions or access live data'); return }
+      if (previewDraftId) { post(false, t('bridge.previewDraftRefusal')); return }
       if (!isBridgeMethod(req.method)) {
-        post(false, `unknown bridge method: ${req.method}`)
+        post(false, t('bridge.unknownMethod', { method: req.method }))
         return
       }
       try {
@@ -55,20 +57,31 @@ export function AppFrame({
         // body must surface the failure, never a SyntaxError from res.json()
         // and never an empty object that hides the server's refusal.
         if (!res.ok) {
-          post(false, await readApiErrorMessage(res, 'bridge call failed'))
+          post(false, await readApiErrorMessage(res, t('bridge.callFailed')))
           return
         }
-        const json = await res.json()
+        // The success body is parsed defensively too: a 200 with a non-JSON
+        // or shapeless body refuses by name instead of posting success with
+        // an empty result (or a SyntaxError string).
+        const json = (await res.json().catch(() => null)) as {
+          ok?: unknown
+          error?: unknown
+          result?: unknown
+        } | null
         if (json?.ok === false) {
           post(
             false,
             typeof json?.error === 'string' && json.error.trim() !== ''
               ? json.error
-              : `bridge call failed (status ${res.status})`,
+              : t('bridge.callFailedWithStatus', { status: res.status }),
           )
+        } else if (!json || typeof json !== 'object' || !('result' in json)) {
+          post(false, t('bridge.callFailedWithStatus', { status: res.status }))
         } else post(true, json.result)
-      } catch (err) {
-        post(false, (err as Error).message)
+      } catch {
+        // A fetch rejection has no server refusal to surface; the named,
+        // translated failure beats the browser's technical TypeError string.
+        post(false, t('bridge.callFailed'))
       }
     }
     window.addEventListener('message', onMessage)
@@ -76,6 +89,9 @@ export function AppFrame({
     // may otherwise execute before React hydrates and lose the first request.
     if (iframeRef.current) iframeRef.current.src = `/api/apps/${encodeURIComponent(appKey)}/sandbox${previewDraftId ? `?draft=${encodeURIComponent(previewDraftId)}` : context.app.versionId ? `?versionId=${encodeURIComponent(context.app.versionId)}` : ''}`
     return () => window.removeEventListener('message', onMessage)
+    // The translator is read inside the relay on purpose: re-subscribing (and
+    // re-setting the document) when its identity changes would reload the App.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appKey, previewDraftId, context.app.versionId])
 
   return (

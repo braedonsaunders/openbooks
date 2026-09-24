@@ -50,6 +50,12 @@
     "failedTitle": "No se pudo abrir esta aplicación.",
     "failedHint": "Pruebe a actualizar la página. Si el problema continúa, contacte con su administrador."
   },
+  "bridge": {
+    "previewDraftRefusal": "La vista previa del borrador no ejecuta acciones de backend ni accede a datos reales",
+    "unknownMethod": "Método de puente desconocido: {method}",
+    "callFailed": "La llamada de puente falló",
+    "callFailedWithStatus": "La llamada de puente falló (estado {status})"
+  },
   "runtime": {
     "notFoundTitle": "Aplicación no encontrada",
     "notInstalled": "Esta aplicación no está instalada o no tiene una versión activa.",

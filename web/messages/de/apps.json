@@ -50,6 +50,12 @@
     "failedTitle": "Diese App konnte nicht geöffnet werden.",
     "failedHint": "Versuchen Sie es erneut. Wenn das Problem weiterhin auftritt, wenden Sie sich an Ihren Administrator."
   },
+  "bridge": {
+    "previewDraftRefusal": "Die Draft-Vorschau führt keine Backend-Aktionen aus und greift nicht auf Echtdaten zu",
+    "unknownMethod": "Unbekannte Bridge-Methode: {method}",
+    "callFailed": "Bridge-Aufruf fehlgeschlagen",
+    "callFailedWithStatus": "Bridge-Aufruf fehlgeschlagen (Status {status})"
+  },
   "runtime": {
     "notFoundTitle": "App nicht gefunden",
     "notInstalled": "Diese App ist nicht installiert oder hat keine aktive Version.",
