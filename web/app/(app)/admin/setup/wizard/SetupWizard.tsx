@@ -1021,10 +1021,8 @@ function OperationsStep(props: {
         </div>
       </fieldset>
       <fieldset className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-950/40">
-        <div>
-          <legend className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('operations.structureTitle')}</legend>
-          <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('operations.structureDescription')}</p>
-        </div>
+        <legend className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('operations.structureTitle')}</legend>
+        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('operations.structureDescription')}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {structureItems.map(({ key, icon: Icon }) => (
             <ToggleRow key={key} icon={<Icon size={18} />} label={t(`operations.${key}.title`)}
