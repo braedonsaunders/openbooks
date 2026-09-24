@@ -355,7 +355,6 @@
     "web/lib/list/order-clause.test.ts": 1,
     "web/lib/list/project-type-options.test.ts": 1,
     "web/lib/module-home/customers.test.ts": 1,
-    "web/lib/nav/app-placement.test.ts": 1,
     "web/lib/payroll-adjustment-route.test.ts": 5,
     "web/lib/payroll-bank-file-route.test.ts": 1,
     "web/lib/payroll-evidence-calendar.test.ts": 1,
