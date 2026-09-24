@@ -111,6 +111,32 @@ test('streamed CSV footer rows ride the last section with its prefix, like the b
   assert.equal(stream.finish(footers), expected)
 })
 
+test('a rowless trailing declaration keeps the header and footer on the whole report', () => {
+  // The paged caller declares every merged group rowless before finishing,
+  // including trailing sections a row cap cut before any row was filed: the
+  // section column must survive and the footer must ride the last merged
+  // section, exactly like the buffered builder appending to its last group.
+  const stream = createPagedCsvStream({ sectionHeader: 'Section' })
+  stream.pushPage([{ slot: 0, title: 'Kind: a', columns: ['Item'], rows: [['x']] }])
+  stream.pushPage([
+    { slot: 0, title: 'Kind: a', columns: ['Item'], rows: [] },
+    { slot: 1, title: 'Kind: b', columns: ['Item'], rows: [] },
+  ])
+  const out = stream.finish([[`Rows: 1`]])
+  const expected = reportResultToCsv(
+    {
+      groups: [
+        { kind: 'section' as const, title: 'Kind: a', columns: ['Item'], rows: [['x'] as Cell[]], isEmpty: false },
+        { kind: 'section' as const, title: 'Kind: b', columns: ['Item'], rows: [['Rows: 1'] as Cell[]], isEmpty: false },
+      ],
+      summary: [],
+      rowCount: 1,
+    },
+    { sectionHeader: 'Section' },
+  )
+  assert.equal(out, expected)
+})
+
 test('streamed CSV covers the empty result exactly', () => {
   const stream = createPagedCsvStream({ sectionHeader: 'Section' })
   stream.pushPage([{ slot: 0, title: 'Results', columns: ['Lot #'], rows: [] }])

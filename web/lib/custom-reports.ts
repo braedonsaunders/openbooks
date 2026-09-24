@@ -492,7 +492,15 @@ export async function streamPagedReportCsv(
     if (offset < expectedTotal && page.rowCount === 0) {
       throw new Error('Paged report stopped before all rows were returned')
     }
-    if (offset >= expectedTotal || emitted >= cap) break
+    // Fetching continues past the row cap: pages beyond the cap file zero
+    // rows but still REGISTER their groups, so trailing sections the cap cut
+    // before any of their rows are declared to the stream. Stopping here
+    // would drop those groups — the header would lose its section column and
+    // the footer would ride on the surviving prefix instead of the report's
+    // last section (the buffered mergeReportPages path keeps every group).
+    // Only output bytes stay bounded by the cap; pages are released as they
+    // are filed.
+    if (offset >= expectedTotal) break
   }
   const totalRows = expectedTotal ?? 0
   if (emitted < totalRows && emitted < cap) {
@@ -503,6 +511,12 @@ export async function streamPagedReportCsv(
     index === 0 ? { ...item, value: totalRows } : item
   ))
   if (truncated) finalSummary.push({ label: exportTruncatedNotice(prepared.options.labels, emitted, totalRows), value: '' })
+  // Declare every merged group to the stream — including trailing sections
+  // the row cap cut before any of their rows were filed. Without this the
+  // stream drops those zero-row groups, so the section column and the footer
+  // prefix attribute to the surviving prefix instead of the whole report
+  // (the buffered mergeReportPages path keeps every group).
+  stream.pushPage(slots.map((target, slot) => ({ slot, title: target.title, columns: target.columns, rows: [] })))
   return { csv: stream.finish(exportSummaryFooterRows(finalSummary)), rowCount: emitted, totalRows, truncated }
 }
 
@@ -571,6 +585,9 @@ export async function streamPagedReportXlsx(
         })
       }
       const target = slots[slot]!
+      // Past the cap rows are skipped but the group stays registered, so a
+      // trailing section the cap cut still gets its sheet (same discipline
+      // as the CSV path above).
       for (const row of group.rows) {
         if (counted >= cap) break
         if (target.count < 400) {
@@ -582,14 +599,16 @@ export async function streamPagedReportXlsx(
         target.count++
         counted++
       }
-      if (counted >= cap) break
     }
     pageKeys.push(keys)
     offset += page.rowCount
     if (offset < (expectedTotal ?? 0) && page.rowCount === 0) {
       throw new Error('Paged report stopped before all rows were returned')
     }
-    if (offset >= (expectedTotal ?? 0) || counted >= cap) break
+    // Like the CSV path, the pre-pass fetches every page: registration must
+    // see trailing groups the cap cut, while counting and measuring stop at
+    // the cap and the emit pass below stops emitting there.
+    if (offset >= (expectedTotal ?? 0)) break
   }
   const totalRows = expectedTotal ?? 0
   if (counted < totalRows && counted < cap) {
