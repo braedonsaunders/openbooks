@@ -57,10 +57,14 @@ const mockSources = new Map<string, string>([
           let calls = 0
           return work({ execute: async () => {
             calls += 1
-            if (calls === 1) return { rows: [{ tax_attributes: { ca_cca_class: '8' } }] }
-            if (calls === 2) return { rows: state.openPoolClass ? [{ class_code: state.openPoolClass }] : [] }
-            state.assignmentWrites += 1
-            return { rows: [{ tax_attributes: {} }] }
+            if (calls === 1) return { rows: [{ subsidiary_id: 'sub-a' }, { subsidiary_id: 'sub-b' }] }
+            if (calls === 5) return { rows: [{ tax_attributes: { ca_cca_class: '8' } }] }
+            if (calls === 6) return { rows: state.openPoolClass ? [{ class_code: state.openPoolClass }] : [] }
+            if (calls === 7) {
+              state.assignmentWrites += 1
+              return { rows: [{ tax_attributes: {} }] }
+            }
+            return { rows: [] }
           } })
         },
       }
