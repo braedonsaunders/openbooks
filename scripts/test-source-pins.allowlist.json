@@ -75,7 +75,6 @@
     "scripts/test-fixture-architecture.test.mjs": 3,
     "scripts/test-workflow.test.mjs": 1,
     "scripts/upgrade-rehearsal/upgrade-rehearsal.test.mjs": 2,
-    "web/app/(app)/_order/order-convert-refusal.test.ts": 2,
     "web/app/(app)/_order/order-drawer-refusal.test.ts": 1,
     "web/app/(app)/_order/order-stock-location.test.ts": 3,
     "web/app/(app)/accounting/changes/accounting-events-ui.test.ts": 2,
