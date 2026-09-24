@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createSuccessionPlan,
   listSuccessionPlans,
+  setSuccessionPlanNotes,
   setSuccessionPlanStatus,
 } from "@openbooks/engine/src/hrm/performance/talent.ts";
 import { getAuthz } from "../../../../lib/authz";
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
       actorId: authz.user.id,
       positionId: body.positionId,
       incumbentEmploymentId: body.incumbentEmploymentId ?? null,
+      notes: body.notes ?? null,
     });
     return NextResponse.json({ plan }, { status: 201 });
   } catch (e) {
@@ -74,7 +76,22 @@ export async function PATCH(req: Request) {
   const parsedBody = await parseJsonBody(req, patchSuccessionPlanBody);
   if (!parsedBody.ok) return parsedBody.response;
   try {
-    await setSuccessionPlanStatus({ orgId: authz.user.orgId, actorId: authz.user.id, id, status: parsedBody.data.status });
+    if (parsedBody.data.status !== undefined) {
+      await setSuccessionPlanStatus({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        id,
+        status: parsedBody.data.status,
+      });
+    }
+    if (parsedBody.data.notes !== undefined) {
+      await setSuccessionPlanNotes({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        id,
+        notes: parsedBody.data.notes,
+      });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     return performanceErrorResponse(e);
