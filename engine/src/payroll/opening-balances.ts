@@ -702,6 +702,14 @@ export async function openingBalancesForYear(
 
 export interface OpeningBalanceWrite {
   employeePartyId: string;
+  /**
+   * The row's loader-served `updatedAt` (`updated_at::text`, opaque). When
+   * present the save refuses the row unless the stored `updated_at` still
+   * matches — the lost-update guard for grids that replay full-row payloads
+   * from a loader snapshot. Absent means the caller does not speak versions
+   * (the file importer) and the row saves unguarded, as before.
+   */
+  updatedAt?: string | null;
   /** Any subset of OPENING_BALANCE_FIELDS keys; omitted amounts are zero. */
   amounts: Record<string, unknown>;
   /**
@@ -791,11 +799,14 @@ export async function saveOpeningBalances(input: {
     const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
     const subsidiaryById = new Map(names.rows.map((r) => [r.id, r.subsidiary_id]));
 
-    const existing = (await tx.execute<{ employee_party_id: string }>(sql`
-      select employee_party_id from payroll_opening_balances
+    const existing = (await tx.execute<{ employee_party_id: string; updated_at: string | null }>(sql`
+      select employee_party_id, updated_at::text as updated_at from payroll_opening_balances
        where org_id = ${input.orgId} and tax_year = ${year}
     `));
     const hasRow = new Set(existing.rows.map((r) => r.employee_party_id));
+    // The stored version per row, for the lost-update guard below. Compared
+    // as the same `::text` the loader serves, so a client echo is exact.
+    const storedVersion = new Map(existing.rows.map((r) => [r.employee_party_id, r.updated_at]));
 
     // Component descriptors resolve names/codes and enforce the annual cap;
     // stored amounts are what a caller that says nothing about components keeps.
@@ -856,6 +867,24 @@ export async function saveOpeningBalances(input: {
         continue;
       }
       seen.add(row.employeePartyId);
+      // Lost-update guard: a caller that speaks versions (the grid) replays
+      // full-row payloads from its loader snapshot, so a carry-in saved by
+      // someone else after that snapshot must refuse rather than be silently
+      // overwritten. Checked before the lock: a stale operator cannot act on
+      // lock state it has not loaded, and the remedy (reload) reveals it.
+      // Runs inside the employee-tax-year fence, so a competing save has
+      // either fully committed (and is seen here) or has not started yet.
+      if (row.updatedAt !== undefined) {
+        const stored = storedVersion.has(row.employeePartyId)
+          ? storedVersion.get(row.employeePartyId) ?? null
+          : null;
+        if (stored !== (row.updatedAt ?? null)) {
+          fail(
+            `the carry-in changed since this screen was loaded — reload the page and re-enter your edits`,
+          );
+          continue;
+        }
+      }
       const lock = locks.get(row.employeePartyId);
       if (lock && input.strictLocks !== false) {
         fail(

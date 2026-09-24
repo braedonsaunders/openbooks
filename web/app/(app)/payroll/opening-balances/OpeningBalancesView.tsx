@@ -237,7 +237,16 @@ export function OpeningBalancesView({
               : (row?.programAmounts?.[program.key] ?? '0')
           }
         }
-        return { employeePartyId, amounts, components: componentAmounts, programs: programAmounts }
+        // The row's loader-served version: a carry-in someone else saved
+        // after this snapshot refuses with a named 409 instead of being
+        // silently overwritten by these replayed full-row amounts.
+        return {
+          employeePartyId,
+          updatedAt: row?.updatedAt ?? null,
+          amounts,
+          components: componentAmounts,
+          programs: programAmounts,
+        }
       })
       // Client-side decimal gate: every EDITED non-blank value is classified
       // through the shared decimal helper before anything is posted, so an
