@@ -623,9 +623,11 @@ export async function deleteScheduleDependency(
   await db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
     await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    await tx.execute(sql`
+    const deleted = await tx.execute<{ id: string }>(sql`
       delete from schedule_dependencies
-       where id = ${id} and org_id = ${orgId} and project_id = ${projectId}`)
+       where id = ${id} and org_id = ${orgId} and project_id = ${projectId}
+       returning id`)
+    if (!deleted.rows[0]) throw new ScheduleError('dependency not found', 404)
   })
 }
 
@@ -671,12 +673,24 @@ export async function deleteScheduleBaseline(
   await db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
     await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
+
+    // Resolve and lock the parent before touching its child snapshot rows.
+    // Otherwise a caller can pair an in-scope project with another project's
+    // baseline id and erase that baseline's task history before the parent
+    // delete discovers the mismatch.
+    const parent = await tx.execute<{ id: string }>(sql`
+      select id from schedule_baselines
+       where id = ${baselineId} and org_id = ${orgId} and project_id = ${projectId}
+       for update`)
+    if (!parent.rows[0]) throw new ScheduleError('baseline not found', 404)
     await tx.execute(sql`
       delete from schedule_baseline_tasks
        where org_id = ${orgId} and baseline_id = ${baselineId}`)
-    await tx.execute(sql`
+    const deleted = await tx.execute<{ id: string }>(sql`
       delete from schedule_baselines
-       where id = ${baselineId} and org_id = ${orgId} and project_id = ${projectId}`)
+       where id = ${baselineId} and org_id = ${orgId} and project_id = ${projectId}
+       returning id`)
+    if (!deleted.rows[0]) throw new ScheduleError('baseline not found', 404)
   })
 }
 
