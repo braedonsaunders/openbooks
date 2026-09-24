@@ -378,7 +378,6 @@
     "web/lib/payroll-outputs.test.ts": 2,
     "web/lib/payroll-setup-checklist.test.ts": 1,
     "web/lib/project-costing.test.ts": 1,
-    "web/lib/public-surface-contract.test.ts": 2,
     "web/lib/recurring-delete-audit.test.ts": 2,
     "web/lib/report-definition-export-calendar.test.ts": 3,
     "web/lib/report-drill.test.ts": 1,

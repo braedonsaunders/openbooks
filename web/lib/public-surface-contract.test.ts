@@ -1,3 +1,4 @@
+// source-pin-contract: edge session-gate public surface — every route under a public root (/api/v1, token-authed HR/time surfaces) must authenticate in-route with its surface marker and never read the session cookie. The subject list is derived by walking the route filesystem, never hand-listed.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
