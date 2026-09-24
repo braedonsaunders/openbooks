@@ -19,6 +19,7 @@
  * recent images and converged on the same probe. Re-verify against the image
  * filesystem when the pin is next moved.
  */
+// source-pin-contract: compose healthcheck and dependency policy (compose.yaml: minio curl-free probe, init ordering)
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
