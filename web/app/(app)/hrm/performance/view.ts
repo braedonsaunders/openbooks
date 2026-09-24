@@ -190,6 +190,7 @@ export interface PerformancePageData {
     regrettableValue: string
     gapsTitle: string
     gapsEmpty: string
+    departmentLabel: string
     gaps: {
       employmentHref: string
       employmentLabel: string
@@ -355,7 +356,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
                 },
                 columns: [
                   column(data.retention.gapsTitle, link(item('employmentLabel'), item('employmentHref'))),
-                  column(t('home.groups.department'), text(item('departmentLabel'))),
+                  column(data.retention.departmentLabel, text(item('departmentLabel'))),
                   column(data.columns.period, text(item('terminatedFrom')), {
                     className: 'tabular-nums',
                   }),
@@ -722,6 +723,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
       regrettableValue: String(overview.regrettableLeavers),
       gapsTitle: t('retention.missingExits'),
       gapsEmpty: t('retention.noMissingExits'),
+      departmentLabel: t('home.groups.department'),
       gaps: overview.missingExitRecords.map((g) => ({
         employmentHref: performanceHref(preservedParams, { status: rawStatus, exit: g.employmentId }),
         employmentLabel: g.workerName,
