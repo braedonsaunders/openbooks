@@ -92,7 +92,7 @@ async function adjustmentSnapshot(orgId: string, documentId: string): Promise<un
     ) as state`))).rows[0]!.state;
 }
 
-function send(fx: ScopeFixture, body: Record<string, unknown>): Promise<Response> {
+function send(fx: Pick<ScopeFixture, "orgId" | "documentId">, body: Record<string, unknown>): Promise<Response> {
   return withOrgContext(fx.orgId, () => POST(new Request("https://openbooks.test/api/payroll/runs/fixture", {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
   }), { params: Promise.resolve({ id: fx.documentId }) }));
@@ -118,7 +118,9 @@ test("set-scope removes a deactivated roster member instead of rolling back 422"
       rosterPartyIds: [fx.activeId, fx.deactivatedId],
     });
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
-    assert.deepEqual(await response.json(), { ok: true, included: 1, excluded: 1 });
+    // True deltas: the active member stays (no change), the deactivated one
+    // is newly excluded — not an echo of the input lists.
+    assert.deepEqual(await response.json(), { ok: true, included: 0, excluded: 1 });
     const excluded = await withOrgContext(fx.orgId, () => db.execute<{ employee_party_id: string }>(sql`
       select employee_party_id from pay_run_adjustments
        where org_id = ${fx.orgId} and pay_run_document_id = ${fx.documentId}
@@ -172,7 +174,7 @@ test("set-scope replays nothing when the requested scope already holds", { skip:
       rosterPartyIds: [fx.activeId, fx.deactivatedId],
     });
     assert.equal(second.status, 200);
-    assert.deepEqual(await second.json(), { ok: true, included: 1, excluded: 1 });
+    assert.deepEqual(await second.json(), { ok: true, included: 0, excluded: 0 });
     assert.deepEqual(await adjustmentSnapshot(fx.orgId, fx.documentId), before, "a no-change scope must write nothing");
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
 });
@@ -183,5 +185,84 @@ test("set-scope on an empty roster is a no-op", { skip: !process.env.OPENBOOKS_D
     const response = await send(fx, { action: "set-scope", employeePartyIds: [], rosterPartyIds: [] });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ok: true, included: 0, excluded: 0 });
+  } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+});
+
+test("set-scope reports true deltas, and an off-roster keep id is refused by name", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // The input-echo defect: the response counted the request lists
+  // ({included: keep.size}), so a roster of 10 with 3 already excluded and a
+  // keep of 5 reported {included: 5, excluded: 5} while only 2 memberships
+  // changed — and keep ids that are not on the roster at all were counted as
+  // included although nothing was written for them.
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+  const fx = await withBypassContext(async () => {
+    await db.execute(sql`
+      update orgs set settings = settings || ${JSON.stringify({ features: { payroll: true } })}::jsonb
+       where id = ${org.orgId}`);
+    await seedPayrollComponents(org.orgId, actorId, "CA");
+    const scheduleId = randomUUID();
+    await db.execute(sql`
+      insert into pay_schedules
+        (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+         pay_date_offset_days, is_active, created_by, updated_by)
+      values
+        (${scheduleId}, ${org.orgId}, 'Scope Schedule', 'biweekly', 26, '2026-07-18',
+         3, true, ${actorId}, ${actorId})`);
+    const ids: string[] = [];
+    for (let n = 0; n < 10; n++) {
+      const id = randomUUID();
+      ids.push(id);
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${id}, ${org.orgId}, 'person', ${`Scope ${n}`}, true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles
+          (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis,
+           federal_claim_code, provincial_claim_code, is_active, created_by, updated_by)
+        values
+          (${org.orgId}, ${id}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1, true, ${actorId}, ${actorId})`);
+    }
+    const run = await createPayRun({
+      orgId: org.orgId, actorId, payScheduleId: scheduleId,
+      periodStart: "2026-07-05", periodEnd: "2026-07-18",
+    });
+    return { orgId: org.orgId, actorId, documentId: run.documentId, roster: ids };
+  });
+  state.gate = {
+    user: { orgId: fx.orgId, id: fx.actorId },
+    permissions: new Set(["payroll.run"]),
+    allowedSubsidiaryIds: null,
+  } as Authz;
+  try {
+    // Three already excluded: only memberships that actually change count.
+    const seed = await send(fx, {
+      action: "set-scope",
+      employeePartyIds: fx.roster.slice(3),
+      rosterPartyIds: fx.roster,
+    });
+    assert.equal(seed.status, 200);
+    assert.deepEqual(await seed.json(), { ok: true, included: 0, excluded: 3 });
+    // Keep 5 of the 7 included: exactly 2 memberships change.
+    const response = await send(fx, {
+      action: "set-scope",
+      employeePartyIds: fx.roster.slice(3, 8),
+      rosterPartyIds: fx.roster,
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, included: 0, excluded: 2 });
+
+    // A keep id that is not on the roster is refused naming it — it used to
+    // be counted as included while nothing was written for it.
+    const stranger = randomUUID();
+    const refused = await send(fx, {
+      action: "set-scope",
+      employeePartyIds: [...fx.roster.slice(3, 8), stranger],
+      rosterPartyIds: fx.roster,
+    });
+    assert.equal(refused.status, 422);
+    const body = (await refused.json()) as { error: string };
+    assert.ok(body.error.includes(stranger), "the refusal names the off-roster id");
+    assert.match(body.error, /not on this run's roster/);
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
 });

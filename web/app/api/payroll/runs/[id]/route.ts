@@ -479,6 +479,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: `rosterPartyIds[${badRoster}] "${suppliedValue(roster[badRoster])}" is not an employee id — fix that entry and try again` }, { status: 422 })
       }
       const keep = new Set(included as string[])
+      const rosterSet = new Set(roster as string[])
+      // A keep id that is not on the roster would be silently ignored by the
+      // loop below (and used to be COUNTED as included). That is either a
+      // stale client roster or a mistyped id on a 2000-employee list — refuse
+      // naming it rather than answering counts that describe nothing.
+      const offRoster = (included as string[]).find((id) => !rosterSet.has(id))
+      if (offRoster !== undefined) {
+        return NextResponse.json({ error: `employeePartyIds "${offRoster}" is not on this run's roster — pass only roster members to include, and refresh the roster first` }, { status: 422 })
+      }
+      // True deltas, not input echoes: members already where they belong are
+      // skipped below, so the counts report the memberships that actually
+      // changed.
+      let includedDelta = 0
+      let excludedDelta = 0
       await withOrgTransaction(gate.user.orgId, async () => {
         // DIFF against the current scope, never replay the roster. Every
         // mutatePayRunAdjustment call re-validates its member, so looping the
@@ -498,16 +512,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const wanted = keep.has(employeePartyId) ? 'include' : 'exclude'
           const current = excluded.has(employeePartyId) ? 'exclude' : 'include'
           if (wanted === current) continue
-          await mutatePayRunAdjustment({
+          const outcome = await mutatePayRunAdjustment({
             orgId: gate.user.orgId,
             documentId: id,
             actorId: gate.user.id,
             allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
             mutation: { action: wanted, employeePartyId },
           })
+          // The write's own receipt: count the membership only when the
+          // mutation reports it changed, never because the input named it.
+          if (outcome.changed) {
+            if (wanted === 'include') includedDelta++
+            else excludedDelta++
+          }
         }
       })
-      return NextResponse.json({ ok: true, included: keep.size, excluded: roster.length - keep.size })
+      return NextResponse.json({ ok: true, included: includedDelta, excluded: excludedDelta })
     }
     if (body.action === 'exclude-employee' || body.action === 'include-employee') {
       if (typeof body.employeePartyId !== 'string') {
