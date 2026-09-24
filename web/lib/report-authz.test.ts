@@ -115,12 +115,16 @@ const EXECUTION_PATHS: Array<{ file: string; symbol: string; why: string }> = [
   },
   {
     file: '../app/api/reports/runs/[id]/csv/route.ts',
-    symbol: 'canAccessReportArtifact',
+    // The named-refusal face of the same shared gate: reportArtifactAccessDetail
+    // IS canAccessReportArtifact plus the missing permission names, so a
+    // payroll-bearing artifact refuses reports-only viewers by name.
+    symbol: 'reportArtifactAccessDetail',
     why: 'downloading a recorded run CSV returns the same rows',
   },
   {
     file: '../app/api/reports/runs/[id]/artifact/route.ts',
-    symbol: 'canAccessReportArtifact',
+    // Same shared gate, named-refusal face — see above.
+    symbol: 'reportArtifactAccessDetail',
     why: 'scheduled-run artifacts are the same report, rendered',
   },
 ]

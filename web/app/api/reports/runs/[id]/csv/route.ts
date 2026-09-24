@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
-import { canAccessReportArtifact } from '../../../../../../lib/report-execution-context'
+import { reportArtifactAccessDetail } from '../../../../../../lib/report-execution-context'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 export const runtime = 'nodejs'
@@ -24,8 +24,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   `))
   const row = r.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!(await canAccessReportArtifact(gate, row.authorization_snapshot))) {
-    return NextResponse.json({ error: 'report artifact access denied or original scope unavailable' }, { status: 403 })
+  const access = await reportArtifactAccessDetail(gate, row.authorization_snapshot)
+  if (!access.ok) {
+    return NextResponse.json({ error: access.missingPermissions.length > 0
+      ? `report artifact requires ${access.missingPermissions.join(', ')}`
+      : 'report artifact access denied or original scope unavailable' }, { status: 403 })
   }
   if (row.status !== 'succeeded' || row.result_csv == null) {
     return NextResponse.json({ error: 'no result available for this run' }, { status: 409 })

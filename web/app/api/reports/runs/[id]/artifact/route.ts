@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
-import { canAccessReportArtifact } from '../../../../../../lib/report-execution-context'
+import { reportArtifactAccessDetail } from '../../../../../../lib/report-execution-context'
 import { blobResponse } from '../../../../../../lib/blob-response'
 
 export const runtime = 'nodejs'
@@ -23,8 +23,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   `))
   const row = result.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!(await canAccessReportArtifact(gate, row.authorization_snapshot))) {
-    return NextResponse.json({ error: 'report artifact access denied or original scope unavailable' }, { status: 403 })
+  // Content recorded at render time names its own permission set (e.g. a
+  // payroll-bearing GL names payroll.read): refuse those viewers by name
+  // rather than re-rendering per viewer.
+  const access = await reportArtifactAccessDetail(gate, row.authorization_snapshot)
+  if (!access.ok) {
+    return NextResponse.json({ error: access.missingPermissions.length > 0
+      ? `report artifact requires ${access.missingPermissions.join(', ')}`
+      : 'report artifact access denied or original scope unavailable' }, { status: 403 })
   }
   return blobResponse(req, {
     filename: row.filename,

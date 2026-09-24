@@ -57,7 +57,7 @@ import { can } from './authz'
 import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
 import { resolveSubsidiaryView } from './consolidation'
 import { resolvePeriod } from './periods'
-import { STATEMENT_KIND_FEATURE } from './report-authz'
+import { reportEntityPermission, STATEMENT_KIND_FEATURE } from './report-authz'
 import { reportBookSelection } from './report-books'
 
 /**
@@ -143,8 +143,21 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
  * per output format.
  */
 export type ResolvedReport =
-  | { render: 'view'; view: StatementView; title: string; periodPhrase: string }
-  | { render: 'data'; data: ExportData }
+  | { render: 'view'; view: StatementView; title: string; periodPhrase: string; requiredPermissions?: string[] }
+  | { render: 'data'; data: ExportData; requiredPermissions?: string[] }
+
+/**
+ * Content permissions a line-level ledger statement requires. Journal and
+ * general-ledger artifacts render individual lines with party names and
+ * memos, so lines sourced from pay-run documents are per-employee payroll
+ * detail: the artifact requires payroll.read even though the statement KIND
+ * is gated by the reports feature only. Aggregated statements blend payroll
+ * into wage-expense totals without per-employee detail and owe nothing extra.
+ */
+const PAY_RUN_DOCUMENT_KIND = 'pay_run'
+function ledgerContentPermissions(lines: ReadonlyArray<{ docKind: string | null }>): string[] {
+  return lines.some((line) => line.docKind === PAY_RUN_DOCUMENT_KIND) ? ['payroll.read'] : []
+}
 
 export type ResolveReportCtx = {
   orgId: string
@@ -267,17 +280,22 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // identity or per-employee amounts) from every ledger-detail reader below.
   const canSeePayroll = can(authz, 'payroll.read')
   switch (kind) {
-    case 'general-ledger':
+    case 'general-ledger': {
+      const ledger = await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId, canSeePayroll })
       return {
         render: 'data',
-        data: generalLedgerExportData(
-          await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId, canSeePayroll }),
-          t('generalLedger.title'),
-          t,
-        ),
+        data: generalLedgerExportData(ledger, t('generalLedger.title'), t),
+        requiredPermissions: ledgerContentPermissions(ledger.accounts.flatMap((account) => account.lines)),
       }
-    case 'journal':
-      return { render: 'data', data: journalExportData(await journalReport(period.from, period.to, { dims, orgId, bookId: detailBookId, canSeePayroll }), t('journal.title'), t) }
+    }
+    case 'journal': {
+      const journal = await journalReport(period.from, period.to, { dims, orgId, bookId: detailBookId, canSeePayroll })
+      return {
+        render: 'data',
+        data: journalExportData(journal, t('journal.title'), t),
+        requiredPermissions: ledgerContentPermissions(journal.entries),
+      }
+    }
     case 'registers':
       return {
         render: 'data',
@@ -397,7 +415,7 @@ export async function resolveDefinitionToExportData(
   p: URLSearchParams,
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
-): Promise<ExportData> {
+): Promise<ExportData & { requiredPermissions: string[] }> {
   const { row, authz } = await loadAuthorizedDefinition(orgId, id)
 
   if (row.report_type === 'statement') {
@@ -407,14 +425,18 @@ export async function resolveDefinitionToExportData(
     const params = new URLSearchParams(p)
     for (const [k, v] of Object.entries(spec.params ?? {})) if (!params.has(k)) params.set(k, v)
     const resolved = await resolveReport(spec.kind, params, ctx)
+    // The artifact records the permission set its CONTENT required (a
+    // payroll-bearing journal/GL names payroll.read here); the scheduled
+    // render stamps it onto the run snapshot and downloads enforce it.
+    const requiredPermissions = resolved.requiredPermissions ?? []
     if (resolved.render === 'view') {
-      return statementViewToExportData(resolved.view, {
+      return { ...statementViewToExportData(resolved.view, {
         title: resolved.title,
         dateRangeLabel: resolved.periodPhrase,
         accountLabel: ctx.t('export.columns.accountName'),
-      })
+      }), requiredPermissions }
     }
-    return resolved.data
+    return { ...resolved.data, requiredPermissions }
   }
 
   // query-type definition → entity engine → ExportData. An explicit period in
@@ -424,10 +446,11 @@ export async function resolveDefinitionToExportData(
   // Pageable entity exports deliberately collect every causally stable page;
   // they never inherit the interactive page or the engine's legacy 10k cap.
   const result = await executeReportAllPages(orgId, query)
-  return runResultToExportData(result, {
+  const entityPermission = reportEntityPermission(query)
+  return { ...runResultToExportData(result, {
     title,
     dateRangeLabel,
-  })
+  }), requiredPermissions: entityPermission ? [entityPermission] : [] }
 }
 
 /**

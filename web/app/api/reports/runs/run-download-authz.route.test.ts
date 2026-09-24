@@ -63,6 +63,9 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.run-download-authz-route-test')]
       export async function canAccessReportArtifact() { return state.artifactAllowed }
+      export async function reportArtifactAccessDetail() {
+        return { ok: state.artifactAllowed, missingPermissions: [] }
+      }
     `,
   ],
   [
