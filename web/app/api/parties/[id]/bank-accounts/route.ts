@@ -179,22 +179,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // instructions keep paying exactly what their file generation locked, but a
   // fresh edit here would leave them pointing at unapproved details. Refuse at
   // the mutation boundary — same dependency rule as retirement (DELETE).
-  const dependencies = (await db.execute<{ inFlightPayment: boolean }>(sql`
-    select exists (
-      select 1
-        from payment_instructions instruction
-       where instruction.org_id = ${user.orgId}
-         and instruction.payee_bank_account_id = ${accountId}
-         and instruction.status in ('pending', 'approved', 'generated', 'sent')
-    ) as "inFlightPayment"
-  `))
-  if (dependencies.rows[0]?.inFlightPayment) {
-    return NextResponse.json(
-      { error: 'cancel in-flight payment instructions referencing these bank details before editing them' },
-      { status: 422 },
-    )
-  }
-
   const accountNumber = body.accountNumber?.trim()
   const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
   // Keep the material reset, stale-gate cancellation, run completion, audit
@@ -204,6 +188,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   return withOrgTransaction(user.orgId, async () => {
     const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
     if (lockedDenied) return lockedDenied
+    const dependencies = (await db.execute<{ inFlightPayment: boolean }>(sql`
+      select exists (
+        select 1
+          from payment_instructions instruction
+         where instruction.org_id = ${user.orgId}
+           and instruction.payee_bank_account_id = ${accountId}
+           and instruction.status in ('pending', 'approved', 'generated', 'sent')
+      ) as "inFlightPayment"
+    `))
+    if (dependencies.rows[0]?.inFlightPayment) {
+      return NextResponse.json(
+        { error: 'cancel in-flight payment instructions referencing these bank details before editing them' },
+        { status: 422 },
+      )
+    }
     // Any material edit re-enters approval: pending + inactive + approval
     // cleared (the source platform workflow's @OLDRECORD@ comparison, done natively).
     const updated = (await db.execute<{ id: string }>(sql`
@@ -312,34 +311,34 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       { status: 409 },
     )
   }
-  const dependencies = (await db.execute<{ in_flight_payment: boolean; live_mandate: boolean }>(sql`
-    select
-      exists (
-        select 1
-          from payment_instructions instruction
-         where instruction.org_id = ${user.orgId}
-           and instruction.payee_bank_account_id = ${accountId}
-           and instruction.status in ('pending', 'approved', 'generated', 'sent')
-      ) as in_flight_payment,
-      exists (
-        select 1
-          from payment_mandates mandate
-         where mandate.org_id = ${user.orgId}
-           and mandate.party_bank_account_id = ${accountId}
-           and mandate.status in ('pending', 'active', 'suspended')
-      ) as live_mandate
-  `))
-  if (dependencies.rows[0]?.in_flight_payment || dependencies.rows[0]?.live_mandate) {
-    return NextResponse.json(
-      { error: 'cancel in-flight payment instructions and revoke live mandates before retiring these bank details' },
-      { status: 422 },
-    )
-  }
   // Retirement and its fraud evidence are one commit unit; an audit failure
   // must leave the bank details available for a safe retry.
   return withOrgTransaction(user.orgId, async () => {
     const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
     if (lockedDenied) return lockedDenied
+    const dependencies = (await db.execute<{ in_flight_payment: boolean; live_mandate: boolean }>(sql`
+      select
+        exists (
+          select 1
+            from payment_instructions instruction
+           where instruction.org_id = ${user.orgId}
+             and instruction.payee_bank_account_id = ${accountId}
+             and instruction.status in ('pending', 'approved', 'generated', 'sent')
+        ) as in_flight_payment,
+        exists (
+          select 1
+            from payment_mandates mandate
+           where mandate.org_id = ${user.orgId}
+             and mandate.party_bank_account_id = ${accountId}
+             and mandate.status in ('pending', 'active', 'suspended')
+        ) as live_mandate
+    `))
+    if (dependencies.rows[0]?.in_flight_payment || dependencies.rows[0]?.live_mandate) {
+      return NextResponse.json(
+        { error: 'cancel in-flight payment instructions and revoke live mandates before retiring these bank details' },
+        { status: 422 },
+      )
+    }
     // Bind the caller's canonical six-digit token as timestamptz; a Date or
     // millisecond JSON round-trip would spuriously miss a microsecond row.
     const updated = (await db.execute<{ id: string }>(sql`

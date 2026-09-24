@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardSubsidiaryScope, type Authz } from '../../../../../lib/authz'
 
 /** Party record boundary shared by every bank-account verb here (null-subsidiary parties are org-wide). */
@@ -26,12 +26,19 @@ export async function denyLockedOutsidePartyScope(
   gate: Authz,
   partyId: string,
 ): Promise<NextResponse | null> {
-  const row = (await tx.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from parties
-         where id = ${partyId} and org_id = ${gate.user.orgId}
-           ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-         for update`,
-  ))
-  if (!row.rows[0]) return NextResponse.json({ error: 'party not found' }, { status: 404 })
-  return null
+  try {
+    await lockScopeRow(
+      tx,
+      gate.user.orgId,
+      'party',
+      partyId,
+      gate.allowedSubsidiaryIds,
+      'update',
+      { orgWideNull: true },
+    )
+    return null
+  } catch (error) {
+    if (!(error instanceof ScopeNotFoundError)) throw error
+    return NextResponse.json({ error: 'party not found' }, { status: 404 })
+  }
 }
