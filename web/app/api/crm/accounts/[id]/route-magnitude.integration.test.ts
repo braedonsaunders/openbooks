@@ -80,10 +80,19 @@ async function profile(partyId: string) {
   return rows[0]!
 }
 
+
+// The revision token PATCH mandates (F3-97): every pre-existing call below
+// targets other behavior, so each carries a fresh token to reach it.
+async function revisionFor(partyId: string): Promise<string> {
+  return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+    select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+      from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
+}
+
 test('PATCH refuses an employee count outside int32 without writing', { skip: !DB }, async () => {
   const { org, partyId } = await fixture()
   try {
-    const result = await patch(partyId, { employeeCount: '99999999999999999999' })
+    const result = await patch(partyId, { employeeCount: '99999999999999999999', expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.deepEqual(await profile(partyId), { annual_revenue: '100.0000', employee_count: 10 })
   } finally {
@@ -94,7 +103,7 @@ test('PATCH refuses an employee count outside int32 without writing', { skip: !D
 test('PATCH refuses an annual revenue wider than numeric(19,4) without writing', { skip: !DB }, async () => {
   const { org, partyId } = await fixture()
   try {
-    const result = await patch(partyId, { annualRevenue: '99999999999999999999' })
+    const result = await patch(partyId, { annualRevenue: '99999999999999999999', expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.deepEqual(await profile(partyId), { annual_revenue: '100.0000', employee_count: 10 })
   } finally {
@@ -105,7 +114,7 @@ test('PATCH refuses an annual revenue wider than numeric(19,4) without writing',
 test('PATCH still saves column-maximum figures with identical read-back', { skip: !DB }, async () => {
   const { org, partyId } = await fixture()
   try {
-    const result = await patch(partyId, { annualRevenue: '999999999999999.9999', employeeCount: 2147483647 })
+    const result = await patch(partyId, { annualRevenue: '999999999999999.9999', employeeCount: 2147483647, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.deepEqual(await profile(partyId), { annual_revenue: '999999999999999.9999', employee_count: 2147483647 })
   } finally {

@@ -104,6 +104,15 @@ async function stageEvents(partyId: string) {
      where cp.party_id = ${partyId} order by e.occurred_at`))).rows
 }
 
+
+// The revision token PATCH mandates (F3-97): every pre-existing call below
+// targets other behavior, so each carries a fresh token to reach it.
+async function revisionFor(partyId: string): Promise<string> {
+  return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+    select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+      from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
+}
+
 test('PATCH keeps a stage-only drawer save: stale lead status falls back to the prospect default', { skip: !DB }, async () => {
   const f = await fixture()
   try {
@@ -114,6 +123,7 @@ test('PATCH keeps a stage-only drawer save: stale lead status falls back to the 
       ownerUserId: null, territoryId: null, leadSourceId: null,
       industry: '', category: '', annualRevenue: '', employeeCount: '',
       qualificationScore: '', nextActionAt: null, isActive: true,
+      expectedUpdatedAt: await revisionFor(f.partyId),
     })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.deepEqual(await profile(f.partyId), { lifecycle_stage: 'prospect', status_id: f.prospectDefaultId, status_key: 'open' })
@@ -126,7 +136,7 @@ test('PATCH keeps a stage-only drawer save: stale lead status falls back to the 
 test('PATCH honors an explicit new-stage status on promotion', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: f.prospectOtherId })
+    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: f.prospectOtherId, expectedUpdatedAt: await revisionFor(f.partyId) })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     const row = await profile(f.partyId)
     assert.equal(row.lifecycle_stage, 'prospect')
@@ -139,7 +149,7 @@ test('PATCH honors an explicit new-stage status on promotion', { skip: !DB }, as
 test('PATCH with a cleared status on promotion keeps the promoted default instead of nulling it', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: null })
+    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: null, expectedUpdatedAt: await revisionFor(f.partyId) })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.deepEqual(await profile(f.partyId), { lifecycle_stage: 'prospect', status_id: f.prospectDefaultId, status_key: 'open' })
   } finally {
@@ -150,7 +160,7 @@ test('PATCH with a cleared status on promotion keeps the promoted default instea
 test('PATCH with an unknown status id still fails closed on a stage change', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: randomUUID() })
+    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: randomUUID(), expectedUpdatedAt: await revisionFor(f.partyId) })
     assert.equal(result.status, 422, JSON.stringify(result.json))
     assert.equal((await profile(f.partyId)).lifecycle_stage, 'lead')
   } finally {
@@ -161,7 +171,7 @@ test('PATCH with an unknown status id still fails closed on a stage change', { s
 test('PATCH without a stage change still rejects a status from another stage', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    const result = await patch(f.partyId, { statusId: f.prospectDefaultId })
+    const result = await patch(f.partyId, { statusId: f.prospectDefaultId, expectedUpdatedAt: await revisionFor(f.partyId) })
     assert.equal(result.status, 422, JSON.stringify(result.json))
     assert.equal((await profile(f.partyId)).status_id, f.leadStatusId)
   } finally {
@@ -221,12 +231,12 @@ async function inCustomerPicker(orgId: string, partyId: string): Promise<boolean
 test('PATCH demotion back to prospect deactivates the customer role in the same transaction', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    const promoted = await patch(f.partyId, { lifecycleStage: 'customer' })
+    const promoted = await patch(f.partyId, { lifecycleStage: 'customer', expectedUpdatedAt: await revisionFor(f.partyId) })
     assert.equal(promoted.status, 200, JSON.stringify(promoted.json))
     assert.equal(await customerRoleActive(f.orgId, f.partyId), true)
     assert.equal(await inCustomerPicker(f.orgId, f.partyId), true)
 
-    const demoted = await patch(f.partyId, { lifecycleStage: 'prospect', stageReason: 'lost the deal' })
+    const demoted = await patch(f.partyId, { lifecycleStage: 'prospect', stageReason: 'lost the deal', expectedUpdatedAt: await revisionFor(f.partyId) })
     assert.equal(demoted.status, 200, JSON.stringify(demoted.json))
     assert.equal((await profile(f.partyId)).lifecycle_stage, 'prospect')
     assert.equal(await customerRoleActive(f.orgId, f.partyId), false)
@@ -243,13 +253,13 @@ test('PATCH demotion back to prospect deactivates the customer role in the same 
 test('PATCH demotion of a customer with an in-flight order is refused by name', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    const promoted = await patch(f.partyId, { lifecycleStage: 'customer' })
+    const promoted = await patch(f.partyId, { lifecycleStage: 'customer', expectedUpdatedAt: await revisionFor(f.partyId) })
     assert.equal(promoted.status, 200, JSON.stringify(promoted.json))
     await withBypassContext(() => db.execute(sql`
       insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, total)
       values (${f.orgId}, 'sales_order', 'SO-GUARD-1', '2026-01-05', 'USD', 'pending_approval', ${f.partyId}, '100.0000')`))
 
-    const demoted = await patch(f.partyId, { lifecycleStage: 'prospect', stageReason: 'lost the deal' })
+    const demoted = await patch(f.partyId, { lifecycleStage: 'prospect', stageReason: 'lost the deal', expectedUpdatedAt: await revisionFor(f.partyId) })
     assert.equal(demoted.status, 422, JSON.stringify(demoted.json))
     assert.match(demoted.json?.error ?? '', /in flight|open balance/i)
     // The refusal changed nothing: still a customer with an active role.

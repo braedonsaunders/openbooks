@@ -95,6 +95,9 @@ const PROFILE = {
   employee_count: null,
   qualification_score: null,
   next_action_at: null,
+  // The read surfaces the revision token as updated_at (F3-97): every save
+  // must echo it back as expectedUpdatedAt.
+  updated_at: "2026-09-17T12:00:00.000000Z",
 };
 
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
@@ -198,4 +201,54 @@ test("after a successful start the profile renders and Start tracking is gone", 
     document.body.textContent?.includes("Relationship profile"),
     "the profile renders in place without a drawer remount",
   );
+});
+
+// F3-97: the relationship PATCH carries the revision token the read
+// surfaced as profile.updated_at — the same expectedUpdatedAt contract as
+// the main party and bank-account saves — so a second tab holding older
+// fields 409s instead of silently replacing them.
+test("a relationship save carries the read revision as its concurrency token", async (t) => {
+  const patches: { url: string; init?: RequestInit }[] = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url !== `/api/crm/accounts/${PARTY_ID}`) return null;
+    if (init?.method === "PATCH") {
+      patches.push({ url, init });
+      return Response.json({ account: { profile: PROFILE, opportunities: [] } });
+    }
+    return Response.json({
+      account: { profile: PROFILE, opportunities: [] },
+      options: OPTIONS,
+    });
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountSection();
+  t.after(unmount);
+  // The industry field is the first free-text input in the form grid.
+  const industry = [...document.querySelectorAll("input")].find(
+    (el) => (el as HTMLInputElement).type === "text",
+  ) as HTMLInputElement | undefined;
+  assert.ok(industry, "the industry input must render");
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(industry!, "Software");
+    industry!.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  const save = buttonsNamed("Save")[0];
+  assert.ok(save, "Save must render");
+  await act(async () => {
+    save.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+  assert.equal(patches.length, 1, "Save is exactly one PATCH");
+  const body = JSON.parse(String(patches[0]!.init?.body)) as Record<string, unknown>;
+  assert.equal(
+    body.expectedUpdatedAt,
+    PROFILE.updated_at,
+    "the PATCH must echo the read revision verbatim",
+  );
+  assert.equal(body.industry, "Software");
 });
