@@ -199,6 +199,132 @@ test("company selections are stated as announced text and track changes", async 
   );
 });
 
+/** UX-17: Skip is a deferral — the wizard lands on the canonical home and
+ * names where setup resumes, instead of detouring into Setup. */
+test("skipping lands on the canonical home naming the resume", async (t) => {
+  const { host, root } = mount();
+  const pushes: string[] = [];
+  globalThis.__wizardRouter = {
+    push(url: string) {
+      pushes.push(url);
+    },
+    refresh() {},
+  };
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async () => Response.json({ ok: true })) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = prior;
+  });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await renderWizard(host, root);
+  const skip = buttonsNamed("Skip for now")[0];
+  assert.ok(skip, "the welcome step must offer Skip");
+  await act(async () => {
+    skip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await tick();
+  assert.deepEqual(pushes, ["/dashboard"], "Skip lands on the canonical home, never Setup");
+  const successes = (globalThis.__wizardToasts ?? []).filter((toast) => toast.kind === "success");
+  assert.equal(successes.length, 1, "Skip names the resume in exactly one toast");
+  assert.match(successes[0]!.message, /Company Setup/, "the toast says setup resumes from Company Setup");
+});
+
+/** TZ1: the company step offers the business time zone from the
+ * server-declared list — never hardcoded here — and states it live. */
+test("the company step offers exactly the server-declared time zones", async (t) => {
+  const { host, root } = mount();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await renderWizard(host, root);
+  await cont(); // welcome → company
+  const zone = document.getElementById("setup-time-zone") as HTMLSelectElement;
+  assert.ok(zone, "the company step must render a time-zone picker");
+  assert.deepEqual(
+    [...zone.options].map((option) => option.value),
+    ["UTC", "America/Toronto"],
+    "the picker offers the server-declared list, nothing hardcoded",
+  );
+  await act(async () => {
+    zone.value = "America/Toronto";
+    zone.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+  await tick();
+  assert.match(
+    document.querySelector('[aria-live="polite"]')?.textContent ?? "",
+    /America\/Toronto/,
+    "the restated summary follows the new time-zone selection",
+  );
+});
+
+/** TZ1: apply sends the chosen business time zone to the wizard route. */
+test("apply sends the chosen business time zone", async (t) => {
+  const { host, root } = mount();
+  const seen: { url: string; method: string; body: unknown }[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    seen.push({
+      url: String(input),
+      method: (init?.method ?? "GET").toUpperCase(),
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = prior;
+  });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await renderWizard(host, root);
+  await cont(); // welcome → company
+  const zone = document.getElementById("setup-time-zone") as HTMLSelectElement;
+  await act(async () => {
+    zone.value = "America/Toronto";
+    zone.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+  await tick();
+  await cont(); // company → industry
+  const card = [...document.querySelectorAll("button[aria-pressed]")].filter((b) =>
+    b.textContent?.includes("Manufacturing"),
+  )[0] as HTMLButtonElement;
+  await act(async () => {
+    card.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await cont(); // industry → profile
+  await cont(); // profile → rhythm
+  await cont(); // rhythm → operations
+  await cont(); // operations → launch
+  await cont(); // launch → review
+  const launch = buttonsNamed("Set up my books")[0];
+  assert.ok(launch, "the review step must offer to set up the books");
+  await act(async () => {
+    launch.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick(STEP_WAIT);
+  await tick(STEP_WAIT);
+  const puts = seen.filter((request) => request.method === "PUT");
+  assert.equal(puts.length, 1, "applying writes the company once");
+  assert.equal(
+    (puts[0]!.body as Record<string, unknown>).timeZone,
+    "America/Toronto",
+    "apply sends the chosen zone to the wizard route",
+  );
+});
+
 /** UX-19: option cards expose their selection through aria-pressed, and are
  * keyboard-operable native buttons — the industry gate proves it. */
 test("industry cards announce selection through aria-pressed", async (t) => {
