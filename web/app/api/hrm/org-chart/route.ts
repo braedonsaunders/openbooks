@@ -25,12 +25,22 @@ export async function GET(req: Request) {
   try {
     const params = new URL(req.url).searchParams;
     if (params.get("mode") === "directory") {
+      const requestedPage = params.get("page") == null ? 1 : Number(params.get("page"));
+      if (!Number.isSafeInteger(requestedPage) || requestedPage < 1) {
+        return NextResponse.json({ error: "page must be a positive whole number" }, { status: 400 });
+      }
       const directory = await loadDirectory({
         orgId: actor.user.orgId,
         actorId: actor.user.id,
         search: params.get("search") ?? undefined,
+        page: requestedPage,
       });
-      return NextResponse.json({ directory });
+      return NextResponse.json({
+        directory: directory.entries,
+        totalCount: directory.totalCount,
+        page: directory.page,
+        pageSize: directory.pageSize,
+      });
     }
     // The default as-of is the org's business day, never the UTC day (which is
     // tomorrow in the evening for the Americas).

@@ -50,17 +50,22 @@ export async function loadOrgChartHome(
   const asOf = typeof sp.asOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sp.asOf) ? sp.asOf : today
   const view = sp.view === 'directory' ? 'directory' : 'tree'
   const search = typeof sp.q === 'string' ? sp.q.trim().toLowerCase() : ''
+  const requestedDirectoryPage = Number(sp.page ?? 1)
+  const directoryPageNumber = Number.isSafeInteger(requestedDirectoryPage) && requestedDirectoryPage > 0
+    ? requestedDirectoryPage
+    : 1
 
-  const [chart, directory] = await Promise.all([
+  const [chart, directoryPage] = await Promise.all([
     loadOrgChart({ orgId: authz.orgId, actorId: authz.userId, asOf }),
     view === 'directory'
       ? loadDirectory({
           orgId: authz.orgId,
           actorId: authz.userId,
           ...(search ? { search } : {}),
-          limit: 200,
+          limit: 50,
+          page: directoryPageNumber,
         })
-      : Promise.resolve([]),
+      : Promise.resolve({ entries: [], totalCount: 0, page: 1, pageSize: 50 }),
   ])
 
   const personBaseHref = `/hrm/org-chart?asOf=${asOf}`
@@ -79,7 +84,7 @@ export async function loadOrgChartHome(
   }
   const selected = selectedId ? findNode(chart.roots, selectedId) : null
 
-  const directoryRows = directory.map((entry) => ({
+  const directoryRows = directoryPage.entries.map((entry) => ({
       id: entry.employmentId,
       name: entry.name,
       title: entry.title,
@@ -106,6 +111,9 @@ export async function loadOrgChartHome(
     search,
     chart,
     directoryRows,
+    directoryTotal: directoryPage.totalCount,
+    directoryPage: directoryPage.page,
+    directoryPageSize: directoryPage.pageSize,
     directoryColumns: {
       name: t('orgChart.columns.name'),
       title: t('orgChart.columns.title'),
@@ -119,6 +127,7 @@ export async function loadOrgChartHome(
     currentParams: {
       ...(view === 'directory' ? { view: 'directory' } : {}),
       ...(search ? { q: search } : {}),
+      ...(view === 'directory' && directoryPage.page > 1 ? { page: String(directoryPage.page) } : {}),
       asOf,
     },
     personBaseHref,

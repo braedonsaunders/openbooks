@@ -1763,10 +1763,11 @@ const hrmOrgChart: AssistantToolDef = {
   inputSchema: z.object({
     asOf: dateInput.optional().describe("Read the tree as of this date; defaults to today"),
     search: z.string().max(200).optional().describe("Keep directory entries matching this name, title, or department"),
+    page: z.number().int().positive().optional().describe("Directory page to read; continue with directoryNextPage"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmOrgChart"))) return { ok: false, error: HRM_FEATURE_OFF };
-    const a = raw as { asOf?: string; search?: string };
+      const a = raw as { asOf?: string; search?: string; page?: number };
     try {
       const { loadDirectory, loadOrgChart } = await import("@openbooks/engine/src/hrm/org-chart.ts");
       const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
@@ -1777,7 +1778,8 @@ const hrmOrgChart: AssistantToolDef = {
           orgId: authz.user.orgId,
           actorId: authz.user.id,
           ...(a.search ? { search: a.search } : {}),
-          limit: 200,
+          limit: 100,
+          page: a.page ?? 1,
         }),
       ]);
       return {
@@ -1788,7 +1790,11 @@ const hrmOrgChart: AssistantToolDef = {
           vacancies: chart.vacancies,
           layers: chart.layers,
           roots: chart.roots,
-          directory,
+          directory: directory.entries,
+          directoryTotal: directory.totalCount,
+          directoryNextPage: directory.page * directory.pageSize < directory.totalCount
+            ? directory.page + 1
+            : null,
           href: "/hrm/org-chart",
         },
       };

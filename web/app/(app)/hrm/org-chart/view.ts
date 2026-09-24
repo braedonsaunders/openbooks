@@ -10,6 +10,7 @@ import {
   page,
   pageHeader,
   panel,
+  pagination,
   statTile,
   table,
   text,
@@ -118,6 +119,13 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
                   ],
                 }),
               ]),
+              pagination({
+                basePath: '/hrm/org-chart',
+                total: f('directoryTotal'),
+                page: f('directoryPage'),
+                perPage: f('directoryPageSize'),
+                bare: true,
+              }),
             ]
           : [
               // The tree remains a panel because its canvas needs a named,
