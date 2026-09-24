@@ -339,7 +339,6 @@
     "web/lib/report-run.test.ts": 1,
     "web/lib/reports-posted.test.ts": 2,
     "web/lib/security-headers.test.ts": 2,
-    "web/lib/setup-route-contract.test.ts": 1,
     "web/lib/statement-export-calendar.test.ts": 4
   }
 }
