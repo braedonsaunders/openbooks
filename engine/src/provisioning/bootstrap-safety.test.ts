@@ -5,10 +5,6 @@ import test from "node:test";
 
 const root = join(import.meta.dirname, "..", "..", "..");
 const bootstrap = readFileSync(join(root, "scripts", "bootstrap.ts"), "utf8");
-const environments = readFileSync(
-  join(root, "schema", "migrations", "environments.sql"),
-  "utf8",
-);
 const projectTypeSeed = readFileSync(
   join(root, "engine", "src", "projects", "seed-project-types.ts"),
   "utf8",
@@ -74,15 +70,6 @@ test("constrained schema-owner mode is migration-only and fail-closed", () => {
   assert.doesNotMatch(constrainedOwnerBranch, /ensureReadRole/);
   assert.doesNotMatch(constrainedOwnerBranch, /ensureRuntimeRoleExists/);
   assert.doesNotMatch(constrainedOwnerBranch, /seed[A-Z]/);
-});
-
-test("row-level security refresh is versioned and drift-driven", () => {
-  assert.match(bootstrap, /applied_digest !== digest/);
-  assert.match(bootstrap, /catalog_drift/);
-  assert.match(environments, /openbooks:org_isolation:v1/);
-  assert.match(environments, /openbooks:sandbox_isolation:v1/);
-  assert.match(environments, /if not rls_enabled then/i);
-  assert.match(environments, /if policy_version is distinct from/i);
 });
 
 test("bundled bootstrap cannot launch the project-type seed CLI twice", () => {

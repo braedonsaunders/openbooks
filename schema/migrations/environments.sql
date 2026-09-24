@@ -225,7 +225,7 @@ begin
     from pg_policy p
    where p.polrelid = 'public.sandboxes'::regclass
      and p.polname = 'sandbox_isolation';
-  if policy_version is distinct from 'openbooks:sandbox_isolation:v1' then
+  if policy_version is distinct from 'openbooks:sandbox_isolation:v2' then
     drop policy if exists sandbox_isolation on sandboxes;
     create policy sandbox_isolation on sandboxes
       using (
@@ -235,9 +235,18 @@ begin
       )
       with check (
         current_setting('app.bypass_rls', true) = 'on'
-        or production_org_id::text = current_setting('app.current_org', true)
+        or (
+          production_org_id::text = current_setting('app.current_org', true)
+          and exists (
+            select 1
+              from public.orgs sandbox_org
+             where sandbox_org.id = sandboxes.org_id
+               and sandbox_org.env_kind = 'sandbox'
+               and sandbox_org.sandbox_of = sandboxes.production_org_id
+          )
+        )
       );
     comment on policy sandbox_isolation on sandboxes
-      is 'openbooks:sandbox_isolation:v1';
+      is 'openbooks:sandbox_isolation:v2';
   end if;
 end $$;
