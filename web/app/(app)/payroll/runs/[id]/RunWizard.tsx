@@ -2048,8 +2048,12 @@ export function BulkEditDrawer({
 }
 
 /** One employee's stub — the house flyout: header facts, pay lines, the T4127
- * factor trace, and the variance flag, with the paystub PDF one click away. */
-function StubDrawer({
+ * factor trace, and the variance flag, with the paystub PDF one click away.
+ *
+ * Exported for the exclude-close test: the drawer closes only when the
+ * exclusion succeeds, never over a refusal that would strand the typed
+ * adjustments with the stub that still holds them. */
+export function StubDrawer({
   stub,
   variance,
   change,
@@ -2126,7 +2130,16 @@ function StubDrawer({
               <Button
                 variant="outline"
                 disabled={busy}
-                onClick={() => void onAdjust({ action: 'exclude-employee', employeePartyId: stub.employee_party_id }).then(onClose)}
+                onClick={() =>
+                  void onAdjust({ action: 'exclude-employee', employeePartyId: stub.employee_party_id }).then(
+                    (applied) => {
+                      // The drawer closes only on success: closing over a
+                      // refused exclusion would strand the typed adjustments
+                      // with the stub that still holds them.
+                      if (applied) onClose()
+                    },
+                  )
+                }
               >
                 {t('wizard.adjust.exclude')}
               </Button>
