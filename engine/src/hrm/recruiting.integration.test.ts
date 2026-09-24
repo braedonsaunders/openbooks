@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -1312,6 +1314,50 @@ test("retention anonymizes an expired prospect and keeps the analytics", { skip:
   });
 });
 
+test("country-scoped retention matches the candidate's requisition legal-entity country", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const orgId = h.org.orgId;
+    await enableRecruitingDepth(orgId);
+    const country = (await db.execute<{ country: string }>(sql`
+      select country from subsidiaries where org_id = ${orgId} and id = ${h.org.subsidiaryId}
+    `)).rows[0]!.country;
+    const ruleId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
+      values (${ruleId}, ${orgId}, 'Scoped stale prospects', ${JSON.stringify({ applies_to: "countries", countries: [country] })}::jsonb,
+              'inactivity', 1, 'anonymize', true)`);
+    const { candidateId } = await seedAgedApplication(h, "rejected");
+    const run = await evaluateRetentionRule(
+      { orgId, actorId: h.recruiterId, ruleId },
+      { removeFile: async () => {}, enqueueEmail: async () => {} },
+    );
+    assert.equal(run.candidatesAnonymized, 1, "the legal entity's country is supplied to the matcher");
+    const candidate = (await db.execute<{ display_name: string }>(sql`
+      select display_name from hrm_candidates where id = ${candidateId}`)).rows[0]!;
+    assert.equal(candidate.display_name, "Anonymized candidate");
+  });
+});
+
+test("the system retention duty returns its durable per-rule business-day claim", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const orgId = h.org.orgId;
+    await enableRecruitingDepth(orgId);
+    const ruleId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
+      values (${ruleId}, ${orgId}, 'Daily recruiting retention', '{}'::jsonb, 'inactivity', 12, 'anonymize', true)`);
+    const day = await businessToday(orgId);
+    const options = { now: new Date(), runner: { kind: "system" as const }, claimBusinessDay: day };
+    const first = await evaluateRetentionRule({ orgId, actorId: SYSTEM_ACTOR_ID, ruleId }, options);
+    const repeated = await evaluateRetentionRule({ orgId, actorId: SYSTEM_ACTOR_ID, ruleId }, options);
+    assert.equal(repeated.id, first.id, "a retry reuses the durable completed run");
+    const count = (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from hrm_retention_runs where org_id = ${orgId} and rule_id = ${ruleId}
+    `)).rows[0]!.count;
+    assert.equal(count, 1, "the rule has one committed run row for the business day");
+  });
+});
+
 test("retention never touches a candidate with an open application", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
@@ -1335,11 +1381,56 @@ test("retention never touches a candidate with an open application", { skip: !DB
   });
 });
 
+test("retention rechecks open applications after locking against a concurrent attach", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const orgId = h.org.orgId;
+    await enableRecruitingDepth(orgId);
+    const ruleId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
+      values (${ruleId}, ${orgId}, 'Concurrent prospect cleanup', '{}'::jsonb, 'inactivity', 1, 'anonymize', true)`);
+    const { candidateId } = await seedAgedApplication(h, "rejected");
+    const requisition = await createRequisition({
+      orgId,
+      actorId: h.recruiterId,
+      title: "New application during retention",
+      employerSubsidiaryId: h.org.subsidiaryId,
+      headcount: 1,
+    });
+    const opened = await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+    let unlockAppTransaction!: () => void;
+    let reportAppLock!: () => void;
+    const appTransactionHeld = new Promise<void>((resolve) => { unlockAppTransaction = resolve; });
+    const appRowLocked = new Promise<void>((resolve) => { reportAppLock = resolve; });
+    const appWrite = withOrgTransaction(orgId, async () => {
+      await db.execute(sql`
+        select id from hrm_candidates where org_id = ${orgId} and id = ${candidateId} for update
+      `);
+      reportAppLock();
+      await appTransactionHeld;
+      await createApplication({ orgId, actorId: h.recruiterId, requisitionId: opened.id, candidateId });
+    });
+    await appRowLocked;
+    const retention = evaluateRetentionRule(
+      { orgId, actorId: h.recruiterId, ruleId },
+      { removeFile: async () => {}, enqueueEmail: async () => {} },
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    unlockAppTransaction();
+    await appWrite;
+    const run = await retention;
+    assert.equal(run.candidatesAnonymized, 0, "retention sees the active application committed before its candidate lock releases");
+    const candidate = (await db.execute<{ display_name: string }>(sql`
+      select display_name from hrm_candidates where org_id = ${orgId} and id = ${candidateId}
+    `)).rows[0]!;
+    assert.equal(candidate.display_name, "Depth Candidate");
+  });
+});
+
 test("consent extension emails go once per grant, then lapse into the action", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
     await enableRecruitingDepth(orgId);
-    const sent: string[] = [];
     const ruleId = randomUUID();
     await db.execute(sql`
       insert into hrm_retention_rules

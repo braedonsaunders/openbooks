@@ -177,7 +177,10 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
         `a ${requisition.status} requisition takes no new candidates — open it before attaching applications`,
       );
     }
-    const candidate = await loadCandidate(db, orgId, candidateId);
+    const candidateLock = (await db.execute<{ id: string }>(sql`
+      select id from hrm_candidates where org_id = ${orgId} and id = ${candidateId} for update
+    `)).rows[0];
+    const candidate = candidateLock ? await loadCandidate(db, orgId, candidateId) : null;
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
     }
