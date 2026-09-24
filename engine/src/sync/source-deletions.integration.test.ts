@@ -74,6 +74,7 @@ test(
           document_status: string;
           open_balance: string | null;
           original_status: string;
+          reversal_in_original_period: boolean;
           reversal_count: number;
           reversal_total: string;
           void_evidence_complete: boolean;
@@ -81,6 +82,7 @@ test(
         }>(sql`
         select d.status as document_status, d.open_balance::text,
                original.status as original_status,
+               bool_and(reversal.period_id = original.period_id) as reversal_in_original_period,
                count(distinct reversal.id)::int as reversal_count,
                coalesce(sum(reversal_line.amount), 0)::text as reversal_total,
                bool_and(
@@ -111,6 +113,7 @@ test(
         document_status: "voided",
         open_balance: null,
         original_status: "reversed",
+        reversal_in_original_period: true,
         reversal_count: 1,
         reversal_total: "0.0000",
         void_evidence_complete: true,

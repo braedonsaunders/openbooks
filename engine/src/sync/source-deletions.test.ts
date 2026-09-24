@@ -28,18 +28,6 @@ test("automatic source deletions preserve settlement evidence", () => {
   assert.doesNotMatch(automatic, /delete from documents/i);
 });
 
-test("automatic source deletions reverse in the original accounting period", () => {
-  const automatic = source.slice(
-    source.indexOf("export async function mirrorSourceDeletion"),
-    source.indexOf("export async function resolveSourceDeletion"),
-  );
-  assert.match(automatic, /postingDate: entry\.postingDate/);
-  assert.match(automatic, /periodId: entry\.periodId/);
-  assert.match(automatic, /status: "reversed"/);
-  assert.match(automatic, /status = 'voided'/);
-  assert.match(automatic, /open_balance = null/);
-});
-
 test("unposted source deletions are preserved as audited voids", () => {
   const automatic = source.slice(
     source.indexOf("export async function mirrorSourceDeletion"),
