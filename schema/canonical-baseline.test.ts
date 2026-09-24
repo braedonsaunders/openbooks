@@ -705,12 +705,9 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // The migration chain relied on the bootstrap environments.sql backstop
     // for tenant isolation, so three tables shipped FORCE-without-ENABLE
     // (0026, 0153) or no RLS at all (0281) and read cross-tenant on a
-    // scratch install; posted documents could regress to draft in storage;
-    // amend-deletes fenced softer than amend-updates; and the GL monthly,
-    // document-balance and payment-stats summaries could drift behind the
-    // rows they summarize. 0334 makes the chain correct standalone and
-    // heals NULL open-balance caches, and widens the governed query
-    // catalog to every reportable org table.
+    // scratch install. 0334 makes the chain correct standalone for those
+    // three (ENABLE + FORCE + the standard org_isolation policy); the
+    // wave's posting guards and summary heals ship in 0338.
     "0334_tenant_isolation_and_posting_guards.sql",
     // Content-identical ID-less statement lines are possible overlap, not
     // identity: 0335 adds the nullable self-referencing
@@ -725,6 +722,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // at pricing time and copied on conversion; hand-priced lines stay
     // null and replay from the stored price.
     "0336_document_line_price_basis.sql",
+    // Audit wave G continued: 0338 refuses posted -> draft on documents in
+    // storage (G4). Further wave-G sections land in the same file under
+    // later commits, each extending this note to match.
+    "0338_posting_guards_and_summary_heals.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

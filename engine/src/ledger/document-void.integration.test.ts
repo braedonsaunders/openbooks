@@ -1042,3 +1042,43 @@ test("a void refuses cleanly when an application writer holds the entry's lines"
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a posted document cannot regress to draft in storage", { skip: !DB }, async () => {
+  // G4: the financial-columns guard never watched status, so a direct
+  // posted -> draft rewrote posted history with no amend flag. Storage now
+  // refuses every exit from posted except the controlled void (with its
+  // evidence) and the governed amend path.
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Status Guard Controller", "admin");
+    const { documentId } = await seedPostedCheck(org, actorId, "CHECK-STATUS-GUARD-1");
+    await assert.rejects(
+      db.execute(sql`update documents set status = 'draft' where id = ${documentId} and org_id = ${org.orgId}`),
+      (error: unknown) => {
+        const chain: string[] = [];
+        for (let cur: unknown = error; cur && typeof cur === "object"; cur = (cur as { cause?: unknown }).cause) {
+          chain.push(String((cur as { message?: unknown }).message ?? ""));
+        }
+        assert.match(
+          chain.join(" "),
+          /is posted and immutable.*void it through the controlled void path/,
+        );
+        return true;
+      },
+    );
+    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${documentId}`)).rows[0]!.status;
+    assert.equal(status, "posted");
+    // The sanctioned exit still works: the controlled void voids the check.
+    const control = await requestDocumentVoid({
+      documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Status guard void control",
+      reversalDate: org.date,
+      source: "api",
+    });
+    assert.equal(control.status, "voided");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
