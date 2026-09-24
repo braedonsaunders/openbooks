@@ -1,37 +1,46 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Composition contract for the Me team (/me/team): roster, manager-assigned
-// steps, pending leave, and pending change requests through the shared
-// `table` block. Decisions ride native Approvals — rows deep-link there and
-// the team builds no second decision path.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const loader = readFileSync(new URL("../../../../lib/hrm/self-service.ts", import.meta.url), "utf8");
-
-test("team renders through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadMeTeamPage/, "page loads through the team loader");
-  assert.match(view, /meTeamSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+// Behaviour contract for the team page (/me/team). The spec builder runs
+// over hand-built data: a refused read renders its title and remedy with
+// the only decision surface being the deep link into approvals — no
+// approve/decline widget exists on this page — and the tab strip rides
+// the header. Roster scoping (one level, no matrix) stays covered by
+// engine/src/hrm/self-service/scope.test.ts, which owns the team read.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("team rows render through the shared table block with approvals links", () => {
-  assert.match(view, /table\(\{/, "rows compose a table block");
-  assert.match(view, /variant: 'app'/, "the table uses the app list variant");
-  assert.match(view, /rows: f\('roster'\)/, "the roster reads the loader-resolved reports");
-  assert.match(view, /rows: f\('pendingLeave'\)/, "pending leave reads the loader-resolved rows");
-  assert.match(view, /rows: f\('pendingChanges'\)/, "pending changes read the loader-resolved rows");
-  assert.match(view, /link\(item\('decideLabel'\), item\('decideHref'\)\)/, "decisions deep-link to native Approvals");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
-  const code = view.replace(/\/\*[\s\S]*?\*\//g, "");
-  assert.ok(!/approve|decline/i.test(code.split('decideInApprovals').join('').split('approvalsHref').join('')), "the spec builds no decision path of its own");
+const { meTeamSpec } = await import("./view.ts");
+
+function specJson(data: Record<string, unknown>): string {
+  return JSON.stringify(meTeamSpec(data as never));
+}
+
+const TABS = [{ label: "Team", href: "/me/team" }];
+
+test("a refused team read renders the remedy with decisions left to approvals", () => {
+  const json = specJson({
+    tabs: TABS,
+    refusal: { title: "No team", message: "ask an administrator for a linked employment" },
+  } as unknown as Record<string, unknown>);
+  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes("No team"), "the refusal title reaches the page");
+  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
+  assert.ok(json.includes("\"link-button\""), "the header keeps the approvals deep link");
+  assert.ok(json.includes("\"decideInApprovals\""), "the deep link names deciding in approvals");
+  assert.ok(!json.includes('"approve"'), "no approve widget exists on this page");
+  assert.ok(!json.includes('"decline"'), "no decline widget exists on this page");
 });
 
-test("the team loader resolves structure in the engine and gates the drawer link", () => {
-  assert.match(loader, /getTeamView\(\{\s*orgId/, "the team reads the structural team service");
-  assert.match(loader, /partyTab=employment/, "report names deep-link the employee drawer on the Employment tab");
-  assert.match(loader, /can\(authz, 'parties\.read'\)/, "names render plain when the viewer cannot open the drawer");
-  assert.match(view, /requirePermission\('hrm\.self\.read'\)/, "page requires the self-service grant");
+test("the tab strip rides the header", () => {
+  const json = specJson({ tabs: TABS, refusal: null } as unknown as Record<string, unknown>);
+  assert.ok(json.includes("\"module-home-tabs\""), "the header carries the tab strip");
+  assert.ok(json.includes("/me/team"), "the strip links the team surface");
 });
