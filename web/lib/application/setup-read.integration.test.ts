@@ -5,7 +5,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import { BUILT_IN_ROLES } from "@openbooks/engine/src/organization/permissions.ts";
-import { db, env, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -33,7 +33,6 @@ const { applicationContextFromSession } = await import("./context.ts");
 const { getSetupRecord, listSetupRecords } = await import("./setup-read.ts");
 const { ApplicationError } = await import("./errors.ts");
 
-const DB = !!env.OPENBOOKS_DB_URL;
 const ADMIN_PERMISSIONS = ["admin.setup.manage"];
 const VIEWER_PERMISSIONS = [...(BUILT_IN_ROLES.viewer?.permissions ?? ["gl.read"])];
 
@@ -78,7 +77,7 @@ async function viewerContext(org: ScratchOrg): Promise<ApplicationContext> {
   return contextFor(org, outsiderId, "Viewer", "viewer", "Viewer", VIEWER_PERMISSIONS);
 }
 
-test("getSetupRecord finds a tax code that a 200-row list page omits", { skip: !DB }, async () => {
+test("getSetupRecord finds a tax code that a 200-row list page omits", async () => {
   // Wrapped, not baselined: creating a scratch org reaches across tenants, so
   // it runs in the sanctioned bypass context the way every other integration
   // test does. Adding the file to the exposure baseline would have recorded
@@ -132,5 +131,26 @@ test("getSetupRecord finds a tax code that a 200-row list page omits", { skip: !
   } finally {
     await dropScratchOrg(orgA.orgId);
     await dropScratchOrg(orgB.orgId);
+  }
+});
+
+test("feature-disabled setup entities return the catalog remedy", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const admin = await adminContext(org);
+    await withBypassContext(() => db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,inventory}', 'false'::jsonb, true)
+       where id = ${org.orgId}`));
+
+    await assert.rejects(
+      withOrgContext(org.orgId, () => listSetupRecords(admin, { entityKey: "stock-locations" })),
+      (error: unknown) => error instanceof ApplicationError
+        && error.code === "not_found"
+        && error.status === 404
+        && error.message === "setup entity not found; list enabled entities from GET /api/v1/setup",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
   }
 });
