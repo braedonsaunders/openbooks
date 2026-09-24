@@ -10,30 +10,11 @@
  */
 
 import type { SqlExecutor } from "../platform/db.ts";
+import type { InboxKind } from "./kinds.ts";
+export type { InboxKind } from "./kinds.ts";
 
 /** Sort bucket: overdue first, then due soon, then everything else. */
 export type InboxPriority = "overdue" | "due_soon" | "normal";
-
-/** Every source kind the inbox aggregates. Registered in registry.ts. */
-export type InboxKind =
-  | "flows_approval"
-  | "hrm_process_step"
-  | "hrm_leave_request"
-  | "hrm_change_request"
-  | "hrm_review"
-  | "hrm_feedback_request"
-  | "hrm_benefit_enrollment_window"
-  | "hrm_qualification_alert"
-  | "field_ticket_signature"
-  | "timesheet_week"
-  // HR-20 begin
-  | "crew_time_batch"
-  // HR-20 end
-  | "expense_report"
-  | "notification"
-  | "document_signature"
-  | "payroll_anomaly_block"
-  | "ai_capability_review";
 
 export type InboxActionStyle = "primary" | "secondary" | "danger";
 
