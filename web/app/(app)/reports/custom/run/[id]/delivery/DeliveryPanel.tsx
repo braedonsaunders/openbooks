@@ -6,6 +6,7 @@ import { Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Badge, Button } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../../../../lib/api-error'
 import { ScheduleEditor, type ScheduleRow } from '../../../../ScheduleEditor'
 
 export type RunRow = {
@@ -63,15 +64,21 @@ export function DeliveryPanel({
   // Records a run row + CSV artifact — the report screen itself never does.
   async function runNow() {
     setRunning(true)
-    const res = await fetch('/api/reports/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ definitionId }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('runFailed'))
-    else toast.success(t('runComplete'))
-    setRunning(false)
+    try {
+      const res = await fetch('/api/reports/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ definitionId }),
+      })
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('runFailed')))
+      toast.success(t('runComplete'))
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('runFailed'))
+    } finally {
+      setRunning(false)
+    }
     router.refresh()
   }
 
