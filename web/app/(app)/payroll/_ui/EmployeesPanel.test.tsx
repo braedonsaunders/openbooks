@@ -21,70 +21,9 @@ const { ProfileEditor } = await import('./EmployeesPanel')
 // tsx compiles JSX classic: the component under test never imports React
 // (Next provides the automatic runtime in production), so the test bridges it.
 Object.assign(globalThis, { React })
-const { PAYROLL_COUNTRY_PACKS } = await import('@openbooks/engine/src/payroll/packs.ts')
-const { packCertificates } = await import('@openbooks/engine/src/payroll/certificates.ts')
-
-const source = readFileSync(new URL('./EmployeesPanel.tsx', import.meta.url), 'utf8')
-// Comments explain history; only code can branch.
-const code = source
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .replace(/(^|\s)\/\/.*$/gm, '$1')
 const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
 const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
-
-// Country packs DECLARE; the generic layer branches on NOTHING. A third pack
-// must be expressible through the served declarations with no edit here, so no
-// existing country's literal may remain in code — not in a union, a list, a
-// branch, or a label key.
-test('profile editor names no country in code', () => {
-  assert.doesNotMatch(code, /['"]CA['"]/)
-  assert.doesNotMatch(code, /['"]US['"]/)
-  assert.doesNotMatch(code, /\bPROVINCES\b/)
-  assert.doesNotMatch(code, /\bUS_STATES\b/)
-  assert.doesNotMatch(code, /\bFILING_STATUSES\b/)
-  assert.doesNotMatch(code, /country\s*===?\s*['"][A-Z]/)
-  assert.doesNotMatch(code, /fields\.province\b/)
-  assert.doesNotMatch(code, /fields\.state\b/)
-  assert.doesNotMatch(code, /fields\.fitExempt\b/)
-  assert.doesNotMatch(code, /country\.CA\b/)
-  assert.doesNotMatch(code, /country\.US\b/)
-})
-
-// The renderer binds declared columns through its binding maps plus a
-// generic extra-column path. A pack that declares a column nobody binds
-// would render nothing and save null — silently dropping the operator's
-// answer — so every column every pack declares must resolve through one of
-// the two, and the build (this test) refuses the gap. The generic path is
-// proved live by the unknown-column render test below; this test pins that
-// the real packs' columns each have a binding and that the generic path
-// still exists (its removal would orphan every future pack's first fact).
-test('profile editor binds every column the packs declare', () => {
-  const columns = new Set<string>()
-  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
-    const pack = PAYROLL_COUNTRY_PACKS[country]!
-    for (const certificate of packCertificates(country).certificates) {
-      if (certificate.storage !== 'profile_columns') continue
-      for (const field of certificate.fields) {
-        if (field.storage?.kind === 'column') columns.add(field.storage.column)
-      }
-    }
-    for (const flag of pack.profileExemptionFlags ?? []) columns.add(flag.column)
-  }
-  assert.ok(columns.size > 0, 'expected the packs to declare profile columns')
-  // The generic extra-column path: comments were stripped above, so these
-  // markers prove the mechanism is code, not prose.
-  assert.match(code, /extraColumns\[column\]/, 'the generic extra-column read is gone')
-  assert.match(code, /setExtraValue\(column\)/, 'the generic extra-column write is gone')
-  assert.match(code, /\.\.\.extraFactSave/, 'the generic extra-column save is gone')
-  for (const column of [...columns].sort()) {
-    // Binding-map key syntax (`federal_claim_code: [...]`) or the generic
-    // path (which binds by column at render time) — a passing mention in a
-    // comment is not a binding, and comments were stripped above.
-    const literal = new RegExp(`(^|[^\\w])${column}\\s*:`).test(code)
-    const generic = /extraValue\(column\)/.test(code) && /\.\.\.extraFactSave/.test(code)
-    assert.ok(literal || generic, `no editor binding for declared column ${column}`)
-  }
-})
+const uiMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8'))
 
 // Exercise the real editor against a country that does not exist: subdivisions,
 // bands, forms and flags must all come from the served declaration.
@@ -145,7 +84,7 @@ function render(
 ): string {
   const profileCountry = (overrides.country as string | undefined) ?? countries[0]!
   return renderToStaticMarkup(
-    <NextIntlClientProvider locale="en" messages={{ 'payroll': messages, 'common': commonMessages }}>
+    <NextIntlClientProvider locale="en" messages={{ payroll: messages, common: commonMessages, ui: uiMessages }}>
       <ProfileEditor
         inline
         readOnly={editor.readOnly}

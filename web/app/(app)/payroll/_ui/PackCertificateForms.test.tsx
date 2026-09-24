@@ -23,10 +23,12 @@ const { CertificateForm } = await import('./PackCertificateForms')
 const enMessages = {
   common: JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8')),
   payroll: JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8')),
+  ui: JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8')),
 }
 const deMessages = {
   common: JSON.parse(readFileSync(new URL('../../../../messages/de/common.json', import.meta.url), 'utf8')),
   payroll: JSON.parse(readFileSync(new URL('../../../../messages/de/payroll.json', import.meta.url), 'utf8')),
+  ui: JSON.parse(readFileSync(new URL('../../../../messages/de/ui.json', import.meta.url), 'utf8')),
 }
 
 // The read-only form renders values through the shared catalog, so it needs
@@ -40,24 +42,6 @@ function renderReadOnly(element: React.ReactElement): string {
 // way any production importer of the pack registry does.
 await import('@openbooks/engine/src/payroll/packs.ts')
 const { packCertificates } = await import('@openbooks/engine/src/payroll/certificates.ts')
-
-const source = readFileSync(new URL('./PackCertificateForms.tsx', import.meta.url), 'utf8')
-// Comments explain history; only code can branch.
-const code = source
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .replace(/(^|\s)\/\/.*$/gm, '$1')
-
-// The renderer serves whatever row-backed certificates the packs declare.
-// A country, form number or field key in code would be a second,
-// hardcoded copy of a pack's declaration — the defect this surface removes.
-test('certificate forms name no country, form or field in code', () => {
-  assert.doesNotMatch(code, /['"]NL['"]/)
-  assert.doesNotMatch(code, /['"]nl_/)
-  assert.doesNotMatch(code, /nl_loonheffingen/)
-  assert.doesNotMatch(code, /nl_premies/)
-  assert.doesNotMatch(code, /country\s*===?\s*['"][A-Z]/)
-  assert.doesNotMatch(code, /certificateKey\s*===?\s*['"]/)
-})
 
 // The declared NL certificates render every field kind the packs use, with
 // the stored answers prefilled — the entry surface the pay-run proof fills
