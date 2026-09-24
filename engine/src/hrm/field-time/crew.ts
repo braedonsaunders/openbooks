@@ -82,7 +82,7 @@ export async function assertForemanOnProject(
     select r.id from schedule_resources r
      where r.org_id = ${orgId} and r.party_id = ${foremanPartyId}
        and r.project_id = ${projectId}
-     limit 1`)).rows[0];
+     limit 1 for update`)).rows[0];
   if (!row) {
     refuse(
       "foreman_not_on_project",
