@@ -43,14 +43,3 @@ test("posting implementation dependencies have no facade backimports or static c
   }
   for (const file of files) visit(file, []);
 });
-
-test("posting coordinator prepares, commits and dispatches in that order", () => {
-  const text = source("posting-document.ts");
-  const prepare = text.indexOf("await prepareDocumentPosting(");
-  const commit = text.indexOf("await commitDocumentPosting(");
-  const effects = text.indexOf("await runPostDocumentEffects(");
-  assert.ok(prepare >= 0 && commit > prepare && effects > commit);
-  assert.match(text, /if \(!options\.deferEffects\)/);
-  assert.doesNotMatch(source("posting-prepare.ts"), /inDbTransaction/);
-  assert.match(source("posting-commit.ts"), /return await inDbTransaction\(async \(tx\) =>/);
-});

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { metrics, trace } from "@opentelemetry/api";
 import {
@@ -35,8 +34,6 @@ import {
   TERMINAL_FAILURE_LOG_EVENT,
 } from "./terminal-failure.ts";
 
-const source = (relative: string) =>
-  readFileSync(new URL(relative, import.meta.url), "utf8");
 
 test("a signal-specific endpoint alone enables telemetry and preserves its explicit path", () => {
   const cases = [
@@ -341,21 +338,4 @@ test("durable-work attempts are counted by outcome and measured by duration", as
   );
   assert.ok(report, "scheduled_report duration point missing");
   assert.equal(report.value.sum, 40_000);
-});
-
-test("the durable-work surfaces stay wired to spans, outcome metrics, and the terminal counter", () => {
-  const outbox = source("../scheduling/outbox.ts");
-  assert.match(outbox, /runInSpan\(\s*"outbox\.attempt"/);
-  assert.match(outbox, /recordOutboxAttempt\(\s*"scheduler_outbox",\s*row\.kind,\s*"succeeded"/);
-  assert.match(outbox, /recordOutboxAttempt\(\s*"scheduler_outbox",\s*row\.kind,\s*"failed"/);
-
-  const delivery = source("../delivery/report-delivery.ts");
-  assert.match(delivery, /runInSpan\(\s*"report_run\.process"/);
-  assert.match(delivery, /recordOutboxAttempt\(\s*"report_runs",\s*"scheduled_report",\s*"succeeded"/);
-
-  const tick = source("../worker/scheduler.ts");
-  assert.match(tick, /runInSpan\(\s*"scheduler\.tick"/);
-
-  const surfacing = source("./terminal-failure.ts");
-  assert.match(surfacing, /recordTerminalFailure\(fields\.surface,\s*fields\.kind\)/);
 });

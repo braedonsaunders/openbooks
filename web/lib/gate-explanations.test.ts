@@ -223,27 +223,6 @@ test("F-t03-012: compliance gates name the feature that is actually off", async 
 // --- the named routes funnel through the shared gates ------------------------
 
 const webDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (path: string) => readFileSync(join(webDir, path), "utf8");
-
-test("scripts, api-docs, subcontracts and lien-waivers share one gate", () => {
-  assert.match(read("app/(app)/admin/scripts/view.ts"), /requireFeatureEnabled\(authz\.user\.orgId, 'scripts'\)/);
-  assert.match(read("app/(app)/api-docs/view.ts"), /requireFeatureEnabled\(authz\.user\.orgId, 'apiAccess'\)/);
-  assert.match(read("app/(app)/admin/api-keys/view.ts"), /requireFeatureEnabled\(authz\.user\.orgId, 'apiAccess'\)/);
-  assert.match(read("app/(app)/subcontracts/layout.tsx"), /requireFeatureEnabled\(authz\.user\.orgId, 'subcontracts'\)/);
-  assert.match(
-    read("app/(app)/compliance/lien-waivers/view.ts"),
-    /requireFeatureEnabled\(authz\.user\.orgId, 'subcontractorCompliance'\)/,
-  );
-  assert.match(read("app/(app)/compliance/view.ts"), /requireComplianceFeature\(orgId\)/);
-  assert.match(read("app/(app)/platform/layout.tsx"), /requireSuperAdmin\(\)/);
-});
-
-test("continuous-close redirect carries landing context (F-t13-007)", () => {
-  assert.match(
-    read("app/(app)/continuous-close/page.tsx"),
-    /params\.set\('from', 'continuous-close'\)/,
-  );
-});
 
 // --- catalog: explanation copy in all 7 locales -------------------------------
 

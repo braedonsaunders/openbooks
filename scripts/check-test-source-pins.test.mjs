@@ -22,6 +22,25 @@ test("a test asserting on source text is a pin; a behaviour test beside it is no
   assert.deepEqual(sourcePinTests(pinned).map((pin) => pin.name), ["guard exists"]);
 });
 
+test("a local read helper and bindings through it count as source pins", () => {
+  const viaHelper = src([
+    'const read = (path: string) => READ(new URL(path, import.meta.url), "utf8");',
+    'const tools = read("./tools.ts");',
+    'test("pins module binding", () => {',
+    "  assert.match(tools, /feature: \"orders\"/);",
+    "});",
+    'test("pins call inside the test", () => {',
+    "  const route = read('./route.ts');",
+    "  assert.match(route, /guardFeaturePermission/);",
+    "});",
+    'test("behaviour", () => { assert.equal(1, 1); });',
+  ]);
+  assert.deepEqual(sourcePinTests(viaHelper).map((pin) => pin.name), [
+    "pins module binding",
+    "pins call inside the test",
+  ]);
+});
+
 test("inline reads, includes and indexOf over source text are pins too", () => {
   const inline = src([
     'test("inline", () => {',

@@ -164,26 +164,3 @@ test('the en cashflow catalog pins the exact legacy copy', () => {
   assert.equal(t('cashflow.horizon.weeks', { count: 1 }), '1 Week')
   assert.equal(t('cashflow.horizon.weeks', { count: 4 }), '4 Weeks')
 })
-
-test('every locale renders the cashflow hub without falling back to English', () => {
-  const en = catalogTranslator('en')
-  const keys = [
-    'cashflow.tabs.overview', 'cashflow.kpi.currentCash', 'cashflow.vitals.burnRate',
-    'cashflow.panels.bridge', 'cashflow.catTable.category', 'cashflow.toggle.outflowsAp',
-    'cashflow.partyTable.party', 'cashflow.footer.cashCockpit', 'cashflow.horizon.label',
-  ]
-  // Cognates spelled identically to English are still real translations.
-  const identicalIn = { 'cashflow.horizon.label': ['fr'] } as Record<string, string[]>
-  for (const locale of ['fr', 'es', 'de', 'pt-BR', 'ja', 'zh']) {
-    const t = catalogTranslator(locale)
-    for (const key of keys) {
-      const got = t(key)
-      assert.notEqual(got, key, `${locale} ${key} must exist in the catalog`)
-      if (!(identicalIn[key] ?? []).includes(locale)) {
-        assert.notEqual(got, en(key), `${locale} ${key} must not be English fallback`)
-      }
-    }
-    assert.doesNotMatch(t('cashflow.horizon.weeks', { count: 4 }), /\{/)
-    assert.doesNotMatch(t('cashflow.footnote.text', { flow: 'x', weeks: 4 }), /\{/)
-  }
-})

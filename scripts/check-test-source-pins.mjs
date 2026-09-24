@@ -46,20 +46,76 @@ function escapeIdentifier(name) {
   return name.replace(/\$/g, "\\$");
 }
 
-/** Variables bound to repository source text at any level of the file. */
-export function sourceTextVariables(source) {
+function helperReadsRepositorySource(body) {
+  if (!/readFile(?:Sync)?\s*\(/.test(body)) return false;
+  if (FIXTURE_PATH.test(body)) return false;
+  if (SOURCE_EXTENSION.test(body)) return true;
+  return /join\s*\(|new\s+URL\s*\(/.test(body);
+}
+
+/** Local readers whose call result is repository source text (not direct readFileSync bindings). */
+export function sourceReadHelpers(source) {
+  const helpers = new Set();
+  for (const match of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*readingPagePairs\s*\(/g)) {
+    helpers.add(match[1]);
+  }
+  for (const match of source.matchAll(
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*([^;\n]+)/g,
+  )) {
+    if (helperReadsRepositorySource(match[2])) helpers.add(match[1]);
+  }
+  for (const match of source.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{([^}]*)\}/g)) {
+    if (helperReadsRepositorySource(match[2])) helpers.add(match[1]);
+  }
+  return helpers;
+}
+
+/** Variables bound to repository source text at file scope. */
+export function sourceTextVariables(source, helpers = sourceReadHelpers(source)) {
   const names = new Set();
   const binding = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?(?:fs\.)?(?:readFileSync|readFile)\(([^;\n]*)/g;
   for (const match of source.matchAll(binding)) {
     if (SOURCE_EXTENSION.test(match[2]) && !FIXTURE_PATH.test(match[2])) names.add(match[1]);
   }
+  const viaHelper = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(/g;
+  for (const match of source.matchAll(viaHelper)) {
+    if (helpers.has(match[2])) names.add(match[1]);
+  }
+  return names;
+}
+
+function scopeSourceTextVariables(scope, helpers) {
+  const names = new Set();
+  const binding = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?(?:fs\.)?(?:readFileSync|readFile)\(([^;\n]*)/g;
+  for (const match of scope.matchAll(binding)) {
+    if (SOURCE_EXTENSION.test(match[2]) && !FIXTURE_PATH.test(match[2])) names.add(match[1]);
+  }
+  const viaHelper = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(/g;
+  for (const match of scope.matchAll(viaHelper)) {
+    if (helpers.has(match[2])) names.add(match[1]);
+  }
   return names;
 }
 
 /** The tests in one file that assert on source text, by name and line. */
+function bodyAssertsOnSourceText(body, variables, helpers) {
+  const usesVariable = variables.some((name) => {
+    const id = escapeIdentifier(name);
+    return new RegExp(`assert\\.(?:match|doesNotMatch)\\(\\s*${id}\\b|\\b${id}\\.(?:includes|indexOf|match|search|slice)\\(`).test(body);
+  });
+  const inlineRead = /readFileSync\([^)]*\.(?:tsx?|mjs|js|sql|ya?ml|css)["'`]/.test(body)
+    && /assert\.(?:match|doesNotMatch)|\.includes\(|\.indexOf\(/.test(body);
+  const inlineHelper = [...helpers].some((name) => {
+    const id = escapeIdentifier(name);
+    return new RegExp(`assert\\.(?:match|doesNotMatch)\\(\\s*${id}\\s*\\(`).test(body);
+  });
+  return usesVariable || inlineRead || inlineHelper;
+}
+
 export function sourcePinTests(source) {
   if (CONTRACT.test(source)) return [];
-  const variables = [...sourceTextVariables(source)];
+  const helpers = sourceReadHelpers(source);
+  const fileVariables = [...sourceTextVariables(source, helpers)];
   const lines = source.split("\n");
   const starts = [];
   lines.forEach((line, index) => {
@@ -70,13 +126,8 @@ export function sourcePinTests(source) {
   starts.forEach((start, k) => {
     const end = k + 1 < starts.length ? starts[k + 1].index : lines.length;
     const body = lines.slice(start.index, end).join("\n");
-    const usesVariable = variables.some((name) => {
-      const id = escapeIdentifier(name);
-      return new RegExp(`assert\\.(?:match|doesNotMatch)\\(\\s*${id}\\b|\\b${id}\\.(?:includes|indexOf|match|search|slice)\\(`).test(body);
-    });
-    const inline = /readFileSync\([^)]*\.(?:tsx?|mjs|js|sql|ya?ml|css)["'`]/.test(body)
-      && /assert\.(?:match|doesNotMatch)|\.includes\(|\.indexOf\(/.test(body);
-    if (usesVariable || inline) pins.push({ name: start.name, line: start.index + 1 });
+    const variables = [...fileVariables, ...scopeSourceTextVariables(body, helpers)];
+    if (bodyAssertsOnSourceText(body, variables, helpers)) pins.push({ name: start.name, line: start.index + 1 });
   });
   return pins;
 }

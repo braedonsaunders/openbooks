@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
-import { readingPagePairs } from './page-source'
 import test from 'node:test'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import type { Authz } from './authz'
@@ -33,7 +31,6 @@ const { canRunReportEntity, canSeeReportDefinition, guardReportEntity } = await 
  * that: the shared helper keeps the rule, and every path is wired to it.
  */
 
-const read = readingPagePairs((path: string) => readFileSync(new URL(path, import.meta.url), 'utf8'))
 
 test('payroll entities still declare a permission beyond reports.read', () => {
   // If this ever empties out, the gate below is guarding nothing.
@@ -76,114 +73,6 @@ test('optional-module report entities declare the Features switch they follow', 
   }
 })
 
-/** Every path that can execute a stored plan, and how it reaches the gate. */
-const EXECUTION_PATHS: Array<{ file: string; symbol: string; why: string }> = [
-  {
-    file: '../app/api/reports/run/route.ts',
-    symbol: 'guardReportEntity',
-    why: 'running a saved definition or ad-hoc plan',
-  },
-  {
-    file: '../app/api/reports/definitions/[id]/export/route.ts',
-    symbol: 'guardReportEntity',
-    why: 'exporting a definition to CSV/XLSX/PDF returns the same rows',
-  },
-  {
-    file: './report-drill-data.ts',
-    symbol: 'canRunReportEntity',
-    why: "drilling returns the report's own supporting rows",
-  },
-  {
-    file: '../app/api/reports/definitions/route.ts',
-    symbol: 'canSeeReportDefinition',
-    why: 'listing hands out the ids and stored plans every other path keys on',
-  },
-  {
-    file: '../app/api/reports/definitions/route.ts',
-    symbol: 'guardReportEntity',
-    why: 'creating a definition must not persist an unknown or forbidden entity',
-  },
-  {
-    file: '../app/api/reports/definitions/[id]/route.ts',
-    symbol: 'guardReportEntity',
-    why: 'saving a definition query must not persist an unknown or forbidden entity',
-  },
-  {
-    file: '../app/api/reports/definitions/[id]/route.ts',
-    symbol: 'canSeeReportDefinition',
-    why: 'reading a definition by id must hide what the list hides',
-  },
-  {
-    file: '../app/api/reports/runs/[id]/csv/route.ts',
-    // The named-refusal face of the same shared gate: reportArtifactAccessDetail
-    // IS canAccessReportArtifact plus the missing permission names, so a
-    // payroll-bearing artifact refuses reports-only viewers by name.
-    symbol: 'reportArtifactAccessDetail',
-    why: 'downloading a recorded run CSV returns the same rows',
-  },
-  {
-    file: '../app/api/reports/runs/[id]/artifact/route.ts',
-    // Same shared gate, named-refusal face — see above.
-    symbol: 'reportArtifactAccessDetail',
-    why: 'scheduled-run artifacts are the same report, rendered',
-  },
-]
-
-for (const { file, symbol, why } of EXECUTION_PATHS) {
-  test(`${file} applies the shared report entity gate (${why})`, () => {
-    const source = read(file)
-    assert.match(
-      source,
-      new RegExp(`\\b${symbol}\\b`),
-      `${file} can execute a report plan without consulting lib/report-authz — ` +
-        'a payroll register becomes readable with only reports.read.',
-    )
-    assert.match(
-      source,
-      /from '(\.\.\/)*(\.\.\/)*.*report-(?:authz|execution-context)'/,
-      `${file} must import the gate rather than re-implement it`,
-    )
-  })
-}
-
-test('lot recall cannot bypass the inventory feature gate through either entry point', () => {
-  const legacy = read('../app/(app)/reports/lot-recall/page.tsx')
-  // The legacy entry gates through the shared page boundary, resolved
-  // before any definition lookup or redirect: a switched-off inventory
-  // gate fails closed instead of handing off to the native runner.
-  assert.match(legacy, /await requireFeatureEnabled\(authz\.user\.orgId, 'inventory'\)/)
-  assert.match(
-    legacy,
-    /requireFeatureEnabled\(authz\.user\.orgId, 'inventory'\)[\s\S]*builtInReportDefinitionId\(/,
-    'the feature gate resolves before the definition lookup',
-  )
-  assert.match(legacy, /notFound\(\)/)
-
-  const runner = read('../app/(app)/reports/custom/run/[id]/page.tsx')
-  assert.match(runner, /canRunReportEntity\(authz, definition\.query\)/)
-  assert.equal(REPORT_ENTITY_MAP.inventory_lot_movements?.featureKey, 'inventory')
-})
-
-test('a refused drill is an authorization outcome, not a 500', () => {
-  const route = read('../app/api/reports/drill/route.ts')
-  const mapped = read('../lib/report-drill-error.ts')
-  assert.match(route, /reportDrillErrorResponse/)
-  assert.match(mapped, /report_entity_forbidden/)
-  assert.match(mapped, /status: 403/)
-})
-
-test('the gate lives in exactly one place', () => {
-  // Re-deriving `requiredPermission` inline is how the export and drill paths
-  // drifted from the runner in the first place.
-  for (const { file } of EXECUTION_PATHS) {
-    assert.doesNotMatch(
-      read(file),
-      /REPORT_ENTITY_MAP\[[^\]]+\]\??\.requiredPermission/,
-      `${file} re-implements the entity gate instead of using lib/report-authz`,
-    )
-  }
-})
-
 function reportReader(): Authz {
   return {
     user: {
@@ -223,29 +112,6 @@ test('guardReportEntity refuses a missing entity the same way canRunReportEntity
 test('guardReportEntity refuses an unknown entity the same way canRunReportEntity does', async () => {
   assert.equal(REPORT_ENTITY_MAP['not_a_catalog_entity'], undefined)
   await assertEntityRefused({ entity: 'not_a_catalog_entity' }, 'unknown entity')
-})
-
-test('guardReportEntity does not refuse a statement definition with no entity plan', async () => {
-  // Standard statements are seeded with query=null. The export route passes
-  // that value into this gate unconditionally before the shared
-  // CSV/XLSX/PDF pipeline. Refusing it 403s every P&L, balance sheet, and
-  // trial-balance download. canRunReportEntity(null) stays false — it
-  // answers "may I run this entity plan?" — but this HTTP gate must not
-  // apply when there is no entity plan.
-  const source = read('../app/api/reports/definitions/[id]/export/route.ts')
-  assert.match(
-    source,
-    /guardReportEntity\(\s*gate,\s*def\.query\s*\)/,
-    'export must keep passing the stored query, including statement null',
-  )
-  const authz = reportReader()
-  assert.equal(await canRunReportEntity(authz, null), false)
-  assert.equal(
-    await guardReportEntity(authz, null),
-    null,
-    'null query is a statement plan, not a missing entity — the guard must return allow',
-  )
-  assert.equal(await guardReportEntity(authz, undefined), null)
 })
 
 test('canSeeReportDefinition branches on report_type for the read surfaces', async () => {

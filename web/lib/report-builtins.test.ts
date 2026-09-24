@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { readingPagePairs } from './page-source'
 import test from 'node:test'
 import {
   applyBuiltInUrlFilters,
@@ -16,7 +14,6 @@ const ITEM_ID = '018f47aa-7c11-7a12-8bc3-1234567890ab'
 const DOC_ID = '018f47aa-7c11-7a12-8bc3-1234567890ac'
 const ENTRY_ID = '018f47aa-7c11-7a12-8bc3-1234567890ad'
 
-const read = readingPagePairs((path: string) => readFileSync(new URL(path, import.meta.url), 'utf8'))
 const definition = BUILT_IN_REPORT_DEFINITION_MAP['lot-recall']!
 const entity = REPORT_ENTITY_MAP.inventory_lot_movements!
 
@@ -161,86 +158,4 @@ test('paged rows carry native transaction drawer metadata without exposing hidde
     'Lot #', 'Expiry', 'Item code', 'Item', 'Movement type',
     'Moved at', 'Quantity', 'Stock location', 'Transaction #', 'Party',
   ])
-})
-
-test('legacy, native screen, saved-view and export paths share the built-in filter contract', () => {
-  const legacy = read('../app/(app)/reports/lot-recall/page.tsx')
-  assert.match(legacy, /builtInReportDefinitionId\(authz\.user\.orgId, 'lot-recall'\)/)
-  assert.match(legacy, /redirect\(`\/reports\/custom\/run\/\$\{definitionId\}/)
-  assert.doesNotMatch(legacy, /queryLotRecall/)
-  for (const param of ['lotNumber', 'itemId', 'expiresOnOrBefore', 'expiring']) {
-    assert.match(legacy, new RegExp(`'${param}'`))
-  }
-
-  const screen = read('../app/(app)/reports/custom/run/[id]/page.tsx')
-  assert.match(screen, /BUILT_IN_REPORT_DEFINITION_MAP/)
-  assert.match(screen, /applyBuiltInUrlFilters/)
-  assert.match(screen, /reportPeriodField\(definition\.query, entityMap\)[\s\S]*applyBuiltInUrlFilters/)
-  assert.match(screen, /key === 'page' \|\| key === 'perPage' \|\| key === 'format'/)
-  // JSX or the `save-view` widget: the widget mounts the same button.
-  assert.match(screen, /<SaveViewButton\b|widget\('save-view'\)/)
-
-  const exportRun = read('./report-run.ts')
-  assert.match(exportRun, /reportPeriodField\(query, entityMap\)[\s\S]*applyBuiltInUrlFilters/)
-  assert.match(exportRun, /executeReportAllPages\(orgId, query\)/)
-
-  const executor = read('./custom-reports.ts')
-  assert.match(executor, /entity\.defaultPeriodField === null\) return null/)
-  assert.match(executor, /BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY/)
-  assert.match(executor, /while \(offset < \(expectedRows \?\? 0\)\)/)
-})
-
-test('legacy lot-recall entry fails closed and forwards only its allowlisted controls', () => {
-  const legacy = read('../app/(app)/reports/lot-recall/page.tsx')
-
-  // The route renders per-user authorization state, so it must never be
-  // statically cached, and every gate below resolves before any redirect.
-  assert.match(legacy, /export const dynamic = 'force-dynamic'/)
-  assert.match(legacy, /requirePermission\('reports\.read'\)/)
-  // Fail-closed inventory gating through the shared page boundary: the
-  // permission and the feature gate both resolve before the definition
-  // lookup and the redirect, so a gated-out caller never reaches either.
-  assert.match(legacy, /await requireFeatureEnabled\(authz\.user\.orgId, 'inventory'\)/)
-  assert.match(
-    legacy,
-    /requirePermission\('reports\.read'\)[\s\S]*requireFeatureEnabled\(authz\.user\.orgId, 'inventory'\)[\s\S]*builtInReportDefinitionId\(authz\.user\.orgId, 'lot-recall'\)[\s\S]*redirect\(`/,
-    'both gates resolve before the definition lookup and the handoff redirect',
-  )
-  assert.match(
-    legacy,
-    /if \(!definitionId\) notFound\(\)/,
-    'an org without the seeded built-in must 404, never redirect to another tenant\'s id',
-  )
-
-  // The forward list is a boundary: exactly the recall controls plus the
-  // engine's paging keys ride along, so anything else smuggled into an old
-  // saved link never reaches the native runner.
-  const allowlist = legacy.match(/const FORWARDED_PARAMS = new Set\(\[(?<body>[^\]]*)\]\)/)
-  assert.ok(allowlist?.groups?.body, 'FORWARDED_PARAMS must remain a declared allowlist')
-  const forwarded = [...allowlist.groups.body.matchAll(/'([^']+)'/g)].map((entry) => entry[1])
-  assert.deepEqual(
-    [...forwarded].sort(),
-    ['expiresOnOrBefore', 'expiring', 'itemId', 'lotNumber', 'page', 'perPage'],
-    'the allowlist owns the recall filters plus page/perPage — nothing more',
-  )
-  assert.match(legacy, /FORWARDED_PARAMS\.has\(key\)[^\n]*continue/)
-  // Repeated params survive as repeated values instead of collapsing.
-  assert.match(legacy, /Array\.isArray\(raw\) \? raw : raw \? \[raw\] : \[\]/)
-  assert.match(legacy, /forwarded\.append\(key, value\)/)
-  // A clean handoff: no stray '?' when nothing qualifies for forwarding.
-  assert.match(legacy, /redirect\(`\/reports\/custom\/run\/\$\{definitionId\}\$\{query \? `\?\$\{query\}` : ''\}`\)/)
-})
-
-test('native report paging is URL-backed and uses the engine count', () => {
-  const screen = read('../app/(app)/reports/custom/run/[id]/page.tsx')
-  assert.match(screen, /pickString\(sp\.page\)/)
-  assert.match(screen, /pickString\(sp\.perPage\)/)
-  assert.match(screen, /executeReportPage\(authz\.user\.orgId, query/)
-  // The count comes from the engine's own pageInfo, whether it is passed as a
-  // JSX prop or resolved by the loader and bound by the spec's pagination
-  // block. Guessing a total is the failure this guards against.
-  assert.match(screen, /total(?:=\{|Rows: )result\??\.pageInfo\??\.totalRows/)
-  assert.match(screen, /Number\.MAX_SAFE_INTEGER \/ pagination\.maxPageSize/)
-  assert.doesNotMatch(screen, /pickString\(sp\.page\)[\s\S]{0,120}10_000/)
-  assert.match(screen, /<Pagination|\bpagination\(\{/)
 })
