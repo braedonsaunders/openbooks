@@ -948,6 +948,37 @@ test("a staged claim blocks a second enqueue for the same rung", { skip: !DB }, 
   }
 });
 
+test("an org-scoped run leaves another org's due invoice untouched", { skip: !DB }, async () => {
+  const target = await createScratchOrg();
+  const other = await createScratchOrg();
+  try {
+    const targetInvoice = await seedDunnableInvoice(target, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    const otherInvoice = await seedDunnableInvoice(other, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+
+    const run = await runDunningForOrg(target.orgId, "2026-07-10");
+
+    assert.equal(run.scanned, 1);
+    assert.equal(run.sent, 1);
+    assert.deepEqual(run.notices.map((notice) => notice.documentId), [targetInvoice.invoiceId]);
+    const targetNotice = await stagedNotice(targetInvoice.invoiceId);
+    assert.equal(targetNotice.logRows.length, 1);
+    assert.equal(targetNotice.outboxRows.length, 1);
+    const otherNotice = await stagedNotice(otherInvoice.invoiceId);
+    assert.equal(otherNotice.logRows.length, 0);
+    assert.equal(otherNotice.outboxRows.length, 0);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id in (${target.orgId}, ${other.orgId})`);
+    await dropScratchOrg(target.orgId);
+    await dropScratchOrg(other.orgId);
+  }
+});
+
 test("the runner leaves the claim staged and stamps its id in the outbox meta", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
