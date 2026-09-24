@@ -14,7 +14,7 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  AL_CERTIFICATE, AL_REGION, AL_RATES_2026, AL_WITHHOLDING, alAnnualTax, alDependentAllowance,
+  AL_A4_MS_CERTIFICATE, AL_CERTIFICATE, AL_REGION, AL_RATES_2026, AL_WITHHOLDING, alAnnualTax, alDependentAllowance,
   alPersonalExemption, alStandardDeduction, alSupplementalFlat,
 } from "./al.ts";
 import { pctToRate } from "./transcription.ts";
@@ -106,6 +106,37 @@ test("AL refuses without this period's federal income tax withheld", () => {
     }),
     /federal income tax withheld/,
   );
+});
+
+// Form A4-MS and its employer-retained records:
+// https://revenue.alabama.gov/wp-content/uploads/2019/09/FA4MS9_19-1.pdf
+// https://www.revenue.alabama.gov/faqs/i-am-in-the-military-and-not-a-legal-resident-of-alabama-if-my-spouse-and-or-i-also-have-civilian-jobs-in-alabama-should-we-report-that-income/
+test("AL A4-MS is separate from A-4 and requires every attestation and supporting record", () => {
+  assert.equal(certificateDeclarationProblem(AL_A4_MS_CERTIFICATE), null);
+  const incomplete = resolvedCertificate(AL_A4_MS_CERTIFICATE, {
+    spouse_is_active_duty_member: "true",
+  });
+  assert.throws(
+    () => AL_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", basis: "nonresident",
+      certificate: cert({ exemption: "0", dependents: "0" }),
+      supportingCertificates: { us_al_a4_ms: incomplete },
+    }),
+    /Alabama military-spouse withholding exemption requires proof that the employee is not a military servicemember; current military orders assign the servicemember to Alabama; the employee is in Alabama solely to be with the servicemember; the employee and servicemember live at the same address; the employee's domicile is outside Alabama; the employee and servicemember share the same domicile; a current military spouse identification is on file; the servicemember's DD Form 2058 is on file; a recent Leave and Earnings Statement is on file/,
+  );
+
+  const eligible = resolvedCertificate(AL_A4_MS_CERTIFICATE, Object.fromEntries([
+    "spouse_is_active_duty_member", "employee_is_not_servicemember", "current_orders_assign_al",
+    "employee_here_to_accompany", "same_current_address", "employee_domicile_outside_al",
+    "same_domicile", "military_id_on_file", "dd2058_on_file", "recent_les_on_file",
+  ].map((key) => [key, "true"])));
+  const result = AL_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", basis: "nonresident",
+    certificate: cert({ exemption: "0", dependents: "0" }),
+    supportingCertificates: { us_al_a4_ms: eligible },
+  });
+  assert.equal(result.tax, money("0"));
+  assert.equal(result.factors.AL_MILITARY_SPOUSE_EXEMPT, "1");
 });
 
 test("AL supplemental paid with regular wages is aggregated, not a silent 5%", () => {

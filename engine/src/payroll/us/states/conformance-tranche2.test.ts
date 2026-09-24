@@ -748,6 +748,47 @@ test("MA does not withhold below the printed wage floor, or from a student", () 
   assert.equal(student.tax, money("0"));
 });
 
+// Form and annual supporting-document requirements:
+// https://www.mass.gov/doc/form-m-4-ms-annual-withholding-tax-exemption-certificate-for-nonresident-military-spouse/download
+// https://www.mass.gov/info-details/ma-tax-information-for-military-personnel-and-their-spouses
+test("MA M-4-MS is a separate annual certificate and only a fully supported claim stops withholding", () => {
+  const primary = cert("us_ma_m4", { total_exemptions: "0" });
+  const incomplete = cert("us_ma_m4_ms", { claim_status: "qualified_domicile" });
+  assert.throws(
+    () => MA_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+      certificate: primary,
+      supportingCertificates: { us_ma_m4_ms: incomplete },
+    }),
+    /Massachusetts military-spouse withholding exemption requires proof that the employee is the civilian spouse of an active-duty servicemember; current military orders assign the servicemember to Massachusetts; the spouse is in Massachusetts solely to be with the servicemember; the spouse and servicemember have the same non-Massachusetts tax residence or the spouse elects that residence; a current Military Spouse ID card is on file; the servicemember's DD Form 2058 is on file; the servicemember's current Leave and Earnings Statement is on file; the servicemember's current Massachusetts military orders are on file/,
+  );
+
+  const eligible = cert("us_ma_m4_ms", {
+    claim_status: "elect_servicemember_residence",
+    active_duty_servicemember_spouse: "true",
+    servicemember_orders_assign_ma: "true",
+    spouse_present_to_accompany: "true",
+    same_non_ma_domicile: "true",
+    military_spouse_id_on_file: "true",
+    dd2058_on_file: "true",
+    servicemember_les_on_file: "true",
+    current_military_orders_on_file: "true",
+  });
+  const exempt = MA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+    certificate: primary, supportingCertificates: { us_ma_m4_ms: eligible },
+  });
+  assert.equal(exempt.tax, money("0"));
+  assert.equal(exempt.factors.MA_MILITARY_SPOUSE_EXEMPT, "1");
+
+  const lapsedClaim = cert("us_ma_m4_ms", { claim_status: "no_longer_qualified" });
+  const resumed = MA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+    certificate: primary, supportingCertificates: { us_ma_m4_ms: lapsedClaim },
+  });
+  assert.ok(U(resumed.tax) > 0n);
+});
+
 test("MA accepts a 27-payday biweekly year, which the pack's general mapping does not", () => {
   // Circular M step 3: "multiply the result by the number of periods in the
   // year (52 for weekly, 12 for monthly, 24 for semimonthly and 26 OR 27 for

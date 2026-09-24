@@ -45,6 +45,7 @@ import {
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/co.ts";
 
@@ -95,6 +96,24 @@ export function coRatesForPayDate(payDate: string): CoYearRates {
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = coRatesForPayDate(input.payDate);
+  const militarySpouseCertificate = input.supportingCertificates?.us_co_dr1059;
+  if (militarySpouseCertificate?.onFile) {
+    requireMilitarySpouseEligibility(militarySpouseCertificate, "Colorado", [
+      { key: "spouse_is_nonresident", description: "the spouse is not a Colorado resident" },
+      { key: "servicemember_is_member", description: "the spouse is a qualifying U.S. servicemember" },
+      { key: "servicemember_is_nonresident", description: "the servicemember is not a Colorado resident" },
+      { key: "spouse_present_to_accompany", description: "the spouse is in Colorado solely to be with the servicemember" },
+      { key: "servicemember_serving_under_orders", description: "the servicemember is serving in compliance with military orders" },
+      { key: "notify_if_residency_changes", description: "the employee will notify the employer immediately if they become a Colorado resident" },
+    ]);
+    return {
+      state: "CO",
+      year: rates.year,
+      tax: D(0n),
+      taxSupplemental: D(0n),
+      factors: { CO_MILITARY_SPOUSE_EXEMPT: "1" },
+    };
+  }
   // DR 1098 says to skip its calculation and withhold zero when the employee
   // filed only an exempt W-4. With a separate DR 0004 on file, use that state
   // certificate's instructions instead of treating the W-4 as the only form.
@@ -156,6 +175,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * keys above. Terms are the DR 1098 worksheet's own — see the module header.
  */
 export const CO_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  CO_MILITARY_SPOUSE_EXEMPT: "Colorado qualifying military-spouse wages exempt from withholding",
   CO_NONRESIDENT_WAGES: "Colorado apportioned nonresident wages",
   CO_ANNUAL_WAGES: "Colorado annualized wages",
   CO_ANNUAL_ALLOWANCE: "Colorado annual allowance",
@@ -168,6 +188,7 @@ export const CO_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CO",
   label: "Colorado income tax",
   certificateKey: "us_co_dr0004",
+  supportingCertificateKeys: ["us_co_dr1059"],
   ratesModule: RATES_MODULE,
   editions: CO_TAX_YEAR_EDITIONS,
   printedPeriods: null,
@@ -214,6 +235,29 @@ export const CO_CERTIFICATE: PayrollCertificate = {
         "Added after the 4.40% calculation (DR 1098 line 2e). A pre-2022 extra-withholding "
         + "request stays in force until the employee files a new certificate.",
     },
+  ],
+};
+
+/** Colorado DR 1059, the calendar-year affidavit for a qualifying nonresident military spouse. */
+export const CO_DR1059_CERTIFICATE: PayrollCertificate = {
+  key: "us_co_dr1059",
+  form: "DR 1059",
+  label: "Colorado Affidavit of Exemption for the Nonresident Spouse of a U.S. Servicemember",
+  scope: { level: "region", region: "CO" },
+  purpose: "withholding",
+  validity: { kind: "calendar_year_end" },
+  citation:
+    "Colorado Department of Revenue, DR 1059 (07/20/23); Income Tax Topics: Military Servicemembers (Feb. 2025)",
+  summary:
+    "A calendar-year affidavit. The spouse must be a nonresident and in Colorado solely to be with a servicemember serving in compliance with military orders.",
+  storage: "certificate_rows",
+  fields: [
+    { key: "spouse_is_nonresident", label: "Spouse is not a Colorado resident", kind: "flag", help: "Required DR 1059 attestation 1." },
+    { key: "servicemember_is_member", label: "Spouse is a U.S. servicemember", kind: "flag", help: "Required DR 1059 attestation 2." },
+    { key: "servicemember_is_nonresident", label: "Servicemember is not a Colorado resident", kind: "flag", help: "Required DR 1059 attestation 3." },
+    { key: "spouse_present_to_accompany", label: "Spouse is in Colorado solely to be with the servicemember", kind: "flag", help: "Required DR 1059 attestation 4." },
+    { key: "servicemember_serving_under_orders", label: "Servicemember is serving in compliance with military orders", kind: "flag", help: "Required DR 1059 attestation 4." },
+    { key: "notify_if_residency_changes", label: "Employee will notify employer immediately if they become a Colorado resident", kind: "flag", help: "Required DR 1059 attestation 5." },
   ],
 };
 

@@ -23,6 +23,7 @@ import {
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   refuseUntranscribedYear,
@@ -144,6 +145,24 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
+  const militarySpouseCertificate = input.supportingCertificates?.us_al_a4_ms;
+  if (militarySpouseCertificate?.onFile) {
+    requireMilitarySpouseEligibility(militarySpouseCertificate, "Alabama", [
+      { key: "spouse_is_active_duty_member", description: "the employee's spouse is an active-duty military servicemember" },
+      { key: "employee_is_not_servicemember", description: "the employee is not a military servicemember" },
+      { key: "current_orders_assign_al", description: "current military orders assign the servicemember to Alabama" },
+      { key: "employee_here_to_accompany", description: "the employee is in Alabama solely to be with the servicemember" },
+      { key: "same_current_address", description: "the employee and servicemember live at the same address" },
+      { key: "employee_domicile_outside_al", description: "the employee's domicile is outside Alabama" },
+      { key: "same_domicile", description: "the employee and servicemember share the same domicile" },
+      { key: "military_id_on_file", description: "a current military spouse identification is on file" },
+      { key: "dd2058_on_file", description: "the servicemember's DD Form 2058 is on file" },
+      { key: "recent_les_on_file", description: "a recent Leave and Earnings Statement is on file" },
+    ]);
+    factors.AL_MILITARY_SPOUSE_EXEMPT = "1";
+    return { state: "AL", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  }
+
   const code = (certificateChoice(input.certificate, "exemption") ?? "0") as AlExemption;
   if (code !== "0" && code !== "S" && code !== "MS" && code !== "M" && code !== "H") {
     throw new PayrollError(`Alabama exemption "${code}" is not 0, S, MS, M, or H`);
@@ -197,6 +216,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * the module header.
  */
 export const AL_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  AL_MILITARY_SPOUSE_EXEMPT: "Alabama military-spouse wages exempt from withholding",
   AL_GI: "Alabama gross income (annualized)",
   AL_STANDARD_DEDUCTION: "Alabama standard deduction",
   AL_FEDERAL_ANNUAL: "Alabama federal-tax deduction (annualized)",
@@ -212,6 +232,7 @@ export const AL_WITHHOLDING: UsStateWithholdingEngine = {
   state: "AL",
   label: "Alabama income tax",
   certificateKey: "us_al_a4",
+  supportingCertificateKeys: ["us_al_a4_ms"],
   ratesModule: RATES_MODULE,
   editions: AL_TAX_YEAR_EDITIONS,
   printedPeriods: null,
@@ -283,6 +304,32 @@ export const AL_CERTIFICATE: PayrollCertificate = {
       min: "0",
       help: "Added AFTER the formula is de-annualized. A flat dollar amount.",
     },
+  ],
+};
+
+/** Alabama Form A4-MS, separate from the ordinary A-4 allowance certificate. */
+export const AL_A4_MS_CERTIFICATE: PayrollCertificate = {
+  key: "us_al_a4_ms",
+  form: "A4-MS",
+  label: "Alabama Nonresident Military Spouse Withholding Tax Exemption Certificate",
+  scope: { level: "region", region: "AL" },
+  purpose: "withholding",
+  citation:
+    "Alabama Department of Revenue, Form A4-MS (Rev. 09/2019); ALDOR military-spouse withholding FAQ",
+  summary:
+    "A separate MSRRA certificate. All seven employee eligibility statements must be true, and the employer retains the current military ID, DD Form 2058, and a recent Leave and Earnings Statement.",
+  storage: "certificate_rows",
+  fields: [
+    { key: "spouse_is_active_duty_member", label: "Employee's spouse is an active-duty military servicemember", kind: "flag", help: "Required A4-MS condition 1." },
+    { key: "employee_is_not_servicemember", label: "Employee is not a military servicemember", kind: "flag", help: "Required A4-MS condition 2." },
+    { key: "current_orders_assign_al", label: "Current orders assign the servicemember to a military location in Alabama", kind: "flag", help: "Required A4-MS condition 3." },
+    { key: "employee_here_to_accompany", label: "Employee is in Alabama solely to be with the servicemember", kind: "flag", help: "Required A4-MS condition 4." },
+    { key: "same_current_address", label: "Employee and servicemember live at the same address", kind: "flag", help: "Required A4-MS condition 5." },
+    { key: "employee_domicile_outside_al", label: "Employee is domiciled outside Alabama", kind: "flag", help: "Required A4-MS condition 6." },
+    { key: "same_domicile", label: "Employee and servicemember share the same domicile", kind: "flag", help: "Required A4-MS condition 7." },
+    { key: "military_id_on_file", label: "Current military spouse identification is on file", kind: "flag", help: "ALDOR requires the employer to retain a clear copy of the current military spouse ID." },
+    { key: "dd2058_on_file", label: "DD Form 2058 is on file", kind: "flag", help: "ALDOR requires the servicemember's state-of-legal-residence certificate." },
+    { key: "recent_les_on_file", label: "Recent Leave and Earnings Statement is on file", kind: "flag", help: "ALDOR requires a recent servicemember LES." },
   ],
 };
 

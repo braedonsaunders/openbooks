@@ -379,6 +379,11 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   const certificate = levy.certificateKey
     ? input.certificateFor(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
     : emptyResolvedCertificate(`${levy.label} publishes no withholding certificate`);
+  const supportingCertificates = (keys: readonly string[] | undefined) =>
+    Object.fromEntries((keys ?? []).map((key) => [
+      key,
+      input.certificateFor(key) ?? emptyResolvedCertificate(key),
+    ]));
   let separateFlatRate: string | undefined;
   let separateFlatWholeDollar = false;
   let combinedFlatRate: string | undefined;
@@ -485,6 +490,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         federalWithholdingExempt: input.federalWithholdingExempt,
         taxQualifiedDeductions: input.taxQualifiedDeductions,
         certificate,
+        supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
         basis: levy.reach,
         wageAllocations: input.wageAllocations,
         residentWithholdingFacts,
@@ -522,6 +528,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         federalIncomeTax: input.federalIncomeTax,
         taxQualifiedDeductions: input.taxQualifiedDeductions,
         certificate,
+        supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
         basis: levy.reach,
         wageAllocations: input.wageAllocations,
         residentWithholdingFacts,
@@ -560,6 +567,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       federalWithholdingExempt: input.federalWithholdingExempt,
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
+      supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
       basis: levy.reach,
       wageAllocations: input.wageAllocations,
       residentWithholdingFacts,
@@ -602,6 +610,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         federalIncomeTax: input.federalIncomeTax,
         taxQualifiedDeductions: input.taxQualifiedDeductions,
         certificate,
+        supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
         basis: levy.reach,
         wageAllocations: input.wageAllocations,
         residentWithholdingFacts,
@@ -640,6 +649,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       federalWithholdingExempt: input.federalWithholdingExempt,
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
+      supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
       basis: levy.reach,
       wageAllocations: input.wageAllocations,
       residentWithholdingFacts,

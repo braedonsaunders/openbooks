@@ -30,10 +30,15 @@ import {
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/hi.ts";
 
-export type HiFilingStatus = "single" | "married";
+export type HiFilingStatus =
+  | "single"
+  | "married"
+  | "certified_disabled"
+  | "nonresident_military_spouse";
 
 interface HiBracket {
   over: string;
@@ -122,14 +127,27 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("HI_EXEMPT", 1n);
-    return { state: "HI", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
-
   // No HW-4: "withhold tax as if the employee was single and had claimed
   // no withholding allowance." Head of household is treated as single.
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as HiFilingStatus;
+  if (status === "certified_disabled") {
+    if (!certificateFlag(input.certificate, "disability_certification_on_file")) {
+      throw new PayrollError(
+        "Hawaii certified-disabled withholding status requires the Department-prescribed disability certification on file",
+      );
+    }
+    factors.HI_CERTIFIED_DISABLED_NOT_SUBJECT = "1";
+    return { state: "HI", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  }
+  if (status === "nonresident_military_spouse") {
+    requireMilitarySpouseEligibility(input.certificate, "Hawaii", [
+      { key: "servicemember_present_under_orders", description: "the servicemember is in Hawaii solely under military or naval orders" },
+      { key: "spouse_present_to_accompany", description: "the spouse is in Hawaii solely to be with the servicemember" },
+      { key: "same_non_hawaii_domicile", description: "the spouse and servicemember are domiciled in the same state outside Hawaii" },
+    ]);
+    factors.HI_NONRESIDENT_MILITARY_SPOUSE_NOT_SUBJECT = "1";
+    return { state: "HI", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  }
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -169,7 +187,9 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * module header.
  */
 export const HI_FACTOR_LABELS: Readonly<Record<string, string>> = {
-  HI_EXEMPT: "Exempt from Hawaii withholding",
+  HI_CERTIFIED_DISABLED_NOT_SUBJECT: "Certified-disabled wages not subject to Hawaii withholding",
+  HI_NONRESIDENT_MILITARY_SPOUSE_NOT_SUBJECT:
+    "Nonresident military-spouse wages not subject to Hawaii withholding",
   HI_ANNUAL_WAGES: "Hawaii annualized wages",
   HI_ALLOWANCES: "Hawaii personal allowances",
   HI_LUMP_SUM: "Hawaii lump-sum allowance",
@@ -208,9 +228,10 @@ export const HI_CERTIFICATE: PayrollCertificate = {
   purpose: "withholding",
   citation:
     "Hawaii Department of Taxation, Booklet A, Employer's Tax Guide (Rev. 2025); "
-    + "Form HW-4. Federal Form W-4 may not be used.",
+    + "Form HW-4 (Rev. 2022). Federal Form W-4 may not be used.",
   summary:
-    "Sets Hawaii marital status and allowances. If the employee does not "
+    "Sets Hawaii marital status, allowances, and the two HW-4 not-subject-to-withholding statuses. "
+    + "Hawaii does not allow exempt status. If the employee does not "
     + "furnish an HW-4, Booklet A requires withholding as single with no "
     + "allowance. Head of household is treated as single.",
   storage: "certificate_rows",
@@ -223,6 +244,8 @@ export const HI_CERTIFICATE: PayrollCertificate = {
       choices: [
         { value: "single", label: "Single (including unmarried heads of household)" },
         { value: "married", label: "Married" },
+        { value: "certified_disabled", label: "Certified disabled person (not subject to withholding)" },
+        { value: "nonresident_military_spouse", label: "Nonresident military spouse (not subject to withholding)" },
       ],
       help:
         "Booklet A treats head of household as single. Default Single is the "
@@ -251,12 +274,28 @@ export const HI_CERTIFICATE: PayrollCertificate = {
         + "required amount. Added AFTER the annualized method is de-annualized.",
     },
     {
-      key: "exempt",
-      label: "Exempt from Hawaii withholding",
+      key: "disability_certification_on_file",
+      label: "Department-prescribed disability certification is on file",
       kind: "flag",
-      help:
-        "A current exempt claim on Form HW-4 withholds zero. Dating any "
-        + "year-end lapse is certificate administration.",
+      help: "Required with the certified-disabled status. Hawaii requires the Department-prescribed certification that the person is blind, deaf, or totally disabled; this continues until a re-examination finds the person no longer qualifies.",
+    },
+    {
+      key: "servicemember_present_under_orders",
+      label: "Servicemember is in Hawaii solely under military or naval orders",
+      kind: "flag",
+      help: "Required for the nonresident military-spouse status under the Military Spouses Residency Relief Act.",
+    },
+    {
+      key: "spouse_present_to_accompany",
+      label: "Spouse is in Hawaii solely to be with the servicemember",
+      kind: "flag",
+      help: "Required for the nonresident military-spouse status under the Military Spouses Residency Relief Act.",
+    },
+    {
+      key: "same_non_hawaii_domicile",
+      label: "Spouse and servicemember share a domicile outside Hawaii",
+      kind: "flag",
+      help: "Required for the nonresident military-spouse status under the Military Spouses Residency Relief Act.",
     },
   ],
 };
