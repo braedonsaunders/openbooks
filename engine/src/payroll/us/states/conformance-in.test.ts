@@ -19,6 +19,7 @@ import {
 } from "./in.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
+import { computeUsWithholding } from "../withholding.ts";
 
 const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
   resolvedCertificate(IN_CERTIFICATE, answers);
@@ -173,4 +174,32 @@ test("IN refuses a year it has not transcribed", () => {
     }),
     /2027 Indiana income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
   );
+});
+
+test("IN county tax dispatches through computeUsWithholding — DN#1 p. 3 county figure", () => {
+  // The notice's worked example ends "County Tax to Withhold $473.08 × .01 =
+  // $4.73". Driven through the pack dispatch (not the engine directly), so a
+  // missing IN branch fails here: every resolved county levy used to fall to
+  // default: and refuse.
+  const result = computeUsWithholding({
+    levy: {
+      level: "sub_region", region: "IN", subRegion: "31",
+      label: "Harrison County income tax",
+      basis: "resident", side: "residence", reach: "resident",
+      certificateKey: "us_in_wh4",
+    },
+    payDate: "2026-03-06", periodEnd: "2026-03-06", periodsPerYear: 52,
+    wages: "800.00", federalIncomeTax: "13.96",
+    certificateFor: () => cert({
+      personal_exemptions: "5",
+      additional_dependent_exemptions: "3",
+      first_time_dependent_exemptions: "1",
+      adopted_dependent_exemptions: "2",
+    }),
+    tenantRates: () => undefined,
+  });
+  assert.ok(result, "the county levy computes instead of refusing");
+  assert.equal(result!.code, "IN-31");
+  assert.equal(result!.tax, money("4.73"));
+  assert.equal(result!.factors.IN_COUNTY_RATE, "0.01");
 });
