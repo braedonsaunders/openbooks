@@ -71,6 +71,12 @@ export interface VaYearRates {
   personalExemption: string;
   /** E2 — age 65 and over & blind exemptions, annual, each. */
   ageBlindExemption: string;
+  /**
+   * The Pay Period Conversion Table's daily factor (Daily = 300, not 365):
+   * transcribed because it is the only place the guide states what a day
+   * annualizes as.
+   */
+  dailyPeriods: number;
   formula: readonly VaFormulaBand[];
   /** Flat supplemental election, p. 19 — exported, not applied by `compute`. */
   supplementalRate: string;
@@ -82,6 +88,7 @@ export const VA_RATES_2026: VaYearRates = {
   standardDeduction: "8750",
   personalExemption: "930",
   ageBlindExemption: "800",
+  dailyPeriods: 300,
   formula: [
     { upTo: "3000", over: "0", base: "0", rate: pctToRate("2") },
     { upTo: "5000", over: "3000", base: "60", rate: pctToRate("3") },
@@ -115,6 +122,18 @@ export function vaRatesForPayDate(payDate: string): VaYearRates {
     refuseUntranscribedYear(VA_WITHHOLDING, year);
   }
   return rates;
+}
+
+/**
+ * The annualizing divisor. The interface marks daily as 260 or 365 worked
+ * days, but the Pay Period Conversion Table prints Daily = 300 — so daily
+ * payrolls annualize AND de-annualize with the edition's dailyPeriods, in
+ * both directions (the Delaware and Minnesota engines map their own daily
+ * factors the same way).
+ */
+export function vaAnnualPeriods(periodsPerYear: number, dailyPeriods: number): number {
+  if (periodsPerYear === 260 || periodsPerYear === 365) return dailyPeriods;
+  return periodsPerYear;
 }
 
 /** Step 2 of the p. 21 formula — annualized tax W from annualized taxable T. */
@@ -160,8 +179,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   }
 
   // p. 19: add supplemental paid with regular wages and withhold on the total.
+  // Daily payrolls annualize with the conversion table's 300, not the
+  // caller's P.
+  const annualP = vaAnnualPeriods(P, rates.dailyPeriods);
   const wages = U(input.wages) + U(input.supplemental ?? "0");
-  const annualWages = wages * BigInt(P);
+  const annualWages = wages * BigInt(annualP);
   trace("VA_ANNUAL_WAGES", annualWages);
 
   // Default ZERO exemptions — VA-4: "as if you had no exemptions."
@@ -179,7 +201,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   factors.VA_BAND_OVER = bandOver;
   trace("VA_ANNUAL_TAX", annualTax);
 
-  const periodTax = divIntCents(annualTax, P);
+  const periodTax = divIntCents(annualTax, annualP);
   trace("VA_TAX", periodTax);
 
   // VA-4 line 2 — additional withholding, added AFTER the rate.
