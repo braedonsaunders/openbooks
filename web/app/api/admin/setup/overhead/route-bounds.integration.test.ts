@@ -27,6 +27,15 @@ registerHooks({
           const s = globalThis.__overheadBoundState;
           return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
         }
+        export function guardUnrestrictedScope(authz) {
+          if (authz?.allowedSubsidiaryIds == null) return null
+          return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+        }
+        export function subsidiariesInScope(authz, ids) {
+          const scope = authz?.allowedSubsidiaryIds ?? null
+          if (scope === null) return true
+          return ids.every((id) => id !== null && id !== undefined && id !== '' && scope.has(id))
+        }
       `);
     if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);

@@ -35,6 +35,15 @@ const mockAuthz = `
     const ns = permission.split('.')[0]
     return permissions.has(ns + '.*')
   }
+  export function guardUnrestrictedScope(authz) {
+    if (authz?.allowedSubsidiaryIds == null) return null
+    return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+  }
+  export function subsidiariesInScope(authz, ids) {
+    const scope = authz?.allowedSubsidiaryIds ?? null
+    if (scope === null) return true
+    return ids.every((id) => id !== null && id !== undefined && id !== '' && scope.has(id))
+  }
 `;
 
 const hooks = registerHooks({

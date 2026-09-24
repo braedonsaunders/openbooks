@@ -11,7 +11,11 @@ import test from 'node:test'
 // the publisher, which fails closed through its foreign key — the route only
 // shapes the payload and maps storage input failures.
 const root = pathToFileURL(process.cwd() + '/').href
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
+const state: { orgId: string; actorId: string; allowedSubsidiaryIds: Set<string> | null } = {
+  orgId: '',
+  actorId: '',
+  allowedSubsidiaryIds: null,
+}
 Object.assign(globalThis, { __overheadPublishState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
@@ -20,7 +24,16 @@ registerHooks({
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__overheadPublishState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowedSubsidiaryIds };
+      }
+      export function guardUnrestrictedScope(authz) {
+        if (authz?.allowedSubsidiaryIds == null) return null
+        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+      }
+      export function subsidiariesInScope(authz, ids) {
+        const scope = authz?.allowedSubsidiaryIds ?? null
+        if (scope === null) return true
+        return ids.every((id) => id !== null && id !== undefined && id !== '' && scope.has(id))
       }
     `)
     if (specifier === '../../../../../lib/projects-gate') return virtual(`
@@ -144,6 +157,71 @@ test('publish still stores rates for a known department', { skip: !DB }, async (
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.deepEqual(await publishedRates(org.orgId), [{ department_id: departmentId }])
   } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+// H-OVERHEAD: publish-all without rates replaces every department's
+// effective-dated rates, so a subsidiary-restricted admin is refused with the
+// named org-wide-policy refusal before the live engine runs.
+test('restricted publish-all without rates is refused with no rate rows', { skip: !DB }, async () => {
+  const { org } = await fixture()
+  state.allowedSubsidiaryIds = new Set([org.subsidiaryId])
+  try {
+    const result = await post({ action: 'publish', effectiveFrom: '2026-03-01' })
+    assert.equal(result.status, 403, `expected 403, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.deepEqual(result.json, { error: 'requires unrestricted subsidiary access' })
+    assert.deepEqual(await publishedRates(org.orgId), [], 'refused publish must store no rate rows')
+  } finally {
+    state.allowedSubsidiaryIds = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+async function scopedFixture(): Promise<{
+  org: Fixture['org']
+  otherSubsidiaryId: string
+  otherDepartmentId: string
+}> {
+  const { org } = await fixture()
+  const otherSubsidiaryId = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    insert into subsidiaries (org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+    values (${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+    returning id`)).rows[0]!.id)
+  await withBypassContext(async () => db.execute(sql`
+    update departments set subsidiary_id = ${org.subsidiaryId}
+     where org_id = ${org.orgId} and subsidiary_id is null`))
+  const otherDepartmentId = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    insert into departments (org_id, name, is_active, subsidiary_id)
+    values (${org.orgId}, 'Other Dept', true, ${otherSubsidiaryId})
+    returning id`)).rows[0]!.id)
+  return { org, otherSubsidiaryId, otherDepartmentId }
+}
+
+// H-OVERHEAD: an explicit out-of-scope department answers exactly like an
+// unknown one, so a restricted caller cannot probe other subsidiaries'
+// departments by id; either way no rate row is stored.
+test('restricted publish of another subsidiary department answers like unknown', { skip: !DB }, async () => {
+  const { org, otherDepartmentId } = await scopedFixture()
+  state.allowedSubsidiaryIds = new Set([org.subsidiaryId])
+  try {
+    const denied = await post({
+      action: 'publish',
+      effectiveFrom: '2026-03-01',
+      rates: [{ departmentId: otherDepartmentId, ratePerHour: '10.5' }],
+    })
+    assert.equal(denied.status, 422, `expected 422, got ${denied.status}: ${JSON.stringify(denied.json)}`)
+
+    const unknown = await post({
+      action: 'publish',
+      effectiveFrom: '2026-03-01',
+      rates: [{ departmentId: randomUUID(), ratePerHour: '10.5' }],
+    })
+    assert.equal(unknown.status, 422, `expected 422, got ${unknown.status}: ${JSON.stringify(unknown.json)}`)
+    assert.deepEqual(denied.json, unknown.json, 'out-of-scope and unknown must be indistinguishable')
+    assert.deepEqual(await publishedRates(org.orgId), [], 'refused publish must store no rate rows')
+  } finally {
+    state.allowedSubsidiaryIds = null
     await dropScratchOrg(org.orgId)
   }
 })
