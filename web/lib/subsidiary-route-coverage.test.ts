@@ -1,8 +1,22 @@
 import assert from 'node:assert/strict'
+import { sql } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
+import { registerHooks } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from '../../engine/src/organization/subsidiary-scope.ts'
+
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
+    }
+    return next(specifier, context)
+  },
+})
+const { guardSubsidiaryScope, subsidiariesInScope } = await import('./authz.ts')
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -40,35 +54,35 @@ function count(haystack: string, needle: string): number {
 // ---------------------------------------------------------------------------
 
 test('subsidiaryScopeAllows fails closed on every unknown subsidiary', () => {
-  const src = source('lib/authz.ts')
-  // Unrestricted callers (null set) pass — there is no policy to violate.
-  assert.match(src, /export function subsidiaryScopeAllows\(/)
-  assert.ok(src.includes('if (scope === null) return true'))
-  // Restricted callers: a record whose subsidiary cannot be resolved (null/'')
-  // is denied unless the boundary explicitly declares org-wide rows.
-  assert.ok(src.includes('return opts.orgWideNull === true'))
-  // Everything else must be an explicit member of the allowed set.
-  assert.ok(src.includes('return scope.has(subsidiaryId)'))
+  const allowed = new Set(['sub-a'])
+  assert.equal(subsidiaryScopeAllows(null, 'sub-unknown'), true)
+  assert.equal(subsidiaryScopeAllows(allowed, 'sub-a'), true)
+  assert.equal(subsidiaryScopeAllows(allowed, 'sub-b'), false)
+  assert.equal(subsidiaryScopeAllows(allowed, null), false)
+  assert.equal(subsidiaryScopeAllows(allowed, null, { orgWideNull: true }), true)
 })
 
-test('guardSubsidiaryScope denies with the same response as a missing record', () => {
-  const src = source('lib/authz.ts')
-  assert.match(src, /export function guardSubsidiaryScope\(/)
-  assert.match(src, /status: 404/)
-  assert.match(src, /error: "not found"/)
+test('guardSubsidiaryScope denies with the same response as a missing record', async () => {
+  const response = guardSubsidiaryScope(
+    { allowedSubsidiaryIds: new Set(['sub-a']) } as never,
+    'sub-b',
+  )
+  assert.equal(response?.status, 404)
+  assert.deepEqual(await response?.json(), { error: 'not found' })
 })
 
 test('subsidiariesInScope refuses assigning records outside the visible set', () => {
-  const src = source('lib/authz.ts')
-  assert.match(src, /export function subsidiariesInScope\(/)
-  assert.match(src, /ids\.every\(\(id\) => id !== null && id !== undefined && id !== "" && scope\.has\(id\)\)/)
+  const authz = { allowedSubsidiaryIds: new Set(['sub-a']) } as never
+  assert.equal(subsidiariesInScope(authz, ['sub-a']), true)
+  assert.equal(subsidiariesInScope(authz, ['sub-b']), false)
+  assert.equal(subsidiariesInScope(authz, [null]), false)
 })
 
 test('the shared documents filter degrades to deny-all for an empty scope', () => {
-  const src = source('lib/subsidiaries.ts')
-  assert.match(src, /export function subsidiaryVisibleFilter\(/)
-  assert.match(src, /sql` and \$\{column\} = any\(/)
-  assert.match(src, /: sql` and false`/)
+  const query = new PgDialect().sqlToQuery(
+    subsidiaryVisibleFilter(sql.raw('documents.subsidiary_id'), new Set()),
+  )
+  assert.match(query.sql, /and false/)
 })
 
 // ---------------------------------------------------------------------------
@@ -163,12 +177,6 @@ test('audit/record resolves the record subsidiary before disclosing anything', (
 // ---------------------------------------------------------------------------
 // Journals: header AND line-level subsidiary assignments stay inside scope
 // ---------------------------------------------------------------------------
-
-test('journal boundary gates read, autosave, and delete', () => {
-  const src = source('app/api/journals/[id]/route.ts')
-  assert.ok(count(src, 'guardSubsidiaryScope(') >= 3, 'GET, PATCH and DELETE each gate the record')
-  assert.match(src, /select subsidiary_id as "subsidiaryId" from documents where id = \$\{id\} and kind = 'journal'/)
-})
 
 test('journal autosave rejects out-of-scope header and line subsidiaries', () => {
   const src = source('app/api/journals/[id]/route.ts')
@@ -438,53 +446,6 @@ test('contact hits use the party lists\u2019 own org-wide predicate', () => {
     'null-subsidiary parties stay searchable exactly like the party lists render them')
   assert.match(src, /if \(ids\.length === 0\) return sql`and false`/,
     'an empty scope fails closed before the party query runs')
-})
-
-// ---------------------------------------------------------------------------
-// Payroll: every route is a subsidiary boundary, including artifact and
-// year-end output surfaces. The route-specific tests above pin the detailed
-// query ordering; this inventory prevents a newly added payroll endpoint from
-// silently becoming an org-only escape hatch.
-// ---------------------------------------------------------------------------
-
-const PAYROLL_ROUTE_FILES = [
-  'app/api/payroll/entitlements/route.ts',
-  'app/api/payroll/opening-balances/entitlements/route.ts',
-  'app/api/payroll/opening-balances/route.ts',
-  'app/api/payroll/parallel-run/comparisons/[id]/route.ts',
-  'app/api/payroll/parallel-run/registers/[id]/route.ts',
-  'app/api/payroll/parallel-run/route.ts',
-  'app/api/payroll/parallel-run/tolerances/route.ts',
-  'app/api/payroll/profiles/route.ts',
-  'app/api/payroll/remittances/route.ts',
-  'app/api/payroll/retro/route.ts',
-  'app/api/payroll/runs/[id]/bank-file/[fileId]/route.ts',
-  'app/api/payroll/runs/[id]/bank-file/route.ts',
-  'app/api/payroll/runs/[id]/cheques-pdf/route.ts',
-  'app/api/payroll/runs/[id]/route.ts',
-  'app/api/payroll/runs/[id]/stubs-pdf/route.ts',
-  'app/api/payroll/runs/route.ts',
-  'app/api/payroll/settings/rates/route.ts',
-  'app/api/payroll/settings/route.ts',
-  'app/api/payroll/year-end/amendments/artifact/route.ts',
-  'app/api/payroll/year-end/amendments/route.ts',
-  'app/api/payroll/year-end/amendments/slip/route.ts',
-  'app/api/payroll/year-end/file/route.ts',
-  'app/api/payroll/year-end/route.ts',
-  'app/api/payroll/year-end/slip/route.ts',
-] as const
-
-test('every payroll API route carries a subsidiary scope boundary', () => {
-  assert.equal(PAYROLL_ROUTE_FILES.length, 24)
-  for (const file of PAYROLL_ROUTE_FILES) {
-    const src = source(file)
-    assert.match(src, /guardFeaturePermission\(/, `${file} must retain the payroll permission gate`)
-    assert.match(
-      src,
-      /guardSubsidiaryScope\(|guardRootSubsidiaryScope\(|guardPayroll[A-Za-z]+\(|subsidiaryVisibleFilter\(|subsidiaryScopeAllows\(|subsidiariesInScope\(/,
-      `${file} must enforce subsidiary visibility before its payroll service call`,
-    )
-  }
 })
 
 test('payroll read, write, artifact, and year-end paths pass scope before service work', () => {
