@@ -27,6 +27,7 @@ import {
 } from "../withholding-jurisdictions.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { NL_PAYROLL_PACK, NL_TAX_YEARS, NL_WITHHOLDING } from "./pack.ts";
+import { NL_AOK_2026 } from "./rates.ts";
 
 test("the NL pack exists and is an installable EUR calendar-year pack", () => {
   assert.equal(NL_PAYROLL_PACK.country, "NL");
@@ -86,6 +87,8 @@ test("the NL pack declares both certificates, and they pass generic validation",
     form!.fields.some((field) => field.key === "age_class" && field.kind === "choice"),
     "the tabeltoepassing age class is declared",
   );
+  const aok = form!.fields.find((field) => field.key === "aok_apply");
+  assert.match(aok?.help ?? "", new RegExp(`€ ${NL_AOK_2026} in 2026`));
   // The employer's SV facts are declared too — including the Whk beschikking
   // with no default, because no default is lawful.
   assert.equal(premies!.storage, "certificate_rows");
