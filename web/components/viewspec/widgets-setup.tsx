@@ -433,6 +433,7 @@ export const SETUP_WIDGETS = {
       entityKey={str(props, 'entityKey') ?? ''}
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
       basePath={str(props, 'basePath') ?? ''}
+      rowParam={str(props, 'rowParam') ?? 'row'}
     />
   ),
 

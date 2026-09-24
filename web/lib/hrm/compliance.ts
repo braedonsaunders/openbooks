@@ -154,10 +154,11 @@ export async function loadCompliancePage(
   const canManage = can(authz, 'hrm.construction.manage')
   const section = SECTIONS.includes(sp.section as ComplianceSection) ? (sp.section as ComplianceSection) : 'findings'
   const kindFilter = typeof sp.kind === 'string' && sp.kind.length > 0 ? sp.kind : null
-  // OM-18: the rehomed construction sections read their New/edit drawer
-  // from sp.row (SetupEntitySection) — the workspace's own params ride
-  // beside the section's list params, never instead of them.
-  const currentParams: ComplianceData['currentParams'] = { section, ...(kindFilter ? { kind: kindFilter } : {}), ...setupSectionParams(sp) }
+  // OM-18/CK-09: the rehomed construction sections read their New/edit
+  // drawers from namespaced keys — one URL opens exactly one drawer.
+  // The workspace's own params ride beside the section's list params,
+  // never instead of them.
+  const currentParams: ComplianceData['currentParams'] = { section, ...(kindFilter ? { kind: kindFilter } : {}), ...setupSectionParams(sp, ['classification', 'schedule', 'compClass', 'ratioRule', 'perDiem']) }
   const empty: ComplianceData = {
     title: t('compliance.title'),
     description: t('compliance.description'),

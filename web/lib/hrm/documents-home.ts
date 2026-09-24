@@ -305,10 +305,11 @@ export async function loadDocumentsHome(
       label: statusLabel(value),
       count: countBy.get(value) ?? 0,
     })),
-    // OM-18: the rehomed template/category/schedule sections read their
-    // New/edit drawer from sp.row (SetupEntitySection) — the register's
-    // own segment rides beside the section's list params.
-    currentParams: { ...(status ? { status } : {}), ...setupSectionParams(sp) },
+    // OM-18/CK-09: the rehomed template/category/schedule sections read
+    // their New/edit drawers from namespaced keys (SetupEntitySection via
+    // rowParam) — one URL opens exactly one drawer. The register's own
+    // segment rides beside the section's list params.
+    currentParams: { ...(status ? { status } : {}), ...setupSectionParams(sp, ['template', 'category', 'retention']) },
     columns: {
       title: t('documents.columns.title'),
       person: t('documents.columns.person'),

@@ -30,6 +30,7 @@ export function NewSetupButton({
   entityKey,
   label,
   basePath,
+  rowParam = 'row',
 }: {
   entityKey: string
   label: string
@@ -37,6 +38,10 @@ export function NewSetupButton({
    *  When mounted elsewhere (e.g. /inventory), existing query params such as the
    *  active `view` are preserved so the section stays selected. */
   basePath?: string
+  /** URL key this section's New/edit drawer reads. Hosts rendering several
+   *  setup sections pass a distinct key per section so one URL opens exactly
+   *  one drawer; single-section surfaces keep the default `row`. */
+  rowParam?: string
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -44,7 +49,7 @@ export function NewSetupButton({
   function open() {
     if (basePath) {
       const next = new URLSearchParams(searchParams.toString())
-      next.set('row', 'new')
+      next.set(rowParam, 'new')
       router.push(`${pathname}?${next.toString()}`)
     } else {
       router.push(`/admin/setup/${entityKey}?row=new`)

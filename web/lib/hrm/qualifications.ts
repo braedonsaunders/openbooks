@@ -378,10 +378,11 @@ export async function loadQualificationsPage(
       ...types.filter((x) => x.isActive).map((x) => ({ value: x.id, label: x.code })),
     ],
     typeFilter,
-    // OM-18: the rehomed taxonomy sections read their New/edit drawer
-    // from sp.row (SetupEntitySection) — the ledger's own params ride
-    // beside the section's list params, never instead of them.
-    currentParams: { ...baseParams({}), ...setupSectionParams(sp) },
+    // OM-18/CK-09: the rehomed taxonomy sections read their New/edit
+    // drawers from namespaced keys — one URL opens exactly one drawer.
+    // The ledger's own params ride beside the section's list params,
+    // never instead of them.
+    currentParams: { ...baseParams({}), ...setupSectionParams(sp, ['qtype', 'qsettings']) },
     listTitle: t('qualifications.listTitle'),
     columns: {
       worker: t('qualifications.columns.worker'),

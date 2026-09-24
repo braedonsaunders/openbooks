@@ -96,9 +96,9 @@ export function documentsSpec(data: DocumentsPageData): PageSpec {
         ...widgetBlock('hrm-documents-generate-dialog', { generate: data.generate }),
         when: f('generateOpen'),
       },
-      widgetBlock('setup-section', { entityKey: 'hrm-document-templates', sp: data.currentParams, basePath: '/hrm/documents' }, f('canManage')),
-      widgetBlock('setup-section', { entityKey: 'hrm-document-categories', sp: data.currentParams, basePath: '/hrm/documents' }, f('canManage')),
-      widgetBlock('setup-section', { entityKey: 'hrm-retention-schedules', sp: data.currentParams, basePath: '/hrm/documents' }, f('canManage')),
+      widgetBlock('setup-section', { entityKey: 'hrm-document-templates', sp: data.currentParams, basePath: '/hrm/documents', rowParam: 'template' }, f('canManage')),
+      widgetBlock('setup-section', { entityKey: 'hrm-document-categories', sp: data.currentParams, basePath: '/hrm/documents', rowParam: 'category' }, f('canManage')),
+      widgetBlock('setup-section', { entityKey: 'hrm-retention-schedules', sp: data.currentParams, basePath: '/hrm/documents', rowParam: 'retention' }, f('canManage')),
     ],
   })
 }
