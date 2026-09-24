@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
-import { can, getAuthz, subsidiariesInScope } from '../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope, subsidiariesInScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { isFeatureEnabled } from '../../../lib/features'
 import { DocumentCreateConflict, createDocument, isDocKindEnabled } from "../../../lib/documents.ts";
@@ -190,9 +190,17 @@ export async function POST(req: Request) {
   // Exact retry: the document already exists with this exact request image.
   // Return its current state (it may have advanced past draft since) —
   // no duplicate insert, no duplicate audit event, no flows refired.
+  // The replayed row is CURRENT state, not creation state: a rehome since
+  // the create must not leak another subsidiary's document through a
+  // replayed key — an out-of-scope replay meets the uniform not-found.
   if (created.status === 'replayed') {
     const doc = await loadDocument(created.id, user.orgId)
     if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const replayDenied = guardSubsidiaryScope(
+      authz,
+      doc.doc.subsidiary_id as string | null,
+    )
+    if (replayDenied) return replayDenied
     return NextResponse.json(doc)
   }
 
@@ -209,5 +217,12 @@ export async function POST(req: Request) {
 
   const doc = await loadDocument(created.id, user.orgId)
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Same scope load as the replay path above: the row is read back after
+  // the create, so a rehome in between must not disclose it here either.
+  const createdDenied = guardSubsidiaryScope(
+    authz,
+    doc.doc.subsidiary_id as string | null,
+  )
+  if (createdDenied) return createdDenied
   return NextResponse.json(doc, { status: 201 })
 }
