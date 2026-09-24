@@ -127,7 +127,7 @@ function financialHandler(opts: { post: boolean; thenThrow?: boolean; spinAfterP
     memo: 'invocation proof',
     lines: [
       { accountCode: '1000', amount: request.body.amount },
-      { accountCode: '5000', amount: -request.body.amount }
+      { accountCode: '5000', amount: '-' + request.body.amount }
     ]
   };
   var j = ob.journal.create(journalInput, { post: ${opts.post ? 'true' : 'false'} });
@@ -175,6 +175,55 @@ const appRuns = async (orgId: string) =>
          order by at`),
     )
   ).rows
+
+test(
+  'repeated platform schema, list, and get reads receive independent invocation identities',
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture()
+    try {
+      const appKey = await installProofApp(fx, financialHandler({ post: false }))
+      for (const [method, payload] of [
+        ['platform.schema', {}],
+        ['platform.list', { typeKey: CUSTOM_TYPE_KEY }],
+        ['platform.get', { typeKey: CUSTOM_TYPE_KEY, id: randomUUID() }],
+      ] as const) {
+        const invoke = () => withOrgContext(fx.org.orgId, () => runBridgeMethod({
+          orgId: fx.org.orgId,
+          user: fx.user,
+          key: appKey,
+          method,
+          payload,
+          userCan: () => true,
+          allowedSubsidiaryIds: null,
+        }))
+        const first = await invoke()
+        const repeated = await invoke()
+        assert.equal(first.ok, true, `${method} should return a result`)
+        assert.deepEqual(repeated, first, `${method} should return the same unchanged data`)
+      }
+
+      const claims = await withOrgContext(fx.org.orgId, () => db.execute<{
+        operation: string
+        count: string
+      }>(sql`
+        select operation, count(*)::text as count
+          from application_idempotency_keys
+         where org_id = ${fx.org.orgId} and source = 'app'
+           and operation in ('apps.platform_schema', 'apps.platform_list', 'apps.platform_get')
+         group by operation
+         order by operation
+      `))
+      assert.deepEqual(claims.rows, [
+        { operation: 'apps.platform_get', count: '2' },
+        { operation: 'apps.platform_list', count: '2' },
+        { operation: 'apps.platform_schema', count: '2' },
+      ])
+    } finally {
+      await dropScratchOrg(fx.org.orgId)
+    }
+  },
+)
 
 test(
   'a successful multi-write backend commits journal, platform record, KV, and audit atomically',
