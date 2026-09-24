@@ -857,6 +857,7 @@
     "addGoal": "Adicionar meta",
     "goalProgress": "Progresso",
     "saveProgress": "Salvar progresso",
+    "goalProgressInvalid": "O progresso deve ser um número inteiro entre 0 e 100.",
     "submitReview": "Enviar avaliação",
     "shareReview": "Compartilhar com a pessoa",
     "acknowledgeReview": "Confirmar",

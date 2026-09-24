@@ -80,13 +80,18 @@ export function GoalProgressForm({ goalId, failed }: { goalId: string; failed: s
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
+    const parsed = Number(progress.trim())
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
+      setError(t('performance.goalProgressInvalid'))
+      return
+    }
+    setBusy(true)
     try {
       const res = await fetch(`/api/hrm/goals/${goalId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'progress', progressPercent: Number(progress) }),
+        body: JSON.stringify({ action: 'progress', progressPercent: parsed }),
       })
       if (!res.ok) {
         setError(await readApiErrorMessage(res, failed))
@@ -106,6 +111,7 @@ export function GoalProgressForm({ goalId, failed }: { goalId: string; failed: s
         <Label htmlFor={`goal-progress-${goalId}`}>{t('performance.goalProgress')}</Label>
         <Input
           id={`goal-progress-${goalId}`}
+          inputMode="numeric"
           value={progress}
           onChange={(e) => setProgress(e.target.value)}
           required

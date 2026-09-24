@@ -857,6 +857,7 @@
     "addGoal": "目標を追加",
     "goalProgress": "進捗",
     "saveProgress": "進捗を保存",
+    "goalProgressInvalid": "進捗は 0 から 100 までの整数で入力してください。",
     "submitReview": "レビューを提出",
     "shareReview": "本人と共有",
     "acknowledgeReview": "確認する",

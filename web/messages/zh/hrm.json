@@ -857,6 +857,7 @@
     "addGoal": "添加目标",
     "goalProgress": "进度",
     "saveProgress": "保存进度",
+    "goalProgressInvalid": "进度必须是 0 到 100 之间的整数。",
     "submitReview": "提交评审",
     "shareReview": "与本人共享",
     "acknowledgeReview": "确认",
