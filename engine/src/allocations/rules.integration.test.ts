@@ -350,6 +350,24 @@ test("mutations return revision tokens that guard stale writes", { skip: !proces
   }
 });
 
+test("concurrent rule edits using the same revision allow exactly one writer", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId } = await org();
+  try {
+    const created = await createRule({ orgId, key: "concurrent-rev", name: "Concurrent", mode: "period" }, AUDIT);
+    const writes = await Promise.allSettled([
+      updateRule(created.rule.id, { orgId, name: "First", expectedRevision: created.revision, allowedSubsidiaryIds: null }, AUDIT),
+      updateRule(created.rule.id, { orgId, name: "Second", expectedRevision: created.revision, allowedSubsidiaryIds: null }, AUDIT),
+    ]);
+    assert.equal(writes.filter((write) => write.status === "fulfilled").length, 1);
+    const refused = writes.find((write) => write.status === "rejected");
+    assert.ok(refused && refused.status === "rejected");
+    assert.ok(refused.reason instanceof AllocationRuleError);
+    assert.equal(refused.reason.code, "STALE");
+  } finally {
+    await dropScratchOrg(orgId);
+  }
+});
+
 test("listRuleHeads filters and summarizes current versions", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { orgId } = await org();
   try {
