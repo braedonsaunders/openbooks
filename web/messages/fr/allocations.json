@@ -56,11 +56,11 @@
         "version": "Version en vigueur",
         "window": "Fenêtre d'effet",
         "order": "Ordre",
-        "active": "Active"
+        "active": "Actif"
       },
       "noVersion": "Aucune version publiée",
-      "inactive": "Inactive",
-      "active": "Active",
+      "inactive": "Inactif",
+      "active": "Actif",
       "searchPlaceholder": "Rechercher des règles…",
       "emptyDescription": "Créez la première règle pour commencer à répartir les coûts.",
       "blurb": "Des règles versionnées qui se déclenchent à la saisie, à la comptabilisation ou en balai de période. Une nouvelle règle ouvre une configuration guidée."
@@ -102,7 +102,7 @@
       "description": "Description",
       "sortOrder": "Ordre",
       "sortOrderHint": "L'ordre croissant passe en premier dans les cascades de période et la préséance de saisie.",
-      "isActive": "Active"
+      "isActive": "Actif"
     },
     "definition": {
       "windowHeading": "Fenêtre d'effet",
@@ -328,8 +328,8 @@
     "dimension": "Dimension",
     "sourceKind": "Source",
     "unit": "Unité",
-    "active": "Active",
-    "inactive": "Inactive",
+    "active": "Actif",
+    "inactive": "Inactif",
     "showInactive": "Afficher les inactives",
     "empty": "Aucune clé pour l'instant.",
     "emptyTitle": "Aucune clé pour l’instant",
