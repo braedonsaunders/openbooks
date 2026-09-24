@@ -9,6 +9,7 @@ import { frPackFilings } from "./filings.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 import { FR_PACK_RATES } from "./statutory-rates.ts";
 import { FR_EMPLOYER_FACTS } from "./employer-facts.ts";
+import { FR_EMPLOYEE_FACTS } from "./employee-facts.ts";
 
 /**
  * France payroll pack — `installable: true` for calendar 2026.
@@ -107,6 +108,8 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
       { code: "CHOM-ER", name: "Assurance chômage (employeur)", systemKey: "chomage_er", kind: "employer_contribution", sequence: 225, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "AGS-ER", name: "Cotisation AGS (employeur)", systemKey: "ags_er", kind: "employer_contribution", sequence: 226, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "CDN-ER", name: "FNAL, CSA, dialogue social et versement mobilité (employeur)", systemKey: "cdn_er", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "RGDU-URSSAF", name: "Réduction générale (part Urssaf)", systemKey: "rgdu_urssaf", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "RGDU-ARRCO", name: "Réduction générale (part Agirc-Arrco)", systemKey: "rgdu_arrco", kind: "employer_contribution", sequence: 251, assessedOn: "earnings", remittance: "external" },
     ],
   },
 ];
@@ -128,6 +131,17 @@ const FR_PAS_CERTIFICATE: PayrollCertificate = {
     "The PAS rate option the employee chose with DGFiP; DGFiP transmits the resulting rate to the employer.",
   storage: "certificate_rows",
   fields: [
+    {
+      key: "rgdu_eligibility",
+      label: "Eligibility for the 2026 reduction générale dégressive unique",
+      kind: "choice",
+      choices: [
+        { value: "eligible", label: "Eligible under CSS article L.241-13" },
+        { value: "excluded", label: "Excluded under CSS article L.241-13" },
+      ],
+      required: true,
+      help: "The payroll employer records the applicable legal category before calculation; the engine never assumes eligibility.",
+    },
     {
       key: "domicile",
       label: "Domicile fiscal (grille applicable)",
@@ -344,10 +358,11 @@ export const FR_PAYROLL_PACK = {
   certificates: () => FR_CERTIFICATES,
   withholding: () => FR_WITHHOLDING,
   computeStatutory: computeFrStatutory,
+  statutoryHours: { basis: "contractual-plus-worked-extra" },
   statutoryEngineLabel: "PAS",
   factorLabels: { ...FR_FACTOR_LABELS },
-  // No `emp` facts: the engine reads the PAS rate off the certificate
-  // answers, never off bare profile keys.
-  employeeFacts: [],
+  // RGDU eligibility is declared on the FR certificate. Contract hours are
+  // derived from the effective schedule or approved period time entries.
+  employeeFacts: FR_EMPLOYEE_FACTS,
   employerFacts: FR_EMPLOYER_FACTS,
 } satisfies Omit<PayrollCountryPack, "country"> & { country: "FR" };

@@ -181,6 +181,7 @@ test("a hors-de-France domicile refuses with the 182 A mechanism, never grille I
     tx: { execute: async () => ({ rows: [{ fact_value: "12.00" }] }) },
     orgId: "org",
     subsidiaryId: "legal-employer",
+    employmentId: "employment",
     taxYear: 2026,
     region: "FR",
     run: { pay_date: "2026-06-15" },
@@ -205,29 +206,31 @@ test("the retired lumped domicile refuses with the re-affirmation remedy", async
   await assert.rejects(computeFrStatutory(ctx), /re-affirm domicile/);
 });
 
-test("2026 RGDU eligible SMIC payroll refuses until its reduction can be priced", async () => {
-  // URSSAF's 2026 RGDU applies to eligible remuneration below 3×SMIC and
-  // needs employee/contract history plus employer-size and hours inputs.
-  // The pack currently lacks those facts, so it must stop before posting the
-  // unreduced employer contributions as a complete calculation.
-  // Sources: CSS art. L.241-13 (https://www.legifrance.gouv.fr/codes/id/LEGIARTI000006742355/2026-03-19)
-  // and URSSAF RGDU rules (https://www.urssaf.fr/accueil/employeur/beneficier-exonerations/reduction-generale-cotisation.html).
+test("eligible French payroll refuses missing contractual hours by name", async () => {
+  // CSS D.241-7 IV adjusts the annual SMIC to contractual hours and eligible
+  // extra hours; absence must never turn into a silent zero-SMIC RGDU.
+  // https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000046843821
   const pushed: unknown[] = [];
+  let query = 0;
   const ctx = {
-    tx: { execute: async () => ({ rows: [{ fact_value: "12.00" }] }) },
+    tx: { execute: async () => ++query === 1
+      ? ({ rows: [{ fact_value: "12.00" }] })
+      : ({ rows: [{ remuneration: "0", smic: "0", reduction: "0" }] }) },
     orgId: "org",
     subsidiaryId: "legal-employer",
     taxYear: 2026,
     region: "FR",
-    run: { pay_date: "2026-06-30" },
+    run: { pay_date: "2026-06-30", run_type: "regular" },
+    employmentId: "employment",
     income: "1823.03",
+    gross: "1823.0300",
     nonPeriodic: "0.0000",
     periodsPerYear: 12,
     employerEffectif: "12.00",
-    certificateFor: () => ({ answers: { domicile: "metropole" } }),
+    certificateFor: () => ({ answers: { domicile: "metropole", rgdu_eligibility: "eligible" } }),
     pushStatutory: (...args: unknown[]) => pushed.push(args),
   } as never;
 
-  await assert.rejects(computeFrStatutory(ctx), /RGDU.*not calculated/);
+  await assert.rejects(computeFrStatutory(ctx), /contractual hours for this pay period are missing/);
   assert.deepEqual(pushed, [], "no statutory line is emitted after the refusal");
 });
