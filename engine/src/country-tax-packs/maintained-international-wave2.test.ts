@@ -47,6 +47,7 @@ test("Spain provisions only the sourced IVA-territory standard rate and declares
   assert.equal(definition.completeness.standardRates, "partial");
   assert.equal(definition.completeness.localRates, "partial");
   assert.deepEqual(definition.returnPacks[0]!.boxes.map((box) => box.lineCode), [
+    "01", "02", "03", "04", "05", "06",
     "07", "08", "09", "27", "28", "29", "45", "46", "OB_OUTPUT", "OB_INPUT",
   ]);
 });

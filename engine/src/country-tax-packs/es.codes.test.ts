@@ -36,6 +36,21 @@ test("Spain reduced-rate source is the live AEAT rates page, titled as applicabi
   assert.match(source.title, /applicability/);
 });
 
+test("every priced band lands on a real Modelo 303 casilla, not only the workpaper", () => {
+  const boxes = new Map(SPAIN_TAX_PACK.returnPacks[0]!.boxes.map((box) => [box.lineCode, box] as const));
+  // AEAT 2026 instructions: 4% on 01/02/03, 10% on 04/05/06, 21% on 07/08/09.
+  for (const [base, tipo, cuota, rate] of [["01", "02", "03", "4%"], ["04", "05", "06", "10%"], ["07", "08", "09", "21%"]] as const) {
+    assert.ok(boxes.get(base)?.label.includes(rate), `${base} must carry the ${rate} base`);
+    assert.ok(boxes.get(tipo)?.label.includes(rate), `${tipo} must carry the ${rate} rate`);
+    assert.ok(boxes.get(cuota)?.label.includes(rate), `${cuota} must carry the ${rate} quota`);
+  }
+  const accrued = boxes.get("27")!;
+  assert.ok(accrued, "casilla 27 totals the accrued VAT");
+  assert.equal(boxes.get("03")!.sign, -1);
+  assert.equal(boxes.get("06")!.sign, -1);
+  assert.equal(boxes.get("09")!.sign, -1);
+});
+
 test("Spain headline default code stays the standard 21% rate", () => {
   assert.equal(PACK_DEFAULT_CODES.ES_MODELO303?.code, "ES-VAT-STD");
   assert.equal(PACK_DEFAULT_CODES.ES_MODELO303?.ratePercent, 21);

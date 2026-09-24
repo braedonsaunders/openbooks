@@ -75,6 +75,29 @@ export interface CountryTaxCodeDefinition {
   ratePercent: number;
   rates?: readonly EffectiveTaxRate[];
   role?: CountryTaxCodeRole;
+  /**
+   * Government return boxes (lineCodes on the owning return pack) this
+   * code's output is reported in. Declared only when the box labels do not
+   * name the rate in numbers (word-labelled bands such as "tarifa
+   * general"); the statutory-fidelity test verifies every entry exists on
+   * the return. Absent when a rate-mentioning box already routes the code,
+   * or with workpaperOnlyReason when no government box carries it.
+   */
+  returnBoxes?: readonly string[];
+  /**
+   * Reviewed reason this code prices with no government return box: within
+   * the modelled boxes its amounts land only in the OB workpaper boxes.
+   * The statutory-fidelity test requires this to be non-empty whenever the
+   * code is otherwise unroutable.
+   */
+  workpaperOnlyReason?: string;
+  /**
+   * Reviewed reason the rate schedule opens at source applicability rather
+   * than at the band's origin (primary history unreachable or refused).
+   * Required by the statutory-fidelity test whenever the opening row's
+   * effectiveFrom equals the cited source's asOf fetch date.
+   */
+  truncatedScheduleReason?: string;
 }
 
 export type CountryPackCoverage = "detailed_pack" | "country_tax_setup" | "jurisdiction_setup";
