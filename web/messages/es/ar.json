@@ -173,7 +173,9 @@
       "paid": "pagado",
       "void": "anulado",
       "expired": "caducado"
-    }
+    },
+    "unavailable": "No disponible — debe volver a emitirse",
+    "reissueHint": "Anula este enlace y crea uno nuevo para cobrar el pago."
   },
   "collections": {
     "pageDescription": "Las programaciones recurrentes, los planes de suscripción y las escalas de recobro se configuran aquí. La lista de facturas vencidas está en Cuentas por cobrar.",

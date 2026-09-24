@@ -173,7 +173,9 @@
       "paid": "已支付",
       "void": "已作废",
       "expired": "已过期"
-    }
+    },
+    "unavailable": "不可用 — 需要重新签发",
+    "reissueHint": "作废此链接并创建新链接以收取付款。"
   },
   "collections": {
     "pageDescription": "定期计划、订阅方案和催收阶梯在此配置。逾期追收清单位于应收账款。",

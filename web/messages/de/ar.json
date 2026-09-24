@@ -173,7 +173,9 @@
       "paid": "bezahlt",
       "void": "storniert",
       "expired": "abgelaufen"
-    }
+    },
+    "unavailable": "Nicht verfügbar — muss neu ausgestellt werden",
+    "reissueHint": "Diesen Link stornieren und einen neuen erstellen, um die Zahlung einzuziehen."
   },
   "collections": {
     "pageDescription": "Wiederkehrende Pläne, Abonnementtarife und Mahnstufen werden hier konfiguriert. Die Liste überfälliger Rechnungen finden Sie unter Forderungen.",

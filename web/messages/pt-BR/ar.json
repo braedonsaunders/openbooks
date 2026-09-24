@@ -173,7 +173,9 @@
       "paid": "pago",
       "void": "anulado",
       "expired": "expirado"
-    }
+    },
+    "unavailable": "Indisponível — precisa ser reemitido",
+    "reissueHint": "Anule este link e crie um novo para receber o pagamento."
   },
   "collections": {
     "pageDescription": "Agendamentos recorrentes, planos de assinatura e réguas de cobrança são configurados aqui. A lista de faturas em atraso está em Contas a receber.",
