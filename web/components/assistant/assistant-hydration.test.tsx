@@ -53,10 +53,10 @@ const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../messages/en")).default;
 const { AssistantApp } = await import("./assistant-app");
 
-// F-t12-011: /assistant logs minified React error #419 (hydration mismatch)
+// /assistant logs minified React error #419 (hydration mismatch)
 // on every load with no provider configured. Server HTML and the client's
 // first render must agree for the not-configured empty state.
-test("F-t12-011: not-configured assistant hydrates without mismatch", async () => {
+test("not-configured assistant hydrates without mismatch", async () => {
   // The provider's overloads only accept children inside the props object.
   /* eslint-disable react/no-children-prop */
   const tree = React.createElement(NextIntlClientProvider, {

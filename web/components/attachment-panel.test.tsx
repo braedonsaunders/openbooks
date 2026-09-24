@@ -543,7 +543,7 @@ test('a translator identity change stores the translator without invoking it', a
   assert.deepEqual(testState.errors, [])
 })
 
-// F-t06-010: detaching from a posted record always 409s (evidence is
+// detaching from a posted record always 409s (evidence is
 // retained), but the journal offered Remove with no explanation. Locked
 // records hide the impossible affordance and name the retention instead;
 // unlocked records keep it.

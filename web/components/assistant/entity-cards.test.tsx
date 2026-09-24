@@ -6,7 +6,6 @@ import test from "node:test";
 // translated and record-list-view resolves them through the shared
 // docTypeMeta primitive. A non-en user must read the same translated kind,
 // status, due and reference labels the rest of the app shows.
-//
 // Only routing/link plumbing is doubled. React, next-intl, the shared
 // docTypeMeta primitive and the REAL French catalog run, so hardcoded
 // English labels fail every assertion below.

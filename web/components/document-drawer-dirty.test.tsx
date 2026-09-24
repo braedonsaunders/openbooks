@@ -9,7 +9,7 @@ declare global {
   var __confirmVerdict: boolean | undefined;
 }
 
-// F-t02-003: a dirty document drawer must not close silently, and Save must be
+// a dirty document drawer must not close silently, and Save must be
 // a visible header action in edit mode — not buried in the Actions menu.
 
 // jsdom first: the drawer reads browser globals at render.

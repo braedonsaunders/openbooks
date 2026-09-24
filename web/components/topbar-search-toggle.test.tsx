@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F-t11-014: in topbar nav mode the header search is hidden below lg with
+// in topbar nav mode the header search is hidden below lg with
 // no trigger, so global search is unreachable on mobile. A toggle button
 // must exist below lg and open the search.
 const { JSDOM } = await import("jsdom");
@@ -58,7 +58,7 @@ function mount() {
   };
 }
 
-test("F-t11-014: topbar search toggle is mobile-only and opens the search", async (t) => {
+test("topbar search toggle is mobile-only and opens the search", async (t) => {
   const ui = mount();
   t.after(() => ui.unmount());
   await ui.render();

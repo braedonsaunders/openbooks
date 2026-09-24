@@ -5,7 +5,6 @@ import test from "node:test";
 // placeholder/fallback ('Select a record…' / 'Could not load records')
 // though the file already binds the catalog. A non-en user on an optionless
 // multi-select or a failed reference load must read catalog copy.
-//
 // Only the options route and toasts are doubled. React, next-intl, the
 // shared SearchSelect and the REAL German catalog run, so hardcoded
 // English fails every assertion below.

@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-// F-t12-012 redo: the shared cockpit StatTile clipped KPI labels, values,
+// redo: the shared cockpit StatTile clipped KPI labels, values,
 // AND sublines with `truncate` at 390px ("ACTIVE CU…", "CA$…"), and the card
 // itself (a grid item) could not shrink below its content. Labels/values/
 // sublines must wrap instead of ellipsis, and the card must yield (min-w-0)
@@ -28,7 +28,7 @@ function paragraphs(html: string): string[] {
   return [...html.matchAll(/<p class="([^"]*)">/g)].map((m) => m[1]!);
 }
 
-test("F-t12-012: stat tiles wrap label, value, and sub instead of truncating", () => {
+test("stat tiles wrap label, value, and sub instead of truncating", () => {
   const html = renderToString(
     <StatTile
       icon={Users}

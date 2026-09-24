@@ -119,8 +119,8 @@ async function mountDraftTransferRow(canPost = true) {
   return { host, root };
 }
 
-/** F-t05-013: row Post on an incomplete transfer draft 422s with a typed
- * engine reason — the same row-action path as F-t04-006 must toast it and
+/** row Post on an incomplete transfer draft 422s with a typed
+ * engine reason — the same row-action path as must toast it and
  * persist it row-inline instead of failing silently. */
 test("a 422 post refusal on a draft transfer names the missing legs", async (t) => {
   const prior = globalThis.fetch;
@@ -144,7 +144,7 @@ test("a 422 post refusal on a draft transfer names the missing legs", async (t) 
   assert.match(alert.textContent ?? "", /destination and the source account/);
 });
 
-/** UX-09: a preparer without the post grant gets no enabled Post — the row
+/** a preparer without the post grant gets no enabled Post — the row
  * renders it disabled with the required grant named, so the two-person
  * handoff is visible before any click reaches the server. */
 test("a preparer without ap.post sees a disabled Post naming the grant", async (t) => {
@@ -172,7 +172,7 @@ test("a preparer without ap.post sees a disabled Post naming the grant", async (
   assert.equal(fetched, 0, "rendering the blocked row must not call the API");
 });
 
-/** UX-09, banking namespaces: a gl.post transfer draft without the grant
+/** , banking namespaces: a gl.post transfer draft without the grant
  * names gl.post, not ap.post — the row resolves the grant by row kind. */
 test("a transfer draft without gl.post names the gl.post grant", async (t) => {
   const { host, root } = await mountDraftTransferRow(false);
@@ -189,7 +189,7 @@ test("a transfer draft without gl.post names the gl.post grant", async (t) => {
   assert.equal(blocked.disabled, true, "the named-grant Post must be disabled");
 });
 
-/** UX-09: a preparer without post rights still submits for approval — the
+/** a preparer without post rights still submits for approval — the
  * submit affordance is create-namespaced, not gated by the post grant. */
 test("a draft bill without ap.post still offers Submit for approval", async (t) => {
   globalThis.__docRowRouter = { push() {}, refresh() {} };
@@ -219,7 +219,7 @@ test("a draft bill without ap.post still offers Submit for approval", async (t) 
   assert.equal(submit.disabled, false, "Submit must stay enabled without the post grant");
 });
 
-/** F-t04-006: a refused Post must name the reason instead of failing silently. */
+/** a refused Post must name the reason instead of failing silently. */
 test("a 422 post refusal surfaces the typed server reason", async (t) => {
   const prior = globalThis.fetch;
   globalThis.fetch = (async () =>
@@ -258,9 +258,8 @@ test("a non-JSON post failure still releases the button with an error", async (t
   assert.equal(post.disabled, false, "the post button must release after the failure");
 });
 
-/** Posting-refusal persistence (coordinator follow-up on F-t04-006): the
- * typed 422 reason must persist as a row-inline role=alert until the next
- * action — a 4s toast alone reads as "nothing happened". */
+/** A typed 422 post refusal must persist as a row-inline role=alert until the
+ * next action — a 4s toast alone reads as "nothing happened". */
 test("a 422 post refusal persists as a row-inline alert until the next action", async (t) => {
   const prior = globalThis.fetch;
   globalThis.fetch = (async () =>

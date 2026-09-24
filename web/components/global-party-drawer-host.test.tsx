@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// F-t04-003 (overlay path): the /entities + /parties loaders supply the
+// (overlay path): the /entities + /parties loaders supply the
 // vendor Compliance tab inputs, but the shell-level related-party overlay
 // (GlobalPartyDrawerHost, used from every record page via ?relatedParty=)
 // fetched /api/parties/[id]/drawer and rendered PartyDrawer WITHOUT the
@@ -148,7 +148,7 @@ function findTab(label: string): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined
 }
 
-test('the overlay vendor drawer forwards the Compliance tab (F-t04-003)', async (t) => {
+test('the overlay vendor drawer forwards the Compliance tab', async (t) => {
   await mountHost(t)
   assert.ok(
     findTab('Compliance'),

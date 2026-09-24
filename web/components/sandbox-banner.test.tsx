@@ -4,7 +4,6 @@ import test from "node:test";
 // F5-4: SandboxBanner hardcoded every word of its safety-critical chrome —
 // the banner a sandbox session cannot avoid. A non-en user must read the
 // environment warning and the exit action in their own locale.
-//
 // The banner is a server component, so next-intl/server is doubled with a
 // stub that reads the REAL catalog: the mock translator substitutes the
 // locale file's own values, and hardcoded English fails every assertion.

@@ -98,7 +98,7 @@ function openTrigger(predicate: (b: HTMLButtonElement) => boolean): HTMLButtonEl
   return found as HTMLButtonElement;
 }
 
-test("F-t10-008: list-filter menu exposes menu/menuitem roles", async () => {
+test("list-filter menu exposes menu/menuitem roles", async () => {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -151,7 +151,7 @@ test("F-t10-008: list-filter menu exposes menu/menuitem roles", async () => {
   });
 });
 
-test("F-t10-008: view-picker menu exposes menu/menuitem roles", async () => {
+test("view-picker menu exposes menu/menuitem roles", async () => {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);

@@ -6,7 +6,6 @@ import test from "node:test";
 // route in its own test; what is exercised here is the panel's own behaviour —
 // what it renders for each state, and that Apply and Release send the request
 // bodies those endpoints validate.
-//
 // Only the network is doubled. React, next-intl, the real English catalog and
 // the real money formatter all run.
 const { JSDOM } = await import("jsdom");

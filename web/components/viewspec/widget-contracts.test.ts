@@ -13,13 +13,10 @@ import { WIDGET_CONTRACTS } from './widget-contracts'
  * stale entry is not cosmetic: too few names refuses a prop that works, too
  * many lets a typo through silently. It is generated, and a generated file
  * nobody regenerates is a file that lies.
- *
  * Two different things are checked here and both matter.
- *
  * DRIFT — the file still says what the registry says, re-derived with the
  * generator's own parser. Reimplementing the parse here would test that two
  * parsers agree, not that the contracts match the widgets.
- *
  * REALITY — every widget prop the app's own 166 pages actually pass is one
  * the contract allows. This is the check that makes the feature safe to turn
  * on: the contracts are extracted mechanically, and the only way to know the

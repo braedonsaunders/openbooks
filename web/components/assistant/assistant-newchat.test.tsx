@@ -107,10 +107,10 @@ async function mount(aiEnabled: boolean, canConfigureAi = false) {
   };
 }
 
-// F-t12-011 follow-up: with no AI provider configured, the sidebar
+// follow-up: with no AI provider configured, the sidebar
 // "New chat" is a link to the page already showing — a dead click with no
 // feedback. It must explain the setup state instead of silently no-op'ing.
-test("F-t12-011: New chat explains setup instead of dead-clicking", async () => {
+test("New chat explains setup instead of dead-clicking", async () => {
   const { host, unmount } = await mount(false);
   try {
     const button = newChatButton(host);
@@ -129,12 +129,11 @@ test("F-t12-011: New chat explains setup instead of dead-clicking", async () => 
   }
 });
 
-// F-t13-004: the empty-state "AI providers" entry must take the admin to
+// the empty-state "AI providers" entry must take the admin to
 // /admin/ai in the SAME tab. As target="_blank" the URL never changed and the
 // link read as dead (new-tab opens are also popup-blocker bait in lockdown
-// browsers). The New-chat half of that finding already holds — the F-t12-011
-// test above pins the inline guidance, and the t13 screenshot shows it live.
-test("F-t13-004: AI providers link navigates to setup in the same tab", async () => {
+// browsers). The New-chat half of that finding already holds — the / test above pins the inline guidance, and the t13 screenshot shows it live.
+test("AI providers link navigates to setup in the same tab", async () => {
   const { host, unmount } = await mount(false, true);
   try {
     const link = host.querySelector('a[href="/admin/ai"]');
@@ -149,7 +148,7 @@ test("F-t13-004: AI providers link navigates to setup in the same tab", async ()
   }
 });
 
-test("F-t12-011: New chat still links home when the assistant is configured", async () => {
+test("New chat still links home when the assistant is configured", async () => {
   const { host, unmount } = await mount(true);
   try {
     // Configured New chat renders with no inline alert (navigation itself is covered by E2E).
