@@ -205,33 +205,5 @@
     "workingIssues": "Recherche d’un problème connu…",
     "workingFile": "Dépôt d’un rapport produit…",
     "workingDefault": "Analyse de votre signalement…"
-  },
-  "securityPage": {
-  "title": "Sécurité de connexion",
-  "description": "Protégez votre compte avec un authentificateur et consultez les sessions actives du navigateur.",
-  "authenticatorTitle": "Authentification multifacteur",
-  "enabled": "Activée · {count} codes de récupération restants",
-  "disabledDescription": "Exigez un code temporaire après une authentification par mot de passe ou SSO.",
-  "confirmPassword": "Confirmez votre mot de passe actuel",
-  "setupAuthenticator": "Configurer l’authentificateur",
-  "setupKey": "Clé de configuration de l’authentificateur",
-  "setupKeyHelp": "Ajoutez cette clé comme compte TOTP à six chiffres.",
-  "setupExpiry": "Cette configuration expire après 10 minutes ou cinq confirmations incorrectes.",
-  "confirmCode": "Confirmez le code à six chiffres",
-  "enableMfa": "Activer l’authentification multifacteur",
-  "currentCode": "Code actuel de l’authentificateur ou de récupération",
-  "passwordRequired": "Mot de passe (requis pour les deux modifications)",
-  "replaceRecoveryCodes": "Remplacer les codes de récupération",
-  "disableMfa": "Désactiver l’authentification multifacteur",
-  "saveRecoveryCodes": "Enregistrez maintenant ces codes de récupération",
-  "recoveryCodesHelp": "Chaque code ne fonctionne qu’une fois. Ils ne seront plus affichés.",
-  "copyCodes": "Copier les codes",
-  "sessionsTitle": "Sessions actives",
-  "sessionsDescription": "Révoquez une session de navigateur sans changer votre mot de passe.",
-  "thisSession": "Cette session",
-  "browserSession": "Session de navigateur",
-  "lastUsed": "Dernière utilisation : {date}",
-  "revoke": "Révoquer",
-  "revokeOtherSessions": "Révoquer toutes les autres sessions"
-}
+  }
 }

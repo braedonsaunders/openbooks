@@ -205,33 +205,5 @@
     "workingIssues": "Looking for a known issue…",
     "workingFile": "Filing a product issue…",
     "workingDefault": "Reviewing your report…"
-  },
-  "securityPage": {
-  "title": "Sign-in security",
-  "description": "Protect your account with an authenticator and review active browser sessions.",
-  "authenticatorTitle": "Authenticator MFA",
-  "enabled": "Enabled · {count} recovery codes remain",
-  "disabledDescription": "Require a time-based code after password or SSO authentication.",
-  "confirmPassword": "Confirm your current password",
-  "setupAuthenticator": "Set up authenticator",
-  "setupKey": "Authenticator setup key",
-  "setupKeyHelp": "Add this key as a time-based (TOTP), six-digit account.",
-  "setupExpiry": "This setup expires in 10 minutes and after five incorrect confirmations.",
-  "confirmCode": "Confirm the six-digit code",
-  "enableMfa": "Enable MFA",
-  "currentCode": "Current authenticator or recovery code",
-  "passwordRequired": "Password (required for either change)",
-  "replaceRecoveryCodes": "Replace recovery codes",
-  "disableMfa": "Disable MFA",
-  "saveRecoveryCodes": "Save these recovery codes now",
-  "recoveryCodesHelp": "Each code works once. They will not be shown again.",
-  "copyCodes": "Copy codes",
-  "sessionsTitle": "Active sessions",
-  "sessionsDescription": "Revoke a browser session without changing your password.",
-  "thisSession": "This session",
-  "browserSession": "Browser session",
-  "lastUsed": "Last used {date}",
-  "revoke": "Revoke",
-  "revokeOtherSessions": "Revoke all other sessions"
-}
+  }
 }

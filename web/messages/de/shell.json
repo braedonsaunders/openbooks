@@ -205,33 +205,5 @@
     "workingIssues": "Suche nach einem bekannten Problem…",
     "workingFile": "Produktbericht wird angelegt…",
     "workingDefault": "Ihre Meldung wird geprüft…"
-  },
-  "securityPage": {
-  "title": "Anmeldesicherheit",
-  "description": "Schützen Sie Ihr Konto mit einer Authentifizierungs-App und prüfen Sie aktive Browsersitzungen.",
-  "authenticatorTitle": "Mehrstufige Authentifizierung",
-  "enabled": "Aktiv · {count} Wiederherstellungscodes verfügbar",
-  "disabledDescription": "Fordern Sie nach Passwort- oder SSO-Anmeldung einen zeitbasierten Code an.",
-  "confirmPassword": "Aktuelles Passwort bestätigen",
-  "setupAuthenticator": "Authentifizierungs-App einrichten",
-  "setupKey": "Einrichtungsschlüssel der Authentifizierungs-App",
-  "setupKeyHelp": "Fügen Sie diesen Schlüssel als zeitbasiertes TOTP-Konto mit sechsstelligen Codes hinzu.",
-  "setupExpiry": "Diese Einrichtung läuft nach 10 Minuten oder fünf falschen Bestätigungen ab.",
-  "confirmCode": "Sechsstelligen Code bestätigen",
-  "enableMfa": "Mehrstufige Authentifizierung aktivieren",
-  "currentCode": "Aktueller Authentifizierungs- oder Wiederherstellungscode",
-  "passwordRequired": "Passwort (für beide Änderungen erforderlich)",
-  "replaceRecoveryCodes": "Wiederherstellungscodes ersetzen",
-  "disableMfa": "Mehrstufige Authentifizierung deaktivieren",
-  "saveRecoveryCodes": "Diese Wiederherstellungscodes jetzt speichern",
-  "recoveryCodesHelp": "Jeder Code ist einmal verwendbar. Danach werden sie nicht mehr angezeigt.",
-  "copyCodes": "Codes kopieren",
-  "sessionsTitle": "Aktive Sitzungen",
-  "sessionsDescription": "Beenden Sie eine Browsersitzung, ohne Ihr Passwort zu ändern.",
-  "thisSession": "Diese Sitzung",
-  "browserSession": "Browsersitzung",
-  "lastUsed": "Zuletzt verwendet: {date}",
-  "revoke": "Beenden",
-  "revokeOtherSessions": "Alle anderen Sitzungen beenden"
-}
+  }
 }
