@@ -1573,5 +1573,26 @@
       "unrounded": "Unrounded clock event",
       "custom": "Custom"
     }
+  },
+  "holidayAttestations": {
+    "loadFailed": "Could not load the employees these exceptions need — retry rather than answer blind.",
+    "retry": "Retry",
+    "commissionTitle": "commission-pay status",
+    "standingUnanswered": "Unanswered. This is a standing employment fact — answer it once and later periods stop asking.",
+    "currentlyAnswered": "Currently answered: {answer}. Re-answer to correct it.",
+    "paidOnCommission": "Paid on commission",
+    "choose": "Choose…",
+    "no": "No",
+    "yesWholePart": "Yes, in whole or in part",
+    "saveRecalculate": "Save & recalculate",
+    "absenceTitle": "last-and-first-shift absence assertion",
+    "absenceExplanation": "Was the employee absent WITHOUT the employer’s consent on the last scheduled shift before or the first after the holiday? A timesheet gap cannot answer this — an absence in the data is as likely to be approved leave. This answer is filed for this run only.",
+    "holidayDate": "{holiday} · {date}",
+    "filedStatus": "(filed: {answer})",
+    "absentWithoutConsent": "absent without consent",
+    "notAbsent": "not absent",
+    "absenceNo": "No — not absent without consent",
+    "absenceYes": "Yes — absent without consent",
+    "answerFiled": "Answer filed — recalculating"
   }
 }

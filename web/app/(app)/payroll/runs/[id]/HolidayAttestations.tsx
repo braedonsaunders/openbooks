@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { Button, Label, Select } from '@openbooks/ui'
+import { useTranslations } from 'next-intl'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 /**
@@ -27,9 +28,8 @@ import { readApiErrorMessage } from '../../../../../lib/api-error'
  * never answers for the operator: filing only happens on Save, and the
  * engine keeps requiring the value to be present.
  *
- * Copy is literal English, deliberately: the payroll locale files are owned
- * by the live hsf-translations shard, and a refusal-remedy control must not
- * wait on it. Localize later without touching this file.
+ * Copy is catalog-backed so the refusal remedy is usable in every supported
+ * viewer locale.
  */
 
 export interface AttestationError {
@@ -77,6 +77,7 @@ export function HolidayAttestations(props: {
   /** Re-run the calculation after an answer is filed (server merges stored facts). */
   onAnswered: () => Promise<void> | void
 }) {
+  const t = useTranslations('payroll.holidayAttestations')
   const { runId, errors, roster, canAnswer, onAnswered } = props
   const [employees, setEmployees] = useState<AttestationEmployee[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -128,7 +129,7 @@ export function HolidayAttestations(props: {
     return (
       <div className="mt-3 space-y-2 border-t border-amber-200/60 pt-3 dark:border-amber-800/40">
         <p className="text-sm text-red-700 dark:text-red-300">
-          Could not load the employees these exceptions need — retry rather than answer blind.
+          {t('loadFailed')}
         </p>
         <Button
           variant="outline"
@@ -138,7 +139,7 @@ export function HolidayAttestations(props: {
             setAttempt((n) => n + 1)
           }}
         >
-          Retry
+          {t('retry')}
         </Button>
       </div>
     )
@@ -163,7 +164,7 @@ export function HolidayAttestations(props: {
       if (!reload.ok) throw new Error(await readApiErrorMessage(reload, 'failed'))
       const rj = await reload.json()
       if (Array.isArray(rj.employees)) setEmployees(rj.employees)
-      toast.success('Answer filed — recalculating')
+      toast.success(t('answerFiled'))
       await onAnswered()
     } catch (e) {
       toast.error((e as Error).message)
@@ -199,6 +200,7 @@ function AttestationRow(props: {
   busy: boolean
   onFile: (body: Record<string, unknown>) => Promise<void>
 }) {
+  const t = useTranslations('payroll.holidayAttestations')
   const { error, needed, attested, busy, onFile } = props
   const [commission, setCommission] = useState('')
   const [absence, setAbsence] = useState<Record<string, string>>({})
@@ -208,24 +210,24 @@ function AttestationRow(props: {
     return (
       <div className="rounded-lg bg-white/70 px-3 py-2.5 dark:bg-slate-900/60">
         <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-          {error.employee}: commission-pay status
+          {error.employee}: {t('commissionTitle')}
         </p>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
           {standing === null
-            ? 'Unanswered. This is a standing employment fact — answer it once and later periods stop asking.'
-            : `Currently answered: ${standing ? 'yes, in whole or in part' : 'no'}. Re-answer to correct it.`}
+            ? t('standingUnanswered')
+            : t('currentlyAnswered', { answer: t(standing ? 'yesWholePart' : 'no') })}
         </p>
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <div>
-            <Label htmlFor={`att-comm-${attested.employeePartyId}`}>Paid on commission</Label>
+            <Label htmlFor={`att-comm-${attested.employeePartyId}`}>{t('paidOnCommission')}</Label>
             <Select
               id={`att-comm-${attested.employeePartyId}`}
               value={commission}
               onChange={(e) => setCommission(e.target.value)}
             >
-              <option value="">Choose…</option>
-              <option value="false">No</option>
-              <option value="true">Yes, in whole or in part</option>
+              <option value="">{t('choose')}</option>
+              <option value="false">{t('no')}</option>
+              <option value="true">{t('yesWholePart')}</option>
             </Select>
           </div>
           <Button
@@ -237,7 +239,7 @@ function AttestationRow(props: {
             })}
           >
             {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
-            Save &amp; recalculate
+            {t('saveRecalculate')}
           </Button>
         </div>
       </div>
@@ -254,12 +256,10 @@ function AttestationRow(props: {
   return (
     <div className="rounded-lg bg-white/70 px-3 py-2.5 dark:bg-slate-900/60">
       <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-        {error.employee}: last-and-first-shift absence assertion
+        {error.employee}: {t('absenceTitle')}
       </p>
       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-        Was the employee absent WITHOUT the employer&apos;s consent on the last scheduled shift before
-        or the first after the holiday? A timesheet gap cannot answer this — an absence in the data
-        is as likely to be approved leave. This answer is filed for this run only.
+        {t('absenceExplanation')}
       </p>
       {explicit.map((holiday) => {
         const occurrence = `${holiday.key}|${holiday.date}`
@@ -270,17 +270,17 @@ function AttestationRow(props: {
           <div key={occurrence} className="mt-2 flex flex-wrap items-end gap-2">
             <div>
               <Label htmlFor={`att-abs-${attested.employeePartyId}-${occurrence}`}>
-                {holiday.name} · {holiday.date}
-                {filed !== undefined ? ` (filed: ${filed.absentWithoutConsent ? 'absent without consent' : 'not absent'})` : ''}
+                {t('holidayDate', { holiday: holiday.name, date: holiday.date })}
+                {filed !== undefined ? ` ${t('filedStatus', { answer: t(filed.absentWithoutConsent ? 'absentWithoutConsent' : 'notAbsent') })}` : ''}
               </Label>
               <Select
                 id={`att-abs-${attested.employeePartyId}-${occurrence}`}
                 value={absence[occurrence] ?? ''}
                 onChange={(e) => setAbsence((prev) => ({ ...prev, [occurrence]: e.target.value }))}
               >
-                <option value="">Choose…</option>
-                <option value="false">No — not absent without consent</option>
-                <option value="true">Yes — absent without consent</option>
+                <option value="">{t('choose')}</option>
+                <option value="false">{t('absenceNo')}</option>
+                <option value="true">{t('absenceYes')}</option>
               </Select>
             </div>
             <Button
@@ -294,7 +294,7 @@ function AttestationRow(props: {
               })}
             >
               {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
-              Save &amp; recalculate
+              {t('saveRecalculate')}
             </Button>
           </div>
         )

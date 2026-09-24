@@ -1573,5 +1573,26 @@
       "unrounded": "未取整打卡",
       "custom": "自定义"
     }
+  },
+  "holidayAttestations": {
+    "loadFailed": "无法加载这些例外所需回答的员工。请重试，确认所需信息后再作答。",
+    "retry": "重试",
+    "commissionTitle": "佣金薪酬状态",
+    "standingUnanswered": "尚未回答。这是持续有效的雇佣信息；回答一次后，后续期间不会再询问。",
+    "currentlyAnswered": "当前回答：{answer}。如需更正，请重新回答。",
+    "paidOnCommission": "按佣金支付",
+    "choose": "请选择…",
+    "no": "否",
+    "yesWholePart": "是，全部或部分",
+    "saveRecalculate": "保存并重新计算",
+    "absenceTitle": "节假日前后缺勤声明",
+    "absenceExplanation": "员工在节假日前最后一个排定班次或节后第一个排定班次，是否未经雇主同意而缺勤？工时表中的空缺无法说明原因，因为也可能是已批准的休假。此回答仅记录在本次工资计算中。",
+    "holidayDate": "{date}的{holiday}",
+    "filedStatus": "（已记录：{answer}）",
+    "absentWithoutConsent": "未经同意缺勤",
+    "notAbsent": "未缺勤",
+    "absenceNo": "否 — 未未经同意缺勤",
+    "absenceYes": "是 — 未经同意缺勤",
+    "answerFiled": "回答已保存 — 正在重新计算"
   }
 }
