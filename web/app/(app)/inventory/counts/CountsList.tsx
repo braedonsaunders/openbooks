@@ -9,6 +9,7 @@ import { Plus } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 
 const field = 'space-y-1.5'
@@ -37,21 +38,16 @@ export function NewCountButton({ label }: { label: string }) {
  * never omitted; a new key per call would turn every lost response plus
  * retry into a duplicate count, line write, or lifecycle step.
  */
-async function countAction(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function countAction(body: Record<string, unknown>, fallback: string): Promise<Record<string, unknown>> {
   const res = await fetch('/api/inventory/counts', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), ...body }),
   })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    const detail =
-      typeof (data as { error?: unknown }).error === 'string' &&
-      ((data as { error: string }).error.trim() ? true : false)
-        ? (data as { error: string }).error.trim()
-        : 'Request failed'
-    throw new Error(detail)
-  }
+  // The status is checked before the body parses, and the translated
+  // fallback (never a hard-coded English string) carries the status when
+  // the server names no refusal.
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback))
   return await res.json() as Record<string, unknown>
 }
 
@@ -383,7 +379,7 @@ function CreateCountDrawer({
         createKeyRef.current = crypto.randomUUID()
         createFingerprintRef.current = fingerprint
       }
-      await countAction({ ...payload, idempotencyKey: createKeyRef.current })
+      await countAction({ ...payload, idempotencyKey: createKeyRef.current }, t('counts.failed'))
       toast.success(t('counts.created'))
       // Success consumes the retry identity: the next Open count is new.
       createKeyRef.current = null
@@ -624,7 +620,7 @@ function CountDetailBody({
         stepKeyRef.current = crypto.randomUUID()
         stepFingerprintRef.current = fingerprint
       }
-      const res = await countAction({ ...payload, idempotencyKey: stepKeyRef.current })
+      const res = await countAction({ ...payload, idempotencyKey: stepKeyRef.current }, t('counts.failed'))
       toast.success(t('counts.updated'))
       // Success consumes the retry identity: the next step is a new action.
       stepKeyRef.current = null
