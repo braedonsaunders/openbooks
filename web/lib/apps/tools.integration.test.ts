@@ -28,6 +28,9 @@ registerHooks({
 const { installApp } = await import('./store')
 const { commitAppToolCommand } = await import('./tools')
 const { buildToolRegistryAsync, executeAssistantTool } = await import('../assistant/registry')
+const { createOpenBooksMcpServer } = await import('../mcp/server')
+const { Client: McpClient } = await import('@modelcontextprotocol/sdk/client/index.js')
+const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
@@ -232,6 +235,46 @@ test('registry exposes installed tools only to actors holding the grant intersec
   assert.ok(MUTATING_TOOL in limitedTools, 'grant-free tool stays visible')
   const otherTools = await withOrgContext(fx.otherOrgId, () => buildToolRegistryAsync(fx.otherOrgAuthz))
   assert.ok(!(READ_TOOL in otherTools) && !(MUTATING_TOOL in otherTools), 'another org sees nothing')
+}))
+
+test('MCP catalog enforces both app grants and the assistant doorway', { skip: !DB }, async () => withFixture(async (fx) => {
+  async function listFor(authz: Authz): Promise<string[]> {
+    const requestId = randomUUID()
+    const server = await withOrgContext(authz.user.orgId, () => createOpenBooksMcpServer({
+      auth: {
+        user: authz.user,
+        keyId: randomUUID(),
+        permissions: authz.permissions,
+        rateLimitPerMin: null,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        audit: {
+          method: 'MCP', path: '/mcp', ipAddress: null, userAgent: null, startedAt: Date.now(),
+        },
+      },
+      request: new Request('http://localhost/mcp'),
+      requestId,
+    }))
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    const client = new McpClient({ name: 'OpenBooks test client', version: '1.0.0' })
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+      const result = await client.listTools()
+      return result.tools.map(({ name }) => name)
+    } finally {
+      await Promise.all([client.close(), server.close()])
+    }
+  }
+
+  const adminNames = await listFor(fx.adminAuthz)
+  const limitedNames = await listFor(fx.limitedAuthz)
+  const noAssistantAuthz = {
+    ...fx.adminAuthz,
+    permissions: new Set(['apps.use', 'records.read']),
+  }
+  const noAssistantNames = await listFor(noAssistantAuthz)
+  assert.ok(adminNames.includes(READ_TOOL), 'granted app tool appears in the MCP catalog')
+  assert.ok(!limitedNames.includes(READ_TOOL), 'tool requiring records.read is absent without that grant')
+  assert.ok(!noAssistantNames.includes(READ_TOOL), 'apps.use and the app grant do not bypass assistant.use')
 }))
 
 test('permission refusals and bad input fail closed without executing', { skip: !DB }, async () => withFixture(async (fx) => {
