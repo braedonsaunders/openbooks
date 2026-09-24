@@ -3170,7 +3170,8 @@ test('every English message key exists non-empty in every shipped locale', () =>
 })
 
 test('no locale carries message keys absent from English', () => {
-  // An orphaned key renders nowhere: the app resolves through Englis/ namespaces, so the translation is dead weight that rots — usually a key
+  // An orphaned key renders nowhere: the app resolves through English-first
+  // namespaces, so the translation is dead weight that rots — usually a key
   // renamed in English whose translation was never removed.
   for (const catalog of OTHER_CATALOGS) {
     const extra = [...catalog.leaves.keys()].filter((key) => !EN_LEAVES.has(key)).sort()
@@ -3340,7 +3341,7 @@ test('every cognate declaration names a real verbatim key and pins its exact ter
     if (shipped !== term) {
       offenders.push(`${scope} must stay the reviewed term ${JSON.stringify(term)} (ships ${JSON.stringify(shipped)})`)
     } else if (shipped !== EN_LEAVES.get(key)) {
-      offenders.push(`${scope} is no longer Englisremove the declaration`)
+      offenders.push(`${scope} is no longer English-verbatim — remove the declaration`)
     }
   }
   assert.deepEqual(offenders, [], `${offenders.length} cognate declarations rotted:\n  ${sample(offenders)}`)
