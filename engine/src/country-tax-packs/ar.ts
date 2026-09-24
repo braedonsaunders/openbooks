@@ -139,31 +139,31 @@ const AR_IVA_TAX_CODES = [
   {
     code: "AR-VAT-STD",
     name: "Argentina IVA alícuota general",
-    ratePercent: 21,
+    ratePercent: "21",
     role: "standard",
     rates: [
-      { ratePercent: 18, effectiveFrom: "1992-03-01", effectiveTo: "1995-03-31", sourceId: "infoleg_ley23349_art28" },
-      { ratePercent: 21, effectiveFrom: "1995-04-01", effectiveTo: "1996-03-31", sourceId: "infoleg_ley23349_art28" },
-      { ratePercent: 21, effectiveFrom: "1996-04-01", effectiveTo: "2002-11-17", sourceId: "infoleg_ley23349_art28" },
-      { ratePercent: 19, effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
-      { ratePercent: 21, effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: "18", effectiveFrom: "1992-03-01", effectiveTo: "1995-03-31", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: "21", effectiveFrom: "1995-04-01", effectiveTo: "1996-03-31", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: "21", effectiveFrom: "1996-04-01", effectiveTo: "2002-11-17", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: "19", effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: "21", effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
     ],
   },
   {
     code: "AR-VAT-RED105",
     name: "Argentina IVA alícuota reducida 10,5% — bienes primarios del art. 28",
-    ratePercent: 10.5,
+    ratePercent: "10.5",
     role: "reduced",
     rates: [
-      { ratePercent: 9.5, effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
-      { ratePercent: 10.5, effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: "9.5", effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: "10.5", effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
     ],
   },
   {
     code: "AR-VAT-INC27",
     name: "Argentina IVA alícuota incrementada 27% — servicios públicos a responsables inscriptos",
-    ratePercent: 27,
-    rates: [{ ratePercent: 27, effectiveFrom: "1992-03-01", sourceId: "infoleg_ley23349_art28" }],
+    ratePercent: "27",
+    rates: [{ ratePercent: "27", effectiveFrom: "1992-03-01", sourceId: "infoleg_ley23349_art28" }],
   },
 ] as const;
 

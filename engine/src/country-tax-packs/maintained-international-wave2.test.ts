@@ -41,7 +41,7 @@ test("second-wave maintained country packs are directly provisionable", () => {
 test("Spain provisions only the sourced IVA-territory standard rate and declares territorial scope partial", () => {
   const definition = pack("ES");
   assert.deepEqual(PACK_DEFAULT_CODES.ES_MODELO303?.rates, [
-    { ratePercent: 21, effectiveFrom: "2012-09-01", sourceId: "aeat_2012_standard_rate_change" },
+    { ratePercent: "21", effectiveFrom: "2012-09-01", sourceId: "aeat_2012_standard_rate_change" },
   ]);
   assert.equal(definition.completeness.jurisdictions, "partial");
   assert.equal(definition.completeness.standardRates, "partial");
@@ -55,7 +55,7 @@ test("Spain provisions only the sourced IVA-territory standard rate and declares
 test("Italy uses the official LIPE VP fields without inventing automatic credit or advance calculations", () => {
   const definition = pack("IT");
   assert.deepEqual(PACK_DEFAULT_CODES.IT_LIPE?.rates, [
-    { ratePercent: 22, effectiveFrom: "2013-10-01", sourceId: "italy_vat_22_from_2013" },
+    { ratePercent: "22", effectiveFrom: "2013-10-01", sourceId: "italy_vat_22_from_2013" },
   ]);
   assert.deepEqual(definition.returnPacks[0]!.boxes.map((box) => box.lineCode), [
     "VP2", "VP3", "VP4", "VP5", "VP6", "VP7", "VP8", "VP9", "VP10", "VP11", "VP12", "VP13", "VP14",
@@ -67,9 +67,9 @@ test("Netherlands carries the sourced 1992-present standard-rate schedule and cu
   const definition = pack("NL");
   const rates = PACK_DEFAULT_CODES.NL_OB?.rates ?? [];
   assert.deepEqual(rates, [
-    { ratePercent: 17.5, effectiveFrom: "1992-10-01", effectiveTo: "2000-12-31", sourceId: "netherlands_standard_rate_history" },
-    { ratePercent: 19, effectiveFrom: "2001-01-01", effectiveTo: "2012-09-30", sourceId: "netherlands_standard_rate_history" },
-    { ratePercent: 21, effectiveFrom: "2012-10-01", sourceId: "netherlands_vat_21_2012" },
+    { ratePercent: "17.5", effectiveFrom: "1992-10-01", effectiveTo: "2000-12-31", sourceId: "netherlands_standard_rate_history" },
+    { ratePercent: "19", effectiveFrom: "2001-01-01", effectiveTo: "2012-09-30", sourceId: "netherlands_standard_rate_history" },
+    { ratePercent: "21", effectiveFrom: "2012-10-01", sourceId: "netherlands_vat_21_2012" },
   ]);
   assertContiguous(rates);
   assert.equal(definition.completeness.standardRates, "partial");
@@ -84,13 +84,13 @@ test("Ireland preserves Revenue's complete standard-rate history and current VAT
   const rates = PACK_DEFAULT_CODES.IE_VAT3?.rates ?? [];
   assert.equal(rates.length, 17);
   assert.deepEqual(rates[0], {
-    ratePercent: 16.37,
+    ratePercent: "16.37",
     effectiveFrom: "1972-11-01",
     effectiveTo: "1973-09-02",
     sourceId: "revenue_historical_vat_rates_2026",
   });
   assert.deepEqual(rates.at(-1), {
-    ratePercent: 23,
+    ratePercent: "23",
     effectiveFrom: "2021-03-01",
     sourceId: "revenue_historical_vat_rates_2026",
   });
@@ -107,12 +107,12 @@ test("Singapore preserves every GST rate era and the fifteen current core F5 box
   const definition = pack("SG");
   const rates = PACK_DEFAULT_CODES.SG_GSTF5?.rates ?? [];
   assert.deepEqual(rates.map((rate) => [rate.effectiveFrom, rate.effectiveTo ?? null, rate.ratePercent]), [
-    ["1994-04-01", "2002-12-31", 3],
-    ["2003-01-01", "2003-12-31", 4],
-    ["2004-01-01", "2007-06-30", 5],
-    ["2007-07-01", "2022-12-31", 7],
-    ["2023-01-01", "2023-12-31", 8],
-    ["2024-01-01", null, 9],
+    ["1994-04-01", "2002-12-31", "3"],
+    ["2003-01-01", "2003-12-31", "4"],
+    ["2004-01-01", "2007-06-30", "5"],
+    ["2007-07-01", "2022-12-31", "7"],
+    ["2023-01-01", "2023-12-31", "8"],
+    ["2024-01-01", null, "9"],
   ]);
   assertContiguous(rates);
   assert.equal(definition.completeness.standardRates, "complete");

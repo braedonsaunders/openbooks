@@ -58,26 +58,26 @@ test("TR_KDV1 is a monthly portal-filed return with real beyanname boxes", () =>
 test("Türkiye carries all three KDV bands with the July 2023 increase transcribed", () => {
   const set = packTaxCodesForReturn(TURKIYE_TAX_PACK, "TR_KDV1");
   assert.deepEqual(set.map((entry) => [entry.code, entry.role ?? null, entry.ratePercent]), [
-    ["TR-VAT-STD", "standard", 20],
-    ["TR-VAT-RED10", "reduced", 10],
-    ["TR-VAT-RED1", "reduced", 1],
+    ["TR-VAT-STD", "standard", "20"],
+    ["TR-VAT-RED10", "reduced", "10"],
+    ["TR-VAT-RED1", "reduced", "1"],
   ]);
   const std = set.find((entry) => entry.code === "TR-VAT-STD")!;
   assert.deepEqual(std.rates, [
-    { ratePercent: 18, effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
-    { ratePercent: 20, effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
+    { ratePercent: "18", effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
+    { ratePercent: "20", effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
   ]);
   assertContiguous(std.rates ?? []);
   const red10 = set.find((entry) => entry.code === "TR-VAT-RED10")!;
   assert.deepEqual(red10.rates, [
-    { ratePercent: 8, effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
-    { ratePercent: 10, effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
+    { ratePercent: "8", effectiveFrom: "2007-12-31", effectiveTo: "2023-07-09", sourceId: "rg_2007_13033_baseline" },
+    { ratePercent: "10", effectiveFrom: "2023-07-10", sourceId: "rg_7346_kdv_2023" },
   ]);
   assertContiguous(red10.rates ?? []);
   // The 2023 decision left the 1% liste-I band untouched: one open band.
   const red1 = set.find((entry) => entry.code === "TR-VAT-RED1")!;
   assert.deepEqual(red1.rates, [
-    { ratePercent: 1, effectiveFrom: "2007-12-31", sourceId: "rg_2007_13033_baseline" },
+    { ratePercent: "1", effectiveFrom: "2007-12-31", sourceId: "rg_2007_13033_baseline" },
   ]);
   assertContiguous(red1.rates ?? []);
   assert.equal(primaryPackTaxCode(TURKIYE_TAX_PACK, "TR_KDV1")?.code, "TR-VAT-STD");

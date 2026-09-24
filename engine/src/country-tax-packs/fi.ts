@@ -93,27 +93,27 @@ export const FINLAND_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "FI-VAT-STD",
         name: "Finland standard ALV",
-        ratePercent: 25.5,
+        ratePercent: "25.5",
         role: "standard",
         rates: [
-          { ratePercent: 24, effectiveFrom: "2013-01-01", effectiveTo: "2024-08-31", sourceId: "vero_standard_rate_2024" },
-          { ratePercent: 25.5, effectiveFrom: "2024-09-01", sourceId: "vero_standard_rate_2024" },
+          { ratePercent: "24", effectiveFrom: "2013-01-01", effectiveTo: "2024-08-31", sourceId: "vero_standard_rate_2024" },
+          { ratePercent: "25.5", effectiveFrom: "2024-09-01", sourceId: "vero_standard_rate_2024" },
         ],
       },
       {
         code: "FI-VAT-RED135",
         name: "Finland reduced ALV 13.5% (food, restaurant, and the goods and services moved up from 10% in 2025)",
-        ratePercent: 13.5,
+        ratePercent: "13.5",
         role: "reduced",
         rates: [
-          { ratePercent: 14, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31", sourceId: "vero_reduced_rates_2025_2026" },
-          { ratePercent: 13.5, effectiveFrom: "2026-01-01", sourceId: "vero_reduced_rates_2025_2026" },
+          { ratePercent: "14", effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31", sourceId: "vero_reduced_rates_2025_2026" },
+          { ratePercent: "13.5", effectiveFrom: "2026-01-01", sourceId: "vero_reduced_rates_2025_2026" },
         ],
       },
       {
         code: "FI-VAT-RED10",
         name: "Finland reduced ALV 10% (newspapers and magazines)",
-        ratePercent: 10,
+        ratePercent: "10",
         role: "reduced",
         rates: [
           // The 10% band predates 2025: the Vero rates page records that
@@ -125,17 +125,17 @@ export const FINLAND_TAX_PACK: CountryTaxPackDefinition = {
           // pre-2013 9% era refused like the 23% era. Equal 10% values on
           // either side do NOT collapse: the 2025 narrowing repriced most
           // of the basket to 14%, so each row prices a different basket.
-          { ratePercent: 10, effectiveFrom: "2013-01-01", effectiveTo: "2024-12-31", sourceId: "vero_reduced_rates_2025_2026" },
-          { ratePercent: 10, effectiveFrom: "2025-01-01", sourceId: "vero_reduced_rates_2025_2026" },
+          { ratePercent: "10", effectiveFrom: "2013-01-01", effectiveTo: "2024-12-31", sourceId: "vero_reduced_rates_2025_2026" },
+          { ratePercent: "10", effectiveFrom: "2025-01-01", sourceId: "vero_reduced_rates_2025_2026" },
         ],
       },
       {
         code: "FI-VAT-ZERO",
         name: "Finland zero-rated ALV (exports, intra-EU supply, vessels, warehousing)",
-        ratePercent: 0,
+        ratePercent: "0",
         role: "zero",
         rates: [
-          { ratePercent: 0, effectiveFrom: "2026-01-01", sourceId: "vero_zero_rating_2026" },
+          { ratePercent: "0", effectiveFrom: "2026-01-01", sourceId: "vero_zero_rating_2026" },
         ],
         // Zero-rated sales are reported in the ALV return's turnover and
         // base-information section (fields 309–320), which this pack

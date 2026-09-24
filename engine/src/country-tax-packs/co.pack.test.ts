@@ -42,9 +42,9 @@ test("Colombia files bimonthly through MUISCA as portal entry", () => {
 test("Colombia declares the 19/5/0 bands with honest roles and no excluidos code", () => {
   const codes = packTaxCodesForReturn(COLOMBIA_TAX_PACK, "CO_F300");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["CO-VAT-STD", "standard", 19],
-    ["CO-VAT-RED5", "reduced", 5],
-    ["CO-VAT-ZERO", "zero", 0],
+    ["CO-VAT-STD", "standard", "19"],
+    ["CO-VAT-RED5", "reduced", "5"],
+    ["CO-VAT-ZERO", "zero", "0"],
   ]);
   assert.equal(codes.length, 3);
 });

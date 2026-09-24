@@ -69,8 +69,8 @@ test("every Korea sourceId resolves to a sources[] entry", () => {
 test("Korea rate history is contiguous and the primary code is the 10% standard one", () => {
   const codes = codesFor("KR_VAT_RETURN");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["KR-VAT-STD", "standard", 10],
-    ["KR-VAT-ZERO", "zero", 0],
+    ["KR-VAT-STD", "standard", "10"],
+    ["KR-VAT-ZERO", "zero", "0"],
   ]);
   for (const code of codes) {
     assertContiguous(code.rates ?? [], code.code);

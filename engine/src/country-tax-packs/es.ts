@@ -88,24 +88,24 @@ export const SPAIN_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "ES-VAT-STD",
         name: "Spain IVA-territory standard VAT",
-        ratePercent: 21,
-        rates: [{ ratePercent: 21, effectiveFrom: "2012-09-01", sourceId: "aeat_2012_standard_rate_change" }],
+        ratePercent: "21",
+        rates: [{ ratePercent: "21", effectiveFrom: "2012-09-01", sourceId: "aeat_2012_standard_rate_change" }],
       },
       {
         code: "ES-VAT-RED",
         name: "Spain IVA-territory reducido VAT",
-        ratePercent: 10,
+        ratePercent: "10",
         role: "reduced",
-        rates: [{ ratePercent: 10, effectiveFrom: "2026-03-26", sourceId: "aeat_reduced_rates_applicability" }],
+        rates: [{ ratePercent: "10", effectiveFrom: "2026-03-26", sourceId: "aeat_reduced_rates_applicability" }],
         truncatedScheduleReason:
           "The AEAT rates page states current 10% applicability with no origin date, so the schedule opens at verification, not at the band's origin.",
       },
       {
         code: "ES-VAT-SUPERRED",
         name: "Spain IVA-territory superreducido VAT",
-        ratePercent: 4,
+        ratePercent: "4",
         role: "reduced",
-        rates: [{ ratePercent: 4, effectiveFrom: "2026-03-26", sourceId: "aeat_reduced_rates_applicability" }],
+        rates: [{ ratePercent: "4", effectiveFrom: "2026-03-26", sourceId: "aeat_reduced_rates_applicability" }],
         truncatedScheduleReason:
           "The AEAT rates page states current 4% applicability with no origin date, so the schedule opens at verification, not at the band's origin.",
       },

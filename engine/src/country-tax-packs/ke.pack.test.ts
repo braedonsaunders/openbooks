@@ -73,8 +73,8 @@ test("every Kenya sourceId resolves to a sources[] entry", () => {
 test("Kenya rate history is contiguous and the primary code is the 16% standard one", () => {
   const codes = codesFor("KE_VAT3");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["KE-VAT-STD", "standard", 16],
-    ["KE-VAT-ZERO", "zero", 0],
+    ["KE-VAT-STD", "standard", "16"],
+    ["KE-VAT-ZERO", "zero", "0"],
   ]);
   for (const code of codes) {
     assertContiguous(code.rates ?? [], code.code);
@@ -94,8 +94,8 @@ test("Kenya standard rate carries the sourced 14% COVID window inside 16%", () =
   assert.deepEqual(
     (standard.rates ?? []).map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
     [
-      [14, "2020-04-01", "2020-12-31"],
-      [16, "2021-01-01", null],
+      ["14", "2020-04-01", "2020-12-31"],
+      ["16", "2021-01-01", null],
     ],
   );
 });
@@ -104,7 +104,7 @@ test("Kenya declares no petroleum 8% code and no other bands", () => {
   const codes = codesFor("KE_VAT3");
   for (const code of codes) {
     for (const rate of code.rates ?? []) {
-      assert.notEqual(rate.ratePercent, 8);
+      assert.notEqual(rate.ratePercent, "8");
     }
   }
   assert.ok(!codes.some((code) => code.code.includes("PETRO") || code.code.includes("TOT") || code.code.includes("DST")));

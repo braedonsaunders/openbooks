@@ -75,10 +75,10 @@ test("CL-VAT-STD is a single left-truncated 19% tail from 1 October 2003", () =>
   const standard = codes[0]!;
   assert.equal(standard.code, "CL-VAT-STD");
   assert.equal(standard.role, "standard");
-  assert.equal(standard.ratePercent, 19);
+  assert.equal(standard.ratePercent, "19");
   assertContiguous(standard.rates ?? []);
   assert.deepEqual(standard.rates, [
-    { ratePercent: 19, effectiveFrom: "2003-10-01", sourceId: "contraloria_19888_oct2003" },
+    { ratePercent: "19", effectiveFrom: "2003-10-01", sourceId: "contraloria_19888_oct2003" },
   ]);
   assert.equal(CHILE_TAX_PACK.completeness.standardRates, "partial");
 });
@@ -88,7 +88,7 @@ test("primary code for CL_F29 is the standard 19% code", () => {
   assert.ok(primary, `${RETURN_CODE} declares no tax codes`);
   assert.equal(primary.code, "CL-VAT-STD");
   assert.equal(primary.role, "standard");
-  assert.equal(primary.ratePercent, 19);
+  assert.equal(primary.ratePercent, "19");
 });
 
 test("Chile declares no subnational IVA jurisdictions", () => {

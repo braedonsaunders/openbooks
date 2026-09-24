@@ -42,18 +42,18 @@ test("RO_D300 declares standard and reduced bands through the pack reader", () =
   assert.deepEqual(
     codes.map((code) => [code.code, code.role, code.ratePercent]),
     [
-      ["RO-VAT-STD", "standard", 21],
-      ["RO-VAT-RED11", "reduced", 11],
+      ["RO-VAT-STD", "standard", "21"],
+      ["RO-VAT-RED11", "reduced", "11"],
     ],
   );
   assert.deepEqual(
     codes[0]!.rates,
     [
-      { ratePercent: 19, effectiveFrom: "2017-01-01", effectiveTo: "2025-07-31", sourceId: "codul_fiscal_art291_19" },
-      { ratePercent: 21, effectiveFrom: "2025-08-01", sourceId: "mo_826_2025_d300" },
+      { ratePercent: "19", effectiveFrom: "2017-01-01", effectiveTo: "2025-07-31", sourceId: "codul_fiscal_art291_19" },
+      { ratePercent: "21", effectiveFrom: "2025-08-01", sourceId: "mo_826_2025_d300" },
     ],
   );
-  assert.deepEqual(codes[1]!.rates, [{ ratePercent: 11, effectiveFrom: "2025-08-01", sourceId: "mo_826_2025_d300" }]);
+  assert.deepEqual(codes[1]!.rates, [{ ratePercent: "11", effectiveFrom: "2025-08-01", sourceId: "mo_826_2025_d300" }]);
   for (const code of codes) assertContiguous(code.rates ?? []);
 });
 

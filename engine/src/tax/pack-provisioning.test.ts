@@ -180,10 +180,10 @@ test("a band in force today with a published end date satisfies the schedule gua
   const definition = {
     code: "DEMO-TEMP",
     name: "Demo temporary band",
-    ratePercent: 8,
+    ratePercent: "8",
     rates: [
-      { ratePercent: 16, effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
-      { ratePercent: 8, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+      { ratePercent: "16", effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
+      { ratePercent: "8", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
     ],
   };
   assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", definition, "2026-09-17");
@@ -193,10 +193,10 @@ test("a code whose band ended yesterday fails naming the code, the band, and the
   const definition = {
     code: "DEMO-TEMP",
     name: "Demo temporary band",
-    ratePercent: 8,
+    ratePercent: "8",
     rates: [
-      { ratePercent: 16, effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
-      { ratePercent: 8, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+      { ratePercent: "16", effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
+      { ratePercent: "8", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
     ],
   };
   assert.throws(
@@ -207,12 +207,12 @@ test("a code whose band ended yesterday fails naming the code, the band, and the
 
 test("the schedule guard rejects zero or multiple current bands and a stale headline", () => {
   const history = [
-    { ratePercent: 16, effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
-    { ratePercent: 8, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+    { ratePercent: "16", effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
+    { ratePercent: "8", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
   ];
   // Headline must track the rate current today, not history and not the future.
   assert.throws(
-    () => assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", { code: "DEMO-TEMP", name: "Demo", ratePercent: 16, rates: history }, "2026-09-17"),
+    () => assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", { code: "DEMO-TEMP", name: "Demo", ratePercent: "16", rates: history }, "2026-09-17"),
     /DEMO\/RETURN\/DEMO-TEMP headline rate is stale/,
   );
   // Two bands covering today is ambiguous, never admitted.
@@ -221,10 +221,10 @@ test("the schedule guard rejects zero or multiple current bands and a stale head
       assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", {
         code: "DEMO-TEMP",
         name: "Demo",
-        ratePercent: 8,
+        ratePercent: "8",
         rates: [
           ...history,
-          { ratePercent: 10, effectiveFrom: "2026-06-01", sourceId: "demo_overlap" },
+          { ratePercent: "10", effectiveFrom: "2026-06-01", sourceId: "demo_overlap" },
         ],
       }, "2026-09-17"),
     /DEMO\/RETURN\/DEMO-TEMP has 2 rates covering 2026-09-17/,
@@ -235,8 +235,8 @@ test("the schedule guard rejects zero or multiple current bands and a stale head
       assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", {
         code: "DEMO-TEMP",
         name: "Demo",
-        ratePercent: 8,
-        rates: [{ ratePercent: 8, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" }],
+        ratePercent: "8",
+        rates: [{ ratePercent: "8", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" }],
       }, "2025-12-31"),
     /DEMO\/RETURN\/DEMO-TEMP has no rate covering 2025-12-31/,
   );
@@ -244,9 +244,9 @@ test("the schedule guard rejects zero or multiple current bands and a stale head
 
 test("Canada GST history is effective-dated instead of backdating the current rate", () => {
   assert.deepEqual(PACK_DEFAULT_CODES.CA_GST34?.rates, [
-    { ratePercent: 7, effectiveFrom: "1991-01-01", effectiveTo: "2006-06-30", sourceId: "cra_gst_hst_rates" },
-    { ratePercent: 6, effectiveFrom: "2006-07-01", effectiveTo: "2007-12-31", sourceId: "cra_gst_hst_rates" },
-    { ratePercent: 5, effectiveFrom: "2008-01-01", sourceId: "cra_gst_hst_rates" },
+    { ratePercent: "7", effectiveFrom: "1991-01-01", effectiveTo: "2006-06-30", sourceId: "cra_gst_hst_rates" },
+    { ratePercent: "6", effectiveFrom: "2006-07-01", effectiveTo: "2007-12-31", sourceId: "cra_gst_hst_rates" },
+    { ratePercent: "5", effectiveFrom: "2008-01-01", sourceId: "cra_gst_hst_rates" },
   ]);
   assert.equal(PACK_DEFAULT_CODES.CA_BC_PST?.rates?.[0]?.effectiveFrom, "2013-04-01");
   assert.equal(PACK_DEFAULT_CODES.CA_SK_PST?.rates?.[0]?.effectiveFrom, "2017-03-23");
@@ -305,24 +305,24 @@ test("US supplies a sourced effective-dated statewide rate or explicitly has no 
 
 test("US future enacted rate changes are installed without replacing the current headline rate", () => {
   const dc = TAX_SUBDIVISION_CATALOG.find((item) => item.country === "US" && item.region === "DC")!;
-  assert.equal(dc.defaultTaxCode?.ratePercent, 6);
+  assert.equal(dc.defaultTaxCode?.ratePercent, "6");
   assert.deepEqual(dc.defaultTaxCode?.rates, [
-    { ratePercent: 6, effectiveFrom: "2026-07-31", effectiveTo: "2026-09-30", sourceId: "dc_2025_rate_notice" },
-    { ratePercent: 7, effectiveFrom: "2026-10-01", sourceId: "dc_2025_rate_notice" },
+    { ratePercent: "6", effectiveFrom: "2026-07-31", effectiveTo: "2026-09-30", sourceId: "dc_2025_rate_notice" },
+    { ratePercent: "7", effectiveFrom: "2026-10-01", sourceId: "dc_2025_rate_notice" },
   ]);
   const sd = TAX_SUBDIVISION_CATALOG.find((item) => item.country === "US" && item.region === "SD")!;
-  assert.equal(sd.defaultTaxCode?.ratePercent, 4.2);
-  assert.equal(sd.defaultTaxCode?.rates?.at(-1)?.ratePercent, 4.5);
+  assert.equal(sd.defaultTaxCode?.ratePercent, "4.2");
+  assert.equal(sd.defaultTaxCode?.rates?.at(-1)?.ratePercent, "4.5");
   assert.equal(sd.defaultTaxCode?.rates?.at(-1)?.effectiveFrom, "2027-07-01");
 });
 
 test("New Mexico uses the current official statewide GRT base rate", () => {
   const nm = TAX_SUBDIVISION_CATALOG.find((item) => item.country === "US" && item.region === "NM")!;
   assert.equal(nm.defaultTaxCode?.code, "US-NM-GRT");
-  assert.equal(nm.defaultTaxCode?.ratePercent, 4.875);
+  assert.equal(nm.defaultTaxCode?.ratePercent, "4.875");
   assert.deepEqual(nm.defaultTaxCode?.rates, [
-    { ratePercent: 5, effectiveFrom: "2022-07-01", effectiveTo: "2023-06-30", sourceId: "nm_grt_2022" },
-    { ratePercent: 4.875, effectiveFrom: "2023-07-01", sourceId: "nm_grt_2023" },
+    { ratePercent: "5", effectiveFrom: "2022-07-01", effectiveTo: "2023-06-30", sourceId: "nm_grt_2022" },
+    { ratePercent: "4.875", effectiveFrom: "2023-07-01", sourceId: "nm_grt_2023" },
   ]);
 });
 
@@ -354,11 +354,11 @@ test("only maintained packs and catalogued jurisdiction selections are accepted"
 
 test("Canadian HST histories are contiguous and current through the latest enacted rates", () => {
   const expectedCurrentRates = new Map([
-    ["NB", 15],
-    ["NL", 15],
-    ["NS", 14],
-    ["ON", 13],
-    ["PE", 15],
+    ["NB", "15"],
+    ["NL", "15"],
+    ["NS", "14"],
+    ["ON", "13"],
+    ["PE", "15"],
   ]);
   for (const [region, expectedRate] of expectedCurrentRates) {
     const entry = TAX_SUBDIVISION_CATALOG.find((item) => item.country === "CA" && item.region === region);

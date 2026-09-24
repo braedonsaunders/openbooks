@@ -59,17 +59,17 @@ test("the code set is keyed by the U30 and led by the standard band", () => {
   assert.ok(standard, "the set must lead with a code");
   assert.equal(standard.code, "AT-VAT-STD");
   assert.equal(standard.role, "standard");
-  assert.equal(standard.ratePercent, 20);
+  assert.equal(standard.ratePercent, "20");
 
   const map = byCode();
   assert.equal(map.get("AT-VAT-RED10")?.role, "reduced");
-  assert.equal(map.get("AT-VAT-RED10")?.ratePercent, 10);
+  assert.equal(map.get("AT-VAT-RED10")?.ratePercent, "10");
   assert.equal(map.get("AT-VAT-RED13")?.role, "reduced");
-  assert.equal(map.get("AT-VAT-RED13")?.ratePercent, 13);
+  assert.equal(map.get("AT-VAT-RED13")?.ratePercent, "13");
   // Jungholz/Mittelberg sit in the German customs union and are neither the
   // Austrian standard nor an Austrian reduced band, so they carry no role.
   assert.equal(map.get("AT-VAT-ENCLAVE")?.role, undefined);
-  assert.equal(map.get("AT-VAT-ENCLAVE")?.ratePercent, 19);
+  assert.equal(map.get("AT-VAT-ENCLAVE")?.ratePercent, "19");
 });
 
 test("every source is https with an asOf, and every sourceId resolves", () => {

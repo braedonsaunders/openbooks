@@ -42,8 +42,8 @@ test("Thailand filing is monthly portal entry through Revenue Department e-Filin
 test("Thailand declares the decree 7% band as standard and a Section 80/1 zero band for exports", () => {
   const codes = packTaxCodesForReturn(THAILAND_TAX_PACK, "TH_PP30");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["TH-VAT-STD", "standard", 7],
-    ["TH-VAT-ZERO", "zero", 0],
+    ["TH-VAT-STD", "standard", "7"],
+    ["TH-VAT-ZERO", "zero", "0"],
   ]);
 });
 

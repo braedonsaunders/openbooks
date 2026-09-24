@@ -9,7 +9,7 @@ export type IndirectTaxType =
   | "other";
 
 export interface EffectiveTaxRate {
-  ratePercent: number;
+  ratePercent: string;
   effectiveFrom: string;
   effectiveTo?: string;
   /** Stable id of the authoritative source in the owning country pack. */
@@ -72,7 +72,7 @@ export type CountryTaxCodeRole = "standard" | "reduced" | "zero" | "exempt";
 export interface CountryTaxCodeDefinition {
   code: string;
   name: string;
-  ratePercent: number;
+  ratePercent: string;
   rates?: readonly EffectiveTaxRate[];
   role?: CountryTaxCodeRole;
   /**

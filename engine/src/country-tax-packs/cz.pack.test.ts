@@ -45,9 +45,9 @@ test("Czechia declares 21 / 12 / 0 with no current 10% band", () => {
   assert.deepEqual(
     codes.map((code) => [code.code, code.role, code.ratePercent, code.rates?.[0]?.effectiveFrom, code.rates?.[0]?.sourceId]),
     [
-      ["CZ-VAT-STD", "standard", 21, "2023-06-06", "fs_dph_leaflet_2023"],
-      ["CZ-VAT-RED12", "reduced", 12, "2024-01-01", "esbirka_349_2023"],
-      ["CZ-VAT-ZERO", "zero", 0, "2024-01-01", "esbirka_349_2023"],
+      ["CZ-VAT-STD", "standard", "21", "2023-06-06", "fs_dph_leaflet_2023"],
+      ["CZ-VAT-RED12", "reduced", "12", "2024-01-01", "esbirka_349_2023"],
+      ["CZ-VAT-ZERO", "zero", "0", "2024-01-01", "esbirka_349_2023"],
     ],
   );
   assert.equal(primaryPackTaxCode(pack, "CZ_DPH")?.code, "CZ-VAT-STD");

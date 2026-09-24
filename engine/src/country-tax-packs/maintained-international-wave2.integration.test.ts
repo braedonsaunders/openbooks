@@ -92,10 +92,10 @@ test(
       assert.equal(state.manifests.find((row) => row.country === "IE")?.standardRates, "complete");
       assert.equal(state.manifests.find((row) => row.country === "SG")?.standardRates, "complete");
       assert.equal(state.counts.registrations, 5);
-      // 60 statutory boxes plus 18 workpaper rows fanned out over the new
+      // 66 declared boxes plus 18 additional rows fanned out over the new
       // reduced-rate codes (the OB_OUTPUT/OB_INPUT boxes sum all configured
       // rates); every (report, line, code) triple is distinct.
-      assert.equal(state.counts.lines, 78);
+      assert.equal(state.counts.lines, 84);
 
       const second = await provisionTaxPacks(target.orgId, selections);
       assert.equal(second.jurisdictionsCreated, 0);

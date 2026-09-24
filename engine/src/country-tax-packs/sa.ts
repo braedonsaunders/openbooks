@@ -114,11 +114,11 @@ export const SAUDI_ARABIA_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "SA-VAT-STD",
         name: "Saudi Arabia standard VAT",
-        ratePercent: 15,
+        ratePercent: "15",
         role: "standard",
         rates: [
-          { ratePercent: 5, effectiveFrom: "2018-01-01", effectiveTo: "2020-06-30", sourceId: "zatca_retail_vat_guide" },
-          { ratePercent: 15, effectiveFrom: "2020-07-01", sourceId: "zatca_retail_vat_guide" },
+          { ratePercent: "5", effectiveFrom: "2018-01-01", effectiveTo: "2020-06-30", sourceId: "zatca_retail_vat_guide" },
+          { ratePercent: "15", effectiveFrom: "2020-07-01", sourceId: "zatca_retail_vat_guide" },
         ],
         // Box labels are rate-neutral (the 5% era shares these boxes), so
         // the destinations are declared: standard-rated sales, purchases,
@@ -128,9 +128,9 @@ export const SAUDI_ARABIA_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "SA-VAT-ZERO",
         name: "Saudi Arabia zero-rated VAT",
-        ratePercent: 0,
+        ratePercent: "0",
         role: "zero",
-        rates: [{ ratePercent: 0, effectiveFrom: "2018-01-01", sourceId: "zatca_imports_exports_vat_guide" }],
+        rates: [{ ratePercent: "0", effectiveFrom: "2018-01-01", sourceId: "zatca_imports_exports_vat_guide" }],
       },
     ],
   },

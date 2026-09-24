@@ -110,9 +110,9 @@ export const CHILE_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "CL-VAT-STD",
         name: "Chile national standard IVA",
-        ratePercent: 19,
+        ratePercent: "19",
         role: "standard",
-        rates: [{ ratePercent: 19, effectiveFrom: "2003-10-01", sourceId: "contraloria_19888_oct2003" }],
+        rates: [{ ratePercent: "19", effectiveFrom: "2003-10-01", sourceId: "contraloria_19888_oct2003" }],
       },
     ],
   },

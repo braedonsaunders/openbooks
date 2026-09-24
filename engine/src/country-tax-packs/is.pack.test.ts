@@ -42,9 +42,9 @@ test("Iceland filing is bimonthly portal entry through the Skatturinn VAT page",
 test("Iceland declares the 24/11/0 bands with honest roles", () => {
   const codes = packTaxCodesForReturn(ICELAND_TAX_PACK, "IS_VSK");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["IS-VAT-STD", "standard", 24],
-    ["IS-VAT-RED11", "reduced", 11],
-    ["IS-VAT-ZERO", "zero", 0],
+    ["IS-VAT-STD", "standard", "24"],
+    ["IS-VAT-RED11", "reduced", "11"],
+    ["IS-VAT-ZERO", "zero", "0"],
   ]);
 });
 

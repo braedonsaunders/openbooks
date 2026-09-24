@@ -18,16 +18,16 @@ function governmentBoxes(pack: CountryTaxPackDefinition, returnPackCode: string)
 }
 
 /** Percent numbers named by a box label, with comma decimals ("10,5%"). */
-function labelPercents(label: string): number[] {
-  const out: number[] = [];
+function labelPercents(label: string): string[] {
+  const out: string[] = [];
   for (const match of label.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)) {
-    out.push(Number(match[1]!.replace(",", ".")));
+    out.push(match[1]!.replace(",", "."));
   }
   return out;
 }
 
 function mentionsZero(label: string): boolean {
-  return labelPercents(label).includes(0) || /\bzero\b/i.test(label);
+  return labelPercents(label).includes("0") || /\bzero\b/i.test(label);
 }
 
 test("every priced band on a rate-split return has a box, a declared destination, or a reviewed workpaper-only reason", () => {
@@ -43,7 +43,7 @@ test("every priced band on a rate-split return has a box, a declared destination
       if (!split) continue;
       for (const code of packTaxCodesForReturn(pack, returnPackCode)) {
         const routed =
-          code.ratePercent === 0
+          code.ratePercent === "0"
             ? gov.some((box) => mentionsZero(box.label))
             : gov.some((box) => labelPercents(box.label).includes(code.ratePercent));
         if (routed) continue;

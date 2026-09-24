@@ -68,7 +68,7 @@ test("Denmark 25% standard code opens 1992-01-01 sourced to LOV 891/1991 itself"
   assert.equal(definitions.length, 1);
   assert.deepEqual(
     (definitions[0]!.rates ?? []).map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
-    [[25, "1992-01-01", null]],
+    [["25", "1992-01-01", null]],
   );
   assert.equal(definitions[0]!.rates![0]!.sourceId, "lov_891_1991_tillaegsmoms");
   const act = pack.sources.find((source) => source.id === "lov_891_1991_tillaegsmoms")!;
@@ -81,6 +81,6 @@ test("Denmark primary code is the 25% standard moms code", () => {
   assert.equal(definitions.length, 1);
   assert.equal(definitions[0]!.code, "DK-VAT-STD");
   assert.equal(definitions[0]!.role, "standard");
-  assert.equal(definitions[0]!.ratePercent, 25);
+  assert.equal(definitions[0]!.ratePercent, "25");
   assert.equal(primaryPackTaxCode(pack, "DK_MOMS")?.code, "DK-VAT-STD");
 });

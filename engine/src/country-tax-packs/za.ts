@@ -82,11 +82,11 @@ export const SOUTH_AFRICA_TAX_PACK: CountryTaxPackDefinition = {
     ZA_VAT201: {
       code: "ZA-VAT-STD",
       name: "South Africa standard VAT",
-      ratePercent: 15,
+      ratePercent: "15",
       rates: [
-        { ratePercent: 10, effectiveFrom: "1991-09-30", effectiveTo: "1993-04-06", sourceId: "sars_vat_rate_history" },
-        { ratePercent: 14, effectiveFrom: "1993-04-07", effectiveTo: "2018-03-31", sourceId: "sars_vat_rate_history" },
-        { ratePercent: 15, effectiveFrom: "2018-04-01", sourceId: "sars_vat_current" },
+        { ratePercent: "10", effectiveFrom: "1991-09-30", effectiveTo: "1993-04-06", sourceId: "sars_vat_rate_history" },
+        { ratePercent: "14", effectiveFrom: "1993-04-07", effectiveTo: "2018-03-31", sourceId: "sars_vat_rate_history" },
+        { ratePercent: "15", effectiveFrom: "2018-04-01", sourceId: "sars_vat_current" },
       ],
     },
   },

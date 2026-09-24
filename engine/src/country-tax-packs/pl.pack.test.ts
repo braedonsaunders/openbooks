@@ -53,10 +53,10 @@ test("Poland declares four rate bands with contiguous source-backed histories", 
   assert.deepEqual(
     codes.map((code) => [code.code, code.role, code.ratePercent]),
     [
-      ["PL-VAT-STD", "standard", 23],
-      ["PL-VAT-RED8", "reduced", 8],
-      ["PL-VAT-RED5", "reduced", 5],
-      ["PL-VAT-ZERO", "zero", 0],
+      ["PL-VAT-STD", "standard", "23"],
+      ["PL-VAT-RED8", "reduced", "8"],
+      ["PL-VAT-RED5", "reduced", "5"],
+      ["PL-VAT-ZERO", "zero", "0"],
     ],
   );
   const sourceIds = new Set(POLAND_TAX_PACK.sources.map((source) => source.id));

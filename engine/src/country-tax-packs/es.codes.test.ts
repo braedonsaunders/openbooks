@@ -22,10 +22,10 @@ test("Spain reducido and superreducido carry left-truncated AEAT applicability s
   const definitions = packTaxCodesForReturn(SPAIN_TAX_PACK, "ES_MODELO303");
   const reducido = definitions.find((definition) => definition.code === "ES-VAT-RED")!;
   const superreducido = definitions.find((definition) => definition.code === "ES-VAT-SUPERRED")!;
-  assert.deepEqual(reducido.rates, [{ ratePercent: 10, effectiveFrom: "2026-03-26", sourceId: SOURCE_ID }]);
-  assert.deepEqual(superreducido.rates, [{ ratePercent: 4, effectiveFrom: "2026-03-26", sourceId: SOURCE_ID }]);
-  assert.equal(reducido.ratePercent, 10);
-  assert.equal(superreducido.ratePercent, 4);
+  assert.deepEqual(reducido.rates, [{ ratePercent: "10", effectiveFrom: "2026-03-26", sourceId: SOURCE_ID }]);
+  assert.deepEqual(superreducido.rates, [{ ratePercent: "4", effectiveFrom: "2026-03-26", sourceId: SOURCE_ID }]);
+  assert.equal(reducido.ratePercent, "10");
+  assert.equal(superreducido.ratePercent, "4");
 });
 
 test("Spain reduced-rate source is the live AEAT rates page, titled as applicability", () => {
@@ -53,8 +53,8 @@ test("every priced band lands on a real Modelo 303 casilla, not only the workpap
 
 test("Spain headline default code stays the standard 21% rate", () => {
   assert.equal(PACK_DEFAULT_CODES.ES_MODELO303?.code, "ES-VAT-STD");
-  assert.equal(PACK_DEFAULT_CODES.ES_MODELO303?.ratePercent, 21);
+  assert.equal(PACK_DEFAULT_CODES.ES_MODELO303?.ratePercent, "21");
   assert.deepEqual(PACK_DEFAULT_CODES.ES_MODELO303?.rates, [
-    { ratePercent: 21, effectiveFrom: "2012-09-01", sourceId: "aeat_2012_standard_rate_change" },
+    { ratePercent: "21", effectiveFrom: "2012-09-01", sourceId: "aeat_2012_standard_rate_change" },
   ]);
 });

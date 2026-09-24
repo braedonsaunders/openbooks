@@ -77,24 +77,24 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "IT-VAT-STD",
         name: "Italy standard VAT",
-        ratePercent: 22,
-        rates: [{ ratePercent: 22, effectiveFrom: "2013-10-01", sourceId: "italy_vat_22_from_2013" }],
+        ratePercent: "22",
+        rates: [{ ratePercent: "22", effectiveFrom: "2013-10-01", sourceId: "italy_vat_22_from_2013" }],
       },
       {
         code: "IT-VAT-RED10",
         name: "Italy reduced VAT 10%",
-        ratePercent: 10,
+        ratePercent: "10",
         role: "reduced",
-        rates: [{ ratePercent: 10, effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
+        rates: [{ ratePercent: "10", effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
         truncatedScheduleReason:
           "10% opens at AdE applicability (2026-09-18): the rates page states no statutory start date, so the band is applicability-dated by review.",
       },
       {
         code: "IT-VAT-RED4",
         name: "Italy minimum VAT 4%",
-        ratePercent: 4,
+        ratePercent: "4",
         role: "reduced",
-        rates: [{ ratePercent: 4, effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
+        rates: [{ ratePercent: "4", effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
         truncatedScheduleReason:
           "4% opens at AdE applicability (2026-09-18): the rates page states no statutory start date, so the band is applicability-dated by review.",
       },

@@ -53,8 +53,8 @@ test("Philippines filing is quarterly electronic filing through the BIR e-servic
 test("Philippines declares the 12% standard and 0% zero bands with honest roles and no exempt code", () => {
   const codes = packTaxCodesForReturn(PHILIPPINES_TAX_PACK, "PH_BIR_2550Q");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["PH-VAT-STD", "standard", 12],
-    ["PH-VAT-ZERO", "zero", 0],
+    ["PH-VAT-STD", "standard", "12"],
+    ["PH-VAT-ZERO", "zero", "0"],
   ]);
   assert.ok(!codes.some((code) => code.role === "exempt"), "Section 109 exempt sales carry no code");
   assert.ok(!codes.some((code) => code.role === "reduced"), "no reduced rate in Philippine VAT");
