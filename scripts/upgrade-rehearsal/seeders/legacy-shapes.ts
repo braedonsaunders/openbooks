@@ -39,7 +39,12 @@ function requireEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
-  const client = new pg.Client({ connectionString: requireEnv("OPENBOOKS_DB_URL") });
+  // Raw SQL with no tenant context: the runtime login sees zero org rows
+  // through RLS, so the runner hands raw-SQL seeders the migration login as
+  // OPENBOOKS_SEED_DB_URL. Standalone runs keep working: a directly exported
+  // OPENBOOKS_DB_URL (usually the migration login) is the fallback.
+  const seedUrl = process.env["OPENBOOKS_SEED_DB_URL"]?.trim() || requireEnv("OPENBOOKS_DB_URL");
+  const client = new pg.Client({ connectionString: seedUrl });
   await client.connect();
   try {
     // The rehearsal database holds exactly one org: with several tenants,
