@@ -1,9 +1,27 @@
+/**
+ * 0296 replays the payroll-remittance snapshot migration forward: the body
+ * is additive and idempotent, so replays converge without downgrades.
+ *
+ * Runs without a self-skip: the integration partition always provides a
+ * database (the suite refuses to run without one), so a missing database
+ * must fail loudly, never pass silently. The teardown asserts both touched
+ * tables still match their pre-test snapshots — the CONCURRENTLY-heal test
+ * drops the live snapshot index mid-test, so without that assertion a
+ * failure window would leave the shared database without the index for
+ * the files after it in the process order.
+ */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import test, { afterEach, beforeEach } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "../../../engine/src/platform/db.ts";
+import {
+  assertTableCatalogMatches,
+  snapshotTableCatalog,
+  type CatalogQuery,
+  type TableCatalogSnapshot,
+} from "../../../engine/src/testing/migration-catalog.ts";
 import {
   PAYROLL_COUNTRY_PACKS,
   statutoryRemittanceDeclaration,
@@ -21,12 +39,36 @@ import {
   sanitizeMigrationContent,
 } from "../../../scripts/bootstrap-migration-client.ts";
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const MIGRATION_FILENAME = "generated/0296_payroll_remittance_destination_snapshot.sql";
 const migrationSql = readFileSync(
   new URL("./0296_payroll_remittance_destination_snapshot.sql", import.meta.url),
   "utf8",
 );
+
+const snapshotQuery: CatalogQuery = async (text) =>
+  (await db.execute(sql.raw(text))).rows as Array<Record<string, unknown>>;
+
+let stubLinesBefore: TableCatalogSnapshot | null = null;
+let coverageBefore: TableCatalogSnapshot | null = null;
+
+beforeEach(async () => {
+  stubLinesBefore = await snapshotTableCatalog(snapshotQuery, "public.pay_stub_lines");
+  coverageBefore = await snapshotTableCatalog(snapshotQuery, "public.payroll_remittance_coverage");
+});
+
+afterEach(async () => {
+  assert.ok(stubLinesBefore && coverageBefore, "the pre-test catalog snapshots are missing");
+  await assertTableCatalogMatches(
+    snapshotQuery,
+    stubLinesBefore,
+    "0296 replay test must leave pay_stub_lines exactly as found",
+  );
+  await assertTableCatalogMatches(
+    snapshotQuery,
+    coverageBefore,
+    "0296 replay test must leave payroll_remittance_coverage exactly as found",
+  );
+});
 
 async function runMigration(): Promise<void> {
   // The file builds its hot-table index CONCURRENTLY, which PostgreSQL
@@ -404,254 +446,226 @@ async function coverageRows(orgId: string): Promise<{ bill: string; line: string
      order by bill, line`)).rows;
 }
 
-test(
-  "0296 refuses the upgrade by name for malformed legacy markers",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      await withBypass(async () => {
-        await seedAccrual(fx);
-        await approveBill(fx, await seedBill(fx, "VB-U1-DATE", { ...validMarker(fx), from: "2026-02-30" }));
-        await approveBill(
-          fx,
-          await seedBill(fx, "VB-U1-UUID", {
-            ...validMarker(fx),
-            partyId: "------------------------------------",
-          }),
-        );
-        const missingParty = validMarker(fx);
-        delete missingParty.partyId;
-        await approveBill(fx, await seedBill(fx, "VB-U1-NOPARTY", missingParty));
-      });
-      // The refusing upgrade runs bare on its own client, never inside the
-      // seeding transaction above: the seeds are committed, so the precheck
-      // sees them, and no open transaction holds a lock the upgrade waits on.
-      await runMigration().then(
-        () => assert.fail("malformed markers must refuse the upgrade"),
-        (error: unknown) => {
-          const message = refusalMessage(error);
-          // The refusal names every bill and field — not a bare cast error.
-          assert.match(message, /VB-U1-DATE/);
-          assert.match(message, /from/);
-          assert.match(message, /impossible calendar date/);
-          assert.match(message, /VB-U1-UUID/);
-          assert.match(message, /partyId/);
-          assert.match(message, /unparseable reference/);
-          assert.match(message, /VB-U1-NOPARTY/);
-          assert.match(message, /missing/);
-          assert.match(message, /re-apply/);
-        },
+test("0296 refuses the upgrade by name for malformed legacy markers", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    await withBypass(async () => {
+      await seedAccrual(fx);
+      await approveBill(fx, await seedBill(fx, "VB-U1-DATE", { ...validMarker(fx), from: "2026-02-30" }));
+      await approveBill(
+        fx,
+        await seedBill(fx, "VB-U1-UUID", {
+          ...validMarker(fx),
+          partyId: "------------------------------------",
+        }),
       );
-      await withBypass(async () => {
-        assert.deepEqual(await coverageRows(fx.orgId), [], "refused upgrade covers nothing");
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
+      const missingParty = validMarker(fx);
+      delete missingParty.partyId;
+      await approveBill(fx, await seedBill(fx, "VB-U1-NOPARTY", missingParty));
+    });
+    // The refusing upgrade runs bare on its own client, never inside the
+    // seeding transaction above: the seeds are committed, so the precheck
+    // sees them, and no open transaction holds a lock the upgrade waits on.
+    await runMigration().then(
+      () => assert.fail("malformed markers must refuse the upgrade"),
+      (error: unknown) => {
+        const message = refusalMessage(error);
+        // The refusal names every bill and field — not a bare cast error.
+        assert.match(message, /VB-U1-DATE/);
+        assert.match(message, /from/);
+        assert.match(message, /impossible calendar date/);
+        assert.match(message, /VB-U1-UUID/);
+        assert.match(message, /partyId/);
+        assert.match(message, /unparseable reference/);
+        assert.match(message, /VB-U1-NOPARTY/);
+        assert.match(message, /missing/);
+        assert.match(message, /re-apply/);
+      },
+    );
+    await withBypass(async () => {
+      assert.deepEqual(await coverageRows(fx.orgId), [], "refused upgrade covers nothing");
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
 
-test(
-  "0296 covers a well-formed legacy bill, idempotently",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      const { billId, lineId } = await withBypass(async () => {
-        const { lineId, liability } = await seedAccrual(fx);
-        const billId = await seedBill(fx, "VB-U1-OK", validMarker(fx));
-        await seedBillLines(fx, billId, [{ account: liability, amount: "100", description: "Garnishment" }]);
-        await approveBill(fx, billId);
-        return { billId, lineId };
+test("0296 covers a well-formed legacy bill, idempotently", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    const { billId, lineId } = await withBypass(async () => {
+      const { lineId, liability } = await seedAccrual(fx);
+      const billId = await seedBill(fx, "VB-U1-OK", validMarker(fx));
+      await seedBillLines(fx, billId, [{ account: liability, amount: "100", description: "Garnishment" }]);
+      await approveBill(fx, billId);
+      return { billId, lineId };
+    });
+    await runMigration();
+    assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), [
+      { bill: billId, line: lineId, amount: "100.0000" },
+    ]);
+    // Re-running changes nothing: the anti-join skips covered lines.
+    await runMigration();
+    assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), [
+      { bill: billId, line: lineId, amount: "100.0000" },
+    ]);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("0296 refuses a non-string marker value by name", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    await withBypass(async () => {
+      await seedAccrual(fx);
+      // A JSON number is not a date: ->> yields text that fails the shape
+      // filter. The marker claims the structured shape but is unusable, so
+      // the upgrade refuses by name instead of leaving silent debt.
+      await approveBill(fx, await seedBill(fx, "VB-U1-NONSTRING", { ...validMarker(fx), from: 20260701 }));
+    });
+    await runMigration().then(
+      () => assert.fail("a non-string marker value must refuse the upgrade"),
+      (error: unknown) => {
+        const message = refusalMessage(error);
+        assert.match(message, /VB-U1-NONSTRING/);
+        assert.match(message, /from/);
+        assert.match(message, /malformed date/);
+      },
+    );
+    await withBypass(async () => {
+      assert.deepEqual(await coverageRows(fx.orgId), [], "refused upgrade covers nothing");
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("0296 skips markers that never claimed the structured shape", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    await withBypass(async () => {
+      await seedAccrual(fx);
+      // A scalar marker and an object naming none of the four fields
+      // predate structured bills: the backfill skips them as before and
+      // they keep the fail-closed overlap refusal.
+      await approveBill(fx, await seedBill(fx, "VB-U1-SCALAR", "legacy" as unknown as Record<string, unknown>));
+      await approveBill(fx, await seedBill(fx, "VB-U1-EMPTY", { note: "pre-structured" }));
+    });
+    await runMigration();
+    assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), []);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("0296 leaves a same-total wrong-account bill uncovered and names it", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    const billId = await withBypass(async () => {
+      // $100 accrued to A, but the bill debits $100 of B: same total, so
+      // the old grand-total match covered the A line while A stayed
+      // payable in the GL.
+      const { liability } = await seedAccrual(fx);
+      const other = await seedLiabilityAccount(fx, "2320", "Other payable");
+      assert.notEqual(other, liability);
+      const id = await seedBill(fx, "VB-U2-WRONGACCT", validMarker(fx));
+      await seedBillLines(fx, id, [{ account: other, amount: "100", description: "Garnishment" }]);
+      await approveBill(fx, id);
+      return id;
+    });
+    await runMigration();
+    const { rows, named } = await withBypass(async () => ({
+      rows: await coverageRows(fx.orgId),
+      named: await namedBills(fx.orgId),
+    }));
+    assert.deepEqual(rows, [], "a wrong-account bill gains no coverage");
+    assert.deepEqual(named, [{ number: "VB-U2-WRONGACCT", reasons: "line-mismatch" }]);
+    assert.ok(billId);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("0296 empties a party-mismatched bill and names it", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    await withBypass(async () => {
+      // The marker names the scratch vendor but the bill was re-pointed at
+      // another vendor: simulate the rows the old grand-total backfill
+      // wrote, then prove the repair removes them and names the bill.
+      const { lineId, liability } = await seedAccrual(fx);
+      const otherVendor = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id,
+                             is_active, custom, created_by, updated_by)
+        values (${otherVendor}, ${fx.orgId}, 'company', 'Other vendor', ${fx.subsidiaryId},
+                true, '{}'::jsonb, ${fx.actor}, ${fx.actor})`);
+      const billId = await seedBill(fx, "VB-U2-PARTY", validMarker(fx));
+      await seedBillLines(fx, billId, [{ account: liability, amount: "100", description: "Garnishment" }]);
+      await db.execute(sql`
+        update documents set party_id = ${otherVendor}
+         where org_id = ${fx.orgId} and id = ${billId}`);
+      await approveBill(fx, billId);
+      await db.execute(sql`
+        insert into payroll_remittance_coverage (org_id, bill_document_id, stub_line_id, amount)
+        values (${fx.orgId}, ${billId}, ${lineId}, '100.00')`);
+    });
+    await runMigration();
+    const { rows, named } = await withBypass(async () => ({
+      rows: await coverageRows(fx.orgId),
+      named: await namedBills(fx.orgId),
+    }));
+    assert.deepEqual(rows, [], "a party-mismatched bill keeps no backfill rows");
+    assert.deepEqual(named, [{ number: "VB-U2-PARTY", reasons: "party-mismatch" }]);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
+
+test("0296 covers a bill whose lines reconcile across two liability accounts", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    const { billId, lineA, lineB } = await withBypass(async () => {
+      // $60 to A plus $40 to B, billed as two labelled lines: the account
+      // split is legitimate, so both lines gain coverage and no notice names it.
+      const first = await seedAccrual(fx, { amount: "60.00", code: "GARN-A", name: "Garnishment A" });
+      const second = await seedAccrual(fx, {
+        amount: "40.00",
+        code: "GARN-B",
+        name: "Garnishment B",
+        liabilityId: await seedLiabilityAccount(fx, "2320", "Other payable"),
       });
-      await runMigration();
-      assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), [
-        { bill: billId, line: lineId, amount: "100.0000" },
+      const id = await seedBill(fx, "VB-U2-TWOACCT", validMarker(fx));
+      await seedBillLines(fx, id, [
+        { account: first.liability, amount: "60", description: "Garnishment A" },
+        { account: second.liability, amount: "40", description: "Garnishment B" },
       ]);
-      // Re-running changes nothing: the anti-join skips covered lines.
-      await runMigration();
-      assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), [
-        { bill: billId, line: lineId, amount: "100.0000" },
-      ]);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
-
-test(
-  "0296 refuses a non-string marker value by name",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      await withBypass(async () => {
-        await seedAccrual(fx);
-        // A JSON number is not a date: ->> yields text that fails the shape
-        // filter. The marker claims the structured shape but is unusable, so
-        // the upgrade refuses by name instead of leaving silent debt.
-        await approveBill(fx, await seedBill(fx, "VB-U1-NONSTRING", { ...validMarker(fx), from: 20260701 }));
-      });
-      await runMigration().then(
-        () => assert.fail("a non-string marker value must refuse the upgrade"),
-        (error: unknown) => {
-          const message = refusalMessage(error);
-          assert.match(message, /VB-U1-NONSTRING/);
-          assert.match(message, /from/);
-          assert.match(message, /malformed date/);
-        },
-      );
-      await withBypass(async () => {
-        assert.deepEqual(await coverageRows(fx.orgId), [], "refused upgrade covers nothing");
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
-
-test(
-  "0296 skips markers that never claimed the structured shape",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      await withBypass(async () => {
-        await seedAccrual(fx);
-        // A scalar marker and an object naming none of the four fields
-        // predate structured bills: the backfill skips them as before and
-        // they keep the fail-closed overlap refusal.
-        await approveBill(fx, await seedBill(fx, "VB-U1-SCALAR", "legacy" as unknown as Record<string, unknown>));
-        await approveBill(fx, await seedBill(fx, "VB-U1-EMPTY", { note: "pre-structured" }));
-      });
-      await runMigration();
-      assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), []);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
-
-test(
-  "0296 leaves a same-total wrong-account bill uncovered and names it",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      const billId = await withBypass(async () => {
-        // $100 accrued to A, but the bill debits $100 of B: same total, so
-        // the old grand-total match covered the A line while A stayed
-        // payable in the GL.
-        const { liability } = await seedAccrual(fx);
-        const other = await seedLiabilityAccount(fx, "2320", "Other payable");
-        assert.notEqual(other, liability);
-        const id = await seedBill(fx, "VB-U2-WRONGACCT", validMarker(fx));
-        await seedBillLines(fx, id, [{ account: other, amount: "100", description: "Garnishment" }]);
-        await approveBill(fx, id);
-        return id;
-      });
-      await runMigration();
-      const { rows, named } = await withBypass(async () => ({
-        rows: await coverageRows(fx.orgId),
-        named: await namedBills(fx.orgId),
-      }));
-      assert.deepEqual(rows, [], "a wrong-account bill gains no coverage");
-      assert.deepEqual(named, [{ number: "VB-U2-WRONGACCT", reasons: "line-mismatch" }]);
-      assert.ok(billId);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
-
-test(
-  "0296 empties a party-mismatched bill and names it",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      await withBypass(async () => {
-        // The marker names the scratch vendor but the bill was re-pointed at
-        // another vendor: simulate the rows the old grand-total backfill
-        // wrote, then prove the repair removes them and names the bill.
-        const { lineId, liability } = await seedAccrual(fx);
-        const otherVendor = randomUUID();
-        await db.execute(sql`
-          insert into parties (id, org_id, kind, display_name, subsidiary_id,
-                               is_active, custom, created_by, updated_by)
-          values (${otherVendor}, ${fx.orgId}, 'company', 'Other vendor', ${fx.subsidiaryId},
-                  true, '{}'::jsonb, ${fx.actor}, ${fx.actor})`);
-        const billId = await seedBill(fx, "VB-U2-PARTY", validMarker(fx));
-        await seedBillLines(fx, billId, [{ account: liability, amount: "100", description: "Garnishment" }]);
-        await db.execute(sql`
-          update documents set party_id = ${otherVendor}
-           where org_id = ${fx.orgId} and id = ${billId}`);
-        await approveBill(fx, billId);
-        await db.execute(sql`
-          insert into payroll_remittance_coverage (org_id, bill_document_id, stub_line_id, amount)
-          values (${fx.orgId}, ${billId}, ${lineId}, '100.00')`);
-      });
-      await runMigration();
-      const { rows, named } = await withBypass(async () => ({
-        rows: await coverageRows(fx.orgId),
-        named: await namedBills(fx.orgId),
-      }));
-      assert.deepEqual(rows, [], "a party-mismatched bill keeps no backfill rows");
-      assert.deepEqual(named, [{ number: "VB-U2-PARTY", reasons: "party-mismatch" }]);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
-
-test(
-  "0296 covers a bill whose lines reconcile across two liability accounts",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      const { billId, lineA, lineB } = await withBypass(async () => {
-        // $60 to A plus $40 to B, billed as two labelled lines: the account
-        // split is legitimate, so both lines gain coverage and no notice names it.
-        const first = await seedAccrual(fx, { amount: "60.00", code: "GARN-A", name: "Garnishment A" });
-        const second = await seedAccrual(fx, {
-          amount: "40.00",
-          code: "GARN-B",
-          name: "Garnishment B",
-          liabilityId: await seedLiabilityAccount(fx, "2320", "Other payable"),
-        });
-        const id = await seedBill(fx, "VB-U2-TWOACCT", validMarker(fx));
-        await seedBillLines(fx, id, [
-          { account: first.liability, amount: "60", description: "Garnishment A" },
-          { account: second.liability, amount: "40", description: "Garnishment B" },
-        ]);
-        // The seed bills total a fixed 100; the two lines sum to it.
-        await db.execute(sql`
-          update documents set total = '100', subtotal = '100'
-           where org_id = ${fx.orgId} and id = ${id}`);
-        await approveBill(fx, id);
-        return { billId: id, lineA: first.lineId, lineB: second.lineId };
-      });
-      await runMigration();
-      const { rows, named } = await withBypass(async () => ({
-        rows: await coverageRows(fx.orgId),
-        named: await namedBills(fx.orgId),
-      }));
-      // Line uuids sort arbitrarily: compare as a set keyed by amount.
-      assert.deepEqual(
-        [...rows].sort((a, b) => (a.amount < b.amount ? -1 : 1)),
-        [
-          { bill: billId, line: lineB, amount: "40.0000" },
-          { bill: billId, line: lineA, amount: "60.0000" },
-        ],
-      );
-      assert.deepEqual(named, []);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
+      // The seed bills total a fixed 100; the two lines sum to it.
+      await db.execute(sql`
+        update documents set total = '100', subtotal = '100'
+         where org_id = ${fx.orgId} and id = ${id}`);
+      await approveBill(fx, id);
+      return { billId: id, lineA: first.lineId, lineB: second.lineId };
+    });
+    await runMigration();
+    const { rows, named } = await withBypass(async () => ({
+      rows: await coverageRows(fx.orgId),
+      named: await namedBills(fx.orgId),
+    }));
+    // Line uuids sort arbitrarily: compare as a set keyed by amount.
+    assert.deepEqual(
+      [...rows].sort((a, b) => (a.amount < b.amount ? -1 : 1)),
+      [
+        { bill: billId, line: lineB, amount: "40.0000" },
+        { bill: billId, line: lineA, amount: "60.0000" },
+      ],
+    );
+    assert.deepEqual(named, []);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
 
 test("0296 frozen pack map matches the live declarations", async () => {
   // Pure source-text + declaration comparison: no database needed, so this
@@ -690,36 +704,32 @@ test("0296 frozen pack map matches the live declarations", async () => {
   }
 });
 
-test(
-  "0296 frees backfill rows when their bill is voided",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      const billId = await withBypass(async () => {
-        const { liability } = await seedAccrual(fx);
-        const id = await seedBill(fx, "VB-U2-VOID", validMarker(fx));
-        await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "Garnishment" }]);
-        await approveBill(fx, id);
-        return id;
-      });
-      await runMigration();
-      assert.equal((await withBypass(() => coverageRows(fx.orgId))).length, 1);
-      await withBypass(async () => {
-        await db.execute(sql`
-          update documents
-             set status = 'voided', voided_at = now(), voided_by = ${fx.actor},
-                 void_reason = 'voided for the 0296 repair test'
-           where org_id = ${fx.orgId} and id = ${billId}`);
-      });
-      await runMigration();
-      assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), []);
-      assert.ok(billId);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
+test("0296 frees backfill rows when their bill is voided", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    const billId = await withBypass(async () => {
+      const { liability } = await seedAccrual(fx);
+      const id = await seedBill(fx, "VB-U2-VOID", validMarker(fx));
+      await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "Garnishment" }]);
+      await approveBill(fx, id);
+      return id;
+    });
+    await runMigration();
+    assert.equal((await withBypass(() => coverageRows(fx.orgId))).length, 1);
+    await withBypass(async () => {
+      await db.execute(sql`
+        update documents
+           set status = 'voided', voided_at = now(), voided_by = ${fx.actor},
+               void_reason = 'voided for the 0296 repair test'
+         where org_id = ${fx.orgId} and id = ${billId}`);
+    });
+    await runMigration();
+    assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), []);
+    assert.ok(billId);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
 
 async function setPayrollSetting(fx: SeededOrg, key: string, value: string): Promise<void> {
   // jsonb_set cannot create a missing parent path, so the payroll object is
@@ -741,204 +751,188 @@ async function setPayrollSetting(fx: SeededOrg, key: string, value: string): Pro
      where id = ${fx.orgId}`);
 }
 
-test(
-  "0296 covers a legacy statutory CRA bill through pack settings",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      const { billId, lineId } = await withBypass(async () => {
-        // A normal pre-0296 CRA bill: the income-tax component names no
-        // vendor (the destination lives in pack settings), so the line
-        // snapshot is NULL and snapshot-only matching covers nothing.
-        await setPayrollSetting(fx, "craRemittancePartyId", fx.vendorId);
-        const { lineId, liability } = await seedAccrual(fx, {
-          country: "CA",
-          systemKey: "income_tax",
-          code: "ITAX",
-          name: "Income tax",
-          componentVendor: null,
-          snapshot: null,
-        });
-        const id = await seedBill(fx, "VB-U4-CRA", validMarker(fx));
-        await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "Income tax" }]);
-        await approveBill(fx, id);
-        return { billId: id, lineId };
+test("0296 covers a legacy statutory CRA bill through pack settings", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    const { billId, lineId } = await withBypass(async () => {
+      // A normal pre-0296 CRA bill: the income-tax component names no
+      // vendor (the destination lives in pack settings), so the line
+      // snapshot is NULL and snapshot-only matching covers nothing.
+      await setPayrollSetting(fx, "craRemittancePartyId", fx.vendorId);
+      const { lineId, liability } = await seedAccrual(fx, {
+        country: "CA",
+        systemKey: "income_tax",
+        code: "ITAX",
+        name: "Income tax",
+        componentVendor: null,
+        snapshot: null,
       });
-      await runMigration();
-      const { rows, named } = await withBypass(async () => ({
-        rows: await coverageRows(fx.orgId),
-        named: await namedBills(fx.orgId),
-      }));
-      assert.deepEqual(rows, [{ bill: billId, line: lineId, amount: "100.0000" }]);
-      assert.deepEqual(named, []);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
+      const id = await seedBill(fx, "VB-U4-CRA", validMarker(fx));
+      await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "Income tax" }]);
+      await approveBill(fx, id);
+      return { billId: id, lineId };
+    });
+    await runMigration();
+    const { rows, named } = await withBypass(async () => ({
+      rows: await coverageRows(fx.orgId),
+      named: await namedBills(fx.orgId),
+    }));
+    assert.deepEqual(rows, [{ bill: billId, line: lineId, amount: "100.0000" }]);
+    assert.deepEqual(named, []);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
 
-test(
-  "0296 covers a legacy regional QPP bill through the RQ key",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      const { billId, lineId } = await withBypass(async () => {
-        // QPP for a Quebec stub routes to the RQ vendor before the snapshot:
-        // the snapshot stays NULL and only pack-aware matching covers it.
-        await setPayrollSetting(fx, "rqRemittancePartyId", fx.vendorId);
-        const { lineId, liability } = await seedAccrual(fx, {
-          country: "CA",
-          systemKey: "cpp",
-          code: "QPP",
-          name: "Quebec Pension Plan",
-          componentVendor: null,
-          snapshot: null,
-          province: "QC",
-        });
-        const id = await seedBill(fx, "VB-U4-RQ", validMarker(fx));
-        await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "QPP" }]);
-        await approveBill(fx, id);
-        return { billId: id, lineId };
+test("0296 covers a legacy regional QPP bill through the RQ key", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    const { billId, lineId } = await withBypass(async () => {
+      // QPP for a Quebec stub routes to the RQ vendor before the snapshot:
+      // the snapshot stays NULL and only pack-aware matching covers it.
+      await setPayrollSetting(fx, "rqRemittancePartyId", fx.vendorId);
+      const { lineId, liability } = await seedAccrual(fx, {
+        country: "CA",
+        systemKey: "cpp",
+        code: "QPP",
+        name: "Quebec Pension Plan",
+        componentVendor: null,
+        snapshot: null,
+        province: "QC",
       });
-      await runMigration();
-      const { rows, named } = await withBypass(async () => ({
-        rows: await coverageRows(fx.orgId),
-        named: await namedBills(fx.orgId),
-      }));
-      assert.deepEqual(rows, [{ bill: billId, line: lineId, amount: "100.0000" }]);
-      assert.deepEqual(named, []);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
+      const id = await seedBill(fx, "VB-U4-RQ", validMarker(fx));
+      await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "QPP" }]);
+      await approveBill(fx, id);
+      return { billId: id, lineId };
+    });
+    await runMigration();
+    const { rows, named } = await withBypass(async () => ({
+      rows: await coverageRows(fx.orgId),
+      named: await namedBills(fx.orgId),
+    }));
+    assert.deepEqual(rows, [{ bill: billId, line: lineId, amount: "100.0000" }]);
+    assert.deepEqual(named, []);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
 
-test(
-  "0296 replays clean: a second no-transaction run changes nothing",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
-    try {
-      const { billId, lineId } = await withBypass(async () => {
-        const { lineId, liability } = await seedAccrual(fx);
-        const id = await seedBill(fx, "VB-U5-REPLAY", validMarker(fx));
-        await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "Garnishment" }]);
-        await approveBill(fx, id);
-        return { billId: id, lineId };
-      });
-      await runMigration();
-      // The runner's retry replays the whole file after a mid-file failure,
-      // which leaves earlier statements committed — so the replay must be a
-      // clean no-op, not a duplicate.
-      await runMigration();
-      const index = await withBypass(() => snapshotIndex());
-      assert.equal(index.length, 1, "exactly one snapshot index survives the replay");
-      assert.equal(index[0].valid, true, "the snapshot index is valid");
-      assert.equal(index[0].ready, true, "the snapshot index is ready");
-      assert.ok(
-        index[0].definition.includes("(org_id, remittance_party_id)"),
-        "the replay did not swap the index definition",
-      );
-      assert.deepEqual(await withBypass(() => snapshotFkValidated()), [true]);
-      assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), [
-        { bill: billId, line: lineId, amount: "100.0000" },
-      ]);
-      assert.ok(billId);
-    } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
-    }
-  },
-);
+test("0296 replays clean: a second no-transaction run changes nothing", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    const { billId, lineId } = await withBypass(async () => {
+      const { lineId, liability } = await seedAccrual(fx);
+      const id = await seedBill(fx, "VB-U5-REPLAY", validMarker(fx));
+      await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "Garnishment" }]);
+      await approveBill(fx, id);
+      return { billId: id, lineId };
+    });
+    await runMigration();
+    // The runner's retry replays the whole file after a mid-file failure,
+    // which leaves earlier statements committed — so the replay must be a
+    // clean no-op, not a duplicate.
+    await runMigration();
+    const index = await withBypass(() => snapshotIndex());
+    assert.equal(index.length, 1, "exactly one snapshot index survives the replay");
+    assert.equal(index[0].valid, true, "the snapshot index is valid");
+    assert.equal(index[0].ready, true, "the snapshot index is ready");
+    assert.ok(
+      index[0].definition.includes("(org_id, remittance_party_id)"),
+      "the replay did not swap the index definition",
+    );
+    assert.deepEqual(await withBypass(() => snapshotFkValidated()), [true]);
+    assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), [
+      { bill: billId, line: lineId, amount: "100.0000" },
+    ]);
+    assert.ok(billId);
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});
 
-test(
-  "0296 heals a failed CONCURRENTLY build instead of skipping it forever",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
+test("0296 heals a failed CONCURRENTLY build instead of skipping it forever", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    await withBypass(() => seedAccrual(fx));
+    await runMigration();
+    const live = await withBypass(() => snapshotIndex());
+    assert.equal(live.length, 1);
+    assert.equal(live[0].valid, true);
+    // Plant a failed build under the real name: the poisoned expression
+    // (uuid text never parses as int) fails on the seeded snapshot row and
+    // leaves the name present but INVALID — the shape a killed or
+    // timed-out CONCURRENTLY build leaves behind. This DDL runs on a raw
+    // migration client, never inside withBypass: withBypass holds one
+    // atomic transaction and CONCURRENTLY refuses inside a transaction
+    // block.
+    const plant = await connectMigrationClient();
     try {
-      await withBypass(() => seedAccrual(fx));
-      await runMigration();
-      const live = await withBypass(() => snapshotIndex());
-      assert.equal(live.length, 1);
-      assert.equal(live[0].valid, true);
-      // Plant a failed build under the real name: the poisoned expression
-      // (uuid text never parses as int) fails on the seeded snapshot row and
-      // leaves the name present but INVALID — the shape a killed or
-      // timed-out CONCURRENTLY build leaves behind. This DDL runs on a raw
-      // migration client, never inside withBypass: withBypass holds one
-      // atomic transaction and CONCURRENTLY refuses inside a transaction
-      // block.
-      const plant = await connectMigrationClient();
-      try {
-        await plant.query("drop index if exists pay_stub_lines_remittance_party");
-        const failed = await plant
-          .query(
-            "CREATE INDEX CONCURRENTLY pay_stub_lines_remittance_party ON public.pay_stub_lines (((remittance_party_id::text::int)))",
-          )
-          .then(
-            () => null,
-            (error: unknown) => error,
-          );
-        assert.ok(failed, "the poisoned build must fail");
-      } finally {
-        await releaseMigrationClient(plant);
-      }
-      const planted = await withBypass(() => snapshotIndex());
-      assert.equal(planted.length, 1);
-      assert.equal(planted[0].valid, false, "the plant leaves an INVALID index");
-      // IF NOT EXISTS alone would skip the INVALID name forever, silently
-      // keeping the missing index: show that hazard before the heal.
-      const skip = await connectMigrationClient();
-      try {
-        await skip.query(
-          "CREATE INDEX CONCURRENTLY IF NOT EXISTS pay_stub_lines_remittance_party ON public.pay_stub_lines (org_id, remittance_party_id)",
+      await plant.query("drop index if exists pay_stub_lines_remittance_party");
+      const failed = await plant
+        .query(
+          "CREATE INDEX CONCURRENTLY pay_stub_lines_remittance_party ON public.pay_stub_lines (((remittance_party_id::text::int)))",
+        )
+        .then(
+          () => null,
+          (error: unknown) => error,
         );
-      } finally {
-        await releaseMigrationClient(skip);
-      }
-      const skipped = await withBypass(() => snapshotIndex());
-      assert.equal(skipped[0].valid, false, "IF NOT EXISTS skips the INVALID name");
-      // The file's drop-up-front guard removes it and the rebuild heals.
-      await runMigration();
-      const healed = await withBypass(() => snapshotIndex());
-      assert.equal(healed.length, 1);
-      assert.equal(healed[0].valid, true);
-      assert.equal(healed[0].ready, true);
-      assert.ok(healed[0].definition.includes("(org_id, remittance_party_id)"));
+      assert.ok(failed, "the poisoned build must fail");
     } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
+      await releaseMigrationClient(plant);
     }
-  },
-);
-
-test(
-  "0296 timing rehearsal: the no-transaction file completes over volume",
-  { skip: !DB },
-  async () => {
-    const fx = await withBypass(() => seedOrg());
+    const planted = await withBypass(() => snapshotIndex());
+    assert.equal(planted.length, 1);
+    assert.equal(planted[0].valid, false, "the plant leaves an INVALID index");
+    // IF NOT EXISTS alone would skip the INVALID name forever, silently
+    // keeping the missing index: show that hazard before the heal.
+    const skip = await connectMigrationClient();
     try {
-      const liabilityId = await withBypass(() => seedLiabilityAccount(fx, "2310", "Withholding payable"));
-      await withBypass(async () => {
-        for (let i = 0; i < 50; i += 1) {
-          await seedAccrual(fx, { code: `VOL${i}`, amount: "10.00", liabilityId });
-        }
-      });
-      const started = Date.now();
-      await runMigration();
-      const elapsedMs = Date.now() - started;
-      const index = await withBypass(() => snapshotIndex());
-      assert.equal(index.length, 1);
-      assert.equal(index[0].valid, true, "the rehearsal leaves a valid index");
-      assert.equal(index[0].ready, true, "the rehearsal leaves a ready index");
-      assert.deepEqual(await withBypass(() => snapshotFkValidated()), [true]);
-      assert.ok(
-        Number.isFinite(elapsedMs),
-        `the rehearsal completes and reports its wall time (${elapsedMs}ms over 50 lines)`,
+      await skip.query(
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS pay_stub_lines_remittance_party ON public.pay_stub_lines (org_id, remittance_party_id)",
       );
     } finally {
-      await withBypass(() => dropScratchOrg(fx.orgId));
+      await releaseMigrationClient(skip);
     }
-  },
-);
+    const skipped = await withBypass(() => snapshotIndex());
+    assert.equal(skipped[0].valid, false, "IF NOT EXISTS skips the INVALID name");
+    // The file's drop-up-front guard removes it and the rebuild heals.
+    await runMigration();
+    const healed = await withBypass(() => snapshotIndex());
+    assert.equal(healed.length, 1);
+    assert.equal(healed[0].valid, true);
+    assert.equal(healed[0].ready, true);
+    assert.ok(healed[0].definition.includes("(org_id, remittance_party_id)"));
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+    // Strict: this test drops the live snapshot index, so a failure
+    // window above must rebuild it here rather than leave the shared
+    // database with an INVALID or missing index.
+    await runMigration();
+  }
+});
+
+test("0296 timing rehearsal: the no-transaction file completes over volume", async () => {
+  const fx = await withBypass(() => seedOrg());
+  try {
+    const liabilityId = await withBypass(() => seedLiabilityAccount(fx, "2310", "Withholding payable"));
+    await withBypass(async () => {
+      for (let i = 0; i < 50; i += 1) {
+        await seedAccrual(fx, { code: `VOL${i}`, amount: "10.00", liabilityId });
+      }
+    });
+    const started = Date.now();
+    await runMigration();
+    const elapsedMs = Date.now() - started;
+    const index = await withBypass(() => snapshotIndex());
+    assert.equal(index.length, 1);
+    assert.equal(index[0].valid, true, "the rehearsal leaves a valid index");
+    assert.equal(index[0].ready, true, "the rehearsal leaves a ready index");
+    assert.deepEqual(await withBypass(() => snapshotFkValidated()), [true]);
+    assert.ok(
+      Number.isFinite(elapsedMs),
+      `the rehearsal completes and reports its wall time (${elapsedMs}ms over 50 lines)`,
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId));
+  }
+});

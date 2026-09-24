@@ -9,11 +9,16 @@
  * database, so a missing one must fail loudly, never pass silently. Replays
  * the real migration bytes through the real attempt executor under a probe
  * ledger name.
+ *
+ * The replay is idempotent on a migrated database, so it cannot pollute;
+ * the teardown still asserts the table matches its pre-test snapshot, so
+ * a future edit that breaks idempotence fails here instead of in the next
+ * file of the process order.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import test, { afterEach, beforeEach } from "node:test";
 import { sql } from "drizzle-orm";
 import {
   connectMigrationClient,
@@ -23,6 +28,12 @@ import {
   releaseMigrationClient,
   sanitizeMigrationContent,
 } from "../../../scripts/bootstrap-migration-client.ts";
+import {
+  assertTableCatalogMatches,
+  snapshotTableCatalog,
+  type CatalogQuery,
+  type TableCatalogSnapshot,
+} from "../../../engine/src/testing/migration-catalog.ts";
 import { db } from "../../../engine/src/platform/db.ts";
 import {
   createScratchOrg,
@@ -62,6 +73,32 @@ async function clearProbeLedger(): Promise<void> {
     await releaseMigrationClient(client);
   }
 }
+
+async function catalogQuery(text: string): Promise<Array<Record<string, unknown>>> {
+  const client = await connectMigrationClient();
+  try {
+    return (await client.query(text)).rows as Array<Record<string, unknown>>;
+  } finally {
+    await releaseMigrationClient(client);
+  }
+}
+
+const snapshotQuery: CatalogQuery = (text) => catalogQuery(text);
+
+let catalogBefore: TableCatalogSnapshot | null = null;
+
+beforeEach(async () => {
+  catalogBefore = await snapshotTableCatalog(snapshotQuery, "public.dunning_log");
+});
+
+afterEach(async () => {
+  assert.ok(catalogBefore, "the pre-test catalog snapshot is missing");
+  await assertTableCatalogMatches(
+    snapshotQuery,
+    catalogBefore,
+    "0294 replay test must leave dunning_log exactly as found",
+  );
+});
 
 test("the staged file pins the build shape and ends validated", async () => {
   // The fix is the staging itself: NOT VALID first, a guarded VALIDATE

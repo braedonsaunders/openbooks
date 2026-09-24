@@ -17,11 +17,18 @@
  * the real attempt executor under a probe ledger name: the body is
  * idempotent, so replaying it on an already-migrated database is exactly
  * what a runner retry does.
+ *
+ * 0293 builds its guard CONCURRENTLY outside a transaction, so the
+ * downgrade/replay cannot roll back: every test snapshots the table's
+ * catalog first, restores the staged guard by replaying the idempotent
+ * body in teardown, and asserts the snapshot still matches. A refusal path
+ * that raises before rebuilding the index would otherwise leave the shared
+ * database without the guard for the files after it in the process order.
  */
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import test, { afterEach, beforeEach } from "node:test";
 import { sql } from "drizzle-orm";
 import {
   connectMigrationClient,
@@ -31,6 +38,12 @@ import {
   releaseMigrationClient,
   sanitizeMigrationContent,
 } from "../../../scripts/bootstrap-migration-client.ts";
+import {
+  assertTableCatalogMatches,
+  snapshotTableCatalog,
+  type CatalogQuery,
+  type TableCatalogSnapshot,
+} from "../../../engine/src/testing/migration-catalog.ts";
 import { db } from "../../../engine/src/platform/db.ts";
 import { createStockCount } from "../../../engine/src/inventory/stock-counts.ts";
 import { receiveInventory } from "../../../engine/src/inventory/movements.ts";
@@ -114,6 +127,41 @@ async function clearProbeLedger(): Promise<void> {
   } finally {
     await releaseMigrationClient(client);
   }
+}
+
+async function catalogQuery(text: string): Promise<Array<Record<string, unknown>>> {
+  const client = await connectMigrationClient();
+  try {
+    return (await client.query(text)).rows as Array<Record<string, unknown>>;
+  } finally {
+    await releaseMigrationClient(client);
+  }
+}
+
+const snapshotQuery: CatalogQuery = (text) => catalogQuery(text);
+
+let catalogBefore: TableCatalogSnapshot | null = null;
+
+beforeEach(async () => {
+  catalogBefore = await snapshotTableCatalog(snapshotQuery, "public.stock_count_lines");
+});
+
+afterEach(async () => {
+  assert.ok(catalogBefore, "the pre-test catalog snapshot is missing");
+  await assertTableCatalogMatches(
+    snapshotQuery,
+    catalogBefore,
+    "0293 replay test must leave stock_count_lines exactly as found",
+  );
+});
+
+/** Rebuild the staged guard from any state by replaying the idempotent
+ * body, strictly: a teardown restore that swallows its own failure would
+ * leave the shared database without the guard and fail the suite silently. */
+async function restoreStagedGuard(): Promise<void> {
+  await clearProbeLedger().catch(() => {});
+  await runStagedFile();
+  await clearProbeLedger().catch(() => {});
 }
 
 /** Return the guard to its pre-0293 state (no constraint, no index) so the
@@ -220,6 +268,9 @@ test("posted and cancelled duplicates upgrade cleanly, keep provenance, and stay
   } finally {
     await clearProbeLedger().catch(() => {});
     await dropScratchOrg(org.orgId);
+    // The scratch plants are gone, so the replay converges on clean data;
+    // strict, so a failure here fails the test instead of the next file.
+    await restoreStagedGuard();
   }
 });
 
@@ -247,6 +298,9 @@ test("open duplicates refuse with the cancel-and-recount remedy and mark nothing
   } finally {
     await clearProbeLedger().catch(() => {});
     await dropScratchOrg(org.orgId);
+    // The refusal raised before building the index: rebuild it here, or
+    // the shared database keeps no duplicate-subject guard.
+    await restoreStagedGuard();
   }
 });
 
@@ -291,12 +345,12 @@ test("an INVALID index left by a failed build is dropped and rebuilt valid", asy
     assert.equal(healed.rows[0]!.valid, true);
     assert.match(healed.rows[0]!.definition, /\(org_id, stock_count_id, item_id, stock_location_id, lot_id\)/);
   } finally {
-    // Best-effort reheal: this test drops the shared guard index, so a
-    // failure above must not leave later files without the guard.
-    await clearProbeLedger().catch(() => {});
-    await runStagedFile().catch(() => {});
+    // This test drops the shared guard index and plants a poisoned one, so
+    // the rebuild is strict: a swallowed failure would leave later files
+    // without the guard.
     await clearProbeLedger().catch(() => {});
     await dropScratchOrg(org.orgId);
+    await restoreStagedGuard();
   }
 });
 
@@ -314,6 +368,18 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
   // digest. The 0299 CHECK goes first — its staged form references the
   // marker, so it holds the column.
   const setup = await connectMigrationClient();
+  // The real ledger row returns to this digest in teardown, so a failure
+  // window never strands it at the old digest. Declared in the test body
+  // scope: a const inside the try block is not visible in the finally
+  // block, and the resulting ReferenceError stranded the downgrade client
+  // with the event loop parked and no output.
+  const ledgerBefore = (
+    await setup.query<{ sha256: string }>(
+      "select sha256 from public._applied_migrations where filename = $1",
+      [REAL_FILENAME],
+    )
+  ).rows[0]?.sha256;
+  assert.ok(ledgerBefore, "the real 0293 ledger row exists before the downgrade");
   try {
     // The governed view selects the marker once a refresh has seen it; drop
     // it first so the column can return to its pre-guard absence, exactly as
@@ -415,12 +481,31 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
     );
     assert.match(viewdef.rows[0]!.definition, /is_pre_guard_legacy/, "the reapply converges the governed view");
   } finally {
-    // Best-effort view rebuild for failure windows, then restore the 0299
-    // staged CHECK through its own idempotent body under a probe ledger
-    // name; the real 0299 ledger row is untouched.
+    // Release the downgrade client FIRST: every restore step below can
+    // throw, and a stranded checkout keeps the event loop alive forever
+    // with no output — the failure would present as a hang, not a red.
+    await releaseMigrationClient(setup);
+    // Strict convergence from any failure window, unswallowed: the 0293
+    // staged body first (it owns the marker column the 0299 CHECK
+    // references), then the 0299 staged body, then the governed view
+    // refresh; the real ledger row returns to its pre-test digest last.
     const restore = await connectMigrationClient();
     try {
-      await restore.query("SELECT public.openbooks_refresh_query_catalog()").catch(() => {});
+      await restore.query("delete from public._applied_migrations where filename = $1", [
+        PROBE_FILENAME,
+      ]);
+      await executeMigrationAttempt(restore, {
+        filename: PROBE_FILENAME,
+        body: sanitizeMigrationContent(migrationSql),
+        transactional: false,
+        lock: migrationLockConfig({}),
+        digest: "g43-0293-restore",
+        executeBody: (migrationClient, body, step) =>
+          executeMigrationBody(migrationClient, body, step),
+      });
+      await restore.query("delete from public._applied_migrations where filename = $1", [
+        PROBE_FILENAME,
+      ]);
       await executeMigrationAttempt(restore, {
         filename: "generated/0999_g43_0299_probe.sql",
         body: sanitizeMigrationContent(migration0299Sql),
@@ -429,13 +514,18 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
         digest: "g43-0299-restore",
         executeBody: (migrationClient, body, step) =>
           executeMigrationBody(migrationClient, body, step),
-      }).catch(() => {});
+      });
       await restore.query("delete from public._applied_migrations where filename = $1", [
         "generated/0999_g43_0299_probe.sql",
-      ]).catch(() => {});
+      ]);
+      await restore.query("SELECT public.openbooks_refresh_query_catalog()");
+      const ledgerRestored = await restore.query(
+        "update public._applied_migrations set sha256 = $2 where filename = $1",
+        [REAL_FILENAME, ledgerBefore],
+      );
+      assert.equal(ledgerRestored.rowCount, 1, "the real ledger row returns to its pre-test digest");
     } finally {
       await releaseMigrationClient(restore);
     }
-    await releaseMigrationClient(setup);
   }
 });
