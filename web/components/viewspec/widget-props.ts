@@ -14,13 +14,6 @@ export function num(props: Record<string, unknown>, key: string): number | undef
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-/** Exact decimal text for financial props; JSON numbers are deliberately refused. */
-export function decimalText(props: Record<string, unknown>, key: string): string | undefined {
-  const value = props[key]
-  if (typeof value !== 'string' || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value.trim())) return undefined
-  return value.trim()
-}
-
 export function stringRecord(props: Record<string, unknown>, key: string): Record<string, string> | undefined {
   const value = props[key]
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined

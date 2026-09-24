@@ -1,7 +1,6 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { EntityDrawer } from '../analytics/_ui/EntityDrawer'
@@ -68,7 +67,7 @@ export function CommitmentsTable({
               </td>
               <td className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{r.oldestDue ?? '—'}</td>
               <td className="px-3 py-2.5 text-right tabular-nums">
-                {cmp(r.overdue, '0') > 0 ? (
+                {r.overdue > 0 ? (
                   <span className="text-red-600 dark:text-red-400">{moneyCompact(r.overdue)}</span>
                 ) : (
                   <span className="text-slate-300 dark:text-slate-600">—</span>

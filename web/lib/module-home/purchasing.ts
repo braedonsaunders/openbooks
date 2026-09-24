@@ -2,8 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, cmp, mulDecimal, neg, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { financialChartCoordinate } from '../financial-chart'
+import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import { flowRates, translateFlows } from '../fx-presentation'
 import { openItems, parseISO, summariseSide, toISO } from '../cash/core'
 import { isFeatureEnabled } from '../features'
@@ -21,22 +20,22 @@ import { isFeatureEnabled } from '../features'
 export interface VendorExposureRow {
   partyId: string
   name: string
-  openPoValue: string
+  openPoValue: number
   openPos: number
   openBills: number
-  billedOpen: string
-  overdue: string
+  billedOpen: number
+  overdue: number
   oldestDue: string | null
 }
 
 export interface PurchasingHome {
-  apOutstanding: string
-  apOverdue: string
+  apOutstanding: number
+  apOverdue: number
   openBills: number
-  dueNext7: string
-  openPoValue: string
+  dueNext7: number
+  openPoValue: number
   openPos: number
-  spend30d: string
+  spend30d: number
   topExposure: VendorExposureRow[]
   /** Weekly billed spend (posted vendor bills), oldest → newest. */
   trend: { weekStart: string; spend: number }[]
@@ -44,7 +43,7 @@ export interface PurchasingHome {
     openPos: number
     openBills: number
     payments7d: number
-    paid7dValue: string
+    paid7dValue: number
     unpostedExpenses: number
     vendors: number
   }
@@ -241,18 +240,18 @@ export async function purchasingHome(
     orgId,
     trendRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
   )
-  const byWeek = new Map<string, string>()
+  const byWeek = new Map<string, number>()
   for (const r of trendRes.rows) {
     const wk = String(r.wk).slice(0, 10)
     const late = String(r.late ?? r.wk).slice(0, 10)
-    const spend = mulDecimal(String(r.spend ?? 0), trendCtx.rateAt((r.func ?? null) as string | null, late))
-    byWeek.set(wk, add(byWeek.get(wk) ?? '0.0000', spend))
+    const spend = Number(mulDecimal(String(r.spend ?? 0), trendCtx.rateAt((r.func ?? null) as string | null, late)))
+    byWeek.set(wk, (byWeek.get(wk) ?? 0) + spend)
   }
-  const paid7dValue = normalizeMoney(await translateFlows(
+  const paid7dValue = Number(await translateFlows(
     orgId,
     paidRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
   ))
-  const spend30d = normalizeMoney(await translateFlows(
+  const spend30d = Number(await translateFlows(
     orgId,
     spendRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
   ))
@@ -270,24 +269,24 @@ export async function purchasingHome(
   const billedByParty = new Map<string, {
     name: string
     openBills: number
-    billedOpen: string
-    overdue: string
+    billedOpen: number
+    overdue: number
     oldestDue: string | null
   }>()
   for (const it of apItems) {
     if (it.partyId == null) continue
-    const remaining = String(it.remaining)
+    const remaining = Number(it.remaining)
     const cur = billedByParty.get(it.partyId) ?? {
       name: String(it.partyName ?? 'Unspecified'),
       openBills: 0,
-      billedOpen: '0.0000',
-      overdue: '0.0000',
+      billedOpen: 0,
+      overdue: 0,
       oldestDue: null as string | null,
     }
-    if (cmp(remaining, '0') > 0) cur.openBills += 1
-    cur.billedOpen = add(cur.billedOpen, remaining)
+    if (remaining > 0) cur.openBills += 1
+    cur.billedOpen += remaining
     const due = it.dueDate ? toISO(it.dueDate) : null
-    if (due !== null && due < today) cur.overdue = add(cur.overdue, remaining)
+    if (due !== null && due < today) cur.overdue += remaining
     if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due
     billedByParty.set(it.partyId, cur)
   }
@@ -298,15 +297,15 @@ export async function purchasingHome(
       return {
         partyId,
         name: String(b?.name ?? p?.name ?? 'Unspecified'),
-        openPoValue: p?.value ?? '0.0000',
+        openPoValue: Number(p?.value ?? 0),
         openPos: p?.count ?? 0,
         openBills: Number(b?.openBills ?? 0),
-        billedOpen: b?.billedOpen ?? '0.0000',
-        overdue: b?.overdue ?? '0.0000',
+        billedOpen: Number(b?.billedOpen ?? 0),
+        overdue: Number(b?.overdue ?? 0),
         oldestDue: b?.oldestDue ?? null,
       }
     })
-    .sort((x, y) => cmp(add(y.billedOpen, y.openPoValue), add(x.billedOpen, x.openPoValue)))
+    .sort((x, y) => y.billedOpen + y.openPoValue - (x.billedOpen + x.openPoValue))
     .slice(0, 10)
 
   // Open-payables vitals straight off the shared summary, so the pulse ties
@@ -314,18 +313,17 @@ export async function purchasingHome(
   // minus current (the cockpit's own definition), the 7-day window and the
   // open-line count over the same as-of item set.
   const apSummary = summariseSide(apItems, parseISO(today), '0.0000', 0)
-  const apOutstanding = normalizeMoney(apSummary.outstanding)
-  const apCurrent = normalizeMoney(apSummary.buckets.find((b) => b.label === 'Current')?.amount ?? '0.0000')
-  const overdueDelta = add(apOutstanding, neg(apCurrent))
-  const apOverdue = cmp(overdueDelta, '0') > 0 ? overdueDelta : '0.0000'
+  const apOutstanding = Number(apSummary.outstanding)
+  const apCurrent = Number(apSummary.buckets.find((b) => b.label === 'Current')?.amount ?? 0)
+  const apOverdue = apOutstanding > apCurrent ? apOutstanding - apCurrent : 0
   let openBills = 0
-  let dueNext7 = '0.0000'
+  let dueNext7 = 0
   for (const it of apItems) {
-    const remaining = String(it.remaining)
-    if (cmp(remaining, '0') <= 0) continue
+    const remaining = Number(it.remaining)
+    if (!(remaining > 0)) continue
     openBills += 1
     const due = it.dueDate ? toISO(it.dueDate) : null
-    if (due !== null && due >= today && due < in7) dueNext7 = add(dueNext7, remaining)
+    if (due !== null && due >= today && due < in7) dueNext7 += remaining
   }
   const badge = badgeRes.rows[0] ?? {}
   return {
@@ -333,11 +331,11 @@ export async function purchasingHome(
     apOverdue,
     openBills,
     dueNext7,
-    openPoValue: po.total,
+    openPoValue: Number(po.total ?? 0),
     openPos: Number(badge.open_pos ?? 0),
     spend30d,
     topExposure,
-    trend: weekStarts.map((weekStart) => ({ weekStart, spend: financialChartCoordinate(byWeek.get(weekStart) ?? '0.0000') })),
+    trend: weekStarts.map((weekStart) => ({ weekStart, spend: byWeek.get(weekStart) ?? 0 })),
     badges: {
       openPos: Number(badge.open_pos ?? 0),
       openBills,

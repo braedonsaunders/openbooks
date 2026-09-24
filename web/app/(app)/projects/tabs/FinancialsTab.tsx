@@ -7,7 +7,6 @@ import { Card, CardContent, cn } from '@openbooks/ui'
 import type { PnlLine } from '@openbooks/schema'
 import { PagedTable } from '../../../../components/paged-table'
 import { add, cmp, neg } from '@openbooks/engine/src/money/money.ts'
-import { financialChartPercent } from '../../../../lib/financial-chart'
 
 interface CategoryRow { category: string; amount: string }
 interface AccountRow { accountId: string; number: string | null; name: string; amount: string }
@@ -104,18 +103,17 @@ export function FinancialsTab({ data }: {
     if (SIGNED_GOOD.has(key)) return cmp(String(v), '0') > 0 ? 'good' : cmp(String(v), '0') < 0 ? 'bad' : undefined
     return undefined
   }
-  const fmt = (key: string, v: string | number): string => (key === 'margin_pct' ? `${String(v)}%` : money(v))
+  const fmt = (key: string, v: string | number): string => (key === 'margin_pct' ? `${Number(v).toFixed(1)}%` : money(v))
 
   // Budget bar (derived from measures).
-  const costBudget = String(m.cost_budget ?? '0')
-  const actualCost = String(m.actual_cost ?? '0')
-  const committedCost = String(m.committed_cost ?? '0')
-  const totalCost = String(m.total_cost ?? '0')
-  const scale = cmp(costBudget, totalCost) > 0 ? costBudget : totalCost
-  const chartScale = cmp(scale, '0') > 0 ? scale : '1'
-  const actualPct = financialChartPercent(actualCost, chartScale)
-  const committedPct = Math.min(100 - actualPct, financialChartPercent(committedCost, chartScale))
-  const budgetMarkerPct = financialChartPercent(costBudget, chartScale)
+  const costBudget = m.cost_budget ?? 0
+  const actualCost = m.actual_cost ?? 0
+  const committedCost = m.committed_cost ?? 0
+  const totalCost = m.total_cost ?? 0
+  const scale = Math.max(Number(costBudget), Number(totalCost), 1)
+  const actualPct = Math.min(100, (Number(actualCost) / scale) * 100)
+  const committedPct = Math.min(100 - actualPct, (Number(committedCost) / scale) * 100)
+  const budgetMarkerPct = Math.min(100, (Number(costBudget) / scale) * 100)
   const overBudget = cmp(String(totalCost), String(costBudget)) > 0 && cmp(String(costBudget), '0') > 0
 
   const innerTabs = [
