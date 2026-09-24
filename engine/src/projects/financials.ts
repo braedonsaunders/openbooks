@@ -4,7 +4,7 @@ import { db, orgContext, pool } from '../platform/db.ts'
 import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type CostSource, type OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from '../records/account-groups.ts'
 import { flowTranslation, translateFlowAmount } from '../fx/translation.ts'
-import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from '../money/money.ts'
+import { add, cmp, fromUnits, isZero, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from '../money/money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
 import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
 import { businessToday } from '../platform/business-date.ts'
@@ -33,6 +33,17 @@ const amount = (v: unknown): string => normalizeMoney(v == null ? '0' : String(v
  */
 function primaryBookSql(orgId: string): SQL {
   return sql`e.book_id = (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl)`
+}
+
+/**
+ * Rank translated per-account cost rows: drop exact zeros, sort
+ * amount-descending with exact decimal compare — never floats. Presentation
+ * amounts can differ beyond float64 precision (19 significant digits at
+ * numeric(19,4)), where Number() ties misrank them, and non-numeric strings
+ * coerce through Number() instead of refusing.
+ */
+export function rankCostByAccountRows<T extends { amount: string }>(rows: T[]): T[] {
+  return rows.filter((r) => !isZero(r.amount)).sort((a, b) => cmp(b.amount, a.amount))
 }
 
 export interface ProjectFinancials {
@@ -689,10 +700,11 @@ async function resolveProjectFinancialsInSnapshot(
     costByCategory.set(cat, add(costByCategory.get(cat) ?? '0.0000', amount(r.amount)))
   }
   // The per-account HAVING filter and amount-descending order the SQL used
-  // to provide now apply after translation, on presentation figures.
-  const costByAccountRows = [...accountTranslated.values()]
-    .filter((r) => Number(r.amount) !== 0)
-    .sort((a, b) => Number(b.amount) - Number(a.amount))
+  // to provide now apply after translation, on presentation figures — with
+  // exact decimal compare and sort (never floats): presentation amounts can
+  // differ beyond float64 precision, where Number() ties misrank them, and
+  // non-numeric strings coerce through Number() instead of refusing.
+  const costByAccountRows = rankCostByAccountRows([...accountTranslated.values()])
 
   return {
     measures,
