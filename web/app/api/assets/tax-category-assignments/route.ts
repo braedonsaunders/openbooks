@@ -32,12 +32,38 @@ export async function PATCH(req: Request) {
   // a state that did not commit: a category's tax attributes decide how its
   // assets are reported on every filing.
   let notFound = false
+  let openPoolClass: string | null = null
   await db.transaction(async (tx) => {
     const before = (await tx.execute(sql`
-      select * from asset_categories where id=${body.categoryId} and org_id=${gate.user.orgId}`))
+      select * from asset_categories where id=${body.categoryId} and org_id=${gate.user.orgId} for update`))
     if (!before.rows[0]) {
       notFound = true
       return
+    }
+    const previousAttributes = (before.rows[0] as { tax_attributes?: Record<string, unknown> }).tax_attributes ?? {}
+    const previousClass = typeof previousAttributes[attribute] === 'string' ? previousAttributes[attribute] : null
+    if (previousClass && previousClass !== (body.classCode ?? null)) {
+      const openPool = (await tx.execute<{ class_code: string }>(sql`
+        select tp.class_code
+          from fixed_assets a
+          join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+          join tax_depreciation_pools tp
+            on tp.org_id = a.org_id and tp.subsidiary_id = a.subsidiary_id
+           and tp.regime = ${body.regime} and tp.class_code = c.tax_attributes->>${attribute}
+          join lateral (
+            select pp.closing_balance
+              from tax_pool_periods pp
+             where pp.org_id = tp.org_id and pp.pool_id = tp.id
+             order by pp.tax_year desc
+             limit 1
+          ) latest on true
+         where a.org_id = ${gate.user.orgId} and a.category_id = ${body.categoryId}
+           and latest.closing_balance <> 0
+         limit 1`)).rows[0]
+      if (openPool) {
+        openPoolClass = openPool.class_code
+        return
+      }
     }
     const after = body.classCode
       ? await tx.execute(sql`
@@ -65,5 +91,11 @@ export async function PATCH(req: Request) {
     `)
   })
   if (notFound) return NextResponse.json({ error: 'category not found' }, { status: 404 })
+  if (openPoolClass) {
+    return NextResponse.json(
+      { error: `cannot remove tax class "${openPoolClass}" while its pool has a nonzero balance; keep or restore this class assignment until the pool is closed` },
+      { status: 422 },
+    )
+  }
   return NextResponse.json({ ok: true })
 }

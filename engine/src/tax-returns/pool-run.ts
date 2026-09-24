@@ -402,6 +402,33 @@ async function runPools(
       has_assets: aggregate.hasAssets,
     }));
 
+  // A category can lose its class assignment after a successful year. If its
+  // carried pool has a nonzero latest balance, omitting that class would make
+  // the next run appear complete while dropping the carry-forward. Keep every
+  // open prior pool represented by at least one currently classified asset.
+  const openPools = (await tx.execute<{ class_code: string; closing_balance: string }>(sql`
+    select tp.class_code, latest.closing_balance::text
+      from tax_depreciation_pools tp
+      join lateral (
+        select pp.closing_balance
+          from tax_pool_periods pp
+         where pp.org_id = tp.org_id and pp.pool_id = tp.id and pp.tax_year < ${taxYear}
+         order by pp.tax_year desc
+         limit 1
+      ) latest on true
+     where tp.org_id = ${orgId} and tp.book_id = ${run.bookId}
+       and tp.subsidiary_id = ${run.subsidiaryId} and tp.regime = ${run.regime}
+       and latest.closing_balance <> 0
+     order by tp.class_code`)).rows;
+  const representedClasses = new Set(classRows.map(({ class_code }) => class_code));
+  const omittedOpenPool = openPools.find(({ class_code }) => !representedClasses.has(class_code));
+  if (omittedOpenPool) {
+    throw new TaxPoolError(
+      `tax pool class "${omittedOpenPool.class_code}" has an open prior balance of ${omittedOpenPool.closing_balance} `
+      + `but no fixed assets currently map to it for ${taxYear}; restore the matching tax-class assignment before running this year`,
+    );
+  }
+
   // Compute every class FIRST (reads only once pools exist), then persist all
   // results below in this same transaction — the year lands whole or not at all.
   const prepared: { poolId: string; classCode: string; def: PoolClassDef; result: PoolYearResult; enhancedMultiplier: string | null }[] = [];
