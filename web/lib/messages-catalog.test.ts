@@ -2111,7 +2111,7 @@ test('ar collections copy ships translated in every locale', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('ar.collections.'))
-  assert.equal(wanted.length, 106, 'ar.collections source inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 108, 'ar.collections source inventory changed; translate the new keys everywhere and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -4395,7 +4395,7 @@ test('I15 compliance and fieldTickets copy ships translated in de, ja, zh and pt
   const I15_wanted = [...I15_source.keys()].filter((I15_key) =>
     I15_prefixes.some((I15_prefix) => I15_key.startsWith(I15_prefix)),
   )
-  assert.equal(I15_wanted.length, 428, 'compliance+fieldTickets source inventory changed; translate the new keys in de/ja/zh/pt-BR and re-pin')
+  assert.equal(I15_wanted.length, 431, 'compliance+fieldTickets source inventory changed; translate the new keys in de/ja/zh/pt-BR and re-pin')
   const I15_tokens = (I15_value: string): Set<string> =>
     new Set(I15_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I15_arms = (I15_value: string): string[] => I15_value.match(/, +(plural|select)/g) ?? []
