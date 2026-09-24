@@ -1697,40 +1697,57 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "b3738d09a836ba824febc892bac3a081cb162b9a4fafe1561edbc28a17f9a1f0",
-    to: "d91d0842bd8c0741eddb06ec4e16969bc216a79f0b2fc7fa3cb5a1a85aa2024e",
+    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
     strategy: "reapply",
     reason:
-      "unshipped 0338 corrective revision: posted_document_status_guard trusted a raw "
-      + "openbooks.sandbox_wipe session GUC that any session can SET, reopening the "
-      + "posted -> draft rewrite G4 exists to refuse; the guard now admits a wipe only "
-      + "through openbooks_sandbox_wipe_allowed(org_id). A database recorded at the "
-      + "G4-only (3f4e33911) body re-runs the current file: every statement is CREATE OR REPLACE / "
-      + "DROP TRIGGER IF EXISTS + CREATE TRIGGER, so reapply converges idempotently.",
+      "unshipped wave-G migration grows by section: the G4-only body gains "
+      + "the wipe-fix (no raw sandbox_wipe GUC read), the G5 amend-delete "
+      + "fence, the G6 book-rehome aggregate trigger, the G8 "
+      + "open-balance INSERT trigger plus NULL-cache backfill, the G9 "
+      + "inactive-account remedy message, the G10 line-edit recompute "
+      + "trigger, the G11 payment-stats date-move trigger, the G12 catalog "
+      + "additions, and the G13 promotion of the queued tables. Every statement is CREATE OR REPLACE / DROP ... IF EXISTS "
+      + "+ CREATE or a NULL-guarded backfill, so reapply converges "
+      + "idempotently. Reapply, not restamp: the body changed.",
   },
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "3d46141b8540f29d28d1905acad92a0d3478c6b0b7297e85e2b3654783a3ffab",
-    to: "d91d0842bd8c0741eddb06ec4e16969bc216a79f0b2fc7fa3cb5a1a85aa2024e",
+    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
     strategy: "reapply",
     reason:
-      "unshipped 0338 corrective revision: posted_document_status_guard trusted a raw "
-      + "openbooks.sandbox_wipe session GUC that any session can SET, reopening the "
-      + "posted -> draft rewrite G4 exists to refuse; the guard now admits a wipe only "
-      + "through openbooks_sandbox_wipe_allowed(org_id). A database recorded at the "
-      + "G4+G5 (673890cb9) body re-runs the current file: every statement is CREATE OR REPLACE / "
-      + "DROP TRIGGER IF EXISTS + CREATE TRIGGER, so reapply converges idempotently.",
+      "same growth as the entry above, for databases that applied the "
+      + "G4+G5 body: the delta is the wipe-fix, the G6 book-rehome "
+      + "aggregate trigger, the G8 open-balance section, the G9 remedy "
+      + "message, the G10 line-edit recompute trigger, the G11 payment-stats "
+      + "date-move trigger, the G12 catalog additions, and the G13 promotion "
+      + "of the queued tables, all idempotent on replay. Reapply, not restamp.",
   },
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "8a941cc3890f3159392c37dd7c94848d2fa3b7b60df9bf7684cc075fa6fa50d4",
-    to: "d91d0842bd8c0741eddb06ec4e16969bc216a79f0b2fc7fa3cb5a1a85aa2024e",
+    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
     strategy: "reapply",
     reason:
-      "unshipped 0338 gains its G11 section (the monthly GL aggregate follows book "
-      + "rehomes under amend) after the raw-wipe-GUC correction 06a5b82a7. Every 0338 "
-      + "statement is CREATE OR REPLACE / DROP ... IF EXISTS + CREATE, so a database "
-      + "recorded at the corrected body re-runs the current file idempotently. Each "
-      + "later 0338 revision re-points every earlier digest here to its own.",
+      "same growth as the entries above, for databases that applied the "
+      + "wipe-corrected G4+G5 body: the delta is the G6 book-rehome "
+      + "aggregate trigger, the G8 open-balance section, the G9 remedy "
+      + "message, the G10 line-edit recompute trigger, the G11 payment-stats "
+      + "date-move trigger, the G12 catalog additions, and the G13 promotion "
+      + "of the queued tables, all idempotent on replay. Reapply, not restamp.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "d91d0842bd8c0741eddb06ec4e16969bc216a79f0b2fc7fa3cb5a1a85aa2024e",
+    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    strategy: "reapply",
+    reason:
+      "same growth as the entries above, for databases at the published "
+      + "G4+G5+G6 body: the delta is the G8 open-balance section, the G9 "
+      + "remedy message, the G10 line-edit recompute trigger, the G11 "
+      + "payment-stats date-move trigger, the G12 catalog additions, and the "
+      + "G13 promotion of the queued tables, all idempotent on replay. "
+      + "Reapply, not restamp.",
   },
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
@@ -1823,17 +1840,6 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "name, same expression, validated — so only the digest moves. "
       + "Restamp, not reapply: the revision stages the build but changes no "
       + "enforced state.",
-  },
-  {
-    filename: "generated/0338_posting_guards_and_summary_heals.sql",
-    from: "2d6d2fa331c3a6ffc138f1a30fb1eb6b8f183609ae3a055931aa25acc132ac7b",
-    to: "65ec1f847284c54e4ff51d8cfad926a89cfdeecc94c467d2ae83f1c9d8f1bd31",
-    strategy: "reapply",
-    reason:
-      "same growth as the entries above, for shard databases that applied "
-      + "the branch G4+G5+G6+G8+G9 body: the delta is the wipe-fix and the "
-      + "G10 line-edit recompute trigger, all idempotent on replay. "
-      + "Reapply, not restamp.",
   },
 ];
 
