@@ -123,7 +123,7 @@ async function bankAccountBalances(
     sliver_entries as materialized (
       select id from journal_entries
        where org_id = ${orgId} and status in ('posted', 'reversed')
-         and book_id = (select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary order by b.created_at limit 1)
+         and book_id = (select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl order by b.created_at limit 1)
          and posting_date >= date_trunc('month', ${asOf}::date)::date
          and posting_date <= ${asOf}
     ),
@@ -132,7 +132,7 @@ async function bankAccountBalances(
         from gl_month_activity g
         left join subsidiaries sub on sub.id = g.subsidiary_id and sub.org_id = ${orgId}
        where g.org_id = ${orgId}
-         and g.book_id = (select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary order by b.created_at limit 1)
+         and g.book_id = (select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl order by b.created_at limit 1)
          and g.account_id in (select id from bank_accounts)
          and g.month < date_trunc('month', ${asOf}::date)::date
       union all

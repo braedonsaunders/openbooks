@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { canonicalDecimal, fixedDecimal } from "../money/exact-decimal.ts";
 import { db, type SqlExecutor, withOrg, withTransactionSavepoint } from "../platform/db.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { add, cmp, fromUnits, isZero, mulPercent, mulRate, neg, roundDiv, sum, toUnits } from "../money/money.ts";
 import {
   periodInterest,
@@ -741,12 +742,13 @@ async function lockObligationContract(runner:SqlExecutor,orgId:string,obligation
   if(row)await lockRevenueContract(runner,orgId,row.contract_id);
 }
 
-/** Primary accounting book id (schedules are book-aware). */
+/** Primary accounting book id (schedules are book-aware): the shared active
+ * posting primary, so planning reads the same book the run posts to — never
+ * a deactivated primary. */
 async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string> {
-  const res = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
-  if (!res.rows[0]) throw new Error("no primary accounting book");
-  return res.rows[0].id;
+  const id = await activePostingPrimaryBookId(orgId, runner);
+  if (!id) throw new Error("no primary accounting book");
+  return id;
 }
 
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
@@ -1824,7 +1826,7 @@ export async function runRevenueRecognition(
   const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
   const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds, fallbackSubsidiaryId);
 
-  const effectiveMethod=sql`coalesce((select s.change_basis->>'method' from recognition_schedules s join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary where s.obligation_id=o.id and s.org_id=o.org_id limit 1),r.method)`;
+  const effectiveMethod=sql`coalesce((select s.change_basis->>'method' from recognition_schedules s join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary and b.is_active and b.posts_gl where s.obligation_id=o.id and s.org_id=o.org_id limit 1),r.method)`;
 
   let confirmedLineIds: Set<string> | null = null;
   if (confirm) {

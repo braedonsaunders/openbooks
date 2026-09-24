@@ -2,6 +2,7 @@ import { assetBasisDelta } from "./asset-basis.ts";import { depreciationPeriodCo
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withTransactionSavepoint } from "../platform/db.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, isZero, mulRatio, neg, normalizeMoney, toUnits } from "../money/money.ts";
@@ -288,12 +289,13 @@ function formulaForMethod(
 // Persist a schedule (plan → depreciation_schedules + lines)
 // ---------------------------------------------------------------------------
 
-/** Primary accounting book id (schedules are book-aware). */
+/** Primary accounting book id (schedules are book-aware): the shared active
+ * posting primary, so planning reads the same book the run posts to — never
+ * a deactivated primary. */
 async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string> {
-  const result = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
-  if (!result.rows[0]) throw new DepreciationRefusalError("no primary accounting book");
-  return result.rows[0].id;
+  const id = await activePostingPrimaryBookId(orgId, runner);
+  if (!id) throw new DepreciationRefusalError("no primary accounting book");
+  return id;
 }
 
 /** Retain the schedule's calendar; a new schedule uses the org's active default. */

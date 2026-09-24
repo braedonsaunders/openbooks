@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { db, withOrg } from "../platform/db.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { civilDateFromParts, daysInCivilMonth } from "../platform/business-date.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import type { MigrationSource } from "./source.ts";
@@ -80,13 +81,9 @@ export async function trueUpResidualGl(
         `true-up source currency ${source.baseCurrency} does not match organization base currency ${org.rows[0].base_currency}`,
       );
     }
-    const bookRow = (await db.execute<{ id: string }>(sql`
-      select id
-        from accounting_books
-       where org_id = ${orgId} and is_primary
-       limit 1
-    `));
-    const bookId = bookRow.rows[0]?.id;
+    // The shared active posting primary: opening balances must land where
+    // the posting run writes, never a deactivated primary.
+    const bookId = await activePostingPrimaryBookId(orgId);
     if (!bookId) throw new Error("true-up requires a primary accounting book");
     const subRow = (await db.execute<{ id: string }>(sql`
       select id

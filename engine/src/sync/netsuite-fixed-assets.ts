@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withOrg, withOrgContext } from "../platform/db.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { buildNativeContext } from "./native.ts";
@@ -259,10 +260,8 @@ export async function syncNetSuiteFixedAssets(
     const projects = await idMap("projects", options.orgId);
     const locations = await idMap("locations", options.orgId);
     const parties = await idMap("parties", options.orgId);
-    const books = (await db.execute<{ id: string }>(sql`
-      select id from accounting_books where org_id = ${options.orgId} and is_primary order by id limit 1
-    `));
-    const bookId = books.rows[0]?.id;
+    // The shared active posting primary — never a deactivated primary.
+    const bookId = await activePostingPrimaryBookId(options.orgId);
     if (!bookId) throw new Error("the organization has no primary accounting book");
     const periodResult = (await db.execute<{ id: string; starts_on: string; ends_on: string; is_adjustment: boolean }>(sql`
       select id, starts_on::text, ends_on::text, is_adjustment

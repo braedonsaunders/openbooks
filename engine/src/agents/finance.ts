@@ -178,7 +178,7 @@ export async function financeFindings(
                coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0)::text as opex
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-          join accounting_books b on b.id = e.book_id and b.org_id = e.org_id and b.is_primary
+          join accounting_books b on b.id = e.book_id and b.org_id = e.org_id and b.is_primary and b.is_active and b.posts_gl
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.period_id = ${period.id}
         `));
