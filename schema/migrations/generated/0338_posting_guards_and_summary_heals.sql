@@ -524,6 +524,19 @@ EXECUTE FUNCTION public.trg_party_payment_stats_date();
 -- status and references stay queryable (the parties/sin_last3 precedent).
 -- The function below is the 0161 body verbatim except the array and the
 -- one curated block; the refresh at the end rebuilds every console view.
+-- ---------------------------------------------------------------------------
+-- Section G13: the audit's remaining reportable tables join the catalog.
+-- ---------------------------------------------------------------------------
+-- The G12 triage left twelve reportable tables queued as named exclusions:
+-- financial changes, consolidation control losses, the 0244/0327 pricing
+-- tables (levels, activation history, customer assignments, breaks,
+-- schedules, rate version profiles), payroll levy opening balances,
+-- remittance coverage and statutory rates, and the legacy upgrade
+-- provenance. They join safe_relations here through the same array (all
+-- carry enforced RLS; all are plain operational or config data, so the
+-- generic select-* path applies with no curated redaction), and the
+-- refresh below rebuilds the console with them. Their G12 named-exclusion
+-- entries are removed from the coverage test alongside.
 CREATE OR REPLACE FUNCTION public.openbooks_refresh_query_catalog() RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'public'
@@ -546,6 +559,7 @@ declare
     'close_reporting_packages', 'close_run_tasks', 'close_runs', 'close_signoffs',
     'close_task_evidence', 'compliance_classes', 'compliance_records',
     'compliance_release_checks', 'compliance_requirements', 'compliance_waivers',
+    'consolidation_control_losses',
     'consolidated_fx_rates', 'contacts', 'cost_layer_consumptions',
     'cost_layer_weights', 'cost_layers', 'crm_account_assignment_events',
     'crm_account_profiles', 'crm_account_stage_events', 'crm_account_statuses',
@@ -554,7 +568,7 @@ declare
     'crm_opportunity_documents', 'crm_opportunity_lines',
     'crm_opportunity_stage_events', 'crm_opportunity_statuses',
     'crm_opportunity_team_members', 'crm_sales_quotas', 'crm_sales_team_members',
-    'crm_sales_teams', 'crm_sales_territories', 'currencies', 'departments',
+    'crm_sales_teams', 'crm_sales_territories', 'currencies', 'customer_price_level_assignments', 'departments',
     'depreciation_book_policies', 'depreciation_inputs', 'depreciation_methods',
     'depreciation_schedule_lines', 'depreciation_schedules',
     'document_line_tax_components', 'document_lines', 'document_links', 'documents',
@@ -562,13 +576,13 @@ declare
     'entitlement_plan_limits', 'entitlement_plans', 'entitlement_service_tiers',
     'equipment_units', 'fair_value_prices',
     'field_ticket_labor_lines', 'field_ticket_labor_snapshots',
-    'field_ticket_signatures', 'field_tickets', 'fiscal_calendars', 'fixed_assets',
+    'field_ticket_signatures', 'field_tickets', 'fiscal_calendars', 'financial_changes', 'fixed_assets',
     'fx_rates', 'gl_month_activity', 'income_tax_rates', 'intercompany_pairs',
     'inventory_movements',
     'inventory_provisional_costs', 'inventory_provisional_settlements',
     'inventory_writedowns',
-    'invoice_backups', 'item_inventory_profiles', 'item_rate_book_assignments',
-    'item_rate_books', 'item_rate_lines', 'item_rate_profiles', 'item_rate_versions',
+    'invoice_backups', 'item_inventory_profiles', 'item_price_breaks', 'item_price_schedules', 'item_rate_book_assignments',
+    'item_rate_books', 'item_rate_lines', 'item_rate_profiles', 'item_rate_version_profiles', 'item_rate_versions',
     'items', 'journal_entries', 'journal_lines', 'labor_cost_rates',
     'labor_rate_adjustment_targets', 'labor_rate_adjustments', 'labor_rate_terms',
     'labor_rate_version_policies', 'labor_rate_version_scopes',
@@ -583,7 +597,7 @@ declare
     'payment_schedule_occurrences', 'payment_schedules', 'payment_settlements', 'payment_surcharge_rules',
     'payment_terms', 'performance_obligations', 'period_locks',
     'project_financial_adjustments', 'project_financial_profile_versions',
-    'project_overhead_adjustments', 'project_tasks', 'project_types', 'projects',
+    'project_overhead_adjustments', 'price_level_activation_history', 'price_levels', 'project_tasks', 'project_types', 'projects',
     'property_leases', 'property_units',
     'recognition_events', 'recognition_rules', 'recognition_schedule_lines', 'recognition_schedules',
     'reconciliation_matches', 'reconciliations', 'recurring_schedules',
@@ -610,10 +624,14 @@ declare
     'employee_pay_components',
     'pay_components', 'pay_derived_rules', 'pay_run_adjustments', 'pay_runs',
     'pay_schedules', 'pay_stub_lines', 'pay_stubs',
+    'payroll_employer_levy_opening',
     'payroll_filing_accounts', 'payroll_holidays',
     'payroll_opening_balance_components', 'payroll_opening_balances',
+    'payroll_remittance_coverage',
+    'payroll_statutory_rates',
     'union_agreements', 'union_classifications',
-    'union_fringes'
+    'union_fringes',
+    'upgrade_legacy_provenance'
   ];
 begin
   -- Public base tables are never query-console surfaces. Revoke both current

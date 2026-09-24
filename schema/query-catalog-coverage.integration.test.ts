@@ -162,21 +162,6 @@ const EXCLUDED_TABLES: Record<string, string> = {
   project_geofences: "project operations config.",
   recurring_occurrence_documents: "recurring scheduler runtime.",
   reporting_relationships: "reporting graph config.",
-  // G13 queue: reportable tables the audit named for the follow-up catalog
-  // addition. They fail closed until then; each reason here is a pointer,
-  // not a permanent exclusion.
-  financial_changes: "queued for catalog addition in G13.",
-  consolidation_control_losses: "queued for catalog addition in G13.",
-  price_levels: "queued for catalog addition in G13.",
-  price_level_activation_history: "queued for catalog addition in G13.",
-  customer_price_level_assignments: "queued for catalog addition in G13.",
-  item_rate_version_profiles: "queued for catalog addition in G13.",
-  item_price_breaks: "queued for catalog addition in G13.",
-  item_price_schedules: "queued for catalog addition in G13.",
-  payroll_employer_levy_opening: "queued for catalog addition in G13.",
-  payroll_remittance_coverage: "queued for catalog addition in G13.",
-  payroll_statutory_rates: "queued for catalog addition in G13.",
-  upgrade_legacy_provenance: "queued for catalog addition in G13.",
 };
 
 async function orgTables(): Promise<string[]> {
