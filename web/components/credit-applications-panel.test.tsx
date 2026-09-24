@@ -217,16 +217,11 @@ test("applying sends the credit's own line and the entered amount", async () => 
   }
 });
 
-test("applying nothing is refused in the panel, without a request", async () => {
+test("an unreadable application blocks valid allocations in the same submit", async () => {
   const net = scriptFetch((url) => {
     if (url.includes("/api/payments/open-items")) {
       return Response.json({
-        items: [
-          {
-            lineId: INVOICE_LINE, documentNumber: "INV-4002", entryNumber: "JE-2",
-            dueDate: null, open: "90.0000", currency: "USD",
-          },
-        ],
+        items: [INVOICE_LINE, APPLICATION].map((lineId) => ({ lineId, open: "90.0000", currency: "USD" })),
       });
     }
     return stateBody("250.0000");
@@ -235,11 +230,15 @@ test("applying nothing is refused in the panel, without a request", async () => 
     const { host, root } = await mount();
     await act(async () => { button(host, "Apply to open items")!.click(); });
     await act(async () => { await tick(); });
+    const inputs = host.querySelectorAll("input[type=number]");
+    await act(async () => {
+      nativeSetValue(inputs[0] as HTMLInputElement, "10.00");
+      nativeSetValue(inputs[1] as HTMLInputElement, "12.34567");
+    });
     await act(async () => { button(host, "Apply credit")!.click(); });
-    await act(async () => { await tick(); });
 
     assert.equal(net.sent.filter((s) => s.method === "POST").length, 0);
-    assert.match(host.textContent ?? "", /Enter an amount on at least one open item/);
+    assert.match(host.textContent ?? "", /Application amount allows at most 4 decimal places/);
     await act(async () => { root.unmount(); });
   } finally {
     net.restore();
@@ -361,7 +360,7 @@ test("F5-8: an amount past ledger precision is refused in-panel, without a reque
     await act(async () => { await tick(); });
 
     assert.equal(net.sent.filter((s) => s.method === "POST").length, 0);
-    assert.match(host.textContent ?? "", /Enter an amount on at least one open item/);
+    assert.match(host.textContent ?? "", /Application amount allows at most 4 decimal places/);
     await act(async () => { root.unmount(); });
   } finally {
     net.restore();
