@@ -86,6 +86,8 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 10,
         role: "reduced",
         rates: [{ ratePercent: 10, effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
+        truncatedScheduleReason:
+          "10% opens at AdE applicability (2026-09-18): the rates page states no statutory start date, so the band is applicability-dated by review.",
       },
       {
         code: "IT-VAT-RED4",
@@ -93,6 +95,8 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 4,
         role: "reduced",
         rates: [{ ratePercent: 4, effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
+        truncatedScheduleReason:
+          "4% opens at AdE applicability (2026-09-18): the rates page states no statutory start date, so the band is applicability-dated by review.",
       },
     ],
   },
