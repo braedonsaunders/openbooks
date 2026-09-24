@@ -5404,6 +5404,8 @@
       "document": "Document",
       "manual": "Manual"
     },
+    "triggerKindUnavailable": "Not available yet",
+    "triggerKindUnavailableNote": "These trigger types cannot fire yet — enabling is refused.",
     "builder": {
       "pageTitle": "Automation builder",
       "description": "Trigger, who and when, actions, simulation, and the run log.",

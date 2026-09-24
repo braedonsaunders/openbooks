@@ -16,6 +16,11 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 
 const TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'document', 'manual'] as const
 
+// Event-sourced triggers stage nothing in production yet (no writer feeds
+// the event queue), so enabling a recipe on one is refused by the API —
+// say so here instead of letting an author discover it at enable time.
+const UNAVAILABLE_TRIGGER_KINDS = ['field_change', 'event', 'document'] as const
+
 function defaultTrigger(kind: string): Record<string, unknown> {
   switch (kind) {
     case 'schedule':
@@ -123,10 +128,18 @@ export function NewAutomationButton({ label }: { label: string }) {
           <div className="grid gap-1">
             <Label htmlFor="automation-trigger">{t('list.triggerLabel')}</Label>
             <Select id="automation-trigger" value={kind} disabled={recipeKey !== ''} onChange={(e) => setKind(e.target.value)}>
-              {TRIGGER_KINDS.map((k) => (
-                <option key={k} value={k}>{t(`triggerKinds.${k}`)}</option>
-              ))}
+              {TRIGGER_KINDS.map((k) => {
+                const unavailable = (UNAVAILABLE_TRIGGER_KINDS as readonly string[]).includes(k)
+                return (
+                  <option key={k} value={k} disabled={unavailable}>
+                    {t(`triggerKinds.${k}`)}{unavailable ? ` (${t('triggerKindUnavailable')})` : ''}
+                  </option>
+                )
+              })}
             </Select>
+            {(UNAVAILABLE_TRIGGER_KINDS as readonly string[]).includes(kind) ? (
+              <p className="text-sm text-amber-700 dark:text-amber-300">{t('triggerKindUnavailableNote')}</p>
+            ) : null}
           </div>
           {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
         </div>

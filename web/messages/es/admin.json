@@ -5404,6 +5404,8 @@
       "document": "Documento",
       "manual": "Manual"
     },
+    "triggerKindUnavailable": "Aún no disponible",
+    "triggerKindUnavailableNote": "Estos tipos de desencadenante aún no pueden ejecutarse — la activación será rechazada.",
     "builder": {
       "pageTitle": "Editor de automatización",
       "description": "Desencadenante, quién y cuándo, acciones, simulación e historial.",
