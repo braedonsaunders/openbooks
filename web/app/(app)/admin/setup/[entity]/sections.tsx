@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { projectRuleSlotPrefills } from '../../../../../lib/setup/hrm-rule-slots'
 import { Badge, Button } from '@openbooks/ui'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
@@ -188,6 +189,11 @@ export async function SetupDrawerSlot({
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              limit 1`)))
           const found = selected.rows[0] ?? null
+          // Rule-slot entities store drawer fields folded into jsonb (no
+          // generated columns to read back): unfold the stored rules into
+          // the slot fields so the edit drawer prefills what it would
+          // save (OM-17c). Real columns always win over the projection.
+          const row = found ? projectRuleSlotPrefills(entity.key, found as Record<string, unknown>) : null
           let members: string[] = []
           const multi = entity.fields.find((f) => f.kind === 'multiref')
           if (found && multi) {
@@ -199,7 +205,7 @@ export async function SetupDrawerSlot({
                order by tgm.sequence`)))
             members = m.rows.map((x) => x.tax_code_id as string)
           }
-          return { creating: false, row: found, members }
+          return { creating: false, row, members }
         })()
     : null
   if (!open) return null

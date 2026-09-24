@@ -97,3 +97,35 @@ test('without the opt-in or without a fold the slots still refuse by name', () =
   )
   assert.deepEqual([...coveredSlotFields('departments', { name: 'x' })], [])
 })
+
+test('projectRuleSlotPrefills unfolds the stored scale into the drawer slots', async () => {
+  const { projectRuleSlotPrefills } = await import('./hrm-rule-slots')
+  const out = projectRuleSlotPrefills('hrm-review-templates', {
+    id: 't1',
+    name: 'Senior review',
+    rating_scale: { min: 1, max: 3, labels: ['Low', 'High'] },
+  })
+  assert.equal(out.rating_scale_min, 1)
+  assert.equal(out.rating_scale_max, 3)
+  assert.deepEqual(out.rating_scale_labels, ['Low', 'High'])
+})
+
+test('projectRuleSlotPrefills unfolds signer_roles into membership booleans', async () => {
+  const { projectRuleSlotPrefills } = await import('./hrm-rule-slots')
+  const out = projectRuleSlotPrefills('hrm-document-templates', {
+    id: 't1',
+    signer_roles: ['employee', 'hr'],
+    merge_fields: ['name'],
+  })
+  assert.equal(out.sign_employee, true)
+  assert.equal(out.sign_manager, false)
+  assert.equal(out.sign_hr, true)
+})
+
+test('projectRuleSlotPrefills never overwrites a real column and passes unknown entities through', async () => {
+  const { projectRuleSlotPrefills } = await import('./hrm-rule-slots')
+  const row = { id: 't1', rating_scale_min: 9, rating_scale: { min: 1, max: 3, labels: [] } }
+  assert.equal(projectRuleSlotPrefills('hrm-review-templates', row).rating_scale_min, 9)
+  const other = { id: 't1', rating_scale: { min: 1 } }
+  assert.equal(projectRuleSlotPrefills('no-such-entity', other).rating_scale_min, undefined)
+})
