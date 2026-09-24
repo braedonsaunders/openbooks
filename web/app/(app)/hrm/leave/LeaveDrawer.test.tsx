@@ -345,6 +345,33 @@ test("self-service filing refuses to save without naming the employment", async 
   assert.match(document.body.textContent ?? "", /Pick the employment this request is filed for/);
 });
 
+test("a rejected filing request shows failure and releases the submit button", async (t) => {
+  (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
+  const script: Script = { posts: [] };
+  const restoreFetch = installFetch(script, false, "one");
+  t.after(restoreFetch);
+  const { unmount } = await mountFiling();
+  t.after(unmount);
+  const priorFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url === "/api/hrm/leave-requests" && init?.method === "POST") throw new Error("network unavailable");
+    return priorFetch(input, init);
+  }) as typeof fetch;
+
+  await act(async () => {
+    setSelect(nativeSelectFor("leave-type"), TYPE_ID);
+    setInput(document.querySelector("input#leave-starts") as HTMLInputElement, "2026-10-20");
+    setInput(document.querySelector("input#leave-ends") as HTMLInputElement, "2026-10-21");
+    setInput(document.querySelector("input#leave-hours") as HTMLInputElement, "8");
+    await tick();
+  });
+  await click(buttonNamed("New request"));
+
+  assert.equal(buttonNamed("New request").disabled, false, "the submit button must be available for retry");
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /The request could not be filed/);
+});
+
 test("a single own employment preselects, and none explains instead of an empty picker", async (t) => {
   (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
   const script: Script = { posts: [] };

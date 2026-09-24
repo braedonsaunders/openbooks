@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
+import { useAppAction } from '../../../../lib/use-app-action'
+import { ActionError } from '@braedonsaunders/appkit-errors'
 
 /**
  * Leave filing and detail drawer. Opens blank for filing (employment, type,
@@ -216,7 +218,7 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
   const [hours, setHours] = useState('')
   const [reason, setReason] = useState('')
   const [status, setStatus] = useState<string | undefined>(undefined)
-  const [saving, setSaving] = useState(false)
+  const { busy: saving, execute } = useAppAction()
   // Manager on-behalf filing: the employments the actor may manage leave
   // for, listed through the same grant-plus-scope predicate the filing gate
   // enforces. A self-service actor holds none, so the mode never renders
@@ -354,29 +356,41 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
       setStatus(t('leave.fileEmploymentRequired'))
       return
     }
-    setSaving(true)
-    const res = await fetch('/api/hrm/leave-requests', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: onBehalf
-        ? JSON.stringify({
-            employmentId: onBehalfEmploymentId,
-            leaveTypeId,
-            startsOn,
-            endsOn,
-            hours,
-            reason: reason || null,
-            onBehalf: true,
-          })
-        : JSON.stringify({ employmentId, leaveTypeId, startsOn, endsOn, hours, reason: reason || null }),
+    setStatus(undefined)
+    await execute(async () => {
+      try {
+        const res = await fetch('/api/hrm/leave-requests', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: onBehalf
+            ? JSON.stringify({
+                employmentId: onBehalfEmploymentId,
+                leaveTypeId,
+                startsOn,
+                endsOn,
+                hours,
+                reason: reason || null,
+                onBehalf: true,
+              })
+            : JSON.stringify({ employmentId, leaveTypeId, startsOn, endsOn, hours, reason: reason || null }),
+        })
+        if (!res.ok) {
+          setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
+          return { ok: true as const, status: res.status, data: null }
+        }
+        router.refresh()
+        onClose()
+        return { ok: true as const, status: res.status, data: null }
+      } catch {
+        return {
+          ok: false as const,
+          error: new ActionError({ kind: 'transport', serverMessage: t('leave.fileFailed') }),
+        }
+      }
+    }, {
+      fallbackMessage: t('leave.fileFailed'),
+      onRefused: (error) => setStatus(error.displayMessage(t('leave.fileFailed'))),
     })
-    if (!res.ok) {
-      setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
-      setSaving(false)
-      return
-    }
-    router.refresh()
-    onClose()
   }
 
   return (
