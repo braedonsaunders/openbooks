@@ -77,6 +77,8 @@ export function ItemRatesEditor({
     day: t('defaults.day'), week: t('defaults.week'), month: t('defaults.month'),
   }), [itemKind, itemUnit, t])
   const [data, setData] = useState<RateData | null>(null)
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>('loading')
+  const [loadError, setLoadError] = useState('')
   const [editingRequested, setEditingRequested] = useState(false)
   const [busy, setBusy] = useState(false)
   const [serverError, setServerError] = useState('')
@@ -91,24 +93,31 @@ export function ItemRatesEditor({
   // A read-only viewer must never retain an edit form after permissions
   // change. Derived rather than reset from an effect: an effect would leave
   // the form rendered for the render in which the permission was lost.
-  const editing = editingRequested && canManage
+  const editing = editingRequested && canManage && loadState === 'loaded' && data !== null
 
   // Fetch chain rather than an async body: every state update below sits in a
   // promise continuation (the fetch response), never synchronously in the
   // effect that calls this. The promise is returned so callers can await it.
   const load = useCallback(() => {
+    setLoadState('loading')
+    setLoadError('')
+    setData(null)
     return fetch(`/api/items/${itemId}/rates`).then(async (res) => {
-      if (!res.ok) return
+      if (!res.ok) throw new Error(t('loadFailed'))
       const next = await res.json() as RateData
       setData(next)
+      setLoadState('loaded')
       setRateBookId(next.books.find((book) => book.is_default)?.id ?? next.books[0]?.id ?? '')
       if (next.profile) {
         setBaseUnit(next.profile.base_unit)
         setPricingPolicy(next.profile.pricing_policy)
         setInvoicePresentation(next.profile.invoice_presentation)
       }
+    }).catch((error: unknown) => {
+      setLoadError(error instanceof Error ? error.message : t('loadFailed'))
+      setLoadState('failed')
     })
-  }, [itemId])
+  }, [itemId, t])
   useEffect(() => { void load() }, [load])
 
   const tierTypes = useMemo(
@@ -245,9 +254,16 @@ export function ItemRatesEditor({
         </div>
         <div className="flex items-center gap-2">
           <Link href="/docs/item-rates" className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('documentation')}</Link>
-          {canManage && !editing ? <Button variant="outline" size="sm" onClick={beginEditing}>{advancedPricing ? t('newVersion') : t('configure')}</Button> : null}
+          {canManage && data && loadState === 'loaded' && !editing ? <Button variant="outline" size="sm" onClick={beginEditing}>{advancedPricing ? t('newVersion') : t('configure')}</Button> : null}
         </div>
       </div>
+
+      {loadState === 'loading' ? <p role="status" className="text-sm text-slate-500">{common('loading')}</p> : null}
+      {loadState === 'failed' ? (
+        <div role="alert" className="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
+          <span>{loadError}</span><Button variant="outline" size="sm" onClick={() => { void load() }}>{common('retry')}</Button>
+        </div>
+      ) : null}
 
       {editing ? (
         <Card>
