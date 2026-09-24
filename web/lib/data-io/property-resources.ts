@@ -4,6 +4,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { canonicalPositiveLeaseCharge } from './property-money'
 import {
   activatePropertyLease,
   addLeaseCharge,
@@ -372,7 +373,8 @@ function leaseChargeResource(orgId: string): DataResource {
         if (!leaseNumber || !chargeType || !description || !effectiveFrom || !src.amount || !frequency) throw new Error('leaseNumber, chargeType, description, amount, frequency, and effectiveFrom are required')
         if (!['cam', 'parking', 'storage', 'utility', 'other'].includes(chargeType)) throw new Error('base rent belongs on the property lease import; select another chargeType')
         if (!['monthly', 'quarterly', 'annually', 'one_time'].includes(frequency)) throw new Error(`invalid frequency "${frequency}"`)
-        if (Number(src.amount) <= 0 || !Number.isFinite(Number(src.amount))) throw new Error('amount must be positive')
+        const chargeAmount = canonicalPositiveLeaseCharge(src.amount)
+        if (chargeAmount === null) throw new Error('amount must be a positive decimal with at most 4 decimal places and within the ledger range')
         if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || (src.effectiveTo && String(src.effectiveTo) < effectiveFrom)) throw new Error('effective dates must form a valid YYYY-MM-DD range')
         const lease = (await db.execute(sql`select id,status from property_leases where org_id=${ctx.orgId} and lease_number=${leaseNumber} limit 1`)) as { rows: { id: string; status: string }[] }
         if (!lease.rows[0]) throw new Error(`lease "${leaseNumber}" not found`)
@@ -381,7 +383,7 @@ function leaseChargeResource(orgId: string): DataResource {
           if (mode === 'insert') throw new Error('charge already exists')
           const itemOmitted = src.item === undefined || src.item === null || src.item === ''
           const itemSame = itemOmitted || String(existing.rows[0].item_code ?? '') === String(src.item)
-          const same = normalizeMoney(existing.rows[0].amount) === normalizeMoney(String(src.amount)) && existing.rows[0].frequency === frequency && String(existing.rows[0].effective_to ?? '') === String(src.effectiveTo ?? '') && String(existing.rows[0].account_number ?? '') === String(src.incomeAccount ?? '') && itemSame && String(existing.rows[0].tax_code ?? '') === String(src.taxCode ?? '')
+          const same = normalizeMoney(existing.rows[0].amount) === chargeAmount && existing.rows[0].frequency === frequency && String(existing.rows[0].effective_to ?? '') === String(src.effectiveTo ?? '') && String(existing.rows[0].account_number ?? '') === String(src.incomeAccount ?? '') && itemSame && String(existing.rows[0].tax_code ?? '') === String(src.taxCode ?? '')
           if (!same) throw new Error('an existing charge with this key differs; edit it from the lease so scheduled billing evidence is preserved')
           outcome.updated++
           continue
@@ -395,7 +397,7 @@ function leaseChargeResource(orgId: string): DataResource {
           if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) throw new Error('item is not available')
         }
         if (!ctx.dryRun) {
-          await addLeaseCharge({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, leaseId: lease.rows[0].id, chargeType, description, amount: String(src.amount), frequency, effectiveFrom, effectiveTo: src.effectiveTo ? String(src.effectiveTo) : null, incomeAccountId, itemId, taxCodeId })
+          await addLeaseCharge({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, leaseId: lease.rows[0].id, chargeType, description, amount: chargeAmount, frequency, effectiveFrom, effectiveTo: src.effectiveTo ? String(src.effectiveTo) : null, incomeAccountId, itemId, taxCodeId })
           if (['active', 'notice'].includes(lease.rows[0].status)) await scheduleLeaseCharges(ctx.orgId, ctx.actorId, ctx.allowedSubsidiaryIds ?? null, lease.rows[0].id)
         }
         outcome.created++
