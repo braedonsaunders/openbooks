@@ -352,7 +352,7 @@ const slip = (over: Partial<T4Slip> = {}): T4Slip & { sin: string } => ({
   filingAccountId: null,
   box14EmploymentIncome: "50000", box16Cpp: "3500", box16aCpp2: "200", box18Ei: "900",
   box22IncomeTax: "8000", box24EiInsurable: "50000", box26CppPensionable: "50000",
-  box44UnionDues: "0", box55Qpip: "0", box56QpipInsurable: "0", stubCount: 26,
+  box44UnionDues: "0", box55Qpip: "0", box56QpipInsurable: "0", stubCount: 26, employerCpp: "3500", employerCpp2: "0", employerEi: "1260",
   sin: "046454286",
   ...over,
 });

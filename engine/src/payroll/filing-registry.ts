@@ -217,6 +217,8 @@ export interface PayrollFilingReported {
    * provable without the number ever leaving the sealed profile column.
    */
   confidential: { label: string; fingerprint: string }[];
+  /** Server-side correction inputs not printed on the statutory slip. */
+  privateFacts?: Record<string, string>;
 }
 
 /** One difference between what was reported and what is true now. */
@@ -309,6 +311,8 @@ export type PayrollFilingAmendment =
      */
     confidential?(orgId: string, taxYear: number, rowId: string):
     Promise<{ label: string; fingerprint: string }[]>;
+    /** Immutable, nonprinted values needed to reproduce a corrected artifact. */
+    privateFacts?(orgId: string, taxYear: number, rowId: string): Promise<Record<string, string>>;
   };
 
 /**

@@ -329,6 +329,16 @@ function t4Amendment(): NonNullable<PayrollYearEndFiling["amendment"]> {
     },
     slip: { build: async (row) => t4CorrectionSlip(row) },
     confidential: (orgId, _taxYear, rowId) => t4ConfidentialFields(orgId, rowId),
+    privateFacts: async (orgId, taxYear, rowId) => {
+      const slip = (await t4Slips(orgId, taxYear)).find((candidate) =>
+        `${candidate.employeePartyId}:${candidate.province}:${candidate.filingAccountId ?? ""}` === rowId);
+      if (!slip) throw new PayrollError(`T4 slip ${rowId} is no longer available to snapshot employer contribution totals`);
+      return {
+        employerCpp: slip.employerCpp,
+        employerCpp2: slip.employerCpp2,
+        employerEi: slip.employerEi,
+      };
+    },
   };
 }
 

@@ -136,7 +136,15 @@ export interface T4Slip {
   box55Qpip: string;
   /** Box 56 — QPIP insurable earnings, capped at the year's QPIP maximum. */
   box56QpipInsurable: string;
+  /** Employer-side amounts retained per employee/province for exact corrected-return summaries. */
+  employerCpp: string;
+  employerCpp2: string;
+  employerEi: string;
   stubCount: number;
+}
+
+function t4SlipKey(slip: Pick<T4Slip, "employeePartyId" | "province" | "filingAccountId">): string {
+  return `${slip.employeePartyId}:${slip.province}:${slip.filingAccountId ?? ""}`;
 }
 
 /**
@@ -384,6 +392,18 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
            sum(coalesce((c.factors->>'C2')::numeric, 0)) as cpp2,
            sum((c.factors->>'EI')::numeric) as ei,
            sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'employer_contribution'
+                  and pc.system_key = 'cpp' and (pc.country is null or pc.country = 'CA'))) as employer_cpp,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'employer_contribution'
+                  and pc.system_key = 'cpp2' and (pc.country is null or pc.country = 'CA'))) as employer_cpp2,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'employer_contribution'
+                  and pc.system_key = 'ei' and (pc.country is null or pc.country = 'CA'))) as employer_ei,
            -- The QPIP program's own insurable base, accumulated per stub
            -- under the pack's declared factor key. Stubs computed before
            -- the program-base model carry no such factor; for those the
@@ -436,6 +456,9 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
         // folds in below then the program maximum is consumed per employee
         // across slips. Only Quebec employment reports it.
         box56QpipInsurable: isQuebec ? num(row.qpip_insurable) : "0",
+        employerCpp: num(row.employer_cpp),
+        employerCpp2: num(row.employer_cpp2),
+        employerEi: num(row.employer_ei),
         stubCount: Number(row.stub_count ?? 0),
       };
     });
@@ -459,6 +482,9 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
       box44UnionDues: "0",
       box55Qpip: "0",
       box56QpipInsurable: "0",
+      employerCpp: "0",
+      employerCpp2: "0",
+      employerEi: "0",
       stubCount: 0,
     };
   });
@@ -490,53 +516,28 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
  * program account (undefined = every account, the org-wide view); pass null
  * for the unassigned bucket.
  *
- * `employeePartyIds` narrows the summary further, to the named employees. An
- * AMENDED or CANCELLED return carries only the slips being corrected, and its
- * summary must total THOSE slips — including the employer-side CPP/EI, which
- * is not a slip box and so cannot be derived from the filtered slips alone.
- * Undefined means every employee, which is what an original return files.
+ * `selectedSlips` narrows a correction summary to the exact employee,
+ * province, and account rows being corrected. Undefined means every slip,
+ * which is what an original return files.
  */
 export async function t4Summary(
   orgId: string,
   taxYear: number,
   filingAccountId?: string | null,
-  employeePartyIds?: readonly string[],
+  selectedSlips?: readonly T4Slip[],
 ): Promise<T4SummaryTotals> {
   const scoped = filingAccountId !== undefined;
   const account = filingAccountId ?? null;
   const allSlips = await t4Slips(orgId, taxYear);
   const byAccount = scoped ? allSlips.filter((slip) => slip.filingAccountId === account) : allSlips;
-  const employees = employeePartyIds ? new Set(employeePartyIds) : null;
-  const slips = employees
-    ? byAccount.filter((slip) => employees.has(slip.employeePartyId))
+  const selected = selectedSlips ? new Set(selectedSlips.map(t4SlipKey)) : null;
+  const slips = selected
+    ? byAccount.filter((slip) => selected.has(t4SlipKey(slip)))
     : byAccount;
-  // Empty fragment keeps an unnarrowed summary's SQL identical to before.
-  const employeeFilter = employees
-    ? sql`and s.employee_party_id = any(${`{${[...employees].join(",")}}`}::uuid[])`
-    : sql``;
   // Empty fragments keep the org-wide summary's SQL identical to before.
-  const employerAccountFilter = scoped
-    ? sql`and s.filing_account_id is not distinct from ${account}`
-    : sql``;
   const billAccountFilter = scoped
     ? sql`and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${account}`
     : sql``;
-  const employer = (await db.execute<{ employer_cpp: string | null; employer_cpp2: string | null; employer_ei: string | null }>(sql`
-    select
-      sum(case when pc.system_key = 'cpp' then l.amount else 0 end) as employer_cpp,
-      sum(case when pc.system_key = 'cpp2' then l.amount else 0 end) as employer_cpp2,
-      sum(case when pc.system_key = 'ei' then l.amount else 0 end) as employer_ei
-      from pay_stub_lines l
-      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-     where l.org_id = ${orgId} and s.tax_year = ${taxYear}
-       -- A null component country is SHARED baseline (run-setup.ts), not an
-       -- unknown to default: shared rows apply to every pack's employees.
-       and l.kind = 'employer_contribution' and (pc.country is null or pc.country = 'CA')
-       ${employerAccountFilter}
-       ${employeeFilter}
-  `));
   // NOT narrowed by employee: a posted remittance bill covers an ACCOUNT for a
   // period and carries no employee dimension, so there is no honest way to
   // attribute part of it to the slips of an amended return. It is an on-screen
@@ -559,10 +560,10 @@ export async function t4Summary(
     employmentIncome: total((s) => s.box14EmploymentIncome),
     employeeCpp: total((s) => s.box16Cpp),
     employeeCpp2: total((s) => s.box16aCpp2),
-    employerCpp: num(employer.rows[0]?.employer_cpp),
-    employerCpp2: num(employer.rows[0]?.employer_cpp2),
+    employerCpp: total((s) => s.employerCpp),
+    employerCpp2: total((s) => s.employerCpp2),
     employeeEi: total((s) => s.box18Ei),
-    employerEi: num(employer.rows[0]?.employer_ei),
+    employerEi: total((s) => s.employerEi),
     incomeTax: total((s) => s.box22IncomeTax),
     remitted: num(remitted.rows[0]?.amount),
   };

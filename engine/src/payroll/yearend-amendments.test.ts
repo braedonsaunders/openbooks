@@ -239,7 +239,7 @@ const GOLDEN_SLIP = {
   box44UnionDues: "600.00",
   box55Qpip: "0",
   box56QpipInsurable: "0",
-  stubCount: 26,
+  employerCpp: "3200.50", employerCpp2: "188.00", employerEi: "1167.88", stubCount: 26,
   sin: "046454286",
 };
 
@@ -393,7 +393,7 @@ test("a snapshot round-trips back into the slip a cancellation must file", () =>
       { code: "24", label: "EI insurable earnings", value: "54500.00" },
       { code: "26", label: "CPP/QPP pensionable earnings", value: "54500.00" },
       { code: "44", label: "Union dues", value: "600.00" },
-    ],
+    ], privateFacts: { employerCpp: "3200.50", employerCpp2: "188.00", employerEi: "1167.88" },
   };
   const expected: Record<string, unknown> = { ...GOLDEN_SLIP };
   delete expected.sin;
@@ -415,7 +415,7 @@ test("a Québec snapshot round-trips through boxes 17/17A, not 16/16A", () => {
       { code: "17A", label: "Employee's second QPP contributions", value: "120.00" },
       { code: "55", label: "Employee's PPIP premiums", value: "197.60" },
       { code: "56", label: "PPIP insurable earnings", value: "40000.00" },
-    ],
+    ], privateFacts: { employerCpp: "2400.00", employerCpp2: "120.00", employerEi: "900.00" },
   }, rowId);
   assert.equal(slip.isQuebec, true);
   assert.equal(slip.box16Cpp, "2400.00");
@@ -802,18 +802,24 @@ async function seedT4Year(): Promise<T4Fixture> {
     values (${earningComponentId}, ${org.orgId}, 'SAL', 'Salary', 'earning', 'CA', true,
             ${actorId}, ${actorId})`);
   const taxComponentId = randomUUID();
+  const employerCppId = randomUUID();
   await db.execute(sql`
     insert into pay_components (id, org_id, code, name, kind, system_key, country, taxable,
                                 created_by, updated_by)
     values (${taxComponentId}, ${org.orgId}, 'FIT', 'Income tax', 'deduction', 'income_tax', 'CA',
             false, ${actorId}, ${actorId})`);
   await db.execute(sql`
+    insert into pay_components (id, org_id, code, name, kind, system_key, country, taxable,
+                                created_by, updated_by)
+    values (${employerCppId}, ${org.orgId}, 'ER-CPP', 'Employer CPP', 'employer_contribution', 'cpp', 'CA', false, ${actorId}, ${actorId})`);
+  await db.execute(sql`
     insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
                                 created_by, updated_by)
     values (${org.orgId}, ${stubId}, ${earningComponentId}, 'earning', 'Salary', '52000.0000',
             ${actorId}, ${actorId}),
            (${org.orgId}, ${stubId}, ${taxComponentId}, 'deduction', 'Income tax', '9100.7500',
-            ${actorId}, ${actorId})`);
+            ${actorId}, ${actorId}),
+           (${org.orgId}, ${stubId}, ${employerCppId}, 'employer_contribution', 'Employer CPP', '3200.5000', ${actorId}, ${actorId})`);
 
   return {
     orgId: org.orgId,
@@ -878,17 +884,7 @@ test(
 
       lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(lifecycle.rows[0]!.status, "changed");
-      assert.deepEqual(
-        lifecycle.rows[0]!.changes,
-        [{
-          code: "14",
-          label: "Employment income",
-          previous: "52000.0000",
-          current: "53500.0000",
-          redacted: false,
-        }],
-        "exactly one box moved, and it is named by the CRA's own box number",
-      );
+      assert.deepEqual(lifecycle.rows[0]!.changes, [{ code: "14", label: "Employment income", previous: "52000.0000", current: "53500.0000", redacted: false }], "only box 14 moved");
 
       const amended = await recordFilingIssue({
         orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
@@ -912,9 +908,7 @@ test(
       assert.equal(evidence!.body, originalBytes);
       assert.match(evidence!.body, /<EMPT_INC_AMT>52000\.00<\/EMPT_INC_AMT>/);
       const history = await filingSubmissions(fx.orgId, "CA", "t4", 2026);
-      assert.deepEqual(history.map((s) => [s.revisionNumber, s.revision]), [
-        [1, "original"], [2, "amended"],
-      ]);
+      assert.deepEqual(history.map((s) => [s.revisionNumber, s.revision]), [[1, "original"], [2, "amended"]]);
       assert.deepEqual(
         history[0]!.slips[0]!.reported.fields.find((f) => f.code === "14"),
         { code: "14", label: "Employment income", value: "52000.0000" },
@@ -1449,6 +1443,7 @@ test(
       // the ledger no longer holds it.
       assert.match(cancelled.file!.body, /<EMPT_INC_AMT>52000\.00<\/EMPT_INC_AMT>/);
       assert.match(cancelled.file!.body, /<SIN>046454286<\/SIN>/);
+      assert.match(cancelled.file!.body, /<TOT_EMPR_CPP_AMT>3200\.50<\/TOT_EMPR_CPP_AMT>/);
 
       lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(lifecycle.rows[0]!.status, "withdrawn");

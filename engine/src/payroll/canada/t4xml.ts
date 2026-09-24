@@ -208,7 +208,7 @@ async function scopedReturns(
       ...ret,
       slips,
       summary: await t4Summary(
-        orgId, taxYear, ret.filingAccount.id, slips.map((slip) => slip.employeePartyId),
+        orgId, taxYear, ret.filingAccount.id, slips,
       ),
     });
   }
@@ -233,9 +233,8 @@ async function scopedReturns(
  * the ones the agency holds. The slips therefore come from the issued
  * snapshot, and the summary totals THOSE slips.
  *
- * Employer CPP/EI is the one figure a slip does not carry, so it is read from
- * the subledger for the same employees. Where the underlying run was voided it
- * reads nil — which is exactly what the employer is declaring.
+ * Employer CPP/EI is not printed on the slip, so the issued private facts
+ * preserve those values when a cancelled run is no longer in the ledger.
  */
 async function returnsOfSlips(
   orgId: string,
@@ -249,7 +248,7 @@ async function returnsOfSlips(
   for (const accountId of accountIds) {
     const own = slips.filter((slip) => slip.filingAccountId === accountId);
     const ledger = await t4Summary(
-      orgId, taxYear, accountId, own.map((slip) => slip.employeePartyId),
+      orgId, taxYear, accountId, own,
     );
     const total = (pick: (slip: T4Slip) => string) =>
       own.reduce((acc, slip) => add(acc, pick(slip)), "0");
@@ -262,7 +261,9 @@ async function returnsOfSlips(
         employmentIncome: total((slip) => slip.box14EmploymentIncome),
         employeeCpp: total((slip) => slip.box16Cpp),
         employeeCpp2: total((slip) => slip.box16aCpp2),
+        employerCpp: add(total((slip) => slip.employerCpp), total((slip) => slip.employerCpp2)),
         employeeEi: total((slip) => slip.box18Ei),
+        employerEi: total((slip) => slip.employerEi),
         incomeTax: total((slip) => slip.box22IncomeTax),
       },
     });
@@ -285,7 +286,10 @@ async function returnsOfSlips(
  * out of a printed header label.
  */
 export function t4SlipFromReported(
-  reported: { fields: readonly { code: string | null; label: string; value: string }[] },
+  reported: {
+    fields: readonly { code: string | null; label: string; value: string }[];
+    privateFacts?: Record<string, string>;
+  },
   rowId: string,
 ): T4Slip {
   const [employeePartyId, province, accountId] = rowId.split(":");
@@ -296,6 +300,11 @@ export function t4SlipFromReported(
     reported.fields.find((field) => field.code === code)?.value ?? "0";
   const header = (label: string): string =>
     reported.fields.find((field) => field.code == null && field.label === label)?.value ?? "";
+  const privateFact = (name: string): string => {
+    const value = reported.privateFacts?.[name];
+    if (value == null) throw new PayrollError(`T4 cancellation is missing the previously reported employer ${name} amount`);
+    return value;
+  };
   const isQuebec = province === "QC";
   return {
     employeePartyId,
@@ -314,6 +323,9 @@ export function t4SlipFromReported(
     box44UnionDues: box("44"),
     box55Qpip: box("55"),
     box56QpipInsurable: box("56"),
+    employerCpp: privateFact("employerCpp"),
+    employerCpp2: privateFact("employerCpp2"),
+    employerEi: privateFact("employerEi"),
     // Not a T4 box — a provenance count the transmittal never prints.
     stubCount: 0,
   };
