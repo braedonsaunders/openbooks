@@ -1,5 +1,4 @@
 // Run with:  node --import tsx --test web/lib/apps/bridge.test.ts   (from repo root)
-//
 // Unit tests for the pure bridge protocol helpers: request narrowing, result
 // envelopes, document inlining, and SDK/CSP shape.
 

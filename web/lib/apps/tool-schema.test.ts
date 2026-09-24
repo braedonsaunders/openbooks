@@ -1,5 +1,4 @@
 // Run with:  node --import tsx --test web/lib/apps/tool-schema.test.ts   (from repo root)
-//
 // Unit tests for App-tool schema conversion, input validation, and the
 // permission-intersection renderer. Pure: no database, no server-only chain.
 

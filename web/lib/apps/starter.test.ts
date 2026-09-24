@@ -5,7 +5,7 @@ import { createAppStarter, starterTitleState } from './starter'
 import { parseNativeExtension } from './native-ui'
 
 /**
- * UX-04: renaming a fresh app starter must move the visible title, while a
+ * Renaming a fresh app starter must move the visible title, while a
  * deliberately customized title must survive a rename. The native starter
  * binds its page header to the app name at render time; the sandbox starter
  * binds its heading through a marker the runtime fills from the bridge
@@ -27,7 +27,7 @@ function nativeHeaderTitle(starter: ReturnType<typeof createAppStarter>) {
   return header.title
 }
 
-test('UX-04: a renamed native starter renders the new app name as its heading', () => {
+test('a renamed native starter renders the new app name as its heading', () => {
   const title = nativeHeaderTitle(createAppStarter('native'))
   // Runtime scope is { name, description, key }; see NativeScreens.
   assert.equal(
@@ -36,7 +36,7 @@ test('UX-04: a renamed native starter renders the new app name as its heading', 
   )
 })
 
-test('UX-04: a customized native screen title survives a rename', () => {
+test('a customized native screen title survives a rename', () => {
   const starter = createAppStarter('native')
   const uiFile = starter.files.find((file) => file.path === 'frontend/ui.json')!
   const customized = JSON.parse(uiFile.content) as {
@@ -114,7 +114,7 @@ function runStarterScript(
   )
 }
 
-test('UX-04: a renamed sandbox starter renders the new app name', () => {
+test('a renamed sandbox starter renders the new app name', () => {
   const starter = createAppStarter('sandbox')
   const entry = starter.files.find(
     (file) => file.path === 'frontend/index.html',
@@ -126,7 +126,7 @@ test('UX-04: a renamed sandbox starter renders the new app name', () => {
   assert.equal(document.title, RENAMED)
 })
 
-test('UX-04: a customized sandbox heading and document title survive a rename', () => {
+test('a customized sandbox heading and document title survive a rename', () => {
   const starter = createAppStarter('sandbox')
   const entry = starter.files.find(
     (file) => file.path === 'frontend/index.html',
@@ -146,7 +146,7 @@ test('UX-04: a customized sandbox heading and document title survive a rename', 
   assert.equal(document.title, 'Acme dispatch')
 })
 
-test('UX-04: the starter detector reports follows-name for both fresh starters', () => {
+test('the starter detector reports follows-name for both fresh starters', () => {
   const native = createAppStarter('native')
   assert.equal(
     starterTitleState(native.files, { renderer: 'native', entry: 'frontend/ui.json' }),
@@ -159,7 +159,7 @@ test('UX-04: the starter detector reports follows-name for both fresh starters',
   )
 })
 
-test('UX-04: the starter detector reports unknown when the entry is missing', () => {
+test('the starter detector reports unknown when the entry is missing', () => {
   const native = createAppStarter('native')
   assert.equal(
     starterTitleState(
@@ -170,7 +170,7 @@ test('UX-04: the starter detector reports unknown when the entry is missing', ()
   )
 })
 
-test('UX-04: the sandbox detector reports custom once the binder is gone', () => {
+test('the sandbox detector reports custom once the binder is gone', () => {
   const sandbox = createAppStarter('sandbox')
   // Marker kept but the script that fills it deleted: the heading no longer
   // follows, so the editor must not promise that it does.

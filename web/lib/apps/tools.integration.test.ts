@@ -1,7 +1,6 @@
 // Run with (one file per process):
 //   env $OB_TEST_ENV SESSION_SECRET=<64-hex> node --import tsx --import ./engine/src/testing/database-bypass.ts \
 //     --test --test-force-exit web/lib/apps/tools.integration.test.ts
-//
 // End-to-end proof for App-declared assistant tools: a fixture app with a
 // read tool and a mutating tool is installed, then both are driven through
 // the assistant registry — visibility, execution, confirmation, commit,
