@@ -1,4 +1,5 @@
 import { queryIdentifier } from './custom-record-entities'
+import { averageSql } from './aggregate-sql'
 // Compiler for user-built custom reports. SQL-injection-safe: every identifier
 // comes from the server-resolved entity catalog and all filter values bind
 // as numbered parameters.
@@ -768,7 +769,7 @@ function measureExpr(entity: ReportEntity, m: ReportMeasure): string {
     case 'sum':
       return `SUM(${ref})`
     case 'avg':
-      return `ROUND(AVG(${ref})::numeric, 2)`
+      return averageSql(ref)
     case 'min':
       return `MIN(${ref})`
     case 'max':

@@ -8,7 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_ENTITY_MAP, SqlParams, buildDenominationCensus, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, resolvePreset, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportMeasure, type ReportRule } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, SqlParams, averageSql, buildDenominationCensus, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, resolvePreset, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportMeasure, type ReportRule } from '@openbooks/reports'
 import { sourceFromEntity } from './catalog'
 import { buildSource, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -93,7 +93,7 @@ function aggSql(agg: AggFn, expr: string | null): string {
     case 'sum':
       return `sum(${expr})`
     case 'avg':
-      return `avg(${expr})`
+      return averageSql(expr)
     case 'min':
       return `min(${expr})`
     case 'max':
