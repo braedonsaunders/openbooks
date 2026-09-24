@@ -51,6 +51,27 @@ async function documentHeader(
   return header;
 }
 
+/** Re-read and retain the document row lock for every idempotent mutation. */
+async function lockDocumentHeader(
+  context: ApplicationContext,
+  id: string,
+): Promise<DocumentHeader> {
+  if (!isUuid(id)) throw invalidInput("documentId must be a UUID");
+  const result = (await db.execute<DocumentHeader>(sql`
+    select id, kind, status, subsidiary_id as "subsidiaryId"
+      from documents
+     where id = ${id} and org_id = ${context.authz.user.orgId}
+     for update
+  `));
+  const header = result.rows[0];
+  if (!header) throw notFound("document");
+  if (!(await isDocKindEnabled(context.authz.user.orgId, header.kind))) {
+    throw notFound("document");
+  }
+  assertSubsidiaryAccess(context, header.subsidiaryId);
+  return header;
+}
+
 function lifecyclePermission(kind: string, action: "submit" | "post"): string {
   try {
     return action === "post" ? postPermission(kind) : createPermission(kind);
@@ -122,10 +143,12 @@ export async function advanceDocumentLifecycle(
     request: { documentId: input.documentId, action: input.action },
     execute: async () => {
       try {
-        let currentStatus = header.status;
+        const lockedHeader = await lockDocumentHeader(context, input.documentId);
+        assertApplicationPermission(context, lifecyclePermission(lockedHeader.kind, input.action));
+        let currentStatus = lockedHeader.status;
         if (currentStatus === "draft") {
           const submission = await submitAndReleaseIfUngated(
-            header.kind,
+            lockedHeader.kind,
             input.documentId,
             context.authz.user.id,
           );
@@ -151,7 +174,7 @@ export async function advanceDocumentLifecycle(
         // covers submit, post-from-draft, and post-from-approved alike.
         // Dynamically imported: the packet assembler pulls PDF rendering that
         // every other lifecycle caller must not pay for.
-        if (header.kind === "customer_invoice") {
+        if (lockedHeader.kind === "customer_invoice") {
           const { requireInvoiceBackup } = await import("../invoice-backup");
           await requireInvoiceBackup(context.authz.user.orgId, input.documentId);
         }
@@ -221,7 +244,10 @@ export async function postJournalDocument(
     request: { documentId: input.documentId },
     execute: async () => {
       try {
-        let currentStatus = header.status;
+        const lockedHeader = await lockDocumentHeader(context, input.documentId);
+        if (lockedHeader.kind !== "journal") throw notFound("journal");
+        assertApplicationPermission(context, "gl.post");
+        let currentStatus = lockedHeader.status;
         if (currentStatus === "draft") {
           const submission = await submitAndReleaseIfUngated(
             "journal",
@@ -288,6 +314,8 @@ export async function voidDocument(
     },
     execute: async () => {
       try {
+        const lockedHeader = await lockDocumentHeader(context, input.documentId);
+        assertApplicationPermission(context, voidPermission(lockedHeader.kind));
         return await requestDocumentVoid({
           documentId: input.documentId,
           orgId: context.authz.user.orgId,
@@ -337,10 +365,20 @@ export async function correctPostedDocument(
     request: { documentId: input.documentId, correction: input.correction },
     execute: async () => {
       try {
+        const lockedHeader = await lockDocumentHeader(context, input.documentId);
+        if (!DOC_KINDS[lockedHeader.kind]) {
+          throw new ApplicationError(
+            "unsupported_operation",
+            "this transaction type uses a dedicated correction workflow",
+            422,
+          );
+        }
+        assertApplicationPermission(context, createPermission(lockedHeader.kind));
+        assertApplicationPermission(context, postPermission(lockedHeader.kind));
         // A completed idempotency key must replay even after the first attempt
         // voided the source. Fresh executions still enforce the posted guard;
         // executeIdempotent never invokes this callback for a replay.
-        if (header.status !== "posted") {
+        if (lockedHeader.status !== "posted") {
           throw invalidInput("only a posted transaction can be corrected");
         }
         const replacement = await createPostedCorrectionDraft(
@@ -363,7 +401,7 @@ export async function correctPostedDocument(
         // Approval routing is part of the idempotent command. Flow runs, gates,
         // and deferred effects must commit with the correction and void so a
         // failed dispatch rolls the command back and a replay cannot skip it.
-        await runPostedCorrectionDraftFlows(replacement.id, header.kind, {
+        await runPostedCorrectionDraftFlows(replacement.id, lockedHeader.kind, {
           orgId: context.authz.user.orgId,
           userId: context.authz.user.id,
           source: context.source,

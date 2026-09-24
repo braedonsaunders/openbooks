@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { Client } from "pg";
 
 // Regression coverage (X4): correct_document gated the SOURCE document's
 // subsidiary but never the correction body's `subsidiaryId`, so a restricted
@@ -23,7 +24,7 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
-const { correctPostedDocument } = await import("./documents.ts");
+const { correctPostedDocument, postJournalDocument } = await import("./documents.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
@@ -116,6 +117,85 @@ test("a restricted actor cannot re-home a correction into an out-of-scope subsid
       assert.ok(after.statuses.some((s) => s === `draft:${org.subsidiaryId}`), JSON.stringify(after));
     });
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("journal posting rechecks subsidiary scope after waiting for the document row", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actor = await withBypassContext(() => createScratchUser(org.orgId, "Restricted journal poster", "restricted_journal_poster"));
+  const journalId = randomUUID();
+  const subsidiaryB = randomUUID();
+  const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  let holderOpen = false;
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values (${subsidiaryB},${org.orgId},${org.subsidiaryId},'Rehomed journal entity','CAD','CA')`);
+      await db.execute(sql`insert into documents
+        (id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total,created_by)
+        values (${journalId},${org.orgId},'journal','draft','SCOPE-JE',${org.subsidiaryId},${org.date},'CAD','10','0','10',${actor})`);
+      await db.execute(sql`insert into document_lines
+        (org_id,document_id,line_number,account_id,subsidiary_id,amount,quantity,unit_price,tax_amount,tax_input_amount)
+        values
+          (${org.orgId},${journalId},1,${org.accounts.bank},${org.subsidiaryId},'10','1','10','0','10'),
+          (${org.orgId},${journalId},2,${org.accounts.cogs},${org.subsidiaryId},'-10','1','-10','0','-10')`);
+      await db.execute(sql`update documents set status='approved' where id=${journalId} and org_id=${org.orgId}`);
+    });
+    const context = {
+      authz: {
+        user: { id: actor, orgId: org.orgId, name: "Restricted journal poster", email: "j@scratch.test", roles: [], isSuperAdmin: false, envKind: "production" as const, productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor },
+        permissions: new Set(["gl.post"]),
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      },
+      source: "api" as const,
+      requestId: randomUUID(),
+      apiKeyId: null,
+    };
+
+    await holder.connect();
+    holderOpen = true;
+    await holder.query("begin");
+    await holder.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)", [org.orgId]);
+    await holder.query("select id from documents where id = $1 and org_id = $2 for update", [journalId, org.orgId]);
+    const postingOutcome = withOrgContext(org.orgId, () => postJournalDocument(context, {
+      documentId: journalId,
+      idempotencyKey: `rehome-journal-${randomUUID()}`,
+    })).then((value) => ({ value }), (error: unknown) => ({ error }));
+    const deadline = Date.now() + 15_000;
+    let waiting = false;
+    while (Date.now() < deadline) {
+      const activity = await withOrgContext(org.orgId, () => db.execute<{ waiting: boolean }>(sql`
+        select exists (
+          select 1 from pg_stat_activity where datname = current_database()
+            and pid <> pg_backend_pid() and wait_event_type = 'Lock'
+            and query ilike '%from documents%' and query ilike '%for update%'
+        ) as waiting`));
+      if (activity.rows[0]?.waiting) { waiting = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(waiting, true, "application posting reached the locked document reread");
+    await holder.query("update documents set subsidiary_id = $1 where id = $2 and org_id = $3", [subsidiaryB, journalId, org.orgId]);
+    await holder.query("commit");
+    await holder.end();
+    holderOpen = false;
+
+    const postingResult = await postingOutcome;
+    const error = "error" in postingResult ? postingResult.error : undefined;
+    assert.ok(error instanceof ApplicationError);
+    assert.equal(error.code, "forbidden");
+    assert.deepEqual(error.details, { permission: "subsidiary.restricted" });
+    const state = await withOrgContext(org.orgId, () => db.execute<{ status: string; posted_entry_id: string | null }>(sql`
+      select status, posted_entry_id from documents where id = ${journalId} and org_id = ${org.orgId}`));
+    assert.equal(state.rows[0]?.status, "approved");
+    assert.equal(state.rows[0]?.posted_entry_id, null);
+    assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`
+      select 1 from journal_entries where org_id = ${org.orgId} and source_document_id = ${journalId}`))).rows.length, 0);
+  } finally {
+    if (holderOpen) {
+      await holder.query("rollback").catch(() => {});
+      await holder.end().catch(() => {});
+    }
     await dropScratchOrg(org.orgId);
   }
 });
