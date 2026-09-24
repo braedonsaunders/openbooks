@@ -585,22 +585,41 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
     const rates = input.subRegionRates ?? {};
     const rateFor = (levy: ResolvedWithholdingLevy) => rates[`${levy.subRegion}:${levy.reach}`];
     // The residence side is the remittance destination, so it is the anchor.
+    // Every work-side levy is a candidate: the rule withholds the higher of
+    // the residence rate and the WORK-LOCATION rate, and with two work
+    // locations that is the higher work rate — never workSubs[0]. A missing
+    // rate on ANY compared levy makes the maximum unanswerable (the unentered
+    // one might be the winner), so it blocks rather than picking a side.
     for (const home of residenceSubs) {
       const homeRate = rateFor(home);
-      const rival = workSubs[0];
-      const rivalRate = rival ? rateFor(rival) : undefined;
-      if (homeRate == null || (rival && rivalRate == null)) {
+      let rival: ResolvedWithholdingLevy | null = null;
+      let rivalRate: string | undefined;
+      let unrated: ResolvedWithholdingLevy | null = null;
+      for (const candidate of workSubs) {
+        const candidateRate = rateFor(candidate);
+        if (candidateRate == null) {
+          unrated = candidate;
+          break;
+        }
+        if (rivalRate == null || compareRates(candidateRate, rivalRate) > 0) {
+          rival = candidate;
+          rivalRate = candidateRate;
+        }
+      }
+      const missing = homeRate == null ? home : unrated;
+      if (missing) {
+        const workLabels = workSubs.map((levy) => levy.label).join(", ") || "the work location";
         gaps.push({
           region: home.region, subRegion: home.subRegion, severity: "blocking",
           message:
             `${work.region} withholds the higher of the resident rate for ${home.label} and the `
-            + `nonresident rate for ${rival?.label ?? "the work location"}, and `
-            + `${homeRate == null ? home.label : rival!.label}'s rate has not been entered. `
-            + "Enter both rates from the jurisdiction's register before paying this employee.",
+            + `nonresident rate for ${workLabels}, and `
+            + `${missing.label}'s rate has not been entered. `
+            + "Enter every compared rate from the jurisdiction's register before paying this employee.",
         });
         continue;
       }
-      const takeWork = rival != null && compareRates(rivalRate!, homeRate) > 0;
+      const takeWork = rival != null && compareRates(rivalRate!, homeRate!) > 0;
       const winner = takeWork ? rival! : home;
       trace.push(
         `${work.region}: the higher rate wins — ${winner.label} at `
