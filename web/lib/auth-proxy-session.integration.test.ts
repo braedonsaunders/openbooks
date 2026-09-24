@@ -56,7 +56,7 @@ async function seedSession(orgId: string, userId: string, token: string, revoked
   await withBypass(() => db.execute(sql`update users set is_active = true where id = ${userId}`));
 }
 
-test("the proxy refuses a revoked session cookie with 401 JSON", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("the proxy refuses a revoked session cookie with 401 JSON", async () => {
   const scratch = await withBypass(() => createScratchOrg());
   const priorSecret = process.env.SESSION_SECRET;
   process.env.SESSION_SECRET = randomBytes(32).toString("hex");
@@ -78,7 +78,7 @@ test("the proxy refuses a revoked session cookie with 401 JSON", { skip: !env.OP
   }
 });
 
-test("the proxy passes a live session cookie through to the route", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("the proxy passes a live session cookie through to the route", async () => {
   const scratch = await withBypass(() => createScratchOrg());
   const priorSecret = process.env.SESSION_SECRET;
   process.env.SESSION_SECRET = randomBytes(32).toString("hex");
@@ -97,7 +97,7 @@ test("the proxy passes a live session cookie through to the route", { skip: !env
   }
 });
 
-test("the proxy refuses a forged session cookie with 401 JSON", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("the proxy refuses a forged session cookie with 401 JSON", async () => {
   const scratch = await withBypass(() => createScratchOrg());
   const priorSecret = process.env.SESSION_SECRET;
   process.env.SESSION_SECRET = randomBytes(32).toString("hex");
