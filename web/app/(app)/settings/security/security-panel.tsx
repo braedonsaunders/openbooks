@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { Button, Card, CardContent, Input, Label } from "@openbooks/ui";
 
@@ -27,6 +28,7 @@ async function jsonRequest(url: string, init?: RequestInit) {
 }
 
 export function SecurityPanel() {
+  const t = useTranslations("shell.securityPage");
   const { dateTime } = useViewerFormat();
   const router = useRouter();
   const [status, setStatus] = useState<MfaStatus | null>(null);
@@ -69,18 +71,18 @@ export function SecurityPanel() {
       <Card>
         <CardContent className="space-y-5 p-6">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Authenticator MFA</h2>
+            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("authenticatorTitle")}</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {status?.enabled
-                ? `Enabled · ${status.recoveryCodesRemaining} recovery codes remain`
-                : "Require a time-based code after password or SSO authentication."}
+                ? t("enabled", { count: status.recoveryCodesRemaining })
+                : t("disabledDescription")}
             </p>
           </div>
 
           {!status?.enabled && !setup ? (
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="setup-password">Confirm your current password</Label>
+                <Label htmlFor="setup-password">{t("confirmPassword")}</Label>
                 <Input
                   id="setup-password"
                   type="password"
@@ -96,7 +98,7 @@ export function SecurityPanel() {
                 }));
                 setPassword("");
               })}>
-                Set up authenticator
+                {t("setupAuthenticator")}
               </Button>
             </div>
           ) : null}
@@ -104,13 +106,13 @@ export function SecurityPanel() {
           {setup && !status?.enabled ? (
             <div className="space-y-4">
               <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
-                <p className="text-sm font-medium text-slate-900 dark:text-white">Authenticator setup key</p>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">{t("setupKey")}</p>
                 <code className="mt-2 block break-all font-mono text-sm text-teal-700 dark:text-teal-300">{setup.secret}</code>
-                <p className="mt-2 text-xs text-slate-500">Add this key as a time-based (TOTP), six-digit account.</p>
-                <p className="mt-1 text-xs text-slate-500">This setup expires in 10 minutes and after five incorrect confirmations.</p>
+                <p className="mt-2 text-xs text-slate-500">{t("setupKeyHelp")}</p>
+                <p className="mt-1 text-xs text-slate-500">{t("setupExpiry")}</p>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="confirm-mfa">Confirm the six-digit code</Label>
+                <Label htmlFor="confirm-mfa">{t("confirmCode")}</Label>
                 <Input id="confirm-mfa" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} />
               </div>
               <Button disabled={busy || !code} onClick={() => void act(async () => {
@@ -120,7 +122,7 @@ export function SecurityPanel() {
                 setCode("");
                 await reload();
               })}>
-                Enable MFA
+                {t("enableMfa")}
               </Button>
             </div>
           ) : null}
@@ -128,11 +130,11 @@ export function SecurityPanel() {
           {status?.enabled ? (
             <div className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-800">
               <div className="space-y-1.5">
-                <Label htmlFor="security-code">Current authenticator or recovery code</Label>
+                <Label htmlFor="security-code">{t("currentCode")}</Label>
                 <Input id="security-code" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="disable-password">Password (required for either change)</Label>
+                <Label htmlFor="disable-password">{t("passwordRequired")}</Label>
                 <Input id="disable-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
               </div>
               <Button variant="outline" disabled={busy || !password || !code} onClick={() => void act(async () => {
@@ -142,7 +144,7 @@ export function SecurityPanel() {
                 setCode("");
                 await reload();
               })}>
-                Replace recovery codes
+                {t("replaceRecoveryCodes")}
               </Button>
               <Button variant="destructive" disabled={busy || !password || !code} onClick={() => void act(async () => {
                 await jsonRequest("/api/auth/mfa", { method: "DELETE", body: JSON.stringify({ password, code }) });
@@ -151,18 +153,18 @@ export function SecurityPanel() {
                 setRecoveryCodes(null);
                 await reload();
               })}>
-                Disable MFA
+                {t("disableMfa")}
               </Button>
             </div>
           ) : null}
 
           {recoveryCodes ? (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">
-              <p className="font-semibold">Save these recovery codes now</p>
-              <p className="mt-1 text-sm">Each code works once. They will not be shown again.</p>
+              <p className="font-semibold">{t("saveRecoveryCodes")}</p>
+              <p className="mt-1 text-sm">{t("recoveryCodesHelp")}</p>
               <pre className="mt-3 grid grid-cols-2 gap-1 whitespace-pre-wrap font-mono text-sm">{recoveryCodes.join("\n")}</pre>
               <Button className="mt-3" variant="outline" onClick={() => void navigator.clipboard.writeText(recoveryCodes.join("\n"))}>
-                Copy codes
+                {t("copyCodes")}
               </Button>
             </div>
           ) : null}
@@ -172,24 +174,25 @@ export function SecurityPanel() {
       <Card>
         <CardContent className="space-y-4 p-6">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Active sessions</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Revoke a browser session without changing your password.</p>
+            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("sessionsTitle")}</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("sessionsDescription")}</p>
           </div>
           <div className="divide-y divide-slate-200 dark:divide-slate-800">
             {sessions.map((session) => (
               <div key={session.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">
-                    {session.current ? "This session" : "Browser session"} · {session.authMethod.toUpperCase()}
+                  <p className="inline-flex gap-1 text-sm font-medium text-slate-900 dark:text-white">
+                    <span>{session.current ? t("thisSession") : t("browserSession")}</span>
+                    <span>{session.authMethod.toUpperCase()}</span>
                   </p>
-                  <p className="text-xs text-slate-500">Last used {dateTime(new Date(session.lastSeenAt))}</p>
+                  <p className="text-xs text-slate-500">{t("lastUsed", { date: dateTime(new Date(session.lastSeenAt)) })}</p>
                 </div>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => {
                   await jsonRequest(`/api/auth/sessions/${session.id}`, { method: "DELETE" });
                   if (session.current) router.push("/login");
                   else await reload();
                 })}>
-                  Revoke
+                  {t("revoke")}
                 </Button>
               </div>
             ))}
@@ -199,7 +202,7 @@ export function SecurityPanel() {
               await jsonRequest("/api/auth/sessions", { method: "DELETE" });
               await reload();
             })}>
-              Revoke all other sessions
+              {t("revokeOtherSessions")}
             </Button>
           ) : null}
         </CardContent>
