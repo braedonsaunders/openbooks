@@ -71,7 +71,7 @@ const allocation = (settlementFxRateId: string | null | undefined) => ({
   settlementFxRateId,
 });
 
-test("payment posting refuses a junk provider FX observation id with its field path", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("payment posting refuses a junk provider FX observation id with its field path", async () => {
   const scratch = await withBypass(() => createScratchOrg());
   try {
     gateFor(scratch.orgId);
@@ -84,7 +84,7 @@ test("payment posting refuses a junk provider FX observation id with its field p
   }
 });
 
-test("payment posting keeps the provider FX observation id optional", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("payment posting keeps the provider FX observation id optional", async () => {
   const scratch = await withBypass(() => createScratchOrg());
   try {
     gateFor(scratch.orgId);
