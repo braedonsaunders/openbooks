@@ -5,7 +5,12 @@ import { loadActorPartyId, requireHrmSurveysManage } from "../authorization.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { HrmSurveysError } from "../documents/errors.ts";
 import { hashHrmToken, mintSurveyInvitationToken, verifySurveyInvitationToken } from "../documents/tokens.ts";
-import { INVITATION_TTL_MS } from "./surveys.ts";
+import {
+  INVITATION_TTL_MS,
+  loadSurveyInviteeEmployers,
+  partyVisibleToScope,
+  surveyVisibleToScope,
+} from "./surveys.ts";
 import {
   aggregateQuestion,
   computeEnps,
@@ -34,6 +39,11 @@ import {
  * Results (getSurveyResults) serve aggregates only: per-question counts,
  * eNPS, driver scores, the suppressed heatmap, the pulse trend, and the
  * group-gated comment list. Respondent links never leave this module.
+ * Every aggregate — invitation counts, responses, comments, and the
+ * trend — is computed over in-scope respondents only (named by decoded
+ * link, confidential by decrypted link, anonymous by the employer list
+ * stamped at submission), and the anonymity minimum applies AFTER
+ * scoping, so a scoped slice can never de-anonymize a small group.
  */
 
 // --- Confidential-link encryption (pure; the exact code results rely on) ---
@@ -275,20 +285,39 @@ export async function submitResponse(input: {
       });
     }
     const segment = await resolveSegment(db, claims.orgId, invitation.party_id, input.today);
+    // The respondent's employer footprint at submission time, stored
+    // beside the segment names: results for subsidiary-restricted readers
+    // are computed over in-scope respondents only, and anonymous rows
+    // carry no link to attribute by — without this list they would be
+    // unattributable. Same granularity as the subsidiary name already
+    // stored; aggregates only, links never leave.
+    const employerIds = (
+      await db.execute<{ employerSubsidiaryId: string }>(sql`
+        select distinct employer_subsidiary_id as "employerSubsidiaryId"
+          from worker_employments
+         where org_id = ${claims.orgId} and worker_party_id = ${invitation.party_id}
+           and employer_subsidiary_id is not null
+      `)
+    ).rows.map((row) => row.employerSubsidiaryId);
+    const snapshotWithScope = { ...segment.snapshot, employerSubsidiaryIds: employerIds };
     let segmentSnapshot: unknown = null;
     let linkEnc: Buffer | null = null;
     if (survey.anonymity === "anonymous") {
       // The segment group at submission time: invitees sharing this
-      // respondent's segment. Below minimum the snapshot stays null —
-      // a lone segment IS an identity.
+      // respondent's segment. Below minimum the segment detail stays
+      // suppressed — a lone segment IS an identity — but the employer
+      // footprint is still stamped: without it subsidiary-restricted
+      // readers could never attribute (and thus never aggregate) the
+      // row. Entity ids name the entity, never the respondent.
       const peers = await countSegmentPeers(db, claims.orgId, survey.id, invitation.party_id, segment, input.today);
-      if (peers >= survey.min_group_size) segmentSnapshot = segment.snapshot;
+      segmentSnapshot =
+        peers >= survey.min_group_size ? snapshotWithScope : { employerSubsidiaryIds: employerIds };
       linkEnc = null;
     } else if (survey.anonymity === "confidential") {
-      segmentSnapshot = segment.snapshot;
+      segmentSnapshot = snapshotWithScope;
       linkEnc = encryptRespondentLink(claims.orgId, invitation.party_id);
     } else {
-      segmentSnapshot = segment.snapshot;
+      segmentSnapshot = snapshotWithScope;
       linkEnc = Buffer.from(invitation.party_id, "utf8");
     }
     const responseId = (await db.execute<{ id: string }>(sql`
@@ -459,12 +488,49 @@ export interface SurveyResults {
   comments: { questionId: string; prompt: string; texts: string[] }[];
 }
 
+/**
+ * One stored response is inside the reader's lens when its respondent is:
+ * named rows decode the party link, confidential rows decrypt it (results
+ * readers never expose the link — it only decides inclusion), and
+ * anonymous rows attribute through the employer list stamped at
+ * submission. Legacy anonymous rows without that list are unattributable
+ * and stay out of restricted slices (fail closed); unrestricted readers
+ * include everything, exactly as before.
+ */
+function responseInScope(
+  orgId: string,
+  anonymity: string,
+  linkEnc: Buffer | Uint8Array | null,
+  snapshot: unknown,
+  employersByParty: ReadonlyMap<string, readonly string[]>,
+  allowed: ReadonlySet<string> | null,
+): boolean {
+  if (allowed === null) return true;
+  if (anonymity === "named") {
+    if (!linkEnc) return false;
+    const party = Buffer.from(linkEnc).toString("utf8");
+    return partyVisibleToScope(employersByParty.get(party) ?? [], allowed);
+  }
+  if (anonymity === "confidential") {
+    if (!linkEnc) return false;
+    let party: string;
+    try {
+      party = decryptRespondentLink(orgId, linkEnc);
+    } catch {
+      return false;
+    }
+    return partyVisibleToScope(employersByParty.get(party) ?? [], allowed);
+  }
+  const ids = (snapshot as { employerSubsidiaryIds?: unknown } | null)?.employerSubsidiaryIds;
+  return Array.isArray(ids) && ids.some((id) => typeof id === "string" && allowed.has(id));
+}
+
 export async function getSurveyResults(query: {
   orgId: string;
   actorId: string;
   surveyId: string;
 }): Promise<SurveyResults> {
-  await requireHrmSurveysManage(db, query.orgId, query.actorId);
+  const allowed = await requireHrmSurveysManage(db, query.orgId, query.actorId);
   const survey = (await db.execute<{
     id: string;
     name: string;
@@ -477,6 +543,12 @@ export async function getSurveyResults(query: {
      where org_id = ${query.orgId} and id = ${query.surveyId}
   `)).rows[0];
   if (!survey) throw new HrmSurveysError("NOT_FOUND", "survey is not visible in this organization");
+  // Read visibility first: a survey with no in-scope invitee reads as
+  // not-found, uniformly with a missing survey.
+  const employersByParty = await loadSurveyInviteeEmployers(db, query.orgId, survey.id);
+  if (!surveyVisibleToScope(employersByParty, allowed)) {
+    throw new HrmSurveysError("NOT_FOUND", "survey is not visible in this organization");
+  }
   const questions = (await db.execute<{
     id: string;
     kind: string;
@@ -487,16 +559,33 @@ export async function getSurveyResults(query: {
      where org_id = ${query.orgId} and survey_id = ${survey.id}
      order by position
   `)).rows;
-  const counts = (await db.execute<{ invitations: string; responded: string }>(sql`
-    select count(*) as invitations,
-           count(responded_at) as responded
+  // Invitation counts fence to in-scope invitees: the participation
+  // denominator must never count B's respondents for an A reader.
+  const invitees = (await db.execute<{ party_id: string; responded: boolean }>(sql`
+    select party_id, (responded_at is not null) as responded
       from hrm_survey_invitations
      where org_id = ${query.orgId} and survey_id = ${survey.id}
-  `)).rows[0]!;
-  const responses = (await db.execute<{ answers: unknown; segment_snapshot: unknown }>(sql`
-    select answers, segment_snapshot from hrm_survey_responses
-     where org_id = ${query.orgId} and survey_id = ${survey.id}
   `)).rows;
+  const scopedInvitees = invitees.filter((invite) =>
+    partyVisibleToScope(employersByParty.get(invite.party_id) ?? [], allowed),
+  );
+  const invitations = scopedInvitees.length;
+  const respondedCount = scopedInvitees.filter((invite) => invite.responded).length;
+  const responses = (
+    await db.execute<{ answers: unknown; segment_snapshot: unknown; respondent_link_enc: Buffer | null }>(sql`
+    select answers, segment_snapshot, respondent_link_enc from hrm_survey_responses
+     where org_id = ${query.orgId} and survey_id = ${survey.id}
+  `)
+  ).rows.filter((response) =>
+    responseInScope(
+      query.orgId,
+      survey.anonymity,
+      response.respondent_link_enc,
+      response.segment_snapshot,
+      employersByParty,
+      allowed,
+    ),
+  );
   const byQuestion = new Map(questions.map((q) => [q.id, q]));
   const flat: ResultAnswer[] = [];
   for (const response of responses) {
@@ -519,10 +608,12 @@ export async function getSurveyResults(query: {
   const enps = enpsQuestion
     ? computeEnps(flat.filter((a) => a.questionId === enpsQuestion.id && a.value !== null).map((a) => a.value!))
     : null;
-  // Comments surface only when the whole survey clears the minimum and
-  // anonymity allows words to show: anonymous comments carry no link by
-  // construction, and named/confidential comments show as unattributed
-  // text — the reader grants no path back to a respondent.
+  // Comments surface only when the reader's scoped slice clears the
+  // minimum — the threshold applies AFTER scoping, so a small scoped
+  // slice can never de-anonymize a group the minimum would protect.
+  // Anonymous comments carry no link by construction, and
+  // named/confidential comments show as unattributed text — the reader
+  // grants no path back to a respondent.
   const comments =
     responses.length >= survey.min_group_size
       ? questions
@@ -537,22 +628,40 @@ export async function getSurveyResults(query: {
           }))
           .filter((c) => c.texts.length > 0)
       : [];
-  // Pulse trend: same-name surveys in series order with their eNPS.
-  const series = (await db.execute<{ id: string; name: string }>(sql`
-    select id, name from hrm_surveys
+  // Pulse trend: same-name surveys in series order with their eNPS. Each
+  // sibling fences to the same lens — a sibling with no in-scope invitee
+  // stays out of a restricted reader's trend entirely, and every
+  // included sibling's score aggregates in-scope respondents only.
+  const series = (await db.execute<{ id: string; name: string; anonymity: string }>(sql`
+    select id, name, anonymity from hrm_surveys
      where org_id = ${query.orgId} and name = ${survey.name} and kind = ${survey.kind}
        and status in ('open', 'closed')
      order by created_at
   `)).rows;
   const trend: SurveyResults["trend"] = [];
   for (const sibling of series) {
-    const sibAnswers = (await db.execute<{ answers: unknown }>(sql`
-      select r.answers
+    const sibEmployers = await loadSurveyInviteeEmployers(db, query.orgId, sibling.id);
+    if (!surveyVisibleToScope(sibEmployers, allowed)) continue;
+    const sibAnswers = (await db.execute<{
+      answers: unknown;
+      segment_snapshot: unknown;
+      respondent_link_enc: Buffer | null;
+    }>(sql`
+      select r.answers, r.segment_snapshot, r.respondent_link_enc
         from hrm_survey_responses r
         join hrm_survey_questions q on q.org_id = r.org_id and q.survey_id = r.survey_id and q.kind = 'enps'
        where r.org_id = ${query.orgId} and r.survey_id = ${sibling.id}
        limit 5000
-    `)).rows;
+    `)).rows.filter((row) =>
+      responseInScope(
+        query.orgId,
+        sibling.anonymity,
+        row.respondent_link_enc,
+        row.segment_snapshot,
+        sibEmployers,
+        allowed,
+      ),
+    );
     const values: number[] = [];
     const enpsQ = (await db.execute<{ id: string }>(sql`
       select id from hrm_survey_questions
@@ -574,8 +683,7 @@ export async function getSurveyResults(query: {
       enps: enpsQ ? computeEnps(values).score : null,
     });
   }
-  const invitations = Number(counts.invitations);
-  const responded = Number(counts.responded);
+  const responded = respondedCount;
   return {
     surveyId: survey.id,
     anonymity: survey.anonymity,
