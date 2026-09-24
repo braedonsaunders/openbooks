@@ -1234,7 +1234,7 @@ test("pay page shows the stored link surcharge even after surcharge rules change
   }
 });
 
-test("pay page and checkout keep the link's principal quote after a partial payment", { skip: !DB }, async () => {
+test("checkout refuses a frozen link quote after a partial payment", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const fx = await seedAcceptance(org, "INV-PAY-QUOTE-AFTER-PAYMENT");
@@ -1272,19 +1272,23 @@ test("pay page and checkout keep the link's principal quote after a partial paym
     assert.equal(page.surchargeAmount, "3.0000");
     assert.equal(page.totalAmount, "103.0000");
 
-    await createCheckoutSession(fx.link.token, `https://app.test/pay/${fx.link.token}`, async () => ({
-      status: 200,
-      json: async () => ({ id: "cs_quoted_after_partial_payment", url: "https://checkout.stripe.test/cs_quoted_after_partial_payment" }),
-    }));
-    const attempt = (await db.execute<{ amount: string; surcharge_amount: string; invoice_amount: string }>(sql`
-      select amount, surcharge_amount, event_payload->>'invoiceAmount' as invoice_amount
+    let providerCalled = false;
+    await assert.rejects(
+      createCheckoutSession(fx.link.token, `https://app.test/pay/${fx.link.token}`, async () => {
+        providerCalled = true;
+        return {
+          status: 200,
+          json: async () => ({ id: "cs_quoted_after_partial_payment", url: "https://checkout.stripe.test/cs_quoted_after_partial_payment" }),
+        };
+      }),
+      /payment link is out of date; request a new link/,
+    );
+    assert.equal(providerCalled, false, "a stale quote must be refused before creating provider state");
+    const attempts = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n
         from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
     `)).rows[0]!;
-    assert.deepEqual(attempt, {
-      amount: "100.0000",
-      surcharge_amount: "3.0000",
-      invoice_amount: "100.0000",
-    });
+    assert.equal(attempts.n, 0, "a refused stale quote must not leave a payment attempt");
   } finally {
     await dropScratchOrg(org.orgId);
   }

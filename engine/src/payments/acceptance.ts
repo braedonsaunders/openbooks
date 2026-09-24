@@ -1471,10 +1471,14 @@ export async function createCheckoutSession(
 
     const doc = (await db.execute<{ document_number: string; open_balance: string }>(sql`
       select document_number, open_balance from documents where id = ${link.documentId} and org_id = ${link.orgId}
+       for update
     `));
     if (!doc.rows[0]) throw new PaymentAcceptanceError("invoice not found");
     const openBalance = doc.rows[0].open_balance;
     if (cmp(openBalance, "0") <= 0) throw new PaymentAcceptanceError("invoice is already paid");
+    if (link.amount !== null && cmp(link.amount, openBalance) !== 0) {
+      throw new PaymentAcceptanceError("payment link is out of date; request a new link");
+    }
     const invoiceAmount = link.amount ?? openBalance;
 
     const config = await loadProviderConfig(link.orgId, link.provider);
