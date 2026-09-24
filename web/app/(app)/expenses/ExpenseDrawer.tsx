@@ -28,6 +28,7 @@ import {
 } from '../../../components/document-drawer'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
@@ -740,16 +741,23 @@ export function ExpenseDrawer({
 
   async function act(action: 'submit' | 'post') {
     setBusy(true)
-    const res = await fetch('/api/expenses/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, documentId: doc.id }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
-    else if (data.pendingApproval || (action === 'submit' && !data.autoApproved)) toast.success(t('toasts.submitted'))
-    else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
-    setBusy(false)
+    try {
+      const res = await fetch('/api/expenses/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, documentId: doc.id }),
+      })
+      // The status is checked before the body parses: a non-JSON 502 page
+      // must toast the translated fallback, never a SyntaxError.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('toasts.actionFailed')))
+      const data = (await res.json()) as { pendingApproval?: boolean; autoApproved?: boolean }
+      if (data.pendingApproval || (action === 'submit' && !data.autoApproved)) toast.success(t('toasts.submitted'))
+      else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('toasts.actionFailed'))
+    } finally {
+      setBusy(false)
+    }
     router.refresh()
   }
 
@@ -764,20 +772,26 @@ export function ExpenseDrawer({
     )
       return
     setBusy(true)
-    const res = await fetch(`/api/expenses/${doc.id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      // The delete API fences on the exact revision like the documents
-      // delete contract: without it a stale drawer silently discards a
-      // newer draft.
-      body: JSON.stringify({ expectedUpdatedAt: documentRevisionRef.current }),
-    })
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/expenses/${doc.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        // The delete API fences on the exact revision like the documents
+        // delete contract: without it a stale drawer silently discards a
+        // newer draft.
+        body: JSON.stringify({ expectedUpdatedAt: documentRevisionRef.current }),
+      })
+      // A refusal (423 locked, 409 stale revision) rides in the body, so the
+      // status is checked first and the named error toasted — never a parse
+      // error, and the row only navigates away on a real delete.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('toasts.deleteFailed')))
+      await res.json().catch(() => null)
       toast.success(t('toasts.deleted'))
       router.push('/expenses/reports')
       router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('toasts.deleteFailed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('toasts.deleteFailed'))
+    } finally {
       setBusy(false)
     }
   }
@@ -791,18 +805,23 @@ export function ExpenseDrawer({
     })
     if (!reason) return
     setBusy(true)
-    const res = await fetch(`/api/documents/${doc.id}/void`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // The void API fences on the exact revision like every other document
-      // write: without it every void answers 409 and the button is dead.
-      body: JSON.stringify({ reason, expectedUpdatedAt: documentRevisionRef.current }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
-    else if (data.status === 'pending_approval') toast.success(t('toasts.submitted'))
-    else toast.success(tCommon('status.voided'))
-    setBusy(false)
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The void API fences on the exact revision like every other document
+        // write: without it every void answers 409 and the button is dead.
+        body: JSON.stringify({ reason, expectedUpdatedAt: documentRevisionRef.current }),
+      })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('toasts.actionFailed')))
+      const data = (await res.json().catch(() => ({}))) as { status?: string }
+      if (data.status === 'pending_approval') toast.success(t('toasts.submitted'))
+      else toast.success(tCommon('status.voided'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('toasts.actionFailed'))
+    } finally {
+      setBusy(false)
+    }
     router.refresh()
   }
 
