@@ -352,6 +352,125 @@ test(
 );
 
 test(
+  "a dispute reversal heavier than the dispute posts the signed net on the dispute leg",
+  { skip: !DB },
+  async () => {
+    // Regression: dispute 100 plus dispute_reversal 150 clamped the stored
+    // dispute to 0 while net carried +50, so the GL dispute leg was skipped
+    // and the 50 stranded in the clearing residual. The signed net rides the
+    // dispute leg, and the stored row foots.
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const parsed: ParsedSettlement = {
+        provider: "stripe",
+        externalRef: `payout-dispute-net-${org.orgId}`,
+        settlementDate: org.date,
+        currency: "CAD",
+        memo: "PSP dispute-net settlement",
+        raw: { source: "integration-test", immutable: true },
+        lines: [
+          { kind: "charge", amount: "1000.0000", currency: "CAD", externalRef: "charge-1" },
+          { kind: "dispute", amount: "100.0000", currency: "CAD", externalRef: "dispute-1" },
+          { kind: "dispute_reversal", amount: "150.0000", currency: "CAD", externalRef: "dispute-reversal-1" },
+        ],
+      };
+      const accounts = {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        disputeAccountId: org.accounts.adjustment,
+        fxAccountId: org.accounts.fxGainLoss,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      };
+      const imported = await importSettlementBatch(org.orgId, actor, parsed, accounts);
+      assert.equal(imported.created, true);
+      const row = (await db.execute<{
+          gross_amount: string;
+          dispute_amount: string;
+          net_amount: string;
+        }>(sql`
+        select gross_amount::text, dispute_amount::text, net_amount::text
+          from psp_settlement_batches
+         where id = ${imported.batchId} and org_id = ${org.orgId}
+      `));
+      assert.deepEqual(row.rows[0], {
+        gross_amount: "1000.0000",
+        dispute_amount: "-50.0000",
+        net_amount: "1050.0000",
+      });
+      const { entryId } = await postSettlementBatch(org.orgId, imported.batchId, actor);
+      const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
+        select account_id, sum(amount)::text as amount
+          from journal_lines
+         where entry_id = ${entryId} and org_id = ${org.orgId}
+         group by account_id
+      `));
+      const byAccount = new Map(gl.rows.map((line) => [line.account_id, line.amount]));
+      assert.equal(byAccount.get(org.accounts.bank), "1050.0000");
+      assert.equal(
+        byAccount.get(org.accounts.adjustment),
+        "-50.0000",
+        "the reversal-heavy net posts on the dispute leg, not the clearing residual",
+      );
+      assert.equal(byAccount.get(org.accounts.clearing), "-1000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "an ordinary dispute-only batch is unchanged by signed dispute legs",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const parsed: ParsedSettlement = {
+        provider: "stripe",
+        externalRef: `payout-dispute-plain-${org.orgId}`,
+        settlementDate: org.date,
+        currency: "CAD",
+        memo: "PSP dispute-only settlement",
+        raw: { source: "integration-test", immutable: true },
+        lines: [
+          { kind: "charge", amount: "1000.0000", currency: "CAD", externalRef: "charge-1" },
+          { kind: "dispute", amount: "100.0000", currency: "CAD", externalRef: "dispute-1" },
+        ],
+      };
+      const accounts = {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        disputeAccountId: org.accounts.adjustment,
+        fxAccountId: org.accounts.fxGainLoss,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      };
+      const imported = await importSettlementBatch(org.orgId, actor, parsed, accounts);
+      const row = (await db.execute<{ dispute_amount: string; net_amount: string }>(sql`
+        select dispute_amount::text, net_amount::text
+          from psp_settlement_batches
+         where id = ${imported.batchId} and org_id = ${org.orgId}
+      `));
+      assert.deepEqual(row.rows[0], { dispute_amount: "100.0000", net_amount: "900.0000" });
+      const { entryId } = await postSettlementBatch(org.orgId, imported.batchId, actor);
+      const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
+        select account_id, sum(amount)::text as amount
+          from journal_lines
+         where entry_id = ${entryId} and org_id = ${org.orgId}
+         group by account_id
+      `));
+      const byAccount = new Map(gl.rows.map((line) => [line.account_id, line.amount]));
+      assert.equal(byAccount.get(org.accounts.adjustment), "100.0000");
+      assert.equal(byAccount.get(org.accounts.clearing), "-1000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "PSP settlement refuses FX adjustments when no realized FX account is configured",
   { skip: !DB },
   async () => {

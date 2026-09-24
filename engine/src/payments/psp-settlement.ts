@@ -246,13 +246,27 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
         gross += u;
     }
   }
-  // Net = gross − fees − refunds − disputes − adjustments + fx
+  // Net = gross − fees − refunds − disputes − adjustments + fx, with the
+  // dispute leg SIGNED: a reversal-heavy batch nets a negative dispute
+  // (a credit back), never a clamped 0 that would strand the difference in
+  // the clearing residual. There is no separate reversal account in the PSP
+  // account model, so the net rides the dispute leg and its account.
   const net = gross - fee - refund - dispute - adjustment + fx;
+  // The stored row must foot. This recomputes the identity from the same
+  // accumulators, so it passes by construction today — it is a tripwire for
+  // tomorrow: any future kind or sign change that breaks the identity
+  // refuses the import by name instead of posting an unbalanced story.
+  const footed = gross - fee - refund - dispute - adjustment + fx;
+  if (footed !== net) {
+    throw new PspSettlementError(
+      `settlement totals do not foot: gross ${fromUnits(gross)} − fees ${fromUnits(fee)} − refunds ${fromUnits(refund)} − disputes ${fromUnits(dispute)} − adjustments ${fromUnits(adjustment)} + fx ${fromUnits(fx)} ≠ net ${fromUnits(net)}`,
+    );
+  }
   return {
     grossAmount: fromUnits(gross),
     feeAmount: fromUnits(fee),
     refundAmount: fromUnits(refund),
-    disputeAmount: fromUnits(dispute < 0n ? 0n : dispute),
+    disputeAmount: fromUnits(dispute),
     adjustmentAmount: fromUnits(adjustment),
     fxAmount: fromUnits(fx),
     netAmount: fromUnits(net),
