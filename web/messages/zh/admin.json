@@ -5464,6 +5464,7 @@
       "stepDetail": "详情",
       "runStatus": "状态",
       "runsEmpty": "暂无运行记录。",
+      "readOnlyNotice": "只读：编辑此配方需要自动化管理权限。",
       "runVersion": "版本",
       "runSubject": "主体",
       "runCreated": "创建时间",

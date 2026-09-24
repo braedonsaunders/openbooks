@@ -5464,6 +5464,7 @@
       "stepDetail": "詳細",
       "runStatus": "ステータス",
       "runsEmpty": "実行履歴がありません。",
+      "readOnlyNotice": "読み取り専用：このレシピを編集するには、自動化の管理権限が必要です。",
       "runVersion": "バージョン",
       "runSubject": "サブジェクト",
       "runCreated": "作成",

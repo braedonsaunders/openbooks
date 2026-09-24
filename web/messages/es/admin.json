@@ -5464,6 +5464,7 @@
       "stepDetail": "Detalle",
       "runStatus": "Estado",
       "runsEmpty": "Sin ejecuciones.",
+      "readOnlyNotice": "Solo lectura: para editar esta receta se necesita el permiso de gestión de automatizaciones.",
       "runVersion": "Versión",
       "runSubject": "Sujeto",
       "runCreated": "Creada",
