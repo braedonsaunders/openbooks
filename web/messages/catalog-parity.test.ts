@@ -3109,7 +3109,7 @@ test('every configured locale ships a non-empty message catalog and no stray loc
   for (const catalog of CATALOGS) {
     assert.ok(catalog.leaves.size > 0, `${catalog.code} contributes no messages`)
   }
-  const configured = new Set(SHIPPED_LOCALES)
+  const configured = new Set<string>(SHIPPED_LOCALES)
   const directories = readdirSync(MESSAGES_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
