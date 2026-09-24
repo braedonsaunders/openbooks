@@ -193,6 +193,7 @@ export interface PerformancePageData {
     gaps: {
       employmentHref: string
       employmentLabel: string
+      departmentLabel: string
       terminatedFrom: string
     }[]
     noInterviewTitle: string
@@ -354,6 +355,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
                 },
                 columns: [
                   column(data.retention.gapsTitle, link(item('employmentLabel'), item('employmentHref'))),
+                  column(t('home.groups.department'), text(item('departmentLabel'))),
                   column(data.columns.period, text(item('terminatedFrom')), {
                     className: 'tabular-nums',
                   }),
@@ -722,7 +724,8 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
       gapsEmpty: t('retention.noMissingExits'),
       gaps: overview.missingExitRecords.map((g) => ({
         employmentHref: performanceHref(preservedParams, { status: rawStatus, exit: g.employmentId }),
-        employmentLabel: g.workerPartyId.slice(0, 8),
+        employmentLabel: g.workerName,
+        departmentLabel: g.departmentName ?? '—',
         terminatedFrom: g.terminatedFrom,
       })),
       noInterviewTitle: t('retention.noInterviewTitle'),
@@ -782,5 +785,3 @@ function reviewStatusLabel(t: (key: string) => string, status: string): string {
           ? t('performance.reviewShared')
           : t('performance.reviewAcknowledged')
 }
-
-
