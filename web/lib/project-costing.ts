@@ -89,81 +89,84 @@ async function projectCostSummaryInSnapshot(
   projectId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ProjectCostSummary> {
-  const [proj, actualRows, committedRows, directSubcontractCommitment, byAccountRows, docRows] = await Promise.all([
-    // project custom (contract value) + task cost budget
-    db.execute(sql`
-      select coalesce(p.contract_value, 0) as contract_value,
-             coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget
-        from projects p where p.id = ${projectId} and p.org_id = ${orgId}
-    `),
-    // posted actuals split into cost vs revenue
-    db.execute(sql`
-      select
-        coalesce(sum(l.amount) filter (where a.type in ${COST_SET}), 0) as cost,
-        coalesce(-sum(l.amount) filter (where a.type in ${REVENUE_SET}), 0) as revenue
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
-        and e.book_id = (select b.id from accounting_books b
-                           where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
-        ${projectSubsidiaryFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
-    `),
-    // committed: open order remainders tagged to the project. Order amounts
-    // are transaction-currency facts; translate each contribution through the
-    // document's txn→functional rate before combining it with posted actuals.
-    db.execute(sql`
-      select
-        coalesce(sum(round(
-          (dl.quantity - dl.quantity_billed) * dl.unit_price * d.fx_rate,
-          4
-        )) filter (where d.kind = 'purchase_order'), 0) as committed_cost,
-        coalesce(sum(round(
-          (dl.quantity - dl.quantity_billed) * dl.unit_price * d.fx_rate,
-          4
-        )) filter (where d.kind = 'sales_order'), 0) as committed_revenue
-      from document_lines dl
-      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-      where dl.org_id = ${orgId}
-        and coalesce(dl.project_id, d.project_id) = ${projectId}
-        and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
-        and dl.quantity > dl.quantity_billed
-        ${projectSubsidiaryFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
-    `),
-    directSubcontractOpenCommitment(orgId, projectId),
-    // actual cost broken down by account
-    db.execute(sql`
-      select a.id as account_id, a.number, a.name, a.type, sum(l.amount) as amount
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
-        and e.book_id = (select b.id from accounting_books b
-                           where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
-        and a.type in ${COST_SET}
-        ${projectSubsidiaryFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
-      group by a.id, a.number, a.name, a.type
-      having sum(l.amount) <> 0
-      order by sum(l.amount) desc
-    `),
-    // documents with at least one line tagged to the project (job cost detail)
-    db.execute(sql`
-      select d.id, d.kind, d.document_number, d.document_date, d.status,
-             pt.display_name as party_name,
-             sum(dl.amount) as amount
-      from documents d
-      join document_lines dl
-        on dl.document_id = d.id
-       and dl.org_id = d.org_id
-       and coalesce(dl.project_id, d.project_id) = ${projectId}
-      left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id
-      where d.org_id = ${orgId}
-        ${projectSubsidiaryFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
-      group by d.id, d.kind, d.document_number, d.document_date, d.status, pt.display_name
-      order by d.document_date desc
-      limit 500
-    `),
-  ])
+  // Sequential statements, never Promise.all: this loader participates in a
+  // caller-owned transaction (one pg client), where concurrent queries
+  // interleave on the single connection — deprecated by pg and fatal in
+  // pg 9. The same order runs on the pool, where sequential is merely a
+  // few milliseconds slower and always safe.
+  // project custom (contract value) + task cost budget
+  const proj = await db.execute(sql`
+    select coalesce(p.contract_value, 0) as contract_value,
+           coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget
+      from projects p where p.id = ${projectId} and p.org_id = ${orgId}
+  `)
+  // posted actuals split into cost vs revenue
+  const actualRows = await db.execute(sql`
+    select
+      coalesce(sum(l.amount) filter (where a.type in ${COST_SET}), 0) as cost,
+      coalesce(-sum(l.amount) filter (where a.type in ${REVENUE_SET}), 0) as revenue
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+      and e.book_id = (select b.id from accounting_books b
+                         where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
+      ${projectSubsidiaryFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
+  `)
+  // committed: open order remainders tagged to the project. Order amounts
+  // are transaction-currency facts; translate each contribution through the
+  // document's txn→functional rate before combining it with posted actuals.
+  const committedRows = await db.execute(sql`
+    select
+      coalesce(sum(round(
+        (dl.quantity - dl.quantity_billed) * dl.unit_price * d.fx_rate,
+        4
+      )) filter (where d.kind = 'purchase_order'), 0) as committed_cost,
+      coalesce(sum(round(
+        (dl.quantity - dl.quantity_billed) * dl.unit_price * d.fx_rate,
+        4
+      )) filter (where d.kind = 'sales_order'), 0) as committed_revenue
+    from document_lines dl
+    join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+    where dl.org_id = ${orgId}
+      and coalesce(dl.project_id, d.project_id) = ${projectId}
+      and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
+      and dl.quantity > dl.quantity_billed
+      ${projectSubsidiaryFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
+  `)
+  const directSubcontractCommitment = await directSubcontractOpenCommitment(orgId, projectId)
+  // actual cost broken down by account
+  const byAccountRows = await db.execute(sql`
+    select a.id as account_id, a.number, a.name, a.type, sum(l.amount) as amount
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+      and e.book_id = (select b.id from accounting_books b
+                         where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
+      and a.type in ${COST_SET}
+      ${projectSubsidiaryFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
+    group by a.id, a.number, a.name, a.type
+    having sum(l.amount) <> 0
+    order by sum(l.amount) desc
+  `)
+  // documents with at least one line tagged to the project (job cost detail)
+  const docRows = await db.execute(sql`
+    select d.id, d.kind, d.document_number, d.document_date, d.status,
+           pt.display_name as party_name,
+           sum(dl.amount) as amount
+    from documents d
+    join document_lines dl
+      on dl.document_id = d.id
+     and dl.org_id = d.org_id
+     and coalesce(dl.project_id, d.project_id) = ${projectId}
+    left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id
+    where d.org_id = ${orgId}
+      ${projectSubsidiaryFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
+    group by d.id, d.kind, d.document_number, d.document_date, d.status, pt.display_name
+    order by d.document_date desc
+    limit 500
+  `)
 
   return assembleSummary(
     proj as unknown as QueryRows<ProjectSummaryRow>,
@@ -316,53 +319,54 @@ export interface ProjectTimeSummary {
  * membership from display labels.
  */
 export async function projectTimeSummary(orgId: string, projectId: string): Promise<ProjectTimeSummary> {
-  const [byTaskRows, byEmpRows, byItemRows, totalRow] = await Promise.all([
-    db.execute(sql`
-      select te.project_task_id as key, coalesce(pt.name, '') as label,
-             coalesce(sum(te.hours), 0) as hours,
-             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
-             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
-             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
-        from time_entries te
-        left join project_tasks pt
-          on pt.id = te.project_task_id and pt.org_id = te.org_id and pt.project_id = te.project_id
-       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-       group by te.project_task_id, pt.name
-       order by hours desc
-    `),
-    db.execute(sql`
-      select te.employee_party_id as key, coalesce(pty.display_name, '') as label,
-             coalesce(sum(te.hours), 0) as hours,
-             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
-             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
-             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
-        from time_entries te
-        left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
-       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-       group by te.employee_party_id, pty.display_name
-       order by hours desc
-    `),
-    db.execute(sql`
-      select te.item_id as key, coalesce(i.name, '') as label,
-             coalesce(sum(te.hours), 0) as hours,
-             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
-             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
-             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
-        from time_entries te
-        left join items i on i.id = te.item_id and i.org_id = te.org_id
-       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-       group by te.item_id, i.name
-       order by hours desc
-    `),
-    db.execute(sql`
-      select coalesce(sum(te.hours), 0) as hours,
-             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
-             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
-             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
-        from time_entries te
-       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-    `),
-  ])
+  // Sequential like the cost rollup above: the cockpit fans these loaders
+  // out, and any one of them may one day run under a caller-owned
+  // transaction, where concurrent queries share one pg client.
+  const byTaskRows = await db.execute(sql`
+    select te.project_task_id as key, coalesce(pt.name, '') as label,
+           coalesce(sum(te.hours), 0) as hours,
+           coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
+           coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+           coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
+      from time_entries te
+      left join project_tasks pt
+        on pt.id = te.project_task_id and pt.org_id = te.org_id and pt.project_id = te.project_id
+     where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+     group by te.project_task_id, pt.name
+     order by hours desc
+  `)
+  const byEmpRows = await db.execute(sql`
+    select te.employee_party_id as key, coalesce(pty.display_name, '') as label,
+           coalesce(sum(te.hours), 0) as hours,
+           coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
+           coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+           coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
+      from time_entries te
+      left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
+     where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+     group by te.employee_party_id, pty.display_name
+     order by hours desc
+  `)
+  const byItemRows = await db.execute(sql`
+    select te.item_id as key, coalesce(i.name, '') as label,
+           coalesce(sum(te.hours), 0) as hours,
+           coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
+           coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+           coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
+      from time_entries te
+      left join items i on i.id = te.item_id and i.org_id = te.org_id
+     where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+     group by te.item_id, i.name
+     order by hours desc
+  `)
+  const totalRow = await db.execute(sql`
+    select coalesce(sum(te.hours), 0) as hours,
+           coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
+           coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+           coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
+      from time_entries te
+     where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+  `)
   const row = (r: ProjectTimeSqlRow): ProjectTimeRow => ({
     key: r.key,
     label: r.label || '',
@@ -420,35 +424,35 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
     ],
     sql``,
   )
-  const [timeRow, lineRow] = await Promise.all([
-    db.execute(sql`
-      select coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as revenue,
-             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
-             coalesce(sum(te.hours), 0) as hours,
-             count(*) as cnt
-        from time_entries te
-       where te.org_id = ${orgId} and te.project_id = ${projectId}
-         and te.status = 'approved' and te.is_billable and te.billing_status = 'unbilled'${dateFilter}
-    `),
-    // Document-backed billable costs and charges are transaction-currency
-    // facts too. Convert each source line before summing so unbilled revenue
-    // and cost stay in the same functional currency as the time rollup.
-    db.execute(sql`
-      select coalesce(sum(case when d.kind = 'project_charge'
-                               then round(coalesce(dl.bill_amount, 0) * d.fx_rate, 4)
-                               else round(dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1) * d.fx_rate, 4)
-                          end), 0) as revenue,
-             coalesce(sum(round(dl.amount * d.fx_rate, 4)), 0) as cost,
-             count(*) as cnt
-        from document_lines dl
-        join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-       where dl.org_id = ${orgId}
-         and coalesce(dl.project_id, d.project_id) = ${projectId}
-         and dl.is_billable and dl.billed_by_line_id is null
-         and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
-           or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')))
-    `),
-  ])
+  // Sequential, like the loaders above: never fan concurrent queries out over
+  // a possibly caller-owned transaction connection.
+  const timeRow = await db.execute(sql`
+    select coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as revenue,
+           coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+           coalesce(sum(te.hours), 0) as hours,
+           count(*) as cnt
+      from time_entries te
+     where te.org_id = ${orgId} and te.project_id = ${projectId}
+       and te.status = 'approved' and te.is_billable and te.billing_status = 'unbilled'${dateFilter}
+  `)
+  // Document-backed billable costs and charges are transaction-currency
+  // facts too. Convert each source line before summing so unbilled revenue
+  // and cost stay in the same functional currency as the time rollup.
+  const lineRow = await db.execute(sql`
+    select coalesce(sum(case when d.kind = 'project_charge'
+                             then round(coalesce(dl.bill_amount, 0) * d.fx_rate, 4)
+                             else round(dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1) * d.fx_rate, 4)
+                        end), 0) as revenue,
+           coalesce(sum(round(dl.amount * d.fx_rate, 4)), 0) as cost,
+           count(*) as cnt
+      from document_lines dl
+      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+     where dl.org_id = ${orgId}
+       and coalesce(dl.project_id, d.project_id) = ${projectId}
+       and dl.is_billable and dl.billed_by_line_id is null
+       and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
+         or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')))
+  `)
   const tr = timeRow.rows[0] ?? {}
   const lr = lineRow.rows[0] ?? {}
   return {

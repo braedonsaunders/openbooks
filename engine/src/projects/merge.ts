@@ -519,15 +519,16 @@ export async function mergeProjects(
          union all
         select 'openbooks.migration', coalesce(current_setting('openbooks.migration', true), 'off')`)).rows;
       const restore = new Map(prior.map((r) => [r.name, r.value]));
-      const restoreSettings = () =>
-        Promise.all([
-          tx.execute(
-            sql`select set_config('openbooks.amend', ${restore.get("openbooks.amend") ?? "off"}, true)`,
-          ),
-          tx.execute(
-            sql`select set_config('openbooks.migration', ${restore.get("openbooks.migration") ?? "off"}, true)`,
-          ),
-        ]);
+      // Sequential restores: concurrent set_config calls share this
+      // transaction's single pg client.
+      const restoreSettings = async (): Promise<void> => {
+        await tx.execute(
+          sql`select set_config('openbooks.amend', ${restore.get("openbooks.amend") ?? "off"}, true)`,
+        );
+        await tx.execute(
+          sql`select set_config('openbooks.migration', ${restore.get("openbooks.migration") ?? "off"}, true)`,
+        );
+      };
       await tx.execute(sql`set local openbooks.amend = on`);
       await tx.execute(sql`set local openbooks.migration = on`);
       const plan = await planMerge(tx, orgId, opts.survivorId, opts.duplicateId, true, opts.allowedSubsidiaryIds);

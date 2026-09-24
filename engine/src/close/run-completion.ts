@@ -220,31 +220,31 @@ export async function publishCloseRun(
     await tx.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
       values (${orgId}, ${runId}, 'run.published', ${actorId}, ${JSON.stringify({ comment: comment ?? null })}::jsonb)`);
-    const [publishedRun, tasks, evidence, exceptions, signoffs, events, locks] =
-      (await Promise.all([
-        tx.execute(sql`select r.*, p.name as period_name, p.starts_on, p.ends_on, b.code as book_code, b.name as book_name,
+    // Sequential binder reads, never Promise.all: this publish runs inside
+    // one transaction (one pg client), where concurrent queries interleave
+    // on the single connection — deprecated by pg and fatal in pg 9.
+    const publishedRun = await tx.execute(sql`select r.*, p.name as period_name, p.starts_on, p.ends_on, b.code as book_code, b.name as book_name,
         bp.name as blueprint_name, bp.version as blueprint_version, pkg.name as package_name, pkg.reports as package_reports
         from close_runs r join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
         join close_blueprints bp on bp.id = r.blueprint_id and bp.org_id = r.org_id left join close_reporting_packages pkg on pkg.id = r.reporting_package_id and pkg.org_id = r.org_id
-        where r.id = ${runId} and r.org_id = ${orgId}`),
-        tx.execute(
-          sql`select * from close_run_tasks where run_id = ${runId} and org_id = ${orgId} order by sort_order, id`,
-        ),
-        tx.execute(
-          sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at, id`,
-        ),
-        tx.execute(
-          sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by created_at, id`,
-        ),
-        tx.execute(
-          sql`select * from close_signoffs where run_id = ${runId} and org_id = ${orgId} order by signed_at, id`,
-        ),
-        tx.execute(
-          sql`select * from close_events where run_id = ${runId} and org_id = ${orgId} order by at, id`,
-        ),
-        tx.execute(sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId})
-        and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`),
-      ]));
+        where r.id = ${runId} and r.org_id = ${orgId}`);
+    const tasks = await tx.execute(
+      sql`select * from close_run_tasks where run_id = ${runId} and org_id = ${orgId} order by sort_order, id`,
+    );
+    const evidence = await tx.execute(
+      sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at, id`,
+    );
+    const exceptions = await tx.execute(
+      sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by created_at, id`,
+    );
+    const signoffs = await tx.execute(
+      sql`select * from close_signoffs where run_id = ${runId} and org_id = ${orgId} order by signed_at, id`,
+    );
+    const events = await tx.execute(
+      sql`select * from close_events where run_id = ${runId} and org_id = ${orgId} order by at, id`,
+    );
+    const locks = await tx.execute(sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId})
+        and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`);
     const snapshot = {
       format: "openbooks.close-binder.v1",
       // Package versioning: the first publication is version 1; every

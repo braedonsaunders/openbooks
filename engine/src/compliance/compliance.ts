@@ -630,15 +630,17 @@ export async function loadVendorComplianceInputs(
   partyId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<VendorComplianceInputs> {
-  const [role, records, waivers, lienWaivers, timeZone] = (await Promise.all([
-    runner.execute<{ classId: string | null; lienWaiverEnforcement: LienWaiverEnforcement }>(sql`
+  // Sequential reads: the runner may be a caller-owned transaction (one pg
+  // client — the posting kernel passes its tx), where concurrent queries
+  // interleave on the single connection.
+  const role = await runner.execute<{ classId: string | null; lienWaiverEnforcement: LienWaiverEnforcement }>(sql`
       select vr.compliance_class_id as "classId",
              coalesce(cc.lien_waiver_enforcement, 'none') as "lienWaiverEnforcement"
         from vendor_roles vr
         left join compliance_classes cc
                on cc.id = vr.compliance_class_id and cc.org_id = vr.org_id and cc.is_active
-       where vr.org_id = ${orgId} and vr.party_id = ${partyId}`),
-    runner.execute<EvidenceRecord>(sql`
+       where vr.org_id = ${orgId} and vr.party_id = ${partyId}`);
+  const records = await runner.execute<EvidenceRecord>(sql`
       select id, requirement_id as "requirementId", project_id as "projectId", status,
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              coverage_amount as "coverageAmount", aggregate_amount as "aggregateAmount",
@@ -648,26 +650,25 @@ export async function loadVendorComplianceInputs(
              primary_noncontributory as "primaryNoncontributory",
              verified_at as "verifiedAt"
         from compliance_records
-       where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`),
-    // Revoked rows load too: the evaluator dates them by the revocation's
-    // org-local date, so an as-of read sees the exception exactly while it
-    // was in force. Pending requests (never approved) load too but the
-    // evaluator never honours them — requesting is not granting.
-    runner.execute<WaiverRow>(sql`
+       where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`);
+  // Revoked rows load too: the evaluator dates them by the revocation's
+  // org-local date, so an as-of read sees the exception exactly while it
+  // was in force. Pending requests (never approved) load too but the
+  // evaluator never honours them — requesting is not granting.
+  const waivers = await runner.execute<WaiverRow>(sql`
       select id, requirement_id as "requirementId", project_id as "projectId",
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              approved_at as "approvedAt", revoked_at as "revokedAt"
         from compliance_waivers
-       where org_id = ${orgId} and party_id = ${partyId}`),
-    runner.execute<LienWaiverEvidence>(sql`
+       where org_id = ${orgId} and party_id = ${partyId}`);
+  const lienWaivers = await runner.execute<LienWaiverEvidence>(sql`
       select id, waiver_number as "waiverNumber", status, direction,
              project_id as "projectId", through_date as "throughDate",
              amount, currency, bill_document_id as "billDocumentId"
         from lien_waivers
        where org_id = ${orgId} and party_id = ${partyId} and direction = 'received'
-         and status = 'signed'`),
-    businessTimeZone(orgId),
-  ]));
+         and status = 'signed'`);
+  const timeZone = await businessTimeZone(orgId);
   return {
     classId: role.rows[0]?.classId ?? null,
     lienWaiverEnforcement: role.rows[0]?.lienWaiverEnforcement ?? "none",
@@ -696,10 +697,9 @@ export async function vendorComplianceStatus(args: {
 }): Promise<VendorComplianceStatus> {
   const runner = args.runner ?? db;
   const asOf = args.asOf ?? (await businessToday(args.orgId));
-  const [policies, inputs] = await Promise.all([
-    loadRequirementPolicies(args.orgId, runner),
-    loadVendorComplianceInputs(args.orgId, args.partyId, runner),
-  ]);
+  // Sequential: the runner may be one shared transaction client.
+  const policies = await loadRequirementPolicies(args.orgId, runner);
+  const inputs = await loadVendorComplianceInputs(args.orgId, args.partyId, runner);
   return evaluateVendorCompliance({
     partyId: args.partyId,
     classId: inputs.classId,

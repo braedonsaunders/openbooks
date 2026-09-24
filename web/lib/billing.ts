@@ -799,8 +799,11 @@ export async function generateInvoiceFromBillingRequest(
       // billing refusals rather than bare transaction failures.
       let charges: AdjustmentCharge[]
       try {
-        charges = mergeCharges(
-          (await Promise.all([...partitions.values()].map(async (partition) => {
+        // Sequential partitions, never Promise.all: invoice generation runs
+        // inside one transaction (one pg client), where concurrent rate-card
+        // reads interleave on the single connection.
+        const partitionCharges: AdjustmentCharge[][] = []
+        for (const partition of [...partitions.values()]) {
           const scope = {
             orgId, projectId: req.project_id,
             departmentId: partition.departmentId,
@@ -883,8 +886,10 @@ export async function generateInvoiceFromBillingRequest(
               invoicing.surchargeRounding ?? 'half_up',
             ))
           }
-          return sliceCharges
-        }))).flat(),
+          partitionCharges.push(sliceCharges)
+        }
+        charges = mergeCharges(
+          partitionCharges.flat(),
           invoicing.surchargeRounding ?? 'half_up',
         )
       } catch (cause) {
