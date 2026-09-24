@@ -1,6 +1,8 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import type { SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz, type Authz } from "./authz";
 import { accessDeniedHref } from "./gate-targets";
 
@@ -29,4 +31,31 @@ export async function guardSuperAdmin(): Promise<Authz | NextResponse> {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   return authz;
+}
+
+/** Lock the home identity so deactivation and privilege revocation serialize with privileged writes. */
+export async function lockActiveActor(
+  runner: SqlExecutor,
+  actorId: string,
+): Promise<{ id: string; orgId: string; isSuperAdmin: boolean }> {
+  const actor = (await runner.execute<{ id: string; orgId: string; isActive: boolean; isSuperAdmin: boolean }>(sql`
+    select id, org_id as "orgId", is_active as "isActive", is_super_admin as "isSuperAdmin"
+      from users where id = ${actorId} for update
+  `)).rows[0];
+  if (!actor || !actor.isActive) {
+    throw new Error("Acting user is no longer active — sign in again before retrying this platform change");
+  }
+  return actor;
+}
+
+/** Revalidate super-admin authority while holding the actor row lock through the caller's mutation. */
+export async function lockSuperAdminActor(
+  runner: SqlExecutor,
+  actorId: string,
+): Promise<{ id: string; orgId: string; isSuperAdmin: true }> {
+  const actor = await lockActiveActor(runner, actorId);
+  if (!actor.isSuperAdmin) {
+    throw new Error("Platform super-admin access was revoked — reload and retry with an active super administrator");
+  }
+  return { ...actor, isSuperAdmin: true };
 }
