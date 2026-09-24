@@ -332,6 +332,7 @@
       "noBalanceSheet": "Aucune donnée de bilan",
       "noHeadcount": "Aucun salarié actif",
       "noInterestExpense": "Aucune charge d'intérêts",
+      "unavailable": "Données non disponibles",
       "perEmployees": "{revenue} / {count, plural, one {# salarié} other {# salariés}}"
     }
   },

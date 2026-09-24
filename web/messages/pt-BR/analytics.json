@@ -332,6 +332,7 @@
       "noBalanceSheet": "Sem dados de balanço",
       "noHeadcount": "Sem funcionários ativos",
       "noInterestExpense": "Sem despesas com juros",
+      "unavailable": "Dados não disponíveis",
       "perEmployees": "{revenue} / {count, plural, one {# funcionário} other {# funcionários}}"
     }
   },
