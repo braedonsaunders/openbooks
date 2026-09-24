@@ -57,6 +57,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCount,
@@ -720,7 +721,7 @@ export function nysWithholding(input: {
     // Unreachable while the tables cover [0, methodIIIThreshold/P) with no
     // holes, which the conformance test proves. Refusing rather than defaulting
     // to zero keeps a future transcription gap loud.
-    throw new Error(
+    throw new PayrollError(
       `no New York State Method II line covers net wages of ${D(net)} for a `
       + `${input.marital} ${period} payroll — engine/src/payroll/us/states/ny.ts`,
     );
@@ -824,7 +825,7 @@ function computeNyc(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   const row = rowFor(rates.nyc.tables[period], net);
   if (!row) {
-    throw new Error(
+    throw new PayrollError(
       `no New York City Method II line covers net wages of ${D(net)} for a ${period} payroll `
       + "— engine/src/payroll/us/states/ny.ts",
     );
@@ -880,7 +881,7 @@ function computeYonkers(input: UsStateWithholdingInput): UsStateWithholdingResul
 
   if (input.basis === "resident") {
     if (input.regionTax == null) {
-      throw new Error(
+      throw new PayrollError(
         "the Yonkers resident tax is a surcharge of 16.75% of the New York State withholding "
         + "(NYS-50-T-Y (1/26), Method II step 5), so the state tax must be computed first and "
         + "passed in. Nothing here recomputes New York's schedules.",

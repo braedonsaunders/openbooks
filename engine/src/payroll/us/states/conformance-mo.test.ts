@@ -81,6 +81,6 @@ test("MO refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 12, wages: "2916.67",
       basis: "resident", certificate: cert({ filing_status: "married_spouse_works" }),
     }),
-    /2027 Missouri income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Missouri income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

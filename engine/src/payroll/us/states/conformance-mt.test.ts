@@ -112,6 +112,6 @@ test("MT refuses a year it has not transcribed", () => {
       payDate: "2027-01-15", periodsPerYear: 24, wages: "1375",
       basis: "resident", certificate: cert({ filing_status: "single_or_both" }),
     }),
-    /2027 Montana income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Montana income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

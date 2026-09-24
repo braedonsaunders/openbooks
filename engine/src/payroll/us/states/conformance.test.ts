@@ -161,7 +161,7 @@ test("CA refuses a year it has not transcribed, and never extrapolates", () => {
       payDate: "2027-01-15", periodsPerYear: 26, wages: "2000", basis: "resident",
       certificate: de4(),
     }),
-    /2027 California PIT withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 California PIT withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });
 

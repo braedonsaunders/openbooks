@@ -239,7 +239,7 @@ test("NM no certificate withholds from the single column", () => {
 test("NM refuses a year it has not transcribed", () => {
   assert.throws(
     () => compute({ payDate: "2027-01-15", wages: "1000.00" }),
-    /2027 New Mexico withholding tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 New Mexico withholding tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });
 

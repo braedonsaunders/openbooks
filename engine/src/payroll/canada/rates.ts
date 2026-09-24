@@ -12,6 +12,7 @@
  * plus CRA's machine-readable CSVs (Table 8.1/8.2, CPP/EI, claim codes).
  */
 
+import { PayrollError } from "../error.ts";
 import type {
   PayrollEditionScaffold, PayrollTaxYearEdition, PayrollTaxYearSupport,
 } from "../tax-years.ts";
@@ -465,16 +466,15 @@ export function ratesForPayDate(payDate: string): EditionRates {
   const forYear = CA_EDITIONS.filter((candidate) => candidate.year === year);
   const edition = forYear.find((candidate) => payDate >= candidate.effectiveFrom);
   if (!edition) {
-    throw new Error(
-      `no T4127 constants for pay date ${payDate} — add the edition to `
-      + "engine/src/payroll/canada/rates.ts (scripts/payroll-new-tax-year.ts scaffolds it)",
+    throw new PayrollError(
+      `no T4127 constants for pay date ${payDate} — rates for ${year} aren't `
+      + "available in this pack version; update the pack",
     );
   }
   if (edition.status !== "published") {
-    throw new Error(
-      `the ${year} T4127 constants are scaffolded but not transcribed — placeholder values remain `
-      + `in engine/src/payroll/canada/rates-${year}.ts; fill them in from the published edition `
-      + "and flip it to published",
+    throw new PayrollError(
+      `the ${year} T4127 constants are not available in this pack version — a pay date in `
+      + `${year} cannot be calculated; update the pack`,
     );
   }
   return edition;
@@ -493,7 +493,7 @@ export const CPP_EXEMPTION_BY_P: Record<number, string> = {
 /** TD1 claim code → total claim amount (code 0 = no claim; code 1 = the BPA). */
 export function claimCodeAmount(codes: string[], code: number): string {
   if (!Number.isInteger(code) || code < 0 || code > 10) {
-    throw new Error(`claim code must be an integer 0..10, got ${code}`);
+    throw new PayrollError(`claim code must be an integer 0..10, got ${code}`);
   }
   return code === 0 ? "0" : codes[code - 1]!;
 }

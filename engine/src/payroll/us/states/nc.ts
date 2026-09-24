@@ -31,6 +31,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import { certificateAmount, certificateChoice, certificateCount, certificateFlag }
   from "../../certificates.ts";
@@ -217,7 +218,7 @@ export function ncAnnualizedMethod(input: {
 }): { tax: string; annualTax: string } {
   const rates = ncRatesForPayDate(input.payDate);
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear < 1) {
-    throw new Error(`invalid pay periods per year for North Carolina: ${input.periodsPerYear}`);
+    throw new PayrollError(`invalid pay periods per year for North Carolina: ${input.periodsPerYear}`);
   }
   const annualWages = U(input.wages) * BigInt(input.periodsPerYear);
   const deduction = U(rates.annual.standardDeduction[input.schedule])

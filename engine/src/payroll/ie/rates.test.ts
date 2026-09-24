@@ -33,8 +33,14 @@ describe("IE 2026 edition resolution", () => {
   });
 
   it("refuses any pay date outside 2026 instead of extrapolating", () => {
-    assert.throws(() => ratesForPayDate("2025-12-31"), /no transcribed tables/);
-    assert.throws(() => ratesForPayDate("2027-01-01"), /no transcribed tables/);
+    assert.throws(
+      () => ratesForPayDate("2025-12-31"),
+      /rates for 2025 aren't available in this pack version; update the pack/,
+    );
+    assert.throws(
+      () => ratesForPayDate("2027-01-01"),
+      /rates for 2027 aren't available in this pack version; update the pack/,
+    );
     assert.throws(() => ratesForPayDate("not-a-date"), /not an ISO date/);
   });
 });

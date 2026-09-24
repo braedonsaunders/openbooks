@@ -197,8 +197,14 @@ test("ES 2026 is transcribed with two editions split at 10 September", () => {
     assert.equal(ratesForPayDate("2026-09-09").laPalmaExcepcional, false);
     assert.equal(ratesForPayDate("2026-09-10").laPalmaExcepcional, true);
     // Both sides outside 2026 throw — never extrapolate, never clamp.
-    assert.throws(() => ratesForPayDate("2025-12-31"), /no transcribed tables/);
-    assert.throws(() => ratesForPayDate("2027-01-01"), /no transcribed tables/);
+    assert.throws(
+      () => ratesForPayDate("2025-12-31"),
+      /rates for 2025 aren't available in this pack version; update the pack/,
+    );
+    assert.throws(
+      () => ratesForPayDate("2027-01-01"),
+      /rates for 2027 aren't available in this pack version; update the pack/,
+    );
   } finally {
     if (registered) unregisterPayrollTaxYears("ES");
   }

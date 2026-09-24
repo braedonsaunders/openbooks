@@ -15,6 +15,7 @@
  * why 47 states appear here with `implemented: false` instead of being quietly
  * absent.
  */
+import { PayrollError } from "../error.ts";
 import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 import type { PayrollPackReciprocity } from "../reciprocity.ts";
 import type {
@@ -1413,7 +1414,7 @@ function everyUsRegion(): PayrollRegionWithholding[] {
       };
     }
     if (implemented.has(state)) {
-      throw new Error(
+      throw new PayrollError(
         `${state} has a withholding engine but no jurisdiction declaration in `
         + "engine/src/payroll/us/jurisdictions.ts",
       );

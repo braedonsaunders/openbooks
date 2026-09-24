@@ -51,6 +51,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
@@ -219,7 +220,7 @@ export function philadelphiaRateFor(
   const period = rates.philadelphia.find((entry) =>
     payDate >= entry.effectiveFrom && (entry.effectiveTo == null || payDate < entry.effectiveTo));
   if (!period) {
-    throw new Error(
+    throw new PayrollError(
       `no Philadelphia wage tax rate is loaded for a pay date of ${payDate} — the City revises the `
       + `rate every 1 July and the rate is keyed to the PAY DATE. Transcribe the period from `
       + `phila.gov's Tax Rate History into ${RATES_MODULE}.`,
@@ -335,13 +336,13 @@ export function localServicesTaxPerPeriod(input: {
     // "$10 or less" may be collected as a lump sum and carries no mandatory
     // exemption. Prorating it anyway would be a different tax from the one the
     // jurisdiction levied, so this refuses to guess.
-    throw new Error(
+    throw new PayrollError(
       "a Local Services Tax of $10 or less a year is collected as a lump sum, not prorated per "
       + "pay period (DCED, Local Services Tax). Record it as a one-time deduction.",
     );
   }
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear < 1) {
-    throw new Error(`invalid pay periods per year for the Local Services Tax: ${input.periodsPerYear}`);
+    throw new PayrollError(`invalid pay periods per year for the Local Services Tax: ${input.periodsPerYear}`);
   }
   // Truncate to the cent — DCED's own instruction, and the reason this does not
   // use `divIntCents`, which rounds half-up.

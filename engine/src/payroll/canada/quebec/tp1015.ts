@@ -53,6 +53,7 @@
  * example), s. 2.2 cumulative averaging (commissions), and the s. 5 health
  * services fund employer contribution.
  */
+import { PayrollError } from "../../error.ts";
 import {
   bmin, D, divIntCents, max0, mulInt, mulRateCents, mulRatioCents, rate6, U,
 } from "../decimal.ts";
@@ -165,7 +166,7 @@ export function calculateTp1015(input: Tp1015Input): Tp1015Result {
   const rates: QcEditionRates = qcRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year: ${P}`);
+    throw new PayrollError(`invalid pay periods per year: ${P}`);
   }
 
   const factors: Record<string, string> = {};

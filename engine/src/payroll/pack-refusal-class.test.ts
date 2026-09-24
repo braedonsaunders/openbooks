@@ -38,6 +38,13 @@ import {
 } from "./packs.ts";
 import { payrollSupportedTaxYears } from "./tax-years.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { calculateT4127 } from "./canada/t4127.ts";
+import { ratesForPayDate as caRatesForPayDate } from "./canada/rates.ts";
+import { ratesForPayDate as usRatesForPayDate } from "./us/rates.ts";
+import { miCityWithholding } from "./us/states/mi.ts";
+import { ohMunicipalWithholding } from "./us/states/oh.ts";
+import { orgYearEndFilings } from "./yearend.ts";
+import { filingLifecycle } from "./yearend-amendments.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -97,6 +104,105 @@ test(
         }
       }
       assert.ok(populations > 0, "the probe must actually have called some populations");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+/**
+ * The calculation path rejects with a PayrollError too — not just the
+ * filing populations above. An unconfigured Ohio municipal rate (or a
+ * Michigan city rate, or a pay date in a year no pack transcribed) refused
+ * with a bare Error, and the year-end conversion sites rethrow
+ * non-PayrollError, so one unconfigured rate killed the whole year-end page
+ * org-wide instead of giving a named refusal. Each case below names its
+ * remedy in the message (asserted where the wording is the product).
+ */
+test("pack calculation entries refuse with a PayrollError", () => {
+  assert.throws(
+    () => ohMunicipalWithholding({ wages: "2000.00", rate: null, municipality: "COLUMBUS" }),
+    PayrollError,
+  );
+  assert.throws(
+    () => miCityWithholding({
+      city: "DETROIT", wages: "1000.00", rate: null,
+      exemptionPerYear: "600", exemptions: 2, periodsPerYear: 26,
+    }),
+    PayrollError,
+  );
+  assert.throws(
+    () => calculateT4127({ payDate: "2026-01-15", province: "ON", periodsPerYear: 0, income: "1000.00" }),
+    PayrollError,
+  );
+  // Edition resolvers refuse an untranscribed year with an operator remedy —
+  // rates for a new year arrive with a pack update, never a scaffold script.
+  assert.throws(() => caRatesForPayDate("2031-01-15"), PayrollError);
+  assert.throws(() => usRatesForPayDate("2031-01-15"), PayrollError);
+  try {
+    caRatesForPayDate("2031-01-15");
+    assert.fail("expected the 2031 edition refusal");
+  } catch (error) {
+    assert.ok(error instanceof PayrollError);
+    assert.match(error.message, /rates for 2031 .* update the pack/);
+  }
+});
+
+/**
+ * The year-end conversion sites convert pack refusals instead of throwing:
+ * a committed stub with an unknown country must surface as the affected
+ * filings' named refusals, never as a page-wide crash — through both
+ * `orgYearEndFilings` (the page) and `filingLifecycle` (the corrections
+ * review), which convert independently.
+ */
+test(
+  "the year-end conversion sites convert an unknown-country stub into named refusals",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const countries = declaredPayrollFilings().map((pack) => pack.country);
+      await db.execute(sql`
+        update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
+          payroll: { countries },
+        })}::jsonb where id = ${org.orgId}`);
+      const employeeId = "00000000-0000-4000-8000-000000000001";
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Unknown Country', true, '{}'::jsonb)`);
+      const documentId = "00000000-0000-4000-8000-000000000002";
+      await db.execute(sql`
+        insert into documents (org_id, id, kind, document_number, document_date, currency)
+        values (${org.orgId}, ${documentId}, 'pay_run', 'PAY-1', '2026-07-21', 'CAD')`);
+      const scheduleId = "00000000-0000-4000-8000-000000000003";
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18')`);
+      await db.execute(sql`
+        insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
+                              pay_date, tax_year, run_status, calculated_at, employee_count)
+        values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-05', '2026-07-18',
+                '2026-07-21', 2026, 'committed', now(), 1)`);
+      await db.execute(sql`
+        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+                               periods_per_year, pay_date, tax_year, gross, net_pay)
+        values (${org.orgId}, ${documentId}, ${employeeId}, 'UNKNOWN', 26, '2026-07-21', 2026, '1000', '800')`);
+      // The legacy trigger stamps a country from the province; an UNKNOWN
+      // province is precisely the unattributable row. Make it explicit.
+      await db.execute(sql`
+        update pay_stubs set country = null, country_source = 'unknown'
+         where org_id = ${org.orgId} and pay_run_document_id = ${documentId}`);
+
+      const sections = await orgYearEndFilings(org.orgId, 2026);
+      assert.ok(sections.length > 0, "the page must still enumerate its filings");
+      const refused = sections.filter((section) => section.populationRefusal != null);
+      assert.ok(refused.length > 0, "at least one filing must carry the named refusal");
+      for (const section of refused) {
+        assert.match(section.populationRefusal!, /unknown historical country/);
+      }
+
+      const lifecycle = await filingLifecycle(org.orgId, "CA", "t4", 2026);
+      assert.match(lifecycle.populationRefusal ?? "", /unknown historical country/);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

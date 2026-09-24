@@ -38,6 +38,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, max0, rate6, U } from "../../canada/decimal.ts";
 import {
   certificateChoice, certificateFlag, type PayrollCertificate,
@@ -227,7 +228,7 @@ export function utEditionForPeriodStart(periodStart: string): UtEdition {
     periodStart >= candidate.effectiveFrom
     && (candidate.effectiveTo == null || periodStart < candidate.effectiveTo));
   if (!edition) {
-    throw new Error(
+    throw new PayrollError(
       `no Utah withholding edition is loaded for a payroll period beginning ${periodStart} — `
       + RATES_MODULE,
     );
@@ -237,7 +238,7 @@ export function utEditionForPeriodStart(periodStart: string): UtEdition {
 
 function requirePeriodStart(input: UsStateWithholdingInput): string {
   if (!input.periodStart) {
-    throw new Error(
+    throw new PayrollError(
       "Utah withholding tables are keyed to the PAYROLL PERIOD START DATE, not the pay date — "
       + "Publication 14's June 1, 2026 revision applies to periods beginning on or after June 1. "
       + "Supply the period start date; substituting the pay date would apply the wrong table set "

@@ -17,6 +17,7 @@
  * withholding (v1 covers the nine no-withholding states), nonresident-alien
  * additional amounts, and Form W-4P pension withholding.
  */
+import { PayrollError } from "../error.ts";
 import { bmin, D, divIntCents, max0, mulInt, mulRateCents, U } from "../canada/decimal";
 import { type FilingStatus, ratesForPayDate, type WithholdingRow, type YearRates } from "./rates";
 
@@ -145,7 +146,7 @@ function cappedSlice(wages: bigint, cap: bigint, ytd: bigint): bigint {
 export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   const rates: YearRates = ratesForPayDate(input.payDate);
   const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) throw new Error(`invalid pay periods per year: ${P}`);
+  if (!Number.isInteger(P) || P < 1 || P > 2000) throw new PayrollError(`invalid pay periods per year: ${P}`);
 
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
@@ -163,7 +164,7 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   if (input.pre2020) {
     const allowances = input.pre2020.allowances;
     if (!Number.isInteger(allowances) || allowances < 0) {
-      throw new Error(`invalid W-4 allowances: ${allowances}`);
+      throw new PayrollError(`invalid W-4 allowances: ${allowances}`);
     }
     adjusted = max0(annualWages - mulInt(U(rates.allowanceAmount), allowances));
     schedule = rates.standard[input.pre2020.married ? "married_joint" : "single"];

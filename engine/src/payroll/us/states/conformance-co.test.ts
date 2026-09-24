@@ -75,6 +75,6 @@ test("CO refuses a year the posted worksheet has not been loaded for", () => {
       basis: "resident",
       certificate: cert(),
     }),
-    /2027 Colorado income tax withholding tables are not loaded/,
+    /2027 Colorado income tax withholding tables are not available in this pack version.*update the pack/,
   );
 });

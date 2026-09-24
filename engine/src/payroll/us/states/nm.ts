@@ -77,6 +77,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateFlag,
@@ -592,7 +593,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     // line covers is not something an engine gets to invent, and withholding
     // nothing would be a silent zero. The New Jersey engine refuses the same
     // way for its one printed hole.
-    throw new Error(
+    throw new PayrollError(
       `no New Mexico FYI-104 Table line covers wages of ${D(wages)} on a `
       + `${period} payroll for a ${status} employee. The state's printed table leaves a gap there; `
       + `see ${RATES_MODULE} and the conformance test, and confirm the bracket with the Taxation `

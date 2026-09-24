@@ -36,6 +36,7 @@
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
+import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, type PayrollCertificate,
@@ -178,7 +179,7 @@ export function ctInitialTax(code: CtWithholdingCode, taxable: bigint): bigint {
       return U(band.base) + mulRateCents(max0(taxable - U(band.over)), band.rate);
     }
   }
-  throw new Error(`Connecticut Table B is incomplete for ${code}`);
+  throw new PayrollError(`Connecticut Table B is incomplete for ${code}`);
 }
 
 interface StepBand {
@@ -482,7 +483,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = ctRatesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new Error(`invalid pay periods per year for Connecticut withholding: ${P}`);
+    throw new PayrollError(`invalid pay periods per year for Connecticut withholding: ${P}`);
   }
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
@@ -518,7 +519,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "CT", year: rates.year, tax: D(flat), taxSupplemental: D(0n), factors };
   }
   if (codeRaw !== "A" && codeRaw !== "B" && codeRaw !== "C" && codeRaw !== "D" && codeRaw !== "F") {
-    throw new Error(`Connecticut withholding code "${codeRaw}" is not A, B, C, D, E, or F`);
+    throw new PayrollError(`Connecticut withholding code "${codeRaw}" is not A, B, C, D, E, or F`);
   }
   const code = codeRaw;
 

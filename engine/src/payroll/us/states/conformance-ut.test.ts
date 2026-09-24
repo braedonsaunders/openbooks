@@ -214,6 +214,6 @@ test("UT refuses a year it has not transcribed, and never extrapolates", () => {
       payDate: "2027-01-15", periodStart: "2027-01-01", periodsPerYear: 26, wages: "2000", basis: "resident",
       certificate: cert(),
     }),
-    /2027 Utah income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
+    /2027 Utah income tax withholding tables are not available in this pack version.*update the pack.*Never extrapolate the prior year/s,
   );
 });

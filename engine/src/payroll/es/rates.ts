@@ -166,6 +166,7 @@
  * the BOE Orden instead. No vendor, law-firm, OECD or other-ERP source is
  * cited anywhere.
  */
+import { PayrollError } from "../error.ts";
 import type { PayrollTaxYearSupport } from "../tax-years.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
 
@@ -405,11 +406,12 @@ const EDITION_2026: EsEdition = {
  */
 export function ratesForPayDate(payDate: string): EsEdition {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
-    throw new Error(`ES payroll: pay date is not an ISO date: "${payDate}"`);
+    throw new PayrollError(`ES payroll: pay date is not an ISO date: "${payDate}"`);
   }
   if (payDate < "2026-01-01" || payDate > "2026-12-31") {
-    throw new Error(
-      `ES payroll: no transcribed tables for pay date ${payDate} — 2026 only`,
+    throw new PayrollError(
+      `ES payroll: no tables for pay date ${payDate} — rates for ${payDate.slice(0, 4)} aren't `
+      + "available in this pack version; update the pack",
     );
   }
   return payDate < "2026-09-10" ? EDITION_2026_EARLY : EDITION_2026;
