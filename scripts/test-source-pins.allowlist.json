@@ -71,7 +71,6 @@
     "schema/migrations/generated/0293_stock_count_line_subject_unique.integration.test.ts": 1,
     "scripts/bootstrap-migration-pool.integration.test.ts": 2,
     "scripts/ci-pipeline-integrity.test.mjs": 9,
-    "scripts/deploy-edge-workflow.test.mjs": 1,
     "scripts/test-fixture-architecture.test.mjs": 3,
     "scripts/test-workflow.test.mjs": 1,
     "scripts/upgrade-rehearsal/upgrade-rehearsal.test.mjs": 2,

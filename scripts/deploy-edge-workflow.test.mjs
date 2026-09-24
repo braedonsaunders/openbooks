@@ -1,3 +1,4 @@
+// source-pin-contract: edge-deploy dispatch receipt dataflow and pinned-commit publish policy (deploy-edge.yml, publish-container.yml)
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
