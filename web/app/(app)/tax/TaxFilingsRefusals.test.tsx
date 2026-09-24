@@ -22,6 +22,7 @@ const domWindow = dom.window as unknown as Record<string, unknown>;
 for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
   if (globals[key] === undefined) globals[key] = domWindow[key];
 }
+globals.Event = domWindow.Event;
 if (typeof window.matchMedia !== "function") {
   window.matchMedia = (() => ({
     matches: false,
@@ -107,7 +108,7 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-async function mount(canSave = true) {
+async function mount(canSave = true, forms = [FORM]) {
   globalThis.__taxToasts = [];
   globalThis.__taxRouter = { push() {}, refresh() {} };
   const host = document.createElement("div");
@@ -117,7 +118,7 @@ async function mount(canSave = true) {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <BusinessDateProvider today="2026-07-15">
-          <TaxFilingsView forms={[FORM]} canSave={canSave} canManageSetup={false} />
+          <TaxFilingsView forms={forms} canSave={canSave} canManageSetup={false} />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
     );
@@ -154,6 +155,33 @@ test("a refused compute toasts the server refusal, not a generic failure", async
   }
 });
 
+test("changing filing forms resets edited dates to the current business month", async () => {
+  const restoreFetch = scriptFetch(() => Response.json({ obligations: [] }));
+  const nextForm = { ...FORM, code: "GB_VAT100", name: "VAT Return" };
+  const { unmount } = await mount(true, [FORM, nextForm]);
+  try {
+    const from = document.querySelector<HTMLInputElement>('#tax-from')!;
+    const to = document.querySelector<HTMLInputElement>('#tax-to')!;
+    const setDateValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    setDateValue.call(from, "2026-03-04");
+    setDateValue.call(to, "2026-03-20");
+    await act(async () => {
+      from.dispatchEvent(new window.Event("change", { bubbles: true }));
+      to.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+    const form = document.querySelector<HTMLButtonElement>('#tax-form')!;
+    await click(form);
+    const option = [...document.querySelectorAll('[role="option"]')].find((el) => el.textContent?.trim() === "VAT Return");
+    assert.ok(option, "the second return form must be offered");
+    await click(option as HTMLButtonElement);
+    assert.equal(from.value, "2026-07-01");
+    assert.equal(to.value, "2026-07-31");
+  } finally {
+    await unmount();
+    restoreFetch();
+  }
+});
+
 test("without the filing grant no save action renders after a successful compute", async () => {
   const restoreFetch = scriptFetch((url) => {
     if (url.startsWith("/api/tax/returns/")) {
@@ -184,6 +212,7 @@ test("without the filing grant no save action renders after a successful compute
 
 test("a refused save toasts the server refusal, not a generic failure", async () => {
   const PREPARE_REFUSAL = "the return changed since it was previewed — recompute before saving";
+  let prepareBody: unknown;
   const restoreFetch = scriptFetch((url, init) => {
     if (url.startsWith("/api/tax/returns/")) {
       return Response.json({
@@ -200,6 +229,7 @@ test("a refused save toasts the server refusal, not a generic failure", async ()
       });
     }
     if (url === "/api/tax/filings" && init?.method === "POST") {
+      prepareBody = JSON.parse(String(init.body));
       return Response.json({ error: PREPARE_REFUSAL }, { status: 422 });
     }
     return null;
@@ -210,6 +240,12 @@ test("a refused save toasts the server refusal, not a generic failure", async ()
     assert.deepEqual(errorToasts(), []);
     await click(buttonsNamed("Save to history")[0]!);
     assert.deepEqual(errorToasts(), [PREPARE_REFUSAL]);
+    assert.deepEqual(prepareBody, {
+      code: "CA_GST34",
+      from: "2026-07-01",
+      to: "2026-07-31",
+      adjustments: {},
+    });
   } finally {
     await unmount();
     restoreFetch();

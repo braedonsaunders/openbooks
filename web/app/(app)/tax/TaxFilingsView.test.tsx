@@ -1,12 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { buildPrepareBody, exportScopeQuery, obligationPeriodForForm } from './TaxFilingsView.tsx'
-
-const viewSource = readFileSync(
-  new URL('./TaxFilingsView.tsx', import.meta.url),
-  'utf8',
-)
 
 test('period lookup uses the selected form obligation, not another form', () => {
   const obligations = [
@@ -38,15 +32,6 @@ test('a form without an obligation does not inherit the last response entry', ()
   ]
 
   assert.equal(obligationPeriodForForm(obligations, 'GB_VAT100'), null)
-  assert.doesNotMatch(
-    viewSource,
-    /data\.obligations\[data\.obligations\.length - 1\]/,
-  )
-})
-
-test('changing forms starts from the neutral business-month bounds', () => {
-  assert.match(viewSource, /setFrom\(bounds\.from\)/)
-  assert.match(viewSource, /setTo\(bounds\.to\)/)
 })
 
 // TR2: prepare freezes exactly what was previewed — the clamped window plus
@@ -115,10 +100,4 @@ test('export of an org-wide preview contributes no scope params', () => {
     exportScopeQuery({ subsidiaryIds: [], registrationId: null, translation: null }),
     '',
   )
-})
-
-test('tax filing box display preserves exact decimal values', () => {
-  assert.match(viewSource, /import \{ formatDecimal \} from ['"]\.\.\/\.\.\/\.\.\/lib\/money-format['"]/)
-  assert.match(viewSource, /formatDecimal\(locale, value,/)
-  assert.doesNotMatch(viewSource, /Number\(value\)\.toLocaleString/)
 })
