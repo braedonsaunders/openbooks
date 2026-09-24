@@ -493,7 +493,7 @@ export function FormDesigner({
               <div className="mb-2 flex items-center gap-2">
                 <Input value={g.label ?? ''} onChange={(e) => setGroupLabel(gi, e.target.value)} placeholder={t('designer.forms.groupLabel')} className="h-8 flex-1" />
                 {layout.header.groups.length > 1 ? (
-                  <button type="button" onClick={() => removeGroup(gi)} className="text-slate-400 hover:text-red-600">
+                  <button type="button" onClick={() => removeGroup(gi)} aria-label={tCommon('actions.delete')} className="text-slate-400 hover:text-red-600">
                     <Trash2 size={15} />
                   </button>
                 ) : null}
