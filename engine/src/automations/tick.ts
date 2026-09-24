@@ -1,13 +1,13 @@
 import { sql, type SQL } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
-import { db, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, schema, withBypassContext, withOrg } from "../platform/db.ts";
 import { addCalendarDays } from "../platform/business-date.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
 import { schedulerOutboxBackoffMs } from "../scheduling/outbox.ts";
 import { lastCronOccurrenceBetween } from "../flows/scheduled.ts";
 import { executeAutomation } from "./execute.ts";
 import { automationsFeatureOn } from "./services.ts";
-import { parseAutomationTrigger, type AutomationTrigger } from "./triggers.ts";
+import { invalidScheduleCronReason, parseAutomationTrigger, type AutomationTrigger } from "./triggers.ts";
 
 /**
  * HR-16 automation tick — schedule, date_relative, and queued-event firing.
@@ -135,9 +135,9 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
   };
   await withBypassContext(async () => {
     const automations = await db.execute<{
-      id: string; orgId: string; name: string; trigger: unknown; createdAt: string; lastRunAt: string | null;
+      id: string; orgId: string; name: string; trigger: unknown; version: number; createdAt: string; lastRunAt: string | null;
     }>(sql`
-      select id, org_id as "orgId", name, trigger,
+      select id, org_id as "orgId", name, trigger, version,
              created_at as "createdAt", last_run_at as "lastRunAt"
         from automations where status = 'enabled'
     `);
@@ -185,23 +185,76 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
   return summary;
 }
 
+/**
+ * Durable evidence for a stored schedule that can never fire (a row saved
+ * before save-time cron validation, or written around the service): a failed
+ * run row carrying the named refusal, the recipe parked in error status
+ * until fixed, and a notification to the publisher — the same three objects
+ * the executor writes for a failed firing (the house attention path, no
+ * second system). The cursor does NOT advance and the error status removes
+ * the row from the enabled scan, so this records once, never once per tick.
+ */
+async function recordInvalidScheduleCron(
+  automation: { id: string; orgId: string; name: string; version: number },
+  reason: string,
+): Promise<void> {
+  // The publisher attributes the failure: without an authorized publisher
+  // there is nobody to attribute or notify, so this throws into the tick's
+  // pre-claim refusal path (counted, with the remedy) instead of recording
+  // an ownerless failure.
+  const actorId = await tickActorFor(automation);
+  const fingerprint = "schedule:invalid-cron";
+  await db.execute(sql`
+    insert into automation_runs
+      (org_id, automation_id, version, trigger_payload, subject_kind, subject_id,
+       status, started_at, finished_at, error, steps, trigger_fingerprint, created_by)
+    values (${automation.orgId}, ${automation.id}, ${automation.version},
+            ${JSON.stringify({ kind: "schedule", invalidCron: true })}::jsonb,
+            null, null, 'failed', now(), now(),
+            ${JSON.stringify({ message: reason })}::jsonb,
+            ${JSON.stringify([{ index: 1, kind: "schedule", status: "failed", error: reason }])}::jsonb,
+            ${fingerprint}, ${actorId})
+    on conflict (org_id, automation_id, subject_kind, subject_id, trigger_fingerprint) do nothing
+  `);
+  // ON CONFLICT DO NOTHING here is the single-record guard: the error
+  // status below normally removes the row from the enabled scan after the
+  // first recording, and the conflict key makes even a raced re-record
+  // converge on the one failed run instead of a row per tick.
+  await db.execute(sql`
+    update automations set status = 'error', error_message = ${reason}, updated_at = now()
+     where id = ${automation.id} and org_id = ${automation.orgId}
+  `);
+  await db.insert(schema.notifications).values({
+    orgId: automation.orgId,
+    userId: actorId,
+    kind: "automation_error",
+    title: `Automation '${automation.name}' failed`,
+    body: reason,
+    href: "/admin/automations",
+  });
+}
+
 async function fireSchedule(
-  automation: { id: string; orgId: string; name: string; createdAt: string; lastRunAt: string | null },
+  automation: { id: string; orgId: string; name: string; version: number; createdAt: string; lastRunAt: string | null },
   trigger: Extract<AutomationTrigger, { kind: "schedule" }>,
   now: Date,
 ): Promise<{ fired: boolean; failed: boolean }> {
+  // 'Invalid cron' is a named failure state, never 'not due': the
+  // occurrence function answers null for an unparseable cron exactly as it
+  // does for a schedule with nothing due, so the distinction is made HERE,
+  // explicitly, with the same parser — before evaluation runs.
+  const cronReason = invalidScheduleCronReason(trigger.cron, trigger.timezone);
+  if (cronReason) {
+    await recordInvalidScheduleCron(automation, cronReason);
+    return { fired: false, failed: true };
+  }
   const after = automation.lastRunAt ? new Date(automation.lastRunAt) : new Date(automation.createdAt);
   // The flows scheduler's own occurrence function (same (after, now]
   // window, same catch-up-to-one semantics) — cron semantics reused,
   // cursor per automation row. flow_scheduled_occurrences rows are FK-bound
   // to flows graph nodes and cannot host non-graph recipes without shadow
   // flows, so the cursor lives on the automation row instead.
-  let occurrence: Date | null;
-  try {
-    occurrence = lastCronOccurrenceBetween(trigger.cron, after, now, trigger.timezone);
-  } catch {
-    throw new Error(`schedule trigger has an invalid cron '${trigger.cron}' — fix the trigger and save again`);
-  }
+  const occurrence = lastCronOccurrenceBetween(trigger.cron, after, now, trigger.timezone);
   if (!occurrence) return { fired: false, failed: false };
   const result = await executeAutomation({
     orgId: automation.orgId,
