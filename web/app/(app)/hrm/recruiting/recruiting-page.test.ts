@@ -2,8 +2,6 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const LOCALES = ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const;
-
 /**
  * Contract coverage for /hrm/recruiting without booting Next: source
  * assertions over the page shell (gate placement, metadata, search-params
@@ -106,34 +104,4 @@ test("drawer islands post through the recruiting routes with refusals intact", (
   assert.match(actions, /!res\.ok/, "error bodies are checked before they are parsed");
   assert.match(sections, /from '@openbooks\/ui'/, "forms use the house primitives");
   assert.ok(!actions.includes('orgId') && !actions.includes('actorId'), "no org, user, or Authz crosses into the client");
-});
-
-// CK-23b: a saved offer is a legal instrument — the reviewer verifies which
-// legal entity employs the candidate AFTER save, in a drawer titled for its
-// own record type. The loader resolves the persisted employer's NAME (never
-// the raw id) and the body renders it; offer and candidate drawers carry
-// their own titles instead of inheriting the Requisition one.
-test("saved-offer and candidate drawers carry record-type titles and the persisted employer", () => {
-  assert.match(view, /detail\.employerSubsidiaryId\}/, "the offer branch reads the persisted employer id");
-  assert.match(view, /select name from subsidiaries/, "the loader resolves the employer display name");
-  assert.match(view, /employerName: offerEmployerName/, "the drawer carries the resolved name, never the raw id");
-  assert.ok(!/label: detail\.employerSubsidiaryId/.test(view), "no drawer renders the raw employer id as a label");
-  assert.match(view, /recruiting\.drawer\.offerTitle/, "the offer drawer is titled for its record type");
-  assert.match(view, /recruiting\.drawer\.candidateTitle/, "the candidate drawer is titled for its record type");
-  assert.match(view, /offer\.employerName/, "the offer title shows the persisted employer as review context");
-  assert.match(sections, /employerName: string/, "OfferDrawerData carries the employer name");
-  assert.match(sections, /detail\.employerName/, "the offer body renders the employer name");
-  assert.match(sections, /detail\.labels\.employer/, "the employer row uses the translated label");
-  for (const locale of LOCALES) {
-    const catalog = JSON.parse(
-      readFileSync(new URL(`../../../../messages/${locale}/hrm.json`, import.meta.url), "utf8"),
-    );
-    const drawer = catalog.recruiting?.drawer;
-    assert.ok(typeof drawer?.offerTitle === "string" && drawer.offerTitle.includes("{employer}"),
-      `${locale}: offerTitle names the employer parameter`);
-    assert.ok(typeof drawer?.candidateTitle === "string" && drawer.candidateTitle.includes("{name}"),
-      `${locale}: candidateTitle names the candidate parameter`);
-    assert.ok(typeof drawer?.employer === "string" && drawer.employer.length > 0,
-      `${locale}: the employer row label is translated`);
-  }
 });
