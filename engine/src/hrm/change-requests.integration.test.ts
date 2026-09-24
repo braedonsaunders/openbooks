@@ -775,6 +775,38 @@ test("draft edits bump the revision and move the digest; submit freezes both", {
   });
 });
 
+// OM-19: the drawer re-sends the stored payload on submit-for-approval
+// without touching a field. That re-send used to bump request_revision on a
+// touch-only row, the 0185 guard refused it, and the PATCH 500'd — so the
+// submit POST never ran and the request sat at Draft revision 1. An
+// unchanged canonical payload is now a touch: no write, no bump, and the
+// submit that follows lands.
+test("an unchanged draft edit is a touch: no revision bump, submit still works", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    await seedFlow(h.org.orgId, h.approver1Id);
+    const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const payload = { kind: "hire", status: "offered", effectiveFrom: "2026-09-01" };
+    const draft = await createChangeRequestDraft({
+      orgId: h.org.orgId, actorId: h.submitterId, employmentId,
+      payload, action: "other", reasonCode: "correction",
+    });
+    assert.equal(draft.requestRevision, 1);
+    const touched = await updateChangeRequestPayload({
+      orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, payload,
+    });
+    assert.equal(touched.requestRevision, 1, "an unchanged edit never moves the revision");
+    assert.equal(touched.payloadDigest, draft.payloadDigest, "an unchanged edit never rewrites the digest");
+    const stored = await getChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id });
+    assert.equal(stored.requestRevision, 1, "read back from storage: still revision 1");
+    const submitted = await submitChangeRequest({
+      orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id,
+      reason: "annual correction", action: "other", reasonCode: "correction",
+    });
+    assert.equal(submitted.status, "pending_approval", "the submit lands after the untouched save");
+    assert.equal(await requestStatus(draft.id), "pending_approval");
+  });
+});
+
 test("reads are org-scoped and employment-gated", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approver1Id);

@@ -81,6 +81,47 @@ export class HrmChangeRequestError extends Error {
   }
 }
 
+/**
+ * Canonical payload text for change detection: objects with recursively
+ * sorted keys, so key order (which jsonb IS NOT DISTINCT FROM ignores)
+ * never reads as an edit. An unchanged canonical payload is a touch, not
+ * an edit — the revision stays put.
+ */
+function canonicalPayloadText(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalPayloadText).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPayloadText(entry)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/** Walk the driver-error cause chain for a Postgres failure. */
+function dbFault(error: unknown): { code?: string; message?: string } {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current !== null && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; message?: string; cause?: unknown };
+    if (candidate.code !== undefined) return { code: candidate.code, message: candidate.message };
+    current = candidate.cause;
+  }
+  return {};
+}
+
+/**
+ * Guard-trigger refusals (P0001 raise_exception) arrive as driver errors —
+ * map them to named domain refusals with the trigger's message (and remedy)
+ * intact, never a 500 'internal error'.
+ */
+function mapGuardRefusal(error: unknown): never {
+  const fault = dbFault(error);
+  if (typeof fault.message === "string" && fault.code === "P0001" && fault.message.startsWith("HRM change request")) {
+    throw new HrmChangeRequestError(/revision/i.test(fault.message) ? "STALE_REVISION" : "BAD_STATE", fault.message);
+  }
+  throw error;
+}
+
 // --- Payload validation (zod; pure, unit-tested without a database) --------
 
 const EMPLOYMENT_STATUSES = ["offered", "active", "on_leave", "suspended", "terminated"] as const;
@@ -718,17 +759,30 @@ export async function updateChangeRequestPayload(
       );
     }
     await assertKindPreconditions(db, orgId, current.employment_id, payload);
+    // An unchanged canonical payload is a touch, not an edit: the 0185
+    // guard refuses a revision bump without a draft edit, so skip the write
+    // and hand back the stored row — the drawer re-sends the stored payload
+    // on submit-for-approval without touching a field.
+    if (
+      current.payload_schema_version === PAYLOAD_SCHEMA_VERSION &&
+      canonicalPayloadText(payload) === canonicalPayloadText(current.payload)
+    ) {
+      return toDTO(current);
+    }
     // request_revision moves by exactly one with a draft edit; the digest is
     // recomputed by the guard trigger from the new payload.
-    const updated = (await db.execute<RequestRow>(sql`
-      update hrm_employment_change_requests
-         set payload = ${JSON.stringify(payload)}::jsonb,
-             payload_schema_version = ${PAYLOAD_SCHEMA_VERSION},
-             request_revision = ${current.request_revision + 1},
-             updated_by = ${actorId}, updated_at = now()
-       where org_id = ${orgId} and id = ${requestId}
-      returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    const updated = await db
+      .execute<RequestRow>(sql`
+        update hrm_employment_change_requests
+           set payload = ${JSON.stringify(payload)}::jsonb,
+               payload_schema_version = ${PAYLOAD_SCHEMA_VERSION},
+               request_revision = ${current.request_revision + 1},
+               updated_by = ${actorId}, updated_at = now()
+         where org_id = ${orgId} and id = ${requestId}
+        returning ${REQUEST_COLUMNS}
+      `)
+      .then((result) => result.rows[0])
+      .catch((error: unknown): RequestRow => mapGuardRefusal(error));
     if (!updated) {
       throw new HrmChangeRequestError(
         "REFUSED",
