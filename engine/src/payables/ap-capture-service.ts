@@ -847,24 +847,34 @@ export async function materializeCapture(input: {
     // bill (web/lib/order-cycle.ts) — the bill is the order's bill, so AP
     // aging lands in the order's legal entity and currency. The conflict
     // refusal above runs first, so a null capture currency takes the order's.
-    let subsidiaryId: string | null;
+    // The bill's entity resolves the same way with or without an order: a
+    // null-entity purchase order names nothing, so it shares the unmatched
+    // resolution (single-entity root default, multi-entity refusal) instead
+    // of inserting a NULL-subsidiary draft that returns success.
+    let subsidiaryId = company.subsidiary_id;
+    if (!subsidiaryId) {
+      throw new CaptureMaterializationError("The company has no active root subsidiary");
+    }
+    const entityCount = (await tx.execute<{ n: number }>(sql`
+      select count(*)::int as n from subsidiaries
+       where org_id = ${input.orgId} and is_active and not is_elimination
+    `)).rows[0]?.n ?? 0;
+    const multiEntity = entityCount > 1;
     let currency: string | null | undefined;
     if (poCurrency !== undefined) {
-      subsidiaryId = poSubsidiaryId ?? null;
       currency = poCurrency;
-    } else {
-      subsidiaryId = company.subsidiary_id;
-      if (!subsidiaryId) {
-        throw new CaptureMaterializationError("The company has no active root subsidiary");
+      if (poSubsidiaryId) {
+        subsidiaryId = poSubsidiaryId;
+      } else if (multiEntity) {
+        throw new CaptureMaterializationError(
+          "The purchase order has no subsidiary — set it on the purchase order before creating a draft",
+        );
       }
+    } else {
       // No order names the entity: in a single-entity org the root is the
       // only answer, but in a multi-entity org a silent root default books
       // the bill to the wrong legal entity — refuse and name the remedy.
-      const entityCount = (await tx.execute<{ n: number }>(sql`
-        select count(*)::int as n from subsidiaries
-         where org_id = ${input.orgId} and is_active and not is_elimination
-      `)).rows[0]?.n ?? 0;
-      if (entityCount > 1) {
+      if (multiEntity) {
         throw new CaptureMaterializationError(
           "Cannot determine the billing entity for this capture in a multi-entity organization — " +
             "match it to a purchase order in the right subsidiary before creating a draft",
