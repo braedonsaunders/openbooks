@@ -334,7 +334,6 @@
     "web/lib/report-definition-export-calendar.test.ts": 3,
     "web/lib/report-drill.test.ts": 1,
     "web/lib/report-registers-book.integration.test.ts": 2,
-    "web/lib/report-run.test.ts": 1,
     "web/lib/reports-posted.test.ts": 2,
     "web/lib/security-headers.test.ts": 2,
     "web/lib/statement-export-calendar.test.ts": 4
