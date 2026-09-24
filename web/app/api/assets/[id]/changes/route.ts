@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import {
+  lockScopeRow,
+  ScopeNotFoundError,
+} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { proposeAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardFeaturePermission } from "@/lib/feature-gates";
@@ -93,58 +97,67 @@ export async function GET(
   if (!isUuid(id))
     return NextResponse.json({ error: "invalid asset" }, { status: 422 });
   const orgId = gate.user.orgId;
-  const asset = (
-    await db.execute<{ subsidiary_id: string }>(
-      sql`select subsidiary_id from fixed_assets where org_id=${orgId} and id=${id}`,
-    )
-  ).rows[0];
-  if (
-    !asset ||
-    (gate.allowedSubsidiaryIds &&
-      !gate.allowedSubsidiaryIds.has(asset.subsidiary_id))
-  )
-    return NextResponse.json({ error: "asset not found" }, { status: 404 });
-  const subsidiaries = (
-    await db.execute<{
-      id: string;
-      name: string;
-      base_currency: string;
-      is_elimination: boolean;
-    }>(
-      sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`,
-    )
-  ).rows.filter(
-    (s) => !gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(s.id),
-  );
-  const books = (
-    await db.execute<{ id: string; name: string }>(
-      sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`,
-    )
-  ).rows;
-  const groupBooks = (
-    await db.execute<{ book_id: string; group_currency: string }>(
-      sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`,
-    )
-  ).rows;
-  const groupScope = (
-    await db.execute<{ elimination_subsidiary_id: string }>(
-      sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`,
-    )
-  ).rows;
-  if (
-    gate.allowedSubsidiaryIds &&
-    groupScope.some(
-      (s) => !gate.allowedSubsidiaryIds!.has(s.elimination_subsidiary_id),
-    )
-  )
-    return NextResponse.json(
-      {
-        error:
-          "this asset change includes a group entity outside your authorization",
-      },
-      { status: 403 },
-    );
-  return NextResponse.json({ subsidiaries, books, groupBooks });
+  try {
+    const result = await db.transaction(async (tx) => {
+      // Keep the owner check and every dependent read under one asset lock.
+      await lockScopeRow(
+        tx,
+        orgId,
+        "fixed_asset",
+        id,
+        gate.allowedSubsidiaryIds,
+        "share",
+      );
+      const subsidiaries = (
+        await tx.execute<{
+          id: string;
+          name: string;
+          base_currency: string;
+          is_elimination: boolean;
+        }>(
+          sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`,
+        )
+      ).rows.filter(
+        (s) => !gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(s.id),
+      );
+      const books = (
+        await tx.execute<{ id: string; name: string }>(
+          sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`,
+        )
+      ).rows;
+      const groupBooks = (
+        await tx.execute<{ book_id: string; group_currency: string }>(
+          sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`,
+        )
+      ).rows;
+      const groupScope = (
+        await tx.execute<{ elimination_subsidiary_id: string }>(
+          sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`,
+        )
+      ).rows;
+      if (
+        gate.allowedSubsidiaryIds &&
+        groupScope.some(
+          (s) => !gate.allowedSubsidiaryIds!.has(s.elimination_subsidiary_id),
+        )
+      )
+        return { deniedGroupScope: true as const };
+      return { subsidiaries, books, groupBooks };
+    });
+    if ("deniedGroupScope" in result)
+      return NextResponse.json(
+        {
+          error:
+            "this asset change includes a group entity outside your authorization",
+        },
+        { status: 403 },
+      );
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError)
+      return NextResponse.json({ error: "asset not found" }, { status: 404 });
+    throw error;
+  }
 }
 export async function POST(
   req: Request,

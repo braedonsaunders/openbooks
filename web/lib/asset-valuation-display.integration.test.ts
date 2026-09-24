@@ -75,7 +75,7 @@ for(const scenario of cases){
      expectedValue='1000.0000';
     }
    }
-   const detail=await loadAsset(assetId,org.orgId);
+   const detail=await loadAsset(assetId,org.orgId,{allowedSubsidiaryIds:null});
    assert.ok(detail);
    assert.equal(detail.totals.netBookValue,expectedValue,'current primary-book carrying amount');
    assert.equal(toUnits(detail.totals.accumulated),toUnits(expectedAccumulated),'current accumulated balance');
@@ -84,7 +84,7 @@ for(const scenario of cases){
    if(scenario==='dated reversal')assert.deepEqual(detail.schedule.map(line=>line.netBookValue),['720.0000','817.7778'],'July retains its impaired 80 charge; August allocates restored 920 over nine remaining months');
    if(scenario==='alternate book'){
     assert.equal(detail.schedule.find(line=>line.bookId===org.bookId)?.netBookValue,'700.0000');
-    const alternate=await loadAsset(assetId,org.orgId,{bookId:alternateId});
+    const alternate=await loadAsset(assetId,org.orgId,{allowedSubsidiaryIds:null,bookId:alternateId});
     assert.ok(alternate);
     assert.equal(alternate.totals.netBookValue,'700.0000');
     assert.equal(alternate.schedule[0]?.netBookValue,'900.0000','primary-book impairment must not change another book');
@@ -106,11 +106,28 @@ test('asset detail valuation: dated reversal retains posted July and restores cu
   await reverseAssetLifecycleEvent(org.orgId,await eventFor(org.orgId,impairment.entryId),{actorId,date:'2026-08-01',reason:'Correct the impairment after July depreciation'});
   for(let i=0;i<2;i++) {
    await buildSchedule(assetId,org.orgId,actorId,org.bookId);
-   const detail=await loadAsset(assetId,org.orgId);
+   const detail=await loadAsset(assetId,org.orgId,{allowedSubsidiaryIds:null});
    assert.ok(detail);
    assert.equal(detail.totals.netBookValue,'900.0000');
    assert.deepEqual(detail.schedule.map(line=>line.netBookValue),['800.0000','800.0000']);
    assert.deepEqual((await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} and posted_amount is not null`)).rows,history);
   }
+ } finally {await dropScratchOrg(org.orgId);}
+});
+
+test('asset detail loader returns no payload after the asset moves outside the caller scope',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+ const org=await createScratchOrg();
+ try {
+  const {assetId}=await seedAsset(org);
+  const otherSubsidiary=randomUUID();
+  await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+    values(${otherSubsidiary},${org.orgId},${org.subsidiaryId},'Hidden asset owner','CAD','CA')`);
+  await db.execute(sql`update fixed_assets set subsidiary_id=${otherSubsidiary}
+    where id=${assetId} and org_id=${org.orgId}`);
+
+  const hidden=await loadAsset(assetId,org.orgId,{allowedSubsidiaryIds:new Set([org.subsidiaryId])});
+  assert.equal(hidden,null,'the locked loader must not return aggregates for a reassigned asset');
+  const visible=await loadAsset(assetId,org.orgId,{allowedSubsidiaryIds:new Set([otherSubsidiary])});
+  assert.equal(visible?.asset.id,assetId,'the new owner retains normal detail access');
  } finally {await dropScratchOrg(org.orgId);}
 });

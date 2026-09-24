@@ -4,6 +4,7 @@ import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { resolveAssetAccounts } from '@openbooks/engine/src/assets/depreciation.ts'
 import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
  * Asset payload for the flyout: the asset row, its category, the resolved
@@ -182,14 +183,21 @@ function lifecycleValue(rows: LifecycleValueRow[], bookId?: string, through?: st
   return { delta, disposed: disposals > 0 }
 }
 
-type AssetReadOptions = { bookId?: string | null; query?: string; page?: number; perPage?: number }
+type AssetReadOptions = {
+  allowedSubsidiaryIds: ReadonlySet<string> | null
+  bookId?: string | null
+  query?: string
+  page?: number
+  perPage?: number
+}
 
 export async function loadAsset(
   id: string,
   orgId: string,
-  options: AssetReadOptions = {},
+  options: AssetReadOptions,
 ): Promise<AssetPayload | null> {
-  // Lifecycle writers lock this parent before changing journals and schedules.
+  // The scope check and parent lock must be one operation: a post-load check
+  // can disclose totals after a concurrent rehome changes the asset's owner.
   return db.transaction((tx) => loadAssetWithRunner(tx, id, orgId, options))
 }
 
@@ -197,8 +205,14 @@ export async function loadAssetWithRunner(
   tx: SqlExecutor,
   id: string,
   orgId: string,
-  options: AssetReadOptions = {},
+  options: AssetReadOptions,
 ): Promise<AssetPayload | null> {
+  try {
+    await lockScopeRow(tx, orgId, 'fixed_asset', id, options.allowedSubsidiaryIds, 'share')
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return null
+    throw error
+  }
   const assetRes = await tx.execute<AssetRow>(sql`
     select fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from fixed_assets where id = ${id} and org_id = ${orgId} for share
