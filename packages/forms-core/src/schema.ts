@@ -203,6 +203,10 @@ export const fieldValidationSchema = z
     required: z.boolean().optional(),
     min: z.number().min(-1_000_000_000).max(1_000_000_000).optional(),
     max: z.number().min(-1_000_000_000).max(1_000_000_000).optional(),
+    // Declared decimal scale for number/currency/percentage fields: a value
+    // whose exact decimal expansion carries more fraction digits is refused
+    // rather than silently rounded. Currency defaults to 2 when undeclared.
+    scale: z.number().int().min(0).max(12).optional(),
     minLength: z.number().int().nonnegative().max(100_000).optional(),
     maxLength: z.number().int().nonnegative().max(100_000).optional(),
     pattern: z.string().max(256).optional(),
@@ -283,6 +287,8 @@ const NUMERIC_VALIDATION_FIELD_TYPES = new Set<FieldType>([
   'percentage',
   'rating',
 ])
+/** Field types whose values may carry a declared decimal scale. */
+const DECIMAL_SCALE_FIELD_TYPES = new Set<FieldType>(['number', 'currency', 'percentage'])
 const TEXT_VALIDATION_FIELD_TYPES = new Set<FieldType>(['text', 'long_text', 'date', 'datetime'])
 
 export function textValidationHardLimit(type: FieldType): number | null {
@@ -494,6 +500,12 @@ export function lintFormSchema(schema: FormSchemaV1): SchemaIssue[] {
           issues.push({
             path: [...fieldBasePath, 'validation'],
             message: `${field.type} fields cannot define numeric min or max validation`,
+          })
+        }
+        if (validation.scale !== undefined && !DECIMAL_SCALE_FIELD_TYPES.has(field.type)) {
+          issues.push({
+            path: [...fieldBasePath, 'validation', 'scale'],
+            message: `${field.type} fields cannot define a decimal scale`,
           })
         }
         if (
