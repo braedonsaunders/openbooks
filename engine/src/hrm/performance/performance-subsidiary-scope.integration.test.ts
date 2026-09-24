@@ -678,10 +678,12 @@ test("fulfilling a request twice returns the one fulfilment", { skip: !DB }, asy
 test("a restricted HR retracts feedback only inside their legal-entity scope", { skip: !DB }, async () => {
   const h = await setupHarness();
   try {
-    const onB = await writeFeedback({
-      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.b.employmentId,
-      kind: "feedback", visibility: "manager_and_subject", body: "B-side note",
-    });
+    await assert.rejects(writeFeedback({
+      orgId: h.org.orgId, actorId: h.hrA, subjectEmploymentId: h.b.employmentId,
+      kind: "praise", visibility: "public", body: "Out-of-scope public praise",
+    }), (e: unknown) => e instanceof HrmPerformanceError && e.code === "NOT_FOUND");
+    assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from hrm_feedback where org_id = ${h.org.orgId} and subject_employment_id = ${h.b.employmentId} and body = 'Out-of-scope public praise'`)).rows[0]!.n, "0");
+    const onB = await writeFeedback({ orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.b.employmentId, kind: "feedback", visibility: "manager_and_subject", body: "B-side note" });
     // HR-A holds the manage grant but covers A only: the B row answers
     // as missing, never as refused — they cannot read it, so from their
     // side there is nothing to retract.
@@ -698,20 +700,10 @@ test("a restricted HR retracts feedback only inside their legal-entity scope", {
     // the row is in scope and readable, so the refusal says retracted,
     // never missing.
     await retractFeedback({ orgId: h.org.orgId, actorId: h.hrB, id: onB.id });
-    await assert.rejects(
-      retractFeedback({ orgId: h.org.orgId, actorId: h.hrB, id: onB.id }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "BAD_STATE");
-        assert.match(e.message, /already retracted/);
-        return true;
-      },
-    );
+    await assert.rejects(retractFeedback({ orgId: h.org.orgId, actorId: h.hrB, id: onB.id }),
+      (e: unknown) => e instanceof HrmPerformanceError && e.code === "BAD_STATE" && /already retracted/.test(e.message));
     // In-scope retraction by the restricted HR works on their own side.
-    const onA = await writeFeedback({
-      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId,
-      kind: "feedback", visibility: "manager_and_subject", body: "A-side note",
-    });
+    const onA = await writeFeedback({ orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId, kind: "feedback", visibility: "manager_and_subject", body: "A-side note" });
     await retractFeedback({ orgId: h.org.orgId, actorId: h.hrA, id: onA.id });
   } finally {
     await dropScratchOrg(h.org.orgId);

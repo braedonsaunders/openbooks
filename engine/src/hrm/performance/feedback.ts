@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { lockScopeRow, ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import {
   loadApprovalPerson,
@@ -387,14 +388,24 @@ export async function writeFeedback(args: {
     if (!person.partyId) {
       throw new HrmPerformanceError("FORBIDDEN", "your user has no person identity in this organization — ask an administrator to link it before writing feedback");
     }
+    const manageScope = await performanceManageScope(db, orgId, actorId);
     // Any employee with self read (or HR) may write; the subject must exist.
-    if (!(await hasPerformanceManage(db, orgId, actorId))) {
+    if (manageScope === undefined) {
       if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) {
         throw new HrmPerformanceError(
           "FORBIDDEN",
           "writing feedback needs hrm.self.read — ask an administrator to grant it in /admin/roles",
         );
       }
+    }
+    try {
+      await lockScopeRow(db, orgId, "employment", subjectEmploymentId, manageScope ?? null, "share");
+    } catch (error) {
+      if (!(error instanceof ScopeNotFoundError)) throw error;
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "subject employment was not found in this organization — pick the person from the directory",
+      );
     }
     const party = await subjectParty(db, orgId, subjectEmploymentId);
     if (!party) {
@@ -408,7 +419,7 @@ export async function writeFeedback(args: {
     // praise is refused by name (never silently downgraded).
     if (args.kind === "praise" && args.visibility === "public") {
       const settings = await readFeedbackSettings(db, orgId);
-      if (settings.publicPraiseBy === "managers_and_hr" && !(await hasPerformanceManage(db, orgId, actorId))) {
+      if (settings.publicPraiseBy === "managers_and_hr" && manageScope === undefined) {
         const manages = await isManagerOf(db, orgId, actorId, subjectEmploymentId);
         if (!manages) {
           throw new HrmPerformanceError(
