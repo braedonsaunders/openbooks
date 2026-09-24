@@ -41,6 +41,25 @@ test('compileInsightQuery still prefers an explicit output alias for sorts', () 
   assert.match(compiled.sql, /order by 2 desc nulls last/)
 })
 
+test('compileInsightQuery refuses a stale sort reference instead of using the default order', () => {
+  assert.throws(
+    () => compileInsightQuery(
+      {
+        source: 'ledger_lines',
+        measures: [{ agg: 'sum', field: 'credit', alias: 'revenue' }],
+        dimensions: [{ field: 'posting_date', bin: 'month' }],
+        sort: [{ ref: 'deleted_customer_name', dir: 'asc' }],
+      },
+      'org-1',
+      {},
+      '2026-09-18',
+      null,
+      null,
+    ),
+    /sort reference 'deleted_customer_name' no longer resolves/,
+  )
+})
+
 test('compileInsightQuery emits valid SQL for not_in filters', () => {
   const compiled = compileInsightQuery(
     {
