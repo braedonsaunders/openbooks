@@ -98,8 +98,8 @@ export async function runInsightQuery(
   query: InsightQuery,
   orgId: string,
   allowedSubsidiaryIds: readonly string[] | null,
-  labels?: InsightLabelResolver,
-  asOf?: string,
+  labels: InsightLabelResolver | undefined,
+  asOf: string,
   /** Server-owned accounting-book allowlist, resolved by the caller (the
    *  single active primary unless the card scopes or partitions by book).
    *  Undefined leaves book-scoped entities unclamped. */
@@ -110,7 +110,7 @@ export async function runInsightQuery(
 ): Promise<QueryResult> {
   if (allowedSubsidiaryIds === undefined) throw new Error('Insights requires an explicit subsidiary authorization scope')
   const validatedQuery = validateInsightQuery(query)
-  const compiled = compileInsightQuery(validatedQuery, orgId, labels, asOf, allowedSubsidiaryIds, allowedBookIds, entityMap)
+  const compiled = compileInsightQuery(validatedQuery, orgId, labels ?? {}, asOf, allowedSubsidiaryIds, allowedBookIds, entityMap)
   // Fetch one extra row to detect truncation at the cap.
   const capped = Math.min(compiled.limit, INSIGHT_MAX_ROWS)
   const sentinelLimit = capped + 1

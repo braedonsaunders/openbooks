@@ -283,14 +283,14 @@ function resolveMeasure(source: AnalyticsSource, m: QueryMeasure): { expr: strin
 }
 
 /** Compile an InsightQuery into parameterized SQL + the output column plan.
- *  `labels` localizes the display labels baked into the column plan; omitted
- *  hooks fall back to the authored English. */
+ *  `labels` localizes the display labels baked into the column plan; an empty
+ *  resolver falls back to the authored English. */
 export function compileInsightQuery(
   query: InsightQuery,
   orgId: string,
-  labels: InsightLabelResolver = {},
-  asOf = '1970-01-01',
-  allowedSubsidiaryIds: readonly string[] | null = null,
+  labels: InsightLabelResolver,
+  asOf: string,
+  allowedSubsidiaryIds: readonly string[] | null,
   /** Server-owned accounting-book allowlist, resolved by the caller (the
    *  single active primary unless the card scopes or partitions by book).
    *  Shared compileBookScope with the report executor: null/undefined leaves
