@@ -2442,7 +2442,7 @@ async function applyRowLevelSecurity(): Promise<void> {
                 where policy.polrelid = relation.oid
                   and policy.polname = 'sandbox_isolation'
                   and obj_description(policy.oid, 'pg_policy')
-                    = 'openbooks:sandbox_isolation:v1'
+                    = 'openbooks:sandbox_isolation:v2'
              )
            )
       ) as catalog_drift
