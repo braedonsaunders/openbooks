@@ -88,6 +88,13 @@ export class AppInvocationRequestMismatchError extends Error {
   }
 }
 
+export class AppInvocationDisabledError extends Error {
+  readonly name = "AppInvocationDisabledError";
+  constructor() {
+    super("app is disabled or has changed; reload the app before invoking it again");
+  }
+}
+
 class AppInvocationClaimShapeError extends Error {
   readonly name = "AppInvocationClaimShapeError";
 }
@@ -152,6 +159,21 @@ export function deriveClaimNamespaceKey(args: {
       "utf8",
     )
     .digest("hex");
+}
+
+/**
+ * Serialize endpoint work with installation status changes. setAppStatus uses
+ * this organization-wide advisory key before locking the apps row, so a
+ * status transition and an invocation have one stable ordering.
+ */
+export async function lockInstalledAppForInvocation(orgId: string, appId: string, versionId: string | null): Promise<void> {
+  await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`);
+  const app = await db.execute<{ status: string; activeVersionId: string | null }>(sql`
+    select status, active_version_id as "activeVersionId"
+      from apps where org_id = ${orgId} and id = ${appId} for update`);
+  if (app.rows[0]?.status !== "installed" || app.rows[0]?.activeVersionId !== versionId) {
+    throw new AppInvocationDisabledError();
+  }
 }
 
 interface ClaimRow {
@@ -220,6 +242,8 @@ export async function executeAppInvocation(args: {
   operation: string;
   idempotencyKey: string;
   requestHash: string;
+  /** Lock and revalidate app state in the same transaction as every attempt or replay. */
+  authorize?: () => Promise<void>;
   /** The attempt. MUST issue all of its statements through `db` so they join
    * the envelope's pinned tenant transaction. Must not reject except for
    * infrastructure faults. */
@@ -250,6 +274,7 @@ export async function executeAppInvocation(args: {
   // duplicates of the same key via a tenant-scoped advisory try-lock so a
   // loser can neither block a pooled client nor double-run.
   return withOrgTransaction(orgId, async () => {
+    await args.authorize?.();
     const gateName = `${args.operation}|${claimKey}|${actorId}`;
     const gate = await db.execute<{ acquired: boolean }>(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${gateName}, 0)) as acquired`);
