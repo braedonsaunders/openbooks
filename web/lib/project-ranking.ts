@@ -171,6 +171,7 @@ export async function rankProjects(
        where dl.org_id = ${orgId}
          and d.status = 'approved' and d.kind = 'purchase_order'
          and dl.quantity > dl.quantity_billed
+         ${subsidiaryVisibleFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
          and coalesce(dl.project_id, d.project_id) in (select id from scoped)
        group by 1
     ),
