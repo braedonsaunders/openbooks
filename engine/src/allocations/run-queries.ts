@@ -182,12 +182,27 @@ export async function listRuns(
     if (!RUN_STATUSES.includes(filter.status)) fail("validation", `unknown status: ${filter.status}`);
     conds.push(sql`r.status = ${filter.status}`);
   }
-  if (filter.allowedSubsidiaryIds !== undefined && filter.allowedSubsidiaryIds !== null) {
-    const ids = [...filter.allowedSubsidiaryIds];
-    if (ids.length === 0) return { runs: [], total: 0 };
-    conds.push(sql`r.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])`);
-  }
   const where = sql.join(conds, sql` and `);
+  const allowed = filter.allowedSubsidiaryIds;
+  if (allowed !== undefined && allowed !== null && allowed.size === 0) return { runs: [], total: 0 };
+  if (allowed !== undefined && allowed !== null) {
+    // Visibility depends on every subsidiary recorded in the frozen
+    // computation, not only the header pin. Filter before count and paging so
+    // hidden runs cannot leak through totals or displace visible rows.
+    const candidates = await ex.execute<Record<string, unknown>>(sql`
+      select r.*, rule.key as rule_key, rule.name as rule_name
+        from allocation_runs r
+        left join allocation_rules rule on rule.org_id = r.org_id and rule.id = r.rule_id
+       where ${where}
+       order by r.created_at desc`);
+    const visible = candidates.rows.filter((row) =>
+      allocationScopeVisible(allowed, (row.subsidiary_id as string | null) ?? null, row.computation),
+    );
+    return {
+      runs: visible.slice(offset, offset + limit).map(mapRun),
+      total: visible.length,
+    };
+  }
   const rows = await ex.execute<Record<string, unknown>>(sql`
     select r.*, rule.key as rule_key, rule.name as rule_name
       from allocation_runs r
