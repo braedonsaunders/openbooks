@@ -11,7 +11,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { customersHome } = await import('./customers.ts')
@@ -24,7 +24,7 @@ const D = '2026-07-14'
  * subsidiary at 1.35 collects as 135 CAD — never as a raw 100 mixed with
  * unlike currencies.
  */
-test('customer receipt totals convert each receipt at its posting rate', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('customer receipt totals convert each receipt at its posting rate', async () => {
   const org = await withBypass(() => createScratchOrg())
   try {
     await withBypass(async () => {
