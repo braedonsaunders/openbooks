@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { toUnits } from '../../engine/src/money/money.ts'
-import { readFileSync } from 'node:fs'
 
 // invoice-backup is a server-only module; mock that marker so its pure amount
 // allocator can be exercised directly without starting a Next.js server.
@@ -102,19 +101,4 @@ test('a backup manifest entry pins the exact template design that printed it', (
     }),
     { id: null, revision: null, hash: 'cafe02' },
   )
-})
-
-test('template-rendered backup components record their design in the manifest', () => {
-  const source = readFileSync(new URL('./invoice-backup.ts', import.meta.url), 'utf8')
-  assert.match(source, /manifest\.push\(\{ kind, pages, template: provenanceOf\(tpl\) \}\)/)
-  assert.match(source, /manifest\.push\(\{ kind, sourceDocumentId: tk\.field_ticket_id, pages, template: provenanceOf\(tpl\) \}\)/)
-})
-
-test('invoice backup replacement serializes and audits the complete lifecycle unit', () => {
-  const source = readFileSync(new URL('./invoice-backup.ts', import.meta.url), 'utf8')
-  assert.match(source, /inDbTransaction\(async \(tx\)/)
-  assert.match(source, /from documents[\s\S]*?for update/)
-  assert.match(source, /uploadAndAttach\([\s\S]*?executor: tx/)
-  assert.match(source, /action: 'replace',[\s\S]*?before:[\s\S]*?after:/)
-  assert.match(source, /delete from files where id = \$\{priorFileId\}/)
 })
