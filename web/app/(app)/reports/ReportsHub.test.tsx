@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 const React = await import('react')
+// Classic-JSX fallback: the shared tsx cache can serve a classic transform,
+// which resolves bare React from the global scope, not the module scope.
+Object.assign(globalThis, { React })
 const { renderToString } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { ReportsHub } = await import('./ReportsHub')
@@ -39,7 +42,7 @@ function hubHtml() {
   /* eslint-enable react/no-children-prop */
 }
 
-test('UX-12b: card descriptions clamp to two readable lines, never one-line truncate', () => {
+test('card descriptions clamp to two readable lines, never one-line truncate', () => {
   const html = hubHtml()
   const desc = html.match(new RegExp(`<p id="([^"]*)" class="([^"]*)">${LONG_DESC}`))
   assert.ok(desc, 'the full description must render in the card body')
@@ -47,14 +50,14 @@ test('UX-12b: card descriptions clamp to two readable lines, never one-line trun
   assert.doesNotMatch(desc[2]!, /(^|\s)truncate(\s|$)/, 'description must not one-line truncate mid-word')
 })
 
-test('UX-12b: the card title wraps instead of truncating mid-word', () => {
+test('the card title wraps instead of truncating mid-word', () => {
   const html = hubHtml()
   const title = html.match(/<h3 class="([^"]*)">AP aging<\/h3>/)
   assert.ok(title, 'the card title must render')
   assert.doesNotMatch(title[1]!, /(^|\s)truncate(\s|$)/, 'the title must wrap, never truncate')
 })
 
-test('UX-12b: a still-clamped description stays reachable without the title tooltip', () => {
+test('a still-clamped description stays reachable without the title tooltip', () => {
   const html = hubHtml()
   assert.doesNotMatch(html, / title="/, 'the card must not rely on the title tooltip alone')
   const link = html.match(/<a[^>]*aria-describedby="([^"]*)"[^>]*>/)
