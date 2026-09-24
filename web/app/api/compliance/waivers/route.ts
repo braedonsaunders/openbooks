@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
+import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/compliance.ts'
 import { isUuid } from '@/lib/list-params'
 
@@ -130,6 +131,6 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ id, status: 'pending_approval' })
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
+    return complianceWriteFailure(e)
   }
 }

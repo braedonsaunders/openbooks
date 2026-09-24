@@ -5,6 +5,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { nextNumber } from "@openbooks/engine/src/payments/payment-documents.ts";
 import { guardPermission } from '@/lib/authz'
 import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
+import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid, pickString } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
@@ -221,6 +222,6 @@ export async function POST(req: Request) {
       })
     )
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
+    return complianceWriteFailure(e)
   }
 }

@@ -6,6 +6,7 @@ import { sealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { FORM_TYPES, type FormType } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
+import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -134,6 +135,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
     }
   }
 
+  // The class check runs before the write transaction, not inside it: the
+  // catch below maps every unclassified failure to a generic 500, so a
+  // computed refusal raised in there would never reach the operator.
+  if (body.complianceClassId) {
+    const exists = await db.execute(sql`
+      select 1 from compliance_classes
+       where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`)
+    if (exists.rows.length === 0) {
+      return NextResponse.json({ error: 'unknown compliance class' }, { status: 400 })
+    }
+  }
+
   const reason = auditReason(body.reason)
   let notFound = false
   try {
@@ -153,13 +166,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
         return
       }
 
-      if (body.complianceClassId) {
-        const exists = await db.execute(sql`
-          select 1 from compliance_classes
-           where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`)
-        if (exists.rows.length === 0) throw new Error('unknown compliance class')
-      }
-
       const updated = await db.execute<VendorRoleAuditRow>(sql`
         update vendor_roles set
           compliance_class_id = ${body.complianceClassId === undefined ? sql`compliance_class_id` : sql`${body.complianceClassId}::uuid`},
@@ -175,7 +181,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
         where org_id = ${orgId} and party_id = ${partyId}
         returning ${VENDOR_ROLE_AUDIT_COLUMNS}`)
       const after = updated.rows[0]
-      if (!after) throw new Error('this party is not a vendor')
+      // The row was locked by this transaction's own read, so a zero-row
+      // update means it vanished under the lock — still the vendor-missing
+      // refusal, raised through the flag like the pre-lock read.
+      if (!after) {
+        notFound = true
+        return
+      }
 
       // The audit row is immutable at the database layer. Its actor_id and at
       // columns are written by PostgreSQL, while changes.reason and the exact
@@ -189,7 +201,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
     if (notFound) return NextResponse.json({ error: 'this party is not a vendor' }, { status: 404 })
     return NextResponse.json({ partyId })
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'save failed'
-    return NextResponse.json({ error: message }, { status: 400 })
+    return complianceWriteFailure(e)
   }
 }

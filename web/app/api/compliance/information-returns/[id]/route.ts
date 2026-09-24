@@ -11,6 +11,7 @@ import {
 } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
+import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -100,7 +101,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               ${JSON.stringify({ after: body })}::jsonb, ${actorId})`)
     return NextResponse.json({ id })
   } catch (e) {
-    const status = e instanceof InformationReturnError ? e.status : 500
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status })
+    if (e instanceof InformationReturnError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
+    return complianceWriteFailure(e)
   }
 }
