@@ -2,9 +2,9 @@ import { sql } from "drizzle-orm";
 import {
   loadOwnEmploymentIds,
   loadTeamEmploymentIdsForManager,
+  requireAggregateCertificationsManage,
+  requireAggregateCertificationsRead,
   requireEmploymentOrTeamSubject,
-  requireHrmCertificationsManage,
-  requireHrmCertificationsRead,
 } from "../authorization.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
@@ -228,6 +228,49 @@ async function assertEmploymentInOrg(
   }
 }
 
+/**
+ * The employer's legal entity for one employment, loaded on the trusted
+ * runner inside the caller's transaction — never caller input. Null when
+ * the employment is unknown or floats outside any legal entity.
+ */
+async function loadEmploymentEmployer(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+): Promise<string | null> {
+  const rows = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+    select employer_subsidiary_id as "employerSubsidiaryId"
+      from worker_employments
+     where org_id = ${orgId} and id = ${employmentId}
+  `)).rows;
+  return rows[0]?.employerSubsidiaryId ?? null;
+}
+
+/**
+ * Row-level employment check for the HR audience: the employment must
+ * exist AND its employer must sit inside the caller's allowed set (null
+ * = unrestricted). Unknown, cross-org, employer-less, and out-of-scope
+ * employments all refuse with the uniform not-found, so the refusal can
+ * never confirm which half failed. The party lens does not apply here —
+ * qualifications hang off employments, never bare parties.
+ */
+async function assertEmploymentInScope(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+  allowed: Set<string> | null,
+): Promise<void> {
+  const employer = await loadEmploymentEmployer(exec, orgId, employmentId);
+  if (allowed !== null && (employer === null || !allowed.has(employer))) {
+    throw new HrmQualificationError(
+      "The employment record was not found in this organization — qualifications belong to employment records, never to bare parties.",
+    );
+  }
+  if (employer === null) {
+    await assertEmploymentInOrg(exec, orgId, employmentId);
+  }
+}
+
 export interface RecordQualificationInput {
   readonly orgId: string;
   readonly actorId: string;
@@ -252,9 +295,11 @@ export async function recordQualification(
   const issuedOn = requireDate(input.issuedOn, "issuedOn");
   const expiresOn = input.expiresOn === undefined ? undefined : input.expiresOn === null ? null : requireDate(input.expiresOn, "expiresOn");
   return runInCallerTransaction(exec, async (tx) => {
-    await requireHrmCertificationsManage(tx, orgId, actorId);
+    // The grant plus the allowed employer set, resolved on this same
+    // runner so the check and the write below are atomic.
+    const allowed = await requireAggregateCertificationsManage(tx, orgId, actorId);
     await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
-    await assertEmploymentInOrg(tx, orgId, employmentId);
+    await assertEmploymentInScope(tx, orgId, employmentId, allowed);
     const type = await loadTypeRow(tx, orgId, typeId);
     if (!type) {
       throw new HrmQualificationError(
@@ -339,7 +384,7 @@ export async function verifyQualification(
   const actorId = requireId(input.actorId, "actorId");
   const qualificationId = requireId(input.qualificationId, "qualificationId");
   return runInCallerTransaction(exec, async (tx) => {
-    await requireHrmCertificationsManage(tx, orgId, actorId);
+    const allowed = await requireAggregateCertificationsManage(tx, orgId, actorId);
     await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
     const current = await loadLedgerRow(tx, orgId, qualificationId);
     if (!current) {
@@ -347,6 +392,7 @@ export async function verifyQualification(
         "The qualification was not found in this organization — it may belong to another org; refresh the ledger and try again.",
       );
     }
+    await assertEmploymentInScope(tx, orgId, current.employment_id, allowed);
     if (current.status === "revoked") {
       throw new HrmQualificationError(
         "A revoked qualification cannot be verified — record a new qualification once the worker re-qualifies.",
@@ -403,7 +449,7 @@ export async function renewQualification(
   const qualificationId = requireId(input.qualificationId, "qualificationId");
   const issuedOn = requireDate(input.issuedOn, "issuedOn");
   return runInCallerTransaction(exec, async (tx) => {
-    await requireHrmCertificationsManage(tx, orgId, actorId);
+    const allowed = await requireAggregateCertificationsManage(tx, orgId, actorId);
     await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
     const current = await loadLedgerRow(tx, orgId, qualificationId);
     if (!current) {
@@ -411,6 +457,7 @@ export async function renewQualification(
         "The qualification was not found in this organization — it may belong to another org; refresh the ledger and try again.",
       );
     }
+    await assertEmploymentInScope(tx, orgId, current.employment_id, allowed);
     if (current.status === "revoked") {
       throw new HrmQualificationError(
         "A revoked qualification cannot be renewed — record a brand-new qualification once the worker re-qualifies.",
@@ -457,7 +504,7 @@ export async function revokeQualification(
   const qualificationId = requireId(input.qualificationId, "qualificationId");
   const reason = requireText(input.reason, "reason");
   return runInCallerTransaction(exec, async (tx) => {
-    await requireHrmCertificationsManage(tx, orgId, actorId);
+    const allowed = await requireAggregateCertificationsManage(tx, orgId, actorId);
     await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
     const current = await loadLedgerRow(tx, orgId, qualificationId);
     if (!current) {
@@ -465,6 +512,7 @@ export async function revokeQualification(
         "The qualification was not found in this organization — it may belong to another org; refresh the ledger and try again.",
       );
     }
+    await assertEmploymentInScope(tx, orgId, current.employment_id, allowed);
     if (current.status === "revoked") {
       throw new HrmQualificationError("The qualification is already revoked — a second revocation is not recorded.");
     }
@@ -512,14 +560,20 @@ export async function attachEvidence(
         "The qualification was not found in this organization — it may belong to another org; refresh the ledger and try again.",
       );
     }
-    // HR's path first; the person's own pending rows second. Strangers
-    // keep the unchanged not-found shape — no new information leaks.
+    // HR's path first — fenced to the employments inside the caller's
+    // allowed subsidiaries, answering not-found exactly like a missing
+    // row; the person's own pending rows second, structurally scoped as
+    // before. Strangers keep the unchanged not-found shape.
     let allowed = false;
     try {
-      await requireHrmCertificationsManage(tx, orgId, actorId);
+      const scope = await requireAggregateCertificationsManage(tx, orgId, actorId);
+      await assertEmploymentInScope(tx, orgId, current.employment_id, scope);
       allowed = true;
     } catch (error) {
-      if (!(error instanceof HrmAuthorizationError)) throw error;
+      // A failed HR fence (no grant, or an out-of-scope row) still reaches
+      // the person path below, so holders always act on their own pending
+      // rows; anything else stays refused with the unchanged shapes.
+      if (!(error instanceof HrmAuthorizationError) && !(error instanceof HrmQualificationError)) throw error;
       const own = await loadOwnEmploymentIds(tx, orgId, actorId);
       allowed = own.includes(current.employment_id) && current.status === "pending_verification";
     }
@@ -564,9 +618,12 @@ export async function listQualifications(
   const actorId = requireId(input.actorId, "actorId");
   await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
   let employmentIds: string[] | null = null;
+  // The HR audience's allowed employer set (null = unrestricted); undefined
+  // on the self/team path, which stays structurally scoped as before.
+  let hrScope: Set<string> | null | undefined;
   if (input.scopeAll !== false) {
     try {
-      await requireHrmCertificationsRead(exec, orgId, actorId);
+      hrScope = await requireAggregateCertificationsRead(exec, orgId, actorId);
     } catch (error) {
       // Only authorization denials fall through to self/team scope —
       // infrastructure failures propagate untouched.
@@ -583,16 +640,37 @@ export async function listQualifications(
       // report resolves and a stranger keeps the employment refusal.
       await requireEmploymentOrTeamSubject(exec, orgId, actorId, wanted);
     }
+    if (hrScope !== undefined) {
+      // The HR audience names its employment explicitly, so prove that
+      // employment's employer inside the allowed set — an out-of-scope
+      // employment answers as if it held nothing.
+      const employer = await loadEmploymentEmployer(exec, orgId, wanted);
+      if (hrScope !== null && (employer === null || !hrScope.has(employer))) {
+        return [];
+      }
+    }
     employmentIds = [wanted];
   }
+  // The HR audience's unfiltered read carries the employer predicate on
+  // the employment join; every other path already names its employments.
+  // An empty allowed set builds '{}' so a grant with no subsidiaries
+  // reads nothing rather than everything.
+  const hrScopeIds = hrScope instanceof Set ? `{${[...hrScope].join(",")}}` : null;
+  const hrRestricted = employmentIds === null && hrScopeIds !== null;
   const rows = (await exec.execute<LedgerRow>(sql`
     select ${LEDGER_COLS}
       from hrm_worker_qualifications q
       join hrm_qualification_types t
         on t.org_id = q.org_id and t.id = q.type_id
+      ${hrRestricted
+        ? sql`join worker_employments we on we.org_id = q.org_id and we.id = q.employment_id`
+        : sql``}
      where q.org_id = ${orgId}::uuid
        and (${employmentIds === null}::boolean
             or q.employment_id in (select jsonb_array_elements_text(${JSON.stringify(employmentIds ?? [])}::jsonb)::uuid))
+       ${hrRestricted
+         ? sql`and we.employer_subsidiary_id = any(${hrScopeIds}::uuid[])`
+         : sql``}
        and (${input.typeId ?? null}::uuid is null or q.type_id = ${input.typeId ?? null}::uuid)
      order by q.expires_on nulls last, q.issued_on desc
   `)).rows;
@@ -644,7 +722,11 @@ export async function loadQualification(
   const current = await loadLedgerRow(exec, orgId, qualificationId);
   if (!current) return null;
   try {
-    await requireHrmCertificationsRead(exec, orgId, actorId);
+    const hrScope = await requireAggregateCertificationsRead(exec, orgId, actorId);
+    // The HR audience proves the row's employer inside the allowed set —
+    // an out-of-scope row answers the same null as a missing one.
+    const employer = await loadEmploymentEmployer(exec, orgId, current.employment_id);
+    if (hrScope !== null && (employer === null || !hrScope.has(employer))) return null;
   } catch (error) {
     if (!(error instanceof HrmAuthorizationError)) throw error;
     const allowed = await selfAndTeamEmploymentIds(exec, orgId, actorId);
@@ -662,7 +744,16 @@ export async function listQualificationEvents(
   const qualificationId = requireId(input.qualificationId, "qualificationId");
   await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
   try {
-    await requireHrmCertificationsRead(exec, orgId, actorId);
+    const hrScope = await requireAggregateCertificationsRead(exec, orgId, actorId);
+    // The HR audience proves the row's employer inside the allowed set —
+    // an out-of-scope row refuses exactly like a missing one.
+    const row = await loadLedgerRow(exec, orgId, qualificationId);
+    const employer = row ? await loadEmploymentEmployer(exec, orgId, row.employment_id) : null;
+    if (!row || (hrScope !== null && (employer === null || !hrScope.has(employer)))) {
+      throw new HrmQualificationError(
+        "The qualification was not found in this organization — it may belong to another org; refresh the ledger and try again.",
+      );
+    }
   } catch (error) {
     if (!(error instanceof HrmAuthorizationError)) throw error;
     const current = await loadLedgerRow(exec, orgId, qualificationId);
