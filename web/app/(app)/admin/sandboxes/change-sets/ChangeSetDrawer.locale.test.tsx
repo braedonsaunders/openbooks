@@ -97,7 +97,7 @@ const DETAIL = {
       id: "item-1",
       tableName: "billing_settings",
       targetId: "r1",
-      op: "update",
+      op: "update" as const,
       payload: { name: "Standard" },
       expectedBefore: null,
       baseCaptured: false,
