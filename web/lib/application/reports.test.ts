@@ -1,19 +1,35 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-const SOURCE = readFileSync(new URL("./reports.ts", import.meta.url), "utf8");
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
+    return next(specifier, context);
+  },
+});
 
-test("report run reuses the hub resolver and refuses a restricted subsidiary scope", () => {
-  assert.match(SOURCE, /resolveDefinitionToExportData/);
-  assert.match(SOURCE, /withReportAuthz/);
-  assert.match(SOURCE, /canAccessReportDefinition/);
-  assert.match(SOURCE, /allowedSubsidiaryIds !== null/);
-  assert.match(SOURCE, /forbidden\("reports\.unrestricted_scope"\)/);
-  const runStart = SOURCE.indexOf("export async function runApplicationReport");
-  assert.ok(runStart >= 0);
-  const run = SOURCE.slice(runStart);
-  const scopeCheck = run.indexOf("allowedSubsidiaryIds !== null");
-  const resolver = run.indexOf("resolveDefinitionToExportData");
-  assert.ok(scopeCheck >= 0 && resolver > scopeCheck, "the subsidiary refuse must run before the report resolver");
+const { runApplicationReport } = await import("./reports");
+const { ApplicationError } = await import("./errors");
+type ApplicationContext = import("./context").ApplicationContext;
+
+test("report runs refuse restricted subsidiary scope before resolving report data", async () => {
+  const context = {
+    authz: {
+      user: { orgId: "reports-scope-test", id: "actor" },
+      permissions: new Set(["reports.read"]),
+      allowedSubsidiaryIds: new Set(["one-subsidiary"]),
+    },
+    source: "api",
+    requestId: "reports-scope-request",
+    apiKeyId: null,
+  } as unknown as ApplicationContext;
+
+  await assert.rejects(
+    runApplicationReport(context, { definitionId: "00000000-0000-4000-8000-000000000001" }),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "forbidden"
+      && error.status === 403
+      && error.details?.permission === "reports.unrestricted_scope",
+  );
 });
