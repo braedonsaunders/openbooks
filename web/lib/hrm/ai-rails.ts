@@ -429,7 +429,9 @@ export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
   await ensureAiRailsSettings(db, orgId);
   const [capabilities, decisions, settings] = await Promise.all([
     listCapabilities(db, orgId),
-    listDecisions(db, { orgId, limit: 50 }),
+    // Fenced per row in the service, like the ledger API and CSV export:
+    // a restricted setup admin sees no out-of-scope employment subjects.
+    listDecisions(db, { orgId, actorId: authz.user.id, limit: 50 }),
     loadAiRailsSettings(db, orgId),
   ]);
   const overdue = await overdueReviews(db, orgId, settings.reviewMonths);

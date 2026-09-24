@@ -16,7 +16,9 @@ function csvCell(value: unknown): string {
  * AI decision ledger. GET lists rows with capability/outcome filters;
  * ?format=csv exports the same rows (digests never selected, on either
  * path — they are tamper-evidence, not UI content). Ledger under the
- * setup grant.
+ * setup grant, fenced per row in the service: employment-linked rows
+ * need the reader's own payroll/HR grant plus the subject's employer
+ * scope, so a restricted setup admin never sees out-of-scope pay.
  */
 export async function GET(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
@@ -34,6 +36,7 @@ export async function GET(req: Request) {
   try {
     const decisions = await listDecisions(db, {
       orgId: gate.user.orgId,
+      actorId: gate.user.id,
       capabilityKey,
       outcome,
       limit: 200,
