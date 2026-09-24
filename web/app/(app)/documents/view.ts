@@ -82,6 +82,7 @@ export interface DocumentsData {
   hasRows: boolean
   emptyTitle: string
   emptyDescription: string
+  linkNotice: string | null
   fileDrawerOpen: boolean
   fileDrawer: FileDrawerPayload | null
   folderDrawerCreateOpen: boolean
@@ -197,6 +198,15 @@ export async function loadDocuments(
   const newFolderParent = activeFolderId
   const isEmpty = files.length === 0 && childFolders.length === 0
 
+  // A ?file= / ?folder= that names nothing resolvable must say so: the
+  // drawers stay closed (malformed id, deleted item, or nothing shared —
+  // never distinguished, so existence does not leak), and the plain list
+  // alone would read as a working link.
+  const fileLinkDead = sp.file !== undefined && !openFile
+  const folderLinkDead =
+    folderParam !== undefined && (folderParam === 'new' ? !canManage : !openFolder)
+  const linkNotice = fileLinkDead || folderLinkDead ? t('list.linkNotFound') : null
+
   return {
     title: t('list.title'),
     description: t('list.description'),
@@ -237,6 +247,7 @@ export async function loadDocuments(
     hasRows: !isEmpty,
     emptyTitle: t('list.empty.title'),
     emptyDescription: t('list.empty.description'),
+    linkNotice,
     fileDrawerOpen: Boolean(openFile),
     fileDrawer: openFile
       ? {
@@ -307,6 +318,10 @@ export function documentsSpec(data: DocumentsData): PageSpec {
             activeFolderId: data.activeFolderId ?? null,
           }),
           grid('app-scroll flex min-w-0 flex-1 flex-col overflow-auto', [
+            {
+              ...widgetBlock('documents-link-notice', { message: data.linkNotice ?? '' }),
+              when: f('linkNotice'),
+            },
             widgetBlock('documents-breadcrumb', {
               homeHref: data.allFilesHref,
               homeLabel: data.allFilesLabel,

@@ -13,7 +13,8 @@
       "allTitle": "No files yet",
       "allDescription": "Upload your first file to populate the File Cabinet."
     },
-    "folderRow": "Folder"
+    "folderRow": "Folder",
+    "linkNotFound": "The requested file or folder could not be opened. The link may be stale, or it was shared without access."
   },
   "systemFolders": { "apCapture": "AP capture" },
   "columns": {
