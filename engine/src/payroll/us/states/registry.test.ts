@@ -17,6 +17,7 @@ import {
 } from "../../withholding-jurisdictions.ts";
 import { resolveWithholding } from "../../withholding-resolution.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
+import { computeUsWithholding } from "../withholding.ts";
 // The PACK publishes the US declarations now — see the note in conformance.test.ts.
 import "../../packs.ts";
 import {
@@ -596,4 +597,62 @@ test("an employee with no residence recorded resolves exactly as before", () => 
   const texas = resolveWithholding({ country: "US", workRegion: "TX" });
   assert.deepEqual(texas.levies, []);
   assert.deepEqual(texas.gaps, []);
+});
+
+test("every implemented pack-sourced sub-region levy computes through the dispatch", () => {
+  // DERIVED, never restated: walks the pack's own withholding declarations,
+  // so a newly declared levy fails here until it is wired in
+  // computeUsWithholding. Indiana county tax was declared, conformance-pinned
+  // and never computed — every resolved county levy fell to default: — and
+  // only a test that enumerates the declarations can catch the next one.
+  //
+  // Pack rate source only: tenant-sourced levies need employer-entered rates
+  // a unit fixture cannot invent, and their missing-rate refusal is tested
+  // where those rates are entered.
+  //
+  // Maryland counties are SKIPPED, not covered: the state engine already
+  // withholds the county local tax inside SIT_MD (combined state+local
+  // tables), so a naive dispatch branch would both refuse today AND
+  // double-count once wired. Reported to the coordinator as a same-family
+  // finding needing its own scope (dispatch vs declaration); this test
+  // guards every other declaration and any NEW one.
+  const failures: string[] = [];
+  for (const region of packWithholding("US").regions) {
+    for (const levy of region.subRegions) {
+      if (!levy.implemented || levy.rateSource.kind !== "pack" || region.region === "MD") {
+        continue;
+      }
+      const reach = levy.reaches.includes("resident") ? "resident" as const : "nonresident" as const;
+      const certificateKey = levy.certificateKey ?? region.certificateKey ?? null;
+      const certificateFor = (key: string) => {
+        if (key !== certificateKey) return null;
+        try {
+          return resolveCertificate({ certificate: payrollCertificate("US", key) });
+        } catch {
+          return null;
+        }
+      };
+      try {
+        computeUsWithholding({
+          levy: {
+            level: "sub_region", region: region.region, subRegion: levy.code,
+            label: levy.label, basis: reach,
+            side: reach === "resident" ? "residence" : "work", reach,
+            certificateKey,
+          },
+          payDate: "2026-07-21", periodEnd: "2026-07-18", periodsPerYear: 26,
+          wages: "2000.00", federalIncomeTax: "100.00",
+          certificateFor, tenantRates: () => undefined,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // An engine refusing for missing filed answers is wired — only the
+        // dispatch-gap refusals (the default: branch) fail this test.
+        if (/has no way to compute it|is not a US state or territory code/.test(message)) {
+          failures.push(`${region.region}:${levy.code} — ${message.slice(0, 120)}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(failures, [], "unwired sub-region levies");
 });

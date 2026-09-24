@@ -37,6 +37,7 @@
  * an unknown code THROWS naming itself.
  */
 import {
+  certificateAmount,
   certificateCount,
   emptyResolvedCertificate,
   type ResolvedCertificate,
@@ -55,6 +56,7 @@ import {
   type UsStateYtd,
 } from "./states/index.ts";
 import { act32LocalEit } from "./states/pa.ts";
+import { inCounty, inCountyWithholding } from "./states/in.ts";
 
 export class UsWithholdingError extends PayrollError {}
 
@@ -272,6 +274,37 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       return {
         code: `MI-${subRegion}`, label: declared?.label ?? `${subRegion} city income tax`,
         tax: result.tax, factors: result.factors,
+      };
+    }
+    case "IN": {
+      // Indiana county income tax (Departmental Notice #1): the same taxable
+      // wages the state tax used — the period's wages less the WH-4
+      // exemptions — at the January-1 county's published rate, plus WH-4
+      // line 10 extra county withholding after the rate. The county comes
+      // from the levy the resolver settled (residence county for an Indiana
+      // resident, work county otherwise); the rate is a pack constant from
+      // the notice, never employer-entered.
+      const county = inCounty(Number(input.payDate.slice(0, 4)), subRegion);
+      const countyResult = inCountyWithholding({
+        payDate: input.payDate,
+        periodsPerYear: input.periodsPerYear,
+        wages: input.wages,
+        exemptions: {
+          personal: exemptionCount(certificate, "personal_exemptions"),
+          additionalDependent: exemptionCount(certificate, "additional_dependent_exemptions"),
+          firstTimeDependent: exemptionCount(certificate, "first_time_dependent_exemptions"),
+          adoptedDependent: exemptionCount(certificate, "adopted_dependent_exemptions"),
+        },
+        county,
+        additionalPerPeriod: certificate.certificate.fields.some(
+          (field) => field.key === "additional_county_per_period",
+        )
+          ? certificateAmount(certificate, "additional_county_per_period") ?? undefined
+          : undefined,
+      });
+      return {
+        code: `IN-${subRegion}`, label: declared?.label ?? `${county.name} County income tax`,
+        tax: countyResult.tax, factors: countyResult.factors,
       };
     }
     case "PA": {
