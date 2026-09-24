@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { CopyObjectCommand } from "@aws-sdk/client-s3";
 import {
+  copyS3Blob,
   createInMemoryFileBlobStore,
   encodeS3CopySource,
+  getS3Blob,
+  s3Bucket,
+  setFileBlobS3ClientForTests,
 } from "./file-storage.ts";
+import { createFakeS3, sentCopies } from "../sftp/fake-s3.ts";
 
 test("encodeS3CopySource URL-encodes each key segment and preserves separators", () => {
   assert.equal(
@@ -48,11 +52,24 @@ test("a versioned blob copy round-trips its bytes", async () => {
   assert.equal(await store.getObject("v2"), null);
 });
 
-test("every server-side copy in the engine shares the one helper", () => {
-  const storage = readFileSync(new URL("./file-storage.ts", import.meta.url), "utf8");
-  const backend = readFileSync(new URL("../sftp/backend.ts", import.meta.url), "utf8");
-  assert.match(storage, /CopySource: encodeS3CopySource\(/);
-  assert.match(backend, /CopySource: encodeS3CopySource\(/);
-  assert.doesNotMatch(storage, /CopySource: `\$\{/);
-  assert.doesNotMatch(backend, /CopySource: `\$\{/);
+test("file-cabinet server-side copy sends an encoded source and preserves its bytes", async () => {
+  const fake = createFakeS3();
+  setFileBlobS3ClientForTests(fake.client);
+  const sourceId = "v 1#";
+  fake.objects.set(`file-cabinet/${sourceId}`, {
+    bytes: Buffer.from("immutable file version"),
+    lastModified: new Date("2026-01-01T00:00:00Z"),
+  });
+  try {
+    await copyS3Blob(sourceId, "v2");
+
+    assert.deepEqual(sentCopies(fake), [{
+      CopySource: `${s3Bucket()}/file-cabinet/v%201%23`,
+      Key: "file-cabinet/v2",
+    }]);
+    assert.deepEqual(await getS3Blob("v2"), Buffer.from("immutable file version"));
+    assert.deepEqual(await getS3Blob(sourceId), Buffer.from("immutable file version"));
+  } finally {
+    setFileBlobS3ClientForTests(null);
+  }
 });
