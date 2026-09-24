@@ -13,7 +13,8 @@
       "allTitle": "Aucun fichier",
       "allDescription": "Téléversez votre premier fichier pour remplir le gestionnaire de documents."
     },
-    "folderRow": "Dossier"
+    "folderRow": "Dossier",
+    "linkNotFound": "Le fichier ou le dossier demandé n’a pas pu être ouvert. Le lien est peut-être obsolète ou a été partagé sans accès."
   },
   "systemFolders": {
     "apCapture": "Capture fournisseurs"

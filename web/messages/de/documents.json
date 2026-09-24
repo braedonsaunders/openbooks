@@ -13,7 +13,8 @@
       "allTitle": "Noch keine Dateien",
       "allDescription": "Laden Sie Ihre erste Datei hoch, um die Dokumentenablage zu füllen."
     },
-    "folderRow": "Ordner"
+    "folderRow": "Ordner",
+    "linkNotFound": "Die angeforderte Datei oder der Ordner konnte nicht geöffnet werden. Der Link ist möglicherweise veraltet oder wurde ohne Zugriff geteilt."
   },
   "systemFolders": {
     "apCapture": "Erfassung Eingangsrechnungen"

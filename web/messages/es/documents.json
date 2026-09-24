@@ -13,7 +13,8 @@
       "allTitle": "Aún no hay archivos",
       "allDescription": "Sube tu primer archivo para empezar a usar el gestor de documentos."
     },
-    "folderRow": "Carpeta"
+    "folderRow": "Carpeta",
+    "linkNotFound": "No se pudo abrir el archivo o la carpeta solicitados. Es posible que el enlace esté obsoleto o se haya compartido sin acceso."
   },
   "systemFolders": {
     "apCapture": "Captura de compras"
