@@ -245,7 +245,24 @@ export async function processCloseDeliveryJobData(
       const recipients = (Array.isArray(row.recipients) ? row.recipients : []).filter(
         (value): value is string => typeof value === "string" && value.length > 0,
       );
-      if (recipients.length === 0) return { skipped: "no recipients" };
+      // A scheduled package with nobody to send to is misconfigured, not
+      // skippable: record the named failure on the run timeline (or the
+      // package where there is no run) and throw so BullMQ never marks a
+      // misconfiguration complete.
+      if (recipients.length === 0) {
+        await db.execute(sql`
+          insert into close_events (org_id, run_id, event_type, payload)
+          values (${orgId}, ${runId ?? null}, 'package.delivery_failed',
+                  ${JSON.stringify({
+                    reason: "no-recipients",
+                    packageId: data.packageId,
+                    packageName: row.package_name,
+                    message: `reporting package ${row.package_name} has no recipients — add at least one recipient before delivery can run`,
+                  })}::jsonb)`);
+        throw new Error(
+          `reporting package ${row.package_name} has no recipients — add at least one recipient before delivery can run`,
+        );
+      }
       // Fail closed before any render work: the queue's provider validation
       // throws on the first invalid address, so letting one through burns a
       // full render pass and all three queue attempts while the package is
@@ -257,7 +274,20 @@ export async function processCloseDeliveryJobData(
       }
 
       const attachmentsSpec = normalizeAttachments(row.reports);
-      if (attachmentsSpec.length === 0) return { skipped: "no reports" };
+      if (attachmentsSpec.length === 0) {
+        await db.execute(sql`
+          insert into close_events (org_id, run_id, event_type, payload)
+          values (${orgId}, ${runId ?? null}, 'package.delivery_failed',
+                  ${JSON.stringify({
+                    reason: "no-reports",
+                    packageId: data.packageId,
+                    packageName: row.package_name,
+                    message: `reporting package ${row.package_name} attaches no reports — attach at least one report before delivery can run`,
+                  })}::jsonb)`);
+        throw new Error(
+          `reporting package ${row.package_name} attaches no reports — attach at least one report before delivery can run`,
+        );
+      }
       const truncated = attachmentsSpec.length > MAX_REPORTS;
       const specs = attachmentsSpec.slice(0, MAX_REPORTS);
 
