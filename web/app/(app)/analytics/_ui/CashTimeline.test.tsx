@@ -4,6 +4,10 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CategoryWeekly, WeekRow } from "../../../../lib/cash/core";
 
+const React = await import("react");
+// Classic-JSX fallback: the shared tsx cache can serve a classic transform,
+// which resolves bare React from the global scope, not the module scope.
+Object.assign(globalThis, { React });
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/fr")).default;
 const { MoneyProvider } = await import("../../../../components/money-provider");

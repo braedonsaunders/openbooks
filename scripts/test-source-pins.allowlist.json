@@ -62,7 +62,6 @@
     "web/app/(app)/accounting/changes/accounting-events-ui.test.ts": 2,
     "web/app/(app)/accounts/AccountDrawer.test.ts": 6,
     "web/app/(app)/agents/agents-moved-notice.test.ts": 1,
-    "web/app/(app)/analytics/_ui/DrillDrawer.test.ts": 1,
     "web/app/(app)/analytics/cashflow/CashflowView.test.ts": 1,
     "web/app/(app)/analytics/customer-intelligence/CustomerView.test.ts": 3,
     "web/app/(app)/analytics/financial-health/tabs/BudgetTab.test.ts": 2,
