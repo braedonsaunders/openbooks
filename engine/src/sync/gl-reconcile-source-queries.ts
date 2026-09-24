@@ -214,6 +214,27 @@ export function verdictsDiffer(verdicts: readonly BucketVerdict[]): boolean {
 }
 
 /**
+ * An empty verdict population is not agreement. A --since beyond all data (or
+ * an org with no postings and no invoices) yields zero buckets, and
+ * verdictsDiffer([]) is false — so without this check the harness prints
+ * 'AGREES: all 0 buckets match' with exit 0 and a vacuous agreement passes
+ * the migration parity gate. Refuse by name unless the operator explicitly
+ * allows an empty population with --allow-empty.
+ */
+export function emptyPopulationRefusal(
+  verdicts: readonly BucketVerdict[],
+  allowEmpty: boolean,
+): string | null {
+  if (verdicts.length > 0 || allowEmpty) return null;
+  return (
+    "no data compared — the selected population produced zero comparison " +
+    "buckets (--since is beyond all postings and invoices, or the org has " +
+    "neither); refusing rather than reporting vacuous agreement; pass " +
+    "--allow-empty to accept an empty population on purpose"
+  );
+}
+
+/**
  * Align two bucketed populations on the union of their currency labels,
  * zero-filling a currency one side lacks so a missing bucket reads as a
  * difference, never as agreement. Duplicate labels on one side are summed
