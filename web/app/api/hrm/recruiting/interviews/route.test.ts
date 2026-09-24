@@ -161,62 +161,71 @@ function jsonRequest(url: string, method: string, body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("interviews routes gate on the hrm feature and the manage permission", async () => {
-    const { readFileSync } = await import("node:fs");
-    assert.match(readFileSync(new URL("./route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.manage"\)/);
-    assert.match(readFileSync(new URL("./[id]/route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.manage"\)/);
-  });
-} else {
-  test("schedule validates the body through the real parser before the service runs", async () => {
-    reset();
-    const url = "http://openbooks.test/api/hrm/recruiting/interviews";
-    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
-    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "coffee" }))).status, 400);
-    assert.equal(
-      (await collectionRoute!.POST(jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "video" }))).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-    const response = await collectionRoute!.POST(
-      jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "video", scheduledAt: "2026-09-25T14:00:00Z" }),
-    );
-    assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { interview: { id: "interview-1" } });
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  const url = "http://openbooks.test/api/hrm/recruiting/interviews";
+  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("item PATCH validates the action union through the real parser", async () => {
-    reset();
-    const params = { params: Promise.resolve({ id: INTERVIEW_ID }) };
-    assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete" }), params)).status, 400);
-    assert.equal(
-      (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "maybe" }), params)).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-    assert.equal(
-      (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "advance" }), params)).status,
-      200,
-    );
-    const seenComplete = firstCallFn();
-    assert.equal(seenComplete, "complete");
-    routeState.calls = [] as RouteState["calls"];
-    assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "cancel" }), params)).status, 200);
-    assert.equal(firstCallFn(), "cancel");
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  const url = "http://openbooks.test/api/hrm/recruiting/interviews";
+  const response = await collectionRoute!.POST(jsonRequest(url, "POST", {}));
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("a panel member is not an employee in this organization");
-    routeState.serviceThrow = refusal;
-    const response = await collectionRoute!.POST(
-      jsonRequest("http://openbooks.test/api/hrm/recruiting/interviews", "POST", {
-        applicationId: APPLICATION_ID,
-        kind: "video",
-        scheduledAt: "2026-09-25T14:00:00Z",
-      }),
-    );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+test("schedule validates the body through the real parser before the service runs", async () => {
+  reset();
+  const url = "http://openbooks.test/api/hrm/recruiting/interviews";
+  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
+  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "coffee" }))).status, 400);
+  assert.equal(
+    (await collectionRoute!.POST(jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "video" }))).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+  const response = await collectionRoute!.POST(
+    jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "video", scheduledAt: "2026-09-25T14:00:00Z" }),
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { interview: { id: "interview-1" } });
+});
+
+test("item PATCH validates the action union through the real parser", async () => {
+  reset();
+  const params = { params: Promise.resolve({ id: INTERVIEW_ID }) };
+  assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete" }), params)).status, 400);
+  assert.equal(
+    (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "maybe" }), params)).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+  assert.equal(
+    (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "advance" }), params)).status,
+    200,
+  );
+  const seenComplete = firstCallFn();
+  assert.equal(seenComplete, "complete");
+  routeState.calls = [] as RouteState["calls"];
+  assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "cancel" }), params)).status, 200);
+  assert.equal(firstCallFn(), "cancel");
+});
+
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("a panel member is not an employee in this organization");
+  routeState.serviceThrow = refusal;
+  const response = await collectionRoute!.POST(
+    jsonRequest("http://openbooks.test/api/hrm/recruiting/interviews", "POST", {
+      applicationId: APPLICATION_ID,
+      kind: "video",
+      scheduledAt: "2026-09-25T14:00:00Z",
+    }),
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
