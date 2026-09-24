@@ -251,6 +251,14 @@ function generateCopySql(
       exprs.push("null");
     } else if ((fkTarget && rebaseSet.has(fkTarget)) || t.forceRebase.has(c.name)) {
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
+    } else if (t.name === "flow_runs" && c.name === "occurrence_key") {
+      // OM-13-CLONE: occurrence_key sits in a global partial unique with no
+      // org_id, so a verbatim copy collides with the source's own row (PG
+      // 23505) and hands the sandbox production's dedup claim. The run rows
+      // stay — gates and effects reference them by NOT NULL run_id — but the
+      // key is cleared: a sandbox never adopts the source's dedup slot, and
+      // retried attempts mint their own keys.
+      exprs.push("null");
     } else if (tableMask?.has(c.name)) {
       exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", c)} `);
     } else if (opts.masked && (c.udtName === "jsonb" || c.udtName === "json") && c.name === "custom") {

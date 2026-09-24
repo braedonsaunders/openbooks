@@ -80,10 +80,14 @@ const EXCLUDE = new Set([
   // verbatim copy either collides on a global unique (invitation token_hash,
   // kiosk device_token_hash) or resolves a production credential to the
   // sandbox. Invitation, payment-link, signature and kiosk flows are
-  // re-issued inside the sandbox, never carried over.
+  // re-issued inside the sandbox, never carried over. OM-13-CLONE: document
+  // signing links are the same shape — hrm_document_signers.token_hash is a
+  // global unique routed by an org-less lookup, so any template with
+  // in-flight signatures dies with PG 23505 on the copy.
   "payment_links",
   "field_ticket_signature_requests",
   "hrm_survey_invitations",
+  "hrm_document_signers",
   "time_kiosks",
 ]);
 
