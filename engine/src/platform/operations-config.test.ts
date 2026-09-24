@@ -1,3 +1,4 @@
+// source-pin-contract: compose.yaml is the shipped deployment contract: stateful infrastructure images are pinned by digest, and optional OTLP endpoints are forwarded to the runtime services.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
