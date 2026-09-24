@@ -1,3 +1,4 @@
+// source-pin-contract: readiness guide hrefs resolve against the route tree; subjects derived by extracting every href the guide loader emits, never hand-listed
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
