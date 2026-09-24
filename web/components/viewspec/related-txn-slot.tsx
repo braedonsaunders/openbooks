@@ -11,8 +11,12 @@ import { RelatedTransactionDrawer } from '../related-transaction-drawer'
  * from the session and the spec carries only ids. A spec author who names this
  * widget gains nothing: the session decides what it can read.
  *
- * `permission` names the read the HOST page already required, so the drawer
- * cannot be reached from a page whose own permission the session lacks.
+ * There is deliberately no `permission` prop to thread a host page's read
+ * through: none is needed. The drawer gates every query itself from the
+ * session Authz — organization match, subsidiary fence, per-kind feature and
+ * enablement flags, and ap.read/ar.read for payments (see
+ * related-transaction-drawer.tsx) — and renders null when any gate fails, so
+ * no host page can leak through it a row its own session could not read.
  */
 export async function RelatedTxnSlot({
   id,
