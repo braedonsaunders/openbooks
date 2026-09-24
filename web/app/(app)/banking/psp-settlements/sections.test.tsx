@@ -50,7 +50,7 @@ const messages = (await import("../../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../../components/money-provider");
 const { BusinessDateProvider } = await import("../../../../components/business-date-provider");
 const { PspSettlementsWorkspace } = await import("./sections");
-import type { PspSettlementRow } from "./sections";
+import type { PspSettlementRow, PspSubsidiaryOption } from "./sections";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -120,7 +120,7 @@ const ROWS: PspSettlementRow[] = [
   },
 ];
 
-async function mount(options?: { canReconcile?: boolean; rows?: typeof ROWS }) {
+async function mount(options?: { canReconcile?: boolean; rows?: typeof ROWS; subsidiaries?: PspSubsidiaryOption[] }) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -133,7 +133,7 @@ async function mount(options?: { canReconcile?: boolean; rows?: typeof ROWS }) {
               canReconcile={options?.canReconcile ?? true}
               strings={STRINGS}
               initialRows={options?.rows ?? []}
-              initialSubsidiaries={[]}
+              initialSubsidiaries={options?.subsidiaries ?? []}
               initialAccounts={ACCOUNTS}
             />
           </BusinessDateProvider>
@@ -152,6 +152,12 @@ function setNativeValue(element: HTMLElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(prototype, "value")!.set!;
   setter.call(element, value);
   element.dispatchEvent(new window.Event("input", { bubbles: true }));
+}
+
+function setSelectValue(select: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!;
+  setter.call(select, value);
+  select.dispatchEvent(new window.Event("change", { bubbles: true }));
 }
 
 async function importClick(host: HTMLElement) {
@@ -307,6 +313,50 @@ test("a well-shaped stripe array posts the unchanged stored body", async (t) => 
     payoutId: "po_123",
     transactions: [],
   });
+});
+
+test("multi-entity imports require and post the selected subsidiary with provider guidance", async (t) => {
+  const subsidiary = { id: "sub-north", name: "North Division", baseCurrency: "USD" };
+  const bodies: Record<string, unknown>[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (_input: unknown, init?: { body?: unknown }) => {
+    if (typeof init?.body === "string") bodies.push(JSON.parse(init.body));
+    return Response.json({ batchId: "batch-sub", batches: [], subsidiaries: [subsidiary] }, { status: 200 });
+  }) as typeof fetch;
+  const { host, root } = await mount({ subsidiaries: [subsidiary] });
+  t.after(async () => {
+    await act(async () => { root.unmount(); });
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  await tick();
+
+  assert.ok(host.textContent?.includes(STRINGS.payloadShapeHint), "Stripe guidance must preserve the external row shape");
+  const provider = host.querySelectorAll("select")[0]!;
+  await act(async () => setSelectValue(provider, "recurly"));
+  await tick();
+  assert.ok(host.textContent?.includes(STRINGS.genericPayloadHint), "non-Stripe providers receive generic object guidance");
+  await act(async () => {
+    setSelectValue(provider, "stripe");
+    setNativeValue(host.querySelector("#psp-external-ref") as HTMLElement, "po_multi");
+    setNativeValue(host.querySelector("#psp-payload") as HTMLElement, "[]");
+  });
+  await tick();
+
+  const importButton = [...host.querySelectorAll("button")].find((button) => button.textContent === STRINGS.importDraft) as HTMLButtonElement;
+  assert.ok(importButton.disabled, "a multi-entity draft must not be created without a posting subsidiary");
+  const subsidiarySelect = [...host.querySelectorAll("select")].find((select) =>
+    [...select.options].some((option) => option.value === subsidiary.id),
+  );
+  assert.ok(subsidiarySelect, "the loader-provided subsidiary must be available to select");
+  await act(async () => setSelectValue(subsidiarySelect, subsidiary.id));
+  await tick();
+  assert.equal(importButton.disabled, false, "choosing the posting subsidiary enables import");
+  await act(async () => { importButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); });
+  await tick();
+  await tick();
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0]?.subsidiaryId, subsidiary.id, "the chosen legal entity must be part of the imported draft");
 });
 
 /** F1T-9: every import/post/reverse mutation POSTs with banking.reconcile,

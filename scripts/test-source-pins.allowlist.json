@@ -42,7 +42,6 @@
     "engine/src/worker/backup-scheduler.test.ts": 13,
     "engine/src/worker/overhead-scheduler.test.ts": 1,
     "web/app/(app)/banking/[accountId]/view.test.ts": 2,
-    "web/app/(app)/banking/psp-settlements/psp-settlements-catalog.test.ts": 1,
     "web/app/(app)/banking/view.banner.test.ts": 2,
     "web/app/(app)/collections/collections-worklist.test.ts": 3,
     "web/app/(app)/crm/OpportunityDrawer.test.ts": 3,
