@@ -96,35 +96,81 @@ export async function fullInvariants(orgId: string, at: string, gitSha: string |
 
 /**
  * Closed-period immutability: posting a document dated inside a closed period
- * MUST be rejected. Creates a throwaway draft, attempts to post it, and asserts
- * the kernel refuses. Cleans up the probe draft afterward.
+ * MUST be rejected. The probe stages its own approved vendor bill (never a
+ * draft — a draft is refused by the approval lifecycle before the period
+ * gate, which would certify nothing), attempts to post it, and asserts the
+ * kernel raises the SPECIFIC closed-period refusal. Cleans up the probe
+ * document afterward whenever the post did not land.
+ *
+ * Only the closed-period refusal counts as proof: any other error (a kernel
+ * crash, an RLS denial, a different validation refusal) means the probe never
+ * reached the period gate, and a post that succeeds means the gate is broken.
+ * Both fail loudly — a probe that cannot exercise the gate reports
+ * "not exercised" as a failure, never a pass.
  */
+const CLOSED_PERIOD_REFUSAL = /closed for this period/i;
+
 export async function immutabilityProbe(world: SimOrg, closedPeriod: SimPeriod): Promise<InvariantResult> {
   const probeDate = closedPeriod.startsOn;
-  const vendor = world.vendors[0];
-  if (!vendor) return { pass: true, failures: [] };
+  // A world that staged no vendor must still exercise the kernel: returning
+  // pass here would certify closed-period enforcement without posting
+  // anything. Mint a probe-owned vendor party instead.
+  let vendor = world.vendors[0];
+  if (!vendor) {
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${id}, ${world.orgId}, 'vendor', 'Immutability Probe Vendor', true, '{}'::jsonb)`);
+    await db.execute(sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${world.orgId}, ${id})`);
+    vendor = { id, name: "Immutability Probe Vendor", termDays: 30, expenseCategories: [], billMin: 0, billMax: 0 };
+  }
+  const expenseAccount = world.accounts.materials ?? Object.values(world.accounts)[0];
+  if (!expenseAccount) {
+    return {
+      pass: false,
+      failures: [{ invariant: "period-immutability", detail: `probe not exercised: world has no posting account for closed period ${closedPeriod.name}` }],
+    };
+  }
 
   const docId = randomUUID();
   await db.execute(sql`
-    insert into documents (id, org_id, kind, status, document_number, document_date, currency, subtotal, tax_total, total, created_by, custom)
-    values (${docId}, ${world.orgId}, 'vendor_bill', 'draft', ${`PROBE-${docId.slice(0, 8)}`}, ${probeDate}, ${world.currency}, '100.00', '0.00', '100.00', ${world.actors.admin}, '{}'::jsonb)`);
+    insert into documents (id, org_id, kind, status, document_number, document_date, currency, subtotal, tax_total, total, created_by, custom, party_id, subsidiary_id)
+    values (${docId}, ${world.orgId}, 'vendor_bill', 'draft', ${`PROBE-${docId.slice(0, 8)}`}, ${probeDate}, ${world.currency}, '100.00', '0.00', '100.00', ${world.actors.admin}, '{}'::jsonb, ${vendor.id}, ${world.subsidiaryId})`);
   await db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, tax_amount)
-    values (${randomUUID()}, ${world.orgId}, ${docId}, 1, ${world.accounts.materials}, 'immutability probe', '1', '100.00', '100.00', '0.00')`);
+    values (${randomUUID()}, ${world.orgId}, ${docId}, 1, ${expenseAccount}, 'immutability probe', '1', '100.00', '100.00', '0.00')`);
+  // Lines are immutable outside draft status (storage guard), so the bill is
+  // staged as a draft and approved only once its lines exist — the kernel
+  // then reaches the period gate instead of the approval lifecycle.
+  await db.execute(sql`update documents set status = 'approved' where id = ${docId} and org_id = ${world.orgId}`);
 
   let rejected = false;
+  let unexpected: string | null = null;
   try {
     await postDocument(docId, postingDeps(world));
   } catch (e) {
-    if (e instanceof PostingError) rejected = true;
-    else rejected = true; // any refusal counts; unexpected errors still block the post
+    const message = e instanceof Error ? e.message : String(e);
+    if (e instanceof PostingError && CLOSED_PERIOD_REFUSAL.test(message)) {
+      rejected = true;
+    } else {
+      unexpected = e instanceof Error ? `${e.name}: ${message}` : message;
+    }
+  } finally {
+    if (rejected || unexpected !== null) {
+      // Line writes are immutable outside draft status (storage guard), so
+      // the refused probe bill returns to draft before its lines are removed.
+      await db.execute(sql`update documents set status = 'draft' where id = ${docId} and org_id = ${world.orgId}`);
+      await db.execute(sql`delete from document_lines where document_id = ${docId} and org_id = ${world.orgId}`);
+      await db.execute(sql`delete from documents where id = ${docId} and org_id = ${world.orgId}`);
+    }
   }
 
-  // Clean up: if it was (correctly) rejected the draft is still unposted → delete.
-  if (rejected) {
-    await db.execute(sql`delete from document_lines where document_id = ${docId} and org_id = ${world.orgId}`);
-    await db.execute(sql`delete from documents where id = ${docId} and org_id = ${world.orgId}`);
-    return { pass: true, failures: [] };
+  if (rejected) return { pass: true, failures: [] };
+  if (unexpected !== null) {
+    return {
+      pass: false,
+      failures: [{ invariant: "period-immutability", detail: `probe into closed period ${closedPeriod.name} failed without reaching the closed-period gate: ${unexpected} (probe doc ${docId})` }],
+    };
   }
   return {
     pass: false,
