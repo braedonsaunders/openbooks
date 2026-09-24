@@ -11,6 +11,7 @@
  * ordering between two commands and there is no runtime that can assert it
  * before it has already gone wrong in production.
  */
+// source-pin-contract: swarm release ordering and migration policy (swarm-release.sh: migrate-before-serve, digest pin, owner/runtime login split, stdin guard)
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
