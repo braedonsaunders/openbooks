@@ -37,7 +37,7 @@ import { LA_CERTIFICATE, LA_REGION } from "./states/la.ts";
 import { MO_CERTIFICATE, MO_REGION } from "./states/mo.ts";
 import { MS_CERTIFICATE, MS_REGION } from "./states/ms.ts";
 import { MT_CERTIFICATE, MT_REGION } from "./states/mt.ts";
-import { ND_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_REGION } from "./states/nd.ts";
+import { ND_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_NDWR_CERTIFICATE, ND_REGION } from "./states/nd.ts";
 import { NE_CERTIFICATE, NE_REGION } from "./states/ne.ts";
 import { NM_CERTIFICATE, NM_REGION } from "./states/nm.ts";
 import { OK_CERTIFICATE, OK_OW9MSE_CERTIFICATE, OK_REGION } from "./states/ok.ts";
@@ -1093,7 +1093,7 @@ const US_CERTIFICATES: PayrollPackCertificates = {
     AL_CERTIFICATE, AL_A4_MS_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
     RI_CERTIFICATE, VT_CERTIFICATE, HI_CERTIFICATE,
     ID_CERTIFICATE, KS_CERTIFICATE, LA_CERTIFICATE,
-    MO_CERTIFICATE, MS_CERTIFICATE, MT_CERTIFICATE, ND_CERTIFICATE, ND_NDWM_CERTIFICATE, NE_CERTIFICATE, NM_CERTIFICATE, OK_CERTIFICATE, OK_OW9MSE_CERTIFICATE,
+    MO_CERTIFICATE, MS_CERTIFICATE, MT_CERTIFICATE, ND_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_NDWR_CERTIFICATE, NE_CERTIFICATE, NM_CERTIFICATE, OK_CERTIFICATE, OK_OW9MSE_CERTIFICATE,
     AZ_CERTIFICATE, IN_CERTIFICATE, KY_CERTIFICATE, VA_CERTIFICATE, WV_CERTIFICATE, WV_IT104NR_CERTIFICATE,
     UT_CERTIFICATE, MN_CERTIFICATE, MN_MWR, WI_CERTIFICATE, WI_W220, WI_W221, WI_WT4A, IA_CERTIFICATE, IA_44016,
   ],
@@ -1728,6 +1728,18 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       citation:
         "Minnesota Form MWR for Tax Year 2026; 2026 Minnesota Withholding Tax Instructions "
         + "and Tables p. 4",
+    })),
+    // --- North Dakota: Minnesota and Montana, on Form NDW-R -------------
+    ...(["MN", "MT"] as const).map((residence) => ({
+      workRegion: "ND",
+      residenceRegion: residence,
+      taxedBy: "residence" as const,
+      certificateKey: "us_nd_ndwr",
+      withoutCertificate: "work_region" as const,
+      relievesSubRegionLevies: false,
+      citation:
+        "N.D.C.C. § 57-38-60; North Dakota Form NDW-R (SFN 28729, 2023); "
+        + "North Dakota Income Tax Withholding page (accessed 2026)",
     })),
     // --- Kentucky: unambiguous partners on the K-4 exemption ------------
     // The K-4 also names Virginia (daily commute) and Ohio (unless a

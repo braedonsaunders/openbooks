@@ -346,6 +346,30 @@ export const ND_NDWM_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+/** North Dakota Form NDW-R for qualifying Minnesota and Montana residents. */
+export const ND_NDWR_CERTIFICATE: PayrollCertificate = {
+  key: "us_nd_ndwr",
+  form: "NDW-R",
+  label: "Reciprocity Exemption for Qualifying Minnesota and Montana Residents Working in North Dakota",
+  scope: { level: "region", region: "ND" },
+  purpose: "non_residence",
+  validity: { kind: "calendar_year_end" },
+  citation: "North Dakota Form NDW-R (SFN 28729, 2023); N.D.C.C. § 57-38-60",
+  summary: "Annual certificate for qualifying Minnesota or Montana residents working in North Dakota. The residence on the form must match the employee's verified residence; renew each calendar year.",
+  storage: "certificate_rows",
+  fields: [{
+    key: "qualifying_residence",
+    label: "Employee's qualifying permanent residence",
+    kind: "choice",
+    required: true,
+    choices: [
+      { value: "MN", label: "Minnesota" },
+      { value: "MT", label: "Montana" },
+    ],
+    help: "Match the NDW-R residence claim to the employee's verified permanent residence.",
+  }],
+};
+
 export const ND_REGION: PayrollRegionWithholding = {
   region: "ND",
   label: "North Dakota income tax",

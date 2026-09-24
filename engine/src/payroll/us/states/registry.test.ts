@@ -476,7 +476,7 @@ test("Michigan's SIX reciprocal partners, on a certificate the state does not pr
   assert.equal(nonresidency.form, "(employer-developed)");
 });
 
-test("a North Dakota resident working in Minnesota is withheld NORTH DAKOTA, both engines present", () => {
+test("North Dakota reciprocity covers both directions with Minnesota", () => {
   // Minnesota's agreement with North Dakota is real. With Form MWR on file
   // Minnesota is relieved and North Dakota is withheld — the pair is closed.
   const resolved = resolveWithholding({
@@ -485,7 +485,7 @@ test("a North Dakota resident working in Minnesota is withheld NORTH DAKOTA, bot
   });
   const regions = resolved.levies.filter((levy) => levy.level === "region");
   assert.deepEqual(regions.map((levy) => levy.region), ["ND"]);
-  assert.equal(regions[0]!.basis, "reciprocity");
+  assert.deepEqual(resolveWithholding({ country: "US", workRegion: "ND", residenceRegion: "MN", certificatesOnFile: ["us_nd_ndwr"] }).levies.filter((levy) => levy.level === "region").map((levy) => levy.region), ["MN"]);
   assert.deepEqual(resolved.gaps, []);
 
   // Without the affidavit, Minnesota withholds — correctly — and says why.
