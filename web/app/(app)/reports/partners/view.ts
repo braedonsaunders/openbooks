@@ -26,7 +26,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { parseListParams } from '../../../../lib/list-params'
+import { buildHref, parseListParams } from '../../../../lib/list-params'
 import { partnerBalances } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
@@ -141,8 +141,10 @@ export async function loadPartners(
     backHref: '/reports',
     backLabel: tr('hub.title'),
     searchPlaceholder: t('searchPlaceholder'),
-    payableHref: `/reports/partners?kind=payable&book=${selectedBook.id}`,
-    receivableHref: `/reports/partners?kind=receivable&book=${selectedBook.id}`,
+    // The kind toggle keeps the operator's search term and pager position —
+    // rebuilding from kind+book alone dropped both (F1T-5).
+    payableHref: buildHref('/reports/partners', { kind: 'payable', book: selectedBook.id, q: params.q, page: params.page }),
+    receivableHref: buildHref('/reports/partners', { kind: 'receivable', book: selectedBook.id, q: params.q, page: params.page }),
     payableLabel: t('payables'),
     receivableLabel: t('receivables'),
     isPayable: kind === 'payable',

@@ -29,7 +29,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../../lib/authz'
 import { reconcilableBankAccount } from '../../../../lib/banking-accounts'
-import { isUuid, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
+import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
 import type { StatementDrawer as StatementDrawerComponent } from './StatementDrawer'
 
 /**
@@ -446,7 +446,10 @@ export async function loadBankingAccount(
     columnImported: t('account.columns.imported'),
     statementRows: statements.rows.map((s) => ({
       id: s.id,
-      dateHref: `${basePath}?statement=${s.id}`,
+      // The opener keeps the lists' search, sort and page exactly like the
+      // drawer's closeHref does — rebuilding from the id alone reset the
+      // page underneath to an unfiltered page 1 (F1T-12).
+      dateHref: mergeHref(basePath, sp, { statement: s.id }),
       dateLabel: s.statement_date,
       sourceLabel: s.source,
       lineCount: Number(s.line_count).toLocaleString(),

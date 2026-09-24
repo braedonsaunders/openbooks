@@ -151,8 +151,10 @@ export async function loadStatement(
 
   return {
     title: name,
-    backHref: '/reports/registers',
-    backLabel: t('registers.arTitle'),
+    // Back returns to the register on the side the operator came from — a
+    // bare /reports/registers always opens A/R (F1T-6).
+    backHref: `/reports/registers?side=${side}`,
+    backLabel: side === 'ap' ? t('registers.apTitle') : t('registers.arTitle'),
     company: org?.name ?? '',
     periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     receivablesHref: `/reports/statements/${partyId}?side=ar&${keep}`,
