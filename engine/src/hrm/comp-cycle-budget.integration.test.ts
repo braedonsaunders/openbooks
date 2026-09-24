@@ -909,3 +909,42 @@ test("F02/F03 the public read stays lens-scoped while the write control sees the
     assert.equal(scoped.overBudget, false);
   });
 });
+
+test("pacing and lines refuse a missing round instead of reading an empty envelope", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const { org } = h;
+    // A real round with no envelope keeps its shape: null percent, never over.
+    const cycle = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
+      effectiveOn: "2025-04-01", budgetBasis: "combined",
+      currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
+    });
+    assert.deepEqual(await cyclePacing(org.orgId, h.hrId, cycle.id), { totalPct: null, overBudget: false });
+    // A deleted round and another org's round are indistinguishable from
+    // missing: both refuse NOT_FOUND (404 at the route), never the
+    // no-envelope shape above.
+    const other = await setupHarness();
+    try {
+      const foreign = await createCycle({
+        orgId: other.org.orgId, actorId: other.hrId, name: "Foreign", kind: "merit",
+        effectiveOn: "2025-04-01", budgetBasis: "combined",
+        currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
+      });
+      for (const cycleId of [randomUUID(), foreign.id]) {
+        const pacingRefusal = await cyclePacing(org.orgId, h.hrId, cycleId).then(
+          () => { throw new Error("expected pacing to refuse a missing round"); },
+          (e: unknown) => e as { code?: unknown; message?: unknown },
+        );
+        assert.equal(pacingRefusal.code, "NOT_FOUND");
+        assert.match(String(pacingRefusal.message), /not visible in this organization/);
+        const linesRefusal = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId }).then(
+          () => { throw new Error("expected lines to refuse a missing round"); },
+          (e: unknown) => e as { code?: unknown },
+        );
+        assert.equal(linesRefusal.code, "NOT_FOUND");
+      }
+    } finally {
+      await dropScratchOrg(other.org.orgId);
+    }
+  });
+});
