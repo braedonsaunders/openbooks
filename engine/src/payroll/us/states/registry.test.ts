@@ -18,6 +18,8 @@ import {
 import { resolveWithholding } from "../../withholding-resolution.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
 import { computeUsWithholding } from "../withholding.ts";
+import { MD_WITHHOLDING } from "./md.ts";
+import { money } from "./conformance-support.ts";
 // The PACK publishes the US declarations now — see the note in conformance.test.ts.
 import "../../packs.ts";
 import {
@@ -610,16 +612,34 @@ test("every implemented pack-sourced sub-region levy computes through the dispat
   // a unit fixture cannot invent, and their missing-rate refusal is tested
   // where those rates are entered.
   //
-  // Maryland counties are SKIPPED, not covered: the state engine already
-  // withholds the county local tax inside SIT_MD (combined state+local
-  // tables), so a naive dispatch branch would both refuse today AND
-  // double-count once wired. Reported to the coordinator as a same-family
-  // finding needing its own scope (dispatch vs declaration); this test
-  // guards every other declaration and any NEW one.
+  // A parent-computed levy (Maryland counties inside SIT_MD) is honoured,
+  // not skipped: it must be refused by the dispatch's double-count guard
+  // rather than computed — and the resolver golden below proves no separate
+  // levy is produced for it at all.
   const failures: string[] = [];
   for (const region of packWithholding("US").regions) {
     for (const levy of region.subRegions) {
-      if (!levy.implemented || levy.rateSource.kind !== "pack" || region.region === "MD") {
+      if (!levy.implemented || levy.rateSource.kind !== "pack") {
+        continue;
+      }
+      if (levy.computedByParent) {
+        assert.throws(
+          () => computeUsWithholding({
+            levy: {
+              level: "sub_region", region: region.region, subRegion: levy.code,
+              label: levy.label, basis: "resident", side: "residence", reach: "resident",
+              certificateKey: levy.certificateKey ?? region.certificateKey ?? null,
+            },
+            payDate: "2026-07-21", periodEnd: "2026-07-18", periodsPerYear: 26,
+            wages: "2000.00", federalIncomeTax: "100.00",
+            certificateFor: () => null, tenantRates: () => undefined,
+          }),
+          new RegExp(
+            `computed inside ${levy.computedByParent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+            + ".*would withhold the same tax twice",
+          ),
+          `${region.region}:${levy.code} must refuse a separate posting`,
+        );
         continue;
       }
       const reach = levy.reaches.includes("resident") ? "resident" as const : "nonresident" as const;
@@ -655,4 +675,51 @@ test("every implemented pack-sourced sub-region levy computes through the dispat
     }
   }
   assert.deepEqual(failures, [], "unwired sub-region levies");
+});
+
+test("a Maryland residence county moves SIT_MD and produces no separate levy", () => {
+  // The Comptroller's combined state+local tables: the same $1,000 weekly
+  // wage with one exemption is $69.41 through Montgomery county's 3.20%
+  // table and $68.10 through Carroll county's 3.05% table (Guide p. 39
+  // cells, pinned in conformance-md) — the county SELECTS the SIT_MD
+  // computation. And the resolver produces no county levy for either code,
+  // because the local tax is inside SIT_MD, not beside it: a separate
+  // posting would withhold the same tax twice.
+  const certificateFor = (county: string) => resolveCertificate({
+    certificate: payrollCertificate("US", "us_md_mw507"),
+    stored: [{
+      certificateKey: "us_md_mw507",
+      answers: { filing_status: "single", exemptions: "1", residence_county: county },
+      effectiveFrom: "2026-01-01",
+    }],
+    asOf: "2026-03-06",
+  });
+  const compute = (county: string) => MD_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "resident",
+    certificate: certificateFor(county),
+  });
+  const montgomery = compute("16");
+  const carroll = compute("07");
+  assert.equal(montgomery.factors.MD_LOCAL_TABLE, "3.20");
+  assert.equal(montgomery.tax, money("69.41"));
+  assert.equal(carroll.factors.MD_LOCAL_TABLE, "3.05");
+  assert.equal(carroll.tax, money("68.10"));
+
+  for (const code of ["16", "07"]) {
+    const resolved = resolveWithholding({
+      country: "US", workRegion: "MD", residenceRegion: "MD",
+      workSubRegions: [], residenceSubRegions: [code],
+    });
+    assert.deepEqual(
+      resolved.levies.filter((levy) => levy.level === "sub_region"),
+      [],
+      `no separate levy for county ${code}`,
+    );
+    assert.match(resolved.trace.join("\n"), /computed inside SIT_MD/);
+    assert.deepEqual(
+      resolved.gaps.filter((gap) => gap.severity === "blocking"),
+      [],
+      `no blocking gap for county ${code}`,
+    );
+  }
 });

@@ -96,6 +96,19 @@ export interface PayrollSubRegionLevy {
    * number remitted to entirely the wrong authority.
    */
   settlesIndependently?: boolean;
+  /**
+   * Set when the levy is computed INSIDE another posting rather than as its
+   * own stub line — Maryland's county local tax rides the Comptroller's
+   * combined state+local tables inside SIT_MD. The resolver produces no
+   * separate levy for it, and the dispatch refuses one by name, so the same
+   * tax can never post twice. Names the parent computation whose factors
+   * carry it (the state engine's stub code).
+   *
+   * This is not `implemented: false`: the tax IS computed, just not here. An
+   * unimplemented levy blocks by name; a parent-computed one is silently
+   * (but traceably) part of its parent.
+   */
+  computedByParent?: string;
   /** The ordinance or statute the levy is imposed under. */
   citation: string;
   /**

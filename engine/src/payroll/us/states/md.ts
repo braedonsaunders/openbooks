@@ -854,6 +854,12 @@ const MD_COUNTY_LEVIES = MD_COUNTIES_2026.map((county) => ({
   reaches: ["resident", "nonresident"] as const,
   rateSource: { kind: "pack" } as const,
   certificateKey: "us_md_mw507",
+  // Computed inside SIT_MD, not as a separate levy: the state engine
+  // withholds the county local tax through the Comptroller's combined
+  // state+local percentage tables (residents), the graduated county
+  // computations (Anne Arundel, Frederick), or the 2.25% nonresident table.
+  // A separate county posting would withhold the same tax twice.
+  computedByParent: "SIT_MD",
   citation:
     `Withholding Tax Facts January 2026–December 2026 (COM/RAD-098 Revised 12/25) — `
     + `${county.name} (code ${county.code})`
