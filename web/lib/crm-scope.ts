@@ -1,4 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm'
+import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 export function crmSharedScope(
   column: SQL,
@@ -39,6 +40,89 @@ export function crmSubjectVisible(
     or (${kind}='document' and exists (select 1 from documents d where d.org_id=${org} and d.id=${id}${strictScope(sql`d.subsidiary_id`)}))
     or (${kind}='project' and exists (select 1 from projects p where p.org_id=${org} and p.id=${id}${strictScope(sql`p.subsidiary_id`)}))
   )`
+}
+
+/**
+ * Subject kinds an activity link may anchor to. Anything else matches no
+ * visibility branch, so it can never authorize a link.
+ */
+export const CRM_LINKABLE_SUBJECT_KINDS = new Set([
+  'account',
+  'contact',
+  'opportunity',
+  'document',
+  'project',
+])
+
+/**
+ * Lock a link target inside the link-write transaction so the visibility
+ * recheck that follows sees the latest committed subsidiary: a concurrent
+ * rehome (subsidiary UPDATE) of the subject — or of the party its
+ * visibility inherits — blocks on this lock until the link commits, so no
+ * rehome can slip between the check and the link insert. FOR SHARE is the
+ * read-side lock (the link writer never mutates the subject itself).
+ * Returns false when the subject row itself is missing; callers keep their
+ * existing not-found/invalid-record refusal either way.
+ */
+export async function lockCrmLinkSubject(
+  tx: SqlExecutor,
+  orgId: string,
+  kind: string,
+  id: string,
+): Promise<boolean> {
+  if (!CRM_LINKABLE_SUBJECT_KINDS.has(kind)) return false
+  if (kind === 'account') {
+    const profile = (
+      await tx.execute<{ party_id: string }>(sql`
+        select party_id from crm_account_profiles
+         where org_id = ${orgId} and party_id = ${id}
+         for share`)
+    ).rows[0]
+    if (!profile) return false
+    await tx.execute(sql`
+      select 1 from parties where org_id = ${orgId} and id = ${id} for share`)
+    return true
+  }
+  if (kind === 'contact') {
+    const contact = (
+      await tx.execute<{ party_id: string | null }>(sql`
+        select party_id from contacts
+         where org_id = ${orgId} and id = ${id}
+         for share`)
+    ).rows[0]
+    if (!contact) return false
+    if (contact.party_id) {
+      await tx.execute(sql`
+        select 1 from parties where org_id = ${orgId} and id = ${contact.party_id} for share`)
+    }
+    return true
+  }
+  if (kind === 'opportunity') {
+    const opportunity = (
+      await tx.execute<{ party_id: string | null }>(sql`
+        select party_id from crm_opportunities
+         where org_id = ${orgId} and id = ${id}
+         for share`)
+    ).rows[0]
+    if (!opportunity) return false
+    if (opportunity.party_id) {
+      await tx.execute(sql`
+        select 1 from parties where org_id = ${orgId} and id = ${opportunity.party_id} for share`)
+    }
+    return true
+  }
+  if (kind === 'document') {
+    const row = (
+      await tx.execute(sql`
+        select 1 from documents where org_id = ${orgId} and id = ${id} for share`)
+    ).rows[0]
+    return !!row
+  }
+  const project = (
+    await tx.execute(sql`
+      select 1 from projects where org_id = ${orgId} and id = ${id} for share`)
+  ).rows[0]
+  return !!project
 }
 
 /** Unlinked activities are shared; linked activities inherit all related-record restrictions. */

@@ -1,4 +1,4 @@
-import { crmActivityScope, crmSubjectVisible } from '../../../../../lib/crm-scope'
+import { crmActivityScope, crmSubjectVisible, lockCrmLinkSubject } from '../../../../../lib/crm-scope'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -119,7 +119,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const lockedEndsAt = body.endsAt !== undefined ? textOrNull(body.endsAt) : storedTimestampText(visible.rows[0]?.ends_at)
     if (await endsPrecedeStarts(tx as unknown as QueryExecutor, lockedStartsAt, lockedEndsAt)) return NextResponse.json({error:'end must not precede start'},{status:422})
     if (links) for (const link of links) {
-      const valid=await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${link.subjectKind}`,sql`${link.subjectId}`,gate.allowedSubsidiaryIds)}`)
+      // Same lock-then-recheck as the draft route: the recheck must see the
+      // latest committed subsidiary and a concurrent rehome must block until
+      // the replacement links commit.
+      const exists = await lockCrmLinkSubject(tx, user.orgId, link.subjectKind, link.subjectId)
+      const valid = exists
+        ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${link.subjectKind}`,sql`${link.subjectId}`,gate.allowedSubsidiaryIds)}`)
+        : { rows: [] }
       if (!valid.rows.length) return NextResponse.json({error:'invalid related record'},{status:422})
     }
     // Child evidence is captured on both sides of the delete/insert pairs so
