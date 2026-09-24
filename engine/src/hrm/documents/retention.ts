@@ -383,6 +383,7 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
          and a.due_on <= (${today}::date - (${grace} || ' days')::interval)
          and d.status not in ('deleted', 'voided')
        limit 200
+       for update of a, d
     `)).rows;
     for (const row of open) {
       if (row.legal_hold) {
@@ -396,31 +397,37 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
       }
       if (row.action === "delete") {
         if (row.file_id) await purgeCabinetBytes(db, orgId, row.file_id);
-        await db.execute(sql`
+        const changed = (await db.execute<{ id: string }>(sql`
           update hrm_documents set status = 'deleted', updated_at = now()
            where org_id = ${orgId} and id = ${row.document_id}
-        `);
+          returning id
+        `)).rows[0];
+        if (!changed) throw new HrmDocumentsError("REFUSED", "the locked retention document disappeared before deletion");
         await db.execute(sql`
           insert into hrm_document_events (org_id, document_id, kind, actor)
           values (${orgId}, ${row.document_id}, 'deleted', null)
         `);
       } else {
         if (row.file_id) await purgeCabinetBytes(db, orgId, row.file_id);
-        await db.execute(sql`
+        const changed = (await db.execute<{ id: string }>(sql`
           update hrm_documents
              set title = 'Anonymized document', party_id = null, employment_id = null,
                  file_id = null, updated_at = now()
            where org_id = ${orgId} and id = ${row.document_id}
-        `);
+          returning id
+        `)).rows[0];
+        if (!changed) throw new HrmDocumentsError("REFUSED", "the locked retention document disappeared before anonymization");
         await db.execute(sql`
           insert into hrm_document_events (org_id, document_id, kind, actor)
           values (${orgId}, ${row.document_id}, 'deleted', null)
         `);
       }
-      await db.execute(sql`
+      const executed = (await db.execute<{ id: string }>(sql`
         update hrm_retention_actions set executed_at = now(), executed_by = null
          where org_id = ${orgId} and id = ${row.id}
-      `);
+        returning id
+      `)).rows[0];
+      if (!executed) throw new HrmDocumentsError("REFUSED", "the locked retention action disappeared before completion");
       result.executed += 1;
     }
     return result;

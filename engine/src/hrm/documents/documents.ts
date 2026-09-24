@@ -191,9 +191,11 @@ async function loadDocument(
   exec: SqlExecutor,
   orgId: string,
   documentId: string,
+  forUpdate = false,
 ): Promise<DocumentRow> {
   const row = (await exec.execute<DocumentRow>(sql`
     ${DOC_COLS} where org_id = ${orgId} and id = ${documentId}
+    ${forUpdate ? sql`for update` : sql``}
   `)).rows[0];
   // Zero rows is a failure: unknown id or another org's document.
   if (!row) {
@@ -1258,7 +1260,10 @@ export async function setLegalHold(input: {
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
-    const doc = await loadDocument(db, input.orgId, input.documentId);
+    // Retention execution takes this same document lock before rechecking
+    // legal_hold, so a hold either commits first and blocks retention or
+    // waits until the already-claimed retention action is complete.
+    const doc = await loadDocument(db, input.orgId, input.documentId, true);
     await requireRowSubjectInScope(db, input.orgId, input.actorId, { employmentId: doc.employment_id, partyId: doc.party_id });
     const updated = (await db.execute<DocumentRow>(sql`
       update hrm_documents
@@ -1474,4 +1479,3 @@ export async function readDocumentFile(query: {
   const { bytes } = await currentFileBytes(db, query.orgId, doc.file_id);
   return { bytes, filename: `${(doc.title ?? "document").replace(/[^\w\- ]+/g, "").trim().slice(0, 80) || "document"}.pdf` };
 }
-

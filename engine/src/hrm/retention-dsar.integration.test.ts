@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -54,6 +54,20 @@ async function setGraceDays(orgId: string, days: number): Promise<void> {
                                 ${String(days)}::jsonb, true)
      where id = ${orgId}
   `);
+}
+
+async function waitForDocumentLockWaiters(expected: number): Promise<void> {
+  for (let attempt = 0; attempt < 250; attempt += 1) {
+    const waiting = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from pg_stat_activity
+       where datname = current_database() and wait_event_type = 'Lock'
+         and query ilike '%hrm_documents%'
+    `)).rows[0]!.n;
+    if (waiting >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail(`expected ${expected} document-lock waiter(s)`);
 }
 
 async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
@@ -254,6 +268,63 @@ test("retention due, grace, legal hold, delete, and anonymize matrix", { skip: !
       select status from hrm_documents where id = ${heldDoc.document.id}
     `)).rows[0]!;
     assert.equal(held.status, "signed");
+  });
+});
+
+test("a legal hold that races retention wins before destructive execution", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const templateId = await makeTemplate(h, "contract");
+    await saveSchedule({
+      orgId: h.org.orgId, actorId: h.hrId, categoryKey: "contract",
+      retainYears: 0, fromEvent: "completion", action: "delete",
+    });
+    const documentId = await completeDocument(h, templateId, "Hold race document");
+    const completed = (await db.execute<{ tick_day: string }>(sql`
+      select retain_until::text as tick_day from hrm_documents
+       where org_id = ${h.org.orgId} and id = ${documentId}
+    `)).rows[0]!.tick_day;
+    const { setLegalHold } = await import("./documents/documents.ts");
+
+    let releaseBlocker!: () => void;
+    let signalLocked!: () => void;
+    const release = new Promise<void>((resolve) => { releaseBlocker = resolve; });
+    const locked = new Promise<void>((resolve) => { signalLocked = resolve; });
+    const blocker = withOrgTransaction(h.org.orgId, async () => {
+      await db.execute(sql`
+        select id from hrm_documents where org_id = ${h.org.orgId} and id = ${documentId} for update
+      `);
+      signalLocked();
+      await release;
+    });
+    await locked;
+
+    const hold = setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId, hold: true });
+    let tick: Promise<Awaited<ReturnType<typeof runRetentionTick>>> | undefined;
+    try {
+      await waitForDocumentLockWaiters(1);
+      tick = runRetentionTick(h.org.orgId, completed);
+      // Let the tick traverse the flagging query and reach destructive
+      // execution while the hold setter is already queued on this row.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } finally {
+      releaseBlocker();
+    }
+    await blocker;
+    await hold;
+    assert.ok(tick);
+    const result = await tick;
+    assert.equal(result.blocked, 1);
+    assert.equal(result.executed, 0);
+    const state = (await db.execute<{ status: string; legal_hold: boolean }>(sql`
+      select status, legal_hold from hrm_documents where org_id = ${h.org.orgId} and id = ${documentId}
+    `)).rows[0]!;
+    assert.deepEqual(state, { status: "signed", legal_hold: true });
+    const pending = (await db.execute<{ executed_at: string | null; blocked_reason: string | null }>(sql`
+      select executed_at::text as executed_at, blocked_reason from hrm_retention_actions
+       where org_id = ${h.org.orgId} and document_id = ${documentId}
+    `)).rows[0]!;
+    assert.equal(pending.executed_at, null);
+    assert.match(pending.blocked_reason ?? "", /legal hold/);
   });
 });
 
