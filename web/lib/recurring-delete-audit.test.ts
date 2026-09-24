@@ -1,86 +1,155 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { pathToFileURL } from "node:url";
+import type { SessionUser } from "./auth";
 
-const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const route = readFileSync(join(webRoot, 'app/api/recurring/[id]/route.ts'), 'utf8')
-const collectionsClient = readFileSync(join(webRoot, 'app/(app)/collections/CollectionsClient.tsx'), 'utf8')
-const arMessages = JSON.parse(readFileSync(join(webRoot, 'messages/en/ar.json'), 'utf8')) as {
-  collections: { recurring: Record<string, string> }
+/**
+ * Schedule deletion keeps its evidence: a missing schedule reports not
+ * found without writing audit, a schedule that generated documents refuses
+ * with 409 and keeps everything, a clean delete removes the row and
+ * audits the exact before-state, and run-now attributes the generated
+ * document to the authenticated caller.
+ */
+
+const root = pathToFileURL(process.cwd() + "/").href;
+const state: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __recurringDeleteAuditUser: state });
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
+    if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+      return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__recurringDeleteAuditUser.user}" };
+    }
+    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
+    return next(specifier, context);
+  },
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { withSimClock } = await import("@openbooks/engine/src/platform/clock.ts");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const detail = await import("../app/api/recurring/[id]/route");
+
+const request = (method: string) => new Request("http://audit.local/api/recurring/x", { method });
+const paramsFor = (id: string) => ({ params: Promise.resolve({ id }) });
+
+type Seed = {
+  orgId: string;
+  actor: string;
+  template: string;
+  schedule: string;
+  date: string;
+};
+
+async function seedSchedule(withOccurrence: boolean): Promise<Seed> {
+  const org = await createScratchOrg();
+  const seed = await withBypassContext(async () => {
+    const actor = await createScratchUser(org.orgId, "Recurring manager", "recurring_manager");
+    await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
+      where org_id=${org.orgId} and key='recurring_manager'`);
+    const template = randomUUID(), schedule = randomUUID();
+    await db.execute(sql`insert into documents (id,org_id,kind,status,document_number,document_date,currency,party_id,subsidiary_id,created_by)
+      values (${template},${org.orgId},'customer_invoice','draft',${`RECUR-${schedule.slice(0, 8)}`},${org.date},'CAD',${org.customerId},${org.subsidiaryId},${actor})`);
+    await db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount)
+      values (${org.orgId},${template},1,${org.accounts.revenue},'1','100','100','0')`);
+    await db.execute(sql`insert into recurring_schedules (id,org_id,template_document_id,cadence,next_run_on,auto_post,is_active,created_by)
+      values (${schedule},${org.orgId},${template},'monthly',${org.date},false,true,${actor})`);
+    if (withOccurrence) {
+      const generated = randomUUID();
+      await db.execute(sql`insert into documents (id,org_id,kind,status,document_number,document_date,currency,party_id,subsidiary_id,created_by)
+        values (${generated},${org.orgId},'customer_invoice','draft',${`GEN-${schedule.slice(0, 8)}`},${org.date},'CAD',${org.customerId},${org.subsidiaryId},${actor})`);
+      await db.execute(sql`insert into recurring_occurrence_documents (org_id,schedule_id,occurrence_on,document_id,created_by)
+        values (${org.orgId},${schedule},${org.date},${generated},${actor})`);
+    }
+    return { actor, template, schedule };
+  });
+  state.user = { id: seed.actor, orgId: org.orgId, name: "Recurring manager", email: "recurring@scratch.test", roles: [],
+    isSuperAdmin: false, envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: seed.actor };
+  return { orgId: org.orgId, actor: seed.actor, template: seed.template, schedule: seed.schedule, date: org.date };
 }
-const deleteHandler = route.slice(
-  route.indexOf('export async function DELETE'),
-  route.indexOf('/** Run now', route.indexOf('export async function DELETE')),
-)
-const recurringAct = collectionsClient.slice(
-  collectionsClient.indexOf('const act = async'),
-  collectionsClient.indexOf('\n\n  return (', collectionsClient.indexOf('const act = async')),
-)
 
-test('missing recurring schedule returns 404 without a delete audit', () => {
-  const snapshot = deleteHandler.indexOf('await ownedEnabled(tx, authz, id)')
-  const missingGuard = deleteHandler.indexOf('if (!existing) return "not_found"')
-  const deletion = deleteHandler.indexOf('delete from recurring_schedules')
-  const audit = deleteHandler.indexOf('insert into audit_log')
+async function auditRows(orgId: string, rowId: string): Promise<Array<{ action: string; changes: unknown }>> {
+  return (await db.execute<{ action: string; changes: unknown }>(sql`select action, changes from audit_log
+    where org_id=${orgId} and table_name='recurring_schedules' and row_id=${rowId} order by at`)).rows;
+}
 
-  assert.ok(snapshot >= 0, 'the route snapshots the organization-owned schedule')
-  assert.ok(missingGuard > snapshot, 'the route checks whether the snapshot exists')
-  assert.ok(deletion > missingGuard, 'a missing schedule returns before deletion')
-  assert.ok(audit > missingGuard, 'a missing schedule returns before audit insertion')
-  assert.match(
-    deleteHandler,
-    /if \(outcome === "not_found"\) return NextResponse\.json\(\{ error: "not found" \}, \{ status: 404 \}\)/,
-  )
-})
+test("deleting a missing schedule reports not found and writes no audit", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId } = await seedSchedule(false);
+  try {
+    const missing = randomUUID();
+    const response = await withOrgContext(orgId, () => detail.DELETE(request("DELETE"), paramsFor(missing)));
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await auditRows(orgId, missing), [], "a refused delete must not invent audit history");
+  } finally { state.user = null; await dropScratchOrg(orgId); }
+});
 
-test('recurring schedule with generated documents returns a localized-safe 409 before deletion', () => {
-  const lineageLookup = deleteHandler.indexOf('from recurring_occurrence_documents')
-  const lineageGuard = deleteHandler.indexOf('if (lineage.rows[0]) return "generated_documents_exist"')
-  const deletion = deleteHandler.indexOf('delete from recurring_schedules')
+test("deleting a schedule with generated documents refuses and deletes nothing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId, schedule, date } = await seedSchedule(true);
+  try {
+    const response = await withOrgContext(orgId, () => withSimClock(`${date}T00:00:00Z`, () =>
+      detail.DELETE(request("DELETE"), paramsFor(schedule))));
+    assert.equal(response.status, 409);
+    const body = (await response.json()) as { error: string; code: string };
+    assert.equal(body.code, "generated_documents_exist");
+    assert.match(body.error, /generated documents exist/, "the refusal names what blocks it");
+    const remaining = (await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules
+      where org_id=${orgId} and id=${schedule}`)).rows[0]!.n;
+    assert.equal(remaining, 1, "the refused delete removes nothing");
+    assert.deepEqual((await auditRows(orgId, schedule)).map((row) => row.action), [],
+      "the refused delete audits nothing");
+  } finally { state.user = null; await dropScratchOrg(orgId); }
+});
 
-  assert.ok(lineageLookup >= 0, 'the route checks immutable generated-document lineage')
-  assert.ok(lineageGuard > lineageLookup, 'the route refuses a schedule linked to generated documents')
-  assert.ok(deletion > lineageGuard, 'the lineage refusal happens before deletion is attempted')
-  assert.match(
-    deleteHandler,
-    /where schedule_id = \$\{id\} and org_id = \$\{authz\.user\.orgId\}/,
-  )
-  assert.match(deleteHandler, /outcome === "generated_documents_exist"/)
-  assert.match(deleteHandler, /code: "generated_documents_exist"/)
-  assert.match(deleteHandler, /immutable lineage must be preserved/)
-  assert.match(deleteHandler, /\{ status: 409 \}/)
-})
+test("deleting a clean schedule removes it and audits the before state", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId, schedule, date } = await seedSchedule(false);
+  try {
+    const response = await withOrgContext(orgId, () => withSimClock(`${date}T00:00:00Z`, () =>
+      detail.DELETE(request("DELETE"), paramsFor(schedule))));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true });
+    const remaining = (await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules
+      where org_id=${orgId} and id=${schedule}`)).rows[0]!.n;
+    assert.equal(remaining, 0, "the schedule row is gone");
+    const audits = await auditRows(orgId, schedule);
+    assert.equal(audits.length, 1, "exactly one audit row explains the disappearance");
+    assert.equal(audits[0]!.action, "delete");
+    const changes = audits[0]!.changes as { before: { auto_post: boolean }; after: null };
+    assert.equal(changes.after, null);
+    assert.equal(changes.before.auto_post, false, "the audit snapshots the state this transaction deleted");
+  } finally { state.user = null; await dropScratchOrg(orgId); }
+});
 
-test('existing recurring schedule is locked, deleted, and audited with its true before-state', () => {
-  assert.match(deleteHandler, /db\.transaction\(async \(tx\)/)
-  assert.match(
-    route,
-    /where rs\.id = \$\{id\} and rs\.org_id = \$\{authz\.user\.orgId\}[\s\S]*for update of rs for share of d/,
-  )
-  assert.match(
-    deleteHandler,
-    /delete from recurring_schedules where id = \$\{id\} and org_id = \$\{authz\.user\.orgId\}/,
-  )
-  assert.match(deleteHandler, /insert into audit_log/)
-  assert.match(deleteHandler, /JSON\.stringify\(\{ before: existing, after: null \}\)/)
-  assert.doesNotMatch(deleteHandler, /before: existing\.rows\[0\] \?\? null/)
-  assert.match(deleteHandler, /return "deleted" as const/)
-  assert.match(deleteHandler, /return NextResponse\.json\(\{ ok: true \}\)/)
-})
+test("run now attributes the generated document to the authenticated caller", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId, actor, template, schedule, date } = await seedSchedule(false);
+  try {
+    const response = await withOrgContext(orgId, () => withSimClock(`${date}T00:00:00Z`, () =>
+      detail.POST(request("POST"), paramsFor(schedule))));
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    const generated = (await response.json()) as { documentId: string };
+    const row = (await db.execute<{ createdBy: string }>(sql`select created_by as "createdBy" from documents
+      where org_id=${orgId} and id=${generated.documentId}`)).rows[0]!;
+    assert.equal(row.createdBy, actor, "the run records who ran it, and the template stays untouched");
+    assert.notEqual(generated.documentId, template);
+  } finally { state.user = null; await dropScratchOrg(orgId); }
+});
 
-test('recurring schedule action failures display the generated-document conflict message', () => {
-  assert.match(recurringAct, /const result = await r\.json\(\)\.catch\(\(\) => \(\{\}\)\)/)
-  assert.match(recurringAct, /if \(!r\.ok\)/)
-  assert.match(recurringAct, /result\.code === "generated_documents_exist"/)
-  assert.match(recurringAct, /t\("generatedDocumentsDeleteConflict"\)/)
-  assert.equal(
-    arMessages.collections.recurring.generatedDocumentsDeleteConflict,
-    'This recurring schedule cannot be deleted because it has generated documents. Their source history must be preserved.',
-  )
-})
-
-test('run now passes the authenticated user to recurring generation', () => {
-  assert.match(route, /runScheduleNow\(id,\s*authz\.user\.id, undefined,/)
-})
+test("the delete-conflict message exists in en, es, and fr", async () => {
+  // The collections client renders through the ar.collections namespace;
+  // the key must exist (non-empty) wherever the client can run, without
+  // pinning the exact copy.
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  for (const locale of ["en", "es", "fr"]) {
+    const catalog = JSON.parse(readFileSync(join(process.cwd(), "web", "messages", locale, "ar.json"), "utf8")) as Record<
+      string, unknown
+    >;
+    const collections = catalog["collections"] as Record<string, Record<string, unknown>>;
+    const message = collections?.["recurring"]?.["generatedDocumentsDeleteConflict"];
+    assert.equal(typeof message, "string", `${locale} must carry the delete-conflict message`);
+    assert.ok((message as string).length > 0, `${locale} delete-conflict message must not be empty`);
+  }
+});
