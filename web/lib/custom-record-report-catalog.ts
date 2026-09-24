@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { REPORT_ENTITY_MAP, bindPayStubIncomeTaxKeys, bindPayStubSocialKeys, customRecordEntities, validateCustomQuery, type ReportEntity, type ReportCustomQuery } from '@openbooks/reports'
 import { eiColumnSystemKeys, employeeSocialInsuranceSystemKeys, incomeTaxWithholdingSystemKeys } from '@openbooks/engine/src/payroll/packs.ts'
 import { can, type Authz } from './authz'
+import { applyPayrollConfidentialityToCatalog } from './payroll-confidentiality'
 import { inTypeAudience } from './records'
 import { lintRecordFields } from './record-schema'
 
@@ -47,7 +48,11 @@ export async function reportEntityCatalog(authz: Authz): Promise<Record<string, 
       employeeSocialInsuranceSystemKeys(),
     )
   }
-  return catalog
+  // Readers without payroll.read reach the ledger_lines entity through the
+  // report builder, saved views, and drills: mask payroll party identity at
+  // the catalog so every one of those paths compiles the same masked
+  // expressions (per-row amounts collapse in the execution wrapper).
+  return applyPayrollConfidentialityToCatalog(catalog, can(authz, 'payroll.read'))
 }
 
 export function validateCatalogReportQuery(query: unknown, catalog: Record<string, ReportEntity>) {

@@ -53,6 +53,7 @@ import {
 } from './custom-reports'
 import { isReportUuidParam, type ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
+import { can } from './authz'
 import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
 import { resolveSubsidiaryView } from './consolidation'
 import { resolvePeriod } from './periods'
@@ -261,23 +262,27 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     ? undefined
     : (await reportBookSelection(orgId, bookParam)).selectedBook.id
   const side: AgingSide = p.get('side') === 'ap' ? 'ap' : 'ar'
+  // Payroll confidentiality rides the execution principal: readers without
+  // payroll.read get collapsed restricted lines (balanced totals, no employee
+  // identity or per-employee amounts) from every ledger-detail reader below.
+  const canSeePayroll = can(authz, 'payroll.read')
   switch (kind) {
     case 'general-ledger':
       return {
         render: 'data',
         data: generalLedgerExportData(
-          await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId }),
+          await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId, canSeePayroll }),
           t('generalLedger.title'),
           t,
         ),
       }
     case 'journal':
-      return { render: 'data', data: journalExportData(await journalReport(period.from, period.to, { dims, orgId, bookId: detailBookId }), t('journal.title'), t) }
+      return { render: 'data', data: journalExportData(await journalReport(period.from, period.to, { dims, orgId, bookId: detailBookId, canSeePayroll }), t('journal.title'), t) }
     case 'registers':
       return {
         render: 'data',
         data: registerExportData(
-          await partyRegister(side, { from: period.from, to: period.to, dims, orgId, bookId: detailBookId }),
+          await partyRegister(side, { from: period.from, to: period.to, dims, orgId, bookId: detailBookId, canSeePayroll }),
           side === 'ap' ? t('registers.apTitle') : t('registers.arTitle'),
           t,
         ),
@@ -285,7 +290,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     case 'partner-statement': {
       const partyId = p.get('party')
       if (!partyId) throw new Error('party required')
-      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side, dims, bookId: detailBookId }), t) }
+      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side, dims, bookId: detailBookId, canSeePayroll }), t) }
     }
     case 'true-cost':
       return { render: 'data', data: await trueCostExportData(orgId, period) }

@@ -19,7 +19,7 @@ test('assistant journal detail scopes both the header and returned lines', () =>
   assert.match(data, /sql`l\.subsidiary_id`[\s\S]*allowedSubsidiaryIds/)
   assert.match(data, /e\.org_id = \$\{orgId\}\$\{entrySubsidiaryFilter\}/)
   assert.match(data, /l\.org_id = \$\{orgId\}\$\{lineSubsidiaryFilter\}/)
-  assert.match(tools, /entryDetail\(authz\.user\.orgId, a\.entryId, authz\.allowedSubsidiaryIds\)/)
+  assert.match(tools, /entryDetail\(authz\.user\.orgId, a\.entryId, authz\.allowedSubsidiaryIds, can\(authz, "payroll\.read"\)\)/)
 })
 
 test('assistant financial tools keep canonical money strings', () => {

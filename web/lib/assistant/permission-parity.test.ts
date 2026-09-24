@@ -306,7 +306,7 @@ const NARROWED_ROWS: { tool: string; file: string; markers: string[]; note: stri
   {
     tool: "explain_allocation", file: "./tools-allocations.ts",
     markers: [
-      "entryDetail(authz.user.orgId, anchor.id, authz.allowedSubsidiaryIds)",
+      "entryDetail(authz.user.orgId, anchor.id, authz.allowedSubsidiaryIds, can(authz, \"payroll.read\"))",
       "subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)",
       'error: "entry_not_found"',
       'error: "document_not_found"',

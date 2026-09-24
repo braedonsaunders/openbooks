@@ -25,7 +25,7 @@ import {
   type TableSpanRow,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { requirePermission } from '../../../../../lib/authz'
+import { can, requirePermission } from '../../../../../lib/authz'
 import { partnerStatement, type AgingSide } from '../../../../../lib/reports'
 import { orgInfo } from '../../../../../lib/data'
 import { resolvePeriod } from '../../../../../lib/periods'
@@ -125,6 +125,7 @@ export async function loadStatement(
         subsidiaryIds:
           authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds],
       },
+      canSeePayroll: can(authz, 'payroll.read'),
     }),
     orgInfo(),
   ])

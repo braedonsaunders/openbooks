@@ -9,11 +9,11 @@ test("registers scope every journal read to one accounting book", () => {
   assert.match(source, /statementBookExpr/);
   // accountRegister: trailing bookId with a primary-book default, applied to
   // both the page query and the count query.
-  assert.match(source, /bookId\?: string \| null,\n\) \{/);
+  assert.match(source, /bookId\?: string \| null,\n(?:  \/\/.*\n)*  canSeePayroll\?: boolean,\n\) \{/);
   // partyRegister: explicit opt threaded into the opening and lines queries.
-  assert.match(source, /maxLines\?: number; bookId\?: string \| null \}/);
+  assert.match(source, /maxLines\?: number; bookId\?: string \| null/);
   // partnerStatement: forwards its caller's book into partyRegister.
-  assert.match(source, /bookId: opts\.bookId \}/);
+  assert.match(source, /bookId: opts\.bookId,/);
   const direct = source.match(/e\.book_id = \$\{statementBookExpr\(/g) ?? [];
   const shared = source.match(/\$\{bookFilter\}/g) ?? [];
   assert.ok(

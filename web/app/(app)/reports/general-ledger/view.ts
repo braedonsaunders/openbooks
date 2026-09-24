@@ -24,6 +24,7 @@ import {
   type TableSpanRow,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { getAuthz, can } from '@/lib/authz'
 import { dimensionOptions, generalLedger } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
@@ -155,12 +156,15 @@ export async function loadGeneralLedger(
     }
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const authz = await getAuthz()
+  const canSeePayroll = !!authz && can(authz, 'payroll.read')
   const [gl, opts, org] = subView
     ? await Promise.all([
         generalLedger(period.from, period.to, {
           accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
           dims,
           bookId: selectedBook?.id,
+          canSeePayroll,
         }),
         dimensionOptions(undefined, dims.projectId, dims.subsidiaryIds),
         orgInfo(),

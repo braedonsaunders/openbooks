@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { isReportUuidParam } from '../../../../../lib/report-filters'
 import { getAuthz, can } from '../../../../../lib/authz'
+import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from '../../../../../lib/payroll-confidentiality'
 
 export const runtime = 'nodejs'
 
@@ -51,8 +52,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
            l.contributor_kind, l.contributor_ref,
            coalesce(ar.name, us.name) as contributor_name,
            a.id as account_id, a.number as account_number, a.name as account_name,
-           p.display_name as party, d.name as department, pr.name as project
+           p.display_name as party, l.party_id, d.name as department, pr.name as project,
+           doc.kind as doc_kind, e.origin as entry_origin
       from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join departments d on d.id = l.department_id and d.org_id = l.org_id
@@ -60,10 +63,48 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       left join allocation_rule_versions arv on arv.id = l.contributor_ref and arv.org_id = l.org_id
       left join allocation_rules ar on ar.id = arv.rule_id and ar.org_id = arv.org_id
       left join user_scripts us on us.id = l.contributor_ref and us.org_id = l.org_id
+      left join documents doc on doc.id = e.source_document_id and doc.org_id = e.org_id
      where l.entry_id = ${id} and l.org_id = ${authz.user.orgId}
        ${lineSubsidiaryFilter}
      order by l.line_number
   `))
 
-  return NextResponse.json({ entry, lines: lines.rows })
+  // Without payroll.read the collapsed line keeps the account and the summed
+  // amount but names no employee and shows no per-employee memo or amount.
+  // party_id is dropped from the response: it would otherwise carry the first
+  // grouped employee's id past the collapse.
+  const canSeePayroll = can(authz, 'payroll.read')
+  type FlyoutLine = Record<string, unknown> & {
+    amount: string
+    entryId: string
+    accountId: string
+    partyId: string | null
+    payrollOrigin: boolean
+  }
+  const mapped: FlyoutLine[] = lines.rows.map((row) => ({
+    ...row,
+    amount: row.amount as string,
+    entryId: id,
+    accountId: row.account_id as string,
+    partyId: (row.party_id ?? null) as string | null,
+    payrollOrigin: row.doc_kind === 'pay_run' || row.entry_origin === 'payroll',
+  }))
+  const confidential = canSeePayroll ? mapped : collapseRestrictedPayrollLines(
+    mapped,
+    (first, total) => ({
+      ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, party_id: null, memo: null, amount: total,
+    }),
+  )
+  const shaped = confidential.map((row) => {
+    // Strip every collapse input/output key so the response keeps its
+    // original shape: no party ids and no origin markers reach the client.
+    const {
+      party_id: _partyId, doc_kind: _docKind, entry_origin: _entryOrigin,
+      entryId: _entryId, accountId: _accountId, partyId: _partyUuid, payrollOrigin: _payrollOrigin,
+      ...rest
+    } = row
+    return rest
+  })
+
+  return NextResponse.json({ entry, lines: shaped })
 }

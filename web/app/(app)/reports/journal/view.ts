@@ -21,6 +21,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { getAuthz, can } from '@/lib/authz'
 import { dimensionOptions, journalReport } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
@@ -144,9 +145,11 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
     }
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const authz = await getAuthz()
+  const canSeePayroll = !!authz && can(authz, 'payroll.read')
   const [journal, opts, org] = subView
     ? await Promise.all([
-        journalReport(period.from, period.to, { dims, bookId: selectedBook?.id }),
+        journalReport(period.from, period.to, { dims, bookId: selectedBook?.id, canSeePayroll }),
         dimensionOptions(undefined, undefined, dims.subsidiaryIds),
         orgInfo(),
       ])

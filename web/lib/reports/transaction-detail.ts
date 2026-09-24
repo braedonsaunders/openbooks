@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
 import { resolveOrgId } from "../org-scope";
 import type { ExactDecimal } from "../statement-format";
 import { statementBookExpr } from "../gl-summary";
@@ -68,6 +69,12 @@ export async function transactionDetail(opts: {
   limit?: number
   offset?: number
   orgId?: string
+  /**
+   * True when the reader holds payroll.read and may see per-employee pay
+   * detail. Defaults to false (fail closed): without it, party-tagged
+   * payroll lines collapse into one restricted line per entry per account.
+   */
+  canSeePayroll?: boolean
   /** Restrict the drill-down to the statement's accounting book. */
   bookId?: string | null
   /** Newest posting date first — CoA / register browsing. Statement cell
@@ -216,15 +223,15 @@ export async function transactionDetail(opts: {
 
   const r = (await db.execute<{
       line_id: string; entry_id: string; entry_number: string | null; date: string
-      acct_number: string | null; acct_name: string; acct_type: string
-      party: string | null; memo: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
+      acct_number: string | null; acct_name: string; acct_type: string; acct_id: string
+      party: string | null; party_id: string | null; memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null; entry_origin: string
     }>(sql`
     ${cashCtes}
     select l.id as line_id, e.id as entry_id, e.entry_number, e.posting_date::text as date,
-           a.number as acct_number, a.name as acct_name, a.type as acct_type,
-           p.display_name as party, l.memo, ${v} as amount,
-           d.kind as doc_kind, d.id as doc_id
+           a.number as acct_number, a.name as acct_name, a.type as acct_type, l.account_id as acct_id,
+           p.display_name as party, l.party_id, l.memo, ${v} as amount,
+           d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')${cashJoins}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -236,7 +243,21 @@ export async function transactionDetail(opts: {
        : sql`e.posting_date, e.entry_number, l.line_number`}
      limit ${limit} offset ${offset}
   `))
-  const lines: TxnDetailLine[] = r.rows.map((x) => ({
+  // Confidentiality collapses BEFORE shaping below; the totals above are over
+  // the same posted set, so net/debit/credit tie out exactly. Without
+  // payroll.read the collapsed line keeps the account and the summed amount
+  // but names no employee and shows no per-employee memo or amount.
+  const confidential = opts.canSeePayroll === true ? r.rows : collapseRestrictedPayrollLines(
+    r.rows.map((x) => ({
+      ...x,
+      entryId: x.entry_id,
+      accountId: x.acct_id,
+      partyId: x.party_id,
+      payrollOrigin: x.doc_kind === 'pay_run' || x.entry_origin === 'payroll',
+    })),
+    (first, total) => ({ ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, memo: null, amount: total }),
+  )
+  const lines: TxnDetailLine[] = confidential.map((x) => ({
     lineId: x.line_id,
     entryId: x.entry_id,
     entryNumber: x.entry_number,

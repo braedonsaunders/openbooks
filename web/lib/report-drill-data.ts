@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { defaultColumnsFor, validateCustomQuery, type ReportCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
-import type { Authz } from './authz'
+import { can, type Authz } from './authz'
 import { canRunReportEntity } from './report-authz'
 import { executeReport, loadReportDefinition } from './custom-reports'
 import { loadView } from './views'
@@ -144,6 +144,7 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
     getTranslations('common'),
     getTranslations('reports'),
     transactionDetail({
+      canSeePayroll: can(authz, 'payroll.read'),
       accountIds: target.accountIds,
       bookId,
       accountTypes: target.accountTypes,

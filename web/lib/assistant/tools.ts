@@ -211,7 +211,7 @@ const accountRegisterTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { accountId: string; limit?: number };
     const limit = Math.min(a.limit ?? 25, 50);
-    const r = await accountRegister(authz.user.orgId, a.accountId, limit, 0, undefined, authz.allowedSubsidiaryIds);
+    const r = await accountRegister(authz.user.orgId, a.accountId, limit, 0, undefined, authz.allowedSubsidiaryIds, undefined, can(authz, "payroll.read"));
     if (!r.account) return { ok: false, error: "account_not_found" };
     return {
       ok: true,
@@ -337,7 +337,7 @@ const getJournalEntry: AssistantToolDef = {
   inputSchema: z.object({ entryId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { entryId: string };
-    const r = await entryDetail(authz.user.orgId, a.entryId, authz.allowedSubsidiaryIds);
+    const r = await entryDetail(authz.user.orgId, a.entryId, authz.allowedSubsidiaryIds, can(authz, "payroll.read"));
     if (!r.entry) return { ok: false, error: "entry_not_found" };
     const e = r.entry;
     return {

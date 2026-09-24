@@ -191,6 +191,7 @@ export async function getApplicationPartnerStatement(
       to: input.to,
       side,
       dims: reportDims(context),
+      canSeePayroll: can(context.authz, "payroll.read"),
     });
   } catch (error) {
     agingFailure(error);

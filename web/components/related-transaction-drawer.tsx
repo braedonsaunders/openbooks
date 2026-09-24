@@ -13,6 +13,7 @@ import {
 import { loadOrder } from '../app/api/_order/lib'
 import type { OrderKind } from '../lib/order-kinds'
 import { can, type Authz } from '../lib/authz'
+import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from '../lib/payroll-confidentiality'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveFormLayout } from '../lib/customization/resolve'
 import { isFeatureEnabled } from '../lib/features'
@@ -43,6 +44,46 @@ function canSeeDocument(doc: Record<string, unknown>, partyId: string | undefine
   return String(doc.org_id) === authz.user.orgId
     && (!partyId || String(doc.party_id) === partyId)
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id)))
+}
+
+/**
+ * Pay-run drawers reached without payroll.read (the kind gates on gl.read, so
+ * this path is reachable): per-employee net-pay document lines collapse into
+ * one restricted line per account — the same policy as the journal readers,
+ * so a masked journal's document link cannot walk straight back to
+ * per-employee amounts. Account and summed amount stay; employee identity and
+ * per-employee detail go. Non-party aggregate legs pass through untouched.
+ */
+async function maskPayRunDrawerLines(
+  orgId: string,
+  documentId: string,
+  lines: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const refs = (await db.execute<{ id: string; account_id: string; party_id: string | null }>(sql`
+    select id, account_id, party_id from document_lines
+     where org_id = ${orgId} and document_id = ${documentId}
+  `))
+  const byId = new Map(refs.rows.map((row) => [row.id, row]))
+  const mapped = lines.map((line) => {
+    const ref = byId.get(String(line.id))
+    return {
+      ...line,
+      entryId: documentId,
+      accountId: String(ref?.account_id ?? line.account_id),
+      partyId: (ref?.party_id ?? null) as string | null,
+      payrollOrigin: true,
+      amount: String(line.amount ?? 0),
+    }
+  })
+  const collapsed = collapseRestrictedPayrollLines(mapped, (first, total) => ({
+    ...first,
+    description: PAYROLL_RESTRICTED_PARTY_LABEL,
+    amount: total,
+  }))
+  return collapsed.map((row) => {
+    const { entryId: _entryId, accountId: _accountId, partyId: _partyId, payrollOrigin: _payrollOrigin, ...rest } = row
+    return rest
+  })
 }
 
 async function visibleSubsidiaries(authz: Authz) {
@@ -309,8 +350,13 @@ export async function loadRelatedTransactionDrawerData({
   const config = DOC_KINDS[kind]
   const readPerm = kind === 'project_charge' ? 'projects.read' : readPermission(kind)
   if (!config || !can(authz, readPerm)) return null
-  const payload = await loadDocument(id, authz.user.orgId)
-  if (!payload || !canSeeDocument((payload.doc), partyId, authz)) return null
+  const loaded = await loadDocument(id, authz.user.orgId)
+  if (!loaded || !canSeeDocument((loaded.doc), partyId, authz)) return null
+  // A pay_run drawer without payroll.read shows collapsed restricted lines
+  // (see maskPayRunDrawerLines); payroll.read holders see full detail.
+  const payload = kind === 'pay_run' && !can(authz, 'payroll.read')
+    ? { doc: loaded.doc, lines: await maskPayRunDrawerLines(authz.user.orgId, id, loaded.lines) }
+    : loaded
   const [headerDefs, lineDefs] = await Promise.all([
     loadFieldDefs('documents', kind),
     loadFieldDefs('document_lines', kind),
