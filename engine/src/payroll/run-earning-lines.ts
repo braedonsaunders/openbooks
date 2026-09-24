@@ -16,7 +16,7 @@ import { loadActiveDerivedRules, resolveDerivedEarnings } from "./derived-earnin
 import { entitlementBalances, entitlementMoneyValue, planMovementsForStub, type EntitlementPlan, type EntitlementWarning } from "./entitlements.ts";
 import { applyBasisCaps } from "./limits.ts";
 import { divideMoney, allocateProportionally } from "./run-allocation.ts";
-import { type Line, statutoryHolidayLinesForStub, earningsBase, totalHours, earningJobBuckets, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
+import { type Line, programApplicabilityFromExclusions, statutoryHolidayLinesForStub, earningsBase, totalHours, earningJobBuckets, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
 import { resolvePayRate } from "./run-calculation-support.ts";
 import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
 export async function appendPeriodicEarnings(
@@ -48,6 +48,7 @@ export async function appendPeriodicEarnings(
     lines.push({
       componentId: baseComponent.id as string, kind: "earning", description: "Salary",
       amount: periodSalary, sequence: 10,
+      programApplicability: programApplicabilityFromExclusions(baseComponent.program_exclusions),
     });
   } else {
     // Exact annual ÷ annual hours. This quotient IS the stored four-decimal
@@ -123,6 +124,7 @@ export async function appendPeriodicEarnings(
         expenseAccountEvidence: stamp?.evidence ?? null,
         sequence: sequence++,
         classification: group.row.classification,
+        programApplicability: programApplicabilityFromExclusions(componentRow.program_exclusions),
       });
     }
   }
@@ -410,6 +412,7 @@ export async function applyAssignedComponentLines(
       description: c.name as string, amount, sequence: Number(c.sequence),
       taxable: c.taxable as boolean, pensionable: c.pensionable as boolean,
       insurable: c.insurable as boolean, vacationable: c.vacationable as boolean,
+      programApplicability: programApplicabilityFromExclusions(c.program_exclusions),
       nonPeriodic: c.non_periodic as boolean, taxTreatment: c.tax_treatment as string,
       protectionBase: c.protection_base as string,
       protectionMaxPercent: c.protection_max_percent as string | null,
@@ -458,6 +461,7 @@ export async function applyRunLineAdjustments(
       amount, sequence: Number(adj.sequence),
       taxable: adj.taxable as boolean, pensionable: adj.pensionable as boolean,
       insurable: adj.insurable as boolean, vacationable: adj.vacationable as boolean,
+      programApplicability: programApplicabilityFromExclusions(adj.program_exclusions),
       // On a bonus run every earning is non-periodic by definition: the
       // employee is not receiving this amount every period, so annualizing it
       // would over-withhold badly. On a RETRO run the same is true of a manual

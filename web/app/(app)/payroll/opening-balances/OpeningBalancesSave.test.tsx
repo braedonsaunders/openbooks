@@ -97,6 +97,7 @@ const props = {
         taxYear: 2026,
         amounts: null,
         componentAmounts: {},
+        programAmounts: {},
         locked: false,
         lockedBy: null,
         updatedAt: null,
@@ -107,6 +108,7 @@ const props = {
     components: [],
   },
   fields: [{ key: 'grossYtd', label: 'Gross', help: 'gross help', packs: ['CA'] }],
+  programs: [],
   components: [],
   canManage: true,
 } as unknown as Parameters<typeof OpeningBalancesView>[0]

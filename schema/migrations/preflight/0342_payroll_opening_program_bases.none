@@ -1,0 +1,1 @@
+New table plus a new column with a database-side default: no existing row is rewritten, no backfill is computed, and a fresh install creates both empty. There is no prior state an operator could need to remedy, so no preflight is needed.

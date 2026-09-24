@@ -86,6 +86,23 @@ function dynamicOptions(source: SetupDynamicOptionsSource): SetupOption[] {
       }
       return union
     }
+    case 'payroll-contribution-programs': {
+      // Type-ahead over the packs' declared contribution programs (the
+      // pay-component program exclusion picker). Cross-pack union by key;
+      // the labels ride the declarations, exactly as filing program types
+      // do above. Free entry covers the rest; undeclared keys are inert.
+      const seen = new Set<string>()
+      const union: SetupOption[] = []
+      for (const { country } of installablePayrollPacks()) {
+        for (const program of payrollPack(country).contributionPrograms ?? []) {
+          if (!seen.has(program.key)) {
+            seen.add(program.key)
+            union.push({ value: program.key, label: program.label })
+          }
+        }
+      }
+      return union
+    }
   }
 }
 

@@ -304,3 +304,45 @@ test(
     }
   },
 );
+
+test(
+  "program carry-in columns round-trip through export and import, and undeclared programs refuse",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    await seedEmployee(org.orgId, actorId, "Felix Blanc", "FEL01");
+    const resource = payrollOpeningBalancesResource(org.orgId);
+    const ctx = {
+      orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: null,
+    };
+    try {
+      // The declared program is a column: the CA pack's qpip program arrives
+      // as `program:qpip` labeled from the declaration.
+      const columnKeys = (await resource.columns()).map((c) => c.key);
+      assert.ok(columnKeys.includes("program:qpip"), "the declared program is an importable column");
+      const committed = await resource.write(
+        [{ employee: "FEL01", taxYear: 2026, "program:qpip": "12000" }],
+        "insert", ctx,
+      );
+      assert.deepEqual(committed.errors, []);
+      assert.equal(committed.created, 1);
+
+      const exported = await resource.read();
+      const row = exported.rows.find((r) => r.employee === "FEL01");
+      assert.ok(row, "the carry-in exports");
+      assert.equal(row["program:qpip"], "12000.0000");
+
+      // A column for a program no pack declares refuses by name: storing it
+      // would write a carry-in no slip reader can observe.
+      const refused = await resource.write(
+        [{ employee: "FEL01", taxYear: 2026, "program:qpiq": "100" }],
+        "insert", ctx,
+      );
+      assert.equal(refused.failed, 1);
+      assert.match(refused.errors[0]!.message, /"qpiq" is not a declared contribution program/);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

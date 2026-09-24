@@ -139,12 +139,17 @@ export const setupOptionLabel = (
  * - `payroll-deduction-treatments` — the packs' declared pre-tax treatments,
  *   resolved per country into `scopedOptions` (plus the cross-pack union as
  *   the flat `options` fallback)
+ * - `payroll-contribution-programs` — the packs' declared contribution
+ *   programs (engine/src/payroll/packs.ts), for the pay-component program
+ *   exclusion picker. Cross-pack union; free entry covers the rest, and a
+ *   key no pack declares is inert on runs.
  */
 export type SetupDynamicOptionsSource =
   | 'payroll-filing-countries'
   | 'payroll-filing-program-types'
   | 'payroll-component-countries'
   | 'payroll-deduction-treatments'
+  | 'payroll-contribution-programs'
 
 export interface SetupField {
   key: string
@@ -2032,6 +2037,19 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'taxable', kind: 'boolean', defaultValue: true },
       { key: 'pensionable', kind: 'boolean', defaultValue: true },
       { key: 'insurable', kind: 'boolean', defaultValue: true },
+      // Contribution programs this earning does NOT feed, as program keys
+      // (engine/src/payroll/packs.ts `contributionPrograms` — today only the
+      // CA pack's `qpip`). Empty feeds every declared program, matching the
+      // sibling flags' default-true; a key no pack declares is inert on runs.
+      // Chip input with type-ahead over the packs' declared programs (free
+      // entry for the rest). Earnings-only: the accumulation reads
+      // applicability on earning lines alone, so offering it on a deduction
+      // would be a setting that changes nothing (the protection precedent).
+      {
+        key: 'programExclusions', kind: 'stringArray',
+        optionsSource: 'payroll-contribution-programs',
+        showWhen: { field: 'kind', in: ['earning'] },
+      },
       { key: 'vacationable', kind: 'boolean', defaultValue: true },
       { key: 'nonPeriodic', kind: 'boolean' },
       // Pre-tax treatments THE COMPONENT'S PACK declares, resolved per

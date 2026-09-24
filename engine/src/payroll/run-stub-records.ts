@@ -23,6 +23,26 @@ import { divideMoney } from "./run-allocation.ts";
 /** Which rung of the expense-account resolution answered for a stub line. */
 export type ExpenseAccountSource = "item" | "component" | "org_default";
 
+/**
+ * Per-program applicability stamped from a component row's
+ * `program_exclusions` (0342, C-13): the earning type feeds every declared
+ * program EXCEPT the excluded keys. Empty or absent exclusions stamp
+ * nothing, so the accumulation's default-true includes the line. Keys no
+ * pack declares are inert — no declared program ever looks them up, exactly
+ * like an undeclared tax treatment. Pure, so the exclusion semantics are
+ * verifiable without a database.
+ */
+export function programApplicabilityFromExclusions(
+  exclusions: unknown,
+): Record<string, boolean> | undefined {
+  if (!Array.isArray(exclusions)) return undefined;
+  const out: Record<string, boolean> = {};
+  for (const key of exclusions) {
+    if (typeof key === "string" && key !== "") out[key] = false;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export interface Line {
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
@@ -48,10 +68,10 @@ export interface Line {
    * program's own base when its key is present and true. Absent key means
    * included, matching the sibling flags' default-true; an absent map means
    * every declared program includes the line. Never derived from another
-   * program's base. The per-component source column and the line-build
-   * stamping (beside `taxable`/`pensionable`/`insurable` in
-   * run-earning-lines.ts) land with C-13; until then no line carries the map
-   * and every program base covers the same earnings as the EI leg.
+   * program's base. Stamped from the component's `program_exclusions`
+   * (beside `taxable`/`pensionable`/`insurable` in run-earning-lines.ts);
+   * lines built without a component row in hand (holiday pay is wages)
+   * carry no map and default-include, exactly like the sibling flags.
    */
   programApplicability?: Record<string, boolean>;
   vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;

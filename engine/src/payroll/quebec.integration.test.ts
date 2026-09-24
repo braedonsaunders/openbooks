@@ -164,6 +164,9 @@ test(
       const factors = stub.factors as unknown as Record<string, string>;
       assert.equal(factors.C, federal.cpp, "QPP under the T4127 C factor");
       assert.equal(factors.QPIP, federal.qpip);
+      // The QPIP program's own base rides the stub under its declared factor:
+      // no exclusions here, so it covers the same earnings as the EI leg.
+      assert.equal(factors.IE_QPIP, "2400.0000");
       assert.ok(factors.QC_A !== undefined, "TP-1015 trace factors are on the stub");
       assert.ok(factors.QC_Y !== undefined);
 
@@ -286,6 +289,9 @@ test(
       assert.equal(slips[0]!.isQuebec, true);
       assert.equal(slips[0]!.box22IncomeTax, federal.totalTax,
         "T4 box 22 is the federal tax alone — qc_income_tax is a different system key");
+      // T4 box 56 reads the stub's program factor end to end (C-12/C-13):
+      // the full gross, with no pre-adoption carry-in and under the maximum.
+      assert.equal(slips[0]!.box56QpipInsurable, "2400.0000");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

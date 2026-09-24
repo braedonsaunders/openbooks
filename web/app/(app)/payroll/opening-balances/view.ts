@@ -5,6 +5,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
   OPENING_BALANCE_FIELDS,
   declaredEmployerLevyFields,
+  declaredProgramBaseFields,
   employerLevyOpeningsForYear,
   type OpeningBalanceYear,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
@@ -58,6 +59,7 @@ export interface PayrollOpeningBalancesData {
     currentYear: BalancesProps['currentYear']
     initial: OpeningBalanceYear
     fields: BalancesProps['fields']
+    programs: BalancesProps['programs']
     components: BalancesProps['components']
     canManage: boolean
   }
@@ -110,6 +112,12 @@ export async function loadPayrollOpeningBalances(
         help: field.help,
         packs: [...field.packs],
       })),
+      programs: (await declaredProgramBaseFields()).map((program) => ({
+        key: program.programKey,
+        label: program.label,
+        help: program.help,
+        packs: [program.country],
+      })),
       components: data.components,
       canManage: can(authz, 'payroll.manage'),
     },
@@ -155,6 +163,7 @@ export function payrollOpeningBalancesSpec(_data: PayrollOpeningBalancesData): P
           currentYear: f('balances.currentYear'),
           initial: f('balances.initial'),
           fields: f('balances.fields'),
+          programs: f('balances.programs'),
           components: f('balances.components'),
           canManage: f('balances.canManage'),
         }),

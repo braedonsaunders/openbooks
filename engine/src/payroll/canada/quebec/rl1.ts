@@ -6,6 +6,7 @@ import { add, cmp, normalizeMoney } from "../../../money/money.ts";
 import { RATES_2026_JAN } from "../rates.ts";
 import { PayrollError } from "../../error.ts";
 import type { PayrollFilingData } from "../../filing-registry.ts";
+import { openingProgramBasesByEmployee } from "../../opening-balances.ts";
 import {
   carryOpeningYearEndYtd,
   seedOpeningOnlySlips,
@@ -273,11 +274,13 @@ async function rl1SlipsInSnapshot(
  * premiums (box C), QPIP premiums (box H), and the QPP-pensionable base (box
  * G, capped with the stubs by `assembleRl1Slip` below, never after it).
  *
- * Deliberately absent, like the T4's boxes 44 and 56: Québec income tax (box
- * E — `tax_ytd` is the T4-box-22 federal money, not the Québec slice),
- * union dues (box F — the model collects no union-dues YTD), and the QPIP
- * salary base (box I — `insurable_ytd` is the EI base, and promoting it to a
- * QPIP-insurable figure would invent a Québec return).
+ * Deliberately absent, like the T4's box 44: Québec income tax (box E —
+ * `tax_ytd` is the T4-box-22 federal money, not the Québec slice) and union
+ * dues (box F — the model collects no union-dues YTD). Box I IS carried:
+ * the QPIP program's OWN insurable base arrives in `programBasesYtd` under
+ * the pack-declared program key and is capped at the QPIP maximum with the
+ * stubs below — never the EI base (`insurable_ytd`), which would invent a
+ * Québec return. Absent key means no pre-adoption QPIP base, never a guess.
  */
 export function openingYtdIntoRl1Aggregates(
   row: Rl1SlipAggregates,
@@ -291,6 +294,7 @@ export function openingYtdIntoRl1Aggregates(
     ei: add(row.ei, opening.eiYtd),
     qpip: add(row.qpip, opening.qpipYtd),
     pensionable: add(row.pensionable, opening.pensionableYtd),
+    qpipInsurable: add(row.qpipInsurable, opening.programBasesYtd["qpip"] ?? "0"),
   };
 }
 
@@ -327,8 +331,17 @@ async function openingRl1YtdByEmployee(
          or coalesce(b.cpp_ytd, 0) <> 0 or coalesce(b.cpp2_ytd, 0) <> 0
          or coalesce(b.ei_ytd, 0) <> 0 or coalesce(b.qpip_ytd, 0) <> 0
          or coalesce(b.taxable_ytd, 0) <> 0 or coalesce(b.tax_ytd, 0) <> 0
+         -- A program-only carry-in still seeds slips: its base feeds box I
+         -- with no statutory column alongside.
+         or exists (
+           select 1 from payroll_opening_program_bases pb
+            where pb.org_id = b.org_id and pb.employee_party_id = b.employee_party_id
+              and pb.tax_year = b.tax_year and coalesce(pb.insurable_ytd, 0) <> 0
+         )
        )
   `));
+  // Through the caller's snapshot runner, never a second session (see above).
+  const programs = await openingProgramBasesByEmployee(orgId, taxYear, runner);
   return new Map(rows.rows.map((row) => [row.employee_party_id, {
     pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
     insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
@@ -340,6 +353,7 @@ async function openingRl1YtdByEmployee(
     taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
     // RL-1 is Québec employment: US FICA withholding never applies here.
     ficaWithheldYtd: "0",
+    programBasesYtd: programs.get(row.employee_party_id) ?? {},
   }]));
 }
 

@@ -5,6 +5,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import {
   assertTaxYear,
+  declaredProgramBaseFields,
   OPENING_BALANCE_FIELDS,
   OpeningBalanceSaveError,
   saveOpeningBalances,
@@ -55,10 +56,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: message(error) }, { status: 422 })
   }
   const data = await scopedOpeningBalances(gate, year)
+  // Pack-declared contribution programs ride alongside the statutory fields:
+  // the grid shows one carry-in column per program some employee's country
+  // pack declares, labeled from the declaration itself.
+  const programs = await declaredProgramBaseFields()
   return NextResponse.json({
     ...data,
     fields: OPENING_BALANCE_FIELDS.map((field) => ({
       key: field.key, label: field.label, help: field.help, packs: field.packs,
+    })),
+    programs: programs.map((program) => ({
+      key: program.programKey, label: program.label, help: program.help,
+      packs: [program.country],
     })),
   })
 }
@@ -118,7 +127,7 @@ export async function POST(req: Request) {
 
   const rows: OpeningBalanceWrite[] = []
   for (const raw of body.rows) {
-    const row = raw as { employeePartyId?: unknown; amounts?: unknown; components?: unknown }
+    const row = raw as { employeePartyId?: unknown; amounts?: unknown; components?: unknown; programs?: unknown }
     if (typeof row?.employeePartyId !== 'string' || !isUuid(row.employeePartyId)) {
       return NextResponse.json({ error: 'each row needs a valid employeePartyId' }, { status: 422 })
     }
@@ -138,12 +147,26 @@ export async function POST(req: Request) {
       }
       components = persisted.map
     }
+    if (row.programs != null && (typeof row.programs !== 'object' || Array.isArray(row.programs))) {
+      return NextResponse.json({ error: 'programs must be an object' }, { status: 422 })
+    }
+    let programs: Record<string, unknown> | undefined
+    if (row.programs !== undefined) {
+      const persisted = persistMoneyMap(row.programs as Record<string, unknown>)
+      if (!persisted.ok) {
+        return NextResponse.json({ error: moneyRefusal(`Program carry-in for "${persisted.key}"`, persisted.value) }, { status: 422 })
+      }
+      programs = persisted.map
+    }
     rows.push({
       employeePartyId: row.employeePartyId,
       amounts: amounts.map,
       // Absent means "this client does not speak components", which the service
       // treats as "keep what is stored". Sending {} is how the grid clears them.
       components,
+      // Same contract for program carry-ins: absent keeps what is stored,
+      // {} clears them.
+      programs,
     })
   }
 

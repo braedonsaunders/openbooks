@@ -111,7 +111,8 @@ test("the boxes the data cannot populate are published, not implied", () => {
 
 const opening = (overrides: Partial<OpeningYearEndYtd> = {}): OpeningYearEndYtd => ({
   pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
-  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ficaWithheldYtd: "0", ...overrides,
+  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ficaWithheldYtd: "0",
+  programBasesYtd: {}, ...overrides,
 });
 
 test("RL-1 carry-in: pre-adoption YTD is additive with committed QC stubs", () => {
@@ -134,11 +135,10 @@ test("RL-1 carry-in: pre-adoption YTD is additive with committed QC stubs", () =
   assert.equal(carried.pensionable, "74000.0000");
 });
 
-test("RL-1 carry-in leaves boxes E, F and I alone: no opening source exists", () => {
-  // tax_ytd is the T4-box-22 federal money and insurable_ytd the EI base —
-  // neither is Québec income tax, union dues, or the QPIP salary base, so
-  // carrying them into boxes E/F/I would invent a Québec return the same way
-  // the T4 refuses box 44 and box 56.
+test("RL-1 carry-in leaves boxes E and F alone: no opening source exists", () => {
+  // tax_ytd is the T4-box-22 federal money — not Québec income tax — and the
+  // model collects no union-dues YTD, so carrying them into boxes E/F would
+  // invent a Québec return the same way the T4 refuses box 44.
   const before = aggregates();
   const carried = openingYtdIntoRl1Aggregates(
     before,
@@ -150,7 +150,28 @@ test("RL-1 carry-in leaves boxes E, F and I alone: no opening source exists", ()
   );
   assert.equal(carried.qcIncomeTax, before.qcIncomeTax);
   assert.equal(carried.unionDues, before.unionDues);
-  assert.equal(carried.insurable, before.insurable);
+});
+
+test("RL-1 carry-in folds the program's own base into box I, capped at the QPIP maximum (C-13)", () => {
+  // The EI carry-in folded above must not leak into box I: with no program
+  // base the box keeps the stubs alone (RL-1.G s. 5.11: box I is the QPIP
+  // salary base, not EI-insurable earnings).
+  const untouched = openingYtdIntoRl1Aggregates(
+    aggregates({ qpipInsurable: "52000.00" }),
+    opening({ insurableYtd: "11000.25" }),
+  );
+  assert.equal(untouched.qpipInsurable, "52000.0000");
+  // A pre-adoption QPIP base lands additively, then the program maximum
+  // binds the combined base with the stubs — 95,000 of stubs plus 12,000
+  // carried reads 103,000, never 107,000.
+  const carried = openingYtdIntoRl1Aggregates(
+    aggregates({ insurable: "52000.00", qpipInsurable: "95000.00" }),
+    opening({ programBasesYtd: { qpip: "12000.00" } }),
+  );
+  assert.equal(carried.qpipInsurable, "107000.0000");
+  assert.equal(carried.insurable, "52000.00");
+  const slip = assembleRl1Slip(carried, rl1YearCaps(2026));
+  assert.equal(slip.boxI, "103000");
 });
 
 test("RL-1 carry-in is capped with the stubs, not after them", () => {
