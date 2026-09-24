@@ -44,6 +44,7 @@ import {
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   refuseUntranscribedYear,
   type UsStateWithholdingEngine,
@@ -171,9 +172,19 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
+  const militarySpouseExempt = certificateFlag(input.certificate, "military_spouse_exempt");
+  if (militarySpouseExempt) {
+    requireMilitarySpouseEligibility(input.certificate, "Virginia", [
+      { key: "servicemember_orders_on_file", description: "the servicemember's current Virginia military orders are on file" },
+      { key: "spouse_present_solely_to_accompany", description: "the spouse is present in Virginia solely to be with the servicemember" },
+      { key: "same_nonvirginia_domicile", description: "the spouse and servicemember maintain the same domicile outside Virginia" },
+      { key: "spousal_military_id_on_file", description: "a copy of the spousal military identification card is attached" },
+    ]);
+  }
+
   if (
     certificateFlag(input.certificate, "exempt")
-    || certificateFlag(input.certificate, "military_spouse_exempt")
+    || militarySpouseExempt
   ) {
     trace("VA_EXEMPT", 1n);
     return { state: "VA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
@@ -315,8 +326,32 @@ export const VA_CERTIFICATE: PayrollCertificate = {
       kind: "flag",
       help:
         "The employee is in Virginia solely to be with a servicemember spouse stationed here "
-        + "under orders, and maintains a domicile in another state. Attach a copy of the "
-        + "spousal military identification card.",
+        + "under orders, and maintains the same domicile as the servicemember in another state. "
+        + "File VA-4 annually and attach a copy of the spousal military identification card.",
+    },
+    {
+      key: "servicemember_orders_on_file",
+      label: "Servicemember's current Virginia military orders are on file",
+      kind: "flag",
+      help: "Keep the orders supporting the VA-4 military-spouse claim with the signed certificate.",
+    },
+    {
+      key: "spouse_present_solely_to_accompany",
+      label: "Spouse is present in Virginia solely to be with the servicemember",
+      kind: "flag",
+      help: "Required by Form VA-4's SCRA/MSRRA exemption conditions.",
+    },
+    {
+      key: "same_nonvirginia_domicile",
+      label: "Spouse and servicemember maintain the same domicile outside Virginia",
+      kind: "flag",
+      help: "Virginia Tax Bulletin 10-1 requires the same non-Virginia domicile for this exemption.",
+    },
+    {
+      key: "spousal_military_id_on_file",
+      label: "Copy of spousal military identification card is attached",
+      kind: "flag",
+      help: "Form VA-4 Line 4 requires this supporting document.",
     },
   ],
 };
