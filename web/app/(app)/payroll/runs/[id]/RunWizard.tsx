@@ -41,6 +41,7 @@ import { FlowManualButtons } from '../../../../../components/flow-manual-buttons
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'
+import { MoneyInput, moneyFieldError } from '../../../../../components/money-input'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
 import { HolidayAttestations } from './HolidayAttestations'
@@ -1941,7 +1942,12 @@ function ReviewStep({
 }
 
 /** One component amount applied across every selected employee at once. */
-function BulkEditDrawer({
+/**
+ * Bulk adjustment drawer, exported for the amount-refusal test: the amount
+ * is refused with a named cause and remedy through the shared money input
+ * instead of a naive regex with a silently disabled Apply.
+ */
+export function BulkEditDrawer({
   count,
   components,
   busy,
@@ -1965,7 +1971,13 @@ function BulkEditDrawer({
   // a retried request) reuses it and replays instead of writing twice. The
   // drawer unmounts on close, so the next Apply mints a fresh key.
   const [requestKey] = useState(() => crypto.randomUUID())
-  const valid = componentId !== '' && /^-?\d+(\.\d{1,2})?$/.test(amount)
+  // The amount reads through the shared decimal classifier (scale 4, like
+  // the server): every unreadable value names its cause and remedy under
+  // the field, so a disabled Apply is never silent.
+  const amountError = moneyFieldError(t('wizard.adjust.amount'), 'a money amount', amount, 4, {
+    required: true,
+  })
+  const valid = componentId !== '' && amountError === null
   return (
     <Drawer
       open
@@ -2005,12 +2017,15 @@ function BulkEditDrawer({
             ))}
           </optgroup>
         </select>
-        <input
-          aria-label={t('wizard.adjust.amount')}
+        <MoneyInput
+          ariaLabel={t('wizard.adjust.amount')}
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={setAmount}
+          field={t('wizard.adjust.amount')}
+          noun="a money amount"
+          maxScale={4}
+          required
           placeholder={t('wizard.adjust.amount')}
-          inputMode="decimal"
           className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-700 dark:bg-slate-900"
         />
         <input
@@ -2289,12 +2304,15 @@ function StubDrawer({
                       ))}
                     </optgroup>
                   </select>
-                  <input
-                    aria-label={t('wizard.adjust.amount')}
+                  <MoneyInput
+                    ariaLabel={t('wizard.adjust.amount')}
                     value={adjAmount}
-                    onChange={(e) => setAdjAmount(e.target.value)}
+                    onChange={setAdjAmount}
+                    field={t('wizard.adjust.amount')}
+                    noun="a money amount"
+                    maxScale={4}
+                    required
                     placeholder={t('wizard.adjust.amount')}
-                    inputMode="decimal"
                     className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-700 dark:bg-slate-900"
                   />
                 </div>
@@ -2315,7 +2333,11 @@ function StubDrawer({
                 <div className="flex justify-end">
                   <Button
                     size="sm"
-                    disabled={!adjComponent || !/^-?\d+(\.\d{1,2})?$/.test(adjAmount) || busy}
+                    disabled={
+                      !adjComponent
+                      || moneyFieldError(t('wizard.adjust.amount'), 'a money amount', adjAmount, 4, { required: true }) !== null
+                      || busy
+                    }
                     onClick={() => {
                       void onAdjust({
                         action: 'add-adjustment',

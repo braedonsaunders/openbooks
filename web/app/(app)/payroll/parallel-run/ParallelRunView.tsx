@@ -25,6 +25,7 @@ import {
   cn,
 } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 
@@ -1166,12 +1167,15 @@ function ToleranceDrawer({
             >
               {text('fields.tolerance', 'Allowance')}
             </Label>
-            <Input
+            <MoneyInput
               id="tolerance-amount"
               value={amount}
-              inputMode="decimal"
+              onChange={setAmount}
+              field={text('fields.tolerance', 'Allowance')}
+              noun="a money amount"
+              maxScale={4}
+              required
               placeholder="0.01"
-              onChange={(event) => setAmount(event.target.value)}
             />
           </div>
           <div>
@@ -1190,7 +1194,15 @@ function ToleranceDrawer({
               onChange={(event) => setReason(event.target.value)}
             />
           </div>
-          <Button disabled={!selected || saving || !reason.trim()} onClick={save}>
+          <Button
+            disabled={
+              !selected
+              || saving
+              || !reason.trim()
+              || moneyFieldError(text('fields.tolerance', 'Allowance'), 'a money amount', amount, 4, { required: true }) !== null
+            }
+            onClick={save}
+          >
             {saving ? text('saving', 'Saving…') : text('addTolerance', 'Add tolerance')}
           </Button>
         </div>
