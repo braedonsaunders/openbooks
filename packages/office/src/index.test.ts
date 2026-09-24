@@ -3,6 +3,7 @@ import test from 'node:test'
 import ExcelJS from 'exceljs'
 import {
   readSheet,
+  reportResultToXlsx,
   SheetReadError,
   statementSheetToXlsx,
 } from './index'
@@ -60,6 +61,37 @@ test('readSheet refuses a spreadsheet error value naming its cell', async () => 
       return true
     },
   )
+})
+
+test('report XLSX formats money as accounting but leaves counts and quantities alone', async () => {
+  const buffer = await reportResultToXlsx(
+    {
+      groups: [
+        {
+          kind: 'results' as const,
+          title: 'Recall',
+          columns: ['Lots', 'Qty', 'Amount'],
+          rows: [[3, 1.5, 19.99]],
+          money: [false, false, true],
+        },
+      ],
+      summary: [],
+      rowCount: 1,
+    },
+    { reportName: 'Recall', generatedAt: new Date('2026-01-01T00:00:00Z') },
+  )
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+  const ws = workbook.worksheets[0]!
+  // Data row 5: the count stays a bare number with no forced format (Excel
+  // shows General — never 3.00), the quantity keeps its natural precision,
+  // the money column is accounting.
+  assert.equal(ws.getCell(5, 1).value, 3)
+  assert.equal(ws.getCell(5, 1).numFmt, undefined)
+  assert.equal(ws.getCell(5, 2).value, 1.5)
+  assert.equal(ws.getCell(5, 2).numFmt, undefined)
+  assert.equal(ws.getCell(5, 3).value, 19.99)
+  assert.equal(ws.getCell(5, 3).numFmt, '#,##0.00;(#,##0.00)')
 })
 
 test('statement XLSX keeps safely representable decimal strings numeric', async () => {

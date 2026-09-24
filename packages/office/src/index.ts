@@ -98,10 +98,23 @@ export function xlsxColumnWidth(maxLen: number): number {
   return Math.min(Math.max(Math.ceil(maxLen * 1.1) + 2, MIN_COL_WIDTH), MAX_COL_WIDTH)
 }
 
+const XLSX_MONEY_NUMBER_FORMAT = '#,##0.00;(#,##0.00)'
+
+/**
+ * Number format for one data column: money-kind columns (flagged by the
+ * report engine) print as accounting with two places; every other numeric
+ * column keeps Excel's General format so counts stay counts (3, never 3.00)
+ * and quantities keep their natural precision.
+ */
+export function xlsxMoneyNumberFormat(money: boolean | undefined): string | undefined {
+  return money === true ? XLSX_MONEY_NUMBER_FORMAT : undefined
+}
+
 /**
  * Build an .xlsx workbook from a run result: one sheet per section group,
  * each with a title block (rows 1–3) + a frozen bold header (row 4) + data.
- * Number cells are right-aligned with an accounting format.
+ * Money columns are right-aligned with an accounting format; other numbers
+ * keep General formatting per the group's column metadata.
  */
 export async function reportResultToXlsx(
   result: ReportRunResult,
@@ -148,10 +161,11 @@ export async function reportResultToXlsx(
       for (let i = 0; i < group.columns.length; i++) {
         const v = row[i]
         const cell = ws.getCell(dataRow, i + 1)
-        cell.value = v === null || v === undefined ? '' : (v as string | number)
+        cell.value = v === null || v === undefined ? '' : v
         if (typeof cell.value === 'number') {
           cell.alignment = { horizontal: 'right' }
-          cell.numFmt = '#,##0.00;(#,##0.00)'
+          const numFmt = xlsxMoneyNumberFormat(group.money?.[i])
+          if (numFmt) cell.numFmt = numFmt
         }
       }
       dataRow++
@@ -251,6 +265,8 @@ export type StreamingXlsxGroup = {
   columns: string[]
   /** Pre-measured widths from xlsxColumnWidth (header + first 400 data cells). */
   widths: number[]
+  /** Per-column money flags from the report engine (see xlsxMoneyNumberFormat). */
+  money?: boolean[]
 }
 
 export type StreamingXlsxWriter = {
@@ -260,7 +276,6 @@ export type StreamingXlsxWriter = {
   finish(): Promise<Buffer>
 }
 
-const XLSX_NUMBER_FORMAT = '#,##0.00;(#,##0.00)'
 const XLSX_HEADER_ROW = 4
 
 /**
@@ -313,7 +328,7 @@ export function createStreamingXlsxExport(opts: {
     group.widths.forEach((width, i) => {
       ws.getColumn(i + 1).width = width
     })
-    return { ws, columns: group.columns.length, nextRow: XLSX_HEADER_ROW + 1, index }
+    return { ws, columns: group.columns.length, money: group.money, nextRow: XLSX_HEADER_ROW + 1, index }
   })
 
   return {
@@ -324,10 +339,11 @@ export function createStreamingXlsxExport(opts: {
         for (let i = 0; i < sheet.columns; i++) {
           const v = row[i]
           const cell = sheet.ws.getCell(sheet.nextRow, i + 1)
-          cell.value = v === null || v === undefined ? '' : (v as string | number)
+          cell.value = v === null || v === undefined ? '' : v
           if (typeof cell.value === 'number') {
             cell.alignment = { horizontal: 'right' }
-            cell.numFmt = XLSX_NUMBER_FORMAT
+            const numFmt = xlsxMoneyNumberFormat(sheet.money?.[i])
+            if (numFmt) cell.numFmt = numFmt
           }
         }
         sheet.nextRow++

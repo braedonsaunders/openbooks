@@ -261,6 +261,21 @@ test('streamed XLSX honours subtitles, widths, and the empty-groups contract', a
   assert.equal(newWb.worksheets[0]!.getCell(1, 1).value, 'Recall')
 })
 
+test('streamed XLSX formats money columns but leaves counts alone', async () => {
+  const writer = createStreamingXlsxExport({
+    reportName: 'R',
+    generatedAt: new Date('2026-01-01T00:00:00Z'),
+    groups: [{ title: 'Results', columns: ['Lots', 'Amount'], widths: [10, 16], money: [false, true] }],
+  })
+  writer.appendRows(0, [[3, 19.99]])
+  const back = await readAll(await writer.finish())
+  const ws = back.worksheets[0]!
+  assert.equal(ws.getCell(5, 1).value, 3)
+  assert.equal(ws.getCell(5, 1).numFmt, undefined)
+  assert.equal(ws.getCell(5, 2).value, 19.99)
+  assert.equal(ws.getCell(5, 2).numFmt, '#,##0.00;(#,##0.00)')
+})
+
 test('the XLSX stream releases each page: later input mutation cannot corrupt output', async () => {
   const writer = createStreamingXlsxExport({
     reportName: 'R',
