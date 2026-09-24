@@ -5,7 +5,7 @@ import { documentRevisionCounterSql } from "../records/revision.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, isZero, sum, toUnits } from "../money/money.ts";
 import { PaymentError, PaymentRevisionConflictError } from "./payment-errors.ts";
-import { resolveDraftSubsidiary } from "../organization/subsidiary-scope.ts";
+import { lockScopeRow, resolveDraftSubsidiary } from "../organization/subsidiary-scope.ts";
 import { persistPaymentFxRate, persistPaymentMoney, sameCurrencyAllocation, validateAllocationInputs, validateSettlementEvidence, type AllocationInput } from "./settlement-policy.ts";
 import { type PaymentKind, PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentBookId } from "./payment-accounts.ts";
@@ -23,7 +23,11 @@ export function isPaymentKind(kind: string): kind is PaymentKind {
 /** Lock in run → instruction → payment document order before any flow or
  * service writer mutates a payment document; retain the document lock through
  * the caller's transaction so a new run instruction cannot race the check. */
-export async function lockEditablePaymentDocument(id: string, orgId: string, options: { requireDraft?: boolean } = {}) {
+export async function lockEditablePaymentDocument(
+  id: string,
+  orgId: string,
+  options: { requireDraft?: boolean; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
+) {
   const candidates = (await db.execute<{ run_id: string; instruction_id: string }>(sql`
     select run.id as run_id, instruction.id as instruction_id
       from payment_instructions instruction
@@ -42,6 +46,9 @@ export async function lockEditablePaymentDocument(id: string, orgId: string, opt
   const [doc] = await db.select().from(schema.documents)
     .where(and(eq(schema.documents.id, id), eq(schema.documents.orgId, orgId))).for("update");
   if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
+  // Preserve run → instruction → document lock order, then authorize the
+  // persisted scope before exposing any run-state refusal.
+  await lockScopeRow(db, orgId, "document", id, options.allowedSubsidiaryIds ?? null);
   const claimed = (await db.execute<{ runNumber: string; status: string }>(sql`
     select run.run_number as "runNumber", run.status
       from payment_instructions instruction
@@ -160,10 +167,12 @@ export async function updateDraftPayment(
   },
   userId: string | null,
   orgId: string,
-  options: { expectedRevision?: string } = {},
+  options: { expectedRevision?: string; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<Awaited<ReturnType<typeof loadPaymentDocument>>> {
   return withOrgTransaction(orgId, async () => {
-    const doc = await lockEditablePaymentDocument(id, orgId);
+    const doc = await lockEditablePaymentDocument(id, orgId, {
+      allowedSubsidiaryIds: options.allowedSubsidiaryIds,
+    });
     if (!isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
 
     // A draft claimed by an open run is the run's frozen plan: editing its
