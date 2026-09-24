@@ -31,7 +31,6 @@
  *
  * All arithmetic is exact bigint. No floats.
  */
-import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, type PayrollCertificate,
@@ -39,6 +38,8 @@ import {
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
+  payPeriodFor,
+  refuseUnprintedPeriod,
   refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
@@ -96,6 +97,11 @@ export function coRatesForPayDate(payDate: string): CoYearRates {
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = coRatesForPayDate(input.payDate);
+  const P = input.periodsPerYear;
+  const period = payPeriodFor(P);
+  if (period == null || (period === "daily" && P !== 260)) {
+    refuseUnprintedPeriod(CO_WITHHOLDING, P);
+  }
   const militarySpouseCertificate = input.supportingCertificates?.us_co_dr1059;
   if (militarySpouseCertificate?.onFile) {
     requireMilitarySpouseEligibility(militarySpouseCertificate, "Colorado", [
@@ -125,10 +131,6 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       taxSupplemental: D(0n),
       factors: {},
     };
-  }
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Colorado withholding: ${P}`);
   }
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
