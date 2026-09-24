@@ -315,13 +315,14 @@ export async function createCalibrationSession(args: {
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const cycle = (await db.execute<{ id: string; status: string; appliesTo: unknown }>(sql`
       select id, status, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
+       for update
     `)).rows[0];
     if (!cycle) {
       throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
     }
     assertCycleInScope(cycle.appliesTo, allowed);
-    if (cycle.status === "closed") {
-      throw new HrmPerformanceError("BAD_STATE", "this cycle is closed — calibration belongs to an open or calibrating cycle");
+    if (cycle.status !== "open" && cycle.status !== "calibrating") {
+      throw new HrmPerformanceError("BAD_STATE", `this cycle is ${cycle.status} — calibration belongs to an open or calibrating cycle`);
     }
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into hrm_calibration_sessions (org_id, cycle_id, name, scope, facilitator_party_id, created_by, updated_by)
@@ -345,11 +346,15 @@ export async function openCalibrationSession(args: { orgId: string; actorId: str
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const session = await loadSession(db, orgId, id);
     if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    const sessionCycle = (await db.execute<{ appliesTo: unknown }>(sql`
-      select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
+    const sessionCycle = (await db.execute<{ status: string; appliesTo: unknown }>(sql`
+      select status, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
+       for update
     `)).rows[0];
     if (!sessionCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
     assertCycleInScope(sessionCycle.appliesTo, allowed);
+    if (sessionCycle.status !== "open" && sessionCycle.status !== "calibrating") {
+      throw new HrmPerformanceError("BAD_STATE", `this cycle is ${sessionCycle.status} — calibration belongs to an open or calibrating cycle`);
+    }
     if (session.status !== "draft") {
       throw new HrmPerformanceError("BAD_STATE", `only a draft session can be opened — this one is ${session.status}`);
     }
