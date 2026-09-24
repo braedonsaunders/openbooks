@@ -48,7 +48,7 @@ if (typeof (globalThis as Record<string, unknown>).ResizeObserver !== 'function'
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   fetchBodies: [] as Array<Record<string, unknown>>,
-  fetchBehavior: [] as Array<'fail' | 'ok'>,
+  fetchBehavior: [] as Array<'fail' | 'ok' | 'refuse' | 'malformed-refusal'>,
 }
 Object.assign(globalThis, {
   __drawerTestToasts: script.toasts,
@@ -107,6 +107,8 @@ async function mountDrawer(t: TestContext): Promise<void> {
     script.fetchBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>)
     const behavior = script.fetchBehavior.shift() ?? 'ok'
     if (behavior === 'fail') throw new TypeError('fetch failed')
+    if (behavior === 'refuse') return Response.json({ error: 'Posting period is not open' }, { status: 409 })
+    if (behavior === 'malformed-refusal') return new Response('<html>not json</html>', { status: 409 })
     return Response.json({ ok: true, replayed: script.fetchBodies.length > 1, value: '5' })
   }) as typeof fetch
   t.after(() => {
@@ -241,4 +243,32 @@ test('changing the inputs after a failure rotates the retry identity', async (t)
   assert.equal(script.fetchBodies.length, 3)
   const third = script.fetchBodies[2] as { idempotencyKey: string }
   assert.notEqual(third!.idempotencyKey, first!.idempotencyKey, 'an input change must rotate the retry identity')
+})
+
+test('a server refusal stays attached to the movement until the next Post', async (t) => {
+  await mountDrawer(t)
+  await fillReceive()
+  script.fetchBehavior.push('refuse')
+  await clickPost()
+
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Movement failed: Posting period is not open/)
+  assert.deepEqual(script.toasts, [{ kind: 'error', message: 'Posting period is not open' }])
+  assert.equal(
+    [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Post')?.disabled,
+    false,
+    'the refusal must release Post so the operator can correct the problem',
+  )
+})
+
+test('a non-JSON refusal shows the ordinary movement error instead of leaving Post stuck', async (t) => {
+  await mountDrawer(t)
+  await fillReceive()
+  script.fetchBehavior.push('malformed-refusal')
+  await clickPost()
+
+  assert.equal(document.querySelector('[role="alert"]')?.textContent?.trim(), 'Movement failed')
+  assert.equal(
+    [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Post')?.disabled,
+    false,
+  )
 })
