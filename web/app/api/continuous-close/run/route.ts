@@ -4,6 +4,7 @@ import {
   isContinuousCloseAgentKey,
   runContinuousCloseAgent,
 } from "@openbooks/engine/src/continuous-close/continuous-close.ts";
+import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 
 export const runtime = "nodejs";
@@ -24,11 +25,14 @@ export async function POST(request: Request) {
   }
   let result;
   try {
+    // Manual scans are org-wide (detectors plus auto-resolution across every
+    // entity): restricted callers are refused by name before anything persists.
     result = await runContinuousCloseAgent({
       orgId: gate.user.orgId,
       agentKey: body.agentKey,
       trigger: "manual",
       initiatedBy: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     });
   } catch (error) {
     // The scan rechecks the continuousClose switch inside its own write
@@ -36,6 +40,9 @@ export async function POST(request: Request) {
     // name here instead of surfacing as an anonymous 500.
     if ((error as Error).message === "feature_disabled") {
       return NextResponse.json({ error: "feature_disabled" }, { status: 409 });
+    }
+    if (error instanceof UnrestrictedScopeError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;
   }

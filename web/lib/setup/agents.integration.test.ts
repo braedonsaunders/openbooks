@@ -147,7 +147,7 @@ test(
       await withBypassContext(() =>
         saveSetupAgentPolicy(org.orgId, userId, 'accounting', ENABLE_ACCOUNTING),
       )
-      const result = await withBypassContext(() => runSetupAgentNow(org.orgId, userId, 'accounting'))
+      const result = await withBypassContext(() => runSetupAgentNow(org.orgId, userId, 'accounting', null /* test setup: system provenance, unrestricted */))
       assert.equal(result.status, 'completed')
 
       const activity = await withBypassContext(() => listAgentRuns(org.orgId, {}))
@@ -179,7 +179,7 @@ test(
         saveSetupAgentPolicy(org.orgId, userId, 'accounting', ENABLE_ACCOUNTING),
       )
       for (let i = 0; i < 3; i++) {
-        await withBypassContext(() => runSetupAgentNow(org.orgId, userId, 'accounting'))
+        await withBypassContext(() => runSetupAgentNow(org.orgId, userId, 'accounting', null /* test setup: system provenance, unrestricted */))
       }
       const first = await withBypassContext(() => listAgentRuns(org.orgId, { limit: 2 }))
       assert.equal(first.total, 3)
@@ -531,7 +531,7 @@ test(
         withBypassContext(() => saveSetupAgentPolicy(org.orgId, userId, 'nope', ENABLE_ACCOUNTING)),
         /invalid_agent/,
       )
-      assert.throws(() => runSetupAgentNow(org.orgId, userId, 'nope'), /invalid_agent/)
+      assert.throws(() => runSetupAgentNow(org.orgId, userId, 'nope', null /* test setup: system provenance, unrestricted */), /invalid_agent/)
     } finally {
       await dropScratchOrg(org.orgId)
     }

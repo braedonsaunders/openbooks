@@ -308,10 +308,21 @@ export async function saveSetupAgentPolicy(
   return saveOrgAiAgentSettings(orgId, userId, { ...((body ?? {}) as Record<string, unknown>), agentKey })
 }
 
-/** Setup-scoped run-now over the shared `runContinuousCloseAgent` command. */
-export function runSetupAgentNow(orgId: string, userId: string, agentKey: string) {
+/**
+ * Setup-scoped run-now over the shared `runContinuousCloseAgent` command.
+ * The actor's scope is REQUIRED: a manual scan runs the org-wide detector
+ * pack and auto-resolves other entities' findings, so restricted callers are
+ * refused by the engine before anything persists — only explicit null
+ * (unrestricted manual runs) proceeds.
+ */
+export function runSetupAgentNow(
+  orgId: string,
+  userId: string,
+  agentKey: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
   if (!isContinuousCloseAgentKey(agentKey)) throw new Error('invalid_agent')
-  return runContinuousCloseAgent({ orgId, agentKey, trigger: 'manual', initiatedBy: userId })
+  return runContinuousCloseAgent({ orgId, agentKey, trigger: 'manual', initiatedBy: userId, allowedSubsidiaryIds })
 }
 
 export type { AgentNotificationSettings }

@@ -97,7 +97,13 @@ for (const scenario of ["manual parallel books", "automatic secondary book", "cl
         assert.equal((await reconciliationTotals(recon.id, ctx)).clearedBalance, "100.0000");
         await db.execute(sql`insert into ai_agent_policies(org_id,agent_key,enabled,materiality_threshold,analysis_settings)
           values(${org.orgId},'accounting',true,1,'{"rootCauseAnalysis":false,"recommendations":false,"narrative":false}')`);
-        const scan = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", initiatedBy: actor });
+        const scan = await runContinuousCloseAgent({
+          orgId: org.orgId,
+          agentKey: "accounting",
+          trigger: "manual",
+          initiatedBy: actor,
+          allowedSubsidiaryIds: null, // test setup: the reviewer is unrestricted
+        });
         assert.equal(scan.status, "completed");
         const finding = (await db.execute<{ materiality: string }>(sql`select materiality from ai_work_items where org_id=${org.orgId} and finding_type='reconciliation_difference' and subject_id=${recon.id}`)).rows[0];
         assert.equal(finding?.materiality, "100.0000");

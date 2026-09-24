@@ -99,7 +99,7 @@ test("a setup manager sees runs, the pack filter and paging", { skip: !DB }, asy
     await withBypassContext(() =>
       saveSetupAgentPolicy(org.orgId, userId, "accounting", ENABLE_ACCOUNTING),
     );
-    await withBypassContext(() => runSetupAgentNow(org.orgId, userId, "accounting"));
+    await withBypassContext(() => runSetupAgentNow(org.orgId, userId, "accounting", null /* test setup: system provenance, unrestricted */));
     const data = await withBypassContext(() => loadAgentsActivity({}));
     assert.equal(data.total, 1);
     assert.equal(data.rows.length, 1);
