@@ -11,6 +11,7 @@ import {
   compareMoney,
   divideMoney,
   loadCategories,
+  isCategoryVisibleInScope,
   normalizeMoneyValue,
   openItems,
   paymentStats,
@@ -136,7 +137,10 @@ export async function cashflowData(
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
-  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
+  const visibleCategoryConfigs = catConfigs.filter((category) =>
+    isCategoryVisibleInScope(category, subIds, allowedSubsidiaryIds),
+  );
+  const categories = await Promise.all(visibleCategoryConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
 
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
