@@ -231,6 +231,27 @@ test("CT supplemental paid with regular wages is aggregated, not a flat 6.99%", 
   assert.notEqual(aggregated.tax, D(mulRateCents(U("200"), pctToRate("6.99"))));
 });
 
+test("CT supplemental standing alone from regular wages is refused, not aggregated", () => {
+  // Circular CT Example 12's recompute (tax on regular-plus-supplemental
+  // minus tax already withheld on the regular wages) needs the regular
+  // check's tax, which the input does not carry. With no regular wages on
+  // the call the supplemental necessarily stood alone: refuse by name with
+  // the combine-with-regular remedy, never aggregate it as Example 11.
+  assert.throws(
+    () => CT_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 52, wages: "0", supplemental: "200.00",
+      basis: "resident", certificate: cert({ withholding_code: "A" }),
+    }),
+    (error: unknown) => {
+      const message = (error as Error).message;
+      assert.match(message, /Example 12/);
+      assert.match(message, /no regular wages/);
+      assert.match(message, /Pay the supplemental with the regular wages/);
+      return true;
+    },
+  );
+});
+
 test("CT refuses a year it has not transcribed", () => {
   assert.throws(
     () => CT_WITHHOLDING.compute({

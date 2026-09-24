@@ -493,9 +493,22 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "CT", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
-  // Circular CT: paid with regular wages, add them and run the rules once.
-  // Separately-paid supplementals are a two-check recompute the engine is
-  // not given last-period regular tax for — not a silent 6.99%.
+  // Circular CT: paid with regular wages, add them and run the rules once
+  // (Example 11). A supplemental that stands alone from regular wages is
+  // Example 12's two-check recompute — tax on regular-plus-supplemental
+  // minus tax already withheld on the regular wages — and the input carries
+  // no regular-check tax, so the recompute is not decidable here. With no
+  // regular wages on this call the supplemental necessarily stood alone:
+  // refuse by name rather than aggregate it as if it rode the regular check.
+  if (U(input.supplemental ?? "0") > 0n && U(input.wages) === 0n) {
+    throw new Error(
+      "Connecticut supplemental compensation paid separately from regular wages needs "
+      + "Circular CT Example 12's recompute — tax on regular-plus-supplemental wages minus tax "
+      + "already withheld on the regular wages — and this payment carries no regular wages whose "
+      + "withheld tax the recompute could subtract. Pay the supplemental with the regular wages "
+      + "(Example 11, aggregated) instead of on a standalone check.",
+    );
+  }
   const wages = U(input.wages) + U(input.supplemental ?? "0");
 
   if (codeRaw == null) {
