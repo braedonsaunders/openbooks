@@ -32,9 +32,7 @@ import {
 import { getOnboardingOverview, getOwnStep, getProcess, listProcesses } from "./processes-read.ts";
 
 /**
- * HR-4 onboarding / offboarding / transfer processes over the real 0193
- * tables — DB-owned (the integrator runs these at gate; they skip without
- * OPENBOOKS_DB_URL).
+ * Onboarding / offboarding / transfer processes over the real 0193 tables — DB-owned.
  *
  * Proofs are read back from storage, never from the service's own return
  * values alone, and every refusal asserts its code AND its message: the

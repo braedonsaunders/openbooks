@@ -1,5 +1,5 @@
 /**
- * H-CREW authorization proofs (DB-owned — gated remotely).
+ * Crew authorization proofs (DB-owned — gated remotely).
  *
  * - Foreman B cannot edit, submit, or withdraw foreman A's batch: every
  *   denial is batch_unknown, identical to a missing id.
