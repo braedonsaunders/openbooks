@@ -3,8 +3,11 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { loadWorkSchedules } from '@openbooks/engine/src/payroll/work-schedules.ts'
+import { UNRESTRICTED_SCOPE_REQUIRED } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { guardSubsidiaryScope, type Authz } from '../../../lib/authz'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { parseCycleDays } from '../../../lib/work-schedule-days'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
@@ -49,25 +52,53 @@ function readScope(body: Record<string, unknown>) {
   return { employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId, count: set.length }
 }
 
+/**
+ * Normalize the caller's subsidiary scope: only an explicit null is
+ * unrestricted, an absent (undefined) scope fails closed to an empty set.
+ * Nullish coalescing would collapse null into the empty set, so the
+ * undefined check is explicit.
+ */
+function scopedGate(gate: Authz): Authz {
+  if (gate.allowedSubsidiaryIds === undefined) {
+    return { ...gate, allowedSubsidiaryIds: new Set<string>() }
+  }
+  return gate
+}
+
+/** Record-level scope denials answer exactly like not-found (a uniform 404). */
+function hidden() {
+  return NextResponse.json({ error: 'not found' }, { status: 404 })
+}
+
 export async function GET() {
   const gate = await guardFeaturePermission('admin.setup.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
-  const orgId = gate.user.orgId
+  const authz = scopedGate(gate)
+  const scope = authz.allowedSubsidiaryIds
+  const orgId = authz.user.orgId
 
+  // Schedules carry the employee/subsidiary predicate in the engine loader;
+  // the editor's employee picker and subsidiary options narrow the same way,
+  // so a restricted caller never sees another subsidiary's workers. Trades
+  // and departments are org-wide master data with no entity lineage, so
+  // their options stay whole — scoping them would not hide entity data.
   const [schedules, employees, trades, departments, subsidiaries] = await Promise.all([
-    loadWorkSchedules(db, orgId),
+    loadWorkSchedules(db, orgId, scope),
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name
         from employee_roles er
         join parties p on p.id = er.party_id and p.org_id = er.org_id
        where er.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope)}
        order by p.display_name`),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from trades where org_id = ${orgId} order by name`),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from departments where org_id = ${orgId} order by name`),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from subsidiaries where org_id = ${orgId} order by name`),
+      select id, name from subsidiaries where org_id = ${orgId}
+        ${subsidiaryVisibleFilter(sql`id`, scope)}
+       order by name`),
   ])
 
   return NextResponse.json({
@@ -81,11 +112,39 @@ export async function GET() {
   })
 }
 
+/**
+ * Which subsidiary a stored schedule row belongs to. Employee rows belong
+ * to their employee's party subsidiary, subsidiary rows to their
+ * subsidiary; job-title, trade, department and organization rows are
+ * org-wide selectors with no entity lineage. The employee read runs under
+ * a shared lock in the caller's transaction, so a concurrent rehome
+ * cannot move the row between the check and the write.
+ */
+async function scheduleRowBucket(
+  tx: Pick<typeof db, 'execute'>,
+  authz: Authz,
+  orgId: string,
+  row: { employee_party_id: string | null; subsidiary_id: string | null },
+): Promise<'ok' | 'hidden' | 'org-wide'> {
+  if (row.employee_party_id) {
+    const sub = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from parties
+       where org_id = ${orgId} and id = ${row.employee_party_id} for share`)).rows[0]?.subsidiaryId ?? null
+    return guardSubsidiaryScope(authz, sub) ? 'hidden' : 'ok'
+  }
+  if (row.subsidiary_id) {
+    return guardSubsidiaryScope(authz, row.subsidiary_id) ? 'hidden' : 'ok'
+  }
+  return 'org-wide'
+}
+
 export async function POST(request: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
-  const orgId = gate.user.orgId
-  const actorId = gate.user.id
+  const authz = scopedGate(gate)
+  const unrestricted = authz.allowedSubsidiaryIds === null
+  const orgId = authz.user.orgId
+  const actorId = authz.user.id
 
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -96,12 +155,19 @@ export async function POST(request: Request) {
     if (!isUuid(String(body.id ?? ''))) return bad('a schedule id is required')
     const id = String(body.id)
     // Snapshot the pattern and its days first: they decide holiday pay, and a
-    // bare delete leaves no trace of what an absent employee was owed.
-    await db.transaction(async (tx) => {
+    // bare delete leaves no trace of what an absent employee was owed. The
+    // row is locked and its scope rechecked inside the transaction, so a
+    // concurrent rehome cannot move the delete onto another subsidiary.
+    const outcome = await db.transaction(async (tx) => {
       const existing = (await tx.execute(sql`
-        select * from work_schedules where org_id = ${orgId} and id = ${id}`)
+        select * from work_schedules where org_id = ${orgId} and id = ${id} for update`)
       ).rows[0] as Record<string, unknown> | undefined
-      if (!existing) return
+      if (!existing) return 'unknown' as const
+      const bucket = await scheduleRowBucket(tx, authz, orgId, {
+        employee_party_id: (existing.employee_party_id as string | null) ?? null,
+        subsidiary_id: (existing.subsidiary_id as string | null) ?? null,
+      })
+      if (bucket !== 'ok') return bucket
       const days = (await tx.execute(sql`
         select * from work_schedule_days where org_id = ${orgId} and schedule_id = ${id} order by day_index`)
       ).rows
@@ -117,8 +183,19 @@ export async function POST(request: Request) {
            ${JSON.stringify({ before: { ...existing, days } })}::jsonb,
            ${actorId})
       `)
+      return 'ok' as const
     })
-    return NextResponse.json({ ok: true })
+    if (outcome === 'ok') return NextResponse.json({ ok: true })
+    if (outcome === 'hidden') return hidden()
+    if (outcome === 'org-wide') {
+      // An org-wide pattern decides every subsidiary's holiday pay at once,
+      // so only an unrestricted caller may retire it. Reachable only for
+      // restricted callers, hence the named 403 rather than the uniform 404.
+      return NextResponse.json({ error: UNRESTRICTED_SCOPE_REQUIRED }, { status: 403 })
+    }
+    // A delete matching zero rows is a failure, not a success — and a
+    // restricted caller cannot distinguish it from a hidden row anyway.
+    return unrestricted ? bad('that work schedule no longer exists') : hidden()
   }
 
   if (action !== 'save') return bad(`unknown action "${action}"`)
@@ -179,16 +256,37 @@ export async function POST(request: Request) {
   // Parent and days in ONE transaction: a schedule whose day rows half-applied
   // would be a pattern nobody wrote, and it would go on paying somebody. The
   // audit row lands in the same transaction so it never describes a state that
-  // did not commit.
+  // did not commit. Both the stored row's scope and the requested scope are
+  // rechecked under their locks inside this transaction.
   const saved = await db.transaction(async (tx) => {
     let scheduleId = id
     let before: Record<string, unknown> | null = null
     let afterRow: Record<string, unknown>
+    // The requested scope first: a restricted caller may only write a
+    // pattern for an employee or subsidiary they can see — a missing
+    // employee reads exactly like a hidden one. A pattern with no entity
+    // key decides every subsidiary's holiday pay at once, so writing one
+    // is an org-wide write.
+    if (scope.employeePartyId) {
+      const sub = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from parties
+         where org_id = ${orgId} and id = ${scope.employeePartyId} for share`)).rows[0]?.subsidiaryId ?? null
+      if (guardSubsidiaryScope(authz, sub)) return { hidden: true }
+    } else if (scope.subsidiaryId) {
+      if (guardSubsidiaryScope(authz, scope.subsidiaryId)) return { hidden: true }
+    } else if (!unrestricted) {
+      return { 'org-wide': true }
+    }
     if (scheduleId) {
       const existing = (await tx.execute(sql`
-        select * from work_schedules where org_id = ${orgId} and id = ${scheduleId}`)
+        select * from work_schedules where org_id = ${orgId} and id = ${scheduleId} for update`)
       ).rows[0] as Record<string, unknown> | undefined
-      if (!existing) throw new Error('that work schedule no longer exists')
+      if (!existing) return unrestricted ? { conflict: 'that work schedule no longer exists' } : { hidden: true }
+      const bucket = await scheduleRowBucket(tx, authz, orgId, {
+        employee_party_id: (existing.employee_party_id as string | null) ?? null,
+        subsidiary_id: (existing.subsidiary_id as string | null) ?? null,
+      })
+      if (bucket !== 'ok') return { [bucket]: true }
       const beforeDays = (await tx.execute(sql`
         select * from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId} order by day_index`)
       ).rows
@@ -252,6 +350,12 @@ export async function POST(request: Request) {
 
   if (typeof saved === 'object' && saved !== null && 'conflict' in saved) {
     return bad(String(saved.conflict))
+  }
+  if (typeof saved === 'object' && saved !== null && 'hidden' in saved) {
+    return hidden()
+  }
+  if (typeof saved === 'object' && saved !== null && 'org-wide' in saved) {
+    return NextResponse.json({ error: UNRESTRICTED_SCOPE_REQUIRED }, { status: 403 })
   }
   return NextResponse.json({ ok: true, id: saved })
 }
