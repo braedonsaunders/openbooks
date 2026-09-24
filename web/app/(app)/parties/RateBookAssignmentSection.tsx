@@ -49,6 +49,7 @@ export function RateBookAssignmentSection({
   const [busy, setBusy] = useState(false)
   const [canManage, setCanManage] = useState(false)
   const [canOpenPricing, setCanOpenPricing] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [q, setQ] = useState('')
   const [status, setStatus] = useState<'active' | 'inactive' | 'all'>('active')
   const [page, setPage] = useState(1)
@@ -62,26 +63,32 @@ export function RateBookAssignmentSection({
 
   async function load(generation = ++loadGeneration.current) {
     if (generation !== loadGeneration.current) return
-    const params = new URLSearchParams(scopeParam)
-    if (q.trim()) params.set('q', q.trim())
-    params.set('status', status)
-    params.set('page', String(page))
-    const res = await fetch(`/api/rate-book-assignments?${params}`)
-    if (generation !== loadGeneration.current) return
-    if (res.status === 403 || res.status === 404) {
-      setVisible(false)
-      return
+    try {
+      const params = new URLSearchParams(scopeParam)
+      if (q.trim()) params.set('q', q.trim())
+      params.set('status', status)
+      params.set('page', String(page))
+      const res = await fetch(`/api/rate-book-assignments?${params}`)
+      if (generation !== loadGeneration.current) return
+      if (res.status === 403 || res.status === 404) {
+        setLoadError(false)
+        setVisible(false)
+        return
+      }
+      if (!res.ok) throw new Error('rate book assignments could not be loaded')
+      const data = (await res.json()) as { rateBooks: RateBook[]; assignments: Assignment[]; total: number; page: number; perPage: number; canManage: boolean; canOpenPricing: boolean }
+      if (generation !== loadGeneration.current) return
+      setRateBooks(data.rateBooks)
+      setAssignments(data.assignments)
+      setTotal(data.total)
+      setPerPage(data.perPage)
+      setCanManage(data.canManage)
+      setCanOpenPricing(data.canOpenPricing)
+      setLoadError(false)
+      setVisible(true)
+    } catch {
+      if (generation === loadGeneration.current) setLoadError(true)
     }
-    if (!res.ok) return
-    const data = (await res.json()) as { rateBooks: RateBook[]; assignments: Assignment[]; total: number; page: number; perPage: number; canManage: boolean; canOpenPricing: boolean }
-    if (generation !== loadGeneration.current) return
-    setRateBooks(data.rateBooks)
-    setAssignments(data.assignments)
-    setTotal(data.total)
-    setPerPage(data.perPage)
-    setCanManage(data.canManage)
-    setCanOpenPricing(data.canOpenPricing)
-    setVisible(true)
   }
   useEffect(() => {
     const generationRef = loadGeneration
@@ -164,7 +171,18 @@ export function RateBookAssignmentSection({
     await load()
   }
 
-  if (!visible) return null
+  if (!visible && !loadError) return null
+  if (!visible) {
+    return (
+      <section className="mt-4 space-y-3" aria-label={t('title')}>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h4>
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-red-700 dark:text-red-300">
+          <span>{t('loadFailed')}</span>
+          <Button size="sm" variant="outline" onClick={() => void load()}>{common('actions.retry')}</Button>
+        </div>
+      </section>
+    )
+  }
   const canEditAssignments = canManage && editable
   const pages = Math.max(1, Math.ceil(total / perPage))
   const pricingHref = (versionId: string) => {
@@ -186,6 +204,13 @@ export function RateBookAssignmentSection({
           </Button>
         ) : null}
       </div>
+
+      {loadError ? (
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
+          <span>{t('staleLoadFailed')}</span>
+          <Button size="sm" variant="outline" onClick={() => void load()}>{common('actions.retry')}</Button>
+        </div>
+      ) : null}
 
       {rateBooks.length === 0 ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('noBooks')}</p>

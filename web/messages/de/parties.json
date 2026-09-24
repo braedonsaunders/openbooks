@@ -231,6 +231,8 @@
     },
     "empty": "Kein Satzbuch zugeordnet — Standard gilt.",
     "noBooks": "Erstellen Sie zuerst ein Satzbuch.",
+    "loadFailed": "Lohnsatzzuweisungen konnten nicht geladen werden.",
+    "staleLoadFailed": "Zuweisungen konnten nicht aktualisiert werden; die angezeigten Zeilen können veraltet sein.",
     "rateBookRequired": "Satzbuch auswählen",
     "created": "Satzbuch zugeordnet",
     "confirmDelete": "Diese Zuordnung entfernen?",
