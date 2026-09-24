@@ -135,7 +135,6 @@
     "web/app/api/platform/connections/[id]/qwc/route.test.ts": 1,
     "web/app/api/platform/connections/[id]/run/route.test.ts": 1,
     "web/app/api/platform/connections/[id]/test/route.test.ts": 1,
-    "web/app/api/platform/connections/oauth/xero/callback/route.test.ts": 1,
     "web/app/api/recruiting/apply/route.test.ts": 1,
     "web/app/api/scripts/client/sandbox-contract.test.ts": 1,
     "web/app/api/scripts/e/[slug]/route.integration.test.ts": 1,
