@@ -94,7 +94,7 @@ test("a USD to EUR version activates and invoices in EUR", DB, async () => {
       termStartsOn: "2026-01-01",
       renewalPolicy: "none",
     });
-    const billed = await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor });
+    const billed = await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor }, null);
     assert.equal(await invoiceCurrency(org.orgId, billed.invoiceId), "EUR");
   });
 });
@@ -103,7 +103,7 @@ test("a mid-term currency change on a billed subscription is refused at activati
   await withOrg(async (org, actor) => {
     const planId = await seedUsdPlan(org, actor);
     const subscriptionId = await seedSubscription(org, actor, planId);
-    const first = await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor });
+    const first = await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor }, null);
     assert.equal(await invoiceCurrency(org.orgId, first.invoiceId), "USD");
     const versionId = await seedVersion(org, actor, planId, "EUR");
     // The new term starts at the unbilled boundary so the activation
@@ -128,7 +128,7 @@ test("activating the same-currency version on a billed subscription still works"
   await withOrg(async (org, actor) => {
     const planId = await seedUsdPlan(org, actor);
     const subscriptionId = await seedSubscription(org, actor, planId);
-    await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor });
+    await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor }, null);
     const versionId = await seedVersion(org, actor, planId, "USD");
     await activateLifecycle(org.orgId, actor, {
       subscriptionId,
@@ -170,7 +170,7 @@ test("a version without a currency falls back to the plan currency", DB, async (
       termStartsOn: "2026-01-01",
       renewalPolicy: "none",
     });
-    const billed = await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor });
+    const billed = await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor }, null);
     assert.equal(await invoiceCurrency(org.orgId, billed.invoiceId), "USD");
   });
 });

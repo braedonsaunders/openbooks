@@ -85,7 +85,7 @@ for (const autoPost of [true, false]) {
         const before = await mutationSnapshot(org.orgId, subscriptionId);
 
         await assertRefusesCanceled(
-          billSubscriptionNow(subscriptionId, org.date, { actorId }),
+          billSubscriptionNow(subscriptionId, org.date, { actorId }, null),
           "billSubscriptionNow",
         );
 
@@ -151,13 +151,13 @@ test(
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
       const subscriptionId = await seedSubscription(org, actorId, { status: "active", autoPost: true });
 
-      const first = await billSubscriptionNow(subscriptionId, org.date, { actorId });
+      const first = await billSubscriptionNow(subscriptionId, org.date, { actorId }, null);
       assert.ok(first.invoiceId);
       assert.equal(first.posted, true);
       const mid = await mutationSnapshot(org.orgId, subscriptionId);
       assert.equal(mid.docs, 1);
 
-      const replay = await billSubscriptionNow(subscriptionId, org.date, { actorId });
+      const replay = await billSubscriptionNow(subscriptionId, org.date, { actorId }, null);
       assert.equal(replay.invoiceId, first.invoiceId, "same-occurrence replay returns the committed invoice");
       assert.deepEqual(
         await mutationSnapshot(org.orgId, subscriptionId),
@@ -179,7 +179,7 @@ test(
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
       const subscriptionId = await seedSubscription(org, actorId, { status: "paused", autoPost: false });
 
-      const gen = await billSubscriptionNow(subscriptionId, org.date, { actorId });
+      const gen = await billSubscriptionNow(subscriptionId, org.date, { actorId }, null);
       assert.ok(gen.invoiceId, "paused bill-now still bills: pause gates the scheduler only");
     } finally {
       await dropScratchOrgReporting(org.orgId);

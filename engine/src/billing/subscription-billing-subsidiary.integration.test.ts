@@ -95,12 +95,12 @@ test(
       const branchSub = await seedSubscription(org, actorId, planId, branch.customerId);
       const rootSub = await seedSubscription(org, actorId, planId, org.customerId);
 
-      const branchGen = await billSubscriptionNow(branchSub, org.date, { actorId });
+      const branchGen = await billSubscriptionNow(branchSub, org.date, { actorId }, null);
       const branchInvoice = await invoiceSubsidiary(org.orgId, branchGen.invoiceId);
       assert.equal(branchInvoice.subsidiaryId, branch.branchId, "customer B's invoice must carry branch B, not the root");
       assert.equal(branchInvoice.orgId, org.orgId, "no cross-org entity may leak onto the invoice");
 
-      const rootGen = await billSubscriptionNow(rootSub, org.date, { actorId });
+      const rootGen = await billSubscriptionNow(rootSub, org.date, { actorId }, null);
       const rootInvoice = await invoiceSubsidiary(org.orgId, rootGen.invoiceId);
       assert.equal(rootInvoice.subsidiaryId, org.subsidiaryId, "a null-entity (org-wide) customer keeps the root fallback");
     } finally {
@@ -151,7 +151,7 @@ test(
         nextBillOn: "2026-08-01",
       });
 
-      const changed = await changeSubscription(subscriptionId, { quantity: "2" }, "2026-07-15", { actorId });
+      const changed = await changeSubscription(subscriptionId, { quantity: "2" }, "2026-07-15", { actorId }, null);
       assert.ok(changed.invoiceId, "the upgrade must cut a proration invoice");
       assert.equal(
         (await invoiceSubsidiary(org.orgId, changed.invoiceId!)).subsidiaryId,
@@ -278,7 +278,7 @@ test(
       `)).rows[0]!.n;
 
       await assert.rejects(
-        billSubscriptionNow(subscriptionId, org.date, { actorId }),
+        billSubscriptionNow(subscriptionId, org.date, { actorId }, null),
         (e: unknown) =>
           e instanceof SubscriptionError &&
           /not active/.test(e.message) &&

@@ -7,6 +7,11 @@ import {
   normalizeSubscriptionMoney,
   resolveNextBillOnUpdate,
 } from "../../../../engine/src/billing/subscription-billing.ts";
+import {
+  assertUnrestrictedScope,
+  UNRESTRICTED_SCOPE_REQUIRED,
+  UnrestrictedScopeError,
+} from "../../../../engine/src/organization/subsidiary-scope.ts";
 
 interface RouteState {
   queries: unknown[];
@@ -29,6 +34,9 @@ interface RouteState {
 
 const stateKey = Symbol.for("openbooks.subscription-route-test");
 const routeState: RouteState & {
+  assertUnrestrictedScope: typeof assertUnrestrictedScope;
+  unrestrictedScopeError: typeof UnrestrictedScopeError;
+  unrestrictedScopeRequired: typeof UNRESTRICTED_SCOPE_REQUIRED;
   SubscriptionError: typeof SubscriptionError;
   normalizeSubscriptionCadence: typeof normalizeSubscriptionCadence;
   normalizeSubscriptionMoney: typeof normalizeSubscriptionMoney;
@@ -51,6 +59,9 @@ const routeState: RouteState & {
   beforeSubscription: null,
   guardedThrough: null,
   SubscriptionError,
+  assertUnrestrictedScope,
+  unrestrictedScopeError: UnrestrictedScopeError,
+  unrestrictedScopeRequired: UNRESTRICTED_SCOPE_REQUIRED,
   // The cursor guard is pure domain validation: the double delegates to the
   // real function, or the refusal cases below would test a copy of the rule.
   resolveNextBillOnUpdate,
@@ -138,6 +149,9 @@ const mockSources = new Map<string, string>([
         state.engineCalls.push({ fn: 'changeSubscription', args })
         return { invoiceId: null, documentNumber: null, adjustment: '0.0000' }
       }
+      export async function lockSubscriptionCustomerForScope(tx) {
+        return tx.execute({ queryChunks: ['select customer for share'] })
+      }
       export const resolveNextBillOnUpdate = (...args) => state.resolveNextBillOnUpdate(...args)
       export function monthlyRecurringRevenue(amount) { return String(amount) }
       export async function prorateFirstInvoice(...args) {
@@ -156,6 +170,15 @@ const mockSources = new Map<string, string>([
          return null
        }
        return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+     }
+     export function guardUnrestrictedScope(authz) {
+       try {
+         state.assertUnrestrictedScope(authz.allowedSubsidiaryIds)
+         return null
+       } catch (error) {
+         if (!(error instanceof state.unrestrictedScopeError)) throw error
+         return new Response(JSON.stringify({ error: state.unrestrictedScopeRequired }), { status: 403 })
+       }
      }`,
   ],
   ["mock:features", "export async function isFeatureEnabled() { return true }"],
@@ -400,6 +423,23 @@ test("subsidiary-restricted callers cannot create, list, or bill another custome
   );
 });
 
+test("subsidiary-restricted callers cannot change organization-wide subscription plans", async () => {
+  const actions: Array<Record<string, unknown>> = [
+    { ...validPlan, action: "addPlan" },
+    { action: "updatePlan", id: "plan-1", name: "Changed plan", amount: "30.00", interval: "monthly" },
+    { action: "deletePlan", id: "plan-1" },
+  ];
+  for (const body of actions) {
+    reset();
+    routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+    const response = await post(body);
+    assert.equal(response.status, 403, String(body.action));
+    assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    assert.deepEqual(routeState.queries, [], `${String(body.action)} must be refused before any row lookup`);
+    assert.deepEqual(routeState.transactionQueries, [], `${String(body.action)} must not open a write transaction`);
+  }
+});
+
 test("bill-now, change, and first proration attribute the engine call to the authenticated user", async () => {
   reset();
   const billResponse = await post({ action: "billNow", id: "subscription-1" });
@@ -420,10 +460,10 @@ test("bill-now, change, and first proration attribute the engine call to the aut
   // paths, so the engine stamped the subscription's own UUID into user-actor
   // columns. Every interactive engine call must carry the authenticated user.
   assert.deepEqual(routeState.engineCalls, [
-    { fn: "billSubscriptionNow", args: ["subscription-1", undefined, { actorId: "user-1" }] },
+    { fn: "billSubscriptionNow", args: ["subscription-1", undefined, { actorId: "user-1" }, null] },
     {
       fn: "changeSubscription",
-      args: ["subscription-1", { quantity: "2.0000", priceOverride: undefined }, undefined, { actorId: "user-1" }],
+      args: ["subscription-1", { quantity: "2.0000", priceOverride: undefined }, undefined, { actorId: "user-1" }, null],
     },
     { fn: "prorateFirstInvoice", args: ["subscription-1", "2026-09-26", undefined, { actorId: "user-1" }] },
   ]);

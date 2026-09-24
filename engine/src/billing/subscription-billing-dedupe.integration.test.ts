@@ -285,8 +285,8 @@ test(
       // A double-click on "bill now": both serialize on the subscription row
       // lock inside billOne, the loser replays the winner's committed guard.
       const [a, b] = await Promise.all([
-        billSubscriptionNow(subscriptionId, org.date),
-        billSubscriptionNow(subscriptionId, org.date),
+        billSubscriptionNow(subscriptionId, org.date, undefined, null),
+        billSubscriptionNow(subscriptionId, org.date, undefined, null),
       ]);
       assert.equal(a.invoiceId, b.invoiceId, "both callers observe the same invoice");
       assert.equal(await postedInvoiceCount(org.orgId), 1);
@@ -341,8 +341,8 @@ test(
       const subscriptionId = await seedPlainSubscription(org, actorId, { nextBillOn: "2026-08-15" });
 
       const [a, b] = await Promise.all([
-        changeSubscription(subscriptionId, { quantity: "2" }, org.date, { actorId }),
-        changeSubscription(subscriptionId, { quantity: "2" }, org.date, { actorId }),
+        changeSubscription(subscriptionId, { quantity: "2" }, org.date, { actorId }, null),
+        changeSubscription(subscriptionId, { quantity: "2" }, org.date, { actorId }, null),
       ]);
       const invoiced = [a.invoiceId, b.invoiceId].filter((id): id is string => id !== null);
       assert.equal(invoiced.length, 1, "exactly one proration invoice across both calls");
@@ -376,9 +376,9 @@ test(
       `)).rows[0]!.quantity;
 
       await assert.rejects(
-        changeSubscription(subscriptionId, { quantity: "1.00001" }, org.date, { actorId }),
+        changeSubscription(subscriptionId, { quantity: "1.00001" }, org.date, { actorId }, null),
         (e: unknown) =>
-          e instanceof SubscriptionError && /quantity must be an exact decimal/.test(e.message),
+          e instanceof SubscriptionError && /quantity allows at most 4 decimal places/.test(e.message),
       );
       const row = (await db.execute<{ quantity: string; n: number }>(sql`
         select s.quantity,
@@ -423,7 +423,7 @@ test(
           autoPost: false,
         }),
         (e: unknown) =>
-          e instanceof SubscriptionError && /unit price must be an exact decimal/.test(e.message),
+          e instanceof SubscriptionError && /unit price allows at most 4 decimal places/.test(e.message),
       );
       const documents = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents where org_id = ${org.orgId}

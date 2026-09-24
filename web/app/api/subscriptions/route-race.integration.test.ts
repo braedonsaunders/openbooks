@@ -13,7 +13,9 @@ import test from "node:test";
  */
 const root = pathToFileURL(process.cwd() + "/").href;
 const engineRoot = new URL("../../../../engine/", import.meta.url).href;
-const state = { orgId: "", actorId: "" };
+const state: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null } = {
+  orgId: "", actorId: "", allowedSubsidiaryIds: null,
+};
 Object.assign(globalThis, { __subscriptionRaceState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
@@ -23,9 +25,15 @@ registerHooks({
       return virtual(`
         export async function guardPermission() {
           const s = globalThis.__subscriptionRaceState;
-          return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['ar.create']), allowedSubsidiaryIds: null };
+          return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['ar.create']), allowedSubsidiaryIds: s.allowedSubsidiaryIds };
         }
-        export function guardSubsidiaryScope() { return null }
+        export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
+          if (authz.allowedSubsidiaryIds === null || (subsidiaryId == null && opts.orgWideNull) || authz.allowedSubsidiaryIds.has(subsidiaryId)) return null;
+          return new Response(JSON.stringify({error:'not found'}), {status:404});
+        }
+        export function guardUnrestrictedScope(authz) {
+          return authz.allowedSubsidiaryIds === null ? null : new Response(JSON.stringify({error:'requires unrestricted subsidiary access'}), {status:403});
+        }
       `);
     if (specifier.endsWith("/lib/features"))
       return virtual("export async function isFeatureEnabled() { return true }");
@@ -43,11 +51,12 @@ const { runDueSubscriptions } = await import("@openbooks/engine/src/billing/subs
 const { POST } = await import("./route.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function fixture(): Promise<{ orgId: string; subscriptionId: string }> {
+async function fixture(): Promise<{ orgId: string; subscriptionId: string; subsidiaryId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Race Tester", "admin"));
   state.orgId = org.orgId;
   state.actorId = actorId;
+  state.allowedSubsidiaryIds = null;
   await withBypassContext(() => db.execute(sql`
     update orgs set settings = settings || '{"features":{"subscriptionBilling":true}}'::jsonb
      where id = ${org.orgId}`));
@@ -75,7 +84,7 @@ async function fixture(): Promise<{ orgId: string; subscriptionId: string }> {
       (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on, auto_post, created_by)
     values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, '1', 'active',
             '2026-09-01', '2026-09-01', true, ${actorId})`));
-  return { orgId: org.orgId, subscriptionId };
+  return { orgId: org.orgId, subscriptionId, subsidiaryId: org.subsidiaryId };
 }
 
 const post = (body: unknown) =>
@@ -239,5 +248,58 @@ test("a bill-vs-edit race never double-bills: the edit loses against fresh state
   } finally {
     await withBypassContext(() => db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`));
     await withBypassContext(() => dropScratchOrg(orgId));
+  }
+});
+
+test("change and bill-now refuse after a customer rehome while waiting on its row lock", { skip: !DB }, async () => {
+  for (const action of ["changeSubscription", "billNow"] as const) {
+    const { orgId, subscriptionId, subsidiaryId } = await fixture();
+    const holder = await pool.connect();
+    try {
+      const customerId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+        select customer_id as id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`))).rows[0]!.id;
+      const subsidiaryB = randomUUID();
+      await withBypassContext(() => db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${subsidiaryB}, ${orgId}, ${subsidiaryId}, 'Rehomed Entity', 'CAD', 'CA')`));
+      await withBypassContext(() => db.execute(sql`
+        update parties set subsidiary_id = ${subsidiaryId} where id = ${customerId} and org_id = ${orgId}`));
+      state.allowedSubsidiaryIds = new Set([subsidiaryId]);
+
+      await holder.query("begin");
+      await holder.query("select set_config('app.bypass_rls', 'on', true)");
+      await holder.query("select id from parties where id = $1 for update", [customerId]);
+      const pending = post(action === "changeSubscription"
+        ? { action, id: subscriptionId, quantity: "2" }
+        : { action, id: subscriptionId });
+
+      let waiting = 0;
+      const deadline = Date.now() + 10_000;
+      while (waiting === 0 && Date.now() < deadline) {
+        waiting = (await holder.query(`select count(*)::int as n from pg_stat_activity
+          where datname = current_database() and pid <> pg_backend_pid() and wait_event_type = 'Lock'`)).rows[0].n as number;
+        if (waiting === 0) await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.ok(waiting > 0, `${action} must wait on the customer row`);
+      await holder.query("update parties set subsidiary_id = $1 where id = $2 and org_id = $3", [subsidiaryB, customerId, orgId]);
+      await holder.query("commit");
+
+      const response = await pending;
+      assert.equal(response.status, 404, `${action}: ${JSON.stringify(await response.clone().json())}`);
+      assert.deepEqual(await response.json(), { error: "not found" });
+      const after = (await withBypassContext(() => db.execute<{ quantity: string; runCount: number; lastInvoiceId: string | null }>(sql`
+        select quantity::text as quantity, run_count as "runCount", last_invoice_id as "lastInvoiceId"
+          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`))).rows[0]!;
+      assert.equal(after.quantity, "1.0000", `${action} must not change subscription quantity`);
+      assert.equal(after.runCount, 0, `${action} must not book an invoice`);
+      assert.equal(after.lastInvoiceId, null);
+      assert.equal(await invoiceCount(orgId), 0);
+    } finally {
+      try { await holder.query("rollback"); } catch { /* already released */ }
+      holder.release();
+      state.allowedSubsidiaryIds = null;
+      await withBypassContext(() => db.execute(sql`delete from scheduler_outbox where org_id = ${orgId}`));
+      await withBypassContext(() => dropScratchOrg(orgId));
+    }
   }
 });

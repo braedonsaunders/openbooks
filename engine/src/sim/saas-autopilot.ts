@@ -117,7 +117,7 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
       // Expansion: bump seats on one subscription.
       const up = active.rows[seed % active.rows.length]!;
       try {
-        await changeSubscription(up.id, { quantity: (Number(up.quantity) + 1 + (seed % 3)).toString() }, today);
+        await changeSubscription(up.id, { quantity: (Number(up.quantity) + 1 + (seed % 3)).toString() }, today, undefined, null);
         res.changed++;
       } catch (e) { console.error(`[saas ${today}] expansion skipped: ${(e as Error).message}`); }
       // Churn: cancel one subscription a few times a year (when the date hashes to it).
