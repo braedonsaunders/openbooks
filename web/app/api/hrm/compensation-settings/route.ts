@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { compensationErrorResponse } from "../compensation/_lib";
 
@@ -16,6 +16,14 @@ export const runtime = "nodejs";
  * through comp.read; PUT writes through comp.manage with every field
  * validated before the document commits. Gated on hrmCompensation.
  * The client checks res.ok before parsing.
+ *
+ * The document is org-wide policy with no subsidiary lineage — one write
+ * re-tunes every entity's gap analysis and burdened costing at once — so
+ * PUT needs unrestricted subsidiary scope (canonical shape 2): restricted
+ * callers get the named 403 and store nothing. GET stays open to every
+ * comp.read holder: the five fields are policy scalars that disclose no
+ * per-subsidiary material, and restricted analysts need them to run their
+ * own entity's comparisons.
  */
 const settingsBody = z.object({
   comparisonAttributeKey: z.string().trim().max(120).nullable().optional(),
@@ -44,6 +52,8 @@ export async function PUT(req: Request) {
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, settingsBody);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
