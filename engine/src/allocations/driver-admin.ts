@@ -703,13 +703,21 @@ export async function updateDriverValue(
     await assertNoValueOverlap(
       tx, orgId, String(before.driver_id), String(before.dimension_value_id), { from, to }, id,
     );
-    const updated = await tx.execute<Record<string, unknown>>(sql`
-      update allocation_driver_values
-         set effective_to = ${to}, value = ${value},
-             note = ${patch.note !== undefined ? patch.note : (before.note as string | null)},
-             updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${id}
-       returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
+    let updated: { rows: Record<string, unknown>[] };
+    try {
+      updated = await tx.execute<Record<string, unknown>>(sql`
+        update allocation_driver_values
+           set effective_to = ${to}, value = ${value},
+               note = ${patch.note !== undefined ? patch.note : (before.note as string | null)},
+               updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId} and id = ${id}
+         returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
+    } catch (error) {
+      if (isExclusionViolation(error, "allocation_driver_values_no_overlap")) {
+        fail("conflict", "effective window overlaps an existing value for this dimension value");
+      }
+      throw error;
+    }
     const after = updated.rows[0]!;
     await audit(tx, orgId, "allocation_driver_values", id, "update", { before, after }, actorId);
     return mapDriverValue(after);
