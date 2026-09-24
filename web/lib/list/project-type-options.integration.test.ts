@@ -21,7 +21,7 @@ registerHooks({
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key}export async function getLocale(){return 'en'}" };
     }
     if (specifier === "next-intl") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export function useTranslations(){const t=(key)=>key;t.rich=(key)=>key;return t}" };
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export function useTranslations(){const t=(key)=>key;t.rich=(key)=>key;return t}export function useLocale(){return 'en'}export function useTimeZone(){return 'UTC'}" };
     }
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function useRouter(){return {push(){},replace(){},refresh(){}}}export function usePathname(){return '/projects'}export function useSearchParams(){return new URLSearchParams()}" };
