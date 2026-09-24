@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sealJson } from "../platform/secrets.ts";
 import { buildSource, sourceType, validateSourceConfig, type ConnectionRow } from "./connection.ts";
 import { QbdSource } from "./qbd-source.ts";
+import { NetSuiteSource } from "./netsuite-source.ts";
+
+process.env.OPENBOOKS_DATA_KEY ??=
+  "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
 function qbdRow(config: Record<string, unknown>): ConnectionRow {
   return {
@@ -83,4 +88,57 @@ test("save-time validation shares the build path's base-currency validator", () 
     validateSourceConfig(manifest, { historyStartDate: "2020-01-01", region: "CA", baseCurrency: "ZZZ" }, opts),
     "Base currency has an invalid value",
   );
+});
+
+function netsuiteRow(
+  config: Record<string, unknown>,
+  secrets: Record<string, unknown> | null,
+): ConnectionRow {
+  return {
+    id: "22222222-3333-4444-8555-666666666666",
+    orgId: "00000000-0000-4000-8000-000000000001",
+    source: "netsuite",
+    displayName: "NetSuite test",
+    authKind: "token",
+    status: "active",
+    config,
+    secrets: secrets === null ? null : sealJson(secrets),
+    mirrorEnabled: false,
+    mirrorSchedule: "",
+    postedChangePolicy: "append_only_automatic",
+    postedChangeAuthorizedBy: null,
+    postedChangeAuthorizedAt: null,
+    cursor: null,
+    lastRunAt: null,
+    lastError: null,
+  };
+}
+
+const NETSUITE_CONFIG = { account: "1234567", host: "https://1234567.suitetalk.api.netsuite.com" };
+const NETSUITE_SECRETS = {
+  consumerKey: "ck",
+  consumerSecret: "cs",
+  tokenKey: "tk",
+  tokenSecret: "ts",
+};
+
+test("buildSource refuses a NetSuite connection with a blank token secret, naming it", () => {
+  // The old gate checked only the consumer key: this exact row used to
+  // build a source that signed with an empty secret and died remotely.
+  assert.throws(
+    () => buildSource(netsuiteRow(NETSUITE_CONFIG, { ...NETSUITE_SECRETS, tokenSecret: "" })),
+    /NetSuite connection is missing credentials: token secret — set them on the connection before syncing/,
+  );
+});
+
+test("buildSource names every missing NetSuite credential at once", () => {
+  assert.throws(
+    () => buildSource(netsuiteRow({ account: "   " }, { consumerKey: "ck" })),
+    /NetSuite connection is missing credentials: account, host, consumer secret, token key, token secret/,
+  );
+});
+
+test("buildSource builds a NetSuite source once every credential is present", () => {
+  const source = buildSource(netsuiteRow(NETSUITE_CONFIG, NETSUITE_SECRETS));
+  assert.ok(source instanceof NetSuiteSource);
 });
