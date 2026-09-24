@@ -38,8 +38,11 @@ import type { SqlExecutor } from "../platform/db.ts";
  * reports as EXP-*, which ARE the live prefixes, while its one-off kinds
  * (FP-*, TM-*, CP-*, WOFF-*, ADV-VOID-*) never collide with any live output
  * and must not steer a sequence. Kinds absent here keep whatever row (and
- * prefix) the live allocator already created for them; kinds with no row and
- * no canonical-prefixed documents are left for the allocator's lazy insert.
+ * prefix) the live allocator already created for them. Kinds with no row
+ * whose issued numbers all share one numeric-suffixed prefix get a floored
+ * row on that prefix from the handoff; anything still rowless (ambiguous or
+ * numberless) is floored by the allocator's lazy insert under the live
+ * caller's prefix.
  */
 const CANONICAL_PREFIXES: Record<string, string> = {
   customer_invoice: "INV-",
@@ -59,6 +62,49 @@ export interface ReconciledSequence {
   documentKind: string;
   prefix: string;
   nextNumber: number;
+}
+
+/**
+ * The live prefix of an unmapped kind, inferred only when every issued
+ * number shares exactly one numeric-suffixed prefix ("EQU-" for EQU-00001
+ * and EQU-00002). Anything else — no numbers, numbers without a numeric
+ * tail (WOFF-deadbeef), or two live runs under different prefixes — returns
+ * null so nothing is steered: the allocator floors under its own live
+ * prefix at first use instead.
+ */
+async function inferSingleIssuedPrefix(
+  exec: SqlExecutor,
+  orgId: string,
+  documentKind: string,
+): Promise<string | null> {
+  const numbers = (await exec.execute<{ n: string }>(sql`
+    select document_number as n from documents
+     where org_id = ${orgId} and kind = ${documentKind}`)).rows.map((r) => r.n);
+  const prefixes = new Set<string>();
+  for (const n of numbers) {
+    const match = n.match(/^(.*\D)(\d+)$/);
+    if (!match) continue;
+    prefixes.add(match[1]!);
+    if (prefixes.size > 1) return null;
+  }
+  return prefixes.size === 1 ? [...prefixes][0]! : null;
+}
+
+/** Highest issued number for a kind under a prefix (0 when none). */
+async function issuedMax(
+  exec: SqlExecutor,
+  orgId: string,
+  documentKind: string,
+  prefix: string,
+): Promise<number> {
+  const issued = (await exec.execute<{ mx: number }>(sql`
+    select coalesce(max(substring(document_number from length(${prefix}) + 1)::bigint), 0) as mx
+      from documents
+     where org_id = ${orgId}
+       and kind = ${documentKind}
+       and starts_with(document_number, ${prefix})
+       and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`));
+  return Number(issued.rows[0]?.mx ?? 0);
 }
 
 /**
@@ -94,7 +140,7 @@ export async function reconcileDocumentSequences(
     const existing = (await exec.execute<{ prefix: string; next_number: number }>(sql`
       select prefix, next_number from number_sequences
        where org_id = ${orgId} and document_kind = ${kind}`)).rows[0];
-    const prefix = existing?.prefix ?? CANONICAL_PREFIXES[kind];
+    const prefix = existing?.prefix ?? CANONICAL_PREFIXES[kind] ?? (await inferSingleIssuedPrefix(exec, orgId, kind));
     if (!prefix) continue;
     const issued = (await exec.execute<{ mx: number }>(sql`
       select coalesce(max(substring(document_number from length(${prefix}) + 1)::bigint), 0) as mx
@@ -127,9 +173,17 @@ export async function allocateDocumentNumber(
   documentKind: string,
   prefix: string,
 ): Promise<string> {
+  // Floor a first-time counter past numbers issued outside the sequence
+  // (sample runs, imports, unmapped kinds the handoff left rowless): the
+  // 0032 maintenance repair makes the same guarantee the other way round —
+  // the merged row moves past every configured counter AND every issued
+  // number — so the allocator must not reproduce an issued number either.
+  // Read-then-insert races still converge: the upsert serializes writers on
+  // the row lock and every writer draws a distinct number.
+  const floor = await issuedMax(exec, orgId, documentKind, prefix);
   const seq = await exec.execute<{ prefix: string; next_number: number; padding: number }>(sql`
-    insert into number_sequences (org_id, document_kind, prefix)
-    values (${orgId}, ${documentKind}, ${prefix})
+    insert into number_sequences (org_id, document_kind, prefix, next_number, allocated_through)
+    values (${orgId}, ${documentKind}, ${prefix}, ${floor > 0 ? floor + 1 : 1}, ${floor > 0 ? floor : 0})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     where number_sequences.org_id = ${orgId}

@@ -100,3 +100,60 @@ test("counters that already lead stay put", { skip: !DB }, async () => {
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("an unmapped kind with issued numbers floors its handoff row past the max", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // custrec:equipment has no canonical prefix entry and no sequence row,
+    // but live EQU-00001/02 are already issued. The handoff used to skip the
+    // kind entirely, so the next live allocation lazily restarted at
+    // EQU-00001 and died on the documents unique index mid-close.
+    await seedNumberedDocument(org.orgId, "custrec:equipment", "EQU-00001");
+    await seedNumberedDocument(org.orgId, "custrec:equipment", "EQU-00002");
+
+    await reconcileDocumentSequences(db, org.orgId);
+
+    const rows = await sequenceRow(org.orgId, "custrec:equipment");
+    assert.equal(rows[0]?.prefix, "EQU-");
+    assert.equal(rows[0]?.next_number, 2);
+    const next = await allocateDocumentNumber(db, org.orgId, "custrec:equipment", "EQU-");
+    assert.equal(next, "EQU-00003");
+    await seedNumberedDocument(org.orgId, "custrec:equipment", next);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a lazy first allocation floors past issued numbers without any handoff", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await seedNumberedDocument(org.orgId, "custrec:equipment", "EQU-00001");
+    await seedNumberedDocument(org.orgId, "custrec:equipment", "EQU-00002");
+
+    // No reconcileDocumentSequences call: the allocator itself must floor
+    // from max(issued) for the kind and prefix instead of restarting at 1.
+    const next = await allocateDocumentNumber(db, org.orgId, "custrec:equipment", "EQU-");
+    assert.equal(next, "EQU-00003");
+    await seedNumberedDocument(org.orgId, "custrec:equipment", next);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a kind with two issued prefixes stays out of the handoff for the lazy floor", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // No single shared prefix: inferring either one would steer the other
+    // run's numbers, so the handoff creates no row and the live allocator
+    // floors under its own prefix at first use.
+    await seedNumberedDocument(org.orgId, "custrec:mixed", "XX-00001");
+    await seedNumberedDocument(org.orgId, "custrec:mixed", "YY-00007");
+
+    await reconcileDocumentSequences(db, org.orgId);
+
+    assert.deepEqual(await sequenceRow(org.orgId, "custrec:mixed"), []);
+    assert.equal(await allocateDocumentNumber(db, org.orgId, "custrec:mixed", "XX-"), "XX-00002");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
