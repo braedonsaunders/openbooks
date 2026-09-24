@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmChangeRequestError } from "@openbooks/engine/src/hrm/change-requests.ts";
 import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
@@ -75,6 +76,12 @@ export function recruitingErrorResponse(e: unknown): NextResponse {
     // cannot be probed across tenants; missing grants are forbidden.
     const status = /not visible in this organization/.test(e.message) ? 404 : 403;
     return NextResponse.json({ error: e.message }, { status });
+  }
+  if (e instanceof UnrestrictedScopeError) {
+    // Org-wide configuration writes by subsidiary-restricted callers: the
+    // record is visible and only the scope is lacking, so the refusal names
+    // its remedy with the canonical 403 body — never a 500.
+    return NextResponse.json({ error: e.message }, { status: 403 });
   }
   console.error("[hrm] recruiting endpoint failed:", e);
   return NextResponse.json({ error: "internal error" }, { status: 500 });
