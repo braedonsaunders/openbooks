@@ -72,7 +72,7 @@ function authzFor(
   } as unknown as Authz
 }
 
-async function makeFixture(): Promise<Fixture> {
+async function makeFixture(lookupHandler?: string): Promise<Fixture> {
   return await withBypass(async () => {
     const org = await createScratchOrg()
     const other = await createScratchOrg()
@@ -120,7 +120,7 @@ async function makeFixture(): Promise<Fixture> {
         { path: 'frontend/index.html', content: '<html><body>fixture</body></html>' },
         {
           path: 'backend/lookup.js',
-          content: 'function handler(req) { var q = req.body && req.body.q; return { status: 200, body: { echo: q } } }',
+          content: lookupHandler ?? 'function handler(req) { var q = req.body && req.body.q; return { status: 200, body: { echo: q } } }',
         },
         {
           path: 'backend/counter.js',
@@ -148,8 +148,8 @@ async function makeFixture(): Promise<Fixture> {
  * leases at every test boundary, so a fixture memoized across top-level tests
  * silently disappears under CI; each test creates, uses, and releases its own.
  */
-async function withFixture(run: (fx: Fixture) => Promise<void>): Promise<void> {
-  const fx = await makeFixture()
+async function withFixture(run: (fx: Fixture) => Promise<void>, lookupHandler?: string): Promise<void> {
+  const fx = await makeFixture(lookupHandler)
   try {
     // Assistant tool subjects resolve their app and registry from the
     // ambient tenant scope, exactly as a production request would carry it.
@@ -165,6 +165,25 @@ test('read tool executes through executeAssistantTool with the stored schema', {
   assert.equal(result.ok, true, JSON.stringify(result))
   assert.deepEqual((result as { ok: true; data: unknown }).data, { status: 200, body: { echo: 'hello' } })
 }))
+
+test('repeating an identical read runs again instead of replaying stale app data', { skip: !DB }, async () => withFixture(async (fx) => {
+  const first = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: 'same query' })
+  const second = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: 'same query' })
+  assert.equal(first.ok, true)
+  assert.deepEqual(second, first)
+
+  const claims = await withOrgContext(fx.orgId, () => db.execute<{ n: string }>(sql`
+    select count(*)::text as n from application_idempotency_keys
+     where org_id = ${fx.orgId} and source = 'app'
+       and operation = ${`apps.assistant_tool.${READ_TOOL}`}
+  `))
+  assert.equal(Number(claims.rows[0]!.n), 2, 'each chat read has its own invocation identity')
+}))
+
+test('oversized app tool responses are refused before they reach the model', { skip: !DB }, async () => withFixture(async (fx) => {
+  const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: 'large' })
+  assert.deepEqual(result, { ok: false, error: 'tool response too large; narrow the request' })
+}, 'function handler() { return { status: 200, body: { payload: "x".repeat(70 * 1024) } } }'))
 
 test('installation refuses a tool outside the admin grant before creating the app', { skip: !DB }, async () => withFixture(async (fx) => {
   const key = `${APP_KEY}-denied`
