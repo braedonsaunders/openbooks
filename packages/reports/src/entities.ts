@@ -606,7 +606,15 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description: 'The fixed-asset register — status, acquisition, cost, custodian and dimensions.',
     from: `fixed_assets fa
       LEFT JOIN asset_categories ac ON ac.id = fa.category_id AND ac.org_id = fa.org_id
-      LEFT JOIN accounting_books fab ON fab.org_id=fa.org_id AND fab.is_primary
+      -- Keep one deterministic primary-book row per asset during migration rollout;
+      -- the 0345 database constraint refuses duplicate primary designations.
+      LEFT JOIN LATERAL (
+        SELECT ab.id
+          FROM accounting_books ab
+         WHERE ab.org_id = fa.org_id AND ab.is_primary
+         ORDER BY ab.id
+         LIMIT 1
+      ) fab ON true
       LEFT JOIN asset_book_carrying_values fac ON fac.org_id=fa.org_id AND fac.asset_id=fa.id AND fac.book_id=fab.id
       LEFT JOIN parties cust ON cust.id = fa.custodian_party_id AND cust.org_id = fa.org_id
       LEFT JOIN projects prj ON prj.id = fa.project_id AND prj.org_id = fa.org_id
