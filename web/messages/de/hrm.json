@@ -799,7 +799,7 @@
       "timezone": "Zeitzone",
       "bookingLink": "Buchungslink",
       "email": "E-Mail",
-      "name": "Name",
+      "name": "Personenname",
       "reason": "Grund"
     },
     "posting": {
