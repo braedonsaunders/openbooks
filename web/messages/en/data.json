@@ -34,6 +34,8 @@
       "result": "Result"
     },
     "resource": "Import into",
+    "parseFailed": "Could not read the import file.",
+    "previewFailed": "Could not preview this import.",
     "loadFailed": "Could not load importable record types.",
     "resourcePlaceholder": "Choose an import target…",
     "format": "File format",

@@ -241,8 +241,8 @@ export function ImportWizard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'parse', resource, format, text, base64 }),
       })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('import.parseFailed')))
       const d = await res.json()
-      if (!res.ok) throw new Error(d.error ?? 'parse failed')
       if (!d.headers?.length) throw new Error('No columns found in the file')
       setHeaders(d.headers)
       setRows(d.rows ?? [])
@@ -265,8 +265,8 @@ export function ImportWizard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'preview', resource, format, rows, mapping, importMode, post }),
       })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('import.previewFailed')))
       const d = await res.json()
-      if (!res.ok) throw new Error(d.error ?? 'preview failed')
       setPreview(d.outcome)
       setStep('preview')
     } catch (e) {

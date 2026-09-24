@@ -34,6 +34,8 @@
       "result": "Résultat"
     },
     "resource": "Importer dans",
+    "parseFailed": "Impossible de lire le fichier d’importation.",
+    "previewFailed": "Impossible de prévisualiser cette importation.",
     "format": "Format du fichier",
     "file": "Fichier",
     "chooseFile": "Choisir un fichier",
