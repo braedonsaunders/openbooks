@@ -12,10 +12,12 @@ interface AssetTaxState {
   restricted: boolean
   installCalls: number
   dbCalls: number
+  openPoolClass: string | null
+  assignmentWrites: number
 }
 
 const stateKey = Symbol.for('openbooks.asset-tax-scope-test')
-const assetTaxState: AssetTaxState = { restricted: false, installCalls: 0, dbCalls: 0 }
+const assetTaxState: AssetTaxState = { restricted: false, installCalls: 0, dbCalls: 0, openPoolClass: null, assignmentWrites: 0 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = assetTaxState
 
 const mockSources = new Map<string, string>([
@@ -49,9 +51,18 @@ const mockSources = new Map<string, string>([
       export const db = {
         async execute() {
           state.dbCalls += 1
-          return { rows: [] }
+          return { rows: [{ class_attribute: 'ca_cca_class' }] }
         },
-        async transaction(work) { return work({ execute: async () => ({ rows: [] }) }) },
+        async transaction(work) {
+          let calls = 0
+          return work({ execute: async () => {
+            calls += 1
+            if (calls === 1) return { rows: [{ tax_attributes: { ca_cca_class: '8' } }] }
+            if (calls === 2) return { rows: state.openPoolClass ? [{ class_code: state.openPoolClass }] : [] }
+            state.assignmentWrites += 1
+            return { rows: [{ tax_attributes: {} }] }
+          } })
+        },
       }
     `,
   ],
@@ -105,6 +116,8 @@ function reset(restricted: boolean): void {
   assetTaxState.restricted = restricted
   assetTaxState.installCalls = 0
   assetTaxState.dbCalls = 0
+  assetTaxState.openPoolClass = null
+  assetTaxState.assignmentWrites = 0
 }
 
 test('pack install by a scoped caller is refused before the installer runs', async () => {
@@ -149,4 +162,23 @@ test('category assignment by a scoped caller is refused before any read', async 
   assert.equal(response.status, 403)
   assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
   assert.equal(assetTaxState.dbCalls, 0)
+})
+
+test('removing a category class with a nonzero pool is refused without changing or auditing the assignment', async () => {
+  reset(false)
+  assetTaxState.openPoolClass = '8'
+  const response = await assignCategory(
+    new Request('http://openbooks.test/api/tax-category-assignments', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        categoryId: '00000000-0000-4000-8000-00000000c101',
+        regime: 'ca_cca',
+      }),
+    }),
+  )
+  assert.equal(response.status, 422)
+  const payload = await response.json() as { error: string }
+  assert.match(payload.error, /cannot remove tax class "8" while its pool has a nonzero balance/)
+  assert.equal(assetTaxState.assignmentWrites, 0)
 })

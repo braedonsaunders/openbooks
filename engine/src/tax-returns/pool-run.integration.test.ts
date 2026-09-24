@@ -150,6 +150,27 @@ test("unknown pool and MACRS class codes fail closed without persisting a partia
   }
 });
 
+test("a prior nonzero class pool cannot disappear when its category assignment is removed", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const categoryId = await seedTaxCategory(org, "Open pool assignment", { ca_cca_class: "8" });
+    await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
+    const firstYear = await runYear(org, actorId, "ca_cca", 2023);
+    assert.equal(firstYear.lines[0]?.closingBalance === "0.00", false, "the fixture must leave a live carry-forward");
+
+    await db.execute(sql`update asset_categories set tax_attributes = '{}'::jsonb where org_id = ${org.orgId} and id = ${categoryId}`);
+    await assert.rejects(
+      runYear(org, actorId, "ca_cca", 2024),
+      (error: unknown) => error instanceof TaxPoolError
+        && /class "8" has an open prior balance/.test(error.message)
+        && /restore the matching tax-class assignment/.test(error.message),
+    );
+    assert.deepEqual((await periodsFor(org.orgId)).map(({ tax_year }) => tax_year), [2023]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("Canadian vehicle cost caps apply to additions and disposition capital cost per asset", { skip: !DB }, async () => {
   const { org, actorId } = await seededOrg();
   try {
