@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../../platform/db.ts";
+import { db, withOrg, withOrgTransaction } from "../../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
 import {
   createBatch,
@@ -178,6 +178,59 @@ test("opening a batch under another foreman's identity is refused without time.m
       assert.ok(batchId);
     });
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("batch creation waits for the foreman assignment to remain valid", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let releaseRemoval!: () => void;
+  let assignmentLocked!: () => void;
+  const holdRemoval = new Promise<void>((resolve) => { releaseRemoval = resolve; });
+  const locked = new Promise<void>((resolve) => { assignmentLocked = resolve; });
+  let remover: Promise<void> | undefined;
+  try {
+    await enableCrewEntry(org.orgId);
+    const w = await withOrg(org.orgId, () => seedCrewWorld(org.orgId, org.subsidiaryId));
+    remover = withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`
+        select id from schedule_resources
+         where org_id = ${org.orgId} and project_id = ${w.projectA} and party_id = ${w.foremanA}
+         for update`);
+      assignmentLocked();
+      await holdRemoval;
+      await db.execute(sql`
+        delete from schedule_resources
+         where org_id = ${org.orgId} and project_id = ${w.projectA} and party_id = ${w.foremanA}`);
+    });
+    await locked;
+
+    let finished = false;
+    const creation = withOrg(org.orgId, () => createBatch({
+      orgId: org.orgId,
+      actorUserId: w.userA,
+      foremanPartyId: w.foremanA,
+      projectId: w.projectA,
+      workedOn: "2026-09-14",
+      canManageAll: false,
+      allowedSubsidiaryIds: new Set([w.subA]),
+    })).then((value) => ({ value }), (error: unknown) => ({ error })).finally(() => { finished = true; });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(finished, false, "creation waits for the locked assignment row");
+
+    releaseRemoval();
+    await remover;
+    const outcome = await creation;
+    assert.ok("error" in outcome, "a removed foreman assignment prevents batch creation");
+    assert.ok(outcome.error instanceof FieldTimeError);
+    assert.equal(outcome.error.code, "foreman_not_on_project");
+    const batches = await withOrg(org.orgId, async () => (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from crew_time_batches
+       where org_id = ${org.orgId} and project_id = ${w.projectA} and foreman_party_id = ${w.foremanA}`)).rows[0]?.n);
+    assert.equal(batches, "0");
+  } finally {
+    releaseRemoval();
+    await remover;
     await dropScratchOrg(org.orgId);
   }
 });
