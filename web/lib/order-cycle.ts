@@ -78,6 +78,8 @@ interface OrderConvertLineRow extends Record<string, unknown> {
   is_billable: boolean
   quantity_billed: string
   quantity_fulfilled: string
+  /** Pricing provenance (0336): copied verbatim so lineage survives conversion. */
+  price_basis: unknown
   item_kind: string | null
   item_income_account_id: string | null
 }
@@ -1274,6 +1276,7 @@ export async function convertOrder(
              dl.unit_price, dl.amount, dl.tax_code_id, dl.tax_group_id, dl.tax_amount,
              dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
              dl.stock_location_id, dl.is_billable, dl.quantity_billed, dl.quantity_fulfilled,
+             dl.price_basis,
              i.kind as item_kind, i.income_account_id as item_income_account_id
         from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
@@ -1415,7 +1418,7 @@ export async function convertOrder(
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
-              location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by)
+              location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by, price_basis)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${convertedAccountOf(l)}, ${l.description},
               ${coveredQty}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
@@ -1427,7 +1430,7 @@ export async function convertOrder(
                 // receiving the stock a second time.
                 ...(doc.kind === 'purchase_order' && target.kind === 'vendor_bill' ? { purchaseOrderLineId: l.id } : {}),
                 convertedFrom: { documentId: sourceId, lineId: l.id, quantity: coveredQty },
-              })}::jsonb, ${userId})
+              })}::jsonb, ${userId}, ${l.price_basis == null ? null : JSON.stringify(l.price_basis)}::jsonb)
         returning id
       `))
       const newLineId = inserted.rows[0]!.id

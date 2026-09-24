@@ -1,6 +1,7 @@
 import { normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
 import { cmp, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
+import { parsePriceBasis, type PriceBasis } from '../../../lib/price-basis'
 
 export interface OrderLineInput {
   itemId?: string | null
@@ -16,6 +17,13 @@ export interface OrderLineInput {
   /** Warehouse relieve/fulfil effects use for a stocked line. */
   stockLocationId?: string | null
   extraDims?: Record<string, string | null>
+  /**
+   * Pricing provenance echoed from the price preview (0336). Validated and
+   * persisted as document_lines.price_basis; null for hand-priced lines.
+   * Deliberately excluded from the idempotency match: it carries the
+   * preview instant, so a retry with a fresh preview must still replay.
+   */
+  priceBasis?: unknown
 }
 
 /** Quantity columns are numeric(28,8); do not force ledger money scale. */
@@ -85,4 +93,24 @@ export function selectPostableOrderLines(lines: OrderLineInput[]): { valid: Orde
     valid.push({ ...line, quantity, unitPrice })
   }
   return { valid }
+}
+
+/**
+ * Validate a line's echoed price basis (0336): it must parse, and its price
+ * must equal the line price — a basis for a different price is stale
+ * lineage (or forgery) and refuses instead of persisting. Null means the
+ * line was priced by hand: no basis is stored and replay reads the price.
+ * Pure (kept here, never doubled: route suites double the DB-bound lib).
+ */
+export function resolveLinePriceBasis(
+  lineNumber: number,
+  unitPrice: string | null | undefined,
+  raw: unknown,
+): PriceBasis | null | { error: string } {
+  const parsed = parsePriceBasis(raw ?? null)
+  if (parsed === null || 'error' in parsed) return parsed
+  if (canonicalDecimal(unitPrice ?? '0', 8) !== parsed.unitPrice) {
+    return { error: `Order line ${lineNumber}: price basis does not match the line price — re-resolve the price` }
+  }
+  return parsed
 }

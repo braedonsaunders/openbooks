@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { ActionError, fetchAction, readActionResult } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
+import { basisForResolvedRow, type PriceBasis } from '@/lib/price-basis'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
@@ -400,7 +401,7 @@ export function OrderDrawer({
   const [rows, setRows] = useState<LineRow[]>(
     order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)],
   )
-  const resolvedPriceRef = useRef(new Map<number, { itemId: string; unitPrice: string }>())
+  const resolvedPriceRef = useRef(new Map<number, { itemId: string; unitPrice: string; basis: PriceBasis }>())
   const priceRequestRef = useRef(new Map<number, number>())
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
@@ -483,13 +484,29 @@ export function OrderDrawer({
       body: JSON.stringify({ itemId: row.itemId, customerId: partyId || null, currency: doc.currency, onDate: documentDate, lineQuantity: row.quantity, overallItemQuantity }),
     }).then(async (response) => {
       if (!response.ok) return null
-      return response.json() as Promise<{ price: { unitPrice: string } | null }>
+      return response.json() as Promise<{ price: {
+        unitPrice: string
+        source: PriceBasis['kind']
+        scheduleId: string | null
+        priceLevelId: string | null
+        assignmentId: string | null
+        resolvedAt: string
+      } | null }>
     }).then((payload) => {
       if (!payload?.price || priceRequestRef.current.get(index) !== requestNumber) return
+      const price = payload.price
+      const basis: PriceBasis = {
+        kind: price.source,
+        scheduleId: price.scheduleId,
+        levelId: price.priceLevelId,
+        assignmentId: price.assignmentId,
+        unitPrice: price.unitPrice,
+        resolvedAt: price.resolvedAt,
+      }
       setRows((current) => current.map((candidate, rowIndex) => {
         if (rowIndex !== index || candidate.clientKey !== rowKey || candidate.itemId !== row.itemId || candidate.quantity !== row.quantity) return candidate
-        resolvedPriceRef.current.set(index, { itemId: row.itemId, unitPrice: payload.price!.unitPrice })
-        return { ...candidate, unitPrice: payload.price!.unitPrice }
+        resolvedPriceRef.current.set(index, { itemId: row.itemId, unitPrice: price.unitPrice, basis })
+        return { ...candidate, unitPrice: price.unitPrice }
       }))
     }).catch(() => undefined)
   }
@@ -609,12 +626,25 @@ export function OrderDrawer({
     setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   }
 
+  /**
+   * Provenance for the recorded price basis (0336): attach the preview
+   * basis only to rows that still show exactly what the last preview
+   * resolved — anything the operator touched afterwards prices by hand
+   * (null). Runs at save time (event context), never during render.
+   */
+  function withPriceBasis<T extends { itemId: string | null; unitPrice: string }>(lines: T[]) {
+    return lines.map((line, lineIndex) => ({
+      ...line,
+      priceBasis: basisForResolvedRow({ row: line, resolved: resolvedPriceRef.current.get(lineIndex) }),
+    }))
+  }
+
   async function persistDraft() {
     const saved = await persistOrderDraft({
       request: () => fetch(`${apiBase}/${doc.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, expectedUpdatedAt: revisionRef.current }),
+        body: JSON.stringify({ ...payload, lines: withPriceBasis(payload.lines), expectedUpdatedAt: revisionRef.current }),
       }),
       setState: setSaveState,
       // The callback-style helper cannot return its refusal into execute:
@@ -639,7 +669,7 @@ export function OrderDrawer({
       request: () => fetch(apiBase, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createKey() },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, lines: withPriceBasis(payload.lines) }),
       }),
       setState: setSaveState,
       onError: (message) => refuse(message, t('actionFailed')),

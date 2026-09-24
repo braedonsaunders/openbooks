@@ -8,6 +8,7 @@ import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { assignOrderLineWarehouse, convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from './lib'
+import { resolveLinePriceBasis } from './line-selection'
 import { selectPostableOrderLines, type OrderLineInput } from './line-selection'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
@@ -463,6 +464,13 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         if (taxAmount === 'invalid') {
           return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
         }
+        // Pricing provenance (0336): same contract as create — the drawer
+        // echoes the preview basis it priced from, hand-priced lines carry
+        // none, and a basis for a different price refuses.
+        const priceBasis = resolveLinePriceBasis(i + 1, l.unitPrice, l.priceBasis)
+        if (priceBasis !== null && 'error' in priceBasis) {
+          return NextResponse.json({ error: priceBasis.error }, { status: 400 })
+        }
         preparedLines.push({
           ...l,
           quantity: l.quantity ?? '0',
@@ -471,6 +479,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           taxInputAmount,
           taxAmount,
           extraDims: lineDims.cleaned,
+          priceBasis,
         })
       }
       // Stored inventory / assembly / kit lines stay. Turning Inventory off
@@ -523,11 +532,12 @@ export function makePATCH(cfg: OrderHandlerConfig) {
             insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
                                         tax_input_amount, tax_amount,
-                                        department_id, project_id, stock_location_id, extra_dims)
+                                        department_id, project_id, stock_location_id, extra_dims, price_basis)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
                     ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
                     ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
-                    ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb)
+                    ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb,
+                    ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb)
             returning id
           `))
           await persistLineTaxComponents(tx, {

@@ -20,6 +20,7 @@ import {
   loadOrder,
   orderTaxProfileMap,
 } from './lib'
+import { resolveLinePriceBasis } from './line-selection'
 import { selectPostableOrderLines, type OrderLineInput } from './line-selection'
 
 /**
@@ -250,6 +251,11 @@ export async function createOrder(
     if (amount === 'invalid' || taxInputAmount === 'invalid' || taxAmount === 'invalid') {
       return bad('Order totals contain an invalid amount')
     }
+    // Pricing provenance (0336): the drawer echoes the preview basis it
+    // priced from; hand-priced lines carry none. A basis for a different
+    // price is stale lineage and refuses instead of persisting.
+    const priceBasis = resolveLinePriceBasis(i + 1, l.unitPrice, l.priceBasis)
+    if (priceBasis !== null && 'error' in priceBasis) return bad(priceBasis.error)
     preparedLines.push({
       ...l,
       quantity: l.quantity ?? '0',
@@ -258,6 +264,7 @@ export async function createOrder(
       taxInputAmount,
       taxAmount,
       extraDims: lineDims.cleaned,
+      priceBasis,
     })
   }
   if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
@@ -375,11 +382,12 @@ export async function createOrder(
           insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                       quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
                                       tax_input_amount, tax_amount,
-                                      department_id, project_id, stock_location_id, extra_dims)
+                                      department_id, project_id, stock_location_id, extra_dims, price_basis)
           values (${user.orgId}, ${requestId}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
                   ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
                   ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
-                  ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb)
+                  ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb,
+                  ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb)
           returning id
         `))
         await persistLineTaxComponents(tx, {

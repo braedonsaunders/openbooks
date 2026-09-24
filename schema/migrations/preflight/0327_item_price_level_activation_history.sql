@@ -16,11 +16,17 @@
 -- of rows the upgrade will end-date. Zero rows means no window moves.
 --
 -- (c) assignment_never_effective_revoked_removed: a deactivated assignment
--- starting today or later with an open window (PRC15c for today, PRC15d for
--- future starts). End-dating it would violate the dates CHECK (today) or
+-- starting after today with an open window (PRC15d). End-dating it would
 -- leave a live future window on a dead row, so 0327 removes the
 -- never-effective row to match the post-upgrade trigger. Zero rows means no
 -- removal.
+--
+-- (d) assignment_same_day_revoke_stamped: a deactivated assignment starting
+-- today with an open window (RESIDUAL). The row is KEPT — it may already
+-- have priced intraday transactions whose recorded basis points at it — and
+-- the upgrade stamps revoked_at at the start of the day (revoked_by carries
+-- the last writer), matching the post-upgrade trigger. Zero rows means no
+-- stamping.
 --
 -- (b) inactive_level_historical_active: a level deactivated before
 -- versioned activation existed. Its deactivation instant was never
@@ -45,12 +51,24 @@ SELECT '0327.assignment_never_effective_revoked_removed' AS code,
        'notice' AS severity,
        format('customer_price_level_assignments %s (org %s) for customer %s on level %s starts %s with an open window',
               a.id, a.org_id, a.customer_id, a.price_level_id, a.effective_from) AS subject,
-       format('deactivated assignment %s starts in the future or today and never covered any date; 0327 removes the never-effective row so the post-upgrade trigger and the backfill agree',
+       format('deactivated assignment %s starts in the future and never covered any date; 0327 removes the never-effective row so the post-upgrade trigger and the backfill agree',
               a.id) AS detail,
        'No action required: nothing could have priced off this row. If the customer should hold the level, create a new assignment after the upgrade.' AS remedy
   FROM public.customer_price_level_assignments a
  WHERE NOT a.is_active
-   AND a.effective_from >= current_date
+   AND a.effective_from > current_date
+   AND (a.effective_to IS NULL OR a.effective_to >= current_date)
+UNION ALL
+SELECT '0327.assignment_same_day_revoke_stamped' AS code,
+       'notice' AS severity,
+       format('customer_price_level_assignments %s (org %s) for customer %s on level %s starts today with an open window',
+              a.id, a.org_id, a.customer_id, a.price_level_id) AS subject,
+       format('deactivated assignment %s starts today and may already have priced intraday transactions; 0327 keeps the row and stamps the revoke instant at the start of the day so their recorded basis still resolves',
+              a.id) AS detail,
+       'No action required: replay reads the recorded price basis, and lookups from the upgrade instant see the base price.' AS remedy
+  FROM public.customer_price_level_assignments a
+ WHERE NOT a.is_active
+   AND a.effective_from = current_date
    AND (a.effective_to IS NULL OR a.effective_to >= current_date)
 UNION ALL
 SELECT '0327.inactive_level_historical_active' AS code,

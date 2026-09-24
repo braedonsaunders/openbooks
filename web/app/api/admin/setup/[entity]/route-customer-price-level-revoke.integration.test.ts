@@ -79,7 +79,7 @@ function patchRequest(entity: string, body: unknown): Request {
 
 const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
-test("revoking a same-day assignment through setup PATCH succeeds and is audited as a delete", { skip: !DB }, async () => {
+test("revoking a same-day assignment through setup PATCH keeps the row with its revoke instant", { skip: !DB }, async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Pricing Setup Admin", "admin");
@@ -113,16 +113,18 @@ test("revoking a same-day assignment through setup PATCH succeeds and is audited
       const { id } = (await res.json()) as { id: string };
       assert.equal(id, assignmentId);
 
-      const remaining = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from customer_price_level_assignments
-         where org_id = ${org.orgId} and id = ${assignmentId}`)).rows[0]!.n;
-      assert.equal(remaining, 0);
+      // The row stays: priced lineage must survive the revoke.
+      const membership = (await db.execute<{ is_active: boolean; revoked: boolean }>(sql`
+        select is_active, (revoked_at is not null) as revoked from customer_price_level_assignments
+         where org_id = ${org.orgId} and id = ${assignmentId}`)).rows[0]!;
+      assert.equal(membership.is_active, false);
+      assert.equal(membership.revoked, true);
 
       const audits = (await db.execute<{ action: string; actor: string }>(sql`
         select action, actor_id::text as actor from audit_log
          where org_id = ${org.orgId} and table_name = 'customer_price_level_assignments' and row_id = ${assignmentId}
          order by id desc limit 1`)).rows[0];
-      assert.equal(audits?.action, "delete");
+      assert.equal(audits?.action, "update");
       assert.equal(audits?.actor, actorId);
     } finally {
       routeState.authz = null;

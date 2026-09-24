@@ -224,12 +224,14 @@ test('a historical inactive gap prices base while both active windows price Gold
 })
 
 /**
- * PRC15c: revoking an assignment that starts today removes the never-effective
- * row (end-dating it to yesterday would violate the dates CHECK), so today's
- * pricing falls through to the base price while the live level and schedule
- * stay untouched.
+ * RESIDUAL (Sol): revoking an assignment that starts today KEEPS the row and
+ * stamps the revoke instant instead of removing it — the assignment may
+ * already have priced intraday transactions whose recorded basis points at
+ * this row. Lookups at or after the instant fall through to the base price
+ * while the live level and schedule stay untouched; lookups predating the
+ * instant still resolve what was offered then.
  */
-test('revoking a same-day assignment removes it and today prices base', enabled, async () => {
+test('revoking a same-day assignment keeps the row and ends pricing at its instant', enabled, async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
@@ -264,23 +266,50 @@ test('revoking a same-day assignment removes it and today prices base', enabled,
       assert.equal(before?.unitPrice, '100.0000')
       assert.equal(before?.source, 'customer_level')
 
-      // The mistaken assignment is revoked the day it starts: no error, no
-      // row left behind.
+      // The mistaken assignment is revoked the day it starts: no error, and
+      // the row stays with its revoke instant stamped — priced lineage must
+      // survive the revoke.
       await db.execute(sql`update customer_price_level_assignments set is_active = false
        where org_id = ${org.orgId} and customer_id = ${customerId}`)
-      const remaining = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from customer_price_level_assignments
-         where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!.n
-      assert.equal(remaining, 0)
+      const membership = (await db.execute<{ is_active: boolean; revoked_epoch: number | null }>(sql`
+        select is_active, extract(epoch from revoked_at)::float8 as revoked_epoch from customer_price_level_assignments
+         where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
+      assert.equal(membership.is_active, false)
+      assert.ok(membership.revoked_epoch, 'the revoke instant must be stamped')
+      const revokedAt = Math.round(membership.revoked_epoch! * 1000)
+      assert.ok(Number.isFinite(revokedAt))
 
-      // Level and schedule were never touched: only the assignment is gone.
+      // Level and schedule were never touched.
       const level = (await db.execute<{ is_active: boolean }>(sql`
         select is_active from price_levels where org_id = ${org.orgId} and id = ${goldId}`)).rows[0]!
       assert.equal(level.is_active, true)
 
+      // A lookup running now (at or after the revoke) falls to the base.
       const now = await resolveItemPrice({ ...input, onDate: today })
       assert.equal(now?.unitPrice, '80.0000')
       assert.equal(now?.source, 'base_level')
+
+      // A lookup as of an instant before the revoke still resolves the Gold
+      // that was offered then; at or after it, the base.
+      const beforeRevoke = new Date(revokedAt - 3600000).toISOString()
+      const offered = await resolveItemPrice({ ...input, onDate: today, asOf: beforeRevoke })
+      assert.equal(offered?.unitPrice, '100.0000')
+      assert.equal(offered?.source, 'customer_level')
+      const afterRevoke = new Date(revokedAt + 1000).toISOString()
+      const dark = await resolveItemPrice({ ...input, onDate: today, asOf: afterRevoke })
+      assert.equal(dark?.unitPrice, '80.0000')
+      assert.equal(dark?.source, 'base_level')
+
+      // Re-offering clears the stamp: the row prices again.
+      await db.execute(sql`update customer_price_level_assignments set is_active = true
+       where org_id = ${org.orgId} and customer_id = ${customerId}`)
+      const revived = (await db.execute<{ revoked_at: string | null }>(sql`
+        select revoked_at from customer_price_level_assignments
+         where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
+      assert.equal(revived.revoked_at, null)
+      const again = await resolveItemPrice({ ...input, onDate: today })
+      assert.equal(again?.unitPrice, '100.0000')
+      assert.equal(again?.source, 'customer_level')
     } finally {
       await dropScratchOrg(org.orgId)
     }

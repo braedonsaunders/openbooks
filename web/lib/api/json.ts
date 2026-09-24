@@ -185,6 +185,10 @@ export const orderCreateLineBody = z.object({
   projectId: nullableUuidId.optional(),
   stockLocationId: nullableUuidId.optional(),
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
+  // Pricing provenance echoed from the price preview (0336): validated at
+  // save by resolveLinePriceBasis, never trusted blindly. Unknown keeps the
+  // permissive shape — the domain check owns refusal.
+  priceBasis: z.unknown().optional(),
 });
 
 /**
