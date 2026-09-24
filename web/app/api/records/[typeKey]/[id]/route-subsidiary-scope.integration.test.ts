@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (
       (specifier === '../../../../../lib/authz' || specifier === '../../../../lib/authz') &&
       context.parentURL?.includes('/api/records/')
@@ -51,14 +48,13 @@ const custom_record_detail_scope_listUrl = '../route.ts?custom-record-detail-sco
 const { GET: LIST } = (await import(custom_record_detail_scope_listUrl)) as typeof import('../route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts',
 )
 
 test(
   'custom-record detail route hides a row whose JSON subsidiary_id is outside scope',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeKey = `detail-${randomUUID().replaceAll('-', '').slice(0, 10)}`
     const { org, actorId, recordId } = await withBypass(async () => {
@@ -125,7 +121,6 @@ test(
 
 test(
   'custom-record detail still hides a JSON subsidiary_id row after the type drops the field',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeKey = `dropd-${randomUUID().replaceAll('-', '').slice(0, 10)}`
     const { org, actorId, recordId } = await withBypass(async () => {
@@ -189,7 +184,6 @@ test(
 
 test(
   'interactive PATCH after field-drop keeps stored subsidiary_id so the other fence cannot list/get it',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeKey = `patchdrop-${randomUUID().replaceAll('-', '').slice(0, 8)}`
     const visibleId = randomUUID()

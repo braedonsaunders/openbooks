@@ -36,9 +36,6 @@ routeState.NextResponse = (await import("next/server")).NextResponse;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
       return { url: "mock:values-authz", shortCircuit: true };
     }
@@ -63,7 +60,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "../../../../../engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function authenticate(orgId: string, actorId: string, permissions: string[]): void {
   routeState.authz = {
@@ -102,7 +98,7 @@ function jsonRequest(path: string, method: string, body?: unknown): Request {
   });
 }
 
-test("values grid: add, overlap refused, end-date, onDate read, delete", { skip: !DB }, async () => {
+test("values grid: add, overlap refused, end-date, onDate read, delete", async () => {
   const s = await setup();
   try {
     const base = {
@@ -177,7 +173,7 @@ test("values grid: add, overlap refused, end-date, onDate read, delete", { skip:
   }
 });
 
-test("values writes need manage; reads 404 with feature off", { skip: !DB }, async () => {
+test("values writes need manage; reads 404 with feature off", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;

@@ -34,9 +34,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -95,7 +92,6 @@ async function defaultNames(orgId: string): Promise<string[]> {
 
 test(
   "POST refuses a non-boolean isDefault with a 400 and does not steal the org default",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const prior = await POST(
@@ -124,7 +120,6 @@ test(
 
 test(
   "POST still accepts an omitted or real-boolean isDefault",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const implicit = await POST(
@@ -160,7 +155,6 @@ test(
 
 test(
   "POST refuses a non-boolean isActive with a 400, never a storage 500",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await POST(
@@ -179,7 +173,6 @@ test(
 
 test(
   "POST refuses a truthy non-array allowedRoles and stores no row",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await POST(
@@ -198,7 +191,6 @@ test(
 
 test(
   "POST refuses a non-UUID allowedRoles string and stores no row",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await POST(
@@ -219,7 +211,6 @@ const ROLE_ID = "00000000-0000-4000-8000-000000000099";
 
 test(
   "POST persists a UUID allowedRoles list",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await POST(
@@ -241,7 +232,6 @@ test(
 
 test(
   "POST still accepts an omitted or real-boolean isActive",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const implicit = await POST(
@@ -267,7 +257,6 @@ test(
 
 test(
   "POST refuses an inactive default instead of storing a row resolve cannot see",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await POST(

@@ -18,7 +18,6 @@ const gateState = { orgId: "org-1", userId: "user-1" };
 (globalThis as Record<string, unknown>).__definitionArchiveGate = gateState;
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/api/json") {
       return nextResolve(root + "web/lib/api/json.ts", context);
     }

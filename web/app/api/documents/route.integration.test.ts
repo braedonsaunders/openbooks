@@ -27,7 +27,6 @@ Object.assign(globalThis, { __documentCreateUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') {
       return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
     }
@@ -164,7 +163,7 @@ const PREFIX: Record<string, string> = {
   card_charge: 'CC-', card_refund: 'CRF-', check: 'CHK-', deposit: 'DEP-', transfer: 'TRF-',
 }
 
-test('every supported kind creates a draft with a Save-allocated number', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('every supported kind creates a draft with a Save-allocated number', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const all = bodies(org, bank2, bank3, cardLiability)
@@ -194,7 +193,7 @@ test('every supported kind creates a draft with a Save-allocated number', { skip
   }
 })
 
-test('first create emits exactly two audit events: insert image plus initialization-to-final update', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('first create emits exactly two audit events: insert image plus initialization-to-final update', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
@@ -234,7 +233,7 @@ test('first create emits exactly two audit events: insert image plus initializat
   }
 })
 
-test('exact replay returns 200 with no new rows and no sequence burn', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('exact replay returns 200 with no new rows and no sequence burn', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
@@ -262,7 +261,7 @@ test('exact replay returns 200 with no new rows and no sequence burn', { skip: !
   }
 })
 
-test('changed payload on the same key is a 409 and changes nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('changed payload on the same key is a 409 and changes nothing', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
@@ -285,7 +284,7 @@ test('changed payload on the same key is a 409 and changes nothing', { skip: !pr
   }
 })
 
-test('cross-org key collision is a 409 that discloses nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('cross-org key collision is a 409 that discloses nothing', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   const other = await withBypassContext(() => createScratchOrg())
   try {
@@ -309,7 +308,7 @@ test('cross-org key collision is a 409 that discloses nothing', { skip: !process
   }
 })
 
-test('late writer failure rolls back everything: zero row, zero audit, zero sequence, reusable key', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('late writer failure rolls back everything: zero row, zero audit, zero sequence, reusable key', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
@@ -341,7 +340,7 @@ test('late writer failure rolls back everything: zero row, zero audit, zero sequ
   }
 })
 
-test('pre-transaction provider/shape refusal writes nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('pre-transaction provider/shape refusal writes nothing', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
@@ -361,7 +360,7 @@ test('pre-transaction provider/shape refusal writes nothing', { skip: !process.e
   }
 })
 
-test('tenant and field refusals name the remedy with exact drawer messages', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('tenant and field refusals name the remedy with exact drawer messages', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   const other = await withBypassContext(() => createScratchOrg())
   try {
@@ -408,7 +407,7 @@ test('tenant and field refusals name the remedy with exact drawer messages', { s
   }
 })
 
-test('omitted currency uses the org base with multi-currency off; explicit currency stays gated', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('omitted currency uses the org base with multi-currency off; explicit currency stays gated', async () => {
   const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const all = bodies(org, bank2, bank3, cardLiability)

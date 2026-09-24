@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -56,7 +53,7 @@ function request(body: unknown): Request {
   });
 }
 
-test("payment-link API rejects a malformed bank reference before any link write", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("payment-link API rejects a malformed bank reference before any link write", async () => {
   const { org, actorId } = await withBypassContext(async () => {
     const seeded = await createScratchOrg();
     const seededActor = await createScratchUser(seeded.orgId, "Payment links", "admin");
@@ -143,7 +140,7 @@ async function getLinks(orgId: string, invoiceId: string) {
   } };
 }
 
-test("a mintable link lists with a usable token", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a mintable link lists with a usable token", async () => {
   const { org, invoiceId } = await linkFixture();
   try {
     const created = await withOrgContext(org.orgId, () => POST(request({
@@ -165,7 +162,7 @@ test("a mintable link lists with a usable token", { skip: !process.env.OPENBOOKS
   }
 });
 
-test("a tampered sealed token lists the link as unavailable with no URL", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a tampered sealed token lists the link as unavailable with no URL", async () => {
   const { org, invoiceId } = await linkFixture();
   try {
     const created = await withOrgContext(org.orgId, () => POST(request({

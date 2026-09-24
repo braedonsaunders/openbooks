@@ -4,13 +4,8 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-const virtual = (source: string) => ({
-  shortCircuit: true as const,
-  url: `data:text/javascript,${encodeURIComponent(source)}`,
-})
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     return next(specifier, context)
   },
 })
@@ -19,7 +14,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadOrder } = await import('./lib.ts')
 
-test('order loader refuses documents outside the caller subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('order loader refuses documents outside the caller subsidiary scope', async () => {
   // Fixture seeds under explicit bypass: the top-level ./lib.ts import pulls
   // in the web request-org resolver, which denies every unscoped query.
   const org = await withBypassContext(() => createScratchOrg())

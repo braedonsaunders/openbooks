@@ -12,7 +12,6 @@ Object.assign(globalThis, { __draftProfileState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}")
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return virtual('export async function currentUser(){return globalThis.__draftProfileState.user}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
@@ -31,7 +30,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { POST: postDraft } = await import('../../parties/draft/route')
 const { GET: getParty, PATCH: patchParty } = await import('../../parties/[id]/route')
 const { GET: getProfiles, POST: postProfile } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 /**
  * The reported defect: an intermittent 422 saving a valid US payroll profile
@@ -91,7 +89,7 @@ async function activateParty(id: string, displayName: string) {
   assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
 }
 
-test('profile POST on a just-created draft employee names the draft, then saves after activation', { skip: !DB }, async () => {
+test('profile POST on a just-created draft employee names the draft, then saves after activation', async () => {
   const { org, scheduleId } = await fixture()
   try {
     const draft = await createEmployeeDraft()
@@ -114,7 +112,7 @@ test('profile POST on a just-created draft employee names the draft, then saves 
   }
 })
 
-test('profile POST distinguishes a missing party from a missing schedule', { skip: !DB }, async () => {
+test('profile POST distinguishes a missing party from a missing schedule', async () => {
   const { org, scheduleId } = await fixture()
   try {
     const missingParty = await post(await profileBody(randomUUID(), scheduleId))
@@ -131,7 +129,7 @@ test('profile POST distinguishes a missing party from a missing schedule', { ski
   }
 })
 
-test('profile POST names the role when the party is active but its employee role is not', { skip: !DB }, async () => {
+test('profile POST names the role when the party is active but its employee role is not', async () => {
   const { org, scheduleId } = await fixture()
   try {
     const draft = await createEmployeeDraft()

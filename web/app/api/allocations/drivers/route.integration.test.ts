@@ -44,9 +44,6 @@ routeState.NextResponse = (await import("next/server")).NextResponse;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (
       (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts"))
       || (specifier.endsWith("/lib/authz") && String(context.parentURL ?? "").includes("/api/allocations/drivers/"))
@@ -76,7 +73,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "../../../../../engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function authenticate(orgId: string, actorId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.authz = {
@@ -104,7 +100,7 @@ function jsonRequest(path: string, method: string, body?: unknown): Request {
 const READ = ["allocations.read"];
 const MANAGE = ["allocations.manage"];
 
-test("drivers API is gated: 401 without session, 403 without permission, 404 with feature off", { skip: !DB }, async () => {
+test("drivers API is gated: 401 without session, 403 without permission, 404 with feature off", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -126,7 +122,7 @@ test("drivers API is gated: 401 without session, 403 without permission, 404 wit
   }
 });
 
-test("drivers CRUD round trip with revision token", { skip: !DB }, async () => {
+test("drivers CRUD round trip with revision token", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -198,7 +194,7 @@ test("drivers CRUD round trip with revision token", { skip: !DB }, async () => {
   }
 });
 
-test("driver preview returns exact shares; empty drivers report why", { skip: !DB }, async () => {
+test("driver preview returns exact shares; empty drivers report why", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -279,7 +275,7 @@ test("driver preview returns exact shares; empty drivers report why", { skip: !D
   }
 });
 
-test("report_definition preview runs under the actor via the engine runner", { skip: !DB }, async () => {
+test("report_definition preview runs under the actor via the engine runner", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -338,7 +334,7 @@ test("report_definition preview runs under the actor via the engine runner", { s
   }
 });
 
-test("restricted allocations managers cannot mutate org-wide drivers", { skip: !DB }, async () => {
+test("restricted allocations managers cannot mutate org-wide drivers", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;

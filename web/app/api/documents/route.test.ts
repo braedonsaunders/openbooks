@@ -20,7 +20,6 @@ Object.assign(globalThis, { __documentCreateUnit: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../lib/authz') {
       return virtual(`
       export { can, subsidiariesInScope, subsidiaryScopeAllows, guardSubsidiaryScope, guardUnrestrictedScope, guardRootSubsidiaryScope } from '${root}web/lib/authz.ts'

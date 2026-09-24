@@ -111,12 +111,8 @@ const mockUrls = new Map<string, string>([
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs
-      // as-is; only its server-only marker needs a stand-in outside Next.
       // The real error mapping runs as-is too: refusals assert their real
       // statuses, not a mocked mapping.
-      if (specifier === "server-only") {
-        return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-      }
       const mocked = mockUrls.get(specifier);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);

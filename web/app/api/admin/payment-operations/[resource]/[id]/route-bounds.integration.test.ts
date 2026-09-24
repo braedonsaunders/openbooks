@@ -17,7 +17,6 @@ Object.assign(globalThis, { __mandatePatchBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -34,7 +33,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(): Promise<{ orgId: string; mandateId: string; date: string }> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -81,7 +79,7 @@ async function signedOn(orgId: string, mandateId: string): Promise<string | null
   return rows[0]?.signed_on ?? null;
 }
 
-test("mandate update refuses a non-calendar signed date without writing", { skip: !DB }, async () => {
+test("mandate update refuses a non-calendar signed date without writing", async () => {
   const { orgId, mandateId, date } = await fixture();
   try {
     const response = await patch(mandateId, { signedOn: "2026-09-31" });
@@ -94,7 +92,7 @@ test("mandate update refuses a non-calendar signed date without writing", { skip
   }
 });
 
-test("mandate update still saves an ordinary signed date", { skip: !DB }, async () => {
+test("mandate update still saves an ordinary signed date", async () => {
   const { orgId, mandateId } = await fixture();
   try {
     const response = await patch(mandateId, { signedOn: "2026-02-15" });

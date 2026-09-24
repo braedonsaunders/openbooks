@@ -14,7 +14,6 @@ Object.assign(globalThis, { __projectPatchMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -32,7 +31,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -71,7 +69,7 @@ async function contractValue(projectId: string): Promise<string | null> {
   return rows[0]!.contract_value
 }
 
-test('PATCH refuses a contract value wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('PATCH refuses a contract value wider than numeric(19,4) without writing', async () => {
   const { org, projectId } = await fixture()
   try {
     const result = await patch(projectId, { contractValue: '99999999999999999999' })
@@ -82,7 +80,7 @@ test('PATCH refuses a contract value wider than numeric(19,4) without writing', 
   }
 })
 
-test('PATCH still saves a column-maximum contract value with identical read-back', { skip: !DB }, async () => {
+test('PATCH still saves a column-maximum contract value with identical read-back', async () => {
   const { org, projectId } = await fixture()
   try {
     const result = await patch(projectId, { contractValue: '999999999999999.9999' })

@@ -19,9 +19,6 @@ import { dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 // pins that those handlers exercise the production write path end to end.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // The web tsconfig maps '@/…' to the web root; the plain runner needs the
     // mapping spelled out.
     if (specifier.startsWith("@/")) {
@@ -35,7 +32,6 @@ registerHooks({
   },
 });
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const { generateApiKey } = await import("../../../../lib/api-auth");
 const createRoute = await import("./[typeKey]/route.ts");
@@ -201,7 +197,7 @@ const claimCount = async (orgId: string): Promise<number> => {
   return row!.n;
 };
 
-test("malformed authenticated commands retain execution audit evidence", { skip: !DB }, async () => {
+test("malformed authenticated commands retain execution audit evidence", async () => {
   const org = await seedEvidenceOrg();
   try {
     const response = await withOrgContext(org.orgId, () =>
@@ -242,7 +238,7 @@ async function seedParty(orgId: string, displayName: string): Promise<string> {
   return party.id;
 }
 
-test("a forced execution-audit failure blocks and rolls back the material create", { skip: !DB }, async () => {
+test("a forced execution-audit failure blocks and rolls back the material create", async () => {
   const org = await seedEvidenceOrg();
   try {
     await setAuditFailureMode("forced");
@@ -266,7 +262,7 @@ test("a forced execution-audit failure blocks and rolls back the material create
   }
 });
 
-test("a forced execution-audit failure blocks and rolls back the material update", { skip: !DB }, async () => {
+test("a forced execution-audit failure blocks and rolls back the material update", async () => {
   const org = await seedEvidenceOrg();
   try {
     const partyId = await seedParty(org.orgId, "Update Target");
@@ -290,7 +286,7 @@ test("a forced execution-audit failure blocks and rolls back the material update
   }
 });
 
-test("a forced execution-audit failure blocks and rolls back the material delete", { skip: !DB }, async () => {
+test("a forced execution-audit failure blocks and rolls back the material delete", async () => {
   const org = await seedEvidenceOrg();
   try {
     const partyId = await seedParty(org.orgId, "Delete Target");
@@ -311,7 +307,7 @@ test("a forced execution-audit failure blocks and rolls back the material delete
   }
 });
 
-test("successful create commits exactly one canonical evidence row; replays add correlation only", { skip: !DB }, async () => {
+test("successful create commits exactly one canonical evidence row; replays add correlation only", async () => {
   const org = await seedEvidenceOrg();
   try {
     const first = await withOrgContext(org.orgId, () =>
@@ -361,7 +357,7 @@ test("successful create commits exactly one canonical evidence row; replays add 
   }
 });
 
-test("permission denial keeps canonical key/request correlation without touching data", { skip: !DB }, async () => {
+test("permission denial keeps canonical key/request correlation without touching data", async () => {
   const org = await seedEvidenceOrg();
   try {
     const denied = await withOrgContext(org.orgId, () =>

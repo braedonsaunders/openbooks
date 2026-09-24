@@ -30,9 +30,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -63,7 +60,6 @@ const { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRe
   "../../../../../lib/setup/write.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function authenticate(orgId: string, actorId: string) {
   routeState.authz = {
@@ -84,7 +80,7 @@ async function bomEvidence(orgId: string) {
   return { components, audits };
 }
 
-test("generic Setup CRUD refuses every bom-components mutation and names the BOM command", { skip: !DB }, async () => {
+test("generic Setup CRUD refuses every bom-components mutation and names the BOM command", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Refusal Admin", "admin");

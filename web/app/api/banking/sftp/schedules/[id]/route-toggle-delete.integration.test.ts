@@ -74,13 +74,6 @@ const mockImportJob = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "./authz" &&
       (context.parentURL?.includes("/lib/feature-gates") ||
@@ -261,7 +254,6 @@ async function deleteStatus(
 
 test(
   "schedule PATCH toggle flips is_active and reports success",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -281,7 +273,6 @@ test(
 
 test(
   "schedule PATCH toggle of a missing id refuses instead of reporting success",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -299,7 +290,6 @@ test(
 
 test(
   "schedule PATCH toggle of another organization's id reads as not found",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const other = await seed();
@@ -325,7 +315,6 @@ test(
 
 test(
   "schedule PATCH and DELETE refuse a malformed id without touching storage",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -347,7 +336,6 @@ test(
 
 test(
   "schedule PATCH refuses a non-object body through the real JSON boundary",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -376,7 +364,6 @@ test(
 
 test(
   "schedule PATCH run keeps its contract: missing refuses, owned runs",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -423,7 +410,6 @@ test(
 
 test(
   "schedule PATCH and DELETE enforce permission and feature gates",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const featureOff = await seed(false);
@@ -457,7 +443,6 @@ test(
 
 test(
   "schedule DELETE removes an owned schedule and reports success",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -475,7 +460,6 @@ test(
 
 test(
   "schedule DELETE of a missing id refuses instead of reporting success",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -491,7 +475,6 @@ test(
 
 test(
   "schedule DELETE of another organization's id reads as not found",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const other = await seed();
@@ -513,7 +496,6 @@ test(
 
 test(
   "schedule PATCH binds, rebinds, and clears the expected account",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -553,7 +535,6 @@ test(
 
 test(
   "schedule binding changes refuse while a scan owns the schedule",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -587,7 +568,6 @@ test(
 
 test(
   "schedule binding and active-state changes append actor-attributed before/after audit evidence",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -621,7 +601,6 @@ test(
 
 test(
   "binding a schedule resolves its unbound notice; clearing does not, DELETE does",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {

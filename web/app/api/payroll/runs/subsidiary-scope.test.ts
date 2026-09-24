@@ -52,11 +52,7 @@ const webRoot = new URL("../../../../", import.meta.url);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Forward Next.js-style aliases to the real modules they point at.
     if (specifier.startsWith("@/")) {
       return nextResolve(new URL(`.${specifier.slice(1)}.ts`, webRoot).href, context);

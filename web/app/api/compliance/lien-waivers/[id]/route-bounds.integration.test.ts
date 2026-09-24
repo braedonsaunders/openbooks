@@ -18,7 +18,6 @@ Object.assign(globalThis, { __lienWaiverPatchBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -36,7 +35,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(): Promise<{ orgId: string; waiverId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -79,7 +77,7 @@ async function waiverOf(orgId: string, waiverId: string) {
   return rows[0]!;
 }
 
-test("waiver update refuses a non-calendar through date without writing", { skip: !DB }, async () => {
+test("waiver update refuses a non-calendar through date without writing", async () => {
   const { orgId, waiverId } = await fixture();
   try {
     const response = await patch(waiverId, { action: "update", throughDate: "2026-09-31" });
@@ -92,7 +90,7 @@ test("waiver update refuses a non-calendar through date without writing", { skip
   }
 });
 
-test("waiver update refuses an amount wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("waiver update refuses an amount wider than numeric(19,4) without writing", async () => {
   const { orgId, waiverId } = await fixture();
   try {
     const response = await patch(waiverId, { action: "update", amount: "99999999999999999999.99" });
@@ -105,7 +103,7 @@ test("waiver update refuses an amount wider than numeric(19,4) without writing",
   }
 });
 
-test("waiver sign refuses a non-calendar signed date without writing", { skip: !DB }, async () => {
+test("waiver sign refuses a non-calendar signed date without writing", async () => {
   const { orgId, waiverId } = await fixture();
   try {
     const response = await patch(waiverId, { action: "sign", signedByName: "Jane Doe", signedAt: "not-a-date" });
@@ -118,7 +116,7 @@ test("waiver sign refuses a non-calendar signed date without writing", { skip: !
   }
 });
 
-test("waiver update still saves an ordinary edit", { skip: !DB }, async () => {
+test("waiver update still saves an ordinary edit", async () => {
   const { orgId, waiverId } = await fixture();
   try {
     const response = await patch(waiverId, { action: "update", amount: "2000.00" });

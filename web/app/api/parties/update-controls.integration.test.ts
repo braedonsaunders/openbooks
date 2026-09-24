@@ -9,7 +9,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __partyUpdateControlsSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__partyUpdateControlsSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -44,7 +43,7 @@ async function revision(orgId: string, partyId: string): Promise<string> {
   return (await res.json()).party.updated_at as string
 }
 
-test('impossible hired-on dates are refused with 422 and store nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('impossible hired-on dates are refused with 422 and store nothing', async () => {
   const { org } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {
@@ -61,7 +60,7 @@ test('impossible hired-on dates are refused with 422 and store nothing', { skip:
   }
 })
 
-test('an edit echoing a backed role kind persists instead of 422ing (F-t05-002, OM-16)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('an edit echoing a backed role kind persists instead of 422ing (F-t05-002, OM-16)', async () => {
   // F-t05-002: the drawer echoes the stored kind back on every save, but
   // PATCH only accepted company|person — so every edit of an employee-kind
   // party failed while the UI reported success. OM-16 narrows the round-trip
@@ -88,7 +87,7 @@ test('an edit echoing a backed role kind persists instead of 422ing (F-t05-002, 
   }
 })
 
-test('an edit claiming an unbacked role kind is refused by name (OM-16)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('an edit claiming an unbacked role kind is refused by name (OM-16)', async () => {
   // OM-16: kind "vendor" with no vendor_roles row strands a "Kind: Vendor"
   // the Compliance tab cannot back. The save must refuse, naming the role,
   // and store nothing.
@@ -114,7 +113,7 @@ test('an edit claiming an unbacked role kind is refused by name (OM-16)', { skip
   }
 })
 
-test('routine party saves preserve the reserved source sync-identity bridge', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('routine party saves preserve the reserved source sync-identity bridge', async () => {
   const { org } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {
@@ -130,7 +129,7 @@ test('routine party saves preserve the reserved source sync-identity bridge', { 
   }
 })
 
-test('party PATCH preserves omitted required custom fields on a partial edit', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('party PATCH preserves omitted required custom fields on a partial edit', async () => {
   const { org, actor } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {
@@ -163,7 +162,7 @@ test('party PATCH preserves omitted required custom fields on a partial edit', {
   }
 })
 
-test('transaction filter enums stay inside the caller subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('transaction filter enums stay inside the caller subsidiary scope', async () => {
   const { org, actor } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {

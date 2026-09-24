@@ -167,12 +167,8 @@ async function loadRoute(path: string): Promise<RouteModule> {
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs
-      // as-is; only its server-only marker needs a stand-in outside Next. A
       // test double that cannot produce the refusal is not a test of the
       // refusal, so parseJsonBody is never mocked here.
-      if (specifier === "server-only") {
-        return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-      }
       // The real error mapping must see the real error classes: _lib.ts
       // keeps its own engine import while every route reads the stubbed
       // service, so instanceof keeps working end to end.

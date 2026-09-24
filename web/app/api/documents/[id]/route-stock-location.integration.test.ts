@@ -14,7 +14,6 @@ Object.assign(globalThis, { __documentStockState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz')
       return virtual(`
         export async function getAuthz() {
@@ -32,7 +31,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function makeDraftInvoice(org: { orgId: string; customerId: string; subsidiaryId: string; date: string }): Promise<string> {
   const id = randomUUID()
@@ -85,7 +83,7 @@ function line(itemId: string, accountId: string, stockLocationId?: string | null
   }
 }
 
-test('invoice PATCH persists an explicit line warehouse', { skip: !DB }, async () => {
+test('invoice PATCH persists an explicit line warehouse', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
@@ -102,7 +100,7 @@ test('invoice PATCH persists an explicit line warehouse', { skip: !DB }, async (
   }
 })
 
-test('invoice PATCH leaves a blank warehouse blank with several locations, stamps it with one', { skip: !DB }, async () => {
+test('invoice PATCH leaves a blank warehouse blank with several locations, stamps it with one', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
@@ -128,7 +126,7 @@ test('invoice PATCH leaves a blank warehouse blank with several locations, stamp
   }
 })
 
-test('invoice PATCH stamps no default for a non-stocked line', { skip: !DB }, async () => {
+test('invoice PATCH stamps no default for a non-stocked line', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId

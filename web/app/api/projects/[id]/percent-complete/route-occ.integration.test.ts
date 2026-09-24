@@ -9,7 +9,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __percentCompleteOCC: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__percentCompleteOCC.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -27,7 +26,7 @@ const { PUT } = await import('./route')
  * on a stale number. Single-scalar compare-and-swap on the displayed value —
  * no token plumbing, no false conflicts, exact intent preservation.
  */
-test('a stale percent-complete override refuses instead of re-basing recognition', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a stale percent-complete override refuses instead of re-basing recognition', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Recognition owner', 'admin')

@@ -22,7 +22,6 @@ const virtual = (source: string) => ({
 })
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (
       (specifier === './auth' || specifier.endsWith('/lib/auth')) &&
       context.parentURL?.endsWith('/web/lib/authz.ts')
@@ -44,7 +43,6 @@ const { computeTaxReturn } = await import('@openbooks/engine/src/tax-returns/ret
 const { markTaxFilingFiled } = await import('@openbooks/engine/src/tax-returns/filing.ts')
 const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
 
@@ -143,7 +141,7 @@ async function readFiling(orgId: string, id: string): Promise<FilingRow> {
       from tax_filings where org_id = ${orgId} and id = ${id}`)).rows[0]!
 }
 
-test('prepare freezes one entity return per scope, and scoped filings mark filed', { skip: !DB }, async () => {
+test('prepare freezes one entity return per scope, and scoped filings mark filed', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   const usSub = await withBypassContext(() => createUsdSubsidiary(org))
   try {

@@ -12,7 +12,6 @@ const engineRoot = new URL("../../../../engine/", import.meta.url).href;
 const state: { user: SessionUser | null; allowedSubsidiaryId: string | null } = { user: null, allowedSubsidiaryId: null };
 Object.assign(globalThis, { __subcontractRehomeRace: state });
 registerHooks({ resolve(specifier, context, nextResolve) {
-  if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
   if (specifier === "../../../lib/authz" && context.parentURL?.endsWith("/api/subcontracts/route.ts")) {
     return { shortCircuit: true, url: "mock:subcontract-rehome-authz" };
   }
@@ -49,14 +48,13 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@o
 const { createSubcontract } = await import("@openbooks/engine/src/projects/subcontracts.ts");
 const { GET, POST } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function session(orgId: string, actorId: string): SessionUser {
   return { id: actorId, orgId, name: "Subcontract clerk", email: "clerk@scratch.test", roles: [], isSuperAdmin: false,
     envKind: "production", productionOrgId: orgId, homeOrgId: orgId, homeUserId: actorId };
 }
 
-test("POST rechecks the project scope after waiting out a concurrent rehome", { skip: !DB }, async () => {
+test("POST rechecks the project scope after waiting out a concurrent rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
   try {
@@ -130,7 +128,7 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", { 
   }
 });
 
-test("GET detail retries a stale snapshot after a project is rehomed", { skip: !DB }, async () => {
+test("GET detail retries a stale snapshot after a project is rehomed", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
   try {

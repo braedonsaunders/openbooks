@@ -28,9 +28,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
       const webRoot = parentDir.lastIndexOf("/web/");
@@ -59,7 +56,6 @@ const { documentRevisionSql } = await import("@openbooks/engine/src/records/revi
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts",
 );
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -148,7 +144,7 @@ async function waitForAccountShare(settled: () => boolean): Promise<void> {
 
 const writers = ["POST create", "PATCH edit"] as const;
 for (const writer of writers) {
-  test(`asset ${writer} refuses an account rehomed after preflight`, { skip: !DB }, async () => {
+  test(`asset ${writer} refuses an account rehomed after preflight`, async () => {
     const fixture = await seedFixture();
     let holder: Client | undefined;
     try {

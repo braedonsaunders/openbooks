@@ -31,9 +31,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -95,7 +92,6 @@ function patchRequest(body: unknown): Request {
 
 test(
   "PATCH refuses a non-boolean isDefault with a 400, never a storage 500",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     // The mocked session gate carries no connection scope; the handler runs
@@ -111,7 +107,6 @@ test(
 
 test(
   "PATCH refuses a non-boolean isActive with a 400, never a storage 500",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await withOrgContext(f.orgId, () => PATCH(patchRequest({ isActive: "eventually" }), {
@@ -125,7 +120,6 @@ test(
 
 test(
   "PATCH still accepts real booleans for both flags",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await withOrgContext(f.orgId, () => PATCH(patchRequest({ isDefault: true, isActive: false }), {

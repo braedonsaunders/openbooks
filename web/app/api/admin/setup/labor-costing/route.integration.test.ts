@@ -115,11 +115,7 @@ const mockDbWrapper = (realUrl: string) => `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Forward Next.js-style aliases to the real modules they point at.
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
@@ -228,7 +224,7 @@ function saveRateBody(overrides: Record<string, unknown> = {}): Record<string, u
   };
 }
 
-test("a restricted setup actor cannot change org-wide labor costing policy", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a restricted setup actor cannot change org-wide labor costing policy", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -247,7 +243,7 @@ test("a restricted setup actor cannot change org-wide labor costing policy", { s
   }
 });
 
-test("restricted save-rate refuses org-wide job-title, trade, and default rates before writes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("restricted save-rate refuses org-wide job-title, trade, and default rates before writes", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -280,7 +276,7 @@ test("restricted save-rate refuses org-wide job-title, trade, and default rates 
   }
 });
 
-test("restricted end-rate and delete-rate refuse org-wide rows without rate or audit writes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("restricted end-rate and delete-rate refuse org-wide rows without rate or audit writes", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -423,7 +419,7 @@ test("the labor-costing wizard saves fallback wages with configured currency and
   assert.doesNotMatch(laborCostingWizardSource, /rate:\s*Number\(fallbackRate\)/);
 });
 
-test("a valid save persists policy, control accounts, and audit evidence in one unit", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a valid save persists policy, control accounts, and audit evidence in one unit", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -487,7 +483,7 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
   }
 });
 
-test("allowUnratedTime persists when explicitly set and rejects non-booleans", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("allowUnratedTime persists when explicitly set and rejects non-booleans", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -515,7 +511,7 @@ test("allowUnratedTime persists when explicitly set and rejects non-booleans", {
   }
 });
 
-test("a malformed component rejects the whole save and persists nothing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a malformed component rejects the whole save and persists nothing", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -561,7 +557,7 @@ test("a malformed component rejects the whole save and persists nothing", { skip
   }
 });
 
-test("a valid save with an invalid control account persists NOTHING — not even the settings", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a valid save with an invalid control account persists NOTHING — not even the settings", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -603,7 +599,7 @@ test("a valid save with an invalid control account persists NOTHING — not even
   }
 });
 
-test("re-saves keep the audit trail continuous — before values match what was stored", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("re-saves keep the audit trail continuous — before values match what was stored", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -668,7 +664,7 @@ test("re-saves keep the audit trail continuous — before values match what was 
   }
 });
 
-test("a save whose INSERT fails after the close commits NO rate gap and NO orphan audit", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a save whose INSERT fails after the close commits NO rate gap and NO orphan audit", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -706,7 +702,7 @@ test("a save whose INSERT fails after the close commits NO rate gap and NO orpha
   }
 });
 
-test("a save whose AUDIT write fails rolls the close and the replacement back together", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a save whose AUDIT write fails rolls the close and the replacement back together", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -736,7 +732,7 @@ test("a save whose AUDIT write fails rolls the close and the replacement back to
   }
 });
 
-test("concurrent same-scope starts serialize into one deterministic, fully evidenced timeline", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("concurrent same-scope starts serialize into one deterministic, fully evidenced timeline", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -802,7 +798,7 @@ test("concurrent same-scope starts serialize into one deterministic, fully evide
   }
 });
 
-test("saves keep exact decimal/date scope evidence — new start, correction in place, then end and delete", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("saves keep exact decimal/date scope evidence — new start, correction in place, then end and delete", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -884,7 +880,7 @@ test("saves keep exact decimal/date scope evidence — new start, correction in 
   }
 });
 
-test("end/delete audit-write failures roll the data change back with the evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("end/delete audit-write failures roll the data change back with the evidence", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -918,7 +914,7 @@ test("end/delete audit-write failures roll the data change back with the evidenc
   }
 });
 
-test("an inactive control account is refused like a summary one", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("an inactive control account is refused like a summary one", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -945,7 +941,7 @@ test("an inactive control account is refused like a summary one", { skip: !proce
   }
 });
 
-test("out-of-scope compensation is 404 to a restricted setup actor; variance posting needs gl.post", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("out-of-scope compensation is 404 to a restricted setup actor; variance posting needs gl.post", async () => {
   const f = await seed();
   try {
     const subsidiaryB = await seedSubsidiary(f.orgId, f.subsidiaryId, "B Co");
@@ -1011,7 +1007,7 @@ test("out-of-scope compensation is 404 to a restricted setup actor; variance pos
   }
 });
 
-test("save-rate rejects an impossible calendar date with a field error, not a driver error", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("save-rate rejects an impossible calendar date with a field error, not a driver error", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -1034,7 +1030,7 @@ test("save-rate rejects an impossible calendar date with a field error, not a dr
   }
 });
 
-test("end-rate rejects an impossible calendar date with a field error, not a driver error", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("end-rate rejects an impossible calendar date with a field error, not a driver error", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -1057,7 +1053,7 @@ test("end-rate rejects an impossible calendar date with a field error, not a dri
   }
 });
 
-test("reconcile rejects an impossible calendar date with a 422, never a 500", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("reconcile rejects an impossible calendar date with a 422, never a 500", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -1085,7 +1081,7 @@ test("reconcile rejects an impossible calendar date with a 422, never a 500", { 
   }
 });
 
-test("a backdated save-rate persists mid-timeline, capped the day before its successor (F-t05-001)", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a backdated save-rate persists mid-timeline, capped the day before its successor (F-t05-001)", async () => {
   // F-t05-001: adding a rate effective BEFORE the current start (2026-09-05
   // against a 2026-09-17 start) 422'd on the overlap exclusion and the UI
   // toasted a generic failure — a silent no-op. Backdating is legitimate by
@@ -1131,7 +1127,7 @@ test("a backdated save-rate persists mid-timeline, capped the day before its suc
   }
 });
 
-test("a same-start correction keeps the row's window instead of reopening past its successor", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a same-start correction keeps the row's window instead of reopening past its successor", async () => {
   // The same-start upsert used to reset effective_to to null, which overlaps
   // the successor and trips the overlap exclusion on any mid-timeline row.
   // A correction changes terms, never the window — window edits go through
@@ -1166,7 +1162,7 @@ test("a same-start correction keeps the row's window instead of reopening past i
   }
 });
 
-test("a storage refusal past validation never leaks driver text to the client", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a storage refusal past validation never leaks driver text to the client", async () => {
   // F-t05-001's 422 carried the full INSERT statement with bound org/actor
   // ids. Refusals map to a stable code + safe message instead.
   const f = await seed();
@@ -1195,7 +1191,7 @@ test("a storage refusal past validation never leaks driver text to the client", 
   }
 });
 
-test("save-rate names WHICH wage scope is unavailable, with the supplied id", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("save-rate names WHICH wage scope is unavailable, with the supplied id", async () => {
   // One message covered four distinct failed lookups (employee, trade,
   // department, subsidiary) as 'wage scope is not available'. Each refusal
   // must name the scope kind and the id it was given.
@@ -1228,7 +1224,7 @@ test("save-rate names WHICH wage scope is unavailable, with the supplied id", { 
   }
 });
 
-test("reconcile and post-variance name a subsidiary that is missing, inactive, or elimination", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("reconcile and post-variance name a subsidiary that is missing, inactive, or elimination", async () => {
   // Both actions refused every subsidiary failure as 'subsidiary is not
   // available'. Each refusal must name the id and which predicate failed.
   const f = await seed();

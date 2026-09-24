@@ -2,14 +2,10 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// The guard lives behind server-only (like every route module); the shim
 // stands in for the server boundary. All setup completes before the first
 // test() registration below.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
     return next(specifier, context)
   },
 })

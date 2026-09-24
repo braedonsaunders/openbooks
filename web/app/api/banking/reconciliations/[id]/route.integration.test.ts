@@ -14,7 +14,6 @@ const identity: { gate: Authz | null } = { gate: null }
 // Only identity is substituted. Feature checks, routes, domain services and SQL are native.
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === '@/lib/api/json') return next(new URL('../../../../../lib/api/json.ts', import.meta.url).href, context)
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === './authz' && (context.parentURL ?? '').endsWith('/lib/feature-gates.ts')) {
     return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(
       "export async function guardPermission(){return globalThis[Symbol.for('openbooks.banking-adjustment')].gate}") }

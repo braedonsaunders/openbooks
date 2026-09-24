@@ -34,9 +34,6 @@ let authzRealUrl = ''
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(
         new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href,
@@ -71,7 +68,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const ADVISORY_CLASS = 21470;
 const ADVISORY_OBJECT = 4242;
 
@@ -273,7 +269,6 @@ function postgresCauseMessage(error: unknown): string {
 
 test(
   "concurrent tenant setup stages only its own periods under the shared index",
-  { skip: !DB },
   async () => {
     await ensureCanonicalIndex();
     const first = await seed();
@@ -350,7 +345,6 @@ test(
 
 test(
   "fiscal setup rollback leaves the canonical index and period labels intact",
-  { skip: !DB },
   async () => {
     await ensureCanonicalIndex();
     const fixture = await seed();
@@ -379,7 +373,6 @@ test(
 
 test(
   "omitted base currency is not a foundation change on a posted org",
-  { skip: !DB },
   async () => {
     // Validation permits omitting baseCurrency (only validated/applied when
     // present), so a re-run of setup that requests no currency change must
@@ -451,7 +444,6 @@ test(
 
 test(
   "business time zone stores canonical, refuses unknown zones, and survives omission",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -515,7 +507,6 @@ test(
 
 test(
   "accounting-foundation probe re-runs after the wizard waits for the org lock",
-  { skip: !DB },
   async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Foundation Admin", "admin");

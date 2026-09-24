@@ -10,7 +10,6 @@ Object.assign(globalThis, { __regionMessagesState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}")
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return virtual('export async function currentUser(){return null}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
@@ -27,7 +26,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 /**
  * The reported defect: saving a payroll profile with a missing or mistyped
@@ -72,7 +70,7 @@ async function errorOf(body: unknown): Promise<{ status: number; error: string }
   return { status: response.status, error: payload.error ?? '' }
 }
 
-test('AU profile with no state names the field, the valid states, and an example', { skip: !DB }, async () => {
+test('AU profile with no state names the field, the valid states, and an example', async () => {
   const { org, scheduleId, employeeId } = await fixture()
   try {
     const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'AU', ''))
@@ -86,7 +84,7 @@ test('AU profile with no state names the field, the valid states, and an example
   }
 })
 
-test('AU profile with an unknown state names the received value and the valid states', { skip: !DB }, async () => {
+test('AU profile with an unknown state names the received value and the valid states', async () => {
   const { org, scheduleId, employeeId } = await fixture()
   try {
     const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'AU', 'XX'))
@@ -98,7 +96,7 @@ test('AU profile with an unknown state names the received value and the valid st
   }
 })
 
-test('GB profile with no nation names the field and the four nations', { skip: !DB }, async () => {
+test('GB profile with no nation names the field and the four nations', async () => {
   const { org, scheduleId, employeeId } = await fixture()
   try {
     const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'GB', ''))
@@ -111,7 +109,7 @@ test('GB profile with no nation names the field and the four nations', { skip: !
   }
 })
 
-test('GB profile with an unknown nation names the received value', { skip: !DB }, async () => {
+test('GB profile with an unknown nation names the received value', async () => {
   const { org, scheduleId, employeeId } = await fixture()
   try {
     const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'GB', 'XX'))
@@ -123,7 +121,7 @@ test('GB profile with an unknown nation names the received value', { skip: !DB }
   }
 })
 
-test('IE profile with an unknown region names the received value and the single region', { skip: !DB }, async () => {
+test('IE profile with an unknown region names the received value and the single region', async () => {
   const { org, scheduleId, employeeId } = await fixture()
   try {
     const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'IE', 'DUBLIN'))

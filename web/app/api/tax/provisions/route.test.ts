@@ -69,9 +69,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
     // The collection route reaches the JSON body helper through the @/
     // alias, which the plain runner does not resolve — point it at the real
     // module so body parsing keeps its production behaviour.

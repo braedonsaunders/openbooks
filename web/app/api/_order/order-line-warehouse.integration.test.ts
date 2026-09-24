@@ -15,9 +15,6 @@ const routeGate = { authz: null as null | { user: { id: string; orgId: string };
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -67,7 +64,6 @@ const { POST: assignSalesWarehouse } = await import("../sales-orders/[id]/assign
 const { POST: assignPurchaseWarehouse } = await import("../purchase-orders/[id]/assign-warehouse/route.ts");
 hooks.deregister();
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>;
@@ -134,7 +130,7 @@ function refusal(error: unknown, lineNumber: number): boolean {
   );
 }
 
-test("fulfillment names the warehouseless line instead of failing generically", { skip: !DB }, async () => {
+test("fulfillment names the warehouseless line instead of failing generically", async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
     await assert.rejects(
@@ -159,7 +155,7 @@ test("fulfillment names the warehouseless line instead of failing generically", 
   }
 });
 
-test("assignment unblocks fulfillment and routes stock to the assigned warehouse", { skip: !DB }, async () => {
+test("assignment unblocks fulfillment and routes stock to the assigned warehouse", async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
     await withOrg(f.org.orgId, async () =>
@@ -215,7 +211,7 @@ test("assignment unblocks fulfillment and routes stock to the assigned warehouse
   }
 });
 
-test("a draft order stays on the normal edit path", { skip: !DB }, async () => {
+test("a draft order stays on the normal edit path", async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
     await withBypassContext(() => (db.execute(sql`update documents set status = 'draft' where id = ${f.orderId} and org_id = ${f.org.orgId}`)));
@@ -238,7 +234,7 @@ test("a draft order stays on the normal edit path", { skip: !DB }, async () => {
   }
 });
 
-test("a warehouse does not apply to a non-stocked line", { skip: !DB }, async () => {
+test("a warehouse does not apply to a non-stocked line", async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.service, null);
   try {
     await assert.rejects(
@@ -260,7 +256,7 @@ test("a warehouse does not apply to a non-stocked line", { skip: !DB }, async ()
   }
 });
 
-test("an inactive warehouse is refused", { skip: !DB }, async () => {
+test("an inactive warehouse is refused", async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
     await withBypassContext(() => (db.execute(sql`update stock_locations set is_active = false
@@ -284,7 +280,7 @@ test("an inactive warehouse is refused", { skip: !DB }, async () => {
   }
 });
 
-test("a stale revision is refused before any write", { skip: !DB }, async () => {
+test("a stale revision is refused before any write", async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
     await assert.rejects(
@@ -309,7 +305,7 @@ test("a stale revision is refused before any write", { skip: !DB }, async () => 
   }
 });
 
-test("receipt names the warehouseless purchase-order line", { skip: !DB }, async () => {
+test("receipt names the warehouseless purchase-order line", async () => {
   const f = await approvedOrder("purchase_order", (org) => org.items.fifo, null);
   try {
     await assert.rejects(
@@ -328,7 +324,7 @@ test("receipt names the warehouseless purchase-order line", { skip: !DB }, async
   }
 });
 
-test("both sales and purchase order routes assign the requested line warehouse", { skip: !DB }, async () => {
+test("both sales and purchase order routes assign the requested line warehouse", async () => {
   for (const [kind, post] of [
     ["sales_order", assignSalesWarehouse],
     ["purchase_order", assignPurchaseWarehouse],

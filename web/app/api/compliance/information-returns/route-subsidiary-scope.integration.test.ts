@@ -11,7 +11,6 @@ import { sql } from "drizzle-orm";
 // real scope gate against a scratch org: only the session boundary is
 // stubbed.
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 const stateKey = Symbol.for("openbooks.info-returns-route-test");
 const state: {
@@ -32,9 +31,6 @@ const jsonUrl = new URL("../../../../lib/api/json.ts", import.meta.url).href;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@/lib/authz" || /(^|\/)lib\/authz$/.test(specifier)) {
       return { shortCircuit: true, url: "mock:info-returns-authz" };
     }
@@ -116,7 +112,7 @@ async function enableCompliance(orgId: string): Promise<void> {
   await withBypassContext(() => (db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true') where id = ${orgId}`)));
 }
 
-test("a malformed subsidiary id is a 400, never an org-wide filing", { skip: !DB }, async () => {
+test("a malformed subsidiary id is a 400, never an org-wide filing", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableCompliance(org.orgId);
@@ -133,7 +129,7 @@ test("a malformed subsidiary id is a 400, never an org-wide filing", { skip: !DB
   }
 });
 
-test("an out-of-scope subsidiary reads as missing with nothing filed", { skip: !DB }, async () => {
+test("an out-of-scope subsidiary reads as missing with nothing filed", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableCompliance(org.orgId);
@@ -150,7 +146,7 @@ test("an out-of-scope subsidiary reads as missing with nothing filed", { skip: !
   }
 });
 
-test("a well-formed id outside the org is a 404, not an org-wide filing", { skip: !DB }, async () => {
+test("a well-formed id outside the org is a 404, not an org-wide filing", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableCompliance(org.orgId);

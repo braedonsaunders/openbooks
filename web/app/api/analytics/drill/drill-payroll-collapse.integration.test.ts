@@ -16,7 +16,6 @@ const gate: { permissions: string[] } = { permissions: ["reports.read"] };
 Object.assign(globalThis, { __drillGate: gate });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/analytics/drill/")) {
       return {
         shortCircuit: true,
@@ -89,7 +88,7 @@ async function drill(orgId: string, account: string, date: string) {
   return res.json() as Promise<Record<string, unknown>>;
 }
 
-test("account drill collapses pay-run lines without the grant", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("account drill collapses pay-run lines without the grant", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   (globalThis as Record<string, unknown>).__drillOrgId = org.orgId;
   try {
@@ -104,7 +103,7 @@ test("account drill collapses pay-run lines without the grant", { skip: !process
   }
 });
 
-test("account drill ties out with the grant and shows full detail", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("account drill ties out with the grant and shows full detail", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   (globalThis as Record<string, unknown>).__drillOrgId = org.orgId;
   try {

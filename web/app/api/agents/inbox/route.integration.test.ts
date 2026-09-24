@@ -13,7 +13,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06ApiInbox: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__b06ApiInbox.user}' };
   if (specifier.startsWith('@/')) {
@@ -46,7 +45,7 @@ async function asUser(orgId: string, name: string, roleKey: string, perms: strin
 
 const READER = ['assistant.use', 'gl.read'];
 
-test('inbox feed lists, filters, and stays in-org', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('inbox feed lists, filters, and stays in-org', async () => {
   const orgA = await withBypassContext(() => createScratchOrg());
   const orgB = await withBypassContext(() => createScratchOrg());
   try {
@@ -79,7 +78,7 @@ test('inbox feed lists, filters, and stays in-org', { skip: !process.env.OPENBOO
   }
 });
 
-test('item feed returns the shared detail or fails closed', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('item feed returns the shared detail or fails closed', async () => {
   const orgA = await withBypassContext(() => createScratchOrg());
   const orgB = await withBypassContext(() => createScratchOrg());
   try {

@@ -6,9 +6,6 @@ import { sql } from 'drizzle-orm'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier.startsWith('@/')) {
       return nextResolve(new URL(`../../../${specifier.slice(2)}`, import.meta.url).href, context)
     }
@@ -17,7 +14,7 @@ registerHooks({
 })
 
 const { loadParty } = await import('./_lib.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts',
 )
@@ -32,7 +29,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
  */
 test(
   'party directory payload omits sealed tax identifiers',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { org, partyId } = await withBypass(async () => {
       const created = await createScratchOrg()
@@ -69,7 +65,6 @@ test(
  */
 test(
   'crm party bundle omits role rows, bank details, and transaction totals',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { org, partyId } = await withBypass(async () => {
       const created = await createScratchOrg()

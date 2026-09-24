@@ -330,13 +330,6 @@ function mockedUrl(specifier: string): string | null {
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     const mocked = mockedUrl(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     if (specifier.startsWith("@/") && context.parentURL) {

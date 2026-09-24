@@ -14,7 +14,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningMagnitudeUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/dunning/")) {
       return {
         shortCircuit: true,
@@ -61,7 +60,7 @@ async function counts(orgId: string) {
   return { policies: policies.rows[0]!.n, stages: stages.rows[0]!.n };
 }
 
-test("dunning writes refuse magnitudes the integer and money columns cannot hold", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("dunning writes refuse magnitudes the integer and money columns cannot hold", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

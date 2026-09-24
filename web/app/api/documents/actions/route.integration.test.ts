@@ -18,7 +18,6 @@ Object.assign(globalThis, { __documentActionsUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__documentActionsUser.user}')
@@ -41,7 +40,7 @@ async function documentState(orgId: string, id: string) {
   )
 }
 
-test('documents/actions refuses unknown actions instead of posting them under the create permission', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('documents/actions refuses unknown actions instead of posting them under the create permission', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Sales rep', 'sales_rep'))
@@ -90,7 +89,7 @@ test('documents/actions refuses unknown actions instead of posting them under th
   }
 })
 
-test('documents/actions double submit: one winner, one 422, never a 500', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('documents/actions double submit: one winner, one 422, never a 500', async () => {
   // Two users at once on the same draft: both submitters read `draft` before
   // either commits, so the engine serializes them on the document row lock
   // and the loser must meet a lifecycle refusal — never a raw 500 from the
@@ -139,7 +138,7 @@ test('documents/actions double submit: one winner, one 422, never a 500', { skip
  * records the lifecycle transition itself, so the trail evidences submit
  * (always) plus the auto-release approval it performed.
  */
-test('documents/actions submit evidences the transition in the audit trail', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('documents/actions submit evidences the transition in the audit trail', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Sales rep', 'sales_rep'))
@@ -182,7 +181,7 @@ test('documents/actions submit evidences the transition in the audit trail', { s
  * draft, the scripted memo is gone, and no failed run or script run rows
  * survive as a trail of the refused attempt.
  */
-test('documents/actions submit with refused routing commits no script effects', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('documents/actions submit with refused routing commits no script effects', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Sales rep', 'sales_rep'))
@@ -212,7 +211,7 @@ test('documents/actions submit with refused routing commits no script effects', 
       // An unparseable on_submit flow: the dispatch fails, so the submission
       // is refused with a flowError after the script effects are written.
       await db.execute(sql`
-        insert into flows (id, org_id, name, subject_kind, enabled, graph)
+        insert into flows (id, org_id, name, subject_kind, graph)
         values (${randomUUID()}, ${org.orgId}, 'Broken flow', 'customer_invoice', true,
           ${JSON.stringify({ nodes: 'not-an-array' })}::jsonb)`)
     })

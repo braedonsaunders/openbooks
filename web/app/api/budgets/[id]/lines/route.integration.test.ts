@@ -12,7 +12,6 @@ Object.assign(globalThis, { __budgetLinesState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetLinesState;
@@ -34,7 +33,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface LinesFixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>
@@ -79,7 +77,7 @@ async function storedLines(scenarioId: string, orgId: string) {
   )).rows
 }
 
-test('lines PATCH honors an explicit subsidiaryId', { skip: !DB }, async () => {
+test('lines PATCH honors an explicit subsidiaryId', async () => {
   const { org, scenarioId, subB } = await fixture()
   try {
     const response = await patch(scenarioId, {
@@ -97,7 +95,7 @@ test('lines PATCH honors an explicit subsidiaryId', { skip: !DB }, async () => {
   }
 })
 
-test('lines PATCH defaults an omitted subsidiary to the tenant root', { skip: !DB }, async () => {
+test('lines PATCH defaults an omitted subsidiary to the tenant root', async () => {
   const { org, scenarioId } = await fixture()
   try {
     const response = await patch(scenarioId, {
@@ -114,7 +112,7 @@ test('lines PATCH defaults an omitted subsidiary to the tenant root', { skip: !D
   }
 })
 
-test('lines PATCH rejects a subsidiary outside the caller scope', { skip: !DB }, async () => {
+test('lines PATCH rejects a subsidiary outside the caller scope', async () => {
   const { org, scenarioId, subB } = await fixture()
   try {
     state.allowed = new Set([org.subsidiaryId])
@@ -131,7 +129,7 @@ test('lines PATCH rejects a subsidiary outside the caller scope', { skip: !DB },
   }
 })
 
-test('lines PATCH rejects a root-defaulted cell when root is outside the caller scope', { skip: !DB }, async () => {
+test('lines PATCH rejects a root-defaulted cell when root is outside the caller scope', async () => {
   const { org, scenarioId, subB } = await fixture()
   try {
     state.allowed = new Set([subB])

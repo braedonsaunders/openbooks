@@ -14,7 +14,6 @@ const routeState: {
 const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier.endsWith('/lib/feature-gates')) return { shortCircuit: true, url: 'mock:item-rates-precision-gates' }
     if (specifier.endsWith('/lib/features')) return { shortCircuit: true, url: 'mock:item-rates-precision-features' }
     if (specifier.startsWith('@/')) return nextResolve(`${webRoot}${specifier.slice(2)}.ts`, context)
@@ -42,7 +41,6 @@ const { withBypassContext, withOrgContext, db } = await import('@openbooks/engin
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 hooks.deregister()
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 function post(itemId: string, body: Record<string, unknown>) {
   return POST(new Request(`http://openbooks.test/api/items/${itemId}/rates`, {
@@ -65,7 +63,7 @@ function versioned(itemId: string, book: string, quantity: string, from: string)
  * by name instead of rounding silently to 1.0001 in PostgreSQL, and the
  * refusal must leave the prior version intact.
  */
-test('a five-decimal base quantity is refused and the prior version stands', { skip: !DB }, async () => {
+test('a five-decimal base quantity is refused and the prior version stands', async () => {
   const org = await withBypassContext(() => (createScratchOrg()))
   try {
     routeState.gate = { user: { orgId: org.orgId, id: org.orgId }, allowedSubsidiaryIds: null }

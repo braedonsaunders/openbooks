@@ -24,7 +24,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '../../../../lib/authz' || specifier === '../../../lib/authz') {
       return { url: 'mock:journal-actions-authz', shortCircuit: true }
     }

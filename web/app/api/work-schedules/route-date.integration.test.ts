@@ -15,7 +15,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __workScheduleDateState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       specifier.endsWith("/lib/feature-gates") &&
       context.parentURL?.includes("/api/work-schedules/")
@@ -43,7 +42,6 @@ const { db, withBypassContext } = await import("@openbooks/engine/src/platform/d
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const save = (body: Record<string, unknown>) =>
   new Request("http://audit.local/api/work-schedules", {
@@ -67,7 +65,7 @@ async function scheduleCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("a schedule with a non-calendar start date is refused without writing", { skip: !DB }, async () => {
+test("a schedule with a non-calendar start date is refused without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

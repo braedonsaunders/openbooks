@@ -13,7 +13,6 @@ Object.assign(globalThis, { __expenseNativeState: state, __expenseSqlText: (quer
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
@@ -44,7 +43,6 @@ const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { assertExpenseEmployee } = await import('@openbooks/engine/src/records/expense-validation.ts')
 const { GET, PATCH, DELETE } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture(work: (org: Awaited<ReturnType<typeof createScratchOrg>>, id: string) => Promise<void>) {
   const org = await withBypassContext(() => createScratchOrg())
@@ -76,7 +74,7 @@ async function revision(id: string) {
   return (await withOrgContext(state.orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${state.orgId}`))).rows[0]!.revision
 }
 
-test('expense GET keeps header, lines, exact revision and subsequent OCC save coherent across a committed writer', { skip: !DB }, async () => {
+test('expense GET keeps header, lines, exact revision and subsequent OCC save coherent across a committed writer', async () => {
   await fixture(async (org, id) => {
     const oldRevision = await revision(id)
     state.afterRead = async (text) => {
@@ -101,7 +99,7 @@ test('expense GET keeps header, lines, exact revision and subsequent OCC save co
   })
 })
 
-test('expense draft with omitted employee cannot submit or post without reimbursable open-item evidence', { skip: !DB }, async () => {
+test('expense draft with omitted employee cannot submit or post without reimbursable open-item evidence', async () => {
   await fixture(async (org, id) => {
     const saved = await patch(id, { expectedUpdatedAt: await revision(id), lines: [{ accountId: org.accounts.cogs, amount: '123.45', settlementType: 'out_of_pocket' }] })
     assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
@@ -126,7 +124,7 @@ test('expense draft with omitted employee cannot submit or post without reimburs
   })
 })
 
-test('expense GET and PATCH scope checks cannot authorize a different subsidiary snapshot', { skip: !DB }, async () => {
+test('expense GET and PATCH scope checks cannot authorize a different subsidiary snapshot', async () => {
   await fixture(async (org, id) => {
     const otherSub = randomUUID()
     await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country) values (${otherSub}, ${org.orgId}, ${org.subsidiaryId}, 'Other entity', 'CAD', 'CA')`))
@@ -159,7 +157,7 @@ test('expense GET and PATCH scope checks cannot authorize a different subsidiary
   })
 })
 
-test('expense payload preserves every financial decimal as an exact string', { skip: !DB }, async () => {
+test('expense payload preserves every financial decimal as an exact string', async () => {
   await fixture(async (_org, id) => {
     await withBypassContext(() => db.transaction(async (tx) => {
       await tx.execute(sql`update documents set subtotal='999999999999999.9998', tax_total='0.0001', total='999999999999999.9999', fx_rate='1.1234567890' where id=${id}`)
@@ -175,7 +173,7 @@ test('expense payload preserves every financial decimal as an exact string', { s
   })
 })
 
-test('expense PATCH response cannot bless stale content with a later writer revision', { skip: !DB }, async () => {
+test('expense PATCH response cannot bless stale content with a later writer revision', async () => {
   await fixture(async (org, id) => {
     const before = await revision(id)
     state.afterRead = async (text) => {
@@ -196,7 +194,7 @@ test('expense PATCH response cannot bless stale content with a later writer revi
   })
 })
 
-test('expense PATCH refuses a party from another organization but saves an own-org party', { skip: !DB }, async () => {
+test('expense PATCH refuses a party from another organization but saves an own-org party', async () => {
   await fixture(async (org, id) => {
     // A foreign UUID passes the global documents FK, so the route itself must
     // refuse it: the draft must never store another tenant's party.
@@ -217,7 +215,7 @@ test('expense PATCH refuses a party from another organization but saves an own-o
   })
 })
 
-test('expense employee identity rejects vendor-only parties but preserves former dual-role employee reimbursements', { skip: !DB }, async () => {
+test('expense employee identity rejects vendor-only parties but preserves former dual-role employee reimbursements', async () => {
   await fixture(async (org, id) => {
     await withBypassContext(() => db.execute(sql`update documents set party_id=${org.vendorId} where id=${id}`))
     const before = await revision(id)
@@ -237,7 +235,7 @@ test('expense employee identity rejects vendor-only parties but preserves former
   })
 })
 
-test('expense PATCH preserves omitted required header custom fields on a partial edit', { skip: !DB }, async () => {
+test('expense PATCH preserves omitted required header custom fields on a partial edit', async () => {
   await fixture(async (org, id) => {
     await withBypassContext(async () => {
       await db.execute(sql`
@@ -256,7 +254,7 @@ test('expense PATCH preserves omitted required header custom fields on a partial
   })
 })
 
-test('expense PATCH refuses a line account from another organization but saves an own-org account', { skip: !DB }, async () => {
+test('expense PATCH refuses a line account from another organization but saves an own-org account', async () => {
   await fixture(async (org, id) => {
     const foreign = await withBypassContext(() => createScratchOrg())
     try {
@@ -280,7 +278,7 @@ test('expense PATCH refuses a line account from another organization but saves a
 })
 
 
-test('expense DELETE without a revision token is rejected as a 409 without deleting', { skip: !DB }, async () => {
+test('expense DELETE without a revision token is rejected as a 409 without deleting', async () => {
   await fixture(async (org, id) => {
     const response = await del(id, {})
     assert.equal(response.status, 409, JSON.stringify(await response.clone().json()))
@@ -288,7 +286,7 @@ test('expense DELETE without a revision token is rejected as a 409 without delet
   })
 })
 
-test('expense DELETE with a stale revision token is rejected as a 409 without deleting', { skip: !DB }, async () => {
+test('expense DELETE with a stale revision token is rejected as a 409 without deleting', async () => {
   await fixture(async (org, id) => {
     const stale = await revision(id)
     await withBypassContext(() => db.execute(sql`update documents set memo='concurrent writer', updated_at=updated_at + interval '1 microsecond' where id=${id} and org_id=${org.orgId}`))
@@ -298,7 +296,7 @@ test('expense DELETE with a stale revision token is rejected as a 409 without de
   })
 })
 
-test('expense PATCH refuses malformed and foreign line references with domain errors', { skip: !DB }, async () => {
+test('expense PATCH refuses malformed and foreign line references with domain errors', async () => {
   await fixture(async (org, id) => {
     const foreign = await withBypassContext(() => createScratchOrg())
     try {
@@ -329,7 +327,7 @@ test('expense PATCH refuses malformed and foreign line references with domain er
   })
 })
 
-test('expense PATCH refuses foreign reference custom values on header and lines', { skip: !DB }, async () => {
+test('expense PATCH refuses foreign reference custom values on header and lines', async () => {
   await fixture(async (org, id) => {
     const foreign = await withBypassContext(() => createScratchOrg())
     try {
@@ -359,7 +357,7 @@ test('expense PATCH refuses foreign reference custom values on header and lines'
   })
 })
 
-test('expense DELETE with the exact revision deletes the draft', { skip: !DB }, async () => {
+test('expense DELETE with the exact revision deletes the draft', async () => {
   await fixture(async (org, id) => {
     const response = await del(id, { expectedUpdatedAt: await revision(id) })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
@@ -367,7 +365,7 @@ test('expense DELETE with the exact revision deletes the draft', { skip: !DB }, 
   })
 })
 
-test('expense PATCH refuses a malformed document date with a domain error instead of a storage 500', { skip: !DB }, async () => {
+test('expense PATCH refuses a malformed document date with a domain error instead of a storage 500', async () => {
   await fixture(async (org, id) => {
     // A shape-invalid date must fail closed at the route boundary — sibling
     // PATCH routes (journals, payments) validate with isoDate, but this one

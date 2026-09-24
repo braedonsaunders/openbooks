@@ -6,9 +6,6 @@ import { sql } from 'drizzle-orm'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier.startsWith('@openbooks/engine/')) {
       return nextResolve(
         new URL(`../../../../engine/${specifier.slice('@openbooks/engine/'.length)}`, import.meta.url).href,
@@ -22,11 +19,11 @@ registerHooks({
   },
 })
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadAccount } = await import('./_lib.ts')
 
-test('URL drawer account reads hide out-of-scope subsidiaries and retain shared chart accounts', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('URL drawer account reads hide out-of-scope subsidiaries and retain shared chart accounts', async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     const hiddenSubsidiary = randomUUID()
@@ -54,7 +51,7 @@ test('URL drawer account reads hide out-of-scope subsidiaries and retain shared 
   }
 })
 
-test('shared account drawer child counts omit subsidiary-owned children outside the caller scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('shared account drawer child counts omit subsidiary-owned children outside the caller scope', async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     const hiddenSubsidiary = randomUUID()
@@ -85,7 +82,7 @@ test('shared account drawer child counts omit subsidiary-owned children outside 
   }
 })
 
-test('shared account drawer transaction flag only reflects journal lines in caller scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('shared account drawer transaction flag only reflects journal lines in caller scope', async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     const hiddenSubsidiary = randomUUID()

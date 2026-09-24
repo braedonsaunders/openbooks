@@ -9,7 +9,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __captureOCC: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__captureOCC.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -27,7 +26,7 @@ const { PATCH } = await import('./[id]/route')
  * materialize into a wrong vendor bill). Same contract as document, payment,
  * and prebill-line edits.
  */
-test('a stale capture revision refuses instead of reverting a newer correction', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a stale capture revision refuses instead of reverting a newer correction', async () => {
   const org = await withBypassContext(() => (createScratchOrg()))
   try {
     // createScratchUser seeds app_roles outside any bypass of its own; scope

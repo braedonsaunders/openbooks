@@ -228,9 +228,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '@/lib/api/json') {
       return { shortCircuit: true, url: new URL('../../../../lib/api/json.ts', import.meta.url).href }
     }

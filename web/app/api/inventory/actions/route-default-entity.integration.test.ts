@@ -13,7 +13,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __inventoryDefaultEntityAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__inventoryDefaultEntityAudit.user,allowedSubsidiaryIds:null}}",
@@ -30,7 +29,7 @@ registerHooks({
  * the oldest-created entity: the old per-route default booked to it, while
  * document lines always used the root.
  */
-test("unscoped receipts, counts, and document lines book to the root entity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("unscoped receipts, counts, and document lines book to the root entity", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;

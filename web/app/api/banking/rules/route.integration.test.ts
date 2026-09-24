@@ -56,13 +56,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     // feature-gates imports this relative authz module; keep that one seam
     // mocked while loading the real route and validation implementation.
     if (
@@ -107,7 +100,6 @@ const { db, withBypass, withOrgContext } =
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 type RuleSnapshot = {
   name: string;
@@ -231,7 +223,6 @@ async function waitForRuleWriters(expected: number): Promise<void> {
 
 test(
   "concurrent PATCH requests chain bank-rule audit before-images from committed edits",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const holder = new Client({
@@ -318,7 +309,6 @@ test(
 
 test(
   "concurrent DELETE requests return one success and write one delete audit",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {

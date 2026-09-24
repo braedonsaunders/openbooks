@@ -16,7 +16,6 @@ const engineRoot = new URL('../../../../../engine/', import.meta.url).href
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     // Bare @openbooks/engine/* resolves cross-checkout to main; pin the
     // engine graph to the worktree copy carrying the persistTaxQuote guard.
     if (specifier.startsWith('@openbooks/engine/')) {
@@ -40,7 +39,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST, PUT } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -73,7 +71,7 @@ async function quoteCount(): Promise<number> {
   return rows[0]!.n
 }
 
-test('POST refuses a taxable amount wider than numeric(19,4) without writing evidence', { skip: !DB }, async () => {
+test('POST refuses a taxable amount wider than numeric(19,4) without writing evidence', async () => {
   const { org } = await fixture()
   try {
     const result = await post({ taxableAmount: '99999999999999999999', currency: 'CAD', shipFrom: {}, shipTo: {} })
@@ -84,7 +82,7 @@ test('POST refuses a taxable amount wider than numeric(19,4) without writing evi
   }
 })
 
-test('POST refuses an impossible quotedOn without writing evidence', { skip: !DB }, async () => {
+test('POST refuses an impossible quotedOn without writing evidence', async () => {
   const { org } = await fixture()
   try {
     const result = await post({ taxableAmount: '100', currency: 'CAD', shipFrom: {}, shipTo: {}, quotedOn: '2024-02-30' })
@@ -95,7 +93,7 @@ test('POST refuses an impossible quotedOn without writing evidence', { skip: !DB
   }
 })
 
-test('PUT by a subsidiary-restricted setup manager is refused with the provider untouched', { skip: !DB }, async () => {
+test('PUT by a subsidiary-restricted setup manager is refused with the provider untouched', async () => {
   const { org } = await fixture()
   state.allowed = new Set([randomUUID()])
   try {
@@ -118,7 +116,7 @@ test('PUT by a subsidiary-restricted setup manager is refused with the provider 
   }
 })
 
-test('POST still quotes a column-maximum amount with identical read-back', { skip: !DB }, async () => {
+test('POST still quotes a column-maximum amount with identical read-back', async () => {
   const { org } = await fixture()
   try {
     const result = await post({ taxableAmount: '999999999999999.9999', currency: 'CAD', shipFrom: {}, shipTo: {} })

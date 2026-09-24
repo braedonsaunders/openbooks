@@ -14,7 +14,6 @@ Object.assign(globalThis, { __expenseIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     // The route reaches authz through lib/feature-gates' relative imports,
     // so match by suffix rather than by the route's own specifier.
     if (specifier === '../../../../lib/authz' || specifier === './authz') return virtual(`
@@ -55,7 +54,6 @@ const { GET, PATCH, DELETE } = await import('./route.ts')
 // and are unaffected.
 const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
 installTrustedTestDatabaseBypass()
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -83,7 +81,7 @@ async function call(
 }
 
 for (const method of ['GET', 'PATCH', 'DELETE'] as const) {
-  test(`${method} answers a non-uuid id with the typed not-found contract`, { skip: !DB }, async () => {
+  test(`${method} answers a non-uuid id with the typed not-found contract`, async () => {
     const org = await fixture()
     try {
       const result = await call(method, 'reports')

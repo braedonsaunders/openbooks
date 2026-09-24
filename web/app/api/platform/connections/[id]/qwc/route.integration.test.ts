@@ -24,7 +24,6 @@ const TRANSLATIONS = `
 `
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier.endsWith('/lib/authz')) return virtual(AUTHZ)
     if (specifier === 'next-intl/server') return virtual(TRANSLATIONS)
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -35,7 +34,6 @@ const { db, schema, withOrgContext } = await import('@openbooks/engine/src/platf
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { sql } = await import('drizzle-orm')
 const { GET } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function connectionWithRegion(orgId: string, region: string): Promise<string> {
   const [connection] = await db.insert(schema.connections).values({
@@ -51,7 +49,7 @@ async function connectionWithRegion(orgId: string, region: string): Promise<stri
   return connection.id
 }
 
-test('the .qwc route refuses AU/NZ by name and still generates US/CA/UK', { skip: !DB }, async () => {
+test('the .qwc route refuses AU/NZ by name and still generates US/CA/UK', async () => {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   state.actorId = 'user-1'

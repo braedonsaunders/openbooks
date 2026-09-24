@@ -25,9 +25,6 @@ const module_ = (source: string): { shortCircuit: true; format: "module"; url: s
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Re-export the REAL authz module and override only the session gate, so
     // the unrestricted-scope guard the route calls is the production
     // function. Gates without an explicit scope default to unrestricted.

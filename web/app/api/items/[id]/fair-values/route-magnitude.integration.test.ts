@@ -14,7 +14,6 @@ Object.assign(globalThis, { __fairValueMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__fairValueMagnitudeState;
@@ -32,7 +31,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST, PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -68,7 +66,7 @@ async function rowCount(itemId: string): Promise<number> {
   return rows[0]!.n
 }
 
-test('POST refuses a unit price wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('POST refuses a unit price wider than numeric(19,4) without writing', async () => {
   const { org, itemId } = await fixture()
   try {
     const result = await call('POST', itemId, { currency: 'CAD', unitPrice: '99999999999999999999' })
@@ -79,7 +77,7 @@ test('POST refuses a unit price wider than numeric(19,4) without writing', { ski
   }
 })
 
-test('POST refuses low/high values wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('POST refuses low/high values wider than numeric(19,4) without writing', async () => {
   const { org, itemId } = await fixture()
   try {
     const result = await call('POST', itemId, {
@@ -92,7 +90,7 @@ test('POST refuses low/high values wider than numeric(19,4) without writing', { 
   }
 })
 
-test('PATCH refuses a unit price wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('PATCH refuses a unit price wider than numeric(19,4) without writing', async () => {
   const { org, itemId } = await fixture()
   try {
     const created = await call('POST', itemId, { currency: 'CAD', unitPrice: '10' })
@@ -108,7 +106,7 @@ test('PATCH refuses a unit price wider than numeric(19,4) without writing', { sk
   }
 })
 
-test('POST still saves a column-maximum unit price with identical read-back', { skip: !DB }, async () => {
+test('POST still saves a column-maximum unit price with identical read-back', async () => {
   const { org, itemId } = await fixture()
   try {
     const result = await call('POST', itemId, { currency: 'CAD', unitPrice: '999999999999999.9999' })

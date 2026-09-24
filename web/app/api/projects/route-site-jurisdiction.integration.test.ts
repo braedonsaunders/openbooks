@@ -30,9 +30,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.endsWith("/lib/authz")) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -59,7 +56,6 @@ hooks.deregister();
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await createScratchOrg();
@@ -88,7 +84,7 @@ const siteOf = async (id: string) =>
     )
   ).rows[0]!.site_jurisdiction;
 
-test("project creation refuses an unknown site jurisdiction without writing", { skip: !DB }, async () => {
+test("project creation refuses an unknown site jurisdiction without writing", async () => {
   const org = await fixture();
   try {
     const response = await POST(postRequest({ name: "Site job", siteJurisdiction: "Atlantis" }));
@@ -104,7 +100,7 @@ test("project creation refuses an unknown site jurisdiction without writing", { 
   }
 });
 
-test("project creation stores a canonicalised site jurisdiction, nullable by default", { skip: !DB }, async () => {
+test("project creation stores a canonicalised site jurisdiction, nullable by default", async () => {
   const org = await fixture();
   try {
     const createdSite = await POST(postRequest({ name: "Site job", siteJurisdiction: "us-ca" }));

@@ -33,9 +33,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -100,7 +97,6 @@ async function storedLayout(orgId: string, actorId: string): Promise<{ layout: u
 
 test(
   "first save with a null revision creates the row and returns its token",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await PUT(putRequest({ page: PAGE, layout: { hidden: ["a"] }, expectedRevision: null }));
@@ -117,7 +113,6 @@ test(
 
 test(
   "a stale revision is a 409 carrying current; the current one succeeds",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const first = (await (
@@ -152,7 +147,6 @@ test(
 
 test(
   "a missing revision is a 409 naming the remedy, not a silent overwrite",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     await seed();
     const res = await PUT(putRequest({ page: PAGE, layout: { hidden: ["a"] } }));
@@ -163,7 +157,6 @@ test(
 
 test(
   "two writers on one base revision: the second 409s, then reconciles to the union",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const base = (await (

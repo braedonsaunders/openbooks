@@ -116,7 +116,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   ["mock:catalog", `import { validateCustomQuery } from "@openbooks/reports"; export async function validateOrgReportQuery(_authz, query) { return validateCustomQuery(query) }`],
-  ["mock:server-only", ""],
 ]);
 
 const selfUrl = new URL(import.meta.url).href;
@@ -133,19 +132,14 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only")
-      return { format: "module", shortCircuit: true, url: "mock:server-only" };
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source =
-      url === "mock:server-only"
-        ? ""
-        : mockSources.get(
-            `mock:${new URL(url).searchParams.get("report-definition-mock")}`,
-          );
+    const source = mockSources.get(
+      `mock:${new URL(url).searchParams.get("report-definition-mock")}`,
+    );
     if (source !== undefined)
       return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);

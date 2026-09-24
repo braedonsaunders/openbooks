@@ -22,7 +22,6 @@ Object.assign(globalThis, { __lienExecutedState: state, __lienExecutedHtml: capt
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -56,7 +55,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("./route.ts");
 const { GET } = await import("./pdf/route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const VENDOR = "Original Vendor Co";
 const PROJECT = "Original Project";
@@ -110,7 +108,7 @@ async function snapshotOf(waiverId: string) {
   return rows[0]!.snapshot;
 }
 
-test("signing freezes the print image, later renames do not rewrite it", { skip: !DB }, async () => {
+test("signing freezes the print image, later renames do not rewrite it", async () => {
   const { org, partyId, projectId, waiverId } = await fixture();
   try {
     const signed = await sign(waiverId);
@@ -141,7 +139,7 @@ test("signing freezes the print image, later renames do not rewrite it", { skip:
   }
 });
 
-test("a waiver executed before the freeze prints bannered current records, never a clean release", { skip: !DB }, async () => {
+test("a waiver executed before the freeze prints bannered current records, never a clean release", async () => {
   const { org, partyId, projectId, waiverId } = await fixture();
   try {
     // A legacy executed row: signed, but no frozen image was ever stamped.
@@ -188,7 +186,7 @@ test("a waiver executed before the freeze prints bannered current records, never
   }
 });
 
-test("a newly signed waiver still freezes its snapshot and prints clean", { skip: !DB }, async () => {
+test("a newly signed waiver still freezes its snapshot and prints clean", async () => {
   const { org, waiverId } = await fixture();
   try {
     const signed = await sign(waiverId);

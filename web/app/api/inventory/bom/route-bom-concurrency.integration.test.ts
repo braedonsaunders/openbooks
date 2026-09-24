@@ -37,9 +37,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@/lib/feature-gates") {
       return { url: "mock:feature-gates", shortCircuit: true };
     }
@@ -71,7 +68,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function authenticate(orgId: string, actorId: string) {
   routeState.authz = {
@@ -117,7 +113,7 @@ async function emptyBom(orgId: string, assemblyItemId: string) {
     delete from bom_components where org_id = ${orgId} and assembly_item_id = ${assemblyItemId}`);
 }
 
-test("two concurrent empty-BOM replacements serialize: one recipe, one 409", { skip: !DB }, async () => {
+test("two concurrent empty-BOM replacements serialize: one recipe, one 409", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Race Admin", "admin");
@@ -152,7 +148,7 @@ test("two concurrent empty-BOM replacements serialize: one recipe, one 409", { s
   }
 });
 
-test("a committed Inventory disable refuses the BOM save with nothing written", { skip: !DB }, async () => {
+test("a committed Inventory disable refuses the BOM save with nothing written", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Fence Admin", "admin");
@@ -171,7 +167,7 @@ test("a committed Inventory disable refuses the BOM save with nothing written", 
   }
 });
 
-test("a BOM save waits for an in-flight Inventory disable, then refuses it", { skip: !DB }, async () => {
+test("a BOM save waits for an in-flight Inventory disable, then refuses it", async () => {
   const org = await createScratchOrg();
   const writer = await pool.connect();
   let pending: Promise<{ status: number }> | undefined;

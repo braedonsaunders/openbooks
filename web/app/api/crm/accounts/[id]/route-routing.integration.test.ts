@@ -15,7 +15,6 @@ Object.assign(globalThis, { __crmAccountRoutingState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -37,7 +36,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, createScratchUser } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture(withAddress: boolean) {
   const org = await withBypassContext(() => createScratchOrg())
@@ -94,7 +92,7 @@ async function revisionFor(partyId: string): Promise<string> {
       from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
 }
 
-test('PATCH { route: true } succeeds when the account has no address or territory', { skip: !DB }, async () => {
+test('PATCH { route: true } succeeds when the account has no address or territory', async () => {
   const { org, partyId } = await fixture(false)
   try {
     const result = await patch(partyId, { route: true, expectedUpdatedAt: await revisionFor(partyId) })
@@ -104,7 +102,7 @@ test('PATCH { route: true } succeeds when the account has no address or territor
   }
 })
 
-test('PATCH { route: true } assigns the matching territory, owner, and assignment event', { skip: !DB }, async () => {
+test('PATCH { route: true } assigns the matching territory, owner, and assignment event', async () => {
   const { org, partyId, profileId, ownerId } = await fixture(true)
   try {
     const result = await patch(partyId, { route: true, expectedUpdatedAt: await revisionFor(partyId) })

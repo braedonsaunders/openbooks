@@ -18,7 +18,6 @@ Object.assign(globalThis, { __compliancePatchRevisionState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -37,7 +36,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -88,7 +86,7 @@ async function rowOf(recordId: string) {
   return rows[0]!;
 }
 
-test("certificate PATCH without a revision is refused without writing", { skip: !DB }, async () => {
+test("certificate PATCH without a revision is refused without writing", async () => {
   const { org, recordId } = await fixture();
   try {
     const response = await patch(recordId, { action: "update", coverageAmount: "2000000.00" });
@@ -101,7 +99,7 @@ test("certificate PATCH without a revision is refused without writing", { skip: 
   }
 });
 
-test("a stale revision is refused and the winner's write survives", { skip: !DB }, async () => {
+test("a stale revision is refused and the winner's write survives", async () => {
   const { org, recordId } = await fixture();
   try {
     const first = await patch(recordId, { action: "update", revision: 1, issuerName: "First Writer" });
@@ -118,7 +116,7 @@ test("a stale revision is refused and the winner's write survives", { skip: !DB 
   }
 });
 
-test("verification names the revision it attested", { skip: !DB }, async () => {
+test("verification names the revision it attested", async () => {
   const { org, recordId } = await fixture();
   try {
     state.actorId = await withBypassContext(() => createScratchUser(org.orgId, "Verifier", "compliance_manager"));

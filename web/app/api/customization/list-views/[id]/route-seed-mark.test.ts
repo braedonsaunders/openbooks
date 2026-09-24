@@ -48,9 +48,6 @@ const mockCustomization = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // No root tsconfig maps `@/` (only web/tsconfig does), so resolve the
     // app's alias the way PartyDrawer.test.tsx does: `@/lib/...` → web/lib.
     if (specifier.startsWith('@/')) {

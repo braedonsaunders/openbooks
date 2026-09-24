@@ -67,9 +67,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../../../lib/list-params") {
       return nextResolve(listParamsUrl, context);
     }

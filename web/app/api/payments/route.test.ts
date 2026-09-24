@@ -190,15 +190,7 @@ const mockUrls = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // Server-module guard: the route's transitive imports mark themselves
-    // server-only, which throws outside a Next render. The repo's route
     // tests neutralize it the same way.
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);

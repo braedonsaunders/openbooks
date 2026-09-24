@@ -205,8 +205,6 @@ const hooks = registerHooks({
     if (specifier === '../platform/db.ts' && (context.parentURL ?? '').endsWith('/engine/src/banking/banking.ts')) {
       return { url: 'mock:db', shortCircuit: true }
     }
-    // The real '@/lib/api/json' imports 'server-only', which is inert here.
-    if (specifier === 'server-only') return { url: 'data:text/javascript,export {}', shortCircuit: true }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)

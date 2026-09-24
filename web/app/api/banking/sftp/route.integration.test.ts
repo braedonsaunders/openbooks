@@ -60,13 +60,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     // The identity source behind the REAL lib/feature-gates and
     // lib/super-admin authorities under test.
     if (
@@ -131,7 +124,6 @@ test.after(() => {
   rmSync(scratchDataDir, { recursive: true, force: true });
 });
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -273,7 +265,6 @@ function isForcedAuditFailure(error: unknown): boolean {
 
 test(
   "a forced audit-insert failure rolls the SFTP credential mutation back with no evidence written",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     let removeFailure: (() => Promise<void>) | undefined;
@@ -326,7 +317,6 @@ test(
 
 test(
   "the SFTP access lifecycle and daemon configuration leave exact redacted attributable evidence",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -527,7 +517,6 @@ test(
 
 test(
   "malformed authorizedKeys are refused at creation, naming the bad lines, and store nothing",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {

@@ -18,7 +18,6 @@ Object.assign(globalThis, { __planVersionWidthState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -41,7 +40,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -79,7 +77,7 @@ async function versionCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("plan versions refuse a unit price wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("plan versions refuse a unit price wider than numeric(19,4) without writing", async () => {
   const { org, planId } = await fixture();
   try {
     const response = await post(versionBody(planId, "99999999999999999999.99"));
@@ -92,7 +90,7 @@ test("plan versions refuse a unit price wider than numeric(19,4) without writing
   }
 });
 
-test("plan versions still file an ordinary price", { skip: !DB }, async () => {
+test("plan versions still file an ordinary price", async () => {
   const { org, planId } = await fixture();
   try {
     const response = await post(versionBody(planId, "100.00"));

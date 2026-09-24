@@ -22,7 +22,6 @@ Object.assign(globalThis, { __adminFlowsScopeUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__adminFlowsScopeUser.user}')
     }
@@ -36,7 +35,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET: list, POST: create } = await import('../route')
 const { GET: detail, PATCH: edit, DELETE: remove } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function sessionUser(id: string, orgId: string): SessionUser {
   return {
@@ -67,7 +65,7 @@ async function makeBill(orgId: string, subsidiaryId: string): Promise<string> {
 async function seedFlow(orgId: string): Promise<string> {
   const id = randomUUID()
   await withBypassContext(() => db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, enabled, graph)
+    insert into flows (id, org_id, name, subject_kind, graph)
     values (${id}, ${orgId}, 'Scoped flow', 'vendor_bill', true, '{"schemaVersion":1,"nodes":[],"edges":[]}'::jsonb)`))
   return id
 }
@@ -94,7 +92,7 @@ async function seedUser(
   state.user = sessionUser(userId, orgId)
 }
 
-test('a restricted flows.manage caller sees only in-scope runs', { skip: !DB }, async () => {
+test('a restricted flows.manage caller sees only in-scope runs', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableFlows(org.orgId)
@@ -132,7 +130,7 @@ test('a restricted flows.manage caller sees only in-scope runs', { skip: !DB }, 
   }
 })
 
-test('an unrestricted flows.manage caller still sees every run', { skip: !DB }, async () => {
+test('an unrestricted flows.manage caller still sees every run', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableFlows(org.orgId)
@@ -156,7 +154,7 @@ test('an unrestricted flows.manage caller still sees every run', { skip: !DB }, 
   }
 })
 
-test('flows.manage without ap.read cannot see AP-subject run history or counts', { skip: !DB }, async () => {
+test('flows.manage without ap.read cannot see AP-subject run history or counts', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableFlows(org.orgId)
@@ -180,7 +178,7 @@ test('flows.manage without ap.read cannot see AP-subject run history or counts',
   }
 })
 
-test('restricted flows.manage cannot create, edit or delete org-wide flow policy', { skip: !DB }, async () => {
+test('restricted flows.manage cannot create, edit or delete org-wide flow policy', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableFlows(org.orgId)

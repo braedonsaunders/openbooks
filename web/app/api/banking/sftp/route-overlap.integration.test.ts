@@ -58,13 +58,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "./authz" &&
       (context.parentURL?.includes("/lib/feature-gates") ||
@@ -123,7 +116,6 @@ test.after(() => {
   rmSync(scratchDataDir, { recursive: true, force: true });
 });
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -190,7 +182,6 @@ async function serverCount(fixture: Fixture): Promise<number> {
 
 test(
   "creating two servers on the same root refuses the second by name",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -216,7 +207,6 @@ test(
 
 test(
   "nested roots refuse in both directions while siblings succeed",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -250,7 +240,6 @@ test(
 
 test(
   "two simultaneous first creates on one root give one success and one refusal",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -286,7 +275,6 @@ test(
 
 test(
   "an inactive server does not block creation, but reactivation into an overlap refuses",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {

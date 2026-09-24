@@ -48,9 +48,6 @@ const mockUrls = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier.startsWith('@/')) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}`, import.meta.url).href, context)
     }
@@ -70,9 +67,7 @@ const { withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
-const { env } = await import('@openbooks/engine/src/platform/db.ts')
 
-const DB = !!env.OPENBOOKS_DB_URL
 
 /**
  * Through-stack proofs that the assistant commit boundary books drafts under
@@ -161,7 +156,6 @@ async function journalDrafts(orgId: string): Promise<{ id: string; subsidiary_id
 
 test(
   'a restricted commit lands in the single visible subsidiary, never root',
-  { skip: !DB },
   async () => {
     const fx = await makeFixture()
     try {
@@ -180,7 +174,6 @@ test(
 
 test(
   'an unrestricted commit keeps the existing root behavior',
-  { skip: !DB },
   async () => {
     const fx = await makeFixture()
     try {
@@ -199,7 +192,6 @@ test(
 
 test(
   'a signed preview with an impossible document date fails closed instead of a storage 500',
-  { skip: !DB },
   async () => {
     const fx = await makeFixture()
     try {
@@ -232,7 +224,6 @@ test(
 
 test(
   'an empty or ambiguous restricted scope is refused before anything is written',
-  { skip: !DB },
   async () => {
     const fx = await makeFixture()
     try {

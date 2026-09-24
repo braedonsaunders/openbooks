@@ -22,7 +22,6 @@ const hooks = registerHooks({
       shortCircuit: true,
       url: "data:text/javascript," + encodeURIComponent(source),
     });
-    if (specifier === "server-only") return virtual("export {}");
     const parent = String(context.parentURL ?? "");
     if (parent.includes("auth-reset.ts") && specifier === "@openbooks/emails") {
       return virtual(`
@@ -50,9 +49,7 @@ const hooks = registerHooks({
 const { PUT } = await import("./route");
 const { issueInviteSetPasswordLink } = await import("../../../lib/auth-reset");
 hooks.deregister();
-const skip = !process.env.OPENBOOKS_DB_URL;
-
-test("a live token redeems through the route from a cross-loopback Origin", { skip }, async () => {
+test("a live token redeems through the route from a cross-loopback Origin", async () => {
   const seeded = await withBypassContext(async () => {
     const org = await createScratchOrg();
     const userId = await createScratchUser(org.orgId, "Redeem member", "redeem_member");

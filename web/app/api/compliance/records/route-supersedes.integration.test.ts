@@ -17,7 +17,6 @@ Object.assign(globalThis, { __complianceRecordSupersedeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -42,7 +41,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@open
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
 const { createScratchUser } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -101,7 +99,7 @@ async function recordStatus(id: string): Promise<string> {
   return rows[0]!.status;
 }
 
-test("record creation refuses a malformed supersedesId without writing", { skip: !DB }, async () => {
+test("record creation refuses a malformed supersedesId without writing", async () => {
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({
@@ -117,7 +115,7 @@ test("record creation refuses a malformed supersedesId without writing", { skip:
   }
 });
 
-test("record creation refuses an unmatched supersedesId without writing", { skip: !DB }, async () => {
+test("record creation refuses an unmatched supersedesId without writing", async () => {
   const { org, partyId, requirementId, priorId } = await fixture();
   try {
     const response = await post({
@@ -134,7 +132,7 @@ test("record creation refuses an unmatched supersedesId without writing", { skip
   }
 });
 
-test("record creation refuses another vendor's certificate as supersedesId", { skip: !DB }, async () => {
+test("record creation refuses another vendor's certificate as supersedesId", async () => {
   const { org, partyId, requirementId, priorId, otherPriorId } = await fixture();
   try {
     const response = await post({
@@ -151,7 +149,7 @@ test("record creation refuses another vendor's certificate as supersedesId", { s
   }
 });
 
-test("a renewal files as pending and leaves the prior certificate in force", { skip: !DB }, async () => {
+test("a renewal files as pending and leaves the prior certificate in force", async () => {
   const { org, partyId, requirementId, priorId } = await fixture();
   try {
     const response = await post({
@@ -173,7 +171,7 @@ test("a renewal files as pending and leaves the prior certificate in force", { s
   }
 });
 
-test("verifying the renewal supersedes the prior certificate", { skip: !DB }, async () => {
+test("verifying the renewal supersedes the prior certificate", async () => {
   const { org, partyId, requirementId, priorId } = await fixture();
   try {
     const created = (await (await post({

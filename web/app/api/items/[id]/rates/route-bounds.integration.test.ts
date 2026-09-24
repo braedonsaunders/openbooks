@@ -17,7 +17,6 @@ Object.assign(globalThis, { __itemRatesBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
@@ -34,7 +33,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -70,7 +68,7 @@ async function profileCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("item rates refuse a non-calendar effective date without writing", { skip: !DB }, async () => {
+test("item rates refuse a non-calendar effective date without writing", async () => {
   const { org } = await fixture();
   try {
     const response = await post(org.items.service, body("2026-09-31", "125"));
@@ -83,7 +81,7 @@ test("item rates refuse a non-calendar effective date without writing", { skip: 
   }
 });
 
-test("item rates refuse a bill rate wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("item rates refuse a bill rate wider than numeric(19,4) without writing", async () => {
   const { org } = await fixture();
   try {
     const response = await post(org.items.service, body("2026-07-01", "99999999999999999999.99"));
@@ -96,7 +94,7 @@ test("item rates refuse a bill rate wider than numeric(19,4) without writing", {
   }
 });
 
-test("item rates still file an ordinary version", { skip: !DB }, async () => {
+test("item rates still file an ordinary version", async () => {
   const { org } = await fixture();
   try {
     const response = await post(org.items.service, body("2026-07-01", "125"));

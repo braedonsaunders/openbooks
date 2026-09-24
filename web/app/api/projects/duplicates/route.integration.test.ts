@@ -30,13 +30,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       (specifier === "../../../../lib/authz" || specifier === "../../../../lib/projects-gate")
       && (context.parentURL?.includes("projects/duplicates") || context.parentURL?.includes("projects/merge"))
@@ -87,7 +80,6 @@ const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("../../../../../engine/src/testing/fixtures.ts");
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 function authorize(orgId: string, actorId: string): void {
   routeState.authz = {
@@ -116,7 +108,7 @@ async function seedProject(
   return id;
 }
 
-test("project duplicates list, preview, and merge through the routes", { skip: !DB }, async () => {
+test("project duplicates list, preview, and merge through the routes", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
@@ -179,7 +171,7 @@ test("project duplicates list, preview, and merge through the routes", { skip: !
   }
 });
 
-test("project merge route validates input and maps refusals", { skip: !DB }, async () => {
+test("project merge route validates input and maps refusals", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;

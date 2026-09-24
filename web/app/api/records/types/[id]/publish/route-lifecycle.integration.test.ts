@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (
       (specifier === '../../../../../../lib/authz' || specifier === '../../../../../lib/authz') &&
       context.parentURL?.includes('/api/records/')
@@ -51,7 +48,7 @@ const { POST } = (await import(publishUrl)) as typeof import('./route.ts')
 const { DELETE } = (await import(typeUrl)) as typeof import('../route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
@@ -115,7 +112,6 @@ async function insertDraft(orgId: string, actorId: string, status: 'draft' | 'pu
 
 test(
   'a publish without an audit reason is refused before any write',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { org, actorId } = await withBypass(async () => {
       const created = await createScratchOrg()
@@ -149,7 +145,6 @@ test(
 
 test(
   'a publish commits its transition audit with before, after and reason',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { org, actorId } = await withBypass(async () => {
       const created = await createScratchOrg()
@@ -185,7 +180,6 @@ test(
 
 test(
   'publish and delete refuse zero-row writes by name instead of reporting success',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { org, actorId } = await withBypass(async () => {
       const created = await createScratchOrg()

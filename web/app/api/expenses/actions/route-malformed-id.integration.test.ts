@@ -13,7 +13,6 @@ Object.assign(globalThis, { __expenseActionsIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__expenseActionsIdState;
@@ -36,7 +35,6 @@ registerHooks({
 const { withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -56,7 +54,7 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
   return { status: response.status, json: await response.json().catch(() => null) }
 }
 
-test('submit returns 404 for a malformed expense report id', { skip: !DB }, async () => {
+test('submit returns 404 for a malformed expense report id', async () => {
   const org = await fixture()
   try {
     const result = await post({ action: 'submit', documentId: 'not-a-uuid' })
@@ -66,7 +64,7 @@ test('submit returns 404 for a malformed expense report id', { skip: !DB }, asyn
   }
 })
 
-test('post returns 404 for a malformed expense report id', { skip: !DB }, async () => {
+test('post returns 404 for a malformed expense report id', async () => {
   const org = await fixture()
   try {
     const result = await post({ action: 'post', documentId: 'not-a-uuid' })
@@ -76,7 +74,7 @@ test('post returns 404 for a malformed expense report id', { skip: !DB }, async 
   }
 })
 
-test('unknown ids still return the not-found contract', { skip: !DB }, async () => {
+test('unknown ids still return the not-found contract', async () => {
   const org = await fixture()
   try {
     const submit = await post({ action: 'submit', documentId: randomUUID() })

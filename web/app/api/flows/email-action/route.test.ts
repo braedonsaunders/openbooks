@@ -143,9 +143,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Session machinery is unused; the production subsidiaryScopeAllows
     // helper must load from web/lib/authz.ts so a permissive rewrite fails.
     if (context.parentURL?.includes("/lib/authz")) {

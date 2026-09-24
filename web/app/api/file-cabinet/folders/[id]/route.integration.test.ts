@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { env, db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
 const stateKey = Symbol.for('openbooks.folder-route-test')
@@ -24,7 +24,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '../../../../../lib/authz' || specifier === '../../../lib/authz') {
       return { shortCircuit: true, url: 'mock:folder-authz' }
     }
@@ -47,7 +46,7 @@ const routeSpecifier: string = './route.ts?folder-compound-test'
 const { PATCH } = (await import(routeSpecifier)) as typeof import('./route.ts')
 hooks.deregister()
 
-test('compound folder edits validate and audit as one transaction', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('compound folder edits validate and audit as one transaction', async () => {
   const org = await createScratchOrg()
   const actorId = randomUUID()
   const targetId = randomUUID()

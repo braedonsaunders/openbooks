@@ -66,13 +66,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "./authz" &&
       (context.parentURL?.includes("/lib/feature-gates") ||
@@ -110,7 +103,6 @@ const { db, withBypass, withOrgContext } =
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -211,7 +203,6 @@ async function listSchedules(fixture: Fixture): Promise<unknown> {
 
 test(
   "schedule POST refuses an unknown server id without side effect",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -233,7 +224,6 @@ test(
 
 test(
   "schedule POST refuses another organization's server as not found",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const other = await seed();
@@ -266,7 +256,6 @@ test(
 
 test(
   "schedule POST refuses an unknown account id without side effect",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -290,7 +279,6 @@ test(
 
 test(
   "schedule POST refuses another organization's account like an unknown one",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const other = await seed();
@@ -322,7 +310,6 @@ test(
 
 test(
   "schedule POST refuses a same-org account that cannot back an import",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -349,7 +336,6 @@ test(
 
 test(
   "schedule POST saves a valid schedule that GET shows with both parents",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -402,7 +388,6 @@ test(
 
 test(
   "schedule POST stores the expected account binding canonically and GET returns it",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -430,7 +415,6 @@ test(
 
 test(
   "schedule POST without a binding saves null instead of failing the insert",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -458,7 +442,6 @@ test(
 
 test(
   "schedule POST still refuses malformed ids before any ownership check",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -481,7 +464,6 @@ test(
 
 test(
   "schedule POST refuses a malformed supplied external-account binding before saving",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {

@@ -44,9 +44,6 @@ const mockCompliance = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@/lib/authz") return { url: "mock:waiver-approval-authz", shortCircuit: true };
     if (specifier === "@/lib/compliance") return { url: "mock:waiver-approval-gate", shortCircuit: true };
     if (specifier.startsWith("@openbooks/engine/")) {
@@ -87,7 +84,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 const { vendorComplianceStatus } = await import("@openbooks/engine/src/compliance/compliance.ts");
 hooks.deregister();
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function authorize(orgId: string, actorId: string): void {
   routeState.authz = {
@@ -146,7 +142,7 @@ const VALID = {
   expiresOn: "2026-08-01",
 };
 
-test("a requested exception is pending and covers nothing", { skip: !DB }, async () => {
+test("a requested exception is pending and covers nothing", async () => {
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({ partyId, requirementId, ...VALID });
@@ -167,7 +163,7 @@ test("a requested exception is pending and covers nothing", { skip: !DB }, async
   }
 });
 
-test("the requester cannot approve their own exception", { skip: !DB }, async () => {
+test("the requester cannot approve their own exception", async () => {
   const { org, requesterId, partyId, requirementId } = await fixture();
   try {
     const created = (await (await post({ partyId, requirementId, ...VALID })).json()) as { id: string };
@@ -185,7 +181,7 @@ test("the requester cannot approve their own exception", { skip: !DB }, async ()
   }
 });
 
-test("a different approver grants the exception", { skip: !DB }, async () => {
+test("a different approver grants the exception", async () => {
   const { org, approverId, partyId, requirementId } = await fixture();
   try {
     const created = (await (await post({ partyId, requirementId, ...VALID })).json()) as { id: string };

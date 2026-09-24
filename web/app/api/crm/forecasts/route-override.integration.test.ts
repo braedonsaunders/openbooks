@@ -17,7 +17,6 @@ Object.assign(globalThis, { __forecastOverrideState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next-intl/server") return virtual("export async function getTranslations() { return (key) => key }; export async function getLocale() { return 'en' }");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
@@ -42,7 +41,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -70,7 +68,7 @@ async function snapshotCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("forecast snapshots refuse an override wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("forecast snapshots refuse an override wider than numeric(19,4) without writing", async () => {
   const { org } = await fixture();
   try {
     const response = await post({
@@ -86,7 +84,7 @@ test("forecast snapshots refuse an override wider than numeric(19,4) without wri
   }
 });
 
-test("forecast snapshots still file an ordinary override", { skip: !DB }, async () => {
+test("forecast snapshots still file an ordinary override", async () => {
   const { org } = await fixture();
   try {
     const response = await post({

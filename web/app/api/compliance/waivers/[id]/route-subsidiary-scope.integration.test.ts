@@ -16,7 +16,6 @@ Object.assign(globalThis, { __complianceWaiverDeleteScopeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -43,7 +42,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { DELETE } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -103,7 +101,7 @@ async function revokedAt(id: string): Promise<string | null> {
   return rows[0]!.revoked_at;
 }
 
-test("revocation cannot revoke a hidden-entity exception", { skip: !DB }, async () => {
+test("revocation cannot revoke a hidden-entity exception", async () => {
   const { org, hiddenWaiverId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -116,7 +114,7 @@ test("revocation cannot revoke a hidden-entity exception", { skip: !DB }, async 
   }
 });
 
-test("revocation cannot revoke an exception under a hidden project", { skip: !DB }, async () => {
+test("revocation cannot revoke an exception under a hidden project", async () => {
   const { org, hiddenProjectWaiverId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -129,7 +127,7 @@ test("revocation cannot revoke an exception under a hidden project", { skip: !DB
   }
 });
 
-test("revocation still revokes in-scope exceptions", { skip: !DB }, async () => {
+test("revocation still revokes in-scope exceptions", async () => {
   const { org, visibleWaiverId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);

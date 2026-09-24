@@ -31,9 +31,6 @@ const jsonUrl = new URL('../../../../../../lib/api/json.ts', import.meta.url).hr
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '@/lib/authz' || /(^|\/)lib\/authz$/.test(specifier)) {
       return { shortCircuit: true, url: 'mock:replace-authz' }
     }

@@ -30,9 +30,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -59,7 +56,6 @@ hooks.deregister();
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function postRequest(key: string, body: unknown): Request {
   return new Request("http://localhost/api/parties", {
@@ -81,7 +77,6 @@ async function auditInserts(orgId: string, rowId: string): Promise<{ request_id:
 
 test(
   "parties POST creates one active party with its role and one audit row",
-  { skip: !DB },
   async () => {
     const org = await createScratchOrg();
     try {
@@ -148,7 +143,6 @@ test(
 
 test(
   "parties POST refuses a key minted in another org",
-  { skip: !DB },
   async () => {
     const orgA = await createScratchOrg();
     const orgB = await createScratchOrg();

@@ -6,19 +6,15 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     return nextResolve(specifier, context);
   },
 });
 const { FieldRefusal, assetAccountScopeSql, parseAccountOverride } = await import("./_fields.ts");
 hooks.deregister();
 
-test("asset account overrides accept shared and caller-visible accounts and refuse an outside subsidiary", { skip: !DB }, async () => {
+test("asset account overrides accept shared and caller-visible accounts and refuse an outside subsidiary", async () => {
   const org = await createScratchOrg();
   const childId = randomUUID();
   const siblingId = randomUUID();

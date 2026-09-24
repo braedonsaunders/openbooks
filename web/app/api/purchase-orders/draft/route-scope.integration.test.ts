@@ -24,9 +24,6 @@ const module_ = (source: string): { shortCircuit: true; format: 'module'; url: s
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // Re-export the REAL authz module and override only the session gate, so
     // the scope the draft routes resolve is the production resolution. The
     // feature gate stays real and reads the scratch org's flags.
@@ -59,7 +56,6 @@ const { POST: postPurchase } = await import('./route.ts')
 const { POST: postSales } = await import('../../sales-orders/draft/route.ts')
 const { POST: postEstimate } = await import('../../estimates/draft/route.ts')
 hooks.deregister()
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 const CASES = [
   { kind: 'purchase_order', post: postPurchase, permission: 'ap.create' },
@@ -99,7 +95,7 @@ async function orderDrafts(orgId: string, kind: string) {
 }
 
 for (const { kind, post, permission } of CASES) {
-  test(`${kind} draft lands a restricted caller in their own subsidiary`, { skip: !DB }, async () => {
+  test(`${kind} draft lands a restricted caller in their own subsidiary`, async () => {
     const { org, gate, post: run } = await setup()
     try {
       gate(permission, new Set([org.subsidiaryId]))
@@ -116,7 +112,7 @@ for (const { kind, post, permission } of CASES) {
     }
   })
 
-  test(`${kind} draft with no assignable subsidiary refuses by name and stores nothing`, { skip: !DB }, async () => {
+  test(`${kind} draft with no assignable subsidiary refuses by name and stores nothing`, async () => {
     const { org, other, gate, post: run } = await setup()
     try {
       gate(permission, new Set([org.subsidiaryId, other]))

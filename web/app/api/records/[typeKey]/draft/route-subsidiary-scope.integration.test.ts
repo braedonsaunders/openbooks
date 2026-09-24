@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:custom-record-draft-scope-authz', shortCircuit: true }
     }
@@ -46,14 +43,13 @@ const routeUrl = './route.ts?custom-record-draft-scope-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts',
 )
 
 test(
   'restricted custom-record drafts default subsidiary_id to the only allowed subsidiary',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeKey = `draft-${randomUUID().replaceAll('-', '').slice(0, 10)}`
     const { org, actorId } = await withBypass(async () => {

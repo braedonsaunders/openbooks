@@ -10,7 +10,6 @@ const routeState: { authz: { user: { orgId: string; id: string }; allowedSubsidi
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '@/lib/authz') return { shortCircuit: true, url: 'mock:item-price-authz' }
     if (specifier.startsWith('@/') && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
@@ -40,7 +39,6 @@ hooks.deregister()
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -66,7 +64,7 @@ function post(input: { orgId: string; actorId: string; itemId: string; priceLeve
   }), { params: Promise.resolve({ id: input.itemId }) })
 }
 
-test('an exact schedule retry replays once and a changed payload refuses without a second audit', { skip: !DB }, async () => {
+test('an exact schedule retry replays once and a changed payload refuses without a second audit', async () => {
   const f = await fixture()
   const key = randomUUID()
   try {
@@ -86,7 +84,7 @@ test('an exact schedule retry replays once and a changed payload refuses without
   }
 })
 
-test('a foreign price level is refused before schedule or audit insertion', { skip: !DB }, async () => {
+test('a foreign price level is refused before schedule or audit insertion', async () => {
   const own = await fixture()
   const foreign = await fixture()
   const key = randomUUID()
@@ -106,7 +104,7 @@ test('a foreign price level is refused before schedule or audit insertion', { sk
   }
 })
 
-test('customer price schedules and picker entries stay hidden outside the actor subsidiary scope', { skip: !DB }, async () => {
+test('customer price schedules and picker entries stay hidden outside the actor subsidiary scope', async () => {
   const f = await fixture()
   const customerId = randomUUID()
   const key = randomUUID()

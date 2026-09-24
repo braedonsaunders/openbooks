@@ -16,7 +16,6 @@ const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __scriptAdminEnvHunt: session });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "./auth" && (context.parentURL ?? "").endsWith("/lib/authz.ts")) {
       return {
         shortCircuit: true,
@@ -35,7 +34,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 const { PATCH, POST } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function caller(orgId: string, userId: string): SessionUser {
   return {
@@ -101,7 +99,7 @@ async function scriptCount(orgId: string): Promise<number> {
   );
 }
 
-test("creating an active schedule in a sandbox org refuses by name with nothing written", { skip: !DB }, async () => {
+test("creating an active schedule in a sandbox org refuses by name with nothing written", async () => {
   const org = await createScratchOrg();
   try {
     await adminIn(org.orgId);
@@ -128,7 +126,7 @@ test("creating an active schedule in a sandbox org refuses by name with nothing 
   }
 });
 
-test("a sandbox org can still stage an inactive schedule or another trigger", { skip: !DB }, async () => {
+test("a sandbox org can still stage an inactive schedule or another trigger", async () => {
   const org = await createScratchOrg();
   try {
     await adminIn(org.orgId);
@@ -157,7 +155,7 @@ test("a sandbox org can still stage an inactive schedule or another trigger", { 
   }
 });
 
-test("activating an inactive schedule in a sandbox org refuses; deactivation passes", { skip: !DB }, async () => {
+test("activating an inactive schedule in a sandbox org refuses; deactivation passes", async () => {
   const org = await createScratchOrg();
   try {
     await adminIn(org.orgId);
@@ -199,7 +197,7 @@ test("activating an inactive schedule in a sandbox org refuses; deactivation pas
   }
 });
 
-test("a production org activates schedules unchanged (control)", { skip: !DB }, async () => {
+test("a production org activates schedules unchanged (control)", async () => {
   const org = await createScratchOrg();
   try {
     await adminIn(org.orgId);

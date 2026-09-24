@@ -26,9 +26,6 @@ Object.assign(globalThis, { __quotaGateState: state })
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next-intl/server') {
       const crmUrl = pathToFileURL(join(messagesRoot, 'en', 'crm.json')).href
       return {
@@ -77,7 +74,6 @@ const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts')
 const { GET } = await import('./route.ts')
 const { NextRequest } = await import('next/server')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 const PERIOD = 'periodStart=2026-07-01&periodEnd=2026-07-31'
 
 async function fixture() {
@@ -103,7 +99,7 @@ async function fixture() {
   return org
 }
 
-test('a subsidiary-restricted caller gets no quotas and a named notice', { skip: !DB }, async () => {
+test('a subsidiary-restricted caller gets no quotas and a named notice', async () => {
   const org = await fixture()
   try {
     const second = (
@@ -123,7 +119,7 @@ test('a subsidiary-restricted caller gets no quotas and a named notice', { skip:
   }
 })
 
-test('an unrestricted caller still receives quotas with no notice', { skip: !DB }, async () => {
+test('an unrestricted caller still receives quotas with no notice', async () => {
   const org = await fixture()
   try {
     state.allowed = null

@@ -116,9 +116,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // Next's webpack alias (`@/*` → `web/*`): this suite lives three levels
     // below web/, so `web/app/api/construction/` + `../../../` is web/.
     if (specifier.startsWith('@/lib/') && context.parentURL) {
@@ -152,7 +149,6 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?construction-fence-test'
 const { POST } = (await import(routeUrl)) as { POST: (req: Request) => Promise<Response> }
 // Both fence halves are loaded for real above (only db and authz are
-// doubled): compare their per-org lock identity while the server-only stub
 // is still registered.
 const { featureGateLockKey: webFenceKey } = (await import('../../../lib/features')) as {
   featureGateLockKey: (orgId: string) => string

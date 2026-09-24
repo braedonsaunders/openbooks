@@ -10,7 +10,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __timesheetSaveControls: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__timesheetSaveControls.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -49,7 +48,7 @@ async function fixture(requireApproval: boolean) {
   return { org, actor, employee, project, row, save, snapshot, close }
 }
 
-test('malformed weekly grids cannot erase existing hours', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('malformed weekly grids cannot erase existing hours', async () => {
   const f = await fixture(true)
   try {
     assert.equal((await f.save({})).status, 200)
@@ -74,7 +73,7 @@ test('malformed weekly grids cannot erase existing hours', { skip: !process.env.
   } finally { await f.close() }
 })
 
-test('saving immediately approved hours captures rates and posts configured labor atomically', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('saving immediately approved hours captures rates and posts configured labor atomically', async () => {
   const f = await fixture(false)
   try {
     const response = await f.save({})
@@ -208,7 +207,7 @@ test("hours cannot be booked to another legal entity's project", async () => {
   } finally { await f.close() }
 })
 
-test('an hours cell wider than the ledger column fails closed without writing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('an hours cell wider than the ledger column fails closed without writing', async () => {
   // time_entries.hours is numeric(19,4): a pasted 20-digit cell cleared the
   // exact-decimal check and died in Postgres with a storage error. Fail
   // closed with the named 422 and write nothing.
@@ -225,7 +224,7 @@ test('an hours cell wider than the ledger column fails closed without writing', 
   } finally { await f.close() }
 })
 
-test('a foreign reference custom value cannot be saved on a time row', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a foreign reference custom value cannot be saved on a time row', async () => {
   const f = await fixture(false)
   const foreign = await createScratchOrg()
   try {
@@ -247,7 +246,7 @@ test('a foreign reference custom value cannot be saved on a time row', { skip: !
   }
 })
 
-test('a project save racing a Projects disable loses and stores nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a project save racing a Projects disable loses and stores nothing', async () => {
   // Steady state never reaches the write transaction (timeTracking's parent
   // gate refuses at entry), so this parks a disable mid-flight: the entry
   // guard still sees Projects on while the staged flag write holds the org

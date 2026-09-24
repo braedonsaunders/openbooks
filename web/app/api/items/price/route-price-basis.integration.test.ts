@@ -29,9 +29,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       if (specifier === "@/lib/authz" && context.parentURL.includes("/api/items/price")) {
         return { url: "mock:items-price-basis-authz", shortCircuit: true };
@@ -57,7 +54,6 @@ const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -130,7 +126,6 @@ async function preview(fixture: Fixture, onDate: string) {
 
 test(
   "the preview carries price lineage, and falls to base after the revoke",
-  { skip: !DB },
   async () => {
     const fixture = await seedPricing();
     try {
@@ -159,7 +154,6 @@ test(
 
 test(
   "a deactivated level ends pricing from its close with the event instant recorded",
-  { skip: !DB },
   async () => {
     const fixture = await seedPricing();
     try {

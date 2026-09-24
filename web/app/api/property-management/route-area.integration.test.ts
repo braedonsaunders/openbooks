@@ -18,7 +18,6 @@ const engineRoot = new URL('../../../../engine/', import.meta.url).href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pmUnitBoundState: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   // Bare @openbooks/engine/* resolves cross-checkout to main; pin the worktree copy.
   if (specifier.startsWith('@openbooks/engine/')) {
     return next(new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href, context);
@@ -35,7 +34,6 @@ const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { POST } = await import('./route.ts');
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -63,7 +61,7 @@ async function unitCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test('unit creation refuses a rentable area wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('unit creation refuses a rentable area wider than numeric(19,4) without writing', async () => {
   const { org, propertyId } = await fixture();
   try {
     const response = await post(org.orgId, { action: 'createUnit', propertyId, code: 'U-1', rentableArea: '99999999999999999999.99' });
@@ -77,7 +75,7 @@ test('unit creation refuses a rentable area wider than numeric(19,4) without wri
   }
 });
 
-test('unit creation still files an ordinary area', { skip: !DB }, async () => {
+test('unit creation still files an ordinary area', async () => {
   const { org, propertyId } = await fixture();
   try {
     const response = await post(org.orgId, { action: 'createUnit', propertyId, code: 'U-1', rentableArea: '120.5' });

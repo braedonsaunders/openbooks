@@ -12,7 +12,6 @@ const root = pathToFileURL(process.cwd() + "/").href;
  */
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/api/json") {
       return next(root + "web/lib/api/json.ts", context);
     }
@@ -43,7 +42,7 @@ const json = (method: string, body?: unknown) =>
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-test("DELETE answers a malformed id with 4xx, never a 500", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("DELETE answers a malformed id with 4xx, never a 500", async () => {
   const response = await DELETE(json("DELETE", { id: "not-a-uuid" }));
   assert.ok(
     response.status === 400 || response.status === 403,
@@ -51,7 +50,7 @@ test("DELETE answers a malformed id with 4xx, never a 500", { skip: !process.env
   );
 });
 
-test("POST answers a non-string path with 400, never a 500", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("POST answers a non-string path with 400, never a 500", async () => {
   const response = await POST(json("POST", { name: "Board pack", path: 42 }));
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "name and a /reports path required" });

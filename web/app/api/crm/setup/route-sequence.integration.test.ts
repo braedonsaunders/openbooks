@@ -15,7 +15,6 @@ Object.assign(globalThis, { __crmSetupSequenceState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
@@ -31,7 +30,6 @@ const { withBypassContext, db, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -69,7 +67,7 @@ function saveAction(sequence: unknown) {
   return { action: 'save-account-status', name: 'Probe', lifecycleStage: 'lead', sequence }
 }
 
-test('POST refuses an out-of-int32 sequence without writing', { skip: !DB }, async () => {
+test('POST refuses an out-of-int32 sequence without writing', async () => {
   const { org } = await fixture()
   try {
     const result = await post(saveAction('99999999999999999999'))
@@ -80,7 +78,7 @@ test('POST refuses an out-of-int32 sequence without writing', { skip: !DB }, asy
   }
 })
 
-test('POST refuses a fractional sequence without writing', { skip: !DB }, async () => {
+test('POST refuses a fractional sequence without writing', async () => {
   const { org } = await fixture()
   try {
     const result = await post(saveAction('1.5'))
@@ -91,7 +89,7 @@ test('POST refuses a fractional sequence without writing', { skip: !DB }, async 
   }
 })
 
-test('POST still saves an ordinary sequence', { skip: !DB }, async () => {
+test('POST still saves an ordinary sequence', async () => {
   const { org } = await fixture()
   try {
     const result = await post(saveAction('3'))

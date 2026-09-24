@@ -36,9 +36,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -68,7 +65,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 const { createFieldTicket, loadFieldTicket } = await import("../../../../lib/field-tickets.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function patchRequest(id: string, body: unknown): { req: Request; ctx: { params: Promise<{ id: string }> } } {
   return {
@@ -95,7 +91,6 @@ async function makeTicket(org: { orgId: string; subsidiaryId: string; customerId
 
 test(
   "field-ticket PATCH refuses a malformed header document date instead of silently keeping the old one",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {
@@ -129,7 +124,6 @@ test(
 
 test(
   "field-ticket PATCH refuses a malformed foreman reference instead of silently clearing the foreman",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {
@@ -168,7 +162,6 @@ test(
 
 test(
   "field-ticket PATCH still saves a well-formed header under the exact revision",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {

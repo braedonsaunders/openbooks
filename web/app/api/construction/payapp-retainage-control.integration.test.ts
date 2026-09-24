@@ -8,7 +8,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __payappRetainageSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__payappRetainageSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -39,7 +38,7 @@ async function okJson(res: Response, action: string): Promise<Record<string, str
  * accounts and is silently dropped by the settings writer. Billing the draw
  * must refuse with a visible reason until the account exists, then complete.
  */
-test('a retainage-bearing pay application is billable once the receivable control exists', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a retainage-bearing pay application is billable once the receivable control exists', async () => {
   const org = await createScratchOrg()
   try {
     const preparer = await createScratchUser(org.orgId, 'Preparer', 'reviewer')

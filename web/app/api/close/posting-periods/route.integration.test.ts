@@ -30,13 +30,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "../../../../lib/feature-gates"
       && context.parentURL?.includes("close/posting-periods")
@@ -84,7 +77,6 @@ const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("../../../../../engine/src/testing/fixtures.ts");
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 function authorize(orgId: string, actorId: string, allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.authz = {
@@ -93,7 +85,7 @@ function authorize(orgId: string, actorId: string, allowedSubsidiaryIds: Set<str
   };
 }
 
-test("posting-periods route previews then commits idempotently", { skip: !DB }, async () => {
+test("posting-periods route previews then commits idempotently", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
@@ -149,7 +141,7 @@ test("posting-periods route previews then commits idempotently", { skip: !DB }, 
   }
 });
 
-test("posting-periods route scopes preview and commit to the caller's subsidiaries", { skip: !DB }, async () => {
+test("posting-periods route scopes preview and commit to the caller's subsidiaries", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
@@ -202,7 +194,7 @@ test("posting-periods route scopes preview and commit to the caller's subsidiari
   }
 });
 
-test("posting-periods route validates input and auth", { skip: !DB }, async () => {
+test("posting-periods route validates input and auth", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;

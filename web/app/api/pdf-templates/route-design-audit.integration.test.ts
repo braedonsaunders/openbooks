@@ -32,9 +32,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/")) {
       const base = join(process.cwd(), "web", specifier.slice(2));
       const hit = [".ts", ".tsx", "/index.ts"]
@@ -90,7 +87,6 @@ async function auditEvents(orgId: string, rowId: string) {
 
 test(
   "POST writes the created design as insert {after} evidence",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     try {
@@ -122,7 +118,6 @@ test(
 
 test(
   "PATCH writes {before, after} showing what the save changed",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     try {
@@ -166,7 +161,6 @@ test(
 
 test(
   "DELETE writes the removed design as delete {before} evidence",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     try {

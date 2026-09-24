@@ -25,7 +25,6 @@ Object.assign(globalThis, { __bankSubmitUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__bankSubmitUser.user}')
     }
@@ -71,7 +70,7 @@ async function runCount(orgId: string, accountId: string): Promise<number> {
   )
 }
 
-test('a pre-flow bank account submits into the current flow exactly once', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a pre-flow bank account submits into the current flow exactly once', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
@@ -170,7 +169,7 @@ test('a pre-flow bank account submits into the current flow exactly once', { ski
   }
 })
 
-test('the party payload carries a submittable revision token for bank accounts', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('the party payload carries a submittable revision token for bank accounts', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Token manager', 'bank_token_manager'))
@@ -276,14 +275,14 @@ async function seedActionOnlyFlow(orgId: string, userId: string): Promise<string
   }
   await withBypassContext(async () => {
     await db.execute(sql`
-      insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      insert into flows (id, org_id, name, subject_kind, graph)
       values (${flowId}, ${orgId}, 'Notify-only bank flow', 'party_bank_account', true,
               ${JSON.stringify(graph)}::jsonb)`)
   })
   return flowId
 }
 
-test('an action-only flow refuses the submit instead of stranding the record gateless', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('an action-only flow refuses the submit instead of stranding the record gateless', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
@@ -315,7 +314,7 @@ test('an action-only flow refuses the submit instead of stranding the record gat
   }
 })
 
-test('a failing sibling flow rolls the whole bank submit back instead of committing its gates', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a failing sibling flow rolls the whole bank submit back instead of committing its gates', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))

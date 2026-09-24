@@ -8,15 +8,11 @@ import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
     return next(specifier, context)
   },
 })
 
 const { guardPayrollEmployees } = await import('./subsidiary-scope.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function waitForRehomeWaiter(): Promise<boolean> {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -33,7 +29,7 @@ async function waitForRehomeWaiter(): Promise<boolean> {
   return false
 }
 
-test('payroll filing employee authorization holds the party scope against concurrent rehome', { skip: !DB }, async () => {
+test('payroll filing employee authorization holds the party scope against concurrent rehome', async () => {
   const org = await withBypassContext(() => (createScratchOrg()))
   let releaseGuard: (() => void) | undefined
   let writer: PoolClient | undefined

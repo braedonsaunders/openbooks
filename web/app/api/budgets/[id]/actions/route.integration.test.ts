@@ -19,7 +19,6 @@ Object.assign(globalThis, { __budgetActionsUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__budgetActionsUser.user}')
     }
@@ -54,7 +53,7 @@ async function scenarioState(orgId: string, id: string) {
   )
 }
 
-test('budget approval lifecycle: submit, approve, reject', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('budget approval lifecycle: submit, approve, reject', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Budget manager', 'budget_manager'))
@@ -138,7 +137,7 @@ test('budget approval lifecycle: submit, approve, reject', { skip: !process.env.
  * message, not a silent 500 from the scenario-guard trigger. The drawer
  * keys its pinned refusal off this code.
  */
-test('submitting a line-less draft is refused with budget_requires_lines', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('submitting a line-less draft is refused with budget_requires_lines', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Budget manager', 'budget_manager'))
@@ -167,7 +166,7 @@ test('submitting a line-less draft is refused with budget_requires_lines', { ski
  * budget path is the outlier. The refusal names the reason; a different
  * approver can still decide the same budget.
  */
-test('a submitter cannot approve their own budget', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a submitter cannot approve their own budget', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const maker = await withBypassContext(() => createScratchUser(org.orgId, 'Budget maker', 'budget_manager'))

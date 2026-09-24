@@ -10,7 +10,6 @@ const routeState: { authz: { user: { orgId: string; id: string } } | null } = { 
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '@/lib/authz') return { shortCircuit: true, url: 'mock:item-price-revision-authz' }
     if (specifier.startsWith('@/') && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
@@ -40,7 +39,6 @@ hooks.deregister()
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 interface Fixture { orgId: string; actorId: string; itemId: string; priceLevelId: string }
 
@@ -109,7 +107,7 @@ async function getSchedules(f: Fixture) {
   return (await response.json()).schedules as { id: string; revision: number }[]
 }
 
-test('PATCH without a revision never reaches the row', { skip: !DB }, async () => {
+test('PATCH without a revision never reaches the row', async () => {
   const f = await fixture()
   try {
     const now = await today()
@@ -128,7 +126,7 @@ test('PATCH without a revision never reaches the row', { skip: !DB }, async () =
   }
 })
 
-test('two editors racing on one schedule: the second gets a 409 with a reload remedy', { skip: !DB }, async () => {
+test('two editors racing on one schedule: the second gets a 409 with a reload remedy', async () => {
   const f = await fixture()
   try {
     const now = await today()
@@ -151,7 +149,7 @@ test('two editors racing on one schedule: the second gets a 409 with a reload re
   }
 })
 
-test('a stale revision on a superseded schedule is refused, and DELETE is fenced too', { skip: !DB }, async () => {
+test('a stale revision on a superseded schedule is refused, and DELETE is fenced too', async () => {
   const f = await fixture()
   try {
     const now = await today()

@@ -118,9 +118,6 @@ const hooks = registerHooks({
     if (specifier === "@/lib/api/json") {
       return nextResolve(new URL("../../../../lib/api/json.ts", import.meta.url).href, _context);
     }
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, _context);

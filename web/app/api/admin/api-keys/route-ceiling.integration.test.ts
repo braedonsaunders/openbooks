@@ -17,15 +17,11 @@ import type { SessionUser } from "../../../../lib/auth";
  * `resolveApiKeyAuth`/`canApi` are all real, against a synthetic scratch org.
  */
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const session: { user: SessionUser | null } = { user: null };
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
       return {
         shortCircuit: true,
@@ -120,7 +116,6 @@ async function keyScopes(orgId: string, id: string): Promise<string[]> {
 
 test(
   "a manager with only api.keys.manage cannot widen another owner's key, and the token is unchanged",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {
@@ -163,7 +158,6 @@ test(
 
 test(
   "a manager holding the scope may widen, and the token gains exactly that authority",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {
@@ -192,7 +186,6 @@ test(
 
 test(
   "creation above the editor's authority is refused with no key minted",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {
@@ -217,7 +210,6 @@ test(
 
 test(
   "resume refuses re-enabled authority above the ceiling but permits inert scopes",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {
@@ -257,7 +249,6 @@ test(
 
 test(
   "widening a deactivated owner's key waits for reactivation",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {
@@ -290,7 +281,6 @@ test(
 
 test(
   "a subsidiary-scoped editor cannot widen an unrestricted owner's key, even for a held permission",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {

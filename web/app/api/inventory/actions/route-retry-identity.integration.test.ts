@@ -13,7 +13,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __inventoryRetryAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__inventoryRetryAudit.user,allowedSubsidiaryIds:null}}",
@@ -31,7 +30,7 @@ registerHooks({
  * in the first payload, so the retry hashes identically; replaying the same
  * key with the server filling a NEW date would 409 instead.
  */
-test("a committed receipt retried after midnight replays with one movement and one journal", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a committed receipt retried after midnight replays with one movement and one journal", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;

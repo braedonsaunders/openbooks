@@ -16,7 +16,6 @@ Object.assign(globalThis, { __crmAccountRevisionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -38,7 +37,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET, PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -90,7 +88,7 @@ async function industryOf(profileId: string): Promise<string | null> {
     select industry from crm_account_profiles where id = ${profileId}`))).rows[0]!.industry
 }
 
-test('PATCH without a revision token is refused before any write', { skip: !DB }, async () => {
+test('PATCH without a revision token is refused before any write', async () => {
   const { org, partyId, profileId } = await fixture()
   try {
     const result = await patch(partyId, { industry: 'Hardware' })
@@ -103,7 +101,7 @@ test('PATCH without a revision token is refused before any write', { skip: !DB }
   }
 })
 
-test('PATCH with a malformed token is refused before any write', { skip: !DB }, async () => {
+test('PATCH with a malformed token is refused before any write', async () => {
   const { org, partyId, profileId } = await fixture()
   try {
     const result = await patch(partyId, { industry: 'Hardware', expectedUpdatedAt: 'not-a-token' })
@@ -114,7 +112,7 @@ test('PATCH with a malformed token is refused before any write', { skip: !DB }, 
   }
 })
 
-test('a stale token loses to the concurrent write, which stays intact', { skip: !DB }, async () => {
+test('a stale token loses to the concurrent write, which stays intact', async () => {
   const { org, partyId, profileId } = await fixture()
   try {
     const firstRead = await tokenFor(partyId)
@@ -129,7 +127,7 @@ test('a stale token loses to the concurrent write, which stays intact', { skip: 
   }
 })
 
-test('a consumed token never works twice', { skip: !DB }, async () => {
+test('a consumed token never works twice', async () => {
   const { org, partyId } = await fixture()
   try {
     const first = await tokenFor(partyId)

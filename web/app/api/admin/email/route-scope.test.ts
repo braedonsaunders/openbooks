@@ -12,7 +12,6 @@ const state: { allowedSubsidiaryIds: Set<string> | null; saves: unknown[] } = {
 let authzUrl = ''
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { format: 'module', source: '', shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/admin/email/route')) {
       authzUrl = nextResolve(specifier, context).url
       const source = `

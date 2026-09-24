@@ -15,7 +15,6 @@ Object.assign(globalThis, { __pspSettlementDateRouteState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function getAuthz() {
@@ -39,7 +38,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -74,7 +72,7 @@ async function batchCount(orgId: string, externalRef: string): Promise<number> {
   return Number(rows[0]!.n);
 }
 
-test("psp import maps an impossible settlement date to 422 with nothing written", { skip: !DB }, async () => {
+test("psp import maps an impossible settlement date to 422 with nothing written", async () => {
   const { orgId } = await fixture();
   try {
     const externalRef = `payout-route-bad-${orgId}`;
@@ -89,7 +87,7 @@ test("psp import maps an impossible settlement date to 422 with nothing written"
   }
 });
 
-test("psp import still accepts a real calendar date", { skip: !DB }, async () => {
+test("psp import still accepts a real calendar date", async () => {
   const { orgId, date } = await fixture();
   try {
     const response = await postImport(`payout-route-good-${orgId}`, date);

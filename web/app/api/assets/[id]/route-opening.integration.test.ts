@@ -29,9 +29,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -66,7 +63,6 @@ const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await impo
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const MONTHS_2026 = [
   { n: 1, name: "2026-01", from: "2026-01-01", to: "2026-01-31" },
@@ -152,7 +148,7 @@ async function getPayload(fixture: Fixture): Promise<{ status: number; body: Ope
   return { status: response.status, body: (await response.json()) as OpeningDrawerPayload };
 }
 
-test("PATCH places a mid-life asset in service with opening figures and the drawer ties out", { skip: !DB }, async () => {
+test("PATCH places a mid-life asset in service with opening figures and the drawer ties out", async () => {
   const fixture = await seedFixture();
   try {
     const response = await PATCH(
@@ -189,7 +185,7 @@ test("PATCH places a mid-life asset in service with opening figures and the draw
   }
 });
 
-test("PATCH refuses half-set, excessive, and post-history opening edits", { skip: !DB }, async () => {
+test("PATCH refuses half-set, excessive, and post-history opening edits", async () => {
   const fixture = await seedFixture();
   try {
     const half = await PATCH(await patchRequest(fixture, { openingAccumulated: "1000" }), {
@@ -245,7 +241,7 @@ test("PATCH refuses half-set, excessive, and post-history opening edits", { skip
   }
 });
 
-test("the register list reads NBV as cost minus opening minus posted", { skip: !DB }, async () => {
+test("the register list reads NBV as cost minus opening minus posted", async () => {
   const fixture = await seedFixture();
   try {
     const placed = await PATCH(

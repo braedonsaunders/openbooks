@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:custom-record-route-scope-authz', shortCircuit: true }
     }
@@ -46,14 +43,13 @@ const routeUrl = './route.ts?custom-record-route-scope-test'
 const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts',
 )
 
 test(
   'custom-record list route omits rows whose JSON subsidiary_id is hidden',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeKey = `route-${randomUUID().replaceAll('-', '').slice(0, 12)}`
     const { org, actorId } = await withBypass(async () => {
@@ -127,7 +123,6 @@ test(
 
 test(
   'custom-record list still hides JSON subsidiary_id rows after the type drops the field',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeKey = `drop-${randomUUID().replaceAll('-', '').slice(0, 12)}`
     const { org, actorId } = await withBypass(async () => {

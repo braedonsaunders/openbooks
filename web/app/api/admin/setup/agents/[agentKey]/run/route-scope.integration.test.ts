@@ -20,9 +20,6 @@ const module_ = (source: string): { shortCircuit: true; format: 'module'; url: s
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // The shared dependency tree links @openbooks/engine to another checkout;
     // route tests must execute this worktree's engine boundary (otherwise the
     // UnrestrictedScopeError identity check in the route would compare
@@ -59,7 +56,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 )
 const { POST } = await import('./route.ts')
 hooks.deregister()
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function setup() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -80,7 +76,7 @@ async function setup() {
 
 const params = (agentKey: string) => ({ params: Promise.resolve({ agentKey }) })
 
-test('a restricted manual agent run is refused by name and persists nothing', { skip: !DB }, async () => {
+test('a restricted manual agent run is refused by name and persists nothing', async () => {
   const { org, gate } = await setup()
   try {
     gate(new Set([org.subsidiaryId]))
@@ -97,7 +93,7 @@ test('a restricted manual agent run is refused by name and persists nothing', { 
   }
 })
 
-test('an unknown agent key still answers invalid_agent', { skip: !DB }, async () => {
+test('an unknown agent key still answers invalid_agent', async () => {
   const { org, gate } = await setup()
   try {
     gate(null)

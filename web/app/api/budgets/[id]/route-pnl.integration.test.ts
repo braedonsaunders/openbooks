@@ -18,7 +18,6 @@ Object.assign(globalThis, { __budgetPnlState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier.endsWith('/lib/feature-gates')) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetPnlState;
@@ -42,7 +41,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST: importPost } = await import('./import/route.ts')
 const { PATCH: linesPatch } = await import('./lines/route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function csv(rows: string[][]) {
   return rows.map((cells) => cells.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')
@@ -64,7 +62,7 @@ async function fixture() {
   return { org, bankNumber, bankName, scenarioId }
 }
 
-test('import refuses a balance-sheet account by name', { skip: !DB }, async () => {
+test('import refuses a balance-sheet account by name', async () => {
   const f = await fixture()
   try {
     const text = csv([
@@ -87,7 +85,7 @@ test('import refuses a balance-sheet account by name', { skip: !DB }, async () =
   }
 })
 
-test('the worksheet save refuses a balance-sheet account by name', { skip: !DB }, async () => {
+test('the worksheet save refuses a balance-sheet account by name', async () => {
   const f = await fixture()
   try {
     const response = await withOrgContext(state.orgId, () => linesPatch(
@@ -115,7 +113,7 @@ test('the worksheet save refuses a balance-sheet account by name', { skip: !DB }
   }
 })
 
-test('the line trigger refuses a balance-sheet account for direct writers', { skip: !DB }, async () => {
+test('the line trigger refuses a balance-sheet account for direct writers', async () => {
   const f = await fixture()
   try {
     await assert.rejects(

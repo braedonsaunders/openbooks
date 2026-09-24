@@ -10,7 +10,6 @@ Object.assign(globalThis, { __payrollProfileState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__payrollProfileState;
@@ -26,7 +25,6 @@ const { PAYROLL_COUNTRY_PACKS } = await import('@openbooks/engine/src/payroll/pa
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET, POST } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 /**
  * The countries the profile editor may offer, snapshotted once before any
@@ -66,7 +64,7 @@ const post = (body: unknown) =>
 const get = (query = '') =>
   withOrgContext(state.orgId, () => GET(new Request(`http://payroll.test${query}`)))
 
-test('profile POST refuses money and percent fields wider than their columns', { skip: !DB }, async () => {
+test('profile POST refuses money and percent fields wider than their columns', async () => {
   // Claim amounts are numeric(19,4) and vacation_percent numeric(7,4): pasted
   // figures wider than that cleared the exact-decimal check and died in the
   // upsert with a storage error. Fail closed with the named 422 instead.
@@ -150,7 +148,7 @@ test('profile POST refuses money and percent fields wider than their columns', {
   }
 })
 
-test('profile GET serves the packs declared subdivisions and withholding shapes', { skip: !DB }, async () => {
+test('profile GET serves the packs declared subdivisions and withholding shapes', async () => {
   // The editor renders whatever the installed packs declare: countries from
   // the registry, subdivision lists and labels from each pack's regions
   // coverage, withholding fields from its column-mapped certificates.
@@ -230,7 +228,7 @@ test('profile GET serves the packs declared subdivisions and withholding shapes'
   }
 })
 
-test('profile POST validates withholding answers against the pack declaration', { skip: !DB }, async () => {
+test('profile POST validates withholding answers against the pack declaration', async () => {
   // Choice sets and count bands come from the pack's declared certificate
   // fields: the W-4's statuses and 0–99 allowances, the TD1's 0–10 codes.
   // An answer for a column the pack does not declare is refused.
@@ -266,7 +264,7 @@ test('profile POST validates withholding answers against the pack declaration', 
   }
 })
 
-test('US FUTA and SUI exemption facts save independently', { skip: !DB }, async () => {
+test('US FUTA and SUI exemption facts save independently', async () => {
   const { org, employeeId, scheduleId } = await fixture()
   try {
     const response = await post({
@@ -311,7 +309,7 @@ test('US FUTA and SUI exemption facts save independently', { skip: !DB }, async 
   }
 })
 
-test('profile POST validates the sealed identifier against the pack declaration', { skip: !DB }, async () => {
+test('profile POST validates the sealed identifier against the pack declaration', async () => {
   // The old validator stripped non-digits and demanded nine: every
   // alphanumeric identifier was mangled and every non-9-digit one refused.
   // The pack's own pattern judges the value as given; refusals name the
@@ -354,7 +352,7 @@ test('profile POST validates the sealed identifier against the pack declaration'
   }
 })
 
-test('profile POST saves an identifier-less employee where the pack does not require one', { skip: !DB }, async () => {
+test('profile POST saves an identifier-less employee where the pack does not require one', async () => {
   // Quoting a TFN is voluntary, so the AU pack declares its identifier not
   // required: the save succeeds and clears the sealed value.
   const { org, employeeId, scheduleId } = await fixture()
@@ -378,7 +376,7 @@ test('profile POST saves an identifier-less employee where the pack does not req
   }
 })
 
-test('profile GET never echoes the sealed identifier, only its last three', { skip: !DB }, async () => {
+test('profile GET never echoes the sealed identifier, only its last three', async () => {
   const { org, employeeId, scheduleId } = await fixture()
   try {
     const saved = await post({
@@ -397,7 +395,7 @@ test('profile GET never echoes the sealed identifier, only its last three', { sk
   }
 })
 
-test('profile GET serves every pack identifier declaration', { skip: !DB }, async () => {
+test('profile GET serves every pack identifier declaration', async () => {
   // The editor labels the sealed field from the pack — NINO, PPSN, NIR —
   // never a hardcoded "SIN / SSN".
   const { org } = await fixture()
@@ -426,7 +424,7 @@ test('profile GET serves every pack identifier declaration', { skip: !DB }, asyn
   }
 })
 
-test('profile POST saves the same valid US profile concurrently without a 422', { skip: !DB }, async () => {
+test('profile POST saves the same valid US profile concurrently without a 422', async () => {
   // The reported defect: an intermittent 422 saving a valid US profile. Drive
   // it the way it was reported — many concurrent saves of the same employee,
   // then many concurrent saves across employees — and require every one to
@@ -477,7 +475,7 @@ test('profile POST saves the same valid US profile concurrently without a 422', 
   }
 })
 
-test('profile POST holds the employee row lock across the scope check and upsert', { skip: !DB }, async () => {
+test('profile POST holds the employee row lock across the scope check and upsert', async () => {
   // The scope comment promises a re-home racing the save cannot slip between
   // the subsidiary check and the write. That holds only while the locking
   // reads and the upsert share one transaction: hold an uncommitted re-home
@@ -523,7 +521,7 @@ test('profile POST holds the employee row lock across the scope check and upsert
   }
 })
 
-test('profile POST validates pack-declared employee facts against the declaration', { skip: !DB }, async () => {
+test('profile POST validates pack-declared employee facts against the declaration', async () => {
   // 0191 facts: every band and closed set comes from the pack's own
   // certificate declaration, and every refusal names the fact's
   // operator-facing label — never the engine key. An answer for a column
@@ -573,7 +571,7 @@ test('profile POST validates pack-declared employee facts against the declaratio
   }
 })
 
-test('profile POST derives the PL birth year from the PESEL and refuses contradictions', { skip: !DB }, async () => {
+test('profile POST derives the PL birth year from the PESEL and refuses contradictions', async () => {
   // Decided, not re-decided: a declared field, the PESEL deriving and
   // prefilling it, a contradicting saved value refusing naming both — and
   // no PESEL leaving the declared field to stand

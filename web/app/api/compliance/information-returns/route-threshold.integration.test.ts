@@ -15,7 +15,6 @@ Object.assign(globalThis, { __infoReturnThresholdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}')
     if (specifier === '@/lib/authz') return virtual(`
       export async function guardPermission() {
@@ -32,7 +31,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -66,7 +64,7 @@ async function filingCount(): Promise<number> {
   return rows[0]!.n
 }
 
-test('POST refuses a junk threshold without writing a filing', { skip: !DB }, async () => {
+test('POST refuses a junk threshold without writing a filing', async () => {
   const { org } = await fixture()
   try {
     const result = await post({ taxYear: 2024, formType: '1099-NEC', threshold: 'abc' })
@@ -77,7 +75,7 @@ test('POST refuses a junk threshold without writing a filing', { skip: !DB }, as
   }
 })
 
-test('POST refuses a threshold wider than numeric(19,4) without writing a filing', { skip: !DB }, async () => {
+test('POST refuses a threshold wider than numeric(19,4) without writing a filing', async () => {
   const { org } = await fixture()
   try {
     const result = await post({ taxYear: 2024, formType: '1099-NEC', threshold: '99999999999999999999' })
@@ -88,7 +86,7 @@ test('POST refuses a threshold wider than numeric(19,4) without writing a filing
   }
 })
 
-test('POST still files with a column-maximum threshold and identical read-back', { skip: !DB }, async () => {
+test('POST still files with a column-maximum threshold and identical read-back', async () => {
   const { org } = await fixture()
   try {
     const result = await post({ taxYear: 2024, formType: '1099-NEC', threshold: '999999999999999.9999' })
@@ -101,7 +99,7 @@ test('POST still files with a column-maximum threshold and identical read-back',
   }
 })
 
-test('POST refuses the current tax year as not yet completed', { skip: !DB }, async () => {
+test('POST refuses the current tax year as not yet completed', async () => {
   const { org } = await fixture()
   try {
     const { businessToday } = await import('@openbooks/engine/src/platform/business-date.ts')

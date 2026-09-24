@@ -90,9 +90,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // parseJsonBody is a pure validator — use the real module, never a double.
     if (specifier === '@/lib/api/json') {
       return nextResolve(new URL('../../../../lib/api/json.ts', import.meta.url).href, context)

@@ -21,7 +21,6 @@ Object.assign(globalThis, { __bankingMatchScopeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     // The route imports the gate by relative path (not the @/ alias), so
     // match its exact specifier; everything else resolves for real.
     if (specifier === "../../../../../../lib/feature-gates") return virtual(`
@@ -41,7 +40,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 const { ensureOpenReconciliation } = await import("@/lib/banking-rules");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -113,7 +111,7 @@ async function lineStatus(orgId: string, lineId: string): Promise<string | null>
   return rows[0]?.match_status ?? null;
 }
 
-test("a banking.reconcile-only preparer is refused before any journal write", { skip: !DB }, async () => {
+test("a banking.reconcile-only preparer is refused before any journal write", async () => {
   const f = await fixture();
   try {
     const denied = await post(f.lineId, f.reconId, f.offsetAccountId);
@@ -126,7 +124,7 @@ test("a banking.reconcile-only preparer is refused before any journal write", { 
   }
 });
 
-test("a gl.post holder matches exactly as before", { skip: !DB }, async () => {
+test("a gl.post holder matches exactly as before", async () => {
   const f = await fixture();
   try {
     await grant(f.orgId, f.actorId, "gl.post");

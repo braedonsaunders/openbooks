@@ -16,7 +16,6 @@ Object.assign(globalThis, { __complianceWaiverScopeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -43,7 +42,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -100,7 +98,7 @@ async function waiverCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("waiver creation cannot grant an exception to a hidden vendor", { skip: !DB }, async () => {
+test("waiver creation cannot grant an exception to a hidden vendor", async () => {
   const { org, hiddenPartyId, visibleProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -113,7 +111,7 @@ test("waiver creation cannot grant an exception to a hidden vendor", { skip: !DB
   }
 });
 
-test("waiver creation cannot grant an exception under a hidden project", { skip: !DB }, async () => {
+test("waiver creation cannot grant an exception under a hidden project", async () => {
   const { org, visiblePartyId, hiddenProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -126,7 +124,7 @@ test("waiver creation cannot grant an exception under a hidden project", { skip:
   }
 });
 
-test("waiver creation still files in-scope exception requests", { skip: !DB }, async () => {
+test("waiver creation still files in-scope exception requests", async () => {
   const { org, visiblePartyId, visibleProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);

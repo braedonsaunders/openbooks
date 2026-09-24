@@ -108,9 +108,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     const mocks: Record<string, string> = {
       "../../../../../../../lib/authz": "mock:authz",
       "../../../../../lib/authz": "mock:authz",

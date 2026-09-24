@@ -21,7 +21,6 @@ const state = { user: { orgId: "", id: "" }, scope: null as Set<string> | null }
 Object.assign(globalThis, { __inventoryScopeAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__inventoryScopeAudit.user,allowedSubsidiaryIds:globalThis.__inventoryScopeAudit.scope}}",
@@ -34,7 +33,6 @@ registerHooks({
 const { POST: countsPost } = await import("./counts/route");
 const { POST: advancedPost } = await import("./advanced/route");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await createScratchOrg();
@@ -67,7 +65,7 @@ const countsCall = (body: unknown) =>
 const advancedCall = (body: unknown) =>
   advancedPost(new Request("http://audit.local/api/inventory/advanced", { method: "POST", body: JSON.stringify(body) }));
 
-test("count writes refuse an out-of-scope count and leave it untouched", { skip: !DB }, async () => {
+test("count writes refuse an out-of-scope count and leave it untouched", async () => {
   const { org, actor, hidden } = await fixture();
   try {
     state.scope = new Set([org.subsidiaryId]);
@@ -85,7 +83,7 @@ test("count writes refuse an out-of-scope count and leave it untouched", { skip:
   }
 });
 
-test("count cancel waits on a count reassignment in flight instead of racing it", { skip: !DB }, async () => {
+test("count cancel waits on a count reassignment in flight instead of racing it", async () => {
   const { org, actor, hidden } = await fixture();
   const writer = await pool.connect();
   let pending: Promise<Response> | undefined;
@@ -117,7 +115,7 @@ test("count cancel waits on a count reassignment in flight instead of racing it"
   }
 });
 
-test("transfer ship refuses an out-of-scope order and leaves it draft", { skip: !DB }, async () => {
+test("transfer ship refuses an out-of-scope order and leaves it draft", async () => {
   const { org, actor, hidden } = await fixture();
   try {
     const seedOrder = async (subsidiaryId: string) => {

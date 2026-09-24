@@ -26,7 +26,6 @@ const authzStub = virtual(`
 `)
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     // The session gate is the only stub: feature-gates spells it './authz',
     // the order handlers '../../../lib/authz'. web/lib holds no other
     // authz module, so both spellings name the same gate.
@@ -40,7 +39,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function makeDraftOrder(org: { orgId: string; subsidiaryId: string; date: string }): Promise<string> {
   const id = randomUUID()
@@ -98,7 +96,7 @@ function line(itemId: string, accountId: string, stockLocationId?: string | null
   }
 }
 
-test('order draft PATCH persists an explicit line warehouse', { skip: !DB }, async () => {
+test('order draft PATCH persists an explicit line warehouse', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
@@ -115,7 +113,7 @@ test('order draft PATCH persists an explicit line warehouse', { skip: !DB }, asy
   }
 })
 
-test('order draft PATCH refuses a foreign line warehouse with a domain error', { skip: !DB }, async () => {
+test('order draft PATCH refuses a foreign line warehouse with a domain error', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
@@ -133,7 +131,7 @@ test('order draft PATCH refuses a foreign line warehouse with a domain error', {
   }
 })
 
-test('order draft PATCH leaves a blank warehouse blank with several locations, stamps it with one', { skip: !DB }, async () => {
+test('order draft PATCH leaves a blank warehouse blank with several locations, stamps it with one', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId

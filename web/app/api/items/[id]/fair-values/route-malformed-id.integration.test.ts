@@ -14,7 +14,6 @@ Object.assign(globalThis, { __fairValuePathIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__fairValuePathIdState;
@@ -32,7 +31,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH, DELETE } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface Fixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>
@@ -89,7 +87,7 @@ const validPatch = (rowId: string) => ({
   unitPrice: '12.0000',
 })
 
-test('PATCH returns 404 for a malformed item id', { skip: !DB }, async () => {
+test('PATCH returns 404 for a malformed item id', async () => {
   const { org, rowId } = await fixture()
   try {
     const result = await patch('not-a-uuid', validPatch(rowId))
@@ -99,7 +97,7 @@ test('PATCH returns 404 for a malformed item id', { skip: !DB }, async () => {
   }
 })
 
-test('DELETE returns 404 for a malformed item id', { skip: !DB }, async () => {
+test('DELETE returns 404 for a malformed item id', async () => {
   const { org, rowId } = await fixture()
   try {
     const result = await remove('not-a-uuid', rowId)
@@ -109,7 +107,7 @@ test('DELETE returns 404 for a malformed item id', { skip: !DB }, async () => {
   }
 })
 
-test('unknown item ids still return the not-found contract', { skip: !DB }, async () => {
+test('unknown item ids still return the not-found contract', async () => {
   const { org, rowId } = await fixture()
   try {
     const patched = await patch(randomUUID(), validPatch(rowId))
@@ -121,7 +119,7 @@ test('unknown item ids still return the not-found contract', { skip: !DB }, asyn
   }
 })
 
-test('PATCH still updates a row under a valid item id', { skip: !DB }, async () => {
+test('PATCH still updates a row under a valid item id', async () => {
   const { org, itemId, rowId } = await fixture()
   try {
     const result = await patch(itemId, validPatch(rowId))

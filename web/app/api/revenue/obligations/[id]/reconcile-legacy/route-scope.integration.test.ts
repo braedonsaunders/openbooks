@@ -22,7 +22,6 @@ const state = {
 Object.assign(globalThis, { __reconcileLegacyOracleState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       (specifier === "@/lib/feature-gates" || specifier.endsWith("/lib/feature-gates")) &&
       context.parentURL?.includes("reconcile-legacy")
@@ -161,9 +160,7 @@ async function reconciledAt(orgId: string, obligationId: string): Promise<string
   );
 }
 
-test("reconcile-legacy oracle: out-of-scope and missing obligations share one 404", {
-  skip: !process.env.OPENBOOKS_DB_URL,
-}, async () => {
+test("reconcile-legacy oracle: out-of-scope and missing obligations share one 404", async () => {
   const { org, adminId, subA, ids } = await legacyFixture();
   try {
     state.user = { orgId: org.orgId, id: adminId };

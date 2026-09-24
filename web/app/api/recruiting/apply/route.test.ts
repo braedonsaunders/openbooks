@@ -19,9 +19,6 @@ let hooks: { deregister(): void } | undefined;
 if (!isVitest) {
   hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
-      if (specifier === "server-only") {
-        return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-      }
       return nextResolve(specifier);
     },
   });

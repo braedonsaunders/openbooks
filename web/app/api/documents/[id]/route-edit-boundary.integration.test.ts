@@ -17,7 +17,6 @@ Object.assign(globalThis, { __documentEditBoundaryState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
       export async function getAuthz() {
@@ -47,7 +46,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function makeDraftBill(org: { orgId: string; subsidiaryId: string; date: string; accounts: { cogs: string } }): Promise<string> {
   const id = randomUUID()
@@ -80,7 +78,7 @@ async function storedDate(orgId: string, id: string): Promise<string> {
   return (await withOrgContext(orgId, () => db.execute<{ d: string }>(sql`select document_date::text as d from documents where id=${id} and org_id=${orgId}`))).rows[0]!.d
 }
 
-test('documents PATCH refuses a malformed document date with a domain error', { skip: !DB }, async () => {
+test('documents PATCH refuses a malformed document date with a domain error', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
@@ -102,7 +100,7 @@ test('documents PATCH refuses a malformed document date with a domain error', { 
   }
 })
 
-test('documents PATCH refuses a malformed reference id with a domain error', { skip: !DB }, async () => {
+test('documents PATCH refuses a malformed reference id with a domain error', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
@@ -120,7 +118,7 @@ test('documents PATCH refuses a malformed reference id with a domain error', { s
   }
 })
 
-test('documents PATCH refuses malformed and foreign line dimension references', { skip: !DB }, async () => {
+test('documents PATCH refuses malformed and foreign line dimension references', async () => {
   const orgA = await withBypassContext(() => createScratchOrg())
   const orgB = await withBypassContext(() => createScratchOrg())
   try {
@@ -142,7 +140,7 @@ test('documents PATCH refuses malformed and foreign line dimension references', 
   }
 })
 
-test('documents PATCH refuses a foreign-organization party with a tenant-opaque domain error', { skip: !DB }, async () => {
+test('documents PATCH refuses a foreign-organization party with a tenant-opaque domain error', async () => {
   const orgA = await withBypassContext(() => createScratchOrg())
   const orgB = await withBypassContext(() => createScratchOrg())
   try {
@@ -168,7 +166,7 @@ test('documents PATCH refuses a foreign-organization party with a tenant-opaque 
   }
 })
 
-test('documents PATCH refuses foreign reference custom values on header and lines', { skip: !DB }, async () => {
+test('documents PATCH refuses foreign reference custom values on header and lines', async () => {
   const orgA = await withBypassContext(() => createScratchOrg())
   const orgB = await withBypassContext(() => createScratchOrg())
   try {

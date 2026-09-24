@@ -16,7 +16,6 @@ Object.assign(globalThis, { __taxPoolBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
@@ -32,7 +31,6 @@ registerHooks({
 const { withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -51,7 +49,7 @@ const post = (body: unknown) =>
     })),
   );
 
-test("tax-pool run refuses a non-calendar year start without running", { skip: !DB }, async () => {
+test("tax-pool run refuses a non-calendar year start without running", async () => {
   const { org } = await fixture();
   try {
     const response = await post({ taxYear: 2026, yearStart: "2026-09-31", yearEnd: "2026-12-31" });
@@ -63,7 +61,7 @@ test("tax-pool run refuses a non-calendar year start without running", { skip: !
   }
 });
 
-test("tax-pool run still computes an ordinary year", { skip: !DB }, async () => {
+test("tax-pool run still computes an ordinary year", async () => {
   const { org } = await fixture();
   try {
     const response = await post({ taxYear: 2026 });

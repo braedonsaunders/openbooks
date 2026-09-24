@@ -16,7 +16,6 @@ Object.assign(globalThis, { __fundingBankRoundTripState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__fundingBankRoundTripState;
@@ -39,7 +38,6 @@ const { PATCH } = await import('./route.ts')
 // time (see route-recall); re-install the test boundary after the imports.
 const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
 installTrustedTestDatabaseBypass()
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function revision(orgId: string, id: string): Promise<string> {
   return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`)).rows[0]!.revision
@@ -76,7 +74,7 @@ async function fixture(): Promise<{ orgId: string; checkId: string; bankId: stri
   return { orgId: org.orgId, checkId, bankId, cleanup: () => dropScratchOrg(org.orgId) }
 }
 
-test('the funding-bank override round-trips through save and read-back', { skip: !DB }, async () => {
+test('the funding-bank override round-trips through save and read-back', async () => {
   const { orgId, checkId, bankId, cleanup } = await fixture()
   try {
     // Pick the bank and save: the override must persist on the custom bag.
@@ -140,7 +138,7 @@ async function cardFixture(): Promise<{ orgId: string; chargeId: string; cardId:
 // override the engine cardRule already reads first. The guard must carry
 // it exactly like the funding-bank override — and refuse the wrong
 // population in both directions.
-test('the card-liability override round-trips for card charges', { skip: !DB }, async () => {
+test('the card-liability override round-trips for card charges', async () => {
   const { orgId, chargeId, cardId, cleanup } = await cardFixture()
   try {
     const saved = await patchDoc(orgId, chargeId, {
@@ -166,7 +164,7 @@ test('the card-liability override round-trips for card charges', { skip: !DB }, 
   }
 })
 
-test('the card-liability override fails closed on the wrong population', { skip: !DB }, async () => {
+test('the card-liability override fails closed on the wrong population', async () => {
   const { orgId, chargeId, cardId, bankId, cleanup } = await cardFixture()
   try {
     // A bank account is not a card liability, even when reconcilable.
@@ -191,7 +189,7 @@ test('the card-liability override fails closed on the wrong population', { skip:
   }
 })
 
-test('the funding-bank override fails closed on foreign and malformed banks', { skip: !DB }, async () => {
+test('the funding-bank override fails closed on foreign and malformed banks', async () => {
   const { orgId, checkId, bankId, cleanup } = await fixture()
   try {
     const foreign = await patchDoc(orgId, checkId, {

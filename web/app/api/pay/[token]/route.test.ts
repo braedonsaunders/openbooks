@@ -13,7 +13,6 @@ const root = pathToFileURL(process.cwd() + "/").href;
 const acceptanceUrl = pathToFileURL(process.cwd() + "/engine/src/payments/acceptance.ts").href;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       specifier === "@openbooks/engine/src/payments/acceptance.ts" &&
       context.parentURL?.includes("/api/pay/")

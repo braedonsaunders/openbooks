@@ -14,7 +14,6 @@ const state = { user: { orgId: randomUUID(), id: randomUUID() } };
 Object.assign(globalThis, { __apCaptureRouteUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/ap-capture/")) {
       return {
         shortCircuit: true,
@@ -41,7 +40,7 @@ const patchBody = () =>
     body: JSON.stringify({ normalized: { lines: [] } }),
   });
 
-test("ap-capture item routes return 404 for a malformed capture id", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("ap-capture item routes return 404 for a malformed capture id", async () => {
   for (const id of ["not-a-uuid", "new", "00000000-0000-0000-0000-00000000000"]) {
     const detail = await getDetail(new Request("http://audit.local/x"), params(id));
     assert.equal(detail.status, 404, `GET detail ${id}`);

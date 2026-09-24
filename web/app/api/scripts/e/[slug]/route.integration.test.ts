@@ -9,7 +9,6 @@ const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __scriptEndpointHunt: session });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "./auth" && (context.parentURL ?? "").endsWith("/lib/authz.ts")) {
       return {
         shortCircuit: true,
@@ -28,7 +27,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 const { GET, POST } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const SLUG = "shared-restlet";
 
 function caller(orgId: string, userId: string): SessionUser {
@@ -89,7 +87,7 @@ function postReq(slug = SLUG): Request {
 
 const params = { params: Promise.resolve({ slug: SLUG }) };
 
-test("an unauthenticated caller cannot invoke an endpoint script", { skip: !DB }, async () => {
+test("an unauthenticated caller cannot invoke an endpoint script", async () => {
   const org = await createScratchOrg();
   try {
     await enableScripts(org.orgId);
@@ -108,7 +106,7 @@ test("an unauthenticated caller cannot invoke an endpoint script", { skip: !DB }
   }
 });
 
-test("authenticated GET /api/scripts/e/[slug] is 405, names that only POST executes, and inserts no script_runs", { skip: !DB }, async () => {
+test("authenticated GET /api/scripts/e/[slug] is 405, names that only POST executes, and inserts no script_runs", async () => {
   const org = await createScratchOrg();
   try {
     await enableScripts(org.orgId);
@@ -134,7 +132,7 @@ test("authenticated GET /api/scripts/e/[slug] is 405, names that only POST execu
   }
 });
 
-test("scripts.manage without scripts.execute cannot invoke a restlet", { skip: !DB }, async () => {
+test("scripts.manage without scripts.execute cannot invoke a restlet", async () => {
   const org = await createScratchOrg();
   try {
     await enableScripts(org.orgId);
@@ -152,7 +150,7 @@ test("scripts.manage without scripts.execute cannot invoke a restlet", { skip: !
   }
 });
 
-test("the same slug in another org is not invoked", { skip: !DB }, async () => {
+test("the same slug in another org is not invoked", async () => {
   const home = await createScratchOrg();
   const other = await createScratchOrg();
   try {

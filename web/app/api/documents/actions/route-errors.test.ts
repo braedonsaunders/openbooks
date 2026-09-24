@@ -5,16 +5,9 @@ import test from 'node:test'
 
 // F-t06-002: a server defect must never reach the user as driver text. The
 // failure map is pure (no DB, no session), but the route module drags the
-// server graph, so this file stubs server-only like its integration sibling.
 const root = pathToFileURL(process.cwd() + '/').href
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export {}',
-      }
-    }
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },

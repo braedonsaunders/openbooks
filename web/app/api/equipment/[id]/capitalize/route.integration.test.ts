@@ -43,9 +43,6 @@ const mockEnsure = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (
       specifier === "../../../../../lib/feature-gates"
       && context.parentURL?.includes("/api/equipment/")
@@ -90,7 +87,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 const { Client } = await import("pg");
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   org: ScratchOrg;
@@ -174,7 +170,6 @@ async function waitForRouteWaiters(fixture: Fixture): Promise<void> {
 
 test(
   "concurrent capitalization creates one linked asset and returns a controlled conflict",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const holder = await holdEquipmentRow(fixture);

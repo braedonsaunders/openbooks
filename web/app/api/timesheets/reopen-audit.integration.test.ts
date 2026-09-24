@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/platform/db.ts";
 
 /**
  * Timesheet reopen audit: returning an approved week to draft unwinds a
@@ -16,7 +15,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __reopenRouteState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       specifier.endsWith("/lib/feature-gates") &&
       context.parentURL?.includes("/api/timesheets/reopen/")
@@ -123,7 +121,6 @@ async function cleanup(fixture: Awaited<ReturnType<typeof seedApprovedWeek>>) {
 
 test(
   "reopening an approved week writes actor-attributed before/after audit evidence",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await seedApprovedWeek();
     state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
@@ -169,7 +166,6 @@ test(
 
 test(
   "a refused reopen leaves no audit evidence behind",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await seedApprovedWeek();
     state.user = { orgId: fixture.org.orgId, id: fixture.actorId };

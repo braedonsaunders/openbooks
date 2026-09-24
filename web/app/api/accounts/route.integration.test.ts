@@ -29,9 +29,6 @@ const module_ = (source: string): { shortCircuit: true; format: "module"; url: s
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // The two routes import the session gate by different relative paths.
     // Re-export the REAL authz module and override only the session gate, so
     // the subsidiary-scope guards under test are the production functions —
@@ -71,7 +68,6 @@ hooks.deregister();
 const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function postRequest(key: string, body: unknown): Request {
   return new Request("http://localhost/api/accounts", {
@@ -99,7 +95,6 @@ async function enableMultiCurrency(orgId: string): Promise<void> {
 
 test(
   "accounts POST refuses a reconcilable account without a currency instead of failing in storage",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => (createScratchOrg()));
     try {
@@ -134,7 +129,6 @@ test(
 
 test(
   "accounts POST/PATCH let the reconcilable base currency through when Multi-currency is off",
-  { skip: !DB },
   async () => {
     // F-t05-003: single-currency orgs (scratch orgs are CAD, feature off)
     // have no other currency to settle in, so the reconcilable invariant can
@@ -196,7 +190,6 @@ test(
 
 test(
   "accounts PATCH refuses to add reconcilable or drop its currency instead of failing in storage",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => (createScratchOrg()));
     try {
@@ -245,7 +238,6 @@ test(
 
 test(
   "accounts routes scope entity-owned accounts to the caller subsidiary",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => (createScratchOrg()));
     try {

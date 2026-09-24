@@ -14,7 +14,6 @@ const routeState: {
 const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier.endsWith('/lib/feature-gates')) return { shortCircuit: true, url: 'mock:item-rates-premiums-gates' }
     if (specifier.endsWith('/lib/features')) return { shortCircuit: true, url: 'mock:item-rates-premiums-features' }
     if (specifier.startsWith('@/')) return nextResolve(`${webRoot}${specifier.slice(2)}.ts`, context)
@@ -43,7 +42,6 @@ const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src
 const { resolveItemRate, snapshotTimeBillRates } = await import('../../../../../lib/item-rates.ts')
 hooks.deregister()
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 function post(itemId: string, body: Record<string, unknown>) {
   return POST(new Request(`http://openbooks.test/api/items/${itemId}/rates`, {
@@ -84,7 +82,7 @@ async function versionCount(orgId: string, book: string) {
  * refuses by rate unit and key with no write — never filtered silently —
  * and the prior version stands.
  */
-test('bad premiums refuse by rate unit and key with no write', { skip: !DB }, async () => {
+test('bad premiums refuse by rate unit and key with no write', async () => {
   const { org, book } = await fixture()
   const foreign = await withBypassContext(() => (createScratchOrg()))
   try {
@@ -110,7 +108,7 @@ test('bad premiums refuse by rate unit and key with no write', { skip: !DB }, as
   }
 })
 
-test('an invalid premium value and an over-wide premium refuse', { skip: !DB }, async () => {
+test('an invalid premium value and an over-wide premium refuse', async () => {
   const { org, book, timeType } = await fixture()
   try {
     const first = await post(org.items.service, tiered(book, '2026-01-01', {}))
@@ -131,7 +129,7 @@ test('an invalid premium value and an over-wide premium refuse', { skip: !DB }, 
   }
 })
 
-test('a valid premium map saves and applies at snapshot', { skip: !DB }, async () => {
+test('a valid premium map saves and applies at snapshot', async () => {
   const { org, book, timeType } = await fixture()
   try {
     const saved = await post(org.items.service, tiered(book, '2026-01-01', { [timeType]: '300' }))

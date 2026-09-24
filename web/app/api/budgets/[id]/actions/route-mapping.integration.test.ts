@@ -19,7 +19,6 @@ Object.assign(globalThis, { __budgetActionsState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetActionsState;
@@ -42,7 +41,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface Org {
   orgId: string
@@ -124,7 +122,7 @@ async function scenarioState(id: string, orgId: string) {
   return { revision: scenario?.revision ?? null, lines: lineCount }
 }
 
-test('copy refuses when the target year misses a source period, writing nothing', { skip: !DB }, async () => {
+test('copy refuses when the target year misses a source period, writing nothing', async () => {
   const org = await seedOrg()
   try {
     const sourceId = await seedScenario(org, 2026, 'Source 2026')
@@ -148,7 +146,7 @@ test('copy refuses when the target year misses a source period, writing nothing'
   }
 })
 
-test('apply_source refuses before its delete, keeping the target lines', { skip: !DB }, async () => {
+test('apply_source refuses before its delete, keeping the target lines', async () => {
   const org = await seedOrg()
   try {
     const sourceId = await seedScenario(org, 2026, 'Source 2026')
@@ -171,7 +169,7 @@ test('apply_source refuses before its delete, keeping the target lines', { skip:
   }
 })
 
-test('copy_prior_actuals refuses before its delete when prior actuals lack a destination period', { skip: !DB }, async () => {
+test('copy_prior_actuals refuses before its delete when prior actuals lack a destination period', async () => {
   const org = await seedOrg()
   try {
     const targetId = await seedScenario(org, 2027, 'Target 2027')

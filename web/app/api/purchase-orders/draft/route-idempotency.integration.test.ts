@@ -16,7 +16,6 @@ Object.assign(globalThis, { __poDraftIdempotencySession: session })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual(`export async function currentUser(){return globalThis.__poDraftIdempotencySession.user}`)
     }
@@ -31,7 +30,6 @@ const { POST: postPurchase } = await import('./route')
 const { POST: postSales } = await import('../../sales-orders/draft/route')
 const { POST: postEstimate } = await import('../../estimates/draft/route')
 const { createOrderDraft } = await import('../../../../lib/order-cycle')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 type Post = (req: Request) => Promise<Response>
 
@@ -75,7 +73,7 @@ for (const [kind, path, post, prefix] of [
   ['sales_order', '/api/sales-orders/draft', postSales, 'SO-'],
   ['quote', '/api/estimates/draft', postEstimate, 'EST-'],
 ] as const) {
-  test(`${kind} draft requires an Idempotency-Key`, { skip: !DB }, async () => {
+  test(`${kind} draft requires an Idempotency-Key`, async () => {
     const { org } = await setup()
     try {
       assert.equal((await postDraft(post, path, null)).status, 400)
@@ -87,7 +85,7 @@ for (const [kind, path, post, prefix] of [
     }
   })
 
-  test(`a retried ${kind} draft replays instead of minting a second numbered document`, { skip: !DB }, async () => {
+  test(`a retried ${kind} draft replays instead of minting a second numbered document`, async () => {
     const { org } = await setup()
     try {
       const key = randomUUID()
@@ -107,7 +105,7 @@ for (const [kind, path, post, prefix] of [
   })
 }
 
-test('two orgs sending the same opaque key each mint their own draft', { skip: !DB }, async () => {
+test('two orgs sending the same opaque key each mint their own draft', async () => {
   const first = await setup()
   const second = await setup()
   try {
@@ -130,7 +128,7 @@ test('two orgs sending the same opaque key each mint their own draft', { skip: !
   }
 })
 
-test('a purchase-order draft key minted for another document refuses as conflict', { skip: !DB }, async () => {
+test('a purchase-order draft key minted for another document refuses as conflict', async () => {
   const { org } = await setup()
   try {
     // A row this endpoint did not create owns the key and carries no

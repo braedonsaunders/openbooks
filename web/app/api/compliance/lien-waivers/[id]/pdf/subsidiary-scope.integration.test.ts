@@ -21,7 +21,6 @@ const virtual = (source: string) => ({
 })
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') {
       return virtual('export async function getTranslations(){ const t=(k)=>k; t.has=()=>false; return t }; export async function getLocale(){ return "en" }')
     }
@@ -55,11 +54,10 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
-test('waiver printable PDF fails closed on another entity\u2019s waiver', { skip: !DB }, async () => {
+test('waiver printable PDF fails closed on another entity\u2019s waiver', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Waiver reviewer', 'lw_scope_reviewer'))

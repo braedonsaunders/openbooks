@@ -19,7 +19,6 @@ Object.assign(globalThis, { __assetPatchBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
@@ -36,7 +35,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(): Promise<{ orgId: string; assetId: string; token: string }> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -87,7 +85,7 @@ async function assetOf(orgId: string, assetId: string) {
   return rows[0]!;
 }
 
-test("asset update refuses a non-calendar acquired date without writing", { skip: !DB }, async () => {
+test("asset update refuses a non-calendar acquired date without writing", async () => {
   const { orgId, assetId, token } = await fixture();
   const before = await assetOf(orgId, assetId);
   const response = await patch(assetId, { expectedUpdatedAt: token, acquiredOn: "2026-09-31" });
@@ -98,7 +96,7 @@ test("asset update refuses a non-calendar acquired date without writing", { skip
   await dropScratchOrg(orgId);
 });
 
-test("asset update refuses a cost wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("asset update refuses a cost wider than numeric(19,4) without writing", async () => {
   const { orgId, assetId, token } = await fixture();
   const before = await assetOf(orgId, assetId);
   const response = await patch(assetId, { expectedUpdatedAt: token, acquisitionCost: "99999999999999999999.99" });
@@ -109,7 +107,7 @@ test("asset update refuses a cost wider than numeric(19,4) without writing", { s
   await dropScratchOrg(orgId);
 });
 
-test("asset update still saves an ordinary edit", { skip: !DB }, async () => {
+test("asset update still saves an ordinary edit", async () => {
   const { orgId, assetId, token } = await fixture();
   try {
     const response = await patch(assetId, { expectedUpdatedAt: token, acquisitionCost: "13000.00" });

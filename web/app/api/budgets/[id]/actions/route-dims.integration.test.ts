@@ -17,7 +17,6 @@ Object.assign(globalThis, { __budgetDimsState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetDimsState;
@@ -40,9 +39,8 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
-test('copy_prior_actuals refuses a malformed dimension id instead of broadening to the whole budget', { skip: !DB }, async () => {
+test('copy_prior_actuals refuses a malformed dimension id instead of broadening to the whole budget', async () => {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   state.actorId = randomUUID()

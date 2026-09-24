@@ -83,7 +83,6 @@ function reset(permissions: string[] = ["reports.read", "reports.create"]): void
 const root = pathToFileURL(process.cwd() + "/").href;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/api/json") {
       return next(root + "web/lib/api/json.ts", context);
     }
@@ -160,7 +159,7 @@ const json = (method: string, body?: unknown) =>
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-test("every view verb answers a malformed id with 404", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("every view verb answers a malformed id with 404", async () => {
   reset();
   for (const id of ["not-a-uuid", "new"]) {
     const got = await GET(json("GET"), params(id));

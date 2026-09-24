@@ -10,8 +10,6 @@ const hooks = registerHooks({
     // Resolve framework imports against this real file, not the virtual auth URL.
     if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))
       return next(specifier, { ...context, parentURL: import.meta.url });
-    if (specifier === "server-only")
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:control-loss-route-auth" };
     if (specifier === "@openbooks/engine/src/consolidation/loss-of-control.ts")

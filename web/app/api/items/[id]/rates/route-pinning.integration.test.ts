@@ -15,7 +15,6 @@ const routeState: {
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier.endsWith('/lib/feature-gates')) return { shortCircuit: true, url: 'mock:item-rates-feature-gates' }
     if (specifier.endsWith('/lib/features')) return { shortCircuit: true, url: 'mock:item-rates-features' }
     if (specifier.startsWith('@/')) {
@@ -56,7 +55,6 @@ const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src
 const { resolveItemRate } = await import('../../../../../lib/item-rates.ts')
 hooks.deregister()
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 const TIERS = [
   { unitCode: 'one', unitName: 'One', baseQuantity: '1', costRate: '10', billRate: '10' },
@@ -79,7 +77,7 @@ function postRates(itemId: string, body: Record<string, unknown>) {
  * policies in one version); February through the single-item writer, which
  * must carry the other item's pin forward exactly like its lines.
  */
-test('saving a version pins policy per item and carries other items forward', { skip: !DB }, async () => {
+test('saving a version pins policy per item and carries other items forward', async () => {
   const org = await withBypassContext(() => (createScratchOrg()))
   try {
     routeState.gate = { user: { orgId: org.orgId, id: org.orgId } }

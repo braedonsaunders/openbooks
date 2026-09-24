@@ -25,13 +25,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (specifier === "../../../../lib/feature-gates") {
       return { url: "mock:bank-import-csv-feature-gates", shortCircuit: true };
     }
@@ -63,7 +56,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const MAPPING = { date: 0, amount: 1, description: 2 };
 
 async function fixture() {
@@ -115,7 +107,6 @@ async function storedLineCount(orgId: string, accountId: string): Promise<number
 
 test(
   "a plain column-header row previews with no skipped warning",
-  { skip: !DB },
   async () => {
     const { org } = await fixture();
     try {
@@ -141,7 +132,6 @@ test(
 
 test(
   "a leading disclaimer row previews reported by code, never dropped",
-  { skip: !DB },
   async () => {
     const { org } = await fixture();
     try {
@@ -169,7 +159,6 @@ test(
 
 test(
   "a metadata preamble before the header imports data with each disclaimer reported",
-  { skip: !DB },
   async () => {
     const { org } = await fixture();
     try {
@@ -201,7 +190,6 @@ test(
 
 test(
   "a credit/debit-split CSV with a header previews with no skipped warning",
-  { skip: !DB },
   async () => {
     // Regression: text in both money columns refused as a transaction, so
     // every split-column import with a header broke at the API boundary.
@@ -229,7 +217,6 @@ test(
 
 test(
   "a transaction-looking first row is refused by name with nothing written",
-  { skip: !DB },
   async () => {
     const { org } = await fixture();
     try {

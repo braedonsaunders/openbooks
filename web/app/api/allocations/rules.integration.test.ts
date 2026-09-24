@@ -41,9 +41,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     const parent = String(context.parentURL)
     if (
       specifier === './authz'
@@ -140,7 +137,7 @@ async function read<T>(res: Response): Promise<{ status: number; body: T }> {
   return { status: res.status, body: (await res.json()) as T }
 }
 
-test('rules list is feature-gated and permission-pinned', { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
+test('rules list is feature-gated and permission-pinned', async (t) => {
   const off = await seed(false)
   t.after(() => dropScratchOrg(off.orgId))
   const gated = await read<{ error: string }>(await listRoute.GET(jsonRequest('http://openbooks.test/api/allocations/rules', 'GET')))
@@ -155,7 +152,7 @@ test('rules list is feature-gated and permission-pinned', { skip: !process.env.O
   assert.deepEqual(routeState.requested, ['allocations.read'])
 })
 
-test('unauthenticated rules access is refused', { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
+test('unauthenticated rules access is refused', async (t) => {
   const f = await seed(true)
   t.after(() => dropScratchOrg(f.orgId))
   routeState.authz = null
@@ -163,7 +160,7 @@ test('unauthenticated rules access is refused', { skip: !process.env.OPENBOOKS_D
   assert.equal(res.status, 403)
 })
 
-test('create seeds head + blank draft; head update needs the revision', { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
+test('create seeds head + blank draft; head update needs the revision', async (t) => {
   const f = await seed(true)
   t.after(() => dropScratchOrg(f.orgId))
   const created = await read<{ rule: { id: string }; version: { id: string; versionNo: number }; targets: unknown[] }>(
@@ -236,7 +233,7 @@ test('create seeds head + blank draft; head update needs the revision', { skip: 
   assert.equal(stale.status, 409)
 })
 
-test('version lifecycle: draft edit, publish problems inline, targets, retire', { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
+test('version lifecycle: draft edit, publish problems inline, targets, retire', async (t) => {
   const f = await seed(true)
   t.after(() => dropScratchOrg(f.orgId))
   const created = await read<{ rule: { id: string }; version: { id: string; revision: string } }>(
@@ -356,7 +353,7 @@ test('version lifecycle: draft edit, publish problems inline, targets, retire', 
   void v1
 })
 
-test('test-match previews entry matches and links period rules to Runs', { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
+test('test-match previews entry matches and links period rules to Runs', async (t) => {
   const f = await seed(true)
   t.after(() => dropScratchOrg(f.orgId))
   const created = await read<{ rule: { id: string }; version: { id: string; revision: string } }>(

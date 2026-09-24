@@ -23,7 +23,6 @@ const gate = { ...defaultGate, user: { ...defaultGate.user } };
 Object.assign(globalThis, { __scheduleIdScopeGate: gate });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/api/json") {
       return next(root + "web/lib/api/json.ts", context);
     }
@@ -63,7 +62,7 @@ const json = (method: string, body?: unknown) =>
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-test("schedule autosave and delete answer a malformed id with 404", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("schedule autosave and delete answer a malformed id with 404", async () => {
   resetGate();
   for (const id of ["not-a-uuid", "new"]) {
     // NOTE: no fixture row is needed — the uuid cast fails before any row
@@ -78,7 +77,7 @@ test("schedule autosave and delete answer a malformed id with 404", { skip: !pro
   }
 });
 
-test("hour/active PATCH keeps a restricted authorization_snapshot when the editor is org-unrestricted", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("hour/active PATCH keeps a restricted authorization_snapshot when the editor is org-unrestricted", async () => {
   const { db, withBypassContext } = await import(root + "engine/src/platform/db.ts");
   const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
   const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(

@@ -22,7 +22,6 @@ Object.assign(globalThis, { __revaluationScopeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__revaluationScopeState;
@@ -39,7 +38,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -82,7 +80,7 @@ async function entryCount(): Promise<number> {
   return rows[0]!.n
 }
 
-test('POST refuses an empty caller subsidiary scope with 403 and posts nothing', { skip: !DB }, async () => {
+test('POST refuses an empty caller subsidiary scope with 403 and posts nothing', async () => {
   const { org } = await fixture()
   state.scope = 'empty'
   try {
@@ -96,7 +94,7 @@ test('POST refuses an empty caller subsidiary scope with 403 and posts nothing',
   }
 })
 
-test('POST still runs organization-wide for an unrestricted caller', { skip: !DB }, async () => {
+test('POST still runs organization-wide for an unrestricted caller', async () => {
   const { org } = await fixture()
   state.scope = 'open'
   try {
@@ -110,7 +108,7 @@ test('POST still runs organization-wide for an unrestricted caller', { skip: !DB
   }
 })
 
-test('POST runs a real visible subsidiary in a non-empty caller scope', { skip: !DB }, async () => {
+test('POST runs a real visible subsidiary in a non-empty caller scope', async () => {
   const { org } = await fixture()
   state.scope = 'real'
   state.realId = org.subsidiaryId
@@ -130,7 +128,7 @@ test('POST runs a real visible subsidiary in a non-empty caller scope', { skip: 
   }
 })
 
-test('POST passes a non-empty caller scope through to the engine', { skip: !DB }, async () => {
+test('POST passes a non-empty caller scope through to the engine', async () => {
   const { org } = await fixture()
   state.scope = 'unknown'
   state.unknownId = randomUUID()

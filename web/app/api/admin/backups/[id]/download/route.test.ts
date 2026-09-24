@@ -59,7 +59,6 @@ const mockUrls = new Map([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     if (specifier === "../../../../../../lib/list-params") return nextResolve(listParamsUrl, context);
     if (specifier === "../../../../../../lib/export") return nextResolve(exportUrl, context);
     const mocked = mockUrls.get(specifier);

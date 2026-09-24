@@ -7,7 +7,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __closeRouteUser: state });
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/close/")) {
       return {
         shortCircuit: true,
@@ -34,7 +33,7 @@ const request = (body: unknown) =>
     body: JSON.stringify(body),
   });
 
-test("close configuration saves reject malformed ids instead of creating new rows", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("close configuration saves reject malformed ids instead of creating new rows", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Close Admin", "close-admin");
@@ -84,7 +83,7 @@ test("close configuration saves reject malformed ids instead of creating new row
   }
 });
 
-test("close policy saves emit one audit event for each mutation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("close policy saves emit one audit event for each mutation", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Close Policy Admin", "close-policy-admin");
@@ -128,7 +127,7 @@ test("close policy saves emit one audit event for each mutation", { skip: !proce
   }
 });
 
-test("close automation saves emit one audit event for each mutation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("close automation saves emit one audit event for each mutation", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Close Automation Admin", "close-automation-admin");
@@ -175,7 +174,7 @@ test("close automation saves emit one audit event for each mutation", { skip: !p
   }
 });
 
-test("close calendar saves emit one audit event for each mutation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("close calendar saves emit one audit event for each mutation", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Close Calendar Admin", "close-calendar-admin");
@@ -219,7 +218,7 @@ test("close calendar saves emit one audit event for each mutation", { skip: !pro
   }
 });
 
-test("close blueprint saves emit audit evidence for versioned mutations", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("close blueprint saves emit audit evidence for versioned mutations", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Close Blueprint Admin", "close-blueprint-admin");
@@ -260,7 +259,7 @@ test("close blueprint saves emit audit evidence for versioned mutations", { skip
   }
 });
 
-test("close reporting-package saves emit one audit event for each mutation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("close reporting-package saves emit one audit event for each mutation", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Close Package Admin", "close-package-admin");

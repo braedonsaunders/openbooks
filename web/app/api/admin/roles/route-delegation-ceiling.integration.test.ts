@@ -40,9 +40,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/")) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, import.meta.url).href, context);
     }
@@ -59,8 +56,6 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?admin-roles-delegation";
 const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
-
-const skip = !process.env.OPENBOOKS_DB_URL;
 
 function call(method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>): Promise<Response> {
   const handler = method === "POST" ? POST : method === "PATCH" ? PATCH : DELETE;
@@ -174,7 +169,7 @@ async function restrictionOf(roleId: string): Promise<unknown> {
   return inner.rows[0]?.subsidiary_restriction;
 }
 
-test("POST without a restriction defaults to all and refuses a scoped actor", { skip }, async () => {
+test("POST without a restriction defaults to all and refuses a scoped actor", async () => {
   const f = await seed();
   try {
     const rolesBefore = await roleCount(f);
@@ -186,7 +181,7 @@ test("POST without a restriction defaults to all and refuses a scoped actor", { 
   } finally { await teardown(f); }
 });
 
-test("POST inside the lens succeeds; POST covering a hidden entity refuses", { skip }, async () => {
+test("POST inside the lens succeeds; POST covering a hidden entity refuses", async () => {
   const f = await seed();
   try {
     const ok = await call("POST", {
@@ -204,7 +199,7 @@ test("POST inside the lens succeeds; POST covering a hidden entity refuses", { s
   } finally { await teardown(f); }
 });
 
-test("PATCH widening a held role to all refuses and leaves the real lens scoped", { skip }, async () => {
+test("PATCH widening a held role to all refuses and leaves the real lens scoped", async () => {
   const f = await seed();
   try {
     const before = await withBypass(() => actorAllowedSubsidiaryIds(db, f.orgId, f.actorId));
@@ -220,7 +215,7 @@ test("PATCH widening a held role to all refuses and leaves the real lens scoped"
   } finally { await teardown(f); }
 });
 
-test("PATCH adding an owned permission to an all-scope role still refuses", { skip }, async () => {
+test("PATCH adding an owned permission to an all-scope role still refuses", async () => {
   const f = await seed();
   try {
     const res = await call("PATCH", { id: f.wideId, permissions: ["gl.read"] });
@@ -235,7 +230,7 @@ test("PATCH adding an owned permission to an all-scope role still refuses", { sk
   } finally { await teardown(f); }
 });
 
-test("PATCH removing permissions from a wider role keeps the removal contract", { skip }, async () => {
+test("PATCH removing permissions from a wider role keeps the removal contract", async () => {
   const f = await seed();
   try {
     await withBypass(() => db.execute(sql`
@@ -245,7 +240,7 @@ test("PATCH removing permissions from a wider role keeps the removal contract", 
   } finally { await teardown(f); }
 });
 
-test("PATCH narrowing all to the actor lens succeeds", { skip }, async () => {
+test("PATCH narrowing all to the actor lens succeeds", async () => {
   const f = await seed();
   try {
     const res = await call("PATCH", { id: f.wideId, subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA] } });
@@ -254,7 +249,7 @@ test("PATCH narrowing all to the actor lens succeeds", { skip }, async () => {
   } finally { await teardown(f); }
 });
 
-test("PATCH widening a list and moving list to subtree on a leaf both refuse", { skip }, async () => {
+test("PATCH widening a list and moving list to subtree on a leaf both refuse", async () => {
   const f = await seed();
   try {
     const wider = await call("PATCH", {
@@ -272,7 +267,7 @@ test("PATCH widening a list and moving list to subtree on a leaf both refuse", {
   } finally { await teardown(f); }
 });
 
-test("DELETE into an all-scope replacement refuses; into an in-lens one succeeds", { skip }, async () => {
+test("DELETE into an all-scope replacement refuses; into an in-lens one succeeds", async () => {
   const f = await seed();
   try {
     const auditsBefore = await auditCount(f);
@@ -295,7 +290,7 @@ test("DELETE into an all-scope replacement refuses; into an in-lens one succeeds
   } finally { await teardown(f); }
 });
 
-test("POST refuses an open subtree matching today's enumeration", { skip }, async () => {
+test("POST refuses an open subtree matching today's enumeration", async () => {
   // The leaf actor holds list[subB]: POSTing subtree(subB) enumerates
   // identically today but grants subB's future children, so it refuses on
   // every grant path — while the closed list succeeds as a control.
@@ -319,7 +314,7 @@ test("POST refuses an open subtree matching today's enumeration", { skip }, asyn
   } finally { await teardown(f); }
 });
 
-test("PATCH widening scope within the lens still refuses permissions the actor does not hold", { skip }, async () => {
+test("PATCH widening scope within the lens still refuses permissions the actor does not hold", async () => {
   // The added scope sits inside the actor's portfolio, but widening the
   // scope broadens every permission the role confers — so the role's
   // permissions must sit inside the actor's ceiling even when no
@@ -378,7 +373,7 @@ test("PATCH widening scope within the lens still refuses permissions the actor d
   } finally { await teardown(f); }
 });
 
-test("unrestricted actor keeps full role scope authority", { skip }, async () => {
+test("unrestricted actor keeps full role scope authority", async () => {
   const f = await seed();
   try {
     // Widen the actor's own stored role first so the stubbed unrestricted

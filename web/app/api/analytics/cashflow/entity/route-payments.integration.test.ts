@@ -11,7 +11,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __entityPayments: state, React });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__entityPayments.user}' };
   const app = resolveAppModule(specifier, context, next, root)
   if (app) return app
@@ -85,7 +84,7 @@ async function applyFx(orgId: string, actor: string, fromLine: string, toLine: s
     values (${orgId},${fromLine},${toLine},${amount},${amount},${amount},${currency},${amount},${currency},1,'same_currency','entity-fx-test',${date},${actor})`));
 }
 
-test('entity drill counts distinct payment documents with weighted days', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('entity drill counts distinct payment documents with weighted days', async () => {
   const { org, actor } = await setup();
   try {
     const customer = randomUUID();
@@ -115,7 +114,7 @@ test('entity drill counts distinct payment documents with weighted days', { skip
  * paid.
  */
 for (const side of ['ar', 'ap'] as const) {
-  test(`entity drill excludes ${side === 'ar' ? 'customer' : 'vendor'} credits from payment stats (${side})`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  test(`entity drill excludes ${side === 'ar' ? 'customer' : 'vendor'} credits from payment stats (${side})`, async () => {
     const { org, actor } = await setup();
     try {
       const isAr = side === 'ar';
@@ -155,7 +154,7 @@ for (const side of ['ar', 'ap'] as const) {
  * 1.35 spot — never 200. Each application leg translates at its own source
  * date through the flow path, the same path recent payments already use.
  */
-test('entity drill translates totalPaid across functional frames', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('entity drill translates totalPaid across functional frames', async () => {
   const { org, actor } = await setup();
   try {
     const usdSub = randomUUID();

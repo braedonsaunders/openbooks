@@ -35,11 +35,7 @@ const mockAuthz = (realUrl: string): string => `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Forward Next.js-style aliases to the real modules they point at.
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
@@ -214,7 +210,7 @@ function withoutId(row: Record<string, unknown>): Record<string, unknown> {
   return rest;
 }
 
-test("provider acceptance configuration rejects invalid references before persistence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("provider acceptance configuration rejects invalid references before persistence", async () => {
   const f = await seed();
   try {
     authorize(f);
@@ -249,7 +245,7 @@ test("provider acceptance configuration rejects invalid references before persis
   }
 });
 
-test("a valid surcharge rule persists with actual stored-row insert evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a valid surcharge rule persists with actual stored-row insert evidence", async () => {
   const f = await seed();
   try {
     authorize(f);
@@ -290,7 +286,7 @@ test("a valid surcharge rule persists with actual stored-row insert evidence", {
   }
 });
 
-test("silent zero-fee and misleading policies reject whole and persist nothing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("silent zero-fee and misleading policies reject whole and persist nothing", async () => {
   const f = await seed();
   try {
     authorize(f);
@@ -323,7 +319,7 @@ test("silent zero-fee and misleading policies reject whole and persist nothing",
   }
 });
 
-test("effective dating accepts only real calendar days in start-to-end order", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("effective dating accepts only real calendar days in start-to-end order", async () => {
   const f = await seed();
   try {
     authorize(f);
@@ -360,7 +356,7 @@ test("effective dating accepts only real calendar days in start-to-end order", {
   }
 });
 
-test("fee-income references must be real active non-summary income accounts", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("fee-income references must be real active non-summary income accounts", async () => {
   const f = await seed();
   try {
     authorize(f);
@@ -397,7 +393,7 @@ test("fee-income references must be real active non-summary income accounts", { 
   }
 });
 
-test("same-start same-scope saves conflict; distinct scopes coexist deterministically", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("same-start same-scope saves conflict; distinct scopes coexist deterministically", async () => {
   const f = await seed();
   try {
     authorize(f);
@@ -454,7 +450,7 @@ test("same-start same-scope saves conflict; distinct scopes coexist deterministi
   }
 });
 
-test("updates record the actual previous row and refuse phantom or conflicting targets", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("updates record the actual previous row and refuse phantom or conflicting targets", async () => {
   const f = await seed();
   try {
     authorize(f);
@@ -526,7 +522,7 @@ test("updates record the actual previous row and refuse phantom or conflicting t
   }
 });
 
-test("deletion stores the real deactivated row and refuses phantom or repeat deletes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("deletion stores the real deactivated row and refuses phantom or repeat deletes", async () => {
   const f = await seed();
   try {
     authorize(f);
@@ -564,7 +560,7 @@ test("deletion stores the real deactivated row and refuses phantom or repeat del
   }
 });
 
-test("a restricted caller lists only shared and in-scope accounts, never another entity's", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a restricted caller lists only shared and in-scope accounts, never another entity's", async () => {
   const f = await seed();
   try {
     const own = await ownSubsidiaryId(f.orgId);
@@ -592,7 +588,7 @@ test("a restricted caller lists only shared and in-scope accounts, never another
   }
 });
 
-test("a restricted caller cannot save org-wide provider config, and nothing persists", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a restricted caller cannot save org-wide provider config, and nothing persists", async () => {
   const f = await seed();
   try {
     const own = await ownSubsidiaryId(f.orgId);
@@ -625,7 +621,7 @@ test("a restricted caller cannot save org-wide provider config, and nothing pers
   }
 });
 
-test("restricted callers cannot write org-wide surcharge rules, even with a foreign fee account", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("restricted callers cannot write org-wide surcharge rules, even with a foreign fee account", async () => {
   const f = await seed();
   try {
     const own = await ownSubsidiaryId(f.orgId);
@@ -641,7 +637,7 @@ test("restricted callers cannot write org-wide surcharge rules, even with a fore
   }
 });
 
-test("surcharge rule save and delete require unrestricted subsidiary scope", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("surcharge rule save and delete require unrestricted subsidiary scope", async () => {
   const f = await seed();
   try {
     const own = await ownSubsidiaryId(f.orgId);

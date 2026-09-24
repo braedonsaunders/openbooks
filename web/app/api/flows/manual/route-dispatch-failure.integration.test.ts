@@ -21,7 +21,6 @@ Object.assign(globalThis, { __manualFlowUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__manualFlowUser.user}')
     }
@@ -84,13 +83,13 @@ async function seedFailingManualFlow(orgId: string): Promise<void> {
   }
   await withBypassContext(() =>
     db.execute(sql`
-      insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      insert into flows (id, org_id, name, subject_kind, graph)
       values (${randomUUID()}, ${orgId}, 'Manual probe flow', 'vendor_bill', true,
               ${JSON.stringify(graph)}::jsonb)`),
   )
 }
 
-test('a manual action whose flow fails answers ok:false with the flow reason', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a manual action whose flow fails answers ok:false with the flow reason', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
@@ -114,7 +113,7 @@ test('a manual action whose flow fails answers ok:false with the flow reason', {
   }
 })
 
-test('a manual action whose dispatch fails answers non-2xx with the dispatch reason', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a manual action whose dispatch fails answers non-2xx with the dispatch reason', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))

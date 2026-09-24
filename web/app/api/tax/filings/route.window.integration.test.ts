@@ -23,7 +23,6 @@ const virtual = (source: string) => ({
 })
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (
       (specifier === './auth' || specifier.endsWith('/lib/auth')) &&
       context.parentURL?.endsWith('/web/lib/authz.ts')
@@ -42,7 +41,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 const prepare = (body: unknown) =>
   POST(
@@ -53,7 +51,7 @@ const prepare = (body: unknown) =>
     }),
   )
 
-test('a year-wide prepare stores and responds with the narrowed quarterly window', { skip: !DB }, async () => {
+test('a year-wide prepare stores and responds with the narrowed quarterly window', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Tax filer', 'tax_filer'))

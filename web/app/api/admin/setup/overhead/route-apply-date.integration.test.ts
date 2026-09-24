@@ -48,9 +48,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -100,7 +97,6 @@ function postRequest(body: unknown): Request {
 
 test(
   "apply rejects an impossible calendar date with a 400 field error",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const { orgId } = await seed();
     const res = await withOrgContext(orgId, () =>
@@ -121,7 +117,6 @@ test(
 
 test(
   "apply still reaches the profile lookup for a real calendar date",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const { orgId } = await seed();
     const res = await withOrgContext(orgId, () =>

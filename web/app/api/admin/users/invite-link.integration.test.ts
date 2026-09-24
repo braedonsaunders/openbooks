@@ -31,7 +31,6 @@ const hooks = registerHooks({
       shortCircuit: true,
       url: "data:text/javascript," + encodeURIComponent(source),
     });
-    if (specifier === "server-only") return virtual("export {}");
     const parent = String(context.parentURL ?? "");
     if (
       specifier === "../../../../lib/authz"
@@ -83,8 +82,6 @@ const { POST } = await import("./route");
 const { loadAdminUsers } = await import("../../../(app)/admin/users/view");
 const { completePasswordReset } = await import("../../../../lib/auth-reset");
 hooks.deregister();
-const skip = !process.env.OPENBOOKS_DB_URL;
-
 const FIRST_EMAIL = "link.member@scratch.test";
 
 async function seed(rolePermissions: string[] = []) {
@@ -135,7 +132,7 @@ async function liveTokenCount(userId: string): Promise<number> {
 /** Direct test-body reads/writes run under bypass; the route under test sets its own org scope. */
 const asBypass = <T>(fn: () => Promise<T>): Promise<T> => withBypassContext(fn);
 
-test("invite without email delivery returns a one-time set-password link", { skip }, async () => {
+test("invite without email delivery returns a one-time set-password link", async () => {
   const f = await seed();
   try {
     const response = await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId });
@@ -173,7 +170,7 @@ test("invite without email delivery returns a one-time set-password link", { ski
   }
 });
 
-test("invite with working email never exposes the link in the response", { skip }, async () => {
+test("invite with working email never exposes the link in the response", async () => {
   const f = await seed();
   try {
     state.transport = true;
@@ -193,7 +190,7 @@ test("invite with working email never exposes the link in the response", { skip 
   }
 });
 
-test("resend-invite mints a fresh link and supersedes the outstanding one", { skip }, async () => {
+test("resend-invite mints a fresh link and supersedes the outstanding one", async () => {
   const f = await seed();
   try {
     const first = (await (
@@ -228,7 +225,7 @@ test("resend-invite mints a fresh link and supersedes the outstanding one", { sk
   }
 });
 
-test("resend-invite refuses unknown, activated, and deactivated users", { skip }, async () => {
+test("resend-invite refuses unknown, activated, and deactivated users", async () => {
   const f = await seed();
   try {
     assert.equal(
@@ -254,7 +251,7 @@ test("resend-invite refuses unknown, activated, and deactivated users", { skip }
   }
 });
 
-test("a repeat invite for a pending user re-issues a fresh link and supersedes the old one", { skip }, async () => {
+test("a repeat invite for a pending user re-issues a fresh link and supersedes the old one", async () => {
   const f = await seed();
   try {
     const first = (await (
@@ -287,7 +284,7 @@ test("a repeat invite for a pending user re-issues a fresh link and supersedes t
   }
 });
 
-test("a refused re-issue never exposes a link, even with no mail transport", { skip }, async () => {
+test("a refused re-issue never exposes a link, even with no mail transport", async () => {
   const f = await seed();
   try {
     const invited = (await (
@@ -317,7 +314,7 @@ test("a refused re-issue never exposes a link, even with no mail transport", { s
   }
 });
 
-test("resend-invite enforces the inviter's role ceiling", { skip }, async () => {
+test("resend-invite enforces the inviter's role ceiling", async () => {
   const f = await seed();
   try {
     const invited = (await (
@@ -338,7 +335,7 @@ test("resend-invite enforces the inviter's role ceiling", { skip }, async () => 
   }
 });
 
-test("resend-invite is rate-capped like the self-service path", { skip }, async () => {
+test("resend-invite is rate-capped like the self-service path", async () => {
   const f = await seed();
   try {
     const invited = (await (

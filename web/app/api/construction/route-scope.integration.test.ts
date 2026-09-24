@@ -8,7 +8,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __constructionScopeSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__constructionScopeSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -21,7 +20,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { randomUUID } = await import('node:crypto')
 const construction = await import('./route')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 // H-CONSTRUCTION-REHOME (route half): every construction path resolves the
 // project's subsidiary at entry and rechecks it under the project row lock
@@ -80,7 +78,7 @@ async function fixture() {
   return { org, projectA, projectB, lineB, asOwner, asOwner2, asScoped, get, post, close }
 }
 
-test('an A-only caller sees only not-found for B’s project reads and SOV writes', { skip: !DB }, async () => {
+test('an A-only caller sees only not-found for B’s project reads and SOV writes', async () => {
   const f = await fixture()
   try {
     f.asScoped()
@@ -104,7 +102,7 @@ test('an A-only caller sees only not-found for B’s project reads and SOV write
   }
 })
 
-test('an A-only caller cannot touch B’s pay-application lifecycle', { skip: !DB }, async () => {
+test('an A-only caller cannot touch B’s pay-application lifecycle', async () => {
   const f = await fixture()
   try {
     f.asOwner()
@@ -143,7 +141,7 @@ test('an A-only caller cannot touch B’s pay-application lifecycle', { skip: !D
   }
 })
 
-test('the allowed A-project flow keeps working, including the snapshot GET', { skip: !DB }, async () => {
+test('the allowed A-project flow keeps working, including the snapshot GET', async () => {
   const f = await fixture()
   try {
     f.asScoped()

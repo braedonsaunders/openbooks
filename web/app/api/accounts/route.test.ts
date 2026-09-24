@@ -161,8 +161,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The real '@/lib/api/json' imports 'server-only', which is inert here.
-    if (specifier === "server-only") return { url: "data:text/javascript,export {}", shortCircuit: true };
     // Re-export the REAL authz module and override only the session gate with
     // an unrestricted caller: the idempotency contract never restricts the
     // caller, and a hand-copied guard double could only drift from the

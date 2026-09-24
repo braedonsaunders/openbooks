@@ -12,7 +12,6 @@ import test from "node:test";
 const root = pathToFileURL(process.cwd() + "/").href;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/api/json") {
       return next(root + "web/lib/api/json.ts", context);
     }
@@ -48,7 +47,7 @@ const json = (method: string, body?: unknown) =>
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-test("definition read, autosave, delete, and export answer a malformed id with 404", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("definition read, autosave, delete, and export answer a malformed id with 404", async () => {
   for (const id of ["not-a-uuid", "new"]) {
     const got = await GET(json("GET"), params(id));
     assert.equal(got.status, 404, `GET ${id}`);

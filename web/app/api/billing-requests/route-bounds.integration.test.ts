@@ -18,7 +18,6 @@ Object.assign(globalThis, { __billingRequestBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -36,7 +35,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -65,7 +63,7 @@ async function requestCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("billing-request creation refuses a draw wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("billing-request creation refuses a draw wider than numeric(19,4) without writing", async () => {
   const { org, projectId } = await fixture();
   try {
     const response = await post({
@@ -80,7 +78,7 @@ test("billing-request creation refuses a draw wider than numeric(19,4) without w
   }
 });
 
-test("billing-request creation refuses a non-calendar cutoff date without writing", { skip: !DB }, async () => {
+test("billing-request creation refuses a non-calendar cutoff date without writing", async () => {
   const { org, projectId } = await fixture();
   try {
     const response = await post({
@@ -95,7 +93,7 @@ test("billing-request creation refuses a non-calendar cutoff date without writin
   }
 });
 
-test("billing-request creation refuses a decimal-comma draw with the dotted rewrite", { skip: !DB }, async () => {
+test("billing-request creation refuses a decimal-comma draw with the dotted rewrite", async () => {
   // B3-SAL-01: '12,34' is twelve-thirty-four written correctly in seven
   // installed locales — stripping the comma would post 1234, a 100x error.
   // The house classifier names the dotted rewrite instead of the generic
@@ -121,7 +119,7 @@ test("billing-request creation refuses a decimal-comma draw with the dotted rewr
   }
 });
 
-test("billing-request creation still files an ordinary draw request", { skip: !DB }, async () => {
+test("billing-request creation still files an ordinary draw request", async () => {
   const { org, projectId } = await fixture();
   try {
     const response = await post({

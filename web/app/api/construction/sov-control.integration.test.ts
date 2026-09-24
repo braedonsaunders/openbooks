@@ -7,7 +7,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __constructionSovSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__constructionSovSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -29,7 +28,7 @@ const post = (handler: (req: Request) => Promise<Response>, orgId: string, body:
  * trail. Editing it directly (like deleting it) must go through a change
  * order, or the billed ceiling silently diverges from the approved contract.
  */
-test('updateSov refuses a change-order-controlled schedule line', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('updateSov refuses a change-order-controlled schedule line', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
@@ -69,7 +68,7 @@ test('updateSov refuses a change-order-controlled schedule line', { skip: !proce
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
 
-test('approving a targeted change order controls the repriced schedule line', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('approving a targeted change order controls the repriced schedule line', async () => {
   const org = await createScratchOrg()
   try {
     const preparer = await createScratchUser(org.orgId, 'Change-order preparer', 'reviewer')
@@ -114,7 +113,7 @@ test('approving a targeted change order controls the repriced schedule line', { 
  * uuid cast error escaping as a 500. Same class as the change-order target
  * id fix; this is its addSov/updateSov sibling.
  */
-test('SOV writes refuse a malformed income account with a domain error', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('SOV writes refuse a malformed income account with a domain error', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'SOV writer', 'reviewer')
@@ -151,7 +150,7 @@ test('SOV writes refuse a malformed income account with a domain error', { skip:
  * (double submit, retry after a partial failure) must fail closed as a
  * domain error — never escape as a PostgreSQL unique violation (a 500).
  */
-test('addChangeOrder refuses a duplicate change-order number', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('addChangeOrder refuses a duplicate change-order number', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'CO writer', 'reviewer')
@@ -191,7 +190,7 @@ test('addChangeOrder refuses a duplicate change-order number', { skip: !process.
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
 
-test('SOV values and change-order amounts wider than numeric(19,4) fail closed', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('SOV values and change-order amounts wider than numeric(19,4) fail closed', async () => {
   // scheduled_value and change_orders.amount are numeric(19,4): pasted
   // 20-digit figures cleared the exact-decimal check and died in storage
   // with a driver error. Fail closed with the named refusal instead.
@@ -231,7 +230,7 @@ test('SOV values and change-order amounts wider than numeric(19,4) fail closed',
  * without a manual edit. A malformed account id fails closed as a domain
  * error, mirroring the SOV pin above.
  */
-test('approving an unallocated change order carries the pinned income account', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('approving an unallocated change order carries the pinned income account', async () => {
   const org = await createScratchOrg()
   try {
     const preparer = await createScratchUser(org.orgId, 'CO preparer', 'reviewer')
@@ -283,7 +282,7 @@ test('approving an unallocated change order carries the pinned income account', 
  * approval time, so the created line still bills. With no default
  * configured the line keeps NULL, exactly like a hand-added SOV line.
  */
-test('approving an account-less change order falls back to the org default', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('approving an account-less change order falls back to the org default', async () => {
   const org = await createScratchOrg()
   try {
     const preparer = await createScratchUser(org.orgId, 'CO preparer', 'reviewer')

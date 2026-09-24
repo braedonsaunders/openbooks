@@ -107,7 +107,6 @@ let dbRealUrl = ''
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { format: 'module', source: '', shortCircuit: true, url: 'mock:server-only' }
     if (specifier === '../../../../../lib/authz') {
       realAuthzUrl = nextResolve(specifier, context).url
       return { url: 'mock:authz', shortCircuit: true }
@@ -124,7 +123,6 @@ const hooks = registerHooks({
     const source = mockSources.get(url)
     if (source !== undefined) return { format: 'module', source: url === 'mock:db' ? `export * from ${JSON.stringify(dbRealUrl)};\n${source}` : source, shortCircuit: true }
     if (url === 'mock:authz') return { format: 'module', source: `export { guardUnrestrictedScope } from ${JSON.stringify(realAuthzUrl)}`, shortCircuit: true }
-    if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
     return nextLoad(url, context)
   },
 })

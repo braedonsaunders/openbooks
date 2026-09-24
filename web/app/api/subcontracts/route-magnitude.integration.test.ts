@@ -32,9 +32,6 @@ const mockAuthz = `
 const engineRoot = new URL("../../../../engine/", import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
     }
@@ -66,7 +63,7 @@ const routeUrl = "./route.ts?subcontract-magnitude-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -136,7 +133,7 @@ function createBody(fixture: Fixture, originalCommitment: string) {
   };
 }
 
-test("POST refuses a commitment wider than numeric(19,4) without writing", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST refuses a commitment wider than numeric(19,4) without writing", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, createBody(fixture, "99999999999999999999"));
@@ -147,7 +144,7 @@ test("POST refuses a commitment wider than numeric(19,4) without writing", { ski
   }
 });
 
-test("POST still creates a subcontract at the column maximum", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST still creates a subcontract at the column maximum", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, createBody(fixture, "999999999999999.9999"));

@@ -29,11 +29,7 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as setup-route-contract.test.ts).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "mock:setup-intl" };
     // Forward Next.js-style aliases to the real modules they point at.
     if (specifier.startsWith("@/") && context.parentURL) return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);

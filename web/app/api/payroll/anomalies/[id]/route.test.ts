@@ -45,17 +45,14 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  // Loader boundary, not behaviour: the body parser marks itself server-only,
   // which the plain node loader refuses. An empty module satisfies the
   // side-effect import; every behavioural import stays real.
-  ['mock:server-only', 'export default {}'],
 ])
 
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/ai-rails', 'mock:ai-rails'],
   ['../../../../../lib/features', 'mock:features'],
   ['@openbooks/engine/src/hrm/ai/anomalies.ts', 'mock:anomalies'],
-  ['server-only', 'mock:server-only'],
 ])
 
 // The route imports the body parser through the `@/` alias, which the plain

@@ -12,7 +12,6 @@ Object.assign(globalThis, { __payrollSubsidiaryDefaultState: state, __payrollSub
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') return virtual(`export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}`)
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
@@ -34,7 +33,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { GET: profilesGet } = await import('./route')
 const { PATCH: partiesPatch, GET: partiesGet } = await import('../../parties/[id]/route')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
 async function fixture() {
@@ -81,7 +79,7 @@ async function defaultCountry(orgId: string, employeeId: string): Promise<{ stat
   return { status: res.status, country: body.defaultCountry }
 }
 
-test('a hire that records a non-root subsidiary defaults the profile to that subsidiary\u2019s country', { skip: !DB }, async () => {
+test('a hire that records a non-root subsidiary defaults the profile to that subsidiary\u2019s country', async () => {
   // The guided hire, at route level: the drawer names the draft and sends
   // the operator-chosen subsidiaryId (Save and, since the drawer fix,
   // Activate both carry it). The new-profile default must then resolve the
@@ -117,7 +115,7 @@ test('a hire that records a non-root subsidiary defaults the profile to that sub
   }
 })
 
-test('an org-wide hire still falls back to the root entity\u2019s country', { skip: !DB }, async () => {
+test('an org-wide hire still falls back to the root entity\u2019s country', async () => {
   // The fallback chain itself is correct and untouched: a party that is
   // genuinely org-wide (NULL subsidiary — e.g. hired before the org went
   // multi-entity) resolves the ROOT subsidiary's country. This pins the

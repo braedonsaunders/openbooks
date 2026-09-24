@@ -15,7 +15,6 @@ const state: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<st
 Object.assign(globalThis, { __stockCountRetryAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__stockCountRetryAudit.user,allowedSubsidiaryIds:globalThis.__stockCountRetryAudit.allowedSubsidiaryIds}}",
@@ -31,7 +30,7 @@ registerHooks({
  * same key and payload, must return the ORIGINAL count id — exactly one
  * stock_counts row, no duplicate.
  */
-test("a committed count create retried with the same key returns the original count", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a committed count create retried with the same key returns the original count", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;

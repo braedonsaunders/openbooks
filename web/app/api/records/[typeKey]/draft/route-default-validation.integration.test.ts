@@ -24,9 +24,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:custom-record-draft-validation-authz', shortCircuit: true }
     }
@@ -51,7 +48,7 @@ const routeUrl = './route.ts?custom-record-draft-validation-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts',
 )
@@ -96,7 +93,6 @@ async function draftAs(typeKey: string, orgId: string, actorId: string): Promise
 
 test(
   'a misconfigured default that mistypes a field refuses the draft with a 422',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { orgId } = await withBypass(async () => createScratchOrg())
     try {
@@ -124,7 +120,6 @@ test(
 
 test(
   'a correctly-typed default still drafts',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { orgId } = await withBypass(async () => createScratchOrg())
     try {

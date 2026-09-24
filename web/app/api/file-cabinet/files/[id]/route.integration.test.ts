@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { env, db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
 const stateKey = Symbol.for('openbooks.file-patch-route-test')
@@ -26,7 +26,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '../../../../../lib/authz' || specifier === '../../../lib/authz') {
       return { shortCircuit: true, url: 'mock:file-patch-authz' }
     }
@@ -71,7 +70,7 @@ async function fileName(orgId: string, id: string): Promise<{ name: string; fold
  * "valid name + invalid folderId" reported a failure with the rename already
  * stored. Both edits must validate up front and commit atomically.
  */
-test('file rename+move validates up front and commits atomically', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('file rename+move validates up front and commits atomically', async () => {
   const org = await createScratchOrg()
   const actorId = randomUUID()
   const folderA = randomUUID()

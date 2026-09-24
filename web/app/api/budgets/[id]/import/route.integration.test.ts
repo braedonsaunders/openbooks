@@ -12,7 +12,6 @@ Object.assign(globalThis, { __budgetImportState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetImportState;
@@ -34,7 +33,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface ImportFixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>
@@ -97,7 +95,7 @@ function csv(rows: string[][]) {
   return rows.map((cells) => cells.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')
 }
 
-test('import carries the subsidiary and the export round-trips it', { skip: !DB }, async () => {
+test('import carries the subsidiary and the export round-trips it', async () => {
   const f = await fixture()
   try {
     const text = csv([
@@ -121,7 +119,7 @@ test('import carries the subsidiary and the export round-trips it', { skip: !DB 
   }
 })
 
-test('a zero-amount row clears only its own entity cell', { skip: !DB }, async () => {
+test('a zero-amount row clears only its own entity cell', async () => {
   const f = await fixture()
   try {
     await db.execute(sql`
@@ -145,7 +143,7 @@ test('a zero-amount row clears only its own entity cell', { skip: !DB }, async (
   }
 })
 
-test('a legacy file without a subsidiary column lands in the root', { skip: !DB }, async () => {
+test('a legacy file without a subsidiary column lands in the root', async () => {
   const f = await fixture()
   try {
     const text = csv([
@@ -163,7 +161,7 @@ test('a legacy file without a subsidiary column lands in the root', { skip: !DB 
   }
 })
 
-test('an out-of-scope subsidiary is treated as unknown before any write', { skip: !DB }, async () => {
+test('an out-of-scope subsidiary is treated as unknown before any write', async () => {
   const f = await fixture()
   try {
     state.allowed = new Set([f.org.subsidiaryId])
@@ -185,7 +183,7 @@ test('an out-of-scope subsidiary is treated as unknown before any write', { skip
 })
 
 
-test('subsidiary names round-trip exactly and ambiguous folded names refuse', { skip: !DB }, async () => {
+test('subsidiary names round-trip exactly and ambiguous folded names refuse', async () => {
   const f = await fixture()
   try {
     await db.execute(sql`update subsidiaries set name='Case Company' where id=${f.subB} and org_id=${f.org.orgId}`)

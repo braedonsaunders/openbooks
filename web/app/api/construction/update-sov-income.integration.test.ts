@@ -8,7 +8,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __constructionDrawsSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__constructionDrawsSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -32,7 +31,7 @@ const post = (handler: (req: Request) => Promise<Response>, orgId: string, body:
  * an income-account-only change. Anything beyond the income account must
  * still refuse with the controlled-line message.
  */
-test('updateSov accepts an income-account-only change on an application-used line', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('updateSov accepts an income-account-only change on an application-used line', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')

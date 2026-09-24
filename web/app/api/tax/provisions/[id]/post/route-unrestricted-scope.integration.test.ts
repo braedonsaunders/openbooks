@@ -22,7 +22,6 @@ const state = {
 Object.assign(globalThis, { __provisionPostOracleState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/tax/provisions/")) {
       return {
         shortCircuit: true,
@@ -63,9 +62,7 @@ const post = (id: string) =>
     params: Promise.resolve({ id }),
   });
 
-test("provision-post oracle: restricted callers get the named 403 for existing and missing runs", {
-  skip: !process.env.OPENBOOKS_DB_URL,
-}, async () => {
+test("provision-post oracle: restricted callers get the named 403 for existing and missing runs", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;

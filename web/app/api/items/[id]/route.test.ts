@@ -190,7 +190,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '../_lib' && context.parentURL?.includes('/api/items/')) {
       return { url: 'mock:item-lib', shortCircuit: true }
     }

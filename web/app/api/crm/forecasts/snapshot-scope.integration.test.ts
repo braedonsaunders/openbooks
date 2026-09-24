@@ -16,7 +16,6 @@ const root = pathToFileURL(process.cwd() + "/").href;
 const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __forecastScopeSession: session });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__forecastScopeSession.user}' };
   const app = resolveAppModule(specifier, context, next, root);
@@ -31,7 +30,6 @@ const {randomUUID}=await import('node:crypto');
 const {ensureCrmDefaults}=await import('@openbooks/engine/src/crm/crm.ts');
 const {POST,GET}=await import('./route');
 const {NextRequest}=await import('next/server');
-const enabled={skip:!process.env.OPENBOOKS_DB_URL};
 const period={periodStart:'2026-07-01',periodEnd:'2026-07-31'};
 
 async function fixture(action:(org:Awaited<ReturnType<typeof createScratchOrg>>,actor:string)=>Promise<void>){
@@ -71,7 +69,7 @@ async function snapshots(orgId:string){
   select owner_user_id,sales_team_id,pipeline_amount::text,closed_amount::text from crm_forecast_snapshots where org_id=${orgId}`))).rows;
 }
 
-test('an unfiltered snapshot preserves the org-wide summary scope',enabled,async()=>fixture(async(org)=>{
+test('an unfiltered snapshot preserves the org-wide summary scope',async()=>fixture(async(org)=>{
  const saved=await POST(new NextRequest('http://audit.local',{method:'POST',body:JSON.stringify({...period,ownerUserId:null,salesTeamId:null})}));
  assert.equal(saved.status,201,await saved.clone().text());
  const rows=await snapshots(org.orgId);
@@ -88,7 +86,7 @@ test('an unfiltered snapshot preserves the org-wide summary scope',enabled,async
  assert.equal(forecast[0]!.closed_amount,rows[0]!.closed_amount);
 }));
 
-test('a snapshot without scope keys still files the convenient personal default',enabled,async()=>fixture(async(org,actor)=>{
+test('a snapshot without scope keys still files the convenient personal default',async()=>fixture(async(org,actor)=>{
  const saved=await POST(new NextRequest('http://audit.local',{method:'POST',body:JSON.stringify({...period})}));
  assert.equal(saved.status,201,await saved.clone().text());
  const rows=await snapshots(org.orgId);
@@ -98,7 +96,7 @@ test('a snapshot without scope keys still files the convenient personal default'
  assert.equal(rows[0]!.closed_amount,'0.0000');
 }));
 
-test('a snapshot naming both an owner and a team is still refused',enabled,async()=>fixture(async(org,actor)=>{
+test('a snapshot naming both an owner and a team is still refused',async()=>fixture(async(org,actor)=>{
  const refused=await POST(new NextRequest('http://audit.local',{method:'POST',body:JSON.stringify({...period,ownerUserId:actor,salesTeamId:randomUUID()})}));
  assert.equal(refused.status,422,await refused.clone().text());
  assert.equal((await snapshots(org.orgId)).length,0);

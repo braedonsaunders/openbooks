@@ -21,7 +21,6 @@ const AUTHZ = `
 `
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier.endsWith('/lib/authz')) return virtual(AUTHZ)
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
@@ -35,7 +34,6 @@ const { POST: runPost } = await import('./run/route.ts')
 const { POST: testPost } = await import('./test/route.ts')
 const { GET: qwcGet } = await import('./qwc/route.ts')
 const { POST: deletionsPost } = await import('./source-deletions/[ref]/route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -62,7 +60,7 @@ async function call(handler: Handler, method: string, params: { id: string; ref?
 
 const MALFORMED = 'not-a-uuid'
 
-test('PATCH returns 404 for a malformed connection id', { skip: !DB }, async () => {
+test('PATCH returns 404 for a malformed connection id', async () => {
   const org = await fixture()
   try {
     const result = await call(PATCH, 'PATCH', { id: MALFORMED }, {})
@@ -72,7 +70,7 @@ test('PATCH returns 404 for a malformed connection id', { skip: !DB }, async () 
   }
 })
 
-test('DELETE returns 404 for a malformed connection id', { skip: !DB }, async () => {
+test('DELETE returns 404 for a malformed connection id', async () => {
   const org = await fixture()
   try {
     const result = await call(DELETE, 'DELETE', { id: MALFORMED })
@@ -82,7 +80,7 @@ test('DELETE returns 404 for a malformed connection id', { skip: !DB }, async ()
   }
 })
 
-test('run returns 404 for a malformed connection id', { skip: !DB }, async () => {
+test('run returns 404 for a malformed connection id', async () => {
   const org = await fixture()
   try {
     const result = await call(runPost, 'POST', { id: MALFORMED }, { mode: 'mirror' })
@@ -92,7 +90,7 @@ test('run returns 404 for a malformed connection id', { skip: !DB }, async () =>
   }
 })
 
-test('test returns 404 for a malformed connection id', { skip: !DB }, async () => {
+test('test returns 404 for a malformed connection id', async () => {
   const org = await fixture()
   try {
     const result = await call(testPost, 'POST', { id: MALFORMED })
@@ -102,7 +100,7 @@ test('test returns 404 for a malformed connection id', { skip: !DB }, async () =
   }
 })
 
-test('qwc returns 404 for a malformed connection id', { skip: !DB }, async () => {
+test('qwc returns 404 for a malformed connection id', async () => {
   const org = await fixture()
   try {
     const result = await call(qwcGet, 'GET', { id: MALFORMED })
@@ -112,7 +110,7 @@ test('qwc returns 404 for a malformed connection id', { skip: !DB }, async () =>
   }
 })
 
-test('source-deletions returns 404 for a malformed connection id', { skip: !DB }, async () => {
+test('source-deletions returns 404 for a malformed connection id', async () => {
   const org = await fixture()
   try {
     const result = await call(deletionsPost, 'POST', { id: MALFORMED, ref: 'x' }, { action: 'retain' })
@@ -122,7 +120,7 @@ test('source-deletions returns 404 for a malformed connection id', { skip: !DB }
   }
 })
 
-test('source-deletions binds void/retain to the path connection and the already-decoded ref', { skip: !DB }, async () => {
+test('source-deletions binds void/retain to the path connection and the already-decoded ref', async () => {
   const org = await fixture()
   try {
     state.actorId = await createScratchUser(org.orgId, 'Source deletion route controller', 'admin')
@@ -222,7 +220,7 @@ test('source-deletions binds void/retain to the path connection and the already-
   }
 })
 
-test('unknown ids still return the not-found contract', { skip: !DB }, async () => {
+test('unknown ids still return the not-found contract', async () => {
   const org = await fixture()
   try {
     const patched = await call(PATCH, 'PATCH', { id: randomUUID() }, {})

@@ -19,7 +19,6 @@ const state = {
 Object.assign(globalThis, { __paydocOracleState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/payments/")) {
       return {
         shortCircuit: true,
@@ -56,9 +55,7 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors, seedDraftDocument } = 
 );
 const { GET } = await import("./route.ts");
 
-test("payment-document oracle: no pay permission sees existing and missing ids identically", {
-  skip: !process.env.OPENBOOKS_DB_URL,
-}, async () => {
+test("payment-document oracle: no pay permission sees existing and missing ids identically", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;

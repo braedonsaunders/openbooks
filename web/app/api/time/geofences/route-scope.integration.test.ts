@@ -23,7 +23,6 @@ const virtual = (source: string) => ({
 });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation")
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
@@ -52,7 +51,6 @@ const { createScratchOrg, dropScratchOrg } = await import(
 );
 const { GET, POST } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const CIRCLE = {
   kind: "circle",
@@ -120,7 +118,7 @@ async function fenceProject(orgId: string, id: string): Promise<string | null> {
   return rows[0]?.project_id ?? null;
 }
 
-test("GET hides another subsidiary's fences from a restricted caller", { skip: !DB }, async () => {
+test("GET hides another subsidiary's fences from a restricted caller", async () => {
   const { org, projectB } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -138,7 +136,7 @@ test("GET hides another subsidiary's fences from a restricted caller", { skip: !
   }
 });
 
-test("save cannot create a fence on another subsidiary's project", { skip: !DB }, async () => {
+test("save cannot create a fence on another subsidiary's project", async () => {
   const { org, projectB } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -153,7 +151,7 @@ test("save cannot create a fence on another subsidiary's project", { skip: !DB }
   }
 });
 
-test("save cannot edit another subsidiary's fence or point at its project", { skip: !DB }, async () => {
+test("save cannot edit another subsidiary's fence or point at its project", async () => {
   const { org, projectA, projectB, fenceA, fenceB } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -172,7 +170,7 @@ test("save cannot edit another subsidiary's fence or point at its project", { sk
   }
 });
 
-test("delete cannot retire another subsidiary's fence", { skip: !DB }, async () => {
+test("delete cannot retire another subsidiary's fence", async () => {
   const { org, fenceB } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -186,7 +184,7 @@ test("delete cannot retire another subsidiary's fence", { skip: !DB }, async () 
   }
 });
 
-test("an unrestricted caller keeps the full surface", { skip: !DB }, async () => {
+test("an unrestricted caller keeps the full surface", async () => {
   const { org, projectA, fenceA } = await fixture();
   try {
     state.allowedSubsidiaryIds = null;

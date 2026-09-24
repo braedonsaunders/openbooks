@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { POST } from "./route.ts";
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function post(connectionId: string, body: string): Promise<Response> {
   return POST(new Request(`http://localhost/api/qbd/web-connector/${connectionId}`, {
@@ -18,7 +17,7 @@ function receiveEnvelope(ticket: string, response: string): string {
   return `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><receiveResponseXML xmlns="http://developer.intuit.com/"><ticket>${ticket}</ticket><response>${response}</response><hresult></hresult><message></message></receiveResponseXML></soap:Body></soap:Envelope>`;
 }
 
-test("a legitimate large receiveResponseXML with a valid ticket still works", { skip: !DB }, async () => {
+test("a legitimate large receiveResponseXML with a valid ticket still works", async () => {
   const { db, schema } = await import("@openbooks/engine/src/platform/db.ts");
   const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");
   const { authenticateWebConnector } = await import("@openbooks/engine/src/qbd/bridge.ts");

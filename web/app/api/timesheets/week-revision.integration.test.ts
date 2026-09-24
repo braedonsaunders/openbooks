@@ -24,7 +24,6 @@ const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __weekRevision: session })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === 'next-intl/server') {
       return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
     }

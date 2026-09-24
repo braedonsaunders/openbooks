@@ -32,9 +32,6 @@ const mockAuthz = `
 const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
     }
@@ -66,7 +63,7 @@ const routeUrl = "./route.ts?close-run-date-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -110,7 +107,7 @@ async function runCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("POST refuses an impossible target close date without starting a run", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST refuses an impossible target close date without starting a run", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, {
@@ -123,7 +120,7 @@ test("POST refuses an impossible target close date without starting a run", { sk
   }
 });
 
-test("POST still starts a run with a real target close date", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST still starts a run with a real target close date", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, {

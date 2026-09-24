@@ -16,7 +16,6 @@ const state = { user: { orgId: "", id: "" }, allowed: new Set<string>() };
 Object.assign(globalThis, { __allocationTargetScopeState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/payments/")) {
       return {
         shortCircuit: true,
@@ -70,7 +69,7 @@ const allocation = (openLineId: string) => ({
   settlementRateReference: "same transaction currency",
 });
 
-test("a malformed allocation target id fails closed as 404, never a 500", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a malformed allocation target id fails closed as 404, never a 500", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;

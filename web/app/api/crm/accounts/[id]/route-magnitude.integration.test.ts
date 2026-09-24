@@ -15,7 +15,6 @@ Object.assign(globalThis, { __crmAccountMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -37,7 +36,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -89,7 +87,7 @@ async function revisionFor(partyId: string): Promise<string> {
       from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
 }
 
-test('PATCH refuses an employee count outside int32 without writing', { skip: !DB }, async () => {
+test('PATCH refuses an employee count outside int32 without writing', async () => {
   const { org, partyId } = await fixture()
   try {
     const result = await patch(partyId, { employeeCount: '99999999999999999999', expectedUpdatedAt: await revisionFor(partyId) })
@@ -100,7 +98,7 @@ test('PATCH refuses an employee count outside int32 without writing', { skip: !D
   }
 })
 
-test('PATCH refuses an annual revenue wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('PATCH refuses an annual revenue wider than numeric(19,4) without writing', async () => {
   const { org, partyId } = await fixture()
   try {
     const result = await patch(partyId, { annualRevenue: '99999999999999999999', expectedUpdatedAt: await revisionFor(partyId) })
@@ -111,7 +109,7 @@ test('PATCH refuses an annual revenue wider than numeric(19,4) without writing',
   }
 })
 
-test('PATCH still saves column-maximum figures with identical read-back', { skip: !DB }, async () => {
+test('PATCH still saves column-maximum figures with identical read-back', async () => {
   const { org, partyId } = await fixture()
   try {
     const result = await patch(partyId, { annualRevenue: '999999999999999.9999', employeeCount: 2147483647, expectedUpdatedAt: await revisionFor(partyId) })

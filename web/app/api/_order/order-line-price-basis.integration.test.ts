@@ -33,9 +33,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -64,7 +61,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const PATCH = makePATCH({ kind: "quote", readPerm: "ar.read", createPerm: "ar.create" });
 
 interface Fixture {
@@ -147,7 +143,6 @@ async function patchLines(
 
 test(
   "create saves catalog provenance derived by the server, not client identifiers",
-  { skip: !DB },
   async () => {
     const fixture = await seedPricedQuote("Q-BASIS-CREATE");
     try {
@@ -184,7 +179,6 @@ test(
 
 test(
   "a line priced before the revoke replays from its basis after it",
-  { skip: !DB },
   async () => {
     const fixture = await seedPricedQuote("Q-BASIS-1");
     try {
@@ -239,7 +233,6 @@ test(
 
 test(
   "a client cannot invent provenance for a price the catalog did not resolve",
-  { skip: !DB },
   async () => {
     const fixture = await seedPricedQuote("Q-BASIS-2");
     try {

@@ -10,7 +10,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __lrcScopeSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__lrcScopeSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
   return next(specifier, context)
@@ -19,7 +18,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PUT } = await import('./route.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 // H-LABORRATE: a subsidiary-restricted setup manager must not set or alter
 // another entity's labour pricing by naming its subsidiary, project, or
@@ -119,7 +117,7 @@ async function fixture() {
   return { org, ids, ownerUser: user(owner, 'Owner', 'owner@scratch.test'), scopedUser: user(scoped, 'A clerk', 'clerk@scratch.test'), put, scopeCount, close }
 }
 
-test('a restricted manager cannot scope or target another entity’s pricing', { skip: !DB }, async () => {
+test('a restricted manager cannot scope or target another entity’s pricing', async () => {
   const f = await fixture()
   try {
     session.user = f.scopedUser
@@ -140,7 +138,7 @@ test('a restricted manager cannot scope or target another entity’s pricing', {
   }
 })
 
-test('a version already pricing another entity is not-found to a restricted manager', { skip: !DB }, async () => {
+test('a version already pricing another entity is not-found to a restricted manager', async () => {
   const f = await fixture()
   try {
     session.user = f.ownerUser
@@ -163,7 +161,7 @@ test('a version already pricing another entity is not-found to a restricted mana
   }
 })
 
-test('in-scope subsidiary, project, and customer references still save', { skip: !DB }, async () => {
+test('in-scope subsidiary, project, and customer references still save', async () => {
   const f = await fixture()
   try {
     session.user = f.scopedUser

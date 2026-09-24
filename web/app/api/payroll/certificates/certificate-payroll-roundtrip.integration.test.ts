@@ -10,7 +10,6 @@ Object.assign(globalThis, { __gbRoundtripState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__gbRoundtripState;
@@ -27,7 +26,6 @@ const { setPackSlotAccount } = await import('@openbooks/engine/src/payroll/packs
 const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts"), { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts"), { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 /**
  * THE hole, closed end to end: a GB employee with no P6/P9 coding notice is
@@ -135,7 +133,7 @@ const fileCertificate = (
     }),
   })))
 
-test('a GB employee refused for a missing P6/P9 code calculates after it is filed', { skip: !DB }, async () => {
+test('a GB employee refused for a missing P6/P9 code calculates after it is filed', async () => {
   const { org, scheduleId, employeeId } = await gbPayrollOrg()
   try {
     // BEFORE: the pack's named refusal — the exact sentence the engine has

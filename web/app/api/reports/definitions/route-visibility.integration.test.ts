@@ -20,7 +20,6 @@ Object.assign(globalThis, { __reportVisibilityState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -47,7 +46,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, createScratchUser } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { GET: listDefinitions } = await import("./route.ts");
 const { GET: getDefinition } = await import("./[id]/route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 type Definition = { id: string; slug: string; report_type: string };
 
@@ -73,7 +71,7 @@ async function setProjects(orgId: string, on: boolean): Promise<void> {
      where id = ${orgId}`));
 }
 
-test("statements are visible to a permitted reader and hide by feature switch", { skip: !DB }, async () => {
+test("statements are visible to a permitted reader and hide by feature switch", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Report Reader", "viewer"));

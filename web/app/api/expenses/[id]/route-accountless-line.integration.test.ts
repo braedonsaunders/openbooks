@@ -17,7 +17,6 @@ Object.assign(globalThis, { __expenseAccountlessState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
@@ -34,7 +33,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
 const { PATCH } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 const patch = (id: string, body: unknown) => withOrgContext(state.orgId, () => PATCH(new Request('http://expense.test', { method: 'PATCH', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
 async function revision(id: string) {
@@ -46,7 +44,7 @@ async function storedState(orgId: string, id: string): Promise<{ total: string; 
   return { total: doc.total, n: lines.length, amounts: lines.map((l) => l.amount) }
 }
 
-test('expenses PATCH refuses an account-less contentful line with its line number and writes nothing', { skip: !DB }, async () => {
+test('expenses PATCH refuses an account-less contentful line with its line number and writes nothing', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId

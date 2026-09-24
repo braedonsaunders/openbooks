@@ -40,7 +40,6 @@ const hooks = registerHooks({
       shortCircuit: true,
       url: "data:text/javascript," + encodeURIComponent(source),
     });
-    if (specifier === "server-only") return virtual("export {}");
     const parent = String(context.parentURL ?? "");
     if (specifier === "../../../../lib/authz" && parent.includes("/api/admin/users/route.ts")) {
       return virtual(`
@@ -86,8 +85,6 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?admin-users-delegation";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
-
-const skip = !process.env.OPENBOOKS_DB_URL;
 
 const post = (body: object) =>
   POST(
@@ -209,7 +206,7 @@ async function isActive(f: Fixture, userId: string): Promise<boolean> {
   return inner.rows[0]!.is_active;
 }
 
-test("assign refuses a distinct unrestricted empty-permission role and the target lens stays scoped", { skip }, async () => {
+test("assign refuses a distinct unrestricted empty-permission role and the target lens stays scoped", async () => {
   const f = await seed();
   try {
     const before = await targetLens(f);
@@ -223,7 +220,7 @@ test("assign refuses a distinct unrestricted empty-permission role and the targe
   } finally { await teardown(f); }
 });
 
-test("assign inside the lens succeeds", { skip }, async () => {
+test("assign inside the lens succeeds", async () => {
   const f = await seed();
   try {
     const res = await post({ action: "assign", userId: f.targetId, roleId: f.extraId });
@@ -232,7 +229,7 @@ test("assign inside the lens succeeds", { skip }, async () => {
   } finally { await teardown(f); }
 });
 
-test("assign refuses an open subtree matching today's enumeration", { skip }, async () => {
+test("assign refuses an open subtree matching today's enumeration", async () => {
   // The leaf actor holds list[subB]: assigning subtree(subB) enumerates
   // identically today but grants subB's future children, so it refuses —
   // while the closed list assigns as a control.
@@ -253,7 +250,7 @@ test("assign refuses an open subtree matching today's enumeration", { skip }, as
   } finally { await teardown(f); }
 });
 
-test("invite with an all-scope role refuses before any user or issuance exists", { skip }, async () => {
+test("invite with an all-scope role refuses before any user or issuance exists", async () => {
   const f = await seed();
   try {
     const email = `wide-${randomUUID().slice(0, 8)}@scratch.test`;
@@ -269,7 +266,7 @@ test("invite with an all-scope role refuses before any user or issuance exists",
   } finally { await teardown(f); }
 });
 
-test("invite with an in-lens role succeeds", { skip }, async () => {
+test("invite with an in-lens role succeeds", async () => {
   const f = await seed();
   try {
     const email = `narrow-${randomUUID().slice(0, 8)}@scratch.test`;
@@ -301,7 +298,7 @@ async function seedPending(f: Fixture, tag: string, roleId: string): Promise<str
   return userId;
 }
 
-test("resend-invite refuses for a target whose stored roles exceed the lens", { skip }, async () => {
+test("resend-invite refuses for a target whose stored roles exceed the lens", async () => {
   const f = await seed();
   const pending = await seedPending(f, "widepending", f.wideId);
   try {
@@ -313,7 +310,7 @@ test("resend-invite refuses for a target whose stored roles exceed the lens", { 
   } finally { await teardown(f); }
 });
 
-test("resend-invite inside the lens succeeds", { skip }, async () => {
+test("resend-invite inside the lens succeeds", async () => {
   const f = await seed();
   const pending = await seedPending(f, "narrowpending", f.baseId);
   try {
@@ -322,7 +319,7 @@ test("resend-invite inside the lens succeeds", { skip }, async () => {
   } finally { await teardown(f); }
 });
 
-test("resend-invite refuses a grant override above the ceiling before issuance", { skip }, async () => {
+test("resend-invite refuses a grant override above the ceiling before issuance", async () => {
   const f = await seed();
   const pending = await seedPending(f, "overridepending", f.baseId);
   try {
@@ -338,7 +335,7 @@ test("resend-invite refuses a grant override above the ceiling before issuance",
   } finally { await teardown(f); }
 });
 
-test("resend-invite does not treat a deny override as a grant", { skip }, async () => {
+test("resend-invite does not treat a deny override as a grant", async () => {
   const f = await seed();
   const pending = await seedPending(f, "denypending", f.baseId);
   try {
@@ -366,7 +363,7 @@ async function seedInactive(f: Fixture, tag: string, roleId: string): Promise<st
   return userId;
 }
 
-test("reactivation refuses a stored all-scope union and stays inactive without audit", { skip }, async () => {
+test("reactivation refuses a stored all-scope union and stays inactive without audit", async () => {
   const f = await seed();
   const inactive = await seedInactive(f, "wideinactive", f.wideId);
   try {
@@ -379,7 +376,7 @@ test("reactivation refuses a stored all-scope union and stays inactive without a
   } finally { await teardown(f); }
 });
 
-test("reactivation inside the lens succeeds", { skip }, async () => {
+test("reactivation inside the lens succeeds", async () => {
   const f = await seed();
   const inactive = await seedInactive(f, "narrowinactive", f.baseId);
   try {
@@ -389,7 +386,7 @@ test("reactivation inside the lens succeeds", { skip }, async () => {
   } finally { await teardown(f); }
 });
 
-test("reactivation refuses a grant override above the ceiling but honours a deny", { skip }, async () => {
+test("reactivation refuses a grant override above the ceiling but honours a deny", async () => {
   const f = await seed();
   const granted = await seedInactive(f, "grantoverride", f.baseId);
   const denied = await seedInactive(f, "denyoverride", f.baseId);
@@ -413,7 +410,7 @@ test("reactivation refuses a grant override above the ceiling but honours a deny
   } finally { await teardown(f); }
 });
 
-test("reactivation unions every assignment: a wide role past fifty still refuses", { skip }, async () => {
+test("reactivation unions every assignment: a wide role past fifty still refuses", async () => {
   const f = await seed();
   const tag = randomUUID().slice(0, 8);
   const inactive = randomUUID();
@@ -446,7 +443,7 @@ test("reactivation unions every assignment: a wide role past fifty still refuses
   } finally { await teardown(f); }
 });
 
-test("re-affirming an active wider user and deactivating need no new authority", { skip }, async () => {
+test("re-affirming an active wider user and deactivating need no new authority", async () => {
   const f = await seed();
   const pending = await seedPending(f, "affirm", f.wideId);
   try {

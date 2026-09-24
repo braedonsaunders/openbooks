@@ -22,8 +22,6 @@ const state: { user: { id: string; orgId: string } } = {
 
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only")
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
     // Session/feature boundary only: every other module (validation, the
     // consolidation engine, storage) loads for real.
     if (specifier === "@/lib/authz")

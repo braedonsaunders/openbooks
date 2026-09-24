@@ -16,7 +16,6 @@ Object.assign(globalThis, { __pspReverseBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -37,7 +36,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { importSettlementBatch, postSettlementBatch } = await import("@openbooks/engine/src/payments/psp-settlement.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(): Promise<{ orgId: string; batchId: string; date: string }> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -98,7 +96,7 @@ async function batchStatus(orgId: string, batchId: string): Promise<string> {
   return rows[0]!.status;
 }
 
-test("psp reversal refuses a non-calendar reversal date without writing", { skip: !DB }, async () => {
+test("psp reversal refuses a non-calendar reversal date without writing", async () => {
   const { orgId, batchId } = await fixture();
   try {
     const response = await post(batchId, "2026-09-31");
@@ -111,7 +109,7 @@ test("psp reversal refuses a non-calendar reversal date without writing", { skip
   }
 });
 
-test("psp reversal still reverses on an ordinary date", { skip: !DB }, async () => {
+test("psp reversal still reverses on an ordinary date", async () => {
   const { orgId, batchId, date } = await fixture();
   try {
     const response = await post(batchId, date);

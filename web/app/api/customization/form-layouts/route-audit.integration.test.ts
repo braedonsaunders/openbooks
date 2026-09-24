@@ -33,9 +33,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       // The collection and member routes sit at different depths; resolve
       // against the web root rather than a fixed number of ../ segments.
@@ -87,7 +84,6 @@ async function auditFor(orgId: string, rowId: string): Promise<{ action: string;
 
 test(
   "form-layout writes audit full before/after snapshots",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const { orgId } = await seed();
     const created = await POST(

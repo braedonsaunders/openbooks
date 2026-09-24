@@ -19,7 +19,6 @@ Object.assign(globalThis, { __complianceRecordBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -40,7 +39,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -82,7 +80,7 @@ async function recordCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("record creation refuses a non-calendar effective date without writing", { skip: !DB }, async () => {
+test("record creation refuses a non-calendar effective date without writing", async () => {
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({
@@ -97,7 +95,7 @@ test("record creation refuses a non-calendar effective date without writing", { 
   }
 });
 
-test("record creation refuses a coverage figure wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("record creation refuses a coverage figure wider than numeric(19,4) without writing", async () => {
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({
@@ -112,7 +110,7 @@ test("record creation refuses a coverage figure wider than numeric(19,4) without
   }
 });
 
-test("record creation still files an ordinary certificate", { skip: !DB }, async () => {
+test("record creation still files an ordinary certificate", async () => {
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({

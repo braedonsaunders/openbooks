@@ -11,7 +11,6 @@ import { sql } from "drizzle-orm";
 // the real route and the real week helpers against a scratch org: only the
 // session/feature boundary is stubbed.
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 const stateKey = Symbol.for("openbooks.timesheets-reject-route-test");
 const state: {
@@ -31,9 +30,6 @@ const jsonUrl = new URL("../../../../lib/api/json.ts", import.meta.url).href;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@/lib/authz" || /(^|\/)lib\/authz$/.test(specifier)) {
       return { shortCircuit: true, url: "mock:reject-authz" };
     }
@@ -144,7 +140,7 @@ async function auditEvents(orgId: string): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
-test("an employee outside the caller scope is unreachable, with nothing read or written", { skip: !DB }, async () => {
+test("an employee outside the caller scope is unreachable, with nothing read or written", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const hiddenId = randomUUID();
@@ -169,7 +165,7 @@ test("an employee outside the caller scope is unreachable, with nothing read or 
   }
 });
 
-test("a rejection flips the header, its entries, and the audit together", { skip: !DB }, async () => {
+test("a rejection flips the header, its entries, and the audit together", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
@@ -203,7 +199,7 @@ test("a rejection flips the header, its entries, and the audit together", { skip
   }
 });
 
-test("an empty rejection rolls the header stamp back instead of recording a reason", { skip: !DB }, async () => {
+test("an empty rejection rolls the header stamp back instead of recording a reason", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();

@@ -32,11 +32,7 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Forward Next.js-style aliases to the real modules they point at.
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
@@ -58,7 +54,7 @@ const routeUrl = "./route.ts?lrc-array-binding-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -206,7 +202,6 @@ function put(fixture: Fixture, body: Record<string, unknown>): Promise<Response>
 
 test(
   "PUT saves multi-element item/customer/location/line collections against live Postgres",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await withBypass(seed);
     try {
@@ -275,7 +270,6 @@ test(
 
 test(
   "PUT prunes exactly the kept-line complement via not(id = any(multi-element))",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await withBypass(seed);
     try {
@@ -303,7 +297,6 @@ test(
 
 test(
   "PUT rejects non-string rate-card names at the JSON boundary",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await withBypass(seed);
     try {
@@ -319,7 +312,6 @@ test(
 
 test(
   "PUT rejects non-string rate-card codes at the JSON boundary",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await withBypass(seed);
     try {
@@ -335,7 +327,6 @@ test(
 
 test(
   "PUT rejects an impossible effective date with the date error",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await withBypass(seed);
     try {
@@ -360,7 +351,6 @@ test(
 
 test(
   "PUT refuses a foreign reference custom value instead of storing it",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await withBypass(seed);
     const foreign = await withBypass(() => createScratchOrg());
@@ -390,7 +380,6 @@ test(
 
 test(
   "PUT refuses unmatchable adjustment targets by name instead of billing zero",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     // transaction_type and other have no matcher case: an adjustment saved
     // with one would measure nothing and bill zero forever. The save names
@@ -430,7 +419,6 @@ test(
 
 test(
   "PUT accepts all-labor and all-materials selectors and refuses them with an id",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     // PRC10: labor/material are value-less selectors. The stored text echoes
     // the selector so the one-value CHECK stays satisfied; an id is refused.
@@ -498,7 +486,6 @@ test(
 
 test(
   "PUT caps fixed adjustment amounts at ledger precision and keeps full percent precision",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     // PRC11: percents store to 10dp and price exactly; a fixed 5.12345 the
     // ledger cannot store is refused at save, not at invoicing.
@@ -551,7 +538,6 @@ test(
 
 test(
   "PUT refuses distance and time calculations by name instead of billing zero",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     // PRC12: distance names no mileage source the bill line carries and time
     // is undefined, so neither has a pricing case. Saving one billed zero

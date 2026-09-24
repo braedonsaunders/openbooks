@@ -34,9 +34,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -66,7 +63,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 const { createFieldTicket, loadFieldTicket } = await import("../../../../lib/field-tickets.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function deleteRequest(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {
   const handler = routeModule["DELETE"];
@@ -91,7 +87,7 @@ async function orgRows(orgId: string, id: string) {
   return { documents, tickets };
 }
 
-test("DELETE discards an untouched ticket draft", { skip: !DB }, async () => {
+test("DELETE discards an untouched ticket draft", async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     try {
@@ -116,7 +112,7 @@ test("DELETE discards an untouched ticket draft", { skip: !DB }, async () => {
   });
 });
 
-test("DELETE refuses a draft that already carries content", { skip: !DB }, async () => {
+test("DELETE refuses a draft that already carries content", async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     try {
@@ -142,7 +138,7 @@ test("DELETE refuses a draft that already carries content", { skip: !DB }, async
   });
 });
 
-test("DELETE answers 404 for unknown or malformed ticket ids", { skip: !DB }, async () => {
+test("DELETE answers 404 for unknown or malformed ticket ids", async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     try {

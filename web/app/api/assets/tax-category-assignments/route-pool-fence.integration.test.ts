@@ -11,7 +11,6 @@ Object.assign(globalThis, { __assetTaxPoolFenceState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier.endsWith("/lib/feature-gates")) return virtual(`
       const state = globalThis.__assetTaxPoolFenceState;
       export async function guardFeaturePermission() {
@@ -29,7 +28,6 @@ const { installTaxDepreciationPack } = await import("@openbooks/engine/src/tax-r
 const { lockAssetTaxLifecycle } = await import("@openbooks/engine/src/organization/asset-tax-fence.ts");
 const routeUrl = "./route.ts?asset-tax-pool-fence-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function blockedBy(holderPid: number): Promise<boolean> {
   const deadline = Date.now() + 3_000;
@@ -44,7 +42,7 @@ async function blockedBy(holderPid: number): Promise<boolean> {
   return false;
 }
 
-test("category class PATCH waits on every affected subsidiary's tax-pool lifecycle fence", { skip: !DB }, async () => {
+test("category class PATCH waits on every affected subsidiary's tax-pool lifecycle fence", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;

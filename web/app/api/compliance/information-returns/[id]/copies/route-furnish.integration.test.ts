@@ -55,9 +55,6 @@ const mockPdf = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@/lib/authz") {
       return { url: "mock:ir-copies-authz", shortCircuit: true };
     }
@@ -97,7 +94,6 @@ const {
   recomputeFiling,
 } = await import("@openbooks/engine/src/compliance/information-returns.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 type Org = Awaited<ReturnType<typeof createScratchOrg>>;
 
@@ -254,7 +250,7 @@ const postFurnished = (filingId: string, body: unknown) =>
     ),
   );
 
-test("a read-only GET renders without marking copies furnished", { skip: !DB }, async () => {
+test("a read-only GET renders without marking copies furnished", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
@@ -270,7 +266,7 @@ test("a read-only GET renders without marking copies furnished", { skip: !DB }, 
   }
 });
 
-test("the furnish POST without the manage grant is refused before any write", { skip: !DB }, async () => {
+test("the furnish POST without the manage grant is refused before any write", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
@@ -284,7 +280,7 @@ test("the furnish POST without the manage grant is refused before any write", { 
   }
 });
 
-test("the furnish POST with the manage grant stamps and audits both copies", { skip: !DB }, async () => {
+test("the furnish POST with the manage grant stamps and audits both copies", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
@@ -306,7 +302,7 @@ test("the furnish POST with the manage grant stamps and audits both copies", { s
   }
 });
 
-test("the furnish POST for one recipient stamps only that copy", { skip: !DB }, async () => {
+test("the furnish POST for one recipient stamps only that copy", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();

@@ -18,7 +18,6 @@ const identity: { gate: Authz | null } = { gate: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.script-run-id")] = identity;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "./authz" && (context.parentURL ?? "").endsWith("/lib/feature-gates.ts")) {
       return {
         shortCircuit: true,

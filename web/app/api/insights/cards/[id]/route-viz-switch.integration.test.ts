@@ -15,7 +15,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __insightCardVizSwitchSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__insightCardVizSwitchSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
   return next(specifier, context)
@@ -45,7 +44,7 @@ function patchRequest(id: string, body: unknown): Request {
   })
 }
 
-test('a Bar-to-Table autosave persists the table viz with bar leftovers intact', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a Bar-to-Table autosave persists the table viz with bar leftovers intact', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Viz switch', 'reviewer')
@@ -90,7 +89,7 @@ test('a Bar-to-Table autosave persists the table viz with bar leftovers intact',
   }
 })
 
-test('a stale revision is refused, never a 200, leaving the row untouched', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('a stale revision is refused, never a 200, leaving the row untouched', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Stale revision', 'reviewer')

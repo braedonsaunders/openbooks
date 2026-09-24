@@ -19,7 +19,6 @@ Object.assign(globalThis, { __documentReadScopeUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__documentReadScopeUser.user}')
     }
@@ -35,7 +34,6 @@ const { GET, PATCH, DELETE } = await import('./route')
 const { POST: act } = await import('../actions/route')
 const { POST: correct } = await import('./correct/route')
 const { POST: voidDoc } = await import('./void/route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function sessionUser(id: string, orgId: string): SessionUser {
   return {
@@ -68,7 +66,7 @@ async function getJson(orgId: string, id: string) {
   return { status: response.status, json: await response.json() as Record<string, unknown> }
 }
 
-test('GET hides an unreadable bill as missing, symmetrically', { skip: !DB }, async () => {
+test('GET hides an unreadable bill as missing, symmetrically', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const bill = await makeDraftBill(org.orgId, org.subsidiaryId)
@@ -87,7 +85,7 @@ test('GET hides an unreadable bill as missing, symmetrically', { skip: !DB }, as
   }
 })
 
-test('a reader still opens the bill', { skip: !DB }, async () => {
+test('a reader still opens the bill', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const bill = await makeDraftBill(org.orgId, org.subsidiaryId)
@@ -101,7 +99,7 @@ test('a reader still opens the bill', { skip: !DB }, async () => {
   }
 })
 
-test('mutations hide unreadable bills as missing; readers keep the edit 403', { skip: !DB }, async () => {
+test('mutations hide unreadable bills as missing; readers keep the edit 403', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const bill = await makeDraftBill(org.orgId, org.subsidiaryId)

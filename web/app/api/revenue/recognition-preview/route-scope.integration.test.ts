@@ -20,7 +20,6 @@ const state = {
 Object.assign(globalThis, { __recognitionPreviewOracleState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       specifier.endsWith("/lib/authz") &&
       context.parentURL?.includes("/revenue/recognition-preview/")
@@ -96,9 +95,7 @@ const post = (body: unknown) =>
     }),
   );
 
-test("recognition-preview oracle: out-of-scope ids answer exactly like missing ids", {
-  skip: !process.env.OPENBOOKS_DB_URL,
-}, async () => {
+test("recognition-preview oracle: out-of-scope ids answer exactly like missing ids", async () => {
   const { org, adminId, subA, ids } = await previewFixture();
   try {
     state.user = { orgId: org.orgId, id: adminId };
