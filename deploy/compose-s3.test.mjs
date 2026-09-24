@@ -10,6 +10,7 @@
  * These are contract tests over compose.yaml because the property under test
  * (which secret each service receives) only fails at deploy time.
  */
+// source-pin-contract: object-storage credential and bucket policy (compose.yaml: no root-user creds, required password, bucket-scoped user)
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
