@@ -38,6 +38,9 @@ const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { listApplicationPayrollEmployees } = await import("./application/payroll-read.ts");
+const { ApplicationError } = await import("./application/errors.ts");
+type ApplicationContext = import("./application/context.ts").ApplicationContext;
 // The page LOADER. What this test checks is which schedules and which
 // final-pay candidates the page's queries return for a given subsidiary scope,
 // and that is decided in the loader — the spec only names where the resolved
@@ -49,7 +52,7 @@ const { loadPayRuns } = await import("../app/(app)/payroll/runs/view");
 type PickerProps = { schedules: RunSchedule[]; finalPayCandidates: FinalPayCandidate[] };
 
 for (const surface of ["employee", "schedule"] as const) {
-  test(`payroll creation ${surface} picker scopes server-rendered data`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  test(`payroll creation ${surface} picker scopes server-rendered data`, async () => {
     const fx = await withBypassContext(() => seedAdoption());
     try {
       const childId = randomUUID();
@@ -63,6 +66,10 @@ for (const surface of ["employee", "schedule"] as const) {
           select ${childScheduleId},org_id,'Hidden schedule',frequency,periods_per_year,anchor_period_end,pay_date_offset_days,${childId},true
           from pay_schedules where org_id=${fx.orgId} and id=${fx.scheduleId}`);
         await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${childScheduleId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+        await db.execute(sql`update employee_payroll_profiles
+          set sin_encrypted='SEALED-PAYROLL-SIN-TEST-SENTINEL', sin_last3='789',
+              federal_claim_amount='123456789012345.6789', additional_tax_per_period='9876.5432'
+          where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
         await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
       });
       const gate = { user: { orgId: fx.orgId, id: fx.actorId }, permissions: new Set(["payroll.read", "payroll.run"]) } as Authz;
@@ -70,6 +77,26 @@ for (const surface of ["employee", "schedule"] as const) {
         state.gate = { ...gate, allowedSubsidiaryIds: scope };
         const props = (await withOrgContext(fx.orgId, () => loadPayRuns({}))).newRun as PickerProps;
         assert.ok(props);
+        const appContext: ApplicationContext = {
+          authz: { ...gate, permissions: new Set(["payroll.manage"]), allowedSubsidiaryIds: scope },
+          source: "api",
+          requestId: randomUUID(),
+          apiKeyId: null,
+        };
+        const payrollEmployees = await withOrgContext(fx.orgId, () =>
+          listApplicationPayrollEmployees(appContext, {}));
+        assert.deepEqual(
+          payrollEmployees.employees.map((employee) => employee.employeePartyId),
+          employeeVisible ? [fx.employeeId] : [],
+        );
+        if (employeeVisible) {
+          const employee = payrollEmployees.employees[0]!;
+          assert.equal(employee.name, fx.employeeName);
+          assert.equal(employee.scheduleName, "Hidden schedule");
+          assert.equal("sinLast3" in employee, false);
+          assert.equal("federalClaimAmount" in employee, false);
+          assert.equal(JSON.stringify(employee).includes("SEALED-PAYROLL-SIN-TEST-SENTINEL"), false);
+        }
         if (surface === "schedule") assert.deepEqual(new Set(props.schedules.map((row) => row.id)), new Set(scheduleIds));
         else assert.deepEqual(props.finalPayCandidates, employeeVisible ? [{
           id: fx.employeeId, name: fx.employeeName, pay_schedule_id: childScheduleId, terminated_on: "2026-07-18",
@@ -83,3 +110,33 @@ for (const surface of ["employee", "schedule"] as const) {
     } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
   });
 }
+
+test("application payroll employee reads name the Features-page remedy when payroll is off", async () => {
+  const fx = await withBypassContext(() => seedAdoption());
+  try {
+    await withBypassContext(() => db.execute(sql`
+      update orgs set settings=jsonb_set(settings,'{features}',
+        coalesce(settings->'features','{}'::jsonb)||'{"payroll":false}'::jsonb,true)
+       where id=${fx.orgId}`));
+    const context: ApplicationContext = {
+      authz: {
+        user: { orgId: fx.orgId, id: fx.actorId } as ApplicationContext["authz"]["user"],
+        permissions: new Set(["payroll.manage"]),
+        allowedSubsidiaryIds: null,
+      },
+      source: "api",
+      requestId: randomUUID(),
+      apiKeyId: null,
+    };
+    await withOrgContext(fx.orgId, () => assert.rejects(
+      listApplicationPayrollEmployees(context, {}),
+      (error: unknown) => error instanceof ApplicationError
+        && error.code === "not_found"
+        && error.status === 404
+        && error.message === "payroll is off; enable it from GET /api/v1/settings/features",
+    ));
+  } finally {
+    state.gate = null;
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
