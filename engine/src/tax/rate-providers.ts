@@ -1012,6 +1012,12 @@ export async function quoteViaTaxJar(
   config: { apiKey: string; baseUrl?: string },
   options: TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult> {
+  if (req.currency !== "USD") {
+    throw new TaxRateProviderError(
+      `TaxJar quotes only support USD documents; ${req.currency ? `currency "${req.currency}"` : "an unspecified currency"} `
+      + "must be priced with a USD document or another provider that supports the document currency",
+    );
+  }
   // Origin and destination countries are required: an empty address used to
   // fall back to 'US' on both ends, quoting every foreign document under US
   // rules (or a false zero). The origin keeps its ship-from-first fallback —

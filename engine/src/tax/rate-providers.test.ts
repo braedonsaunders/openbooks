@@ -209,6 +209,27 @@ test("Avalara and TaxJar refuse an empty destination instead of defaulting it to
   }
 });
 
+test("TaxJar refuses non-USD and unspecified currencies before sending a quote", async () => {
+  let calls = 0;
+  const server = createServer((_req, res) => {
+    calls += 1;
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end("{}");
+  });
+  const origin = await listen(server);
+  try {
+    for (const currency of ["CAD", "EUR", undefined]) {
+      await assert.rejects(
+        quoteViaTaxJar({ ...quoteRequest, currency }, { apiKey: TAXJAR_API_KEY, baseUrl: origin }),
+        /TaxJar quotes only support USD documents/,
+      );
+    }
+    assert.equal(calls, 0, "unsupported currencies must be refused before any USD-denominated quote is sent");
+  } finally {
+    await close(server);
+  }
+});
+
 test("TaxJar carries a coded line's product tax code; uncoded lines stay aggregate", async () => {
   const local = { allowPrivateEndpoints: true } as const;
   const bodies: Array<Record<string, unknown>> = [];
