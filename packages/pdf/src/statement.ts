@@ -170,11 +170,91 @@ export async function renderStatementPdf(input: StatementPdfInput): Promise<Buff
   doc.on('data', (c: Uint8Array) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
 
   // --- Column geometry --------------------------------------------------------
+  // Value columns are measured, not split equally: each column gets the width
+  // of its widest content (header label + every formatted cell) at the body
+  // size, so a 12-column statement cannot overlap its neighbours the way an
+  // equal split does. When the measured need exceeds the page, the
+  // description column shrinks to its floor and the body size steps down to
+  // its floor; past that the render is refused by name instead of printing
+  // overlapping amounts that read as wrong numbers.
   const nCols = input.columns.length
-  const descW = Math.max(160, Math.min(page.contentWidth * 0.4, page.contentWidth - nCols * 62))
-  const valW = (page.contentWidth - descW) / Math.max(1, nCols)
-  const valX = (i: number) => page.contentLeft + descW + i * valW
   const cellPad = 5
+  const DESC_FLOOR = 100
+  const BODY_SIZE_FLOOR = 7
+
+  // Pre-pass: per-row currency flags (the E25 amount-column rule) and the
+  // formatted cell text the measurement below needs.
+  type FittedRow = { row: StatementPdfRow; showCurrency: boolean; cells: string[] }
+  const fittedRows: FittedRow[] = []
+  {
+    let firstAmountRowDone = false
+    for (const row of input.rows) {
+      if (row.kind === 'section') {
+        fittedRows.push({ row, showCurrency: false, cells: [] })
+        continue
+      }
+      const isTotalish = row.kind === 'subtotal' || row.kind === 'total'
+      const showCurrency = isTotalish || !firstAmountRowDone
+      const cells = input.columns.map((column, i) =>
+        formatValue(row.values?.[i], column.kind, decimals, locale, currency, showCurrency),
+      )
+      fittedRows.push({ row, showCurrency, cells })
+      if (
+        row.values?.some(
+          (v, i) =>
+            input.columns[i]?.kind !== 'variance_pct' &&
+            (typeof v === 'number' || typeof v === 'string'),
+        )
+      ) {
+        firstAmountRowDone = true
+      }
+    }
+  }
+
+  const baseDescW = Math.max(160, Math.min(page.contentWidth * 0.4, page.contentWidth - nCols * 62))
+  let bodySize = sz.body
+  let descW = baseDescW
+  let colW: number[] = []
+  doc.font(theme.fontBold)
+  for (let sizeTenths = Math.round(sz.body * 10); sizeTenths >= Math.round(BODY_SIZE_FLOOR * 10); sizeTenths -= 5) {
+    const size = sizeTenths / 10
+    doc.fontSize(size)
+    const needs = input.columns.map((column, i) => {
+      let need = doc.widthOfString(column.label) + cellPad
+      for (const fitted of fittedRows) {
+        const w = doc.widthOfString(fitted.cells[i] ?? '') + cellPad
+        if (w > need) need = w
+      }
+      return need
+    })
+    const needTotal = needs.reduce((a, b) => a + b, 0)
+    let d = baseDescW
+    if (d + needTotal > page.contentWidth) d = Math.max(DESC_FLOOR, page.contentWidth - needTotal)
+    if (d + needTotal <= page.contentWidth) {
+      bodySize = size
+      descW = d
+      // Slack is distributed in proportion to need, so every column keeps at
+      // least its measured width (never overlaps) while the common
+      // equal-content case reproduces the old equal split exactly.
+      const avail = page.contentWidth - d
+      colW = needTotal === 0 ? needs.map(() => avail / Math.max(1, nCols)) : needs.map((n) => (n / needTotal) * avail)
+      break
+    }
+  }
+  if (nCols > 0 && colW.length === 0) {
+    throw new Error(
+      `Too many columns (${nCols}) to print legibly on ${input.page.paperSize} ${input.page.orientation} — use fewer columns, landscape, or a larger paper size.`,
+    )
+  }
+  const colX: number[] = []
+  {
+    let x = page.contentLeft + descW
+    for (const w of colW) {
+      colX.push(x)
+      x += w
+    }
+  }
+  const valX = (i: number): number => colX[i] ?? page.contentLeft + descW
 
   // --- Header (3-line centred stack) -----------------------------------------
   let y = page.contentTop
@@ -207,9 +287,14 @@ export async function renderStatementPdf(input: StatementPdfInput): Promise<Buff
 
   // --- Column header ----------------------------------------------------------
   const drawColumnHeader = (): void => {
-    doc.font(theme.fontBold).fontSize(sz.body).fillColor(theme.text)
+    doc.font(theme.fontBold).fontSize(bodySize).fillColor(theme.text)
     for (let i = 0; i < nCols; i++) {
-      doc.text(input.columns[i]!.label, valX(i), y, { width: valW - cellPad, align: 'right' })
+      doc.text(input.columns[i]!.label, valX(i), y, {
+        width: (colW[i] ?? 0) - cellPad,
+        align: 'right',
+        lineBreak: false,
+        ellipsis: true,
+      })
     }
     y = doc.y + 2
     doc.moveTo(page.contentLeft, y).lineTo(page.contentLeft + page.contentWidth, y).lineWidth(0.8).strokeColor(theme.rule).stroke()
@@ -219,7 +304,6 @@ export async function renderStatementPdf(input: StatementPdfInput): Promise<Buff
 
   const valuesRightEdge = page.contentLeft + page.contentWidth
   const valuesLeftEdge = page.contentLeft + descW + cellPad
-  let firstAmountRowDone = false
 
   const ensureSpace = (rowH: number) => {
     if (y + rowH > page.contentBottom) {
@@ -230,8 +314,11 @@ export async function renderStatementPdf(input: StatementPdfInput): Promise<Buff
   }
 
   // --- Body rows --------------------------------------------------------------
-  for (const row of input.rows) {
-    doc.fontSize(sz.body)
+  // Cells reuse the pre-pass formatting (and its currency flags), so the
+  // measurement above and the printed bytes can never disagree.
+  for (const fitted of fittedRows) {
+    const row = fitted.row
+    doc.fontSize(bodySize)
     const isTotalish = row.kind === 'subtotal' || row.kind === 'total'
     const bold = row.kind === 'section' || isTotalish
     doc.font(bold ? theme.fontBold : theme.font)
@@ -255,16 +342,16 @@ export async function renderStatementPdf(input: StatementPdfInput): Promise<Buff
     doc.font(bold ? theme.fontBold : theme.font).fillColor(theme.text)
     doc.text(row.label, page.contentLeft + indent, y, { width: descW - indent, lineBreak: false, ellipsis: true })
 
-    const showCurrency = isTotalish || !firstAmountRowDone
     for (let i = 0; i < nCols; i++) {
-      const kind = input.columns[i]!.kind
-      const cell = formatValue(row.values?.[i], kind, decimals, locale, currency, showCurrency)
+      const cell = fitted.cells[i] ?? ''
       const rawValue = row.values?.[i]
       const neg = typeof rawValue === 'number' ? rawValue < 0 : typeof rawValue === 'string' && rawValue.trim().startsWith('-')
       doc.fillColor(input.style === 'formal' ? theme.text : neg ? '#b91c1c' : theme.text)
-      doc.text(cell, valX(i), y, { width: valW - cellPad, align: 'right', lineBreak: false })
+      // Amounts never truncate or wrap: the geometry pre-pass sized every
+      // column to its widest content, so an instrumented overflow here would
+      // mean the measurement lied — surface it in tests, not in print.
+      doc.text(cell, valX(i), y, { width: (colW[i] ?? 0) - cellPad, align: 'right', lineBreak: false })
     }
-    if (row.values && row.values.some((v) => typeof v === 'number' || typeof v === 'string')) firstAmountRowDone = true
     y = doc.y + rowPadY
 
     // Double rule below a grand total.
