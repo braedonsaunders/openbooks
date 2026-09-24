@@ -46,7 +46,8 @@ const hooks = registerHooks({
   },
 });
 
-const { PUT } = await import("./route.ts?tax-rate-provider-route-test") as typeof import("./route.ts");
+const routeUrl = "./route.ts?tax-rate-provider-route-test";
+const { PUT } = await import(routeUrl) as typeof import("./route.ts");
 hooks.deregister();
 
 function reset(): void {
