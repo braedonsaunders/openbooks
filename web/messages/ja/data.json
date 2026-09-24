@@ -34,6 +34,8 @@
       "result": "結果"
     },
     "resource": "インポート先",
+    "parseFailed": "インポートファイルを読み込めませんでした。",
+    "previewFailed": "このインポートのプレビューを作成できませんでした。",
     "format": "ファイル形式",
     "file": "ファイル",
     "chooseFile": "ファイルを選択",

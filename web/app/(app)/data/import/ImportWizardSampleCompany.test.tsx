@@ -81,6 +81,7 @@ const script = {
   postBody: { error: 'sample-company-clone-failed', stage: 'clone' },
   resources: [] as { key: string; label: string; group: string }[],
   importRequests: [] as { mode?: string }[],
+  importFailureMode: null as string | null,
 }
 
 function stubFetch(): void {
@@ -105,6 +106,7 @@ function stubFetch(): void {
     if (url === '/api/data/import' && method === 'POST') {
       const body = JSON.parse(String(init?.body ?? '{}')) as { mode?: string }
       script.importRequests.push(body)
+      if (body.mode === script.importFailureMode) return new Response('<html>upstream unavailable</html>', { status: 502 })
       if (body.mode === 'parse') {
         return Response.json({ headers: ['Name'], rows: [{ Name: 'Acme' }], mapping: { Name: 'name' }, fields: [{ key: 'name', label: 'Name', kind: 'text' }] })
       }
@@ -124,6 +126,7 @@ async function mountWizard(t: TestContext): Promise<void> {
   script.postStatus = 500
   script.postBody = { error: 'sample-company-clone-failed', stage: 'clone' }
   script.importRequests = []
+  script.importFailureMode = null
   stubFetch()
   const rootHandle = createRoot(document.body)
   t.after(async () => {
@@ -170,6 +173,38 @@ async function clickCreate(): Promise<void> {
     await tick()
   })
   await tick()
+}
+
+function importAction(label: string): HTMLButtonElement {
+  const button = [...document.querySelectorAll('button')].find((candidate) =>
+    (candidate.textContent ?? '').includes(label),
+  ) as HTMLButtonElement | undefined
+  assert.ok(button, `the ${label} action must render`)
+  return button
+}
+
+async function chooseImportSource(): Promise<void> {
+  const resourceSelect = ([...document.querySelectorAll('select')] as HTMLSelectElement[]).find((candidate) =>
+    [...candidate.options].some((option) => option.value === 'customers'),
+  )
+  assert.ok(resourceSelect, 'an import resource is available')
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set?.call(resourceSelect, 'customers')
+    resourceSelect.dispatchEvent(new window.Event('change', { bubbles: true }))
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set?.call(textarea, 'Name\nAcme')
+    textarea.dispatchEvent(new window.Event('input', { bubbles: true }))
+    textarea.dispatchEvent(new window.Event('change', { bubbles: true }))
+  })
+}
+
+async function clickImportAction(label: string): Promise<void> {
+  const button = importAction(label)
+  await act(async () => {
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+  })
 }
 
 test('a failed create shows a persistent inline error and keeps the selection', async (t) => {
@@ -263,5 +298,32 @@ test('the wizard does not send a commit when retry-key session storage cannot pe
   assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse', 'preview'])
   assert.ok((globalThis.__sampleTestToasts ?? []).some(
     ({ kind, message }) => kind === 'error' && /browser could not save the import retry key, so no import was sent/.test(message),
+  ))
+})
+
+test('a non-JSON parse refusal is shown by name instead of a JSON syntax error', async (t) => {
+  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data' }]
+  await mountWizard(t)
+  script.importFailureMode = 'parse'
+  await chooseImportSource()
+  await clickImportAction('Continue')
+
+  assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse'])
+  assert.ok((globalThis.__sampleTestToasts ?? []).some(
+    ({ kind, message }) => kind === 'error' && /Could not read the import file\. \(status 502\)/.test(message),
+  ))
+})
+
+test('a non-JSON preview refusal is shown by name instead of a JSON syntax error', async (t) => {
+  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data' }]
+  await mountWizard(t)
+  script.importFailureMode = 'preview'
+  await chooseImportSource()
+  await clickImportAction('Continue')
+  await clickImportAction('Preview')
+
+  assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse', 'preview'])
+  assert.ok((globalThis.__sampleTestToasts ?? []).some(
+    ({ kind, message }) => kind === 'error' && /Could not preview this import\. \(status 502\)/.test(message),
   ))
 })

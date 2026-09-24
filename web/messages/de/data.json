@@ -34,6 +34,8 @@
       "result": "Ergebnis"
     },
     "resource": "Importieren in",
+    "parseFailed": "Die Importdatei konnte nicht gelesen werden.",
+    "previewFailed": "Für diesen Import konnte keine Vorschau erstellt werden.",
     "format": "Dateiformat",
     "file": "Datei",
     "chooseFile": "Datei auswählen",

@@ -34,6 +34,8 @@
       "result": "结果"
     },
     "resource": "导入至",
+    "parseFailed": "无法读取导入文件。",
+    "previewFailed": "无法预览此导入。",
     "format": "文件格式",
     "file": "文件",
     "chooseFile": "选择文件",
