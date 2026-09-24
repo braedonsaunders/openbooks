@@ -18,7 +18,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { PayrollError } from "../../error.ts";
-import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, divIntCents, max0, rate6, U } from "../../canada/decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
   certificateCount, certificateFlag, type PayrollCertificate,
@@ -35,6 +35,7 @@ import {
 
 const RATES_MODULE = "engine/src/payroll/us/states/ar.ts";
 const DOLLAR = 10_000n;
+const RATE6 = 1_000_000n;
 
 export interface ArYearRates {
   year: number;
@@ -126,7 +127,8 @@ export function arAnnualGrossTax(netTaxable: bigint, rates: ArYearRates): bigint
   const lookedUp = arMidrangeLookup(netTaxable, rates);
   const bracket = arBracket(lookedUp);
   if (bracket.rate === pctToRate("0")) return 0n;
-  return arRoundToDollar(max0(mulRateCents(lookedUp, bracket.rate) - U(bracket.adjustment)));
+  const exactTax = lookedUp * rate6(bracket.rate) - U(bracket.adjustment) * RATE6;
+  return roundDiv(max0(exactTax), RATE6 * DOLLAR) * DOLLAR;
 }
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
