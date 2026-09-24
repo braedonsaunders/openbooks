@@ -3,9 +3,11 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { validateSessionToken, SESSION_COOKIE } from "./auth";
+import { currentUser, validateSessionToken, SESSION_COOKIE } from "./auth";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
+
+const requestUser = cache(async () => currentUser());
 
 /**
  * The active locale for this request: the user's personal choice
@@ -17,22 +19,13 @@ import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
  */
 export const resolveLocale = cache(async (): Promise<Locale> => {
   // cookies() throws synchronously when there is no request store.
-  let jar: Awaited<ReturnType<typeof cookies>> | null = null;
-  try {
-    jar = await cookies();
-  } catch {
-    jar = null;
-  }
-  const uid = jar
-    ? (await validateSessionToken(jar.get(SESSION_COOKIE)?.value))?.userId
-    : null;
-
-  if (uid) {
+  const activeUser = await requestUser();
+  if (activeUser) {
     const r = await withBypassContext(async () => (await db.execute(sql`
         select u.locale as user_locale, o.settings ->> 'defaultLocale' as org_default
           from users u
           join orgs o on o.id = u.org_id
-         where u.id = ${uid} and u.is_active
+         where u.id = ${activeUser.id} and u.org_id = ${activeUser.orgId} and o.id = ${activeUser.orgId} and u.is_active
       `)));
     const row = r.rows[0];
     if (row) {
@@ -67,25 +60,13 @@ export const userLocalePreference = cache(async (): Promise<Locale | null> => {
  * stored zone is configuration corruption and must be fixed explicitly.
  */
 export const resolveTimeZone = cache(async (): Promise<string> => {
-  let jar: Awaited<ReturnType<typeof cookies>> | null = null;
-  try {
-    jar = await cookies();
-  } catch {
-    jar = null;
-  }
-  const uid = jar
-    ? (await validateSessionToken(jar.get(SESSION_COOKIE)?.value))?.userId
-    : null;
-
-  const r = uid
-    ? await withBypassContext(async () => (await db.execute(sql`
-        select o.settings ->> 'timeZone' as time_zone
-          from users u join orgs o on o.id = u.org_id
-         where u.id = ${uid} and u.is_active
-      `)))
-    : await withBypassContext(async () => (await db.execute(sql`
-        select settings ->> 'timeZone' as time_zone from orgs limit 1
-      `)));
+  const activeUser = await requestUser();
+  if (!activeUser) return "UTC";
+  const r = await withBypassContext(async () => (await db.execute(sql`
+      select settings ->> 'timeZone' as time_zone
+        from orgs
+       where id = ${activeUser.orgId}
+    `)));
   const stored = r.rows[0]?.time_zone;
   if (stored == null || String(stored).trim() === "") return "UTC";
   const canonical = canonicalTimeZone(String(stored));
