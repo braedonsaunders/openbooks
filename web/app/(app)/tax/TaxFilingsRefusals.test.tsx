@@ -107,7 +107,7 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-async function mount() {
+async function mount(canSave = true) {
   globalThis.__taxToasts = [];
   globalThis.__taxRouter = { push() {}, refresh() {} };
   const host = document.createElement("div");
@@ -117,7 +117,7 @@ async function mount() {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <BusinessDateProvider today="2026-07-15">
-          <TaxFilingsView forms={[FORM]} canSave canManageSetup={false} />
+          <TaxFilingsView forms={[FORM]} canSave={canSave} canManageSetup={false} />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
     );
@@ -148,6 +148,34 @@ test("a refused compute toasts the server refusal, not a generic failure", async
   try {
     await click(buttonsNamed("Compute")[0]!);
     assert.deepEqual(errorToasts(), [CHOOSE_ONE]);
+  } finally {
+    await unmount();
+    restoreFetch();
+  }
+});
+
+test("without the filing grant no save action renders after a successful compute", async () => {
+  const restoreFetch = scriptFetch((url) => {
+    if (url.startsWith("/api/tax/returns/")) {
+      return Response.json({
+        formCode: "CA_GST34",
+        formName: "GST/HST Return",
+        from: "2026-07-01",
+        to: "2026-07-31",
+        submissionChannel: "portal_manual",
+        watermark: null,
+        boxes: [],
+        subsidiaryIds: [],
+        registrationId: null,
+        translation: null,
+      });
+    }
+    return null;
+  });
+  const { unmount } = await mount(false);
+  try {
+    await click(buttonsNamed("Compute")[0]!);
+    assert.deepEqual(buttonsNamed("Save to history"), []);
   } finally {
     await unmount();
     restoreFetch();

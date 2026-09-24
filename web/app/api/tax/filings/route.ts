@@ -11,6 +11,15 @@ import { parseReturnScopeBody, returnScopeOpts } from '@/lib/tax-return-scope'
 
 export const runtime = 'nodejs'
 
+/**
+ * Saving a snapshot (POST here) and marking it filed (PATCH [id]) both
+ * certify a statutory position. The tax page derives its Save snapshot and
+ * mark-filed affordances from this same symbol — never a second literal —
+ * so a grant that can file always sees the action and one that cannot never
+ * does.
+ */
+export const TAX_FILING_WRITE_PERMISSION = 'compliance.file' as const
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function isIsoDate(value: string): boolean {
@@ -46,7 +55,7 @@ export async function GET(req: Request) {
 
 /** Recompute server-side and freeze a versioned return snapshot in history. */
 export async function POST(req: Request) {
-  const gate = await guardPermission('compliance.file')
+  const gate = await guardPermission(TAX_FILING_WRITE_PERMISSION)
   if (gate instanceof NextResponse) return gate
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
