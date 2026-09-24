@@ -78,6 +78,7 @@ export function ExitRecordForm({
         return
       }
       router.refresh()
+      setBusy(false)
     } catch {
       setError(t('performance.actionFailed'))
       setBusy(false)
