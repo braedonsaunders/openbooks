@@ -219,8 +219,10 @@ describe('period_preset compile contract', () => {
   const entity = REPORT_ENTITY_MAP['ledger_lines']!
 
   it('leaves an unresolved preset as a documented no-op clause', () => {
-    // Resolution happens web-side; the DB-free compiler must not invent a
-    // window of its own (it drops the clause rather than guessing).
+    // Resolution happens web-side; the DB-free leaf compiler must not invent
+    // a window of its own (it returns null rather than guessing). Null is a
+    // leaf-level signal only: the group compiler throws on it instead of
+    // dropping the date bounds and running unfiltered.
     const sql = compileRule(entity, { column: 'posting_date', op: 'period_preset' }, new SqlParams())
     assert.equal(sql, null)
   })
