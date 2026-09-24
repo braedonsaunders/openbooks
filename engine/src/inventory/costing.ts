@@ -45,11 +45,26 @@ export function extendCost(quantity: string, unitCost: string): string {
   return fromUnits(mulUnits(toUnits(quantity), toUnits(unitCost)));
 }
 
-/** Represent an exact carried value with at most two adjacent 4dp rates. */
+/**
+ * Represent an exact carried value with at most two adjacent 4dp rates.
+ *
+ * Both refusals below are InventoryError (422 at the routes), never a bare
+ * Error (500): quantity/value shapes arrive here from receipts and builds
+ * the operator priced, so a refusal names the quantity, the value and the
+ * correction instead of failing anonymously inside commit math. The
+ * unrepresentable leg is a defensive invariant — adjacent-rate splitting
+ * covers every positive quantity, so no input reaches it today — kept
+ * typed so a future rounding change still refuses by name.
+ */
 export function exactCostFragments(quantity: string, value: string, sourceUnitCost?: string): { quantity: string; unitCost: string }[] {
   const q = toUnits(quantity);
   const v = toUnits(value);
-  if (q <= 0n || v < 0n) throw new Error("exact inventory layers require positive quantity and non-negative value");
+  if (q <= 0n || v < 0n) {
+    throw new InventoryError(
+      `inventory layers require a positive quantity and a non-negative value, got quantity ${quantity} and value ${value} — ` +
+        `raise the movement with a positive quantity and a value at or above zero instead`,
+    );
+  }
   if (sourceUnitCost !== undefined && toUnits(extendCost(quantity, sourceUnitCost)) === v) {
     return [{ quantity: fromUnits(q), unitCost: sourceUnitCost }];
   }
@@ -63,7 +78,12 @@ export function exactCostFragments(quantity: string, value: string, sourceUnitCo
   // extension introduces no additional rounding. An unrepresentable single
   // rate implies 0 < highQuantity < q (fractions <= one unit need no split).
   const highQuantity = (v - lowValue) * SCALE;
-  if (highQuantity <= 0n || highQuantity >= q) throw new Error("inventory value cannot be represented exactly");
+  if (highQuantity <= 0n || highQuantity >= q) {
+    throw new InventoryError(
+      `inventory value ${value} on quantity ${quantity} cannot be represented exactly at ledger precision — ` +
+        `adjust the extended amount or the quantity so the value divides evenly instead of booking a rounded layer`,
+    );
+  }
   return [
     { quantity: fromUnits(q - highQuantity), unitCost: fromUnits(lowRate) },
     { quantity: fromUnits(highQuantity), unitCost: fromUnits(highRate) },
