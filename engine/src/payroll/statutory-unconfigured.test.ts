@@ -202,6 +202,24 @@ test("account slots apply by population: QC-only slots absent for ON, demanded w
   );
 });
 
+test("account slots demand when the population's region is undeclared", () => {
+  // A typo'd province ("XX" is no Canadian province) is not an inapplicable
+  // region — it is an unknown one. Dropping the QC-declared levy out of the
+  // demands would silently lose it; demanding the mapping is safe, and the
+  // run still refuses the undeclared region by name at calculate
+  // (assertPayrollRegionSupported). A declared-but-inapplicable region (AB
+  // for the Québec HSF) stays inert.
+  const slot = (key: string) => payrollPack("CA").statutorySlots.find((s) => s.key === key)!;
+  const xx = new Map([["CA", new Set<string | null>(["XX"])]]);
+  for (const key of ["qc_income_tax", "qpip", "hsf"]) {
+    assert.equal(packSlotAppliesToPopulation(slot(key), "CA", xx), true, `${key} demanded for XX`);
+  }
+  assert.equal(
+    packSlotAppliesToPopulation(slot("hsf"), "CA", new Map([["CA", new Set(["AB"])]])),
+    false, "HSF inert for declared-but-inapplicable AB",
+  );
+});
+
 test("legacy and zero slots keep today's behaviour when unconfigured", () => {
   const au = buildResolution({
     country: "AU", taxYear: 2026, pack: AU_PACK_RATES, rows: [], legacy: [],

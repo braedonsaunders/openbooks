@@ -2887,8 +2887,16 @@ export function packSlotAppliesToPopulation(
   if (!slot.regions || slot.regions.length === 0) return true;
   const regions = regionsByCountry?.get(country);
   if (!regions || regions.size === 0) return true;
+  const known = PAYROLL_COUNTRY_PACKS[country]?.regions?.known;
   for (const region of regions) {
     if (region == null || slot.regions.includes(region)) return true;
+    // Fail-safe: a region code the pack does not declare (a typo'd province)
+    // is not an inapplicable region — it is an unknown one, and demanding the
+    // account mapping is safe while skipping money is not. The run still
+    // refuses the undeclared region by name at calculate
+    // (assertPayrollRegionSupported), so this demand is the setup half of
+    // that refusal, not a second computation.
+    if (region != null && known && !known.includes(region)) return true;
   }
   return false;
 }
