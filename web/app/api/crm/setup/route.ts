@@ -1,11 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from "next/server";
+import { getTranslations } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { ensureCrmDefaults } from "@openbooks/engine/src/crm/crm.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
+import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
@@ -23,6 +25,11 @@ function slug(value: string): string {
 export async function GET() {
   const gate = await guardFeaturePermission("crm.setup.manage", "crm");
   if (gate instanceof NextResponse) return gate;
+  // Quotas carry no subsidiary lineage, so a subsidiary-restricted caller
+  // must not receive them at all — the same policy as the forecast reader,
+  // which hides quotas with a notice instead of an empty-looking list. The
+  // rest of setup stays readable; only the quota slice needs full scope.
+  const quotasRestricted = gate.allowedSubsidiaryIds !== null;
   const [
     accountStatuses,
     opportunityStatuses,
@@ -51,13 +58,16 @@ export async function GET() {
     db.execute(
       sql`select m.*,u.name as user_name from crm_sales_team_members m join users u on u.id=m.user_id where m.org_id=${gate.user.orgId} order by u.name`,
     ),
-    db.execute(
-      sql`select q.*,u.name as owner_name,t.name as team_name from crm_sales_quotas q left join users u on u.id=q.owner_user_id left join crm_sales_teams t on t.id=q.sales_team_id where q.org_id=${gate.user.orgId} order by q.period_start desc`,
-    ),
+    quotasRestricted
+      ? Promise.resolve({ rows: [] })
+      : db.execute(
+          sql`select q.*,u.name as owner_name,t.name as team_name from crm_sales_quotas q left join users u on u.id=q.owner_user_id left join crm_sales_teams t on t.id=q.sales_team_id where q.org_id=${gate.user.orgId} order by q.period_start desc`,
+        ),
     db.execute(
       sql`select id,name,email from users where org_id=${gate.user.orgId} and is_active order by name`,
     ),
   ])));
+  const t = await getTranslations("crm");
   return NextResponse.json({
     accountStatuses: accountStatuses.rows,
     opportunityStatuses: opportunityStatuses.rows,
@@ -67,6 +77,7 @@ export async function GET() {
     members: members.rows,
     quotas: quotas.rows,
     users: users.rows,
+    quotasNotice: quotasRestricted ? t("forecasts.quotasRestrictedNotice") : null,
   });
 }
 
@@ -268,6 +279,11 @@ export async function POST(req: NextRequest) {
         row = team;
       }
     } else if (action === "save-quota") {
+      // Quotas name an owner or team but carry no subsidiary lineage, so a
+      // subsidiary-restricted caller must never write them: the quota would
+      // price another entity's people. Org-wide write, named 403 remedy.
+      const scopeDenied = guardUnrestrictedScope(gate);
+      if (scopeDenied) return scopeDenied;
       // Quota currency is Multi-currency configuration. Turning that switch
       // off must refuse a new write; the stored code stays so turning the
       // feature back on restores the same currency. New quotas without a

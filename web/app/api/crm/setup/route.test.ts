@@ -15,6 +15,8 @@ interface RouteState {
   inTx: boolean;
   failAudit: boolean;
   auditSeenInTx: boolean;
+  /** Null = unrestricted; otherwise the caller's allowed subsidiary ids. */
+  allowed: string[] | null;
 }
 const state: RouteState = {
   executed: [],
@@ -24,6 +26,7 @@ const state: RouteState = {
   inTx: false,
   failAudit: false,
   auditSeenInTx: false,
+  allowed: null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -106,6 +109,7 @@ const mockSources = new Map<string, string>([
       export const env = {}
       export const schema = {}
       export function registerRequestOrgResolver() {}
+      export function ambientTenantOrgId() { return undefined }
     `,
   ],
   ["mock:crm", `export async function ensureCrmDefaults() {}`],
@@ -113,7 +117,11 @@ const mockSources = new Map<string, string>([
     "mock:feature-gates",
     `
       export async function guardFeaturePermission() {
-        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
+        const state = globalThis[Symbol.for('openbooks.crm-setup-route-test')]
+        return {
+          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
+          allowedSubsidiaryIds: state.allowed === null ? null : new Set(state.allowed),
+        }
       }
     `,
   ],
@@ -134,6 +142,26 @@ const hooks = registerHooks({
         shortCircuit: true,
         format: "module",
         url: "data:text/javascript,export {}",
+      };
+    }
+    // The route's scope guard loads through the real lib/authz; only the
+    // session identity behind it is scripted. next-intl is never called on
+    // the POST path but must still resolve at import time.
+    if (specifier === "next-intl/server") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export async function getTranslations(){return (key)=>key}",
+      };
+    }
+    if (
+      specifier === "./auth" &&
+      context.parentURL?.endsWith("/web/lib/authz.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export async function currentUser(){return null}",
       };
     }
     const mocked = mockUrls.get(specifier);
@@ -166,6 +194,7 @@ function reset(): void {
   state.inTx = false;
   state.failAudit = false;
   state.auditSeenInTx = false;
+  state.allowed = null;
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
@@ -324,6 +353,30 @@ test("save-quota refuses impossible calendar dates before any write", async () =
     assert.equal(state.committed.length, 0);
     assert.equal(state.outsideWrites.length, 0);
   }
+});
+
+test("save-quota refuses a subsidiary-restricted caller before any write", async () => {
+  reset();
+  state.allowed = ["00000000-0000-4000-8000-00000000b001"];
+
+  const response = await post({
+    action: "save-quota",
+    ownerUserId: USER_ID,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    amount: "1000.25",
+  });
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), {
+    error: "requires unrestricted subsidiary access",
+  });
+  assert.equal(state.committed.length, 0);
+  assert.equal(state.outsideWrites.length, 0);
+  assert.ok(
+    !state.executed.some((text) => text.includes("crm_sales_quotas")),
+    "the quota table was never touched",
+  );
 });
 
 test("save-team refuses a manager duplicated in the member list under another role", async () => {
