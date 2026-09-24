@@ -139,6 +139,9 @@ export interface LaborCostingSettings {
   hoursPerDay: number;
   annualHours: number;
   components: LaborCostComponent[];
+  /** Explicit opt-in: approve time with no covering wage row. Default false —
+   *  uncovered time refuses at approval so hours never price silently at $0. */
+  allowUnratedTime: boolean;
 }
 
 export const DEFAULT_LABOR_COSTING: LaborCostingSettings = {
@@ -146,6 +149,7 @@ export const DEFAULT_LABOR_COSTING: LaborCostingSettings = {
   hoursPerDay: 8,
   annualHours: 2080,
   components: [],
+  allowUnratedTime: false,
 };
 
 export async function laborCostingSettings(
@@ -165,6 +169,7 @@ export async function laborCostingSettings(
     hoursPerDay: parseLaborHoursSetting(c.hoursPerDay, 8, 24, "hoursPerDay"),
     annualHours: parseLaborHoursSetting(c.annualHours, 2080, 8784, "annualHours"),
     components: parseLaborCostComponents(c.components),
+    allowUnratedTime: c.allowUnratedTime === true,
   };
 }
 

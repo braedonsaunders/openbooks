@@ -56,11 +56,17 @@ const SEED = `
 
   installTrustedTestDatabaseBypass();
 
-  async function seedWeek({ withSubmittedEntry }) {
+  async function seedWeek({ withSubmittedEntry, withWage = true }) {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const employeeId = randomUUID();
     const headerId = randomUUID();
+    // Cost evidence runs under the projects feature; pin it on so the
+    // approval effects (and the wage refusal) execute in every test below.
+    await db.execute(sql\`
+      update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb
+       where id = \${org.orgId}
+    \`);
     await db.execute(sql\`
       insert into parties
         (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -70,6 +76,18 @@ const SEED = `
     \`);
     // The guard refusals below must be reached past the pin.
     await seedActiveEmployment(org.orgId, employeeId);
+    // A covering CAD wage row keeps the week costed; tests for the wage
+    // refusal itself pass withWage: false.
+    if (withWage) {
+      await db.execute(sql\`
+        insert into labor_cost_rates
+          (org_id, employee_party_id, currency, rate, basis, effective_from,
+           is_active, created_by, updated_by)
+        values
+          (\${org.orgId}, \${employeeId}, 'CAD', '25.0000', 'hour',
+           '2026-07-01', true, \${actorId}, \${actorId})
+      \`);
+    }
     await db.execute(sql\`
       insert into timesheet_weeks
         (id, org_id, employee_party_id, week_start, status,
@@ -223,6 +241,98 @@ test(
         await db.execute(sql\`
           delete from time_entries where org_id = \${fixture.org.orgId}
         \`);
+        await dropScratchOrg(fixture.org.orgId);
+      }
+    `);
+  },
+);
+
+test(
+  "approval refuses a week with no covering wage rate and names the remedy",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runIntegrationSource(`
+      ${SEED}
+      const fixture = await seedWeek({ withSubmittedEntry: true, withWage: false });
+      try {
+        await assert.rejects(
+          approveSubmittedTimeEntries({
+            orgId: fixture.org.orgId,
+            actorId: fixture.actorId,
+            employeePartyId: fixture.employeeId,
+            weekStart: "2026-07-12",
+          }),
+          /no covering wage rate.*Guard Worker.*2026-07-15.*labor costing setup/i,
+        );
+        const entry = await db.execute(sql\`
+          select status, cost_rate from time_entries where id = \${fixture.timeEntryId}
+        \`);
+        assert.equal(entry.rows[0].status, "submitted");
+        assert.equal(entry.rows[0].cost_rate, null);
+        const header = await db.execute(sql\`
+          select status from timesheet_weeks where id = \${fixture.headerId}
+        \`);
+        assert.equal(header.rows[0].status, "submitted");
+      } finally {
+        await dropScratchOrg(fixture.org.orgId);
+      }
+    `);
+  },
+);
+
+test(
+  "a covered week approves and stamps every rate",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runIntegrationSource(`
+      ${SEED}
+      const fixture = await seedWeek({ withSubmittedEntry: true, withWage: true });
+      try {
+        const ids = await approveSubmittedTimeEntries({
+          orgId: fixture.org.orgId,
+          actorId: fixture.actorId,
+          employeePartyId: fixture.employeeId,
+          weekStart: "2026-07-12",
+        });
+        assert.deepEqual(ids, [fixture.timeEntryId]);
+        const entry = await db.execute(sql\`
+          select status, cost_rate from time_entries where id = \${fixture.timeEntryId}
+        \`);
+        assert.equal(entry.rows[0].status, "approved");
+        assert.notEqual(entry.rows[0].cost_rate, null);
+      } finally {
+        await dropScratchOrg(fixture.org.orgId);
+      }
+    `);
+  },
+);
+
+test(
+  "an org that allows unrated time approves without a wage row",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runIntegrationSource(`
+      ${SEED}
+      const fixture = await seedWeek({ withSubmittedEntry: true, withWage: false });
+      try {
+        await db.execute(sql\`
+          update orgs
+             set settings = settings || '{"laborCosting": {"allowUnratedTime": true}}'::jsonb
+           where id = \${fixture.org.orgId}
+        \`);
+        const ids = await approveSubmittedTimeEntries({
+          orgId: fixture.org.orgId,
+          actorId: fixture.actorId,
+          employeePartyId: fixture.employeeId,
+          weekStart: "2026-07-12",
+        });
+        assert.deepEqual(ids, [fixture.timeEntryId]);
+        const entry = await db.execute(sql\`
+          select status, cost_rate from time_entries where id = \${fixture.timeEntryId}
+        \`);
+        assert.equal(entry.rows[0].status, "approved");
+        assert.equal(entry.rows[0].cost_rate, null);
+      } finally {
         await dropScratchOrg(fixture.org.orgId);
       }
     `);

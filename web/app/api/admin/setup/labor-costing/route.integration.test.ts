@@ -289,6 +289,7 @@ interface StoredPolicy {
   hoursPerDay: string;
   annualHours: string;
   components: Record<string, unknown>[];
+  allowUnratedTime: boolean;
 }
 
 async function storedPolicy(orgId: string): Promise<StoredPolicy | null> {
@@ -359,6 +360,7 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
         { key: "burden", name: "Statutory Burden", kind: "percent_of_wage", value: "13", scaleWithOvertime: true },
         { key: "c1", name: "Component", kind: "per_day", value: "75.5", scaleWithOvertime: false },
       ],
+      allowUnratedTime: false,
     };
     assert.deepEqual(await storedPolicy(f.orgId), after);
     assert.equal(await storedControl(f.orgId, "laborWip"), f.wipAccount);
@@ -381,6 +383,34 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
       laborClearing: [null, f.clearingAccount],
       payrollVariance: [null, f.varianceAccount],
     });
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("allowUnratedTime persists when explicitly set and rejects non-booleans", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+
+    const res = await PUT(putRequest({
+      settings: { mode: "off", hoursPerDay: 8, annualHours: 2080, components: [], allowUnratedTime: true },
+    }));
+    assert.equal(res.status, 200);
+    assert.equal((await storedPolicy(f.orgId))?.allowUnratedTime, true);
+
+    const bad = await PUT(putRequest({
+      settings: { mode: "off", hoursPerDay: 8, annualHours: 2080, components: [], allowUnratedTime: "yes" },
+    }));
+    assert.equal(bad.status, 422);
+    // The rejected save left the stored opt-in exactly as it was.
+    assert.equal((await storedPolicy(f.orgId))?.allowUnratedTime, true);
   } finally {
     routeState.authz = null;
     const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
@@ -490,6 +520,7 @@ test("re-saves keep the audit trail continuous — before values match what was 
       hoursPerDay: "8.0000",
       annualHours: "2080.0000",
       components: [{ key: "burden", name: "Burden", kind: "percent_of_wage", value: "30", scaleWithOvertime: true }],
+      allowUnratedTime: false,
     };
     const res1 = await PUT(putRequest({
       settings: { ...first, hoursPerDay: 8, components: first.components.map((c) => ({ ...c, value: 30 })) },
@@ -505,6 +536,7 @@ test("re-saves keep the audit trail continuous — before values match what was 
       hoursPerDay: "7.5000",
       annualHours: "1900.0000",
       components: [],
+      allowUnratedTime: false,
     };
     const res2 = await PUT(putRequest({
       settings: second,

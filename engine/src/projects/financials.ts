@@ -328,11 +328,11 @@ async function resolveProjectFinancialsInSnapshot(
              coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as cost_func,
              max(te.worked_on)::text as late,
              coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as total_bill,
-             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as total_cost,
+             coalesce(sum(round(te.hours * te.cost_rate, 4)) filter (where te.cost_rate is not null), 0) as total_cost,
              coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4))
                filter (where te.billing_status = 'unbilled'), 0) as unbilled_bill,
-             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4))
-               filter (where te.billing_status = 'unbilled'), 0) as unbilled_cost
+             coalesce(sum(round(te.hours * te.cost_rate, 4))
+               filter (where te.billing_status = 'unbilled' and te.cost_rate is not null), 0) as unbilled_cost
        from time_entries te
        left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
        join orgs o on o.id = te.org_id
@@ -409,7 +409,8 @@ async function resolveProjectFinancialsInSnapshot(
       : profile.laborCost.source === 'time_rate'
         ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
              max(te.worked_on)::text as late,
-             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+             coalesce(sum(round(te.hours * te.cost_rate, 4)) filter (where te.cost_rate is not null), 0) as labor,
+             coalesce(sum(te.hours) filter (where te.cost_rate is null), 0) as unrated_hours from time_entries te
              left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
              join orgs o on o.id = te.org_id
              where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
@@ -417,7 +418,8 @@ async function resolveProjectFinancialsInSnapshot(
         : profile.laborCost.source === 'estimated_time_rate'
           ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
                max(te.worked_on)::text as late,
-               coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+               coalesce(sum(round(te.hours * te.cost_rate, 4)) filter (where te.cost_rate is not null), 0) as labor,
+               coalesce(sum(te.hours) filter (where te.cost_rate is null), 0) as unrated_hours from time_entries te
                left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
                join orgs o on o.id = te.org_id
                where te.org_id = ${orgId} and te.project_id = ${projectId}
@@ -544,6 +546,13 @@ async function resolveProjectFinancialsInSnapshot(
     directSubcontractCommitment,
   )
   const laborCost = amount(mergeSum(legRows(laborRes), (r) => (r as unknown as { labor: string }).labor))
+  // Approved hours with no cost rate are priced at nothing and reported as
+  // unrated hours — never folded into labor cost as a silent $0. Hours are
+  // unitless, so they sum plainly: mergeSum would FX-translate them as money.
+  const laborUnratedHours = legRows(laborRes).reduce(
+    (total: string, r) => add(total, String((r as unknown as { unrated_hours?: string }).unrated_hours ?? '0')),
+    '0',
+  )
   // Billable-time bill and cost sides merge under their own functionals.
   const mergeBillTime = (pick: (r: BillTimeLeg) => unknown, useBillFunc: boolean): string => {
     let total = '0'
@@ -673,6 +682,7 @@ async function resolveProjectFinancialsInSnapshot(
     actual_cost_adjustment: adjustments.actual_cost,
     invoiced_to_date_adjustment: adjustments.invoiced_to_date,
     labor_cost: laborCost,
+    labor_unrated_hours: laborUnratedHours,
     calculated_overhead: calculatedOverhead,
     overhead_adjustment: overheadAdjustment,
     overhead,
