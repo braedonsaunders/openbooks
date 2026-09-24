@@ -5,6 +5,7 @@ import {
   compareCountBucket,
   compareMoneyBucket,
   DEFAULT_SINCE,
+  emptyPopulationRefusal,
   formatMoney,
   formatVerdict,
   parseSince,
@@ -187,4 +188,19 @@ test("query builders refuse unchecked since values", () => {
     () => sourceInvoiceQuery("'; drop table x; --"),
     /unchecked since value/,
   );
+});
+
+test("an empty verdict population refuses by name instead of agreeing", () => {
+  // A --since beyond all data yields zero buckets; verdictsDiffer([]) is
+  // false, so without this refusal the harness would print agreement over
+  // nothing and pass the migration parity gate.
+  const refusal = emptyPopulationRefusal([], false);
+  assert.match(refusal ?? "", /no data compared/);
+  assert.match(refusal ?? "", /--allow-empty/);
+});
+
+test("the empty-population refusal yields to compared data or explicit opt-in", () => {
+  const agreed = compareMoneyBucket("[USD] revenue", "100.0000", "100.0000");
+  assert.equal(emptyPopulationRefusal([agreed], false), null);
+  assert.equal(emptyPopulationRefusal([], true), null);
 });

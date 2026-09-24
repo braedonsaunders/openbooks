@@ -10,7 +10,7 @@
  * project detail by design) from the transaction-level detail after it. Mixing
  * those two eras is what makes a healthy tenant look catastrophic.
  *
- * Usage: npx tsx --conditions=react-server src/validation/gl-reconcile.ts [--org=UUID] [--since=YYYY-MM-DD]
+ * Usage: npx tsx --conditions=react-server src/validation/gl-reconcile.ts [--org=UUID] [--since=YYYY-MM-DD] [--allow-empty]
  *
  * --since may fall anywhere in a period: both sides filter on the actual
  * transaction date (source t.trandate against OpenBooks posting/document
@@ -26,7 +26,10 @@
  * Verdicts are exact: decimals to the unit via the house bigint helpers,
  * counts to the integer. No materiality policy authorises a tolerance, so
  * there is no tolerance mode. Any DIFFERS exits nonzero so automation can
- * gate on it; exact agreement exits 0.
+ * gate on it; exact agreement exits 0. A population that yields zero buckets
+ * (e.g. --since beyond all data) is neither: it refuses by name with a
+ * nonzero exit instead of printing agreement over nothing, unless
+ * --allow-empty explicitly accepts the empty population.
  */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -35,6 +38,7 @@ import {
   alignMoneyBuckets,
   compareCountBucket,
   compareMoneyBucket,
+  emptyPopulationRefusal,
   formatMoney,
   formatVerdict,
   parseSince,
@@ -50,6 +54,8 @@ import {
 const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]
   ?? process.env.RECONCILE_ORG ?? (process.env.PROD_ORG ?? (() => { throw new Error("PROD_ORG is required"); })());
 const SINCE = parseSince(process.argv.find((a) => a.startsWith("--since="))?.split("=")[1]);
+/** Explicit opt-in to an empty comparison population (see the verdict below). */
+const ALLOW_EMPTY = process.argv.includes("--allow-empty");
 
 /** P&L role, read from the account's type — a chart may say cogs or expense. */
 const COST = ["cogs", "expense", "expense_other"];
@@ -202,7 +208,11 @@ const line = (verdict: BucketVerdict) => {
      where jl.org_id = ${ORG} and jl.project_id is not null and je.posting_date >= ${SINCE}`)))).rows[0]!;
   console.log(`\nJOB-TAGGED (${job.projects} projects, detail exists only after cutover)`);
   console.log(`  revenue ${formatMoney(job.revenue)}   cost ${formatMoney(job.cost)}   of which applied overhead ${formatMoney(job.overhead)}`);
-  if (verdictsDiffer(verdicts)) {
+  const refusal = emptyPopulationRefusal(verdicts, ALLOW_EMPTY);
+  if (refusal) {
+    console.error(`\nREFUSES: ${refusal}`);
+    process.exitCode = 1;
+  } else if (verdictsDiffer(verdicts)) {
     console.log(`\nDIFFERS: ${verdicts.filter((verdict) => verdict.status !== "ok").length} of ${verdicts.length} buckets disagree with the source system`);
     process.exitCode = 1;
   } else {
