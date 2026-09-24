@@ -65,6 +65,8 @@ export function renderMarkdown(report: CorpusReport): string {
   out.push(
     `**${totals.pass} passing · ${totals.fail} failing · ${totals.gap} gaps · ${totals.skipped} not run**`,
   );
+  if (report.emptySelection) out.push(`\n> Refused: ${report.emptySelection}`);
+  if (report.notRunReason) out.push(`\n> ${report.notRunReason}`);
   out.push("");
   if (report.gitSha) out.push(`Commit \`${report.gitSha}\`${report.at ? ` · ${report.at}` : ""}`);
   else if (report.at) out.push(report.at);
@@ -159,6 +161,8 @@ export function renderJson(report: CorpusReport): string {
       casesSha256: caseDigest(cases),
       totals: report.totals,
       pass: report.pass,
+      ...(report.emptySelection ? { emptySelection: report.emptySelection } : {}),
+      ...(report.notRunReason ? { notRunReason: report.notRunReason } : {}),
       cases,
     },
     null,
@@ -178,5 +182,9 @@ export function renderConsole(report: CorpusReport): string {
   lines.push(
     `  ${totals.pass} passing, ${totals.fail} failing, ${totals.gap} declared gaps, ${totals.skipped} not run`,
   );
+  // Refusals are part of the summary, not footnotes: an empty selection or
+  // unrun cases must read as a named failure in the CI log, never as green.
+  if (report.emptySelection) lines.push(`  empty selection: ${report.emptySelection}`);
+  if (report.notRunReason) lines.push(`  ${report.notRunReason}`);
   return lines.join("\n");
 }

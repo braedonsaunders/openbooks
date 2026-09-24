@@ -2,9 +2,14 @@
  * Conformance corpus CLI.
  *
  *   npm -w engine run conformance -- list
- *   npm -w engine run conformance -- run [--filter <text>]
+ *   npm -w engine run conformance -- run [--filter <text>] [--allow-empty] [--allow-not-run]
  *   npm -w engine run conformance -- report [--out <dir>]
- *   npm -w engine run conformance -- controls list|run|report [--out <dir>] [--filter <text>]
+ *   npm -w engine run conformance -- controls list|run|report [--out <dir>] [--filter <text>] [--allow-empty] [--allow-not-run]
+ *
+ * A filter that admits zero cases is a named failure (non-zero exit) unless
+ * --allow-empty is passed, and ledger-tier cases that go unrun for want of
+ * OPENBOOKS_DB_URL fail the run unless --allow-not-run is passed — a typo or
+ * a missing database must never read as green.
  *
  * `run` prints one line per case and exits non-zero on any failure. `report`
  * additionally writes the publishable artifacts: the markdown matrix and the
@@ -33,7 +38,7 @@ import {
 import { CONFORMANCE_CORPUS, coveredStandards, validateCorpus } from "./matrix.ts";
 import { renderConsole, renderJson, renderMarkdown } from "./report.ts";
 import { createConformanceOrg } from "./roles.ts";
-import { runCorpus } from "./runner.ts";
+import { finalizeCorpus, runCorpus } from "./runner.ts";
 import { runId, sourceSha } from "../platform/provenance.ts";
 import type { ControlCase } from "./controls.ts";
 import type { CorpusReport } from "./types.ts";
@@ -43,7 +48,16 @@ function arg(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-async function execute(filter?: string): Promise<CorpusReport> {
+function flag(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+
+interface SelectionOptions {
+  allowEmpty: boolean;
+  allowNotRun: boolean;
+}
+
+async function execute(filter?: string, selection: SelectionOptions = { allowEmpty: false, allowNotRun: false }): Promise<CorpusReport> {
   const problems = validateCorpus();
   if (problems.length > 0) {
     console.error("The conformance register is malformed:");
@@ -64,7 +78,14 @@ async function execute(filter?: string): Promise<CorpusReport> {
     if (needsLedger) {
       console.warn("OPENBOOKS_DB_URL is not set — ledger-tier cases will report as not run.\n");
     }
-    return await runCorpus(CONFORMANCE_CORPUS, { at, gitSha, runId: producerRunId, filter });
+    return await runCorpus(CONFORMANCE_CORPUS, {
+      at,
+      gitSha,
+      runId: producerRunId,
+      filter,
+      allowEmpty: selection.allowEmpty,
+      allowNotRun: selection.allowNotRun,
+    });
   }
 
   // Each ledger case gets a FRESH tenant. Cases post real documents and some
@@ -73,7 +94,9 @@ async function execute(filter?: string): Promise<CorpusReport> {
   const results: CorpusReport["results"] = [];
   for (const kase of CONFORMANCE_CORPUS) {
     if (kase.tier !== "ledger" || kase.support === "not-implemented") {
-      const single = await runCorpus([kase], { at, gitSha, runId: producerRunId, filter });
+      // Emptiness is judged once on the aggregate below, not per admitted
+      // single: a non-matching single contributes nothing either way.
+      const single = await runCorpus([kase], { at, gitSha, runId: producerRunId, filter, allowEmpty: true });
       results.push(...single.results);
       continue;
     }
@@ -92,12 +115,20 @@ async function execute(filter?: string): Promise<CorpusReport> {
     }
   }
 
-  const totals = { pass: 0, fail: 0, gap: 0, skipped: 0 };
-  for (const result of results) totals[result.status]++;
-  return { at, gitSha, runId: producerRunId, results, totals, pass: totals.fail === 0 };
+  return finalizeCorpus({
+    at,
+    gitSha,
+    runId: producerRunId,
+    results,
+    selected: results.length,
+    totalCases: CONFORMANCE_CORPUS.length,
+    filter,
+    allowEmpty: selection.allowEmpty,
+    allowNotRun: selection.allowNotRun,
+  });
 }
 
-async function executeControls(filter?: string): Promise<CorpusReport<ControlCase>> {
+async function executeControls(filter?: string, selection: SelectionOptions = { allowEmpty: false, allowNotRun: false }): Promise<CorpusReport<ControlCase>> {
   const problems = validateControls();
   if (problems.length > 0) {
     console.error("The controls register is malformed:");
@@ -116,7 +147,14 @@ async function executeControls(filter?: string): Promise<CorpusReport<ControlCas
     if (needsLedger) {
       console.warn("OPENBOOKS_DB_URL is not set — ledger-tier cases will report as not run.\n");
     }
-    return await runCorpus(CONTROL_CORPUS, { at, gitSha, runId: producerRunId, filter });
+    return await runCorpus(CONTROL_CORPUS, {
+      at,
+      gitSha,
+      runId: producerRunId,
+      filter,
+      allowEmpty: selection.allowEmpty,
+      allowNotRun: selection.allowNotRun,
+    });
   }
 
   // Each ledger case gets a FRESH tenant, like the standards corpus: runs
@@ -124,7 +162,9 @@ async function executeControls(filter?: string): Promise<CorpusReport<ControlCas
   const results: CorpusReport<ControlCase>["results"] = [];
   for (const kase of CONTROL_CORPUS) {
     if (kase.tier !== "ledger" || kase.support === "not-implemented") {
-      const single = await runCorpus([kase], { at, gitSha, runId: producerRunId, filter });
+      // Emptiness is judged once on the aggregate below, not per admitted
+      // single: a non-matching single contributes nothing either way.
+      const single = await runCorpus([kase], { at, gitSha, runId: producerRunId, filter, allowEmpty: true });
       results.push(...single.results);
       continue;
     }
@@ -143,13 +183,22 @@ async function executeControls(filter?: string): Promise<CorpusReport<ControlCas
     }
   }
 
-  const totals = { pass: 0, fail: 0, gap: 0, skipped: 0 };
-  for (const result of results) totals[result.status]++;
-  return { at, gitSha, runId: producerRunId, results, totals, pass: totals.fail === 0 };
+  return finalizeCorpus({
+    at,
+    gitSha,
+    runId: producerRunId,
+    results,
+    selected: results.length,
+    totalCases: CONTROL_CORPUS.length,
+    filter,
+    allowEmpty: selection.allowEmpty,
+    allowNotRun: selection.allowNotRun,
+  });
 }
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "run";
+  const selection = { allowEmpty: flag("allow-empty"), allowNotRun: flag("allow-not-run") };
 
   if (command === "controls") {
     const sub = process.argv[3] ?? "run";
@@ -161,7 +210,7 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "run" || sub === "report") {
-      const report = await executeControls(arg("filter"));
+      const report = await executeControls(arg("filter"), selection);
       console.log(renderControlsConsole(report));
 
       if (sub === "report") {
@@ -191,7 +240,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "run" || command === "report") {
-    const report = await execute(arg("filter"));
+    const report = await execute(arg("filter"), selection);
     console.log(renderConsole(report));
 
     if (command === "report") {

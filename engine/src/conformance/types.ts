@@ -285,7 +285,13 @@ export interface CorpusReport<C extends RunnableCase = ConformanceCase> {
   runId: string | null;
   results: CaseResult<C>[];
   totals: Record<CaseStatus, number>;
-  /** True only when there are zero failures. Gaps do not fail the corpus; they
-   *  are published. A gap that regresses to a wrong answer becomes a failure. */
+  /** True only when there are zero failures, the selection is non-empty, and
+   *  nothing went unrun — unless the caller explicitly allowed the empty
+   *  selection or the unrun cases. Gaps do not fail the corpus; they are
+   *  published. A gap that regresses to a wrong answer becomes a failure. */
   pass: boolean;
+  /** Set when a filter admitted zero cases and the run was refused. */
+  emptySelection?: string;
+  /** Set when ledger-tier cases went unrun for want of a ledger context. */
+  notRunReason?: string;
 }

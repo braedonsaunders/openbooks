@@ -166,6 +166,65 @@ export interface RunOptions {
   ledger?: { roles: Record<Role, string>; ledger: LedgerContext };
   /** Restrict the run to case ids or standards (substring match on id). */
   filter?: string;
+  /**
+   * Selecting zero cases fails the run unless true: a typo'd filter must
+   * read as a named failure, never as "0 passing, 0 failing" green.
+   */
+  allowEmpty?: boolean;
+  /**
+   * "Not run" cases fail the run unless true: an invocation without a ledger
+   * context must not certify the corpus it never executed.
+   */
+  allowNotRun?: boolean;
+}
+
+/**
+ * The one pass rule for every corpus aggregate (the shared runner and the
+ * CLI's per-tenant ledger loop, which builds its own aggregate): zero
+ * failures AND a non-empty selection AND no unrun cases, unless the caller
+ * explicitly allowed the empty selection (`--allow-empty`) or the unrun
+ * cases (`--allow-not-run`). Refusals are named on the report so the console,
+ * markdown, and JSON renderers all surface them.
+ */
+export function finalizeCorpus<C extends RunnableCase>(args: {
+  at: string;
+  gitSha?: string | null;
+  runId?: string | null;
+  results: CaseResult<C>[];
+  /** Cases the filter admitted (results.length when every admission runs). */
+  selected: number;
+  /** Cases before filtering, for the empty-selection message. */
+  totalCases: number;
+  filter?: string;
+  allowEmpty?: boolean;
+  allowNotRun?: boolean;
+}): CorpusReport<C> {
+  const totals: Record<CaseStatus, number> = { pass: 0, fail: 0, gap: 0, skipped: 0 };
+  for (const result of args.results) totals[result.status]++;
+  const emptyRefused = args.selected === 0 && (args.filter ?? "") !== "" && !args.allowEmpty;
+  const notRunBlocked = !args.allowNotRun && totals.skipped > 0;
+  return {
+    at: args.at,
+    gitSha: args.gitSha ?? null,
+    runId: args.runId ?? null,
+    results: args.results,
+    totals,
+    pass: !emptyRefused && totals.fail === 0 && !notRunBlocked,
+    ...(emptyRefused
+      ? {
+          emptySelection:
+            `filter ${JSON.stringify(args.filter)} selected 0 of ${args.totalCases} cases` +
+            " — refusing an empty run (pass --allow-empty to permit it)",
+        }
+      : {}),
+    ...(totals.skipped > 0
+      ? {
+          notRunReason:
+            `${totals.skipped} ledger-tier case(s) not run: no ledger context was provided` +
+            " (conformance CLI: set OPENBOOKS_DB_URL to run them)",
+        }
+      : {}),
+  };
 }
 
 export async function runCase<C extends RunnableCase>(
@@ -258,15 +317,15 @@ export async function runCorpus<C extends RunnableCase>(
     results.push(await runCase(kase, options));
   }
 
-  const totals: Record<CaseStatus, number> = { pass: 0, fail: 0, gap: 0, skipped: 0 };
-  for (const result of results) totals[result.status]++;
-
-  return {
+  return finalizeCorpus({
     at: options.at,
-    gitSha: options.gitSha ?? null,
-    runId: options.runId ?? null,
+    gitSha: options.gitSha,
+    runId: options.runId,
     results,
-    totals,
-    pass: totals.fail === 0,
-  };
+    selected: selected.length,
+    totalCases: cases.length,
+    filter: options.filter,
+    allowEmpty: options.allowEmpty,
+    allowNotRun: options.allowNotRun,
+  });
 }
