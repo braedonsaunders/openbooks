@@ -50,23 +50,23 @@ test('schedule parent pins stay inside the project tree', enabled, async () => {
 
       // A task cannot parent to itself.
       await assert.rejects(
-        updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: taskA }, actor),
+        updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: taskA }, actor, null),
         (error: unknown) => error instanceof ScheduleError && /parent/i.test(error.message),
       )
       assert.equal(await parentOf(taskA), null)
 
       // A parent must live in the same project.
       await assert.rejects(
-        updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: foreign }, actor),
+        updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: foreign }, actor, null),
         (error: unknown) => error instanceof ScheduleError && /parent/i.test(error.message),
       )
       assert.equal(await parentOf(taskA), null)
 
       // A same-project parent applies, but closing the loop back must fail.
-      await updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: taskB }, actor)
+      await updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: taskB }, actor, null)
       assert.equal(await parentOf(taskA), taskB)
       await assert.rejects(
-        updateScheduleTask(org.orgId, projectA, taskB, { parentTaskId: taskA }, actor),
+        updateScheduleTask(org.orgId, projectA, taskB, { parentTaskId: taskA }, actor, null),
         (error: unknown) => error instanceof ScheduleError && /parent/i.test(error.message),
       )
       assert.equal(await parentOf(taskB), null)

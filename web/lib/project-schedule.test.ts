@@ -17,6 +17,9 @@ interface TestState {
   txQueries: Query[]
   calendarTargetExists: boolean
   resourceTargetExists: boolean
+  /** Row the in-transaction project lock sees (null = missing project). */
+  projectRow: { id: string; subsidiary_id: string | null } | null
+  allowedSubsidiaryIds: Set<string> | null
 }
 
 const stateKey = Symbol.for('openbooks.project-schedule-test')
@@ -30,6 +33,8 @@ const state: TestState = {
   txQueries: [],
   calendarTargetExists: false,
   resourceTargetExists: false,
+  projectRow: { id: 'project-a', subsidiary_id: 'sub-a' },
+  allowedSubsidiaryIds: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
@@ -55,6 +60,15 @@ const mockSources = new Map<string, string>([
       }
       function result(query) {
         const statement = text(query)
+        // The in-transaction project lock (subsidiary recheck): served like
+        // any other locked row so scope decisions run against it.
+        if (/from projects p/i.test(statement)) {
+          const row = state.projectRow
+          const inScope = state.allowedSubsidiaryIds === null
+            || (row?.subsidiary_id !== null && row?.subsidiary_id !== undefined
+              && state.allowedSubsidiaryIds.has(row.subsidiary_id))
+          return { rows: row && inScope ? [row] : [] }
+        }
         if (/select coalesce\\(max\\(schedule_order\\)/i.test(statement)) return { rows: [{ n: 7 }] }
         if (/insert into project_tasks/i.test(statement)) return { rows: [{ id: 'task-created' }] }
         if (/select 1 from project_tasks/i.test(statement)) return { rows: [{ id: 'task-1' }] }
@@ -151,6 +165,8 @@ function reset() {
   state.txQueries = []
   state.calendarTargetExists = false
   state.resourceTargetExists = false
+  state.projectRow = { id: 'project-a', subsidiary_id: 'sub-a' }
+  state.allowedSubsidiaryIds = null
 }
 
 test('creating a task rolls back its insert when the patch fails', async () => {
@@ -162,6 +178,7 @@ test('creating a task rolls back its insert when the patch fails', async () => {
       PROJECT_A,
       { name: 'Broken task', resourceAssignments: [{ resourceId: 'resource-1', units: 0 }] } as never,
       'user-1',
+      null,
     ),
     (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 422,
   )
@@ -188,6 +205,7 @@ test('single-task resource replacement is atomic when a later assignment is inva
         { resourceId: 'resource-2', units: 0 },
       ] } as never,
       'user-1',
+      null,
     ),
     (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 422,
   )
@@ -203,7 +221,7 @@ test('calendar updates and deletes require the authorized project', async () => 
   reset()
 
   await assert.rejects(
-    schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-from-b', name: 'Nope' }, 'user-1'),
+    schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-from-b', name: 'Nope' }, 'user-1', null),
     (error: unknown) => (error as { status?: number }).status === 404,
   )
   assert.equal(state.orgTransactionCalls, 1)
@@ -214,7 +232,7 @@ test('calendar updates and deletes require the authorized project', async () => 
 
   reset()
   await assert.rejects(
-    schedule.deleteScheduleCalendar(ORG_ID, PROJECT_A, 'calendar-from-b'),
+    schedule.deleteScheduleCalendar(ORG_ID, PROJECT_A, 'calendar-from-b', null),
     (error: unknown) => (error as { status?: number }).status === 404,
   )
   assert.equal(state.orgTransactionCalls, 1)
@@ -226,7 +244,7 @@ test('calendar updates and deletes require the authorized project', async () => 
   reset()
   state.calendarTargetExists = true
   assert.equal(
-    await schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-a', name: 'Updated' }, 'user-1'),
+    await schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-a', name: 'Updated' }, 'user-1', null),
     'calendar-target',
   )
   assert.equal(state.orgTransactionCalls, 1)
@@ -237,7 +255,7 @@ test('resource updates and deletes require the authorized project', async () => 
   reset()
 
   await assert.rejects(
-    schedule.upsertScheduleResource(ORG_ID, PROJECT_A, { id: 'resource-from-b', name: 'Nope' }, 'user-1'),
+    schedule.upsertScheduleResource(ORG_ID, PROJECT_A, { id: 'resource-from-b', name: 'Nope' }, 'user-1', null),
     (error: unknown) => (error as { status?: number }).status === 404,
   )
   assert.equal(state.orgTransactionCalls, 1)
@@ -248,7 +266,7 @@ test('resource updates and deletes require the authorized project', async () => 
 
   reset()
   await assert.rejects(
-    schedule.deleteScheduleResource(ORG_ID, PROJECT_A, 'resource-from-b'),
+    schedule.deleteScheduleResource(ORG_ID, PROJECT_A, 'resource-from-b', null),
     (error: unknown) => (error as { status?: number }).status === 404,
   )
   assert.equal(state.orgTransactionCalls, 1)
@@ -260,9 +278,88 @@ test('resource updates and deletes require the authorized project', async () => 
   reset()
   state.resourceTargetExists = true
   assert.equal(
-    await schedule.upsertScheduleResource(ORG_ID, PROJECT_A, { id: 'resource-a', name: 'Updated' }, 'user-1'),
+    await schedule.upsertScheduleResource(ORG_ID, PROJECT_A, { id: 'resource-a', name: 'Updated' }, 'user-1', null),
     'resource-target',
   )
   assert.equal(state.orgTransactionCalls, 1)
   assert.equal(state.commits, 1)
+})
+
+test('a write for an out-of-scope project refuses inside the transaction', async () => {
+  reset()
+
+  // The project sits in sub-a; the caller sees only sub-b. The lock runs
+  // inside the write transaction, so nothing is written and the denial
+  // answers exactly like the route's own 404.
+  state.allowedSubsidiaryIds = new Set(['sub-b'])
+  await assert.rejects(
+    schedule.createScheduleTask(
+      ORG_ID,
+      PROJECT_A,
+      { name: 'Foreign task' } as never,
+      'user-1',
+      new Set(['sub-b']),
+    ),
+    (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
+  )
+  assert.equal(state.commits, 0)
+  assert.equal(state.rollbacks, 1)
+  assert.ok(!state.txQueries.some((query) => /insert into project_tasks/i.test(query.strings.join(' '))))
+})
+
+test('a write for a missing project refuses inside the transaction', async () => {
+  reset()
+  state.projectRow = null
+
+  await assert.rejects(
+    schedule.deleteScheduleCalendar(ORG_ID, PROJECT_A, 'calendar-a', new Set(['sub-a'])),
+    (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
+  )
+  assert.equal(state.commits, 0)
+  assert.equal(state.rollbacks, 1)
+})
+
+test('an in-scope write still commits', async () => {
+  reset()
+  state.calendarTargetExists = true
+  assert.equal(
+    await schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-a', name: 'Updated' }, 'user-1', new Set(['sub-a'])),
+    'calendar-target',
+  )
+  assert.equal(state.commits, 1)
+})
+
+test('an out-of-scope project refuses before reading schedule children', async () => {
+  for (const attempt of [
+    () => schedule.deleteScheduleTask(ORG_ID, PROJECT_A, 'task-from-b', new Set(['sub-a'])),
+    () => schedule.batchUpdateScheduleTasks(
+      ORG_ID,
+      PROJECT_A,
+      [{ id: 'task-from-b', name: 'Changed' }],
+      'user-1',
+      new Set(['sub-a']),
+    ),
+    () => schedule.createScheduleDependency(
+      ORG_ID,
+      PROJECT_A,
+      { predecessorId: 'task-from-b', successorId: 'other-task' },
+      'user-1',
+      new Set(['sub-a']),
+    ),
+  ]) {
+    reset()
+    state.projectRow = { id: PROJECT_A, subsidiary_id: 'sub-b' }
+    state.allowedSubsidiaryIds = new Set(['sub-a'])
+
+    await assert.rejects(
+      attempt(),
+      (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
+    )
+    assert.equal(state.commits, 0)
+    assert.equal(state.rollbacks, 1)
+    assert.equal(state.rootExecuteCalls, 0, 'no child lookup may run outside the checked snapshot')
+    assert.ok(!state.txQueries.some((query) =>
+      /project_tasks|time_entries|schedule_dependencies/i.test(query.strings.join(' '))),
+    'the project scope refusal must happen before a task or schedule lookup')
+  }
 })

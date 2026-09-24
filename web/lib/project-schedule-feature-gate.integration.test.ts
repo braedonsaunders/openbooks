@@ -26,7 +26,7 @@ test('project schedule service refuses direct task creation when scheduling is d
       `)
 
       await assert.rejects(
-        createScheduleTask(org.orgId, projectId, { name: 'Should not persist' }, actor),
+        createScheduleTask(org.orgId, projectId, { name: 'Should not persist' }, actor, null),
         (error: unknown) => error instanceof ScheduleError && error.status === 404 && /project scheduling feature is disabled/i.test(error.message),
       )
       assert.equal(
