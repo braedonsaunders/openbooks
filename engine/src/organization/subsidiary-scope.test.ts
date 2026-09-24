@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   assertAnyPermission,
   assertUnrestrictedScope,
+  resolveDraftSubsidiary,
   ScopeNotFoundError,
   subsidiaryScopeAllows,
   UNRESTRICTED_SCOPE_REQUIRED,
@@ -60,4 +61,19 @@ test("assertAnyPermission passes when any family permission is held", () => {
     return true;
   });
   assert.throws(() => assertAnyPermission(() => false, []), ScopeNotFoundError);
+});
+
+test("resolveDraftSubsidiary never assigns null or root to a restricted actor", () => {
+  // Unrestricted callers keep their explicit choice, including null.
+  assert.deepEqual(resolveDraftSubsidiary(null), { ok: true, subsidiaryId: null });
+  assert.deepEqual(resolveDraftSubsidiary(null, A), { ok: true, subsidiaryId: A });
+  // A restricted caller naming an out-of-scope subsidiary is refused by name.
+  assert.deepEqual(resolveDraftSubsidiary(new Set([A]), B), { ok: false, error: "subsidiary_out_of_scope" });
+  assert.deepEqual(resolveDraftSubsidiary(new Set([A]), A), { ok: true, subsidiaryId: A });
+  // No choice: exactly one allowed subsidiary assigns itself, otherwise the
+  // caller must choose — never a silent null.
+  assert.deepEqual(resolveDraftSubsidiary(new Set([A])), { ok: true, subsidiaryId: A });
+  assert.deepEqual(resolveDraftSubsidiary(new Set([A, B])), { ok: false, error: "subsidiary_required" });
+  assert.deepEqual(resolveDraftSubsidiary(new Set()), { ok: false, error: "subsidiary_required" });
+  assert.deepEqual(resolveDraftSubsidiary(new Set([A]), null), { ok: true, subsidiaryId: A });
 });
