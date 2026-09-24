@@ -3931,6 +3931,8 @@
       "childOptions": "{count, plural, one {# opção ao ativar} other {# opções ao ativar}}",
       "blockedReason": "Não dá para desligar — {items}.",
       "affectsNote": "Desligar esconde {items} — os dados ficam e voltam se você reativar.",
+      "requiresNote": "Requer {names}.",
+      "recommendsNote": "Funciona melhor com {names}.",
       "confirmDisable": "Desligar {name}?\n\nIsto esconde {items}. Os dados ficam e voltam se você reativar.",
       "impacts": {
         "subsidiaryTxns": "{count, plural, one {# subsidiária tem} other {# subsidiárias têm}} lançamentos contabilizados",

@@ -3931,6 +3931,8 @@
       "childOptions": "{count, plural, one {# option once enabled} other {# options once enabled}}",
       "blockedReason": "Can't turn off — {items}.",
       "affectsNote": "Turning off hides {items} — the data is kept and returns if you re-enable.",
+      "requiresNote": "Requires {names}.",
+      "recommendsNote": "Works best with {names}.",
       "confirmDisable": "Turn off {name}?\n\nThis hides {items}. The data is kept and comes back if you re-enable.",
       "impacts": {
         "subsidiaryTxns": "{count, plural, one {# subsidiary has} other {# subsidiaries have}} posted transactions",

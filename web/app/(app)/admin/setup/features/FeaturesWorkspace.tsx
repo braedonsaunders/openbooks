@@ -194,7 +194,7 @@ export function FeaturesWorkspace({
         compact={compact}
         reason={
           dependencyLocked
-            ? `Requires ${missingRequirements.map((key) => t(`features.${key}.title`)).join(', ')}.`
+            ? t('setup.features.requiresNote', { names: missingRequirements.map((key) => t(`features.${key}.title`)).join(', ') })
             : hintCount > 0
               ? t('setup.features.childOptions', { count: hintCount })
               : blocked
@@ -202,7 +202,7 @@ export function FeaturesWorkspace({
                 : isOn && impacts.length > 0
                   ? t('setup.features.affectsNote', { items: impactText(impacts) })
                   : isOn && missingRecommendations.length > 0
-                    ? `Works best with ${missingRecommendations.map((key) => t(`features.${key}.title`)).join(', ')}.`
+                    ? t('setup.features.recommendsNote', { names: missingRecommendations.map((key) => t(`features.${key}.title`)).join(', ') })
                     : undefined
         }
         reasonTone={blocked || dependencyLocked ? 'block' : 'info'}
