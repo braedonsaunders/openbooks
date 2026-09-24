@@ -97,7 +97,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
   return (
     <Drawer open onClose={onClose} size="md" title={name} description={side === 'ar' ? 'Customer payment history' : 'Vendor payment history'} bodyClassName="overflow-hidden flex flex-col p-0">
       {error ? (
-        <p className="p-6 text-center text-sm text-slate-400">Could not load history.</p>
+        <p className="p-6 text-center text-sm text-slate-400" role="alert">{error}</p>
       ) : !data ? (
         <p className="p-6 text-center text-sm text-slate-400">Loading…</p>
       ) : (
