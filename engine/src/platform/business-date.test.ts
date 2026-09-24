@@ -78,7 +78,11 @@ test("businessTimeZone resolves a valid org zone and preserves the UTC fallback"
 
     await db.execute(sql`update orgs set settings = ${"{}"}::jsonb where id = ${org.orgId}`);
     assert.equal(await businessTimeZone(org.orgId), "UTC");
-    assert.equal(await businessTimeZone("00000000-0000-0000-0000-000000000000"), "UTC");
+    // A missing org row is a caller bug, never a UTC org.
+    await assert.rejects(
+      () => businessTimeZone("00000000-0000-0000-0000-000000000000"),
+      /not found/,
+    );
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -134,9 +138,12 @@ test("businessToday honours the org's zone and falls back to the UTC day", { ski
     await withSimClock("2026-06-15T23:30:00Z", async () => {
       assert.equal(await businessToday(org.orgId), "2026-06-15");
     });
-    // An org that does not exist has no zone either.
+    // A missing org row refuses instead of dating on the UTC day.
     await withSimClock("2026-06-15T23:30:00Z", async () => {
-      assert.equal(await businessToday("00000000-0000-0000-0000-000000000000"), "2026-06-15");
+      await assert.rejects(
+        () => businessToday("00000000-0000-0000-0000-000000000000"),
+        /not found/,
+      );
     });
   } finally {
     await dropScratchOrgReporting(org.orgId);

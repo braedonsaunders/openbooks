@@ -24,9 +24,18 @@ export async function orgReportingFramework(orgId: string): Promise<ReportingFra
       from orgs where id = ${orgId}
   `));
   const row = r.rows[0];
+  // A missing org row is a caller bug (wrong id, wrong tenant), never a
+  // US-GAAP org: refuse it by name instead of defaulting a framework for an
+  // organization that does not exist.
+  if (!row) {
+    throw new Error(
+      `organization ${orgId} not found — cannot resolve its financial reporting framework`,
+    );
+  }
   // 0033 backfills every persisted organization and setup writes the policy
-  // for new ones. Keep the historical defensive default for isolated callers
-  // that construct an unconfigured scratch organization; importantly, this
-  // branch never consults income-tax presentation.
-  return row?.rf === "ifrs" ? "ifrs" : "us_gaap";
+  // for new ones. Keep the historical default for a persisted row whose
+  // policy is still unset (isolated callers with unconfigured scratch
+  // organizations); importantly, this branch never consults income-tax
+  // presentation.
+  return row.rf === "ifrs" ? "ifrs" : "us_gaap";
 }
