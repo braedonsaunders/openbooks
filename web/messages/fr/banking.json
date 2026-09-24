@@ -847,7 +847,8 @@
         "passwordLabel": "mot de passe :",
         "done": "Terminé",
         "createdToast": "Connexion SFTP créée.",
-        "addedToast": "{name} ajouté."
+        "addedToast": "{name} ajouté.",
+        "routeFailed": "L'accès a été créé, mais le routage automatique a échoué. Créez la route depuis la carte SFTP."
       },
       "method": {
         "plaid": {

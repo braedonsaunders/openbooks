@@ -459,3 +459,119 @@ test('cancelling the schedule confirm leaves the route alone (F4T2-12)', async (
   assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'schedule Remove must confirm before deleting')
   assert.deepEqual(globalThis.__feedDeletes, [], 'a cancelled confirm must not delete the schedule')
 })
+
+// F4T2-13 (pause/resume PATCH, binding PATCH, add-route POST and the SFTP
+// auto-route follow-up POST refreshed without checking status — the SFTP
+// case showed the one-time secret as success while the routing never
+// happened). Every refusal surfaces; the secret display names a failed
+// routing instead of reading as success.
+test('a refused pause surfaces instead of silently re-rendering (F4T2-13)', async (t) => {
+  const { host, root } = await mountFeed((async () => new Response('', { status: 500 })) as typeof fetch)
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickAndSettle(actionButton(host, 'Pause'))
+  assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
+})
+
+async function mountSftpCustom(
+  fetchImpl: typeof fetch,
+  schedules: Array<{ id: string; format: string; expectedExternalAccountId: string | null }>,
+) {
+  globalThis.fetch = fetchImpl
+  return mountSftpSchedules(schedules)
+}
+
+test('a refused binding save stays open with the error (F4T2-13)', async (t) => {
+  const { host, root } = await mountSftpCustom(
+    (async () => new Response('', { status: 500 })) as typeof fetch,
+    [{ id: 'sched-bind', format: 'csv', expectedExternalAccountId: null }],
+  )
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickAndSettle(actionButton(host, 'no account bound'))
+  await clickAndSettle(actionButton(host, 'Save'))
+  assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
+  assert.ok(
+    [...host.querySelectorAll('button')].some((b) => (b.textContent ?? '').trim() === 'Save'),
+    'the refused editor must stay open instead of pretending the binding held',
+  )
+})
+
+test('a refused add-route surfaces instead of a silent list (F4T2-13)', async (t) => {
+  const { host, root } = await mountSftpCustom(
+    (async () => new Response('', { status: 500 })) as typeof fetch,
+    [{ id: 'sched-route', format: 'csv', expectedExternalAccountId: null }],
+  )
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickAndSettle(actionButton(host, 'Routing'))
+  await clickAndSettle(actionButton(host, 'Add route'))
+  assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
+})
+
+test('a failed auto-route still shows the secret but names the routing failure (F4T2-13)', async (t) => {
+  globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
+    const target = String(url)
+    if (target === '/api/banking/sftp') {
+      return Response.json({ id: 'srv-9', username: 'u9', password: 'p9' })
+    }
+    if (target === '/api/banking/sftp/schedules') {
+      return new Response('', { status: 500 })
+    }
+    throw new Error(`unexpected fetch ${target} ${init?.method ?? ''}`)
+  }) as typeof fetch
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <BankFeedsClient
+          connections={[]}
+          sftpServers={[]}
+          sftpSchedules={[]}
+          accounts={[{ id: 'acc-1', label: '1000 Operating Cash' }]}
+          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+        />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickAndSettle(actionButton(host, '+ Add connection'))
+  const sftpTile = [...host.querySelectorAll('button')].find((b) =>
+    [...b.querySelectorAll('div')].some((d) => (d.textContent ?? '').trim() === 'SFTP file drop'),
+  ) as HTMLButtonElement | undefined
+  assert.ok(sftpTile, 'the chooser must offer the SFTP file drop tile')
+  await clickAndSettle(sftpTile)
+  const name = host.querySelector('input[placeholder="e.g. Test SFTP"]') as HTMLInputElement | null
+    ?? host.querySelector('input[placeholder*="SFTP"]') as HTMLInputElement | null
+  const nameInput = name ?? ([...host.querySelectorAll('input')].find((i) => (i as HTMLInputElement).value === '') as HTMLInputElement | undefined)
+  assert.ok(nameInput, 'the connection name input must render')
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    setter.call(nameInput, 'Test SFTP')
+    nameInput.dispatchEvent(new window.Event('input', { bubbles: true }))
+  })
+  await tick()
+  await clickAndSettle(actionButton(host, 'Create SFTP login'))
+  assert.match(host.textContent ?? '', /u9/, 'the one-time username still shows — the login was created')
+  assert.match(host.textContent ?? '', /automatic routing failed/, 'the secret display must say the routing failed')
+})

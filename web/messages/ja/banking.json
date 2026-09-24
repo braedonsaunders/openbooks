@@ -847,7 +847,8 @@
         "passwordLabel": "パスワード:",
         "done": "完了",
         "createdToast": "SFTP接続を作成しました。",
-        "addedToast": "{name} を追加しました。"
+        "addedToast": "{name} を追加しました。",
+        "routeFailed": "ログインは作成されましたが、自動ルーティングに失敗しました。SFTPカードからルートを追加してください。"
       },
       "method": {
         "plaid": {
