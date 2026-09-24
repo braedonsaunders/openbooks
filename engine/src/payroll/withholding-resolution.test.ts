@@ -95,6 +95,18 @@ function setup(): void {
           citation: "city ordinance", implemented: true,
         }],
       }),
+      // TWIN shares WORK's open-code shape under a different region, so a test
+      // can prove same-jurisdiction identity is region-qualified, not a bare
+      // code match.
+      region("TWIN", {
+        subRegions: [],
+        openSubRegions: {
+          kind: "municipality", label: "Twin municipality {code}",
+          codePattern: "^\\d{6}$", reaches: ["resident", "nonresident"],
+          rateSource: { kind: "tenant", rateKey: "zz_local" },
+          citation: "twin register", implemented: true,
+        },
+      }),
       region("NOTAX", {
         taxesNonresidentWages: false,
         residentWithholding: "none",
@@ -339,6 +351,38 @@ test("an OPEN sub-region registry admits a code matching the declared pattern", 
   const sub = resolved.levies.find((levy) => levy.level === "sub_region");
   assert.equal(sub?.subRegion, "123456");
   assert.equal(sub?.label, "Open municipality 123456");
+});
+
+test("the same jurisdiction on both sides is withheld ONCE under the both-rule", () => {
+  // The shape behind Ohio same-city (Ohio Rev. Code Chapter 718: the relief
+  // between a residence municipality and a work municipality is a credit on
+  // the municipal return, not a withholding offset) and a Yonkers resident
+  // working in Yonkers (NYS-50-T-Y): one levy reaching the employee twice is
+  // withheld once, on the resident basis — not priced twice.
+  const resolved = resolve({
+    workRegion: "WORK", residenceRegion: "WORK",
+    workSubRegions: ["CITY"], residenceSubRegions: ["CITY"],
+  });
+  const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
+  assert.deepEqual(
+    subs.map((levy) => [levy.subRegion, levy.reach, levy.basis]),
+    [["CITY", "resident", "resident"]],
+  );
+  assert.match(resolved.trace.join("\n"), /withheld once/);
+});
+
+test("the same CODE in two regions is two levies, not one counted twice", () => {
+  // Identity is region-qualified: WORK/123456 and TWIN/123456 are unrelated
+  // levies that happen to share a code shape, and both are withheld.
+  const resolved = resolve({
+    workRegion: "WORK", residenceRegion: "TWIN",
+    workSubRegions: ["123456"], residenceSubRegions: ["123456"],
+  });
+  const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
+  assert.deepEqual(
+    subs.map((levy) => [levy.region, levy.subRegion]),
+    [["TWIN", "123456"], ["WORK", "123456"]],
+  );
 });
 
 test("a levy declared settlesIndependently leaves the conflict comparison entirely", () => {

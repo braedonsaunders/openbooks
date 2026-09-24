@@ -419,6 +419,41 @@ test("Yonkers reaches BOTH — two different taxes on two populations", () => {
   );
 });
 
+test("a Yonkers resident working in Yonkers is withheld ONCE, not priced twice", () => {
+  // NYS-50-T-Y (1/26): Yonkers levies a resident surcharge and a nonresident
+  // earnings tax — two taxes on two populations. A resident working there owes
+  // the resident one, once; the work-side reach of the same code is not a
+  // second levy.
+  const resolved = resolveWithholding({
+    country: "US", workRegion: "NY", residenceRegion: "NY",
+    workSubRegions: ["YONKERS"], residenceSubRegions: ["YONKERS"],
+  });
+  assert.deepEqual(
+    resolved.levies.filter((levy) => levy.level === "sub_region")
+      .map((levy) => [levy.subRegion, levy.reach, levy.basis]),
+    [["YONKERS", "resident", "resident"]],
+  );
+  assert.match(resolved.trace.join("\n"), /withheld once/);
+});
+
+test("an Ohio same-city employee is withheld the municipal tax ONCE", () => {
+  // Ohio Rev. Code Chapter 718, per the pack's OH declaration: the relief
+  // between a residence municipality and a work municipality is a credit on
+  // the municipal return, not a withholding offset — so living and working in
+  // the same city is one levy, withheld once.
+  const resolved = resolveWithholding({
+    country: "US", workRegion: "OH", residenceRegion: "OH",
+    workSubRegions: ["COLUMBUS"], residenceSubRegions: ["COLUMBUS"],
+    subRegionRates: { "COLUMBUS:nonresident": "0.025", "COLUMBUS:resident": "0.025" },
+  });
+  assert.deepEqual(
+    resolved.levies.filter((levy) => levy.level === "sub_region")
+      .map((levy) => [levy.subRegion, levy.reach, levy.basis]),
+    [["COLUMBUS", "resident", "resident"]],
+  );
+  assert.match(resolved.trace.join("\n"), /withheld once/);
+});
+
 test("Pennsylvania admits any six-digit PSD code, and refuses anything else", () => {
   assert.ok(subRegionLevy("US", "PA", "390101"));
   assert.equal(subRegionLevy("US", "PA", "39010")?.code, undefined);
