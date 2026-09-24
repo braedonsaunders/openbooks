@@ -173,6 +173,13 @@ for (const file of routes) {
     if (directRead || delegatedRead) tableReaders.push({ file, target: table });
   }
 }
+const cashflowCompositeFile = "web/lib/analytics/cashflow-data.ts";
+const cashflowComposite = readFileSync(join(root, cashflowCompositeFile), "utf8");
+if (/\bloadCategories\s*\(/.test(cashflowComposite)) {
+  assert.match(cashflowComposite, /catConfigs\.filter\([\s\S]*?isCategoryVisibleInScope\s*\(/,
+    `${cashflowCompositeFile} reads org-wide cashflow category configuration without its subsidiary visibility projection`);
+  tableReaders.push({ file: cashflowCompositeFile, target: "orgs.settings.analytics.cashflowCategories" });
+}
 
 console.log(`org-wide config scope: ${writes.length} route(s), ${writes.reduce((n, row) => n + row.tables.length, 0)} write target(s)`);
 for (const row of writes) console.log(`  ${row.file}: ${row.tables.join(", ")}`);
