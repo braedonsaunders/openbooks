@@ -32,6 +32,7 @@
     "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
     "review": "レビューを開始",
     "resolve": "解決",
+    "bulkPartial": "{applied}件を適用 — {failed}件が拒否されました",
     "clear": "クリア"
   },
   "empty": {

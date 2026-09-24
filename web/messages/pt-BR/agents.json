@@ -32,6 +32,7 @@
     "selected": "{count, plural, one {# selecionado} other {# selecionados}}",
     "review": "Iniciar revisão",
     "resolve": "Resolver",
+    "bulkPartial": "{applied} aplicados — {failed} recusados",
     "clear": "Limpar"
   },
   "empty": {

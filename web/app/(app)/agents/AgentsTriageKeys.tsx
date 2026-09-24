@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, RotateCcw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 export interface TriageKeyRow {
   id: string
@@ -60,12 +61,20 @@ export function AgentsTriageKeys({
     return stored
   })
   const [newCount, setNewCount] = useState<number | null>(null)
+  // Refused rows the next bulk must keep selected. A refresh rebuilds `rows`
+  // (firing the render-adjust reset below), so the keep-list rides in state
+  // past the refresh instead of being wiped with the stale selection.
+  const [keptSelection, setKeptSelection] = useState<ReadonlySet<string> | null>(null)
+  const [bulkOutcome, setBulkOutcome] = useState<{ applied: number; failures: { id: string; error: string }[] } | null>(null)
   // New rows reset triage position (render-adjust pattern, not an effect).
+  // A bulk that just refused keeps its failed rows selected across the
+  // refresh it triggered; every other rows change clears the selection.
   const [prevRows, setPrevRows] = useState(rows)
   if (prevRows !== rows) {
     setPrevRows(rows)
     setCursor(0)
-    setSelected(new Set())
+    setSelected(keptSelection ?? new Set())
+    if (keptSelection !== null) setKeptSelection(null)
   }
 
   // The "new since" count comes from the same feed with a since filter.
@@ -110,13 +119,21 @@ export function AgentsTriageKeys({
     if (row) router.push(row.href as never)
   }, [router, rows])
 
+  // A refused mutation throws the server's named reason (translated where
+  // the continuous-close catalog knows the code), so every caller — single
+  // key or bulk — reports what the server said, never a generic failure.
   const mutate = useCallback(async (id: string, action: 'review' | 'resolve') => {
     const response = await fetch(`/api/continuous-close/items/${id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action }),
     })
-    if (!response.ok) throw new Error()
+    if (!response.ok) {
+      const named = await readApiErrorMessage(response, tc('feedback.actionFailed'))
+      throw new Error(
+        tc.has(`feedback.errors.${named}` as never) ? tc(`feedback.errors.${named}` as never) : named,
+      )
+    }
     toast.success(tc(`feedback.${action}`))
   }, [tc])
 
@@ -124,21 +141,33 @@ export function AgentsTriageKeys({
     const ids = [...selected]
     if (ids.length === 0 || busy) return
     setBusy(true)
+    setBulkOutcome(null)
     try {
+      // Every selected row is attempted: a refusal is recorded, never a
+      // break — stopping at the first refusal leaves the tail unattempted
+      // with no accounting of what landed.
+      const failures: { id: string; error: string }[] = []
       for (const id of ids) {
         try {
           await mutate(id, action)
-        } catch {
-          toast.error(tc('feedback.actionFailed'))
-          break
+        } catch (e) {
+          failures.push({ id, error: e instanceof Error ? e.message : tc('feedback.actionFailed') })
         }
       }
-      setSelected(new Set())
+      if (failures.length === 0) {
+        setSelected(new Set())
+      } else {
+        const failed = new Set(failures.map((failure) => failure.id))
+        setKeptSelection(failed)
+        setSelected(failed)
+        setBulkOutcome({ applied: ids.length - failures.length, failures })
+        toast.error(t('triage.bulkPartial', { applied: ids.length - failures.length, failed: failures.length }))
+      }
       router.refresh()
     } finally {
       setBusy(false)
     }
-  }, [busy, mutate, router, selected, tc])
+  }, [busy, mutate, router, selected, t, tc])
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -182,10 +211,11 @@ export function AgentsTriageKeys({
         event.preventDefault()
         void mutate(row.id, 'review').then(
           () => router.refresh(),
-          () => toast.error(tc('feedback.actionFailed')),
+          (e: unknown) => toast.error(e instanceof Error ? e.message : tc('feedback.actionFailed')),
         )
       } else if (key === 'Escape') {
         setSelected(new Set())
+        setBulkOutcome(null)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -230,11 +260,34 @@ export function AgentsTriageKeys({
               </Button>
             </>
           ) : null}
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+          <Button variant="ghost" size="sm" onClick={() => { setSelected(new Set()); setBulkOutcome(null) }}>
             <X size={13} />{t('triage.clear')}
           </Button>
         </div>
       )}
+      {bulkOutcome && bulkOutcome.failures.length > 0 ? (
+        <div role="alert" className="space-y-1 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          <div className="font-medium">{t('triage.bulkPartial', { applied: bulkOutcome.applied, failed: bulkOutcome.failures.length })}</div>
+          <ul className="list-disc space-y-0.5 pl-5">
+            {bulkOutcome.failures.map((failure) => (
+              <li key={failure.id}>
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:no-underline"
+                  title={failure.id}
+                  onClick={() => {
+                    const index = rows.findIndex((row) => row.id === failure.id)
+                    if (index >= 0) openRow(index)
+                  }}
+                >
+                  {failure.id.slice(0, 8)}…
+                </button>
+                {': '}{failure.error}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   )
 }

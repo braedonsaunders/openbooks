@@ -32,6 +32,7 @@
     "selected": "{count, plural, one {已选择 # 项} other {已选择 # 项}}",
     "review": "开始复核",
     "resolve": "解决",
+    "bulkPartial": "已应用{applied}项 — 已拒绝{failed}项",
     "clear": "清除"
   },
   "empty": {
