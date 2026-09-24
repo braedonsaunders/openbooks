@@ -27,6 +27,7 @@ import type {
 } from "../packs.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { NL_CERTIFICATES } from "./certificates.ts";
+import { isValidBsn } from "./bsn.ts";
 import { nlPackFilings } from "./filings.ts";
 import { computeNlStatutory, NL_FACTOR_LABELS } from "./loonheffing.ts";
 import { NL_PACK_RATES, NL_TAX_YEARS } from "./rates.ts";
@@ -111,17 +112,20 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   name: "Netherlands",
   // Belastingdienst / Rijksoverheid: the burgerservicenummer (BSN) is the
   // 9-digit personal number for contact with the government, issued on BRP
-  // registration. Length and digit shape only — the elfproef (11-test) is
-  // real but unsourced here, so it is NOT enforced. Needed for the
-  // loonaangifte (wage tax return).
+  // registration. The RvIG requires the 11-proef when checking a BSN. Needed
+  // for the loonaangifte (wage tax return) and jaaropgaaf.
   employeeIdentifier: {
     label: "burgerservicenummer (BSN)",
     pattern: "\\d{9}",
-    formatHelp: "9 digits",
+    formatHelp: "9 digits passing the 11-proef",
     example: "111222333",
     requiredForPayroll: true,
-    neededFor: "loonaangifte",
-    citation: "Belastingdienst: the BSN is the 9-digit personal number for contact with the government (BRP)",
+    neededFor: "loonaangifte and jaaropgaaf",
+    citation: "Rijksoverheid: a BSN has 9 digits; RvIG, Handreiking BSN voor Gebruikers (11-proef)",
+    validator: {
+      validate: isValidBsn,
+      refusalReason: "check that the 9-digit BSN passes the statutory 11-proef",
+    },
     numericEntry: true,
   },
   installable: true,

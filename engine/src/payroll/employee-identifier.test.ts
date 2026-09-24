@@ -50,6 +50,12 @@ test("the PL pack refuses PESEL values with an invalid date or control digit", (
   }
 });
 
+test("the NL pack refuses a BSN that fails the statutory 11-proef", () => {
+  const verdict = validatePackEmployeeIdentifier("NL", "123456789");
+  assert.equal(verdict.valid, false);
+  assert.match(verdict.message ?? "", /BSN.*11-proef/i);
+});
+
 test("a Corsican NIR validates with its 2A/2B department intact", () => {
   const north = validatePackEmployeeIdentifier("FR", "254022A03300522");
   assert.equal(north.valid, true, `2A NIR must validate: ${north.message}`);

@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { cmp } from "../../money/money.ts";
 import { db } from "../../platform/db.ts";
 import { sealSecret } from "../../platform/secrets.ts";
+import { PayrollError } from "../error.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
@@ -220,6 +221,7 @@ test(
       const piet = await nlEmployee(fx, {
         name: "Piet AOW", annualSalary: "38880",
         opgaaf: { apply_loonheffingskorting: "true", age_class: "aow_1946" },
+        bsn: "123456782",
       });
       const truus = await nlEmployee(fx, {
         name: "Truus AOW", annualSalary: "11988",
@@ -290,6 +292,7 @@ test(
       const piet = await nlEmployee(fx, {
         name: "Piet AOW", annualSalary: "38880",
         opgaaf: { apply_loonheffingskorting: "true", age_class: "aow_1946" },
+        bsn: "123456782",
       });
       await monthlyRun(fx, "2026-02-01", "2026-02-28", true);
 
@@ -318,10 +321,26 @@ test(
         "the zero kolom 16 states its scope on the slip face",
       );
 
-      // BSN: rendered from the sealed profile for Jan, a named gap for Piet.
+      // The mandatory identifier is rendered from the sealed profile for both employees.
       assert.equal(header(janSlip, "Burgerservicenummer (BSN)"), "111222333");
-      assert.match(header(pietSlip, "Burgerservicenummer (BSN)")!, /Not on file/);
-      assert.match(header(pietSlip, "Burgerservicenummer (BSN)")!, /payroll profile/);
+      assert.equal(header(pietSlip, "Burgerservicenummer (BSN)"), "123456782");
+
+      // Legacy/imported profile state cannot put instructions or malformed data
+      // into the mandatory BSN field on an otherwise valid jaaropgaaf.
+      await db.execute(sql`
+        update employee_payroll_profiles set sin_encrypted = ${sealSecret("123456789")}
+         where org_id = ${fx.orgId} and employee_party_id = ${jan}`);
+      await assert.rejects(
+        () => slipOf(jan),
+        (error) => error instanceof PayrollError && /employee BSN is invalid.*correct the BSN/.test(error.message),
+      );
+      await db.execute(sql`
+        update employee_payroll_profiles set sin_encrypted = null, sin_last3 = null
+         where org_id = ${fx.orgId} and employee_party_id = ${jan}`);
+      await assert.rejects(
+        () => slipOf(jan),
+        (error) => error instanceof PayrollError && /employee BSN is missing.*add or correct the BSN/.test(error.message),
+      );
 
       await assert.rejects(() => slipOf(randomUUID()), /no 2026 jaaropgaaf matches/);
     } finally {

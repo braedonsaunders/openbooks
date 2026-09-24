@@ -282,6 +282,7 @@ test('profile POST validates the sealed identifier against the pack declaration'
       ['GB NINO', { country: 'GB', province: 'ENG', sin: 'QQ123456C' }, 200, null],
       ['GB spaced NINO', { country: 'GB', province: 'ENG', sin: 'QQ 12 34 56 C' }, 200, null],
       ['FR Corsican NIR', { country: 'FR', province: 'FR', sin: '254022A03300522' }, 200, null],
+      ['NL BSN failing 11-proef', { country: 'NL', province: 'NL', sin: '123456789' }, 422, /BSN.*11-proef/i],
       ['US hyphenated SSN', { country: 'US', province: usState, sin: '123-45-6789' }, 200, null],
       ['stripped NINO digits', { country: 'GB', province: 'ENG', sin: '123456' }, 422, /National Insurance number/],
       ['stripped Corsican NIR', { country: 'FR', province: 'FR', sin: '25402203300522' }, 422, /numéro de sécurité sociale/],
