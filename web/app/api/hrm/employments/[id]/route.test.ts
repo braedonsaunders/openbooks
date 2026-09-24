@@ -118,44 +118,35 @@ function getRequest(): { req: Request; ctx: { params: Promise<{ id: string }> } 
   };
 }
 
-if (isVitest) {
-  test("employment record route gates on the employment grant with a self fallback", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardFeaturePermission\('hrm\.employment\.read', 'hrm'\)/);
-    assert.match(source, /guardFeaturePermission\('hrm\.self\.read', 'hrm'\)/);
-  });
-} else {
-  test("an employment reader reaches the record through the first gate", async () => {
-    reset();
-    const { req, ctx } = getRequest();
-    const response = await recordRoute!.GET(req, ctx);
-    assert.equal(response.status, 200);
-    assert.equal(routeState.calls.length, 1);
-    const call = routeState.calls[0] as { fn: string; args: Record<string, unknown> };
-    assert.equal(call.fn, "record");
-    assert.equal(call.args.orgId, "org-1");
-    assert.equal(call.args.actorId, "user-1");
-    assert.equal(call.args.employmentId, EMPLOYMENT_ID);
-    assert.equal(call.args.effectiveDate, "2026-09-20");
-  });
+test("an employment reader reaches the record through the first gate", async () => {
+  reset();
+  const { req, ctx } = getRequest();
+  const response = await recordRoute!.GET(req, ctx);
+  assert.equal(response.status, 200);
+  assert.equal(routeState.calls.length, 1);
+  const call = routeState.calls[0] as { fn: string; args: Record<string, unknown> };
+  assert.equal(call.fn, "record");
+  assert.equal(call.args.orgId, "org-1");
+  assert.equal(call.args.actorId, "user-1");
+  assert.equal(call.args.employmentId, EMPLOYMENT_ID);
+  assert.equal(call.args.effectiveDate, "2026-09-20");
+});
 
-  test("a manager without the employment grant reaches the record through the self fallback", async () => {
-    reset();
-    routeState.employmentGate = { status: 403 };
-    const { req, ctx } = getRequest();
-    const response = await recordRoute!.GET(req, ctx);
-    assert.equal(response.status, 200);
-    assert.equal(routeState.calls.length, 1);
-  });
+test("a manager without the employment grant reaches the record through the self fallback", async () => {
+  reset();
+  routeState.employmentGate = { status: 403 };
+  const { req, ctx } = getRequest();
+  const response = await recordRoute!.GET(req, ctx);
+  assert.equal(response.status, 200);
+  assert.equal(routeState.calls.length, 1);
+});
 
-  test("a caller with neither grant keeps the employment denial", async () => {
-    reset();
-    routeState.employmentGate = { status: 403 };
-    routeState.selfGate = { status: 403 };
-    const { req, ctx } = getRequest();
-    const response = await recordRoute!.GET(req, ctx);
-    assert.equal(response.status, 403);
-    assert.deepEqual(routeState.calls, []);
-  });
-}
+test("a caller with neither grant keeps the employment denial", async () => {
+  reset();
+  routeState.employmentGate = { status: 403 };
+  routeState.selfGate = { status: 403 };
+  const { req, ctx } = getRequest();
+  const response = await recordRoute!.GET(req, ctx);
+  assert.equal(response.status, 403);
+  assert.deepEqual(routeState.calls, []);
+});
