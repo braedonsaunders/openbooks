@@ -34,21 +34,8 @@ const {
 } = await import('./file-cabinet')
 const { requireFileAccess, requireFolderAccess } = await import('../app/api/file-cabinet/lib')
 
-/**
- * Subsidiary fence for cabinet reads AND mutations: one coherent model.
- *
- * A documents.manage holder restricted to subsidiary B who guesses an A-side
- * record leaf, file, or grant id must read tier 'none' at the access level,
- * be refused (403) by the route gates, and be refused again inside the
- * mutation's own transaction when calling the verbs directly with their
- * viewer — for replace, move, rename, delete/purge, restores, creates, and
- * grant changes alike. B keeps full management of common (unscoped) files.
- */
 test('subsidiary-restricted managers cannot read or alter out-of-fence files', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
-  // Seed only runs in the bypass scope. Every fenced assertion below runs
-  // outside it: the verbs enforce the fence through the caller's own
-  // viewer/scope, and a bypassed refusal would prove nothing.
   const { userA, userB, subA, subB, commonId, leafAId, leafRId, faId, fcId, fpId } = await withBypass(
     async () => {
       const userA = await createScratchUser(org.orgId, 'Keeper A', 'keeper_a')
@@ -78,8 +65,6 @@ test('subsidiary-restricted managers cannot read or alter out-of-fence files', {
           values (${fileId}, ${org.orgId}, ${folderId}, ${name}, 'text/plain', 3)`)
         return fileId
       }
-      // FA lives in A's leaf and is attached to A's record; FC sits in the
-      // common folder but is attached to A's record; FP is free common stock.
       const faId = await mkFile('s19-fa.txt', leafAId)
       const fcId = await mkFile('s19-fc.txt', commonId)
       const fpId = await mkFile('s19-fp.txt', commonId)
@@ -101,9 +86,6 @@ test('subsidiary-restricted managers cannot read or alter out-of-fence files', {
     const auditB = { actorId: userB, viewer: viewerB }
     const auditA = { actorId: userA, viewer: viewerA }
 
-    // Access levels: B reads 'none' on everything evidencing A — including
-    // the common-folder file attached to A's record — while keeping manager
-    // on genuinely common stock. A keeps manager on its own evidence.
     assert.equal(await folderAccessLevel(org.orgId, viewerB, leafAId), 'none')
     assert.equal(await fileAccessLevel(org.orgId, viewerB, faId), 'none')
     assert.equal(await fileAccessLevel(org.orgId, viewerB, fcId), 'none')
@@ -112,13 +94,11 @@ test('subsidiary-restricted managers cannot read or alter out-of-fence files', {
     assert.equal(await folderAccessLevel(org.orgId, viewerA, leafAId), 'manager')
     assert.equal(await fileAccessLevel(org.orgId, viewerA, faId), 'manager')
 
-    // Route gates refuse B at the boundary.
     assert.equal((await requireFileAccess(authzB, faId, 'editor'))?.status, 403)
     assert.equal((await requireFileAccess(authzB, fcId, 'viewer'))?.status, 403)
     assert.equal((await requireFolderAccess(authzB, leafAId, 'manager'))?.status, 403)
     assert.equal(await requireFileAccess(authzB, fpId, 'editor'), null)
 
-    // Direct verb calls with B's viewer refuse inside their transactions.
     assert.equal(await renameFile(org.orgId, faId, 's19-fa-hacked.txt', userB, auditB), false)
     assert.equal(await moveFile(org.orgId, faId, commonId, userB, auditB), false)
     assert.equal(
@@ -140,7 +120,6 @@ test('subsidiary-restricted managers cannot read or alter out-of-fence files', {
       /lacks editor access/,
     )
 
-    // Restores refuse too: trash privately, then B cannot bring rows back.
     await deleteFile(org.orgId, fcId, { actorId: userA })
     assert.equal(await restoreFile(org.orgId, fcId, auditB), false)
     await deleteFolder(org.orgId, leafRId, { actorId: userA }).then((r) => assert.equal(r.ok, true))

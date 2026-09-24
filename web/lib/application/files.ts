@@ -198,7 +198,7 @@ export async function uploadCabinetFile(
     contentType,
     bytes,
     createdBy: authz.user.id,
-    audit: { actorId: authz.user.id },
+    audit: { actorId: authz.user.id, viewer: cabinetViewer(authz) },
   });
   return {
     id: meta.id,

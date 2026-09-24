@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import pg from "pg";
 
-// Covering upload_file end to end: the application tool must write through
-// the same createFile storage the files route uses, honour the destination
-// folder's grants (a viewer without an editor grant is refused), stay inside
-// the caller's org, and replay an idempotent retry without a second file.
+// Exercise upload_file's shared cabinet write, grants, scope, and replay.
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
@@ -22,6 +20,7 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { removeGrant } = await import("../file-cabinet.ts");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
 const applicationFiles = await import("./files.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
@@ -49,8 +48,6 @@ const contentBase64 = Buffer.from("cabinet probe").toString("base64");
 
 test("upload_file writes through cabinet storage, replays idempotently, and enforces folder grants", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  // Real user rows: the idempotency ledger requires the actor to belong to
-  // the org. Permissions ride the fabricated context, as in the unit gates.
   const userId = await withBypassContext(() => createScratchUser(org.orgId, "Upload prober", "upload_prober"));
   const viewerId = await withBypassContext(() => createScratchUser(org.orgId, "Upload viewer", "upload_viewer"));
   const folderId = randomUUID();
@@ -99,19 +96,43 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
       assert.equal(Number(count.rows[0]!.n), 1, "idempotent replay must not store a second file");
 
       const viewer = ctxFor(org.orgId, viewerId, ["documents.read"]);
-      const denied = await executeApplicationTool(definition, viewer, {
+      await assert.rejects(() => executeApplicationTool(definition, viewer, {
         ...input,
         filename: "viewer.txt",
         idempotencyKey: `probe-${randomUUID()}`,
-      }).then(
-        (value) => ({ threw: false, value }),
-        (error) => ({ threw: true, error }),
-      );
-      assert.equal(denied.threw, true, "a viewer without an editor grant must be refused");
-      assert.match(String((denied as { error: unknown }).error), /forbidden/);
+      }), /forbidden/);
+      const grantId = randomUUID();
+      await db.execute(sql`insert into resource_grants(id, org_id, resource_type, resource_id, principal_type, principal_id, access, created_by)
+        values (${grantId}, ${org.orgId}, 'folder', ${folderId}, 'user', ${viewerId}, 'editor', ${userId})`);
+      const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+      await client.connect();
+      const lockKey = `file-cabinet-auth:${org.orgId}`;
+      try {
+        await client.query("begin");
+        await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)", [org.orgId]);
+        await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [lockKey]);
+        let uploaded = false;
+        const pendingUpload = applicationFiles.uploadCabinetFile(viewer.authz, { folderId, filename: "race.txt", contentType: "text/plain", contentBase64 })
+          .then((file) => { uploaded = true; return file; });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        assert.equal(uploaded, false);
+        await client.query("commit");
+        assert.equal((await pendingUpload).name, "race.txt");
+        await client.query("begin");
+        await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)", [org.orgId]);
+        await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [lockKey]);
+        let revoked = false;
+        const pendingRevoke = removeGrant(org.orgId, grantId, "folder", folderId).then((removed) => { revoked = true; return removed; });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        assert.equal(revoked, false);
+        await client.query("commit");
+        assert.equal(await pendingRevoke, true);
+      } finally {
+        await client.query("rollback").catch(() => undefined);
+        await client.end();
+      }
 
     });
-    // A folder id from another org must not resolve, even for a manager.
     const orgB = await withBypassContext(() => createScratchOrg());
     try {
       const userB = await withBypassContext(() => createScratchUser(orgB.orgId, "Upload outsider", "upload_outsider"));
