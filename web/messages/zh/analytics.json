@@ -332,7 +332,6 @@
       "noBalanceSheet": "无资产负债表数据",
       "noHeadcount": "无在职员工记录",
       "noInterestExpense": "无利息费用",
-      "unavailable": "暂无数据",
       "perEmployees": "{revenue} / {count, plural, one {# 人} other {# 人}}"
     }
   },

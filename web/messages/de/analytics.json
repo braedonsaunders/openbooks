@@ -332,7 +332,6 @@
       "noBalanceSheet": "Keine Bilanzdaten",
       "noHeadcount": "Keine aktiven Mitarbeiter",
       "noInterestExpense": "Kein Zinsaufwand",
-      "unavailable": "Keine Daten verfügbar",
       "perEmployees": "{revenue} / {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}}"
     }
   },

@@ -332,7 +332,6 @@
       "noBalanceSheet": "貸借対照表データがありません",
       "noHeadcount": "在籍従業員の記録がありません",
       "noInterestExpense": "支払利息がありません",
-      "unavailable": "データがありません",
       "perEmployees": "{revenue} / {count, plural, one {# 名} other {# 名}}"
     }
   },
