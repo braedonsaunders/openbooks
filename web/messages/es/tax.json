@@ -187,7 +187,7 @@
         "difference": "Diferencia",
         "effect": "Efecto fiscal"
       },
-      "auto": "auto",
+      "auto": "Automático",
       "manual": "manual"
     },
     "postFailed": "No se pudo contabilizar la provisión."
