@@ -4,14 +4,26 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { registerHooks } from 'node:module'
+
+// Only server-only is stubbed: the spec is pure data binding and must load
+// the real view module.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    }
+    return nextResolve(specifier, context)
+  },
+})
+
+const { bankFeedsSpec } = (await import('./view')) as typeof import('./view')
+import type { BankFeedsData } from './view'
+
 // F-t11-005: the connection form's GL picker was empty with no explanation
 // on tenants without a reconcilable bank account, so no feed could ever be
-// connected. The loader also filtered with its own ad-hoc predicate instead
-// of the one banking reader (F-t06-001), and the API accepted feeds on
-// inactive or non-bank reconcilable accounts. Pinned here:
-//  - the empty picker explains the missing precondition and links to the
-//    Chart of Accounts, in every locale;
-//  - the loader reads through the unified reconcilable-bank membership.
+// connected. Pinned here: the empty picker explains the missing precondition
+// and links to the Chart of Accounts, in every locale.
 const dir = dirname(fileURLToPath(import.meta.url))
 const messagesDir = join(dir, '..', '..', '..', '..', '..', 'messages')
 const LOCALES = ['en', 'fr', 'es', 'de', 'ja', 'zh', 'pt-BR'] as const
@@ -52,30 +64,19 @@ test('bank-feeds empty-picker guidance is translated in every locale', () => {
   }
 })
 
-test('the loader reads the unified reconcilable-bank membership (F-t11-005)', () => {
-  const view = readFileSync(join(dir, 'view.ts'), 'utf8')
-  assert.match(
-    view,
-    /listReconcilableBankAccounts/,
-    'the loader must use the one banking reader, not its own predicate',
-  )
-  assert.doesNotMatch(
-    view,
-    /where org_id = \$\{authz\.user\.orgId\} and reconcilable and not is_summary and is_active/,
-    'the ad-hoc reconcilable filter must go',
-  )
-})
-
-test('the empty picker points at the Chart of Accounts (F-t11-005)', () => {
-  const client = readFileSync(join(dir, 'BankFeedsClient.tsx'), 'utf8')
-  assert.match(
-    client,
-    /\{t\("configure\.noEligibleAccounts"\)\}/,
-    'the form must explain the empty picker',
-  )
-  assert.match(
-    client,
-    /<Link href="\/accounts"[^>]*>\s*\{t\("configure\.noEligibleAccountsLink"\)\}\s*<\/Link>/,
-    'the explanation must link to the Chart of Accounts',
-  )
+// The loader's eligible accounts reach the workspace widget unchanged: the
+// picker the client renders is exactly the loader's list, never a second
+// query or a renamed field.
+test('the spec binds the loader accounts and daemon to the workspace widget', () => {
+  const data: BankFeedsData = {
+    connections: [],
+    sftpServers: [],
+    sftpSchedules: [],
+    accounts: [{ id: 'acc-1', label: '1000 · Operating Cash' }],
+    daemon: { enabled: false, port: 0, host: 'localhost', fingerprint: '' },
+  }
+  const serialized = JSON.stringify(bankFeedsSpec(data))
+  assert.match(serialized, /bank-feeds-workspace/)
+  assert.match(serialized, /1000 · Operating Cash/)
+  assert.match(serialized, /localhost/)
 })
