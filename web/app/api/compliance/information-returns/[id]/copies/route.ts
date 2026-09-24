@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -29,8 +30,10 @@ function addressLines(address: Record<string, string | null> | null): string | n
 
 /**
  * Recipient copies (Copy B) for a filing: all of them, or one via
- * `?recipientId=`. Furnishing recipient copies is stamped so the workspace can
- * show who still has not been sent theirs.
+ * `?recipientId=`. Rendering a copy is side-effect free: it never marks
+ * anything furnished, so a read-only holder, a crawler, or a preview cannot
+ * stamp statutory copies as handed over. Marking copies furnished is POST
+ * below, behind the manage grant, and audited.
  *
  * Only an included recipient gets a copy — an excluded one is deliberately not
  * being reported, and printing them a form would say otherwise.
@@ -40,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (gate instanceof NextResponse) return gate
   const blocked = await guardComplianceFeature(gate.user.orgId)
   if (blocked) return blocked
-  const { orgId, id: actorId } = gate.user
+  const { orgId } = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const recipientId = new URL(req.url).searchParams.get('recipientId')
@@ -135,18 +138,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     throw e
   }
 
-  // Furnishing is stamped through the engine's one owned write to recipients —
-  // the only mutation a frozen filing still accepts, because handing over a
-  // copy is not an edit of what was transmitted.
-  try {
-    await stampRecipientCopiesPrinted({ orgId, filingId: id, recipientId, actorId })
-  } catch (error) {
-    if (error instanceof InformationReturnError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
-    }
-    throw error
-  }
-
   const stamp = await businessToday(orgId)
   const filename =
     forms.length === 1
@@ -163,4 +154,48 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       'Cache-Control': 'private, no-store',
     },
   })
+}
+
+/**
+ * Mark recipient copies furnished: all included recipients, or one via
+ * `{ recipientId }`. Furnishing is a write — it stamps printed_at through
+ * the engine's one owned write to a frozen filing's recipients and audits
+ * every stamp — so it needs the manage grant, never the read grant the GET
+ * above renders under. A recipient id that names no included recipient of
+ * this filing answers exactly like not-found.
+ */
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('compliance.manage')
+  if (gate instanceof NextResponse) return gate
+  const blocked = await guardComplianceFeature(gate.user.orgId)
+  if (blocked) return blocked
+  const { orgId, id: actorId } = gate.user
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+  const parsedBody = await parseJsonBody(req, jsonObject)
+  if (!parsedBody.ok) return parsedBody.response
+  const rawRecipientId = (parsedBody.data as { recipientId?: unknown }).recipientId ?? null
+  let recipientId: string | null = null
+  if (rawRecipientId !== null) {
+    if (typeof rawRecipientId !== 'string' || !isUuid(rawRecipientId)) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    recipientId = rawRecipientId
+  }
+  // Entity isolation before any filing detail is read (same 404 as a missing filing).
+  const filingScope = await loadInformationReturnFilingScope(orgId, id)
+  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
+  if (scopeDenied) return scopeDenied
+
+  try {
+    const furnished = await stampRecipientCopiesPrinted({ orgId, filingId: id, recipientId, actorId })
+    return NextResponse.json({ furnished })
+  } catch (error) {
+    if (error instanceof InformationReturnError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    throw error
+  }
 }
