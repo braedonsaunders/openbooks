@@ -158,6 +158,28 @@ async function mountJournal(doc: Record<string, unknown>, initialMode?: string, 
   await tick();
   await tick();
   return {
+    rerender: async (nextDoc: Record<string, unknown>, nextLines: Record<string, unknown>[] = BALANCED_LINES) => {
+      await act(async () => {
+        root.render(
+          <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+            <MoneyProvider currency="USD">
+              <JournalDrawer
+                journal={{ doc: nextDoc, lines: nextLines } as never}
+                parties={[]}
+                accounts={[]}
+                departments={[]}
+                projects={[]}
+                subsidiaries={[]}
+                headerDefs={[]}
+                lineDefs={[]}
+                canPost
+              />
+            </MoneyProvider>
+          </NextIntlClientProvider>,
+        )
+        await tick()
+      })
+    },
     unmount: async () => {
       await act(async () => {
         root.unmount();
@@ -232,12 +254,14 @@ test("a refused save pins the reason instead of toasting into the void", async (
 test("a stale-revision void reloads and pins translated copy (F-t06-021)", async (t) => {
   freshGlobals();
   const doc = { ...DRAFT_DOC(), status: "posted" };
+  let voidPayload: Record<string, unknown> | null = null;
   const restoreFetch = scriptFetch((url, init) => {
     if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) {
       globalThis.__journalGets = (globalThis.__journalGets ?? 0) + 1;
       return Response.json(snapshotBody(String(doc.id)));
     }
     if (url === `/api/documents/${doc.id}/void` && init?.method === "POST") {
+      voidPayload = JSON.parse(String(init.body)) as Record<string, unknown>;
       return Response.json(
         { error: "Reload the document and supply its exact revision before voiding", code: "stale-revision" },
         { status: 409 },
@@ -264,6 +288,7 @@ test("a stale-revision void reloads and pins translated copy (F-t06-021)", async
   assert.ok(voidButton, "a posted journal must offer Void");
   await click(voidButton);
   await tick();
+  assert.deepEqual(voidPayload, { reason: "duplicate entry", expectedUpdatedAt: TOKEN });
   assert.ok(
     (globalThis.__journalGets ?? 0) >= 2,
     "the stale revision must reload the canonical snapshot behind the refusal",
@@ -281,6 +306,112 @@ test("a stale-revision void reloads and pins translated copy (F-t06-021)", async
     1,
     "the recovery must toast exactly once — no server-text duplicate beside the translated copy",
   );
+});
+
+test("a successful post refreshes the revision used by a later void", async (t) => {
+  freshGlobals();
+  const doc = DRAFT_DOC();
+  const afterPostRevision = "2026-09-17T12:00:05.000000Z";
+  let canonicalReads = 0;
+  let voidPayload: Record<string, unknown> | null = null;
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) {
+      canonicalReads += 1;
+      return Response.json({
+        ...snapshotBody(String(doc.id)),
+        doc: { ...snapshotBody(String(doc.id)).doc, updated_at: canonicalReads === 1 ? TOKEN : afterPostRevision },
+      });
+    }
+    if (url === "/api/journals/actions" && init?.method === "POST") return Response.json({});
+    if (url === `/api/documents/${doc.id}/void` && init?.method === "POST") {
+      voidPayload = JSON.parse(String(init.body)) as Record<string, unknown>;
+      return Response.json({ status: "voided" });
+    }
+    if (url.includes("/api/flows/record-state")) {
+      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const drawer = await mountJournal(doc);
+  t.after(drawer.unmount);
+
+  await click(buttonsNamed("Actions")[0]!);
+  const post = buttonsNamed("Post")[0];
+  assert.ok(post, "a draft journal offers Post");
+  await click(post);
+  assert.equal(canonicalReads, 2, "a successful post reads the new canonical revision");
+
+  await drawer.rerender({ ...doc, status: "posted" });
+  await click(buttonsNamed("Actions")[0]!);
+  const voidButton = buttonsNamed("Void")[0];
+  assert.ok(voidButton, "the posted journal offers Void");
+  await click(voidButton);
+  assert.equal((voidPayload as Record<string, unknown> | null)?.expectedUpdatedAt, afterPostRevision);
+});
+
+test("a posted journal keeps uploads available and explains why its evidence stays attached", async (t) => {
+  freshGlobals();
+  const doc = { ...DRAFT_DOC(), status: "posted" };
+  const restoreFetch = scriptFetch((url) => {
+    if (url.startsWith("/api/file-cabinet/attachments?")) {
+      return Response.json({ attachments: [{
+        id: "file-1",
+        name: "bank-statement.pdf",
+        fileType: "pdf",
+        contentType: "application/pdf",
+        sizeBytes: 1024,
+        createdAt: "2026-09-17T12:00:00.000Z",
+        createdBy: null,
+        attachmentId: "attachment-1",
+      }] });
+    }
+    if (url.includes("/api/flows/record-state")) {
+      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+    }
+    if (url === `/api/journals/${doc.id}`) return Response.json(snapshotBody(String(doc.id)));
+    return null;
+  });
+  t.after(restoreFetch);
+  const drawer = await mountJournal(doc);
+  t.after(drawer.unmount);
+  const attachments = [...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.trim() === "Attachments");
+  assert.ok(attachments, "a persisted journal has an Attachments tab");
+  await click(attachments as HTMLButtonElement);
+  await tick();
+
+  assert.match(document.body.textContent ?? "", /bank-statement\.pdf/);
+  assert.match(document.body.textContent ?? "", /Attachments of posted records are retained and cannot be removed\./);
+  assert.ok(buttonsNamed("Add files").length > 0, "posted evidence can still be supplemented");
+  assert.ok(document.querySelector('input[type="file"]'), "the upload control remains available");
+  assert.equal(document.querySelector('button[aria-label="Remove bank-statement.pdf"]'), null);
+});
+
+test("a post warning names partyless control accounts in a persistent alert", async (t) => {
+  freshGlobals();
+  const doc = DRAFT_DOC();
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) return Response.json(snapshotBody(String(doc.id)));
+    if (url === "/api/journals/actions" && init?.method === "POST") {
+      return Response.json({ warnings: [{ code: "partyless_control_lines", accounts: [{ number: "1100", name: "Accounts receivable" }] }] });
+    }
+    if (url.includes("/api/flows/record-state")) {
+      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const drawer = await mountJournal(doc);
+  t.after(drawer.unmount);
+  await click(buttonsNamed("Actions")[0]!);
+  const post = buttonsNamed("Post")[0];
+  assert.ok(post, "a draft journal offers Post");
+  await click(post);
+
+  const warning = document.querySelector('[role="alert"]');
+  assert.ok(warning, "a partyless-control warning stays visible after the success toast");
+  assert.match(warning.textContent ?? "", /1100 Accounts receivable/);
+  assert.match(warning.textContent ?? "", /outside any customer or vendor subledger/);
 });
 
 test("a refused post still pins the server reason (F-t06-006 preservation)", async (t) => {
