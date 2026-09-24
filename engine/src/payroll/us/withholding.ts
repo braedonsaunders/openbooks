@@ -66,6 +66,7 @@ import {
   requireUsWageAllocation,
   type UsResidentWithholdingFacts,
   type UsWageAllocation,
+  type UsStateWithholdingInput,
 } from "./states/types.ts";
 
 export class UsWithholdingError extends PayrollError {}
@@ -316,6 +317,8 @@ export interface UsWithholdingInput {
   wages: string;
   /** Federal W-4 Step 1(c) status for state methods that use the federal form. */
   federalFilingStatus?: "single" | "married_joint" | "head_household";
+  /** Preserved status and allowances from an effective 2019-or-earlier federal W-4. */
+  federalLegacyW4?: UsStateWithholdingInput["federalLegacyW4"];
   /** Federal W-4 exempt claim, used by state rules that inherit it. */
   federalTaxExempt?: boolean;
   /** Supplemental wages this period. */
@@ -500,6 +503,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         periodEnd: input.periodEnd,
         periodsPerYear: input.periodsPerYear,
         wages: input.wages,
+        federalFilingStatus: input.federalFilingStatus,
+        federalLegacyW4: input.federalLegacyW4,
         supplemental: "0",
         federalIncomeTax: input.federalIncomeTax,
         federalWithholdingExempt: input.federalWithholdingExempt,
@@ -540,6 +545,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         periodEnd: input.periodEnd,
         periodsPerYear: input.periodsPerYear,
         wages: input.wages,
+        federalFilingStatus: input.federalFilingStatus,
+        federalLegacyW4: input.federalLegacyW4,
         supplemental: "0",
         federalIncomeTax: input.federalIncomeTax,
         taxQualifiedDeductions: input.taxQualifiedDeductions,
@@ -575,6 +582,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       federalFilingStatus: input.federalFilingStatus,
+      federalLegacyW4: input.federalLegacyW4,
       federalTaxExempt: input.federalTaxExempt,
       stateCertificateOnFile: certificate.onFile,
       supplemental: input.supplemental,
@@ -661,6 +669,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       federalFilingStatus: input.federalFilingStatus,
+      federalLegacyW4: input.federalLegacyW4,
       federalTaxExempt: input.federalTaxExempt,
       stateCertificateOnFile: certificate.onFile,
       supplemental: input.supplemental,

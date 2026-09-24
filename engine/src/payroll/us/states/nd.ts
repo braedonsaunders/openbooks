@@ -11,8 +11,8 @@
  *       Payroll Period Table; no W-4 → treat as single; round the period
  *       amount to the nearest dollar.
  *
- * Automated payroll uses Section 2. Pre-2020 Form W-4 methods (Section 1)
- * are a different publication path and are refused rather than guessed.
+ * A pre-2020 Form W-4 uses Section 1's percentage method and its allowance
+ * table; a 2020-or-later W-4 uses the Section 2 annual method.
  *
  * The booklet's Section 2 worked example prints line 4 as $734.00 on
  * $93,600 Single. The Single table's own figures on that same $93,600 are
@@ -68,6 +68,24 @@ export interface NdYearRates {
 const R0 = pctToRate("0");
 const R195 = pctToRate("1.95");
 const R250 = pctToRate("2.50");
+
+interface NdLegacyPeriodRates {
+  allowance: string;
+  single: { firstLimit: string; secondLimit: string; topBase: string };
+  married: { firstLimit: string; secondLimit: string; topBase: string };
+}
+
+/** 2026 Section 1 percentage-method tables for 2019-or-earlier W-4s. */
+const ND_LEGACY_PERIOD_RATES: Readonly<Record<Exclude<UsStatePayPeriod, "daily"> | "daily", NdLegacyPeriodRates>> = {
+  weekly: { allowance: "97", single: { firstLimit: "1108", secondLimit: "4970", topBase: "75.31" }, married: { firstLimit: "1106", secondLimit: "3241", topBase: "41.63" } },
+  biweekly: { allowance: "194", single: { firstLimit: "2216", secondLimit: "9940", topBase: "150.62" }, married: { firstLimit: "2212", secondLimit: "6482", topBase: "83.27" } },
+  semimonthly: { allowance: "210", single: { firstLimit: "2401", secondLimit: "10769", topBase: "163.18" }, married: { firstLimit: "2396", secondLimit: "7022", topBase: "90.21" } },
+  monthly: { allowance: "420", single: { firstLimit: "4802", secondLimit: "21538", topBase: "326.35" }, married: { firstLimit: "4792", secondLimit: "14044", topBase: "180.41" } },
+  quarterly: { allowance: "1268", single: { firstLimit: "14406", secondLimit: "64613", topBase: "979.04" }, married: { firstLimit: "14375", secondLimit: "42131", topBase: "541.24" } },
+  semiannual: { allowance: "2525", single: { firstLimit: "28813", secondLimit: "129225", topBase: "1958.03" }, married: { firstLimit: "28750", secondLimit: "84263", topBase: "1082.50" } },
+  annual: { allowance: "5050", single: { firstLimit: "57625", secondLimit: "258450", topBase: "3916.09" }, married: { firstLimit: "57500", secondLimit: "168525", topBase: "2164.99" } },
+  daily: { allowance: "19", single: { firstLimit: "222", secondLimit: "994", topBase: "15.05" }, married: { firstLimit: "221", secondLimit: "648", topBase: "8.33" } },
+};
 
 export const ND_RATES_2026: NdYearRates = {
   year: 2026,
@@ -150,6 +168,32 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "ND", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
+  const legacyW4 = input.federalLegacyW4;
+  if (legacyW4) {
+    const legacyRates = ND_LEGACY_PERIOD_RATES[period];
+    const allowance = U(legacyRates.allowance) * BigInt(legacyW4.allowances);
+    const taxableWages = U(input.wages) + U(input.supplemental ?? "0");
+    const taxableAfterAllowances = taxableWages > allowance ? taxableWages - allowance : 0n;
+    const schedule = legacyW4.status === "married" ? legacyRates.married : legacyRates.single;
+    const unroundedTax = taxableAfterAllowances <= U(schedule.firstLimit)
+      ? 0n
+      : taxableAfterAllowances <= U(schedule.secondLimit)
+        ? mulRateCents(taxableAfterAllowances - U(schedule.firstLimit), R195)
+        : U(schedule.topBase) + mulRateCents(taxableAfterAllowances - U(schedule.secondLimit), R250);
+    const roundedTax = ndRoundToDollar(unroundedTax);
+    const periodTax = roundedTax < U("1") ? 0n : roundedTax;
+    const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+    const total = periodTax + extra;
+    factors.ND_W4_METHOD = "pre_2020_section_1";
+    trace("ND_W4_ALLOWANCE", allowance);
+    trace("ND_W4_TAXABLE", taxableAfterAllowances);
+    trace("ND_W4_TAX", periodTax);
+    trace("ND_WITHHELD", total);
+    return {
+      state: "ND", year: rates.year, tax: D(total), taxSupplemental: D(0n), factors,
+    };
+  }
+
   // Newly hired with no W-4: "treat as a single person".
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as NdFilingStatus;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -179,6 +223,10 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const ND_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ND_EXEMPT: "Exempt from North Dakota withholding",
+  ND_W4_METHOD: "North Dakota federal W-4 withholding method",
+  ND_W4_ALLOWANCE: "North Dakota pre-2020 W-4 allowance amount",
+  ND_W4_TAXABLE: "North Dakota wages after pre-2020 W-4 allowances",
+  ND_W4_TAX: "North Dakota tax from pre-2020 W-4 method",
   ND_ANNUAL_WAGES: "North Dakota annualized wages",
   ND_ANNUAL_TAX: "North Dakota tax (annual)",
   ND_WITHHELD: "North Dakota tax withheld this period",

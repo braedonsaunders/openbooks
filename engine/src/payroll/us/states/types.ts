@@ -299,6 +299,8 @@ export interface UsStateWithholdingInput {
   wages: string;
   /** Federal W-4 Step 1(c) status, used by state worksheets that refer to it. */
   federalFilingStatus?: "single" | "married_joint" | "head_household";
+  /** Preserved status and allowances from an effective 2019-or-earlier federal W-4. */
+  federalLegacyW4?: { status: "single" | "married"; allowances: number };
   /** Federal W-4 exempt claim; some state worksheets inherit its withholding result. */
   federalTaxExempt?: boolean;
   /** Whether the state withholding certificate itself is filed and effective. */

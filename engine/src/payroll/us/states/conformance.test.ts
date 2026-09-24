@@ -80,6 +80,24 @@ test("CA Example B — biweekly $1,600, married, 3 allowances (1 estimated): $2.
   assert.equal(result.tax, money("2.38"));
 });
 
+test("CA carries a pre-2020 federal W-4 status and allowances when no DE 4 is filed", () => {
+  // EDD says employees with a pre-2020 federal W-4 need not replace it unless
+  // their allowances change; when no DE 4 exists, continue that withholding.
+  // https://edd.ca.gov/en/Payroll_Taxes/Rates_and_Withholding
+  const result = CA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 26, wages: "1600.00", basis: "resident",
+    certificate: resolveCertificate({ certificate: payrollCertificate("US", "us_ca_de4") }),
+    federalLegacyW4: { status: "married", allowances: 2 },
+  });
+  const equivalentDe4 = CA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 26, wages: "1600.00", basis: "resident",
+    certificate: de4({ filing_status: "married_one_income", regular_allowances: "2" }),
+  });
+  assert.equal(result.factors.CA_LEGACY_W4, money("0.0001"));
+  assert.equal(result.tax, equivalentDe4.tax);
+  assert.equal(result.tax, money("3.22"));
+});
+
 test("CA Example C — monthly $5,100, married, 5 allowances: $0.82", () => {
   const result = CA_WITHHOLDING.compute({
     payDate: "2026-03-31", periodsPerYear: 12, wages: "5100.00", basis: "resident",
