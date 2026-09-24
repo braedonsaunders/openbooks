@@ -138,8 +138,6 @@
     "web/app/(app)/me/profile/me-profile.test.ts": 3,
     "web/app/(app)/me/reviews/me-reviews.test.ts": 4,
     "web/app/(app)/me/team/me-team.test.ts": 3,
-    "web/app/(app)/parties/EmployeeWageRates.test.tsx": 2,
-    "web/app/(app)/parties/PartyDrawer.test.tsx": 11,
     "web/app/(app)/payments/PaymentDrawer.test.tsx": 8,
     "web/app/(app)/payments/RunBuilder.test.tsx": 1,
     "web/app/(app)/payments/RunDrawer.test.tsx": 1,
