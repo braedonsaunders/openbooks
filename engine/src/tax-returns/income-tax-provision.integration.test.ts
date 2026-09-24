@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import type { PoolClient } from "pg";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, pool } from "../platform/db.ts";
 import { isZero, sum } from "../money/money.ts";
 import {
   IncomeTaxProvisionError,
@@ -1104,6 +1105,76 @@ function closeCoveredPeriod(org: ScratchOrg): Promise<void> {
     }
   });
 }
+
+async function waitForAdvisoryWaiter(key: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const rows = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from pg_locks,
+             (select hashtextextended(${key}, 0) as h) as k
+       where locktype = 'advisory'
+         and classid::text = ((k.h >> 32) & 4294967295)::text
+         and objid::text = (k.h & 4294967295)::text
+         and not granted
+    `);
+    if (Number(rows.rows[0]?.n ?? 0) > 0) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
+
+test("mark-filed serializes with a concurrent controlled period reopen", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let holder: PoolClient | null = null;
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Reopen Race", "admin");
+    await seedFilingFingerprintFixture(org);
+    const prepared = await prepareFiling(org, userId);
+    await closeCoveredPeriod(org);
+
+    // Connection A models the approved reopen transaction: it owns the same
+    // period/book fence that the reopen service holds through the lock flip.
+    const connection = await pool.connect();
+    holder = connection;
+    await connection.query("begin");
+    await connection.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+      [org.orgId],
+    );
+    const key = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
+    await connection.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+
+    // Connection B must park on that fence before it certifies the closure.
+    const filing = markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-RACE");
+    const parked = await waitForAdvisoryWaiter(key);
+
+    // The reopen wins the race and commits before the filer can inspect the
+    // lock state. Mark-filed must then refuse instead of certifying an open
+    // period based on the earlier closed state.
+    await connection.query(`
+      update period_locks set state = 'open', locked_at = null, reason = 'test: concurrent reopen'
+       where org_id = $1 and period_id = $2 and book_id = $3
+         and subsidiary_id is null and module in ('gl', 'tax')`,
+      [org.orgId, org.periodId, org.bookId],
+    );
+    await connection.query("commit");
+    connection.release();
+    holder = null;
+
+    assert.ok(parked, "mark-filed must wait on the period-scope fence held by reopening");
+    await assert.rejects(
+      filing,
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+    );
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+  } finally {
+    if (holder) {
+      await holder.query("rollback").catch(() => undefined);
+      holder.release();
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 /** Close the covered period for one legal entity only (gl + tax). */
 function closeEntityPeriod(org: ScratchOrg, subsidiaryId: string): Promise<void> {
