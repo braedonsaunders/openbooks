@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -130,6 +130,7 @@ export function AccountDrawer({
   const t = useTranslations('accounts')
   const tc = useTranslations('common')
   const router = useRouter()
+  const fieldId = useId()
   const account = asAccountRow(payload.account)
   const requestIdRef = useRef<string | null>(null)
 
@@ -296,17 +297,18 @@ export function AccountDrawer({
         ) : null}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${fieldClass} lg:col-span-2`}>
-            <Label>{tc('labels.name')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
-            {editable ? <Input value={form.name} onChange={(e) => set('name', e.target.value)} /> : value(form.name)}
+            <Label htmlFor={`${fieldId}-name`}>{tc('labels.name')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            {editable ? <Input id={`${fieldId}-name`} value={form.name} onChange={(e) => set('name', e.target.value)} /> : value(form.name)}
           </div>
           <div className={fieldClass}>
-            <Label>{tc('labels.number')}</Label>
-            {editable ? <Input className="font-mono" value={form.number} onChange={(e) => set('number', e.target.value)} /> : value(<span className="font-mono">{form.number}</span>)}
+            <Label htmlFor={`${fieldId}-number`}>{tc('labels.number')}</Label>
+            {editable ? <Input id={`${fieldId}-number`} className="font-mono" value={form.number} onChange={(e) => set('number', e.target.value)} /> : value(<span className="font-mono">{form.number}</span>)}
           </div>
           <div className={fieldClass}>
-            <Label>{tc('labels.type')}</Label>
+            <Label htmlFor={`${fieldId}-type`}>{tc('labels.type')}</Label>
             {editable ? (
               <Select
+                id={`${fieldId}-type`}
                 value={form.type}
                 disabled={payload.hasTransactions}
                 onChange={(e) => setForm((current) => ({ ...current, type: e.target.value, parentId: '' }))}
@@ -317,30 +319,31 @@ export function AccountDrawer({
             {editable && payload.hasTransactions ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.typeLocked')}</p> : null}
           </div>
           <div className={`${fieldClass} sm:col-span-2 lg:col-span-4`}>
-            <Label>{tc('labels.description')}</Label>
-            {editable ? <Textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={3} /> : value(form.description)}
+            <Label htmlFor={`${fieldId}-description`}>{tc('labels.description')}</Label>
+            {editable ? <Textarea id={`${fieldId}-description`} value={form.description} onChange={(e) => set('description', e.target.value)} rows={3} /> : value(form.description)}
           </div>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className={fieldClass}>
-            <Label>{t('drawer.parent')}</Label>
+            <Label htmlFor={`${fieldId}-parent`}>{t('drawer.parent')}</Label>
             {editable ? (
-              <SearchSelect value={form.parentId} onChange={(v) => set('parentId', v)} options={compatibleParents} clearable emptyLabel={tc('labels.none')} ariaLabel={t('drawer.parent')} />
+              <SearchSelect id={`${fieldId}-parent`} value={form.parentId} onChange={(v) => set('parentId', v)} options={compatibleParents} clearable emptyLabel={tc('labels.none')} ariaLabel={t('drawer.parent')} />
             ) : value(parents.find((option) => option.value === form.parentId)?.label ?? payload.parentName)}
           </div>
           {(editable ? showCurrencyField : (multiCurrency || form.currencyRestriction)) ? (
           <div className={fieldClass}>
-            <Label>{t('drawer.currencyRestriction')}</Label>
+            <Label htmlFor={`${fieldId}-currency-restriction`}>{t('drawer.currencyRestriction')}</Label>
             {editable ? (
-              <SearchSelect value={form.currencyRestriction} onChange={(v) => set('currencyRestriction', v)} options={currencies} clearable emptyLabel={t('drawer.anyCurrency')} ariaLabel={t('drawer.currencyRestriction')} />
+              <SearchSelect id={`${fieldId}-currency-restriction`} value={form.currencyRestriction} onChange={(v) => set('currencyRestriction', v)} options={currencies} clearable emptyLabel={t('drawer.anyCurrency')} ariaLabel={t('drawer.currencyRestriction')} />
             ) : value(form.currencyRestriction || t('drawer.anyCurrency'))}
           </div>
           ) : null}
           <div className={fieldClass}>
-            <Label>{t('drawer.monetary')}</Label>
+            <Label htmlFor={`${fieldId}-monetary`}>{t('drawer.monetary')}</Label>
             {editable ? (
               <SearchSelect
+                id={`${fieldId}-monetary`}
                 value={form.monetary}
                 onChange={(v) => set('monetary', v)}
                 options={[
@@ -354,9 +357,9 @@ export function AccountDrawer({
             ) : value(form.monetary === 'true' ? t('drawer.monetaryAlways') : form.monetary === 'false' ? t('drawer.monetaryNever') : t('drawer.monetaryDefault'))}
           </div>
           {subsidiaries.length > 0 ? <div className={fieldClass}>
-            <Label>{tc('labels.subsidiary')}</Label>
+            <Label htmlFor={`${fieldId}-subsidiary`}>{tc('labels.subsidiary')}</Label>
             {editable ? (
-              <SearchSelect value={form.subsidiaryId} onChange={(v) => set('subsidiaryId', v)} options={subsidiaries} clearable emptyLabel={t('drawer.allSubsidiaries')} ariaLabel={tc('labels.subsidiary')} />
+              <SearchSelect id={`${fieldId}-subsidiary`} value={form.subsidiaryId} onChange={(v) => set('subsidiaryId', v)} options={subsidiaries} clearable emptyLabel={t('drawer.allSubsidiaries')} ariaLabel={tc('labels.subsidiary')} />
             ) : value(subsidiaries.find((option) => option.value === form.subsidiaryId)?.label ?? payload.subsidiaryName ?? t('drawer.allSubsidiaries'))}
           </div> : null}
         </section>
