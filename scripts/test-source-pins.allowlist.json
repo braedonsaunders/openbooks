@@ -371,7 +371,6 @@
     "web/lib/statement-export-calendar.test.ts": 4,
     "web/lib/tax-filing-export-calendar.test.ts": 2,
     "web/lib/tax-return-export-calendar.test.ts": 2,
-    "web/lib/view-export-calendar.test.ts": 2,
     "web/messages/me-compensation.test.ts": 1
   }
 }
