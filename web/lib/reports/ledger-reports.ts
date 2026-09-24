@@ -129,24 +129,53 @@ export async function generalLedger(
   `))
   const activityByAcct = new Map(periodActivity.rows.map((r) => [r.account_id, r.activity]))
 
-  const lines = (await reportDb.execute<{
-      account_id: string; number: string | null; name: string; type: string
-      entry_id: string; entry_number: string | null; date: string
-      memo: string | null; party: string | null; party_id: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null; entry_origin: string
-    }>(sql`
-    select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
-           e.id as entry_id, e.entry_number, e.posting_date::text as date,
-           l.memo, p.display_name as party, l.party_id, l.amount,
-           d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin
+  // Payroll legs collapse per (entry, account) in a UNION arm BEFORE the
+  // order/limit below, so the cap can never split a group and surface a
+  // partial (single-employee) sum. The arm keeps the summed amount (balances
+  // tie out) but names no employee and shows no per-employee memo. Granted
+  // readers run the line-grain query unchanged.
+  const payrollLeg = sql`(coalesce(d.kind, '') = 'pay_run' or coalesce(e.origin, '') = 'payroll') and l.party_id is not null`
+  const lineJoins = sql`
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
        and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-     where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}
+     where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}`
+  const lines = (await reportDb.execute<{
+      account_id: string; number: string | null; name: string; type: string
+      entry_id: string; entry_number: string | null; date: string
+      memo: string | null; party: string | null; party_id: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null; entry_origin: string
+    }>(opts.canSeePayroll === true
+      ? sql`
+    select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
+           e.id as entry_id, e.entry_number, e.posting_date::text as date,
+           l.memo, p.display_name as party, l.party_id, l.amount,
+           d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin
+      ${lineJoins}
      order by a.number nulls last, a.name, e.posting_date, e.entry_number, l.line_number
+     limit ${maxLines + 1}
+  `
+      : sql`
+    select * from (
+      (select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
+              e.id as entry_id, e.entry_number, e.posting_date::text as date,
+              l.memo, p.display_name as party, l.party_id, l.amount,
+              d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin
+         ${lineJoins}
+           and not (${payrollLeg}))
+      union all
+      (select ${reportDb.censusColumn}, l.account_id, max(a.number), max(a.name), max(a.type),
+              e.id as entry_id, max(e.entry_number), max(e.posting_date)::text as date,
+              null as memo, ${PAYROLL_RESTRICTED_PARTY_LABEL} as party, null as party_id, sum(l.amount) as amount,
+              max(d.kind) as doc_kind, max(d.id::text)::uuid as doc_id, max(e.origin) as entry_origin
+         ${lineJoins}
+           and (${payrollLeg})
+         group by l.account_id, e.id)
+    ) u
+     order by number nulls last, name, date, entry_number
      limit ${maxLines + 1}
   `))
   const truncated = lines.rows.length > maxLines
@@ -273,23 +302,51 @@ export async function journalReport(
            and book_id = ${statementBookExpr(orgId, opts.bookId)}
            and posting_date >= ${from} and posting_date <= ${to}
       )`
-  const r = (await reportDb.execute<{
-      id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
-      acct_number: string | null; acct_name: string; acct_id: string; party: string | null; party_id: string | null
-      line_memo: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
-    }>(sql`
-    select ${reportDb.censusColumn}, e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
-           a.number as acct_number, a.name as acct_name, l.account_id as acct_id, p.display_name as party, l.party_id,
-           l.memo as line_memo, l.amount,
-           d.kind as doc_kind, d.id as doc_id
+  // Payroll legs collapse per (entry, account) in a UNION arm BEFORE the
+  // order/limit below, so the cap can never split a group and surface a
+  // partial (single-employee) sum. Granted readers run the line-grain query
+  // unchanged.
+  const journalLeg = sql`(coalesce(d.kind, '') = 'pay_run' or coalesce(e.origin, '') = 'payroll') and l.party_id is not null`
+  const journalFrom = sql`
       from ${entryWindow} e
       join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-     where ${dimWhere(opts.dims)}
+     where ${dimWhere(opts.dims)}`
+  const r = (await reportDb.execute<{
+      id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
+      acct_number: string | null; acct_name: string; acct_id: string; party: string | null; party_id: string | null
+      line_memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
+    }>(opts.canSeePayroll === true
+      ? sql`
+    select ${reportDb.censusColumn}, e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
+           a.number as acct_number, a.name as acct_name, l.account_id as acct_id, p.display_name as party, l.party_id,
+           l.memo as line_memo, l.amount,
+           d.kind as doc_kind, d.id as doc_id
+      ${journalFrom}
      order by e.posting_date desc, e.entry_number desc, e.id, l.line_number
+     limit ${maxLines + 1}
+  `
+      : sql`
+    select * from (
+      (select ${reportDb.censusColumn}, e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
+              a.number as acct_number, a.name as acct_name, l.account_id as acct_id, p.display_name as party, l.party_id,
+              l.memo as line_memo, l.amount,
+              d.kind as doc_kind, d.id as doc_id
+         ${journalFrom}
+           and not (${journalLeg}))
+      union all
+      (select ${reportDb.censusColumn}, e.id, max(e.entry_number), max(e.posting_date)::text as date, max(e.memo) as entry_memo, max(e.origin),
+              max(a.number) as acct_number, max(a.name) as acct_name, l.account_id as acct_id, ${PAYROLL_RESTRICTED_PARTY_LABEL} as party, null as party_id,
+              null as line_memo, sum(l.amount) as amount,
+              max(d.kind) as doc_kind, max(d.id::text)::uuid as doc_id
+         ${journalFrom}
+           and (${journalLeg})
+         group by e.id, l.account_id)
+    ) u
+     order by date desc, entry_number desc, id
      limit ${maxLines + 1}
   `))
   const truncated = r.rows.length > maxLines

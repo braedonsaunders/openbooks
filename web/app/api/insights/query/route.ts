@@ -7,6 +7,7 @@ import { pool } from '@openbooks/engine/src/platform/db.ts'
 import { InsightDenominationError, runInsightQuery } from '@openbooks/analytics/server'
 import { InsightCompileError, InsightValidationError, sourcePermission } from '@openbooks/analytics'
 import { can, guardPermission } from '../../../../lib/authz'
+import { reportEntityCatalog } from '@/lib/custom-record-report-catalog'
 import { InsightBookScopeError, resolveInsightBookScope } from '@/lib/insight-books'
 import { insightCompileErrorMessage, insightLabelResolver } from '../../../../lib/insight-labels'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -77,11 +78,16 @@ export async function POST(req: Request) {
 
   try {
     // Column labels compile in the caller's locale (results are never persisted).
+    // Payroll confidentiality rides the reader's own entity catalog: a
+    // restricted reader's ledger sources arrive pre-collapsed per
+    // (entry, account, currency) before any caller filter, dimension, sort,
+    // or limit, so no card can isolate one employee's pay.
     const result = await runInsightQuery(
       pool, query, gate.user.orgId,
       gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
       await insightLabelResolver(), await businessToday(gate.user.orgId),
       allowedBookIds,
+      await reportEntityCatalog(gate),
     )
     return NextResponse.json(result)
   } catch (e) {
