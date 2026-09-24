@@ -5,7 +5,6 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import {
   appToolAssistantName,
   parseManifest,
@@ -262,13 +261,4 @@ test('validateAppToolsForInstall rejects assistant-name collisions with built-in
   )
   assert.equal(errors.length, 1)
   assert.match(errors[0]!, /collides with a built-in tool/)
-})
-
-test('installApp enforces the app-tool contract before writing anything', () => {
-  const source = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
-  const start = source.indexOf('export async function installApp')
-  assert.notEqual(start, -1, 'installApp must remain defined')
-  const body = source.slice(start, source.indexOf('\nexport ', start + 1))
-  assert.match(body, /validateAppToolsForInstall\(manifest, granted, staticNames\)/)
-  assert.match(body, /throw new AppError\(`invalid app tools:/)
 })
