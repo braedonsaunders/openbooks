@@ -719,11 +719,18 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
     setBusy(true);
     setTaskError(null);
     try {
-      await call("/api/consolidation", {
+      const result = (await call("/api/consolidation", {
         action: "consolidate",
         periodId: props.run.period_id,
-      });
-      toast.success(t("messages.consolidationPosted"));
+      })) as { elimination?: { status?: string } };
+      // A re-run that only reverses a prior elimination posts no effective
+      // elimination entry: saying "posted" would present the reversal as
+      // effective, so the reversed state gets its own message.
+      if (result.elimination?.status === "reversed") {
+        toast.success(t("messages.consolidationReversed"));
+      } else {
+        toast.success(t("messages.consolidationPosted"));
+      }
       router.refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : t("errors.actionFailed");

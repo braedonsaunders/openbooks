@@ -93,6 +93,7 @@
     "taskUpdated": "Task updated",
     "revaluationPosted": "Foreign-currency balances revalued",
     "consolidationPosted": "Ownership adjustments, rates, and eliminations posted",
+    "consolidationReversed": "Prior elimination reversed; no elimination is in effect for the period",
     "evidenceAdded": "Evidence attached",
     "automationComplete": "Close automation completed"
   },

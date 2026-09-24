@@ -254,6 +254,30 @@ test("a ready approval review task offers start and evidence controls", async (t
   assert.ok(labels.includes("Add evidence"), "an evidence-gated review task must offer Add evidence");
 });
 
+/** A re-run that only reverses a prior elimination must not toast "posted". */
+test("a reversed-only consolidation toasts the reversal, not a posting", async (t) => {
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async () => Response.json({
+    ok: true,
+    ratesWritten: 0,
+    ownership: { runId: "run-1", entryIds: [] },
+    elimination: { entryId: null, lineCount: 0, status: "reversed", reversalEntryIds: ["rev-1"] },
+  })) as typeof fetch;
+  const { host, root } = await mountWizard();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  await clickRunConsolidation(host);
+  const successes = (globalThis.__closeTestToasts ?? []).filter((toast) => toast.kind === "success");
+  assert.equal(successes.length, 1, "the run must toast exactly once");
+  assert.match(successes[0]!.message, /reversed/i, "the toast must name the reversal, not a posting");
+  assert.doesNotMatch(successes[0]!.message, /posted/i);
+});
+
 /** F-t06-026: a refused consolidation must persist its reason inline on the task. */
 test("a 422 consolidation refusal persists inline on the task", async (t) => {
   const calls: string[] = [];

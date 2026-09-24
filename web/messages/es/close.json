@@ -93,6 +93,7 @@
     "taskUpdated": "Tarea actualizada",
     "revaluationPosted": "Saldos en moneda extranjera revaluados",
     "consolidationPosted": "Ajustes de propiedad, tipos y eliminaciones contabilizados",
+    "consolidationReversed": "Eliminación anterior revertida; ninguna eliminación está vigente para el período",
     "evidenceAdded": "Evidencia adjunta",
     "automationComplete": "Automatización completada"
   },

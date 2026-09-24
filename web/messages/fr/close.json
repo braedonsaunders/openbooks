@@ -93,6 +93,7 @@
     "taskUpdated": "Tâche mise à jour",
     "revaluationPosted": "Soldes en devises réévalués",
     "consolidationPosted": "Ajustements de détention, taux et éliminations comptabilisés",
+    "consolidationReversed": "Élimination précédente contre-passée ; aucune élimination en vigueur pour la période",
     "evidenceAdded": "Preuve jointe",
     "automationComplete": "Automatisation terminée"
   },

@@ -464,9 +464,10 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
   }
 });
 
-test("an elimination rerun with emptied activity reverses the prior entry and reports zero lines", { skip: !DB }, async () => {
+test("an elimination rerun with emptied activity reports a reversal, never an elimination entry", { skip: !DB }, async () => {
   // Regression: once every activity group nets to zero the rerun must reverse
-  // the prior elimination and return lineCount 0 — never a replacement entry.
+  // the prior elimination and return lineCount 0 — never a replacement entry,
+  // and never the reversal journal as the elimination entry.
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -500,14 +501,23 @@ test("an elimination rerun with emptied activity reverses the prior entry and re
 
     const first = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(first.lineCount, 2);
+    assert.equal(first.status, "eliminated");
+    assert.ok(first.entryId);
 
     // Exact offsets zero every activity group, so the rerun sees no activity.
     await postPair("IC-OFFSET", true);
 
     const second = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(second.lineCount, 0, "an activity-free rerun posts no replacement lines");
-    assert.ok(second.entryId, "the prior entry's reversal is still reported");
-    assert.notEqual(second.entryId, first.entryId);
+    assert.equal(second.entryId, null, "a reversal is not an elimination entry");
+    assert.equal(second.status, "reversed");
+    assert.equal(second.reversalEntryIds?.length, 1, "the posted reversal is reported separately");
+    const reversal = (await db.execute<{ status: string; reverses_entry_id: string }>(sql`
+      select status, reverses_entry_id from journal_entries where id = ${second.reversalEntryIds![0]}`));
+    assert.deepEqual(reversal.rows[0], {
+      status: "posted",
+      reverses_entry_id: first.entryId,
+    });
     const firstStatus = (await db.execute<{ status: string }>(sql`
       select status from journal_entries where id = ${first.entryId}`));
     assert.equal(firstStatus.rows[0]!.status, "reversed", "the prior elimination is reversed");
