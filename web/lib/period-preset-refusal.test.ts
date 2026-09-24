@@ -6,7 +6,7 @@ import test from 'node:test'
 // catalog) must refuse by name — never silently become This Fiscal Year and
 // widen (or move) the report window.
 const stateKey = Symbol.for('openbooks.period-preset-refusal-test')
-const hookState = { dbCalls: 0 }
+const hookState: { dbCalls: number; periodRows: { name: string; starts_on: string; ends_on: string }[] } = { dbCalls: 0, periodRows: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = hookState
 
 const TODAY = '2026-09-24'
@@ -15,7 +15,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `const state = globalThis[Symbol.for('openbooks.period-preset-refusal-test')]
-     export const db = { async execute() { state.dbCalls += 1; return { rows: [] } } }`,
+     export const db = { async execute() { state.dbCalls += 1; return { rows: state.periodRows } } }`,
   ],
   [
     'mock:org-scope',
@@ -84,4 +84,15 @@ test('a current preset still resolves', async () => {
   assert.equal(resolved.presetId, 'today')
   assert.equal(resolved.from, TODAY)
   assert.equal(resolved.to, TODAY)
+})
+
+test('a business day before every configured accounting period refuses by name', async () => {
+  hookState.periodRows = [
+    { name: 'FY 2027 period 1', starts_on: '2026-04-01', ends_on: '2026-04-30' },
+  ]
+  await assert.rejects(
+    resolvePeriod('this_period', { orgId: ORG, today: '2026-01-15' }),
+    /2026-01-15.*precedes.*FY 2027 period 1/,
+  )
+  hookState.periodRows = []
 })
