@@ -196,6 +196,55 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     if (!subsidiary) {
       throw new RecruitingError("NOT_FOUND", "employer subsidiary is not visible in this organization — check the reference");
     }
+    // THE ENTITY RULE (coordinator constraint: an offer links a
+    // requisition, so the requisition's employer decides): the declared
+    // employer must equal the requisition's employer, and when a position
+    // is in play, the position's live-version employer too. An offer on an
+    // A requisition with B's employer would book the hire into the wrong
+    // legal entity.
+    const declared = (query.employerSubsidiaryId as string).toLowerCase();
+    const requisition = (await db.execute<{
+      employerSubsidiaryId: string;
+      positionId: string | null;
+      requisitionNumber: string;
+    }>(sql`
+      select employer_subsidiary_id as "employerSubsidiaryId",
+             position_id as "positionId",
+             requisition_number as "requisitionNumber"
+        from hrm_requisitions where org_id = ${orgId} and id = ${application.requisitionId}
+    `)).rows[0];
+    if (!requisition) {
+      throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
+    }
+    if (declared !== requisition.employerSubsidiaryId.toLowerCase()) {
+      throw new RecruitingError(
+        "REFUSED",
+        `an offer on requisition ${requisition.requisitionNumber} belongs to that opening's legal entity — declare employerSubsidiaryId ${requisition.employerSubsidiaryId} instead of ${query.employerSubsidiaryId as string}`,
+      );
+    }
+    const refPositionId = positionId ?? requisition.positionId;
+    if (refPositionId) {
+      const liveEmployer = (await db.execute<{ employerSubsidiaryId: string | null }>(sql`
+        select v.employer_subsidiary_id as "employerSubsidiaryId"
+          from position_versions v
+         where v.org_id = ${orgId} and v.position_id = ${refPositionId}
+           and v.recorded_until is null
+         order by v.version_no desc
+         limit 1
+      `)).rows[0]?.employerSubsidiaryId;
+      if (!liveEmployer) {
+        throw new RecruitingError(
+          "REFUSED",
+          "the requisition's position names no live version, so its legal entity cannot be established — revise the position before drafting terms",
+        );
+      }
+      if (declared !== liveEmployer.toLowerCase()) {
+        throw new RecruitingError(
+          "REFUSED",
+          `an offer on requisition ${requisition.requisitionNumber} belongs to the requisition position's legal entity — declare employerSubsidiaryId ${liveEmployer} instead of ${query.employerSubsidiaryId as string}`,
+        );
+      }
+    }
     let inserted: OfferRow | undefined;
     try {
       inserted = (await db.execute<OfferRow>(sql`
