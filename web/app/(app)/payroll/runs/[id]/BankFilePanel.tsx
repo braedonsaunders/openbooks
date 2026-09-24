@@ -115,19 +115,36 @@ export function BankFilePanel({
   )
 
   const [state, setState] = useState<PanelState | null>(null)
+  const [loadError, setLoadError] = useState<{ documentId: string; message: string } | null>(null)
   const [profileId, setProfileId] = useState('')
   const [busy, setBusy] = useState(false)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
-  // response), never synchronously in the effect body.
+  // response), never synchronously in the effect body. Loading, error and
+  // loaded are three distinct states: a failed fetch used to leave `state`
+  // null, which rendered exactly like loading — forever. The error carries
+  // its document id so a stale failure never shadows a newer document.
   const load = useCallback(() => {
     return fetch(`/api/payroll/runs/${documentId}/bank-file`)
-      .then((res) => {
-        if (!res.ok) return
+      .then(async (res) => {
+        // The status is checked before the body is parsed: a non-JSON error
+        // body must surface the failure, never a SyntaxError from res.json().
+        if (!res.ok) {
+          const body = await res.json().catch(() => null)
+          const message =
+            body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+              ? body.error
+              : `request failed (${res.status})`
+          setLoadError({ documentId, message })
+          return
+        }
         return (res.json() as Promise<PanelState>).then((data) => {
           setState(data)
           setProfileId((current) => current || (data.profiles.find((p) => p.configured)?.id ?? ''))
         })
+      })
+      .catch((error: unknown) => {
+        setLoadError({ documentId, message: error instanceof Error ? error.message : 'request failed' })
       })
   }, [documentId])
 
@@ -135,7 +152,45 @@ export function BankFilePanel({
     void load()
   }, [load])
 
-  if (!state) return null
+  const visibleError = loadError !== null && loadError.documentId === documentId ? loadError.message : null
+  if (visibleError !== null) {
+    return (
+      <section
+        aria-label={tx('wizard.bankFile.title', 'Direct deposit')}
+        className="rounded-xl border border-red-200 bg-white px-4 py-3 dark:border-red-900/60 dark:bg-slate-900"
+      >
+        <p className="flex items-start gap-2 text-sm text-red-800 dark:text-red-300">
+          <AlertTriangle size={15} aria-hidden className="mt-0.5 shrink-0" />
+          {tx('wizard.bankFile.loadFailed', 'Could not load the direct-deposit file status')}: {visibleError}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={() => {
+            setLoadError(null)
+            void load()
+          }}
+        >
+          {tx('wizard.bankFile.retry', 'Retry')}
+        </Button>
+      </section>
+    )
+  }
+
+  if (!state) {
+    return (
+      <section
+        aria-label={tx('wizard.bankFile.title', 'Direct deposit')}
+        className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
+      >
+        <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+          <Loader2 size={15} aria-hidden className="animate-spin" />
+          {tx('wizard.bankFile.loading', 'Loading direct-deposit file status…')}
+        </p>
+      </section>
+    )
+  }
 
   const { entitlement, population, profiles, artifacts, formats } = state
   const live = artifacts.filter((a) => a.status !== 'superseded')
