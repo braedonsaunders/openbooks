@@ -57,6 +57,7 @@ import {
 } from "./states/index.ts";
 import { act32LocalEit } from "./states/pa.ts";
 import { inCounty, inCountyWithholding } from "./states/in.ts";
+import { orTransitWithholding } from "./states/or.ts";
 
 export class UsWithholdingError extends PayrollError {}
 
@@ -74,6 +75,9 @@ export const US_LOCAL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   PA_EIT_PSD: "PA Act 32 PSD code",
   PA_EIT_RATE: "PA local EIT rate (employer-entered)",
   PA_EIT_TAX: "PA local earned income tax",
+  OR_TRANSIT_DISTRICT: "Oregon transit district (code)",
+  OR_TRANSIT_RATE: "Oregon transit payroll-tax rate (employer-entered)",
+  OR_TRANSIT_TAX: "Oregon transit payroll tax (employer)",
 };
 
 /**
@@ -176,6 +180,16 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   }
 
   const subRegion = levy.subRegion!;
+  // Wrong-pocket guard: an employer levy (Oregon transit) routed here would
+  // post the employer's tax as a stub deduction — out of the employee's
+  // cheque. It is refused by name; the employer path below is the only way
+  // it posts.
+  if (subRegionLevy("US", levy.region, subRegion)?.pocket === "employer") {
+    throw new UsWithholdingError(
+      `${levy.label} is an employer payroll tax, not employee withholding — `
+      + "it posts as an employer contribution, never as a stub deduction.",
+    );
+  }
   const engineCode = SUB_REGION_ENGINE_CODE[`${levy.region}:${subRegion}`];
   if (engineCode) {
     const engine = usStateWithholding(engineCode);
@@ -350,6 +364,66 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         `${levy.label} is declared inside ${levy.region} and the US pack has no way to compute it`,
       );
   }
+}
+
+/**
+ * The EMPLOYER half of the sub-region dispatch — levies the pack declares
+ * with `pocket: "employer"`.
+ *
+ * Oregon's TriMet and Lane Transit District payroll taxes are assessed on
+ * the employer for wages paid for work performed in the district (Form OQ):
+ * never withheld from the employee, so they never travel
+ * `computeUsWithholding`'s deduction path (which refuses them by name above).
+ * The result posts as an employer contribution: employer expense plus a
+ * liability to the district, with net pay untouched.
+ *
+ * The rate is employer-entered (no Department publication carries it);
+ * `orTransitWithholding` refuses a missing one by name. Its plain-Error
+ * refusal is re-wrapped here so the run reports it as a payroll refusal
+ * (422), not a server failure — the wording is the engine's own.
+ */
+export function computeUsEmployerWithholding(input: {
+  levy: ResolvedWithholdingLevy;
+  /** Total state-taxable compensation this period (periodic plus supplemental). */
+  wages: string;
+  /**
+   * The employer-entered rate values for the levy's `tenant`-sourced slot,
+   * from `payroll_statutory_rates` at `sub_region` scope. Undefined means
+   * the employer has not entered them, which refuses below.
+   */
+  tenantRates: (rateKey: string, subRegion: string) => Record<string, string> | undefined;
+}): UsWithholdingResult {
+  const { levy } = input;
+  const subRegion = levy.subRegion!;
+  const declared = subRegionLevy("US", levy.region, subRegion);
+  if (declared?.pocket !== "employer") {
+    throw new UsWithholdingError(
+      `${levy.label} is not declared as an employer payroll tax — `
+      + "it posts through the employee withholding path, not here.",
+    );
+  }
+  if (levy.region === "OR" && (subRegion === "TRIMET" || subRegion === "LTD")) {
+    const rateKey = declared.rateSource.kind === "tenant" ? declared.rateSource.rateKey : null;
+    const rate = rateKey ? input.tenantRates(rateKey, subRegion)?.rate : undefined;
+    let tax: string;
+    try {
+      tax = orTransitWithholding({ wages: input.wages, rate, district: declared.label });
+    } catch (error) {
+      throw new UsWithholdingError(error instanceof Error ? error.message : String(error));
+    }
+    return {
+      code: `OR-${subRegion}`, label: declared.label, tax,
+      factors: {
+        OR_TRANSIT_DISTRICT: subRegion,
+        OR_TRANSIT_RATE: rate ?? "",
+        OR_TRANSIT_TAX: tax,
+      },
+    };
+  }
+  throw new UsWithholdingError(
+    `${levy.label} is declared as an employer payroll tax inside ${levy.region} and the US pack `
+    + "has no employer computation for it",
+  );
 }
 
 /**

@@ -109,6 +109,18 @@ export interface PayrollSubRegionLevy {
    * (but traceably) part of its parent.
    */
   computedByParent?: string;
+  /**
+   * Whose money the levy is.
+   *
+   * `employee` (the default) — withheld from pay as a deduction: income
+   * taxes, city wage taxes, EIT. `employer` — accrued at the employer's cost
+   * as an employer contribution: Oregon's TriMet and Lane Transit District
+   * payroll taxes, which Form OQ assesses on the employer, never withheld
+   * from the employee. Routing an employer levy through the deduction path
+   * would take the employer's tax out of the employee's cheque, so the
+   * dispatch refuses the wrong pocket by name in both directions.
+   */
+  pocket?: "employee" | "employer";
   /** The ordinance or statute the levy is imposed under. */
   citation: string;
   /**

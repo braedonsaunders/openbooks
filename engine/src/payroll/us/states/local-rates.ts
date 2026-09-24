@@ -120,7 +120,75 @@ const US_MI_CITY_SLOT: PayrollStatutoryRateSlot = {
   ],
 };
 
+/**
+ * TriMet and Lane Transit District payroll-tax rates, per district.
+ *
+ * Oregon's publications set neither rate: 150-206-436 publishes no TriMet or
+ * LTD rate, and the districts revise their own (TriMet's and LTD's current
+ * Form OQ figures are the districts', not the Department's). The employer
+ * holds the rate — it is on the district notice — so the employer enters it,
+ * exactly as they enter an experience-rated SUI rate. orTransitWithholding
+ * refuses without it and never invents 0.8237% or 0.80%.
+ *
+ * ONE rate each: the districts assess a flat rate on payroll. These slots
+ * drive the employer posting (system key transit_payroll_tax), never a stub
+ * deduction.
+ */
+const US_OR_TRIMET_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_or_trimet",
+  label: "TriMet transit payroll-tax rate",
+  scope: "sub_region",
+  systemKeys: ["transit_payroll_tax"],
+  regions: ["OR"],
+  // orTransitWithholding already refuses a missing district rate by name; the
+  // declaration records that refusal here.
+  whenUnconfigured: "refuse",
+  citation:
+    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); "
+    + "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25), which publishes no district rate",
+  variesBecause:
+    "Each transit district sets its own payroll-tax rate on its own schedule. No Department "
+    + "publication carries it, so a rate carried in a payroll release would be wrong for whichever "
+    + "district moved after it, with nothing able to tell.",
+  fields: [
+    {
+      key: "rate", label: "Transit payroll-tax rate", kind: "rate", decimals: 6,
+      min: "0", max: "0.05", required: true,
+      help: "As a decimal, from the district's own notice: 0.008 is 0.8%. The rate is "
+        + "employer-entered because no Department publication carries it — never copy a "
+        + "circulating figure without checking the district.",
+    },
+  ],
+};
+
+const US_OR_LTD_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_or_ltd",
+  label: "Lane Transit District payroll-tax rate",
+  scope: "sub_region",
+  systemKeys: ["transit_payroll_tax"],
+  regions: ["OR"],
+  whenUnconfigured: "refuse",
+  citation:
+    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); "
+    + "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25), which publishes no district rate",
+  variesBecause:
+    "Each transit district sets its own payroll-tax rate on its own schedule. No Department "
+    + "publication carries it, so a rate carried in a payroll release would be wrong for whichever "
+    + "district moved after it, with nothing able to tell.",
+  fields: [
+    {
+      key: "rate", label: "Transit payroll-tax rate", kind: "rate", decimals: 6,
+      min: "0", max: "0.05", required: true,
+      help: "As a decimal, from the district's own notice. The rate is employer-entered "
+        + "because no Department publication carries it — never copy a circulating figure "
+        + "without checking the district.",
+    },
+  ],
+};
+
 export const US_LOCAL_RATE_SLOTS: readonly PayrollStatutoryRateSlot[] = [
   US_OH_MUNICIPAL_SLOT,
   US_MI_CITY_SLOT,
+  US_OR_TRIMET_SLOT,
+  US_OR_LTD_SLOT,
 ];

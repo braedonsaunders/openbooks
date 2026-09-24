@@ -11,9 +11,12 @@ import {
   packCertificates,
 } from "../certificates.ts";
 import { advisoryGaps, blockingGaps, resolveWithholding } from "../withholding-resolution.ts";
+import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculatePub15T } from "./pub15t.ts";
-import { computeUsWithholding, usSubRegionRateIndex } from "./withholding.ts";
+import {
+  computeUsEmployerWithholding, computeUsWithholding, usSubRegionRateIndex,
+} from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
 import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 
@@ -214,7 +217,34 @@ export async function computeUsStatutory(
   const taxQualifiedDeductions = sum([
     deduction("pension_f"), deduction("union_dues"), deduction("alimony"),
   ]);
+  // Employer-pocket levies post below the deduction loop's sequence range:
+  // federal employer lines take 210–250, so transit starts at 260.
+  let transitSequence = 260;
   for (const levy of resolution.levies) {
+    if (levy.level === "sub_region"
+      && subRegionLevy(country, levy.region, levy.subRegion!)?.pocket === "employer") {
+      // Employer-pocket levies (Oregon transit) accrue at the employer's
+      // cost — never out of the cheque. The base is the period's total
+      // state-taxable compensation, the same convention the deduction loop
+      // prices its levies on; the rate is the district's employer-entered
+      // figure, refused by name when absent.
+      const employerTax = computeUsEmployerWithholding({
+        levy,
+        wages: sum([income, nonPeriodic]),
+        tenantRates: (rateKey, subRegion) =>
+          config.subRegionRates(rateKey, levy.region, subRegion),
+      });
+      pushStatutory(
+        "transit_payroll_tax",
+        "employer_contribution", employerTax.label, employerTax.tax, transitSequence++,
+      );
+      factors = {
+        ...factors,
+        ...employerTax.factors,
+        [`EPT_${employerTax.code}`]: employerTax.tax,
+      };
+      continue;
+    }
     const withheld = computeUsWithholding({
       levy,
       payDate: run.pay_date!,

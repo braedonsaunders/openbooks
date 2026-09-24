@@ -610,6 +610,46 @@ export const OR_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+/**
+ * The transit district the employee's work is performed in — the pack's own
+ * record, mirroring Ohio's municipal record.
+ *
+ * No agency form carries it: publication 150-206-436 withholds nothing for the
+ * districts, and Form OQ is the employer's return, not the employee's
+ * certificate. The employer determines the district from the work address
+ * (TriMet serves the Portland metro; LTD serves Lane County) and records it
+ * here, which is what lets the resolver produce the work-side transit levy.
+ * The code is the pack's convention (the district name); an unknown code is
+ * refused by name at resolution, never defaulted to no district.
+ */
+export const OR_TRANSIT_RECORD: PayrollCertificate = {
+  key: "us_or_transit_record",
+  form: "(employer-determined)",
+  label: "Oregon transit district of employment",
+  scope: { level: "region", region: "OR" },
+  purpose: "withholding",
+  citation:
+    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); "
+    + "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25)",
+  summary:
+    "The transit district the employee's work is performed in, which the employer determines "
+    + "from the work address. Oregon publishes no employee form for it, so the code is the "
+    + "pack's own convention: TRIMET or LTD. Its RATE is entered separately against the "
+    + "district, because no Department publication carries one: a district with no rate on "
+    + "file refuses the run rather than accruing zero.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "work_transit_district", label: "Transit district the work is performed in", kind: "code",
+      subRegion: { side: "work" },
+      help: "TRIMET if the work address is inside the TriMet district, LTD if inside Lane Transit "
+        + "District — look the address up against the district boundary maps. Leave it blank if "
+        + "the work address is in neither district. Its RATE is entered separately against the "
+        + "district, because no Department publication carries one.",
+    },
+  ],
+};
+
 export const OR_REGION: PayrollRegionWithholding = {
   region: "OR",
   label: "Oregon income tax",
@@ -631,25 +671,34 @@ export const OR_REGION: PayrollRegionWithholding = {
       code: "TRIMET",
       label: "TriMet transit payroll tax",
       kind: "transit_district",
-      reaches: ["resident", "nonresident"],
+      // Employer liability follows the work location: the transit payroll tax
+      // is assessed on the employer for wages paid for work performed in the
+      // district (Form OQ), so residence alone creates no levy and only the
+      // work side resolves. Never withheld from the employee.
+      reaches: ["nonresident"],
       rateSource: { kind: "tenant", rateKey: "us_or_trimet" },
       implemented: true,
+      pocket: "employer",
       citation:
         "Publication 150-206-436 (Rev. 12-31-25) does not publish a TriMet rate or "
         + "employee-withholding rule. The district exists; the rate is employer-entered. "
-        + "orTransitWithholding refuses without that rate and never invents 0.8237%.",
+        + "orTransitWithholding refuses without that rate and never invents 0.8237%. "
+        + "Employer-paid on Form OQ, never withheld from wages.",
     },
     {
       code: "LTD",
       label: "Lane Transit District payroll tax",
       kind: "transit_district",
-      reaches: ["resident", "nonresident"],
+      // As TriMet above: employer liability on work performed in the district.
+      reaches: ["nonresident"],
       rateSource: { kind: "tenant", rateKey: "us_or_ltd" },
       implemented: true,
+      pocket: "employer",
       citation:
         "Publication 150-206-436 (Rev. 12-31-25) does not publish an LTD rate or "
         + "employee-withholding rule. The district exists; the rate is employer-entered. "
-        + "orTransitWithholding refuses without that rate and never invents 0.80%.",
+        + "orTransitWithholding refuses without that rate and never invents 0.80%. "
+        + "Employer-paid on Form OQ, never withheld from wages.",
     },
     {
       code: "STT",

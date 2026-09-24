@@ -141,7 +141,7 @@ async function usPayrollOrg(): Promise<Fixture> {
       '{payroll,us}',
       coalesce(settings#>'{payroll,us}', '{}'::jsonb) || ${JSON.stringify({
         sui: Object.fromEntries(
-          ["CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX"].map((state) => [
+          ["CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX", "OR"].map((state) => [
             state, { rate: "0.03", wageBase: "7000" },
           ]),
         ),
@@ -365,6 +365,60 @@ test(
       assert.ok(jerseyRefusal, "the NJ resident is refused by name");
       assert.match(jerseyRefusal!.message, /resides in NJ and works in PA/);
       assert.match(jerseyRefusal!.message, /us_pa_rev419 is not on file/);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+/* --------------------------------------------------------------------- */
+/* 2a. Employer pocket — Oregon transit accrues at the employer's cost      */
+/* --------------------------------------------------------------------- */
+
+test(
+  "a TriMet employee's transit tax posts as employer cost, never a deduction",
+  { skip: !DB },
+  async () => {
+    const fx = await usPayrollOrg();
+    try {
+      // The rate figure below is the TEST entering a number as an employer
+      // would — the districts publish no rate, so the fixture invents
+      // nothing citable; any valid figure proves the pocket and the path.
+      await db.execute(sql`
+        insert into payroll_statutory_rates
+          (org_id, country, rate_key, region, sub_region, tax_year, rate_values)
+        values (${fx.orgId}, 'US', 'us_or_trimet', 'OR', 'TRIMET', 2026, '{"rate": "0.008"}')
+      `);
+      const rider = await usEmployee(fx, "TriMet Tess", {
+        state: "OR",
+        certificates: [{
+          key: "us_or_transit_record", region: "OR",
+          answers: { work_transit_district: "TRIMET" },
+        }],
+      });
+
+      const { run, result } = await runPayroll(fx);
+
+      assert.deepEqual(result.errors, [], "transit neither blocks nor warns");
+      const stub = await stubOf(fx, run.documentId, rider);
+      assert.ok(stub, "the stub posts");
+      const factors = stub!.factors;
+      assert.equal(factors.OR_TRANSIT_DISTRICT, "TRIMET");
+      assert.equal(factors.OR_TRANSIT_RATE, "0.008");
+      assert.ok(factors.OR_TRANSIT_TAX, "the transit amount is on the stub trace");
+      assert.equal(factors["EPT_OR-TRIMET"], factors.OR_TRANSIT_TAX);
+      assert.ok(factors.SIT_OR, "Oregon state tax still withholds beside it");
+      const lines = (await db.execute<{ kind: string; description: string; amount: string }>(sql`
+        select l.kind, l.description, l.amount::text as amount
+          from pay_stub_lines l
+          join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+         where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
+           and s.employee_party_id = ${rider}
+      `)).rows;
+      const transit = lines.filter((line) => /transit/i.test(line.description));
+      assert.equal(transit.length, 1, "exactly one transit line");
+      assert.equal(transit[0]!.kind, "employer_contribution", "the employer's pocket, not the cheque");
+      assert.equal(transit[0]!.amount, factors.OR_TRANSIT_TAX!);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
