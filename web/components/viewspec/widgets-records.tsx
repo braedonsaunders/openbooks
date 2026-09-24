@@ -161,14 +161,16 @@ export const RECORDS_WIDGETS = {
     />
   ),
   'activity-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof ActivityDrawer> | null
+    const drawer = props.drawer as (ComponentProps<typeof ActivityDrawer> & { remountKey: string }) | null
     if (!drawer) return null
-    return <ActivityDrawer {...drawer} />
+    const { remountKey, ...rest } = drawer
+    return <ActivityDrawer key={remountKey} {...rest} />
   },
   'opportunity-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof OpportunityDrawer> | null
+    const drawer = props.drawer as (ComponentProps<typeof OpportunityDrawer> & { remountKey: string }) | null
     if (!drawer) return null
-    return <OpportunityDrawer {...drawer} />
+    const { remountKey, ...rest } = drawer
+    return <OpportunityDrawer key={remountKey} {...rest} />
   },
   'opportunity-view-switcher': (props) => {
     const view = (props.view as 'board' | 'list') ?? 'list'

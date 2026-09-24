@@ -183,7 +183,7 @@ export async function loadOpportunities(
     }
   }
 
-  let drawer: OpportunityDrawerProps | null = null
+  let drawer: (OpportunityDrawerProps & { remountKey: string }) | null = null
   if (openId && isUuid(openId)) {
     const [multiCurrency, inventoryEnabled, equipmentEnabled] = await Promise.all([
       isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
@@ -220,6 +220,10 @@ export async function loadOpportunities(
       : '/crm/opportunities'
     if (open) {
       drawer = {
+        // Keyed by the open record: the drawer holds unsaved edits in local
+        // state, so switching records must remount it rather than pour B's
+        // props into A's dirty form.
+        remountKey: openId,
         data: open as unknown as OpportunityDrawerProps['data'],
         statuses: statuses.rows as unknown as OpportunityDrawerProps['statuses'],
         owners: owners.rows as unknown as OpportunityDrawerProps['owners'],

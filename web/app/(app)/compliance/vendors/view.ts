@@ -166,6 +166,9 @@ export async function loadComplianceVendors(
     drawerOpen: Boolean(drawerData),
     drawerProps: drawerData
       ? {
+          // Keyed by the open vendor so the TIN/identity form remounts on a
+          // record switch instead of saving A's keystrokes against B.
+          remountKey: openVendor,
           data: drawerData,
           closeHref,
           formTypes: [...FORM_TYPES],
