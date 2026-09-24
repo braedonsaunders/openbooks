@@ -20,6 +20,7 @@ export const patchAutomationBody = z.object({
   conditions: z.unknown().optional(),
   actions: z.unknown().optional(),
   priority: z.number().int().min(0).max(1000).optional(),
+  expectedVersion: z.number().int().min(1).optional(),
 });
 
 export const automationStatusBody = z.object({

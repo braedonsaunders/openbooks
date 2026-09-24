@@ -28,6 +28,22 @@ import type { ApprovalSettings } from "./approvals.ts";
 export class AutomationServiceError extends Error {}
 
 /**
+ * A save over a moved recipe. Carries the stored version so the caller can
+ * name it: the editor reloads and re-applies, never silently overwriting
+ * another editor's save. The route answers this as a 409, never a 422.
+ */
+export class AutomationVersionConflictError extends Error {
+  readonly currentVersion: number;
+  constructor(currentVersion: number) {
+    super(
+      `the automation changed since it was loaded (now at version ${currentVersion}) — reload and re-apply the change`,
+    );
+    this.name = "AutomationVersionConflictError";
+    this.currentVersion = currentVersion;
+  }
+}
+
+/**
  * Engine-side feature read (orgs.settings.features, registry defaults).
  * API routes 404 first, but the tick and the executor refuse here too —
  * a switched-off capability never fires, no matter the caller.
@@ -157,6 +173,12 @@ export async function updateAutomation(input: {
   conditions?: unknown;
   actions?: unknown;
   priority?: number;
+  /**
+   * The version the caller loaded. When present and stale, the save writes
+   * nothing and refuses instead of silently overwriting another editor's
+   * save. Saves that predate the fence omit it and keep the old behavior.
+   */
+  expectedVersion?: number;
 }): Promise<AutomationDTO> {
   await requireAutomations(input.orgId, input.actorId, "automations.manage");
   return withOrgTransaction(input.orgId, async () => {
@@ -165,6 +187,10 @@ export async function updateAutomation(input: {
     `);
     if (current.rows.length === 0) {
       throw new AutomationServiceError("automation not found — reload the list and try again");
+    }
+    const storedVersion = current.rows[0]!.version;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== storedVersion) {
+      throw new AutomationVersionConflictError(storedVersion);
     }
     const currentStatus = current.rows[0]!.status;
     const sets: string[] = [];

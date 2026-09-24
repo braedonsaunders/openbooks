@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -116,8 +116,10 @@ export function AutomationBuilder({
   backLabel: string
 }) {
   const t = useTranslations('admin.automations')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [name, setName] = useState(automation.name)
+  const [version, setVersion] = useState(automation.version)
   const [trigger, setTrigger] = useState<Record<string, unknown>>({ ...automation.trigger })
   // Per-kind trigger config: replacing the whole trigger on a kind switch
   // discarded everything typed for the previous kind (a schedule cron did
@@ -145,6 +147,27 @@ export function AutomationBuilder({
   const [tab, setTab] = useState<'build' | 'runs'>('build')
   const [simSubject, setSimSubject] = useState('')
   const [simSteps, setSimSteps] = useState<{ index: number; kind: string; status: string; output?: string; error?: string }[] | null>(null)
+  // A refused save names what happened and offers the way back. Local edits
+  // stay until the editor chooses Reload, which re-seeds from the loader
+  // (the WeeklyGrid stale-revision arrangement).
+  const [conflict, setConflict] = useState<string | null>(null)
+  const seededVersion = useRef(automation.version)
+  useEffect(() => {
+    if (seededVersion.current === automation.version) return
+    seededVersion.current = automation.version
+    setName(automation.name)
+    setTrigger({ ...automation.trigger })
+    triggerCache.current = {
+      [String(automation.trigger.kind ?? 'manual')]: { ...automation.trigger },
+    }
+    setRules({ ...(automation.rules ?? {}) })
+    const reseeded = toLeaves((automation.conditions ?? {}) as Record<string, unknown>)
+    setCondMode(reseeded.mode)
+    setLeaves(reseeded.leaves)
+    setActions([...automation.actions])
+    setVersion(automation.version)
+    setConflict(null)
+  }, [automation])
 
   const kind = String(trigger.kind ?? 'manual')
   // Readers (automations.read without automations.manage) see the whole
@@ -155,16 +178,30 @@ export function AutomationBuilder({
 
   async function patch(body: Record<string, unknown>, success: string) {
     setBusy(true)
+    setConflict(null)
     try {
       const res = await fetch(`/api/automations/${automation.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, expectedVersion: version }),
       })
+      if (res.status === 409) {
+        // Another editor saved first: nothing was written. Park the named
+        // refusal as a notice with a Reload path and keep the local edits
+        // until the editor reloads.
+        const message = await readApiErrorMessage(res, saveFailed)
+        setConflict(message)
+        toast.error(message)
+        return
+      }
       if (!res.ok) {
         toast.error(await readApiErrorMessage(res, saveFailed))
         return
       }
+      const payload = (await res.json().catch(() => ({}))) as {
+        automation?: { version?: unknown }
+      }
+      if (typeof payload.automation?.version === 'number') setVersion(payload.automation.version)
       toast.success(success)
       router.refresh()
     } catch {
@@ -235,8 +272,19 @@ export function AutomationBuilder({
         <Badge variant={automation.status === 'enabled' ? 'success' : automation.status === 'error' ? 'destructive' : 'secondary'}>
           {automation.status}
         </Badge>
-        <span className="text-xs text-slate-500 tabular-nums">v{automation.version}</span>
+        <span className="text-xs text-slate-500 tabular-nums">v{version}</span>
       </div>
+      {conflict ? (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          role="alert"
+        >
+          <span className="min-w-52 flex-1">{conflict}</span>
+          <Button size="sm" variant="outline" onClick={() => router.refresh()}>
+            {tCommon('actions.refresh')}
+          </Button>
+        </div>
+      ) : null}
       {automation.errorMessage ? (
         <p className="text-sm text-red-600 dark:text-red-400">{automation.errorMessage}</p>
       ) : null}
