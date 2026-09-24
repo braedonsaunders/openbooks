@@ -47,7 +47,7 @@
     "engine/src/sync/source-deletions.test.ts": 7,
     "engine/src/tax/pack-provisioning.test.ts": 1,
     "engine/src/validation/import-field-tickets.test.ts": 1,
-    "engine/src/worker/backup-scheduler.test.ts": 14,
+    "engine/src/worker/backup-scheduler.test.ts": 13,
     "engine/src/worker/overhead-scheduler.test.ts": 1,
     "web/app/(app)/agents/agents-moved-notice.test.ts": 1,
     "web/app/(app)/assets/asset-popover-triggers.test.ts": 5,
