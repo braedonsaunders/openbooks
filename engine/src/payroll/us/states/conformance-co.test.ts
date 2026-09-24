@@ -74,6 +74,30 @@ test("CO DR 1098 — extra withholding is added after the rate", () => {
   assert.equal(result.tax, money("64.35"));
 });
 
+test("CO accepts the published 260-day basis and refuses unprinted daily periods", () => {
+  const daily = CO_WITHHOLDING.compute({
+    payDate: "2026-03-06",
+    periodsPerYear: 260,
+    wages: "1000.00",
+    basis: "resident",
+    certificate: cert(),
+    federalFilingStatus: "single",
+  });
+  assert.equal(daily.tax, money("43.07"));
+
+  assert.throws(
+    () => CO_WITHHOLDING.compute({
+      payDate: "2026-03-06",
+      periodsPerYear: 365,
+      wages: "1000.00",
+      basis: "resident",
+      certificate: cert(),
+      federalFilingStatus: "single",
+    }),
+    /365 periods a year.*per-period TABLE lookup.*transcribe the state's table for this one/,
+  );
+});
+
 test("CO W-4-only exempt claim withholds zero; a filed DR 0004 resumes its worksheet", () => {
   const w4Only = CO_WITHHOLDING.compute({
     payDate: "2026-03-06",
