@@ -569,12 +569,15 @@ test("a restricted caller lists only shared and in-scope accounts, never another
   try {
     const own = await ownSubsidiaryId(f.orgId);
     const foreign = await seedForeignEntity(f.orgId, own);
+    authorize(f);
+    assert.equal((await POST(postRequest(baseRule({ feeIncomeAccountId: foreign.incomeAccountId })))).status, 200);
     authorizeScope(f, new Set([own]));
     const res = await GET();
     assert.equal(res.status, 200);
     const body = (await res.json()) as {
       bankAccounts: Array<{ id: string; number: string; name: string }>;
       incomeAccounts: Array<{ id: string; number: string; name: string }>;
+      surchargeRules: Array<{ feeIncomeAccountId: string | null }>;
     };
     const bankIds = body.bankAccounts.map((a) => a.id);
     const incomeIds = body.incomeAccounts.map((a) => a.id);
@@ -582,10 +585,7 @@ test("a restricted caller lists only shared and in-scope accounts, never another
     assert.ok(!incomeIds.includes(foreign.incomeAccountId), "Entity B's fee income account must not enumerate");
     assert.ok(bankIds.includes(f.bankAccount), "shared-chart bank accounts stay visible");
     assert.ok(incomeIds.includes(f.revenueAccount), "shared-chart income accounts stay visible");
-    assert.ok(
-      body.bankAccounts.every((a) => a.name !== "Entity B settlement"),
-      "no foreign account name may leak through the picker",
-    );
+    assert.equal(body.surchargeRules[0]?.feeIncomeAccountId, null, "foreign fee account references stay masked");
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);
