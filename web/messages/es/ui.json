@@ -8,7 +8,8 @@
     "nextPageAria": "Página siguiente",
     "prev": "Ant.",
     "pageOf": "Página {page} de {pages}",
-    "selectAllMatching": "Seleccionar todas las filas coincidentes"
+    "selectAllMatching": "Seleccionar todas las filas coincidentes",
+    "perPage": "Filas por página"
   },
   "search": {
     "placeholder": "Buscar…",
