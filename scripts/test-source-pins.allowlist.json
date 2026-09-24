@@ -40,8 +40,6 @@
     "web/app/(app)/purchasing/view.hero.test.ts": 3,
     "web/app/(app)/records/types/TypeBuilderDrawer.test.ts": 1,
     "web/app/(app)/subcontracts/Subcontracts.scope.test.ts": 1,
-    "web/app/(app)/tax/FilingHistoryDrawer.test.ts": 3,
-    "web/app/(app)/tax/TaxFilingsSave.test.tsx": 2,
     "web/app/(app)/tax/provisions/view.test.ts": 1,
     "web/app/(app)/tax/tax-filing-notice.test.ts": 1,
     "web/app/(app)/timesheets/view-subsidiary-scope.test.ts": 2,
