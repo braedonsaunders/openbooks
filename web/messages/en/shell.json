@@ -232,6 +232,7 @@
   "browserSession": "Browser session",
   "lastUsed": "Last used {date}",
   "revoke": "Revoke",
-  "revokeOtherSessions": "Revoke all other sessions"
+  "revokeOtherSessions": "Revoke all other sessions",
+  "requestFailed": "The security request could not be completed. Please try again."
 }
 }

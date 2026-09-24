@@ -232,6 +232,7 @@
   "browserSession": "浏览器会话",
   "lastUsed": "上次使用：{date}",
   "revoke": "撤销",
-  "revokeOtherSessions": "撤销其他所有会话"
+  "revokeOtherSessions": "撤销其他所有会话",
+  "requestFailed": "无法完成安全请求。请重试。"
 }
 }
