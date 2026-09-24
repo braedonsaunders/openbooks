@@ -85,42 +85,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Tier-shape check for a stepped basis (no total needed — coverage is a run concern). */
-function steppedTierProblems(basisConfig: Record<string, unknown>): string[] {
-  const tiers: unknown = basisConfig["tiers"];
-  if (!Array.isArray(tiers) || tiers.length === 0) {
-    return ["stepped basis needs basis_config.tiers with at least one tier"];
-  }
-  const problems: string[] = [];
-  let prev: bigint | null = null;
-  tiers.forEach((tier, index) => {
-    const what = `stepped tier ${index + 1}`;
-    if (!isRecord(tier)) {
-      problems.push(`${what} must be an object`);
-      return;
-    }
-    const upTo: unknown = tier["upTo"];
-    if (upTo === null || upTo === undefined) {
-      if (index !== tiers.length - 1) problems.push(`open ${what} must be the last tier`);
-      return;
-    }
-    let cap: bigint;
-    try {
-      cap = toUnits(String(upTo));
-    } catch {
-      problems.push(`${what} bound is not ledger money: "${String(upTo)}"`);
-      return;
-    }
-    if (cap < 0n) {
-      problems.push(`${what} bound is negative: "${String(upTo)}"`);
-      return;
-    }
-    if (prev !== null && cap <= prev) problems.push(`${what} bound must ascend past ${fromUnits(prev)}`);
-    prev = cap;
-  });
-  return problems;
-}
-
 function percentProblems(targets: AllocationRuleTarget[]): AllocationValidationProblem[] {
   const problems: AllocationValidationProblem[] = [];
   const remainders = targets.filter((t) => t.isRemainder === true);
@@ -455,9 +419,16 @@ export function validateRuleVersion(
       }
     }
   } else if (version.basisKind === "stepped") {
-    for (const message of steppedTierProblems(isRecord(version.basisConfig) ? version.basisConfig : {})) {
-      problems.push({ code: "stepped_tiers", message, field: "basisConfig" });
-    }
+    // Stepped execution is not implemented in any runner: the period runner
+    // and entry explosion refuse it, and posting has no tier weights to
+    // apportion. Like simultaneous solving above, publishing a stepped
+    // version would promise math no run performs — refuse at publication
+    // with the remedy, not at posting with a 500.
+    problems.push({
+      code: "stepped_basis",
+      message: "stepped basis is not yet runnable — republish the version with a fixed_percent or driver basis",
+      field: "basisKind",
+    });
   }
 
   if (version.offsetAccountId !== null && version.offsetAccountId !== undefined && version.impact !== "reclass") {

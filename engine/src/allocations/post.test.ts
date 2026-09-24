@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   assertContributorBalance,
   collectPostContributions,
+  PostAllocationError,
   resolveRuleBooks,
   __testBuildContributedLines,
   type PostableDocument,
@@ -360,6 +361,29 @@ test("migration, suppressAutomation, and a closed gate contribute nothing", asyn
     assert.deepEqual(result.lines, []);
     assert.deepEqual(result.reportOnly, []);
   }
+});
+
+test("a stepped rule refuses at posting with the runnable remedy", async () => {
+  // Publish refuses stepped versions, but a pre-refusal publication still
+  // reaches this seam: it must refuse by name, never run as another basis.
+  await assert.rejects(
+    collectPostContributions(
+      emptyRunner,
+      docFixture,
+      [expenseLine],
+      {
+        rulesOverride: [
+          ruleFixture({ version: { basisKind: "stepped", basisConfig: { tiers: [{ upTo: "100" }] } } }),
+        ],
+        featureGate: gateOn,
+      },
+      { postingDate: "2026-07-15" },
+    ),
+    (error: unknown) =>
+      error instanceof PostAllocationError &&
+      /stepped basis, which is not yet runnable/.test(error.message) &&
+      /republish/.test(error.message),
+  );
 });
 
 test("a rule scoped to another document kind never fires", async () => {

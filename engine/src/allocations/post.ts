@@ -213,6 +213,14 @@ async function resolveWeights(
   postingDate: string,
   runner: PostRunner,
 ): Promise<ResolvedTargets> {
+  // Publish refuses stepped versions, but pre-refusal publications still
+  // reach this seam: refuse before the dynamic branch, which would otherwise
+  // measure a driver and silently run a stepped rule as a driver rule.
+  if (rule.version.basisKind === "stepped") {
+    throw new PostAllocationError(
+      `rule ${rule.rule.key} uses a stepped basis, which is not yet runnable — republish the version with a fixed_percent or driver basis`,
+    );
+  }
   if (rule.version.targetKind === "dynamic") {
     return resolveDynamicTargets(rule, deps, doc, postingDate, runner);
   }
@@ -255,7 +263,9 @@ async function resolveWeights(
       `rule ${rule.rule.key} uses a driver basis but no driver measurement is available`,
     );
   }
-  throw new PostAllocationError(`rule ${rule.rule.key} uses unsupported basis ${rule.version.basisKind}`);
+  throw new PostAllocationError(
+    `rule ${rule.rule.key} uses a stepped basis, which is not yet runnable — republish the version with a fixed_percent or driver basis`,
+  );
 }
 
 async function measureDriver(
