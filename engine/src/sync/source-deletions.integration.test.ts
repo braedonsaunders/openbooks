@@ -343,7 +343,7 @@ test(
       const actorA = await createScratchUser(orgA.orgId, "Deletion Controller A", "admin");
       const actorB = await createScratchUser(orgB.orgId, "Deletion Controller B", "admin");
       const connectionByOrg = new Map<string, string>();
-      for (const [org, actor, docNumber] of [
+      for (const [org, _actor, docNumber] of [
         [orgA, actorA, "SO-RE-RESOLVE-A"],
         [orgB, actorB, "SO-RE-RESOLVE-B"],
       ] as const) {
