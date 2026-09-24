@@ -30,7 +30,7 @@
  * pass uses — scaglioni on the year's total (art. 11 TUIR; 2026 second
  * bracket 33% per L. 199/2025 art. 1 c. 3), detrazione lavoro re-phased on
  * the annual reddito (art. 13 c. 1 TUIR; ratios truncated to 4 decimals per
- * 730/2026 TABELLA 6 note 2), the +65 euro c. 2 increase (25.001–35.000),
+ * 730/2026 TABELLA 6 note 2), the +65 euro c. 2 increase (R > 25.000–35.000,
  * the L. 207/2024 c. 6 ulteriore detrazione (whose spettanza c. 7 says to
  * verify in sede di conguaglio), INPS IVS for the lavoro-netto base, the
  * tenant-declared addizionali (D.Lgs. 446/1997 regionale; D.Lgs. 360/1998

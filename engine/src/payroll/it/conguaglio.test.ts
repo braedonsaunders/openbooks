@@ -32,7 +32,7 @@
  *   passes: the refund is payable, not refused.
  * - Bonus: 2.500 x 11 + (2.500 + 5.000) one-off, declaration filed.
  *   Normal months R = 30.000 − 2.757,00 = 27.243,00: lorda 6.265,89,
- *   detrazione 1.979,25 + 65 (R in 25.001–35.000), ulteriore 1.000, netta
+ *   detrazione 1.979,25 + 65 (R in art. 13 c. 2's R > 25.000–35.000 band), ulteriore 1.000, netta
  *   3.221,64, period 268,47. Bonus month R = 35.000 − 3.216,50 = 31.783,50:
  *   lorda 6.440 + 33% x 3.783,50 = 7.688,56; detrazione band C 1.910 x
  *   trunc4(18.216,50/22.000 = 0,8280) = 1.581,48 + 65; ulteriore 1.000
