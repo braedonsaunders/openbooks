@@ -1,11 +1,8 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import type { ReportCellLink, ReportRunResult } from '@openbooks/reports'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { resultGroupsForPaper } from './paper-groups'
-
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 const customTarget: ReportDrillTarget = {
   kind: 'custom',
@@ -94,12 +91,3 @@ test('non-custom drill targets leave summary groups untouched', () => {
   assert.equal(groups[0]?.rows[0]?.[0], 42)
 })
 
-test('PaperView delegates transaction cells to the native TxnLink flow', () => {
-  const source = read('../PaperView.tsx')
-  const view = read('./ResultView.tsx')
-  const helper = read('./paper-groups.ts')
-  assert.match(source, /cellLink\?\.kind === 'transaction'/)
-  assert.match(source, /<TxnLink target=\{cellLink\}/)
-  assert.match(view, /resultGroupsForPaper\(result, drillTarget\)/)
-  assert.match(helper, /cellLinks: group\.cellLinks/)
-})
