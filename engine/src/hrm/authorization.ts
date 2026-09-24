@@ -1309,6 +1309,24 @@ export async function requireHrmRecruitingManageOrg(
   }
 }
 
+/**
+ * Org-level recruiting read gate, the read twin of the manage gate above:
+ * the live hrm.recruiting.read permission, no subsidiary scope to check —
+ * list-shaped services apply the actor's employer scope to the rows
+ * themselves (canonical subsidiary-scope predicates).
+ */
+export async function requireHrmRecruitingReadOrg(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.read"))) {
+    throw new HrmAuthorizationError(
+      "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
 
 /** Performance and retention duties (HR-7, 0196). Confidential like employment. */
 export const HRM_PERFORMANCE_PERMISSIONS = [
