@@ -287,6 +287,43 @@ test("a restricted HR shares only inside their legal-entity scope", { skip: !DB 
   }
 });
 
+test("sharing waits for the cycle transition and refuses once calibration starts", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const cycleId = await openScopedCycle(h);
+    const reviewId = await submitManagerReview(h, cycleId, h.a);
+    let settled = false;
+    let sharing: Promise<unknown> | undefined;
+    let waited = false;
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select id from hrm_review_cycles where org_id = ${h.org.orgId} and id = ${cycleId} for update
+      `);
+      sharing = shareReview({ orgId: h.org.orgId, actorId: h.a.managerUserId, reviewId }).then(
+        (value) => { settled = true; return value; },
+        (error: unknown) => { settled = true; return error; },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      waited = !settled;
+      await tx.execute(sql`
+        update hrm_review_cycles set status = 'calibrating'
+         where org_id = ${h.org.orgId} and id = ${cycleId}
+      `);
+    });
+    const outcome = await sharing!;
+    assert.equal(waited, true);
+    assert.ok(outcome instanceof HrmPerformanceError);
+    assert.equal(outcome.code, "REFUSED");
+    assert.match(outcome.message, /calibrating cycle/);
+    const review = (await db.execute<{ status: string }>(sql`
+      select status from hrm_reviews where org_id = ${h.org.orgId} and id = ${reviewId}
+    `)).rows[0]!;
+    assert.equal(review.status, "submitted");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
 test("a restricted HR reads only the feedback whose subject they cover", { skip: !DB }, async () => {
   const h = await setupHarness();
   try {
