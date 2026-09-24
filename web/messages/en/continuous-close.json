@@ -333,6 +333,13 @@
     "dismiss": "Finding dismissed.",
     "reopen": "Finding reopened.",
     "actionFailed": "The finding could not be updated.",
+    "errors": {
+      "invalid_transition": "That action isn't available for this finding anymore. Refresh to see its current status.",
+      "reason_required": "A dismissal reason is required.",
+      "conflict": "Someone else updated this finding just now. Refresh and try again.",
+      "forbidden": "You don't have permission to change this finding.",
+      "not_found": "This finding no longer exists. Refresh the list."
+    },
     "recorded": "Feedback recorded.",
     "wasHelpful": "Was this finding useful?",
     "helpful": "Helpful",

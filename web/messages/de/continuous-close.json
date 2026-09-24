@@ -336,6 +336,13 @@
     "dismiss": "Feststellung verworfen.",
     "reopen": "Feststellung wieder geöffnet.",
     "actionFailed": "Die Feststellung konnte nicht aktualisiert werden.",
+    "errors": {
+      "invalid_transition": "Diese Aktion ist für diesen Befund nicht mehr verfügbar. Aktualisieren Sie die Ansicht, um den aktuellen Status zu sehen.",
+      "reason_required": "Für die Ablehnung ist eine Begründung erforderlich.",
+      "conflict": "Jemand hat diesen Befund gerade aktualisiert. Aktualisieren Sie die Ansicht und versuchen Sie es erneut.",
+      "forbidden": "Sie haben keine Berechtigung, diesen Befund zu ändern.",
+      "not_found": "Dieser Befund existiert nicht mehr. Aktualisieren Sie die Liste."
+    },
     "recorded": "Feedback erfasst.",
     "wasHelpful": "War diese Feststellung nützlich?",
     "helpful": "Hilfreich",
