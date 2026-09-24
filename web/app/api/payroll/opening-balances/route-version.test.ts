@@ -24,7 +24,7 @@ import {
 
 const stateKey = Symbol.for('openbooks.opening-balances-version-test')
 interface RouteState {
-  saveCalls: { rows: { employeePartyId: string; updatedAt?: string | null }[]; allowedSubsidiaryIds?: Set<string> | null }[]
+  saveCalls: { rows: { employeePartyId: string; updatedAt?: string | null; components?: Record<string, unknown> }[]; allowedSubsidiaryIds?: Set<string> | null }[]
   allowedSubsidiaryIds: Set<string> | null
   saveResult: unknown
   throwSave: unknown
@@ -213,4 +213,30 @@ test('a non-string version refuses by name before anything is saved', async () =
   const body = (await res.json()) as { error: string }
   assert.match(body.error, /updatedAt/)
   assert.equal(routeState.saveCalls.length, 0)
+})
+
+test('a supplied malformed components payload refuses instead of preserving stale values', async () => {
+  for (const components of [[], 'not-an-object']) {
+    reset()
+    const res = await post({
+      taxYear: 2026,
+      rows: [{ employeePartyId: uuid(1), amounts: {}, components }],
+    })
+    assert.equal(res.status, 422)
+    assert.match((await res.json() as { error: string }).error, /components must be an object/)
+    assert.equal(routeState.saveCalls.length, 0)
+  }
+})
+
+test('omitted and null components remain valid requests that preserve stored values', async () => {
+  for (const row of [
+    { employeePartyId: uuid(1), amounts: {} },
+    { employeePartyId: uuid(1), amounts: {}, components: null },
+  ]) {
+    reset()
+    const res = await post({ taxYear: 2026, rows: [row] })
+    assert.equal(res.status, 200)
+    assert.equal(routeState.saveCalls.length, 1)
+    assert.equal(routeState.saveCalls[0]!.rows[0]!.components, undefined)
+  }
 })

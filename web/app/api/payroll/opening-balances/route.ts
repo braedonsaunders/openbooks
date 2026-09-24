@@ -149,6 +149,9 @@ export async function POST(req: Request) {
     if (row.amounts != null && (typeof row.amounts !== 'object' || Array.isArray(row.amounts))) {
       return NextResponse.json({ error: 'amounts must be an object' }, { status: 422 })
     }
+    if (row.components != null && (typeof row.components !== 'object' || Array.isArray(row.components))) {
+      return NextResponse.json({ error: 'components must be an object' }, { status: 422 })
+    }
     const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>)
     if (!amounts.ok) {
       return NextResponse.json({ error: moneyRefusal(`Opening-balance amount for "${amounts.key}"`, amounts.value) }, { status: 422 })
