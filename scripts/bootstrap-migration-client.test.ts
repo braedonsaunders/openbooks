@@ -214,17 +214,24 @@ test("the sanitizer strips TO/=/RESET forms with or without a semicolon, any cas
   }
 });
 
-test("sanitize and split stay linear on the real baseline and a 5 MB synthetic body (perf regression)", () => {
-  const baseline = readFileSync(join(generatedDir, "0001_baseline.sql"), "utf8");
-  assert.ok(baseline.length > 1_000_000, "expected the real multi-megabyte baseline");
+test("sanitize and split stay linear on the published corpus and a 5 MB synthetic body (perf regression)", () => {
+  // The whole published corpus as one input: every scanner state on real DDL,
+  // with no assertion on any file's text (the strip property over the same
+  // corpus is proven by the no-published-survivors test above).
+  const corpus = readdirSync(generatedDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .map((file) => readFileSync(join(generatedDir, file), "utf8"))
+    .join("\n");
+  assert.ok(corpus.length > 1_000_000, "expected the real multi-megabyte corpus");
   let started = performance.now();
-  const clean = sanitizeMigrationContent(baseline);
+  const clean = sanitizeMigrationContent(corpus);
   const sanitizeMs = performance.now() - started;
-  assert.ok(sanitizeMs < 2_000, `sanitize took ${sanitizeMs.toFixed(0)}ms on ${(baseline.length / 1e6).toFixed(1)} MB`);
+  assert.ok(sanitizeMs < 2_000, `sanitize took ${sanitizeMs.toFixed(0)}ms on ${(corpus.length / 1e6).toFixed(1)} MB`);
   started = performance.now();
-  const statements = splitSqlStatements(baseline);
+  const statements = splitSqlStatements(corpus);
   const splitMs = performance.now() - started;
-  assert.ok(splitMs < 2_000, `split took ${splitMs.toFixed(0)}ms on ${(baseline.length / 1e6).toFixed(1)} MB`);
+  assert.ok(splitMs < 2_000, `split took ${splitMs.toFixed(0)}ms on ${(corpus.length / 1e6).toFixed(1)} MB`);
   assert.ok(statements.length > 0);
   assert.doesNotMatch(clean, /^\s*set\s+(?:(?:session|local)\s+)?lock_timeout/m);
 
@@ -365,13 +372,27 @@ test("a killed no-transaction attempt writes no ledger row; the resume completes
   }
 });
 
-test("the real 0251 header is neutralized exactly where the runner would run it", () => {
-  const content = readFileSync(
-    join(generatedDir, "0251_payment_link_token_at_rest.sql"),
-    "utf8",
-  );
-  assert.match(content, /SET lock_timeout = 0;/);
-  const clean = sanitizeMigrationContent(content);
+test("the published header spellings are neutralized exactly where the runner would run them", () => {
+  // The exact SET block every forward migration carries: the runner strips
+  // file-level lock_timeout before executing, so the published
+  // `SET lock_timeout = 0` must not survive while the sibling header SETs
+  // ride through untouched. Frozen here as input data, not read from the
+  // migration file; the no-published-survivors test above proves the strip
+  // property over the whole corpus.
+  const header = [
+    "SET statement_timeout = 0;",
+    "SET lock_timeout = 0;",
+    "SET idle_in_transaction_session_timeout = 0;",
+    "SET client_encoding = 'UTF8';",
+    "SET standard_conforming_strings = on;",
+    "SET client_min_messages = warning;",
+    "",
+    "CREATE UNIQUE INDEX IF NOT EXISTS payment_links_token_hash",
+    "  ON public.payment_links (token_hash);",
+  ].join("\n");
+  const clean = sanitizeMigrationContent(header);
   assert.doesNotMatch(clean, /SET lock_timeout/i);
+  assert.match(clean, /SET statement_timeout = 0;/);
+  assert.match(clean, /SET idle_in_transaction_session_timeout = 0;/);
   assert.match(clean, /CREATE UNIQUE INDEX IF NOT EXISTS payment_links_token_hash/);
 });
