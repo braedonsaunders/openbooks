@@ -337,7 +337,8 @@ test(
           select org_id as "orgId", bank_reference as "reference", count(*)::int as "count"
             from payment_settlements
            where payment_instruction_id in (${instructionA}, ${instructionB})
-           group by org_id, bank_reference`)).rows,
+           group by org_id, bank_reference
+           order by org_id`)).rows,
       );
       const sortedRows = [...rows].sort((a, b) => a.orgId.localeCompare(b.orgId));
       const expectedRows = [
