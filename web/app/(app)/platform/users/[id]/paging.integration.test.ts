@@ -68,9 +68,9 @@ async function seedMemberWithGrants(): Promise<{ ids: string[]; memberId: string
     actingIds.push(await withBypass(() => createScratchUser(targetId, `${PREFIX} Acting`, 'w93d_acting')))
   }
   await withBypass(async () => {
-    await Promise.all(
-      targetIds.map((id, i) => db.execute(sql`update orgs set name = ${orgName(i)} where id = ${id}`)),
-    )
+    for (const [i, id] of targetIds.entries()) {
+      await db.execute(sql`update orgs set name = ${orgName(i)} where id = ${id}`)
+    }
     for (let i = 0; i < targetIds.length; i++) {
       const targetId = targetIds[i]!
       const acting = actingIds[i]!
