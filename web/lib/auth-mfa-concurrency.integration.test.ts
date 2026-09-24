@@ -94,3 +94,47 @@ const priorSecret = process.env.SESSION_SECRET;
     }
   });
 }
+
+
+test("concurrent MFA setup requests for one session reuse the same pending secret", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const priorSecret = process.env.SESSION_SECRET;
+  process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+  try {
+    const auth = await import("./auth");
+    const { totpCode } = await import("./auth-totp");
+    const password = "Isolated concurrent MFA setup password 5019";
+    const requestContext = { networkAddress: "127.0.0.1", userAgent: "concurrent MFA setup regression" };
+    const { userId, email } = await withBypassContext(async () => {
+      const userId = (await seedFlowActors(org.orgId)).adminId;
+      const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+      await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
+      await db.execute(sql`update users set password_hash=${await auth.hashPassword(password)} where id=${userId}`);
+      return { userId, email };
+    });
+    const login = await auth.login(email, password, requestContext);
+    assert.equal(login.kind, "success");
+    assert.ok(login.kind === "success");
+    const sessionId = (await auth.validateSessionToken(login.token))!.sessionId;
+
+    const [first, second] = await Promise.all([
+      auth.beginMfaSetup(userId, sessionId, password, requestContext),
+      auth.beginMfaSetup(userId, sessionId, password, requestContext),
+    ]);
+    assert.ok(first && second);
+    assert.deepEqual(second, first, "a retry must return the secret and QR identity already staged for this session");
+    const secondLogin = await auth.login(email, password, requestContext);
+    assert.ok(secondLogin.kind === "success");
+    const secondSessionId = (await auth.validateSessionToken(secondLogin.token))!.sessionId;
+    await assert.rejects(
+      auth.beginMfaSetup(userId, secondSessionId, password, requestContext),
+      /MFA setup is already pending in another session; finish setup there or wait for it to expire before starting again/,
+    );
+    const recoveryCodes = await auth.confirmMfaSetup(userId, sessionId, totpCode(first.secret)!.code);
+    assert.ok(recoveryCodes, "the first response's authenticator code must remain valid after the concurrent call");
+  } finally {
+    if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = priorSecret;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
