@@ -106,7 +106,6 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'web/lib/documents.test.ts',
   'web/lib/feature-gating.test.ts',
   'web/lib/file-cabinet.private-boundary.test.ts',
-  'web/lib/reports-posted.test.ts',
 ])
 
 // Restore is an isolated disaster-recovery rehearsal. It has its own
