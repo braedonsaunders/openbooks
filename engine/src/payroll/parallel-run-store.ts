@@ -1000,9 +1000,17 @@ export async function saveParallelTolerance(input: {
   }
 
   // The upsert and the audit row land together: a tolerance change whose
-  // attribution went missing would be an allowance nobody agreed to.
+  // attribution went missing would be an allowance nobody agreed to. The
+  // audit action is derived from the upsert itself — a pre-read under the
+  // input fence, so a first save audits 'create' with a null before-image
+  // and a second save audits 'update' with before/after. A hardcoded
+  // 'update' here rewrote the slot's birth as an edit.
   await inDbTransaction(async (tx) => {
     await lockParallelRunInputs(tx, input.orgId);
+    const before = (await tx.execute<{ tolerance: string; reason: string }>(sql`
+      select tolerance::text as tolerance, reason from payroll_parallel_tolerances
+       where org_id = ${input.orgId} and kind = ${input.kind} and slot = ${input.slot}
+       for update`)).rows[0];
     const row = (await tx.execute<{ id: string }>(sql`
       insert into payroll_parallel_tolerances
         (org_id, kind, slot, tolerance, reason, created_by, updated_by)
@@ -1014,10 +1022,21 @@ export async function saveParallelTolerance(input: {
       where payroll_parallel_tolerances.org_id = ${input.orgId}
       returning id`));
 
+    const createdRow = before == null;
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${input.orgId}, 'payroll_parallel_tolerances', ${row.rows[0]!.id}, 'update',
-              ${JSON.stringify({ kind: input.kind, slot: input.slot, tolerance, reason })},
+      values (${input.orgId}, 'payroll_parallel_tolerances', ${row.rows[0]!.id},
+              ${createdRow ? "create" : "update"},
+              ${JSON.stringify(createdRow
+                ? {
+                  kind: input.kind, slot: input.slot, before: null,
+                  after: { tolerance, reason },
+                }
+                : {
+                  kind: input.kind, slot: input.slot,
+                  before: { tolerance: before.tolerance, reason: before.reason },
+                  after: { tolerance, reason },
+                })},
               ${input.actorId})`);
   });
 }

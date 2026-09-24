@@ -420,6 +420,46 @@ test("tolerance changes never land without their audit row beside them", { skip:
   }
 });
 
+test("a first tolerance save audits create with a null before-image; a second audits update with before/after", { skip: !DB }, async () => {
+  // The hardcoded-action defect: the upsert always audited 'update', so the
+  // slot's birth read as an edit and no before-image was ever recorded.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+
+    await saveParallelTolerance({
+      orgId: org.orgId, actorId, kind: "earning", slot: "base_pay",
+      tolerance: "25", reason: "provider rounding on hourly conversions",
+    });
+    await saveParallelTolerance({
+      orgId: org.orgId, actorId, kind: "earning", slot: "base_pay",
+      tolerance: "50", reason: "overtime codes included",
+    });
+    const audits = (await db.execute<{ action: string; changes: unknown }>(sql`
+      select action, changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'payroll_parallel_tolerances'
+       order by id`));
+    assert.equal(audits.rows.length, 2);
+    assert.equal(audits.rows[0]!.action, "create");
+    const created = audits.rows[0]!.changes as {
+      before: null; after: { tolerance: string; reason: string };
+    };
+    assert.equal(created.before, null);
+    assert.equal(created.after.tolerance, "25.0000");
+    assert.equal(created.after.reason, "provider rounding on hourly conversions");
+    assert.equal(audits.rows[1]!.action, "update");
+    const updated = audits.rows[1]!.changes as {
+      before: { tolerance: string; reason: string }; after: { tolerance: string; reason: string };
+    };
+    assert.equal(updated.before.tolerance, "25.0000");
+    assert.equal(updated.before.reason, "provider rounding on hourly conversions");
+    assert.equal(updated.after.tolerance, "50.0000");
+    assert.equal(updated.after.reason, "overtime codes included");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 /**
  * One real calculated CA pay run; the prior register mirrors whatever the run
  * actually paid, so the filing must come out clean with every cell matched.
