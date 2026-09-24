@@ -1273,6 +1273,18 @@ export async function setLegalHold(input: {
                 status, sent_at::text as sent_at, completed_at::text as completed_at,
                 expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
+    if (!input.hold) {
+      // A released hold makes its previously blocked retention action
+      // executable again. Anchor-blocked actions have a different remedy and
+      // remain blocked until the retention clock is derived.
+      await db.execute(sql`
+        update hrm_retention_actions
+           set blocked_reason = null
+         where org_id = ${input.orgId} and document_id = ${doc.id}
+           and executed_at is null
+           and blocked_reason like 'legal hold is on — release the hold%'
+      `);
+    }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'hrm_documents', ${doc.id},

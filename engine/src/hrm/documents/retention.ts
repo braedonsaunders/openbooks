@@ -210,6 +210,7 @@ export async function applyCompletionRetention(
     select category_key, employment_id,
            completed_at::text as completed_at, created_at::text as created_at
       from hrm_documents where org_id = ${orgId} and id = ${documentId}
+       for update
   `)).rows[0];
   if (!doc) {
     throw new HrmDocumentsError("NOT_FOUND", "document is not visible in this organization");
@@ -238,11 +239,22 @@ export async function applyCompletionRetention(
         `)).rows[0]?.end ?? null
       : null;
     if (!term) {
-      await exec.execute(sql`
-        insert into hrm_retention_actions (org_id, document_id, schedule_id, due_on, action, blocked_reason)
-        values (${orgId}, ${documentId}, ${schedule.id}, current_date, ${schedule.action},
-                'termination anchor: no employment end date is recorded — record the termination before retention can clock this document')
-      `);
+      const existingBlock = (await exec.execute<{ id: string }>(sql`
+        select id from hrm_retention_actions
+         where org_id = ${orgId} and document_id = ${documentId}
+           and schedule_id = ${schedule.id} and executed_at is null
+           and blocked_reason like 'termination anchor:%'
+         order by created_at, id
+         limit 1
+         for update
+      `)).rows[0];
+      if (!existingBlock) {
+        await exec.execute(sql`
+          insert into hrm_retention_actions (org_id, document_id, schedule_id, due_on, action, blocked_reason)
+          values (${orgId}, ${documentId}, ${schedule.id}, current_date, ${schedule.action},
+                  'termination anchor: no employment end date is recorded — record the termination before retention can clock this document')
+        `);
+      }
       return;
     }
     anchor = term;
@@ -329,11 +341,11 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
       await applyCompletionRetention(db, orgId, row.id, null);
       result.clocksStarted += 1;
     }
-    // (3) Flag documents at retain_until — one action row per document,
-    // ever. An executed row ends the document's retention story (no
-    // re-flag after delete/anonymize); an open row means flagged and
-    // waiting out grace or held. Without this, every tick would open a
-    // fresh row on an already-executed document.
+    // (3) Flag documents at retain_until. An anchor-blocked row records
+    // why the clock has not started; once the anchor resolves it must not
+    // suppress the one actionable row for the now-computed retain_until.
+    // Other open rows (including legal-hold blocks) still prevent duplicate
+    // actions, and an executed row ends the document's retention story.
     // The flagged action is the document's FROZEN completion snapshot
     // (d.retention_action), never the schedule's live value: editing a
     // schedule after completion must not re-govern historical documents.
@@ -351,6 +363,8 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
          and not exists (
            select 1 from hrm_retention_actions a
             where a.org_id = d.org_id and a.document_id = d.id
+              and a.schedule_id = d.retention_rule_id
+              and (a.blocked_reason is null or a.blocked_reason not like 'termination anchor:%')
          )
        limit 200
     `)).rows;
@@ -367,6 +381,16 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
     }
     // (4) Execute actions past grace — unless legal hold.
     const grace = await loadGraceDays(db, orgId);
+    const previouslyBlocked = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from hrm_retention_actions a
+        join hrm_documents d on d.org_id = a.org_id and d.id = a.document_id
+       where a.org_id = ${orgId} and a.executed_at is null
+         and a.blocked_reason is not null
+         and a.due_on <= (${today}::date - (${grace} || ' days')::interval)
+         and d.status not in ('deleted', 'voided')
+    `)).rows[0]?.n ?? 0;
+    result.blocked += previouslyBlocked;
     const open = (await db.execute<{
       id: string;
       document_id: string;
@@ -380,6 +404,7 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
         from hrm_retention_actions a
         join hrm_documents d on d.org_id = a.org_id and d.id = a.document_id
        where a.org_id = ${orgId} and a.executed_at is null
+         and a.blocked_reason is null
          and a.due_on <= (${today}::date - (${grace} || ' days')::interval)
          and d.status not in ('deleted', 'voided')
        limit 200
