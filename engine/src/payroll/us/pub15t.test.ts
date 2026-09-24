@@ -257,7 +257,7 @@ test("supplemental wages: 22% flat rate, 37% past $1,000,000 YTD", () => {
     supplemental: "10000.00", filingStatus: "single",
     ytd: { supplemental: "998000.00" },
   });
-  // 2,000 at 22% (440) + 8,000 at 37% (2,960) = 3,400
+  // Pub. 15 §7: $2k at 22% + $8k at 37%; the mandatory 37% slice also applies to W-4-exempt employees: https://www.irs.gov/publications/p15
   assert.equal(high.fitSupplemental, money("3400.00"));
 });
 
@@ -267,11 +267,11 @@ test("supplemental wages: 22% flat rate, 37% past $1,000,000 YTD", () => {
 test("unemployment coverage exemptions are independent: FUTA-only and SUI-only", () => {
   const fitExempt = calculateWithConfiguredFuta({
     payDate: "2026-02-13", periodsPerYear: 26, wages: "2000.00",
-    filingStatus: "single", fitExempt: true, extraPerPeriod: "25.00",
+    filingStatus: "single", fitExempt: true, supplemental: "10000.00", ytd: { supplemental: "998000.00" }, extraPerPeriod: "25.00",
   });
-  assert.equal(fitExempt.fit, money("0"));
-  assert.equal(fitExempt.ss, money("124.00"));
-  assert.equal(fitExempt.medicare, money("29.00"));
+  assert.equal(fitExempt.fit, money("2960.00"));
+  assert.equal(fitExempt.ss, money("744.00"));
+  assert.equal(fitExempt.medicare, money("174.00"));
 
   const ficaExempt = calculateWithConfiguredFuta({
     payDate: "2026-02-13", periodsPerYear: 26, wages: "2000.00",
