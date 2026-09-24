@@ -501,8 +501,16 @@ test("comp classes resolve by priority and refuse when nothing matches", { skip:
     assert.equal(split.length, 1);
     assert.equal(split[0]!.compCode, "ROOF-5551");
     assert.equal(split[0]!.hours, "8.0000");
+    // A fabricated project refuses as not-found, exactly like an
+    // out-of-scope one — never as a rule miss.
     await assertConstructionRefusal(
       () => classify(db, { orgId: org.orgId, actorId: adminId, projectId: randomUUID(), workedOn: "2026-09-08", employmentId }),
+      /does not exist in this organization/,
+    );
+    // A real project with no covering rule still reports the rule miss.
+    const bareProjectId = await seedProject(org.orgId, "Bare Job");
+    await assertConstructionRefusal(
+      () => classify(db, { orgId: org.orgId, actorId: adminId, projectId: bareProjectId, workedOn: "2026-09-08", employmentId }),
       /No comp-class rule matches/,
     );
   });
