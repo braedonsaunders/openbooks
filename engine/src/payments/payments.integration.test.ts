@@ -15,6 +15,7 @@ import { createPaymentRun } from "./run-creation.ts";
 import { PaymentError, PaymentRevisionConflictError } from "./payment-errors.ts";
 import { postPaymentRun } from "./run-posting.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
+import { createDocumentsFlowAdapter } from "../flows/documents-adapter.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
 import { suggestApplications } from "./payment-queries.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -451,6 +452,101 @@ async function seedPaymentRunSelectionFixture(org: Awaited<ReturnType<typeof cre
     return { actorId, profileId, billId };
   });
 }
+
+test("run posting is bound to stored cash and credit targets", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const options = await seedPaymentRunSelectionFixture(org);
+    await withOrgContext(org.orgId, async () => {
+      const creditId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${creditId}, ${org.orgId}, 'vendor_credit', 'draft', 'CREDIT-RUN-TARGET',
+                ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '1',
+                '30', '0', '30', ${options.actorId})`);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price,
+           amount, tax_amount, tax_input_amount)
+        values (${org.orgId}, ${creditId}, 1, ${org.accounts.cogs}, '1', '30', '30', '0', '30')`);
+      await db.execute(sql`update documents set status = 'approved' where id = ${creditId}`);
+      await postDocument(creditId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+
+      const run = await createPaymentRun({
+        orgId: org.orgId,
+        createdBy: options.actorId,
+        paymentBankProfileId: options.profileId,
+        billDocumentIds: [options.billId],
+        scheduledFor: org.date,
+      });
+      const instruction = (await db.execute<{ id: string; payment_document_id: string }>(sql`
+        select id, payment_document_id from payment_instructions
+         where payment_run_id = ${run.id} and org_id = ${org.orgId}
+      `)).rows[0]!;
+      const creditItem = (await db.execute<{ source_open_line_id: string; source_document_id: string; targets: unknown }>(sql`
+        select source_open_line_id, source_document_id,
+               credit_target_allocations as targets
+          from payment_run_items
+         where payment_run_id = ${run.id} and payment_instruction_id = ${instruction.id}
+           and kind = 'credit' and org_id = ${org.orgId}
+      `)).rows[0]!;
+      assert.deepEqual(creditItem.targets, [{
+        toLineId: (await db.execute<{ id: string }>(sql`
+          select source_open_line_id as id from payment_run_items
+           where payment_run_id = ${run.id} and payment_instruction_id = ${instruction.id}
+             and kind <> 'credit' and org_id = ${org.orgId}
+        `)).rows[0]!.id,
+        amount: "30.0000",
+      }]);
+
+      // The shared posting service rejects the same live claim for every
+      // direct caller, before an individually approved payment can escape.
+      await assert.rejects(
+        postPaymentWithApplications(instruction.payment_document_id, undefined, options.actorId),
+        (error: unknown) => error instanceof PaymentError && /claimed by a payment run/.test(error.message),
+      );
+      await assert.rejects(
+        withOrgTransaction(org.orgId, () => createDocumentsFlowAdapter("vendor_payment").setField(
+          instruction.payment_document_id,
+          "memo",
+          "changed by flow",
+          { orgId: org.orgId, userId: options.actorId },
+        )),
+        (error: unknown) => error instanceof PaymentError && /claimed by open payment run/.test(error.message),
+      );
+
+      // A changed credit target/amount is rejected against the stored run
+      // item even after the draft has passed through submission.
+      await db.execute(sql`
+        update documents
+           set custom = jsonb_set(custom, '{creditAllocations}',
+             jsonb_build_array(jsonb_build_object(
+               'fromLineId', ${creditItem.source_open_line_id}::text,
+               'toLineId', ${creditItem.targets instanceof Array ? (creditItem.targets[0] as { toLineId: string }).toLineId : ""}::text,
+               'amount', '29.0000', 'sourceDocumentId', ${creditItem.source_document_id}::text
+             )), true), status = 'approved'
+         where id = ${instruction.payment_document_id} and org_id = ${org.orgId}`);
+      await db.execute(sql`update payment_runs set status = 'generated' where id = ${run.id} and org_id = ${org.orgId}`);
+      const posting = await postPaymentRun(run.id, org.orgId, options.actorId);
+      assert.match(posting.failures[0]?.error ?? "", /composition differs from the approved run items/);
+      const result = (await db.execute<{ run_status: string; document_status: string; instruction_status: string; item_status: string }>(sql`
+        select run.status as run_status, document.status as document_status,
+               instruction.status as instruction_status,
+               item.status as item_status
+          from payment_instructions instruction
+          join payment_runs run on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
+          join documents document on document.id = instruction.payment_document_id and document.org_id = instruction.org_id
+          join payment_run_items item on item.payment_instruction_id = instruction.id and item.kind = 'credit'
+         where instruction.id = ${instruction.id} and instruction.org_id = ${org.orgId}
+      `)).rows[0]!;
+      assert.deepEqual(result, { run_status: "partially_failed", document_status: "approved", instruction_status: "pending", item_status: "selected" });
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test("an open item can be reserved by only one live payment run at a time", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());

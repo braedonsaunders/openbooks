@@ -1,5 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { ambientTenantOrgId, db, schema } from "../platform/db.ts";
+import { PAYMENT_SYSTEM_CUSTOM_FIELDS } from "../platform/payment-system-fields.ts";
+import { lockEditablePaymentDocument } from "../payments/payment-documents.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import {
   captureTransactionAuditSnapshot,
@@ -174,6 +176,9 @@ export const RESERVED_DOCUMENT_FIELD_KEYS: ReadonlySet<string> = new Set([
   // key above is read unconditionally).
   ...Object.keys(builtinHeaderValues({} as DocRow, null)),
   ...WRITABLE_DOCUMENT_FIELDS,
+  // Payment posting controls are financial-system state even though they
+  // travel in documents.custom; never allow a custom field to shadow them.
+  ...PAYMENT_SYSTEM_CUSTOM_FIELDS,
 ]);
 
 export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
@@ -321,6 +326,16 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
     },
 
     async setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void> {
+      if (
+        ["vendor_payment", "customer_payment"].includes(kind)
+        && RESERVED_DOCUMENT_FIELD_KEYS.has(field)
+        && !WRITABLE_DOCUMENT_FIELDS.has(field)
+      ) {
+        throw new Error(`payment field "${field}" is not writable by flows`);
+      }
+      if (["vendor_payment", "customer_payment"].includes(kind)) {
+        await lockEditablePaymentDocument(subjectId, ctx.orgId, { requireDraft: false });
+      }
       const headerField = WRITABLE_DOCUMENT_FIELDS.has(field);
       if (!headerField) {
         const customField = (await db.execute(sql`

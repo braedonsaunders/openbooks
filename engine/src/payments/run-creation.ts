@@ -519,12 +519,13 @@ async function createPaymentRunWithinTransaction(
       status: "selected" as const,
       createdBy: opts.createdBy,
     })));
-    const creditsUsed = new Map<string, { sourceDocumentId: string; amount: bigint }>();
+    const creditsUsed = new Map<string, { sourceDocumentId: string; amount: bigint; targets: Array<{ toLineId: string; amount: string }> }>();
     for (const credit of creditAllocations) {
       const current = creditsUsed.get(credit.fromLineId);
       creditsUsed.set(credit.fromLineId, {
         sourceDocumentId: credit.sourceDocumentId,
         amount: (current?.amount ?? 0n) + toUnits(credit.amount),
+        targets: [...(current?.targets ?? []), { toLineId: credit.toLineId, amount: credit.amount }],
       });
     }
     if (creditsUsed.size > 0) {
@@ -538,6 +539,7 @@ async function createPaymentRunWithinTransaction(
         grossAmount: divRate(fromUnits(used.amount), first.fx_rate),
         discountAmount: "0",
         creditAmount: divRate(fromUnits(used.amount), first.fx_rate),
+        creditTargetAllocations: used.targets,
         paymentAmount: "0",
         currency: profile.currency,
         fxRate: first.fx_rate,

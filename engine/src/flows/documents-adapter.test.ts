@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { headerValues, RESERVED_DOCUMENT_FIELD_KEYS } from "./documents-adapter.ts";
+import { createDocumentsFlowAdapter, headerValues, RESERVED_DOCUMENT_FIELD_KEYS } from "./documents-adapter.ts";
 import { WRITABLE_DOCUMENT_FIELDS } from "./subject-profiles.ts";
+import { PAYMENT_SYSTEM_CUSTOM_FIELDS } from "../platform/payment-system-fields.ts";
 
 /**
  * headerValues precedence + the reserved-key set derived from it: together
@@ -86,6 +87,7 @@ test("reserved custom-field keys cover every exposed header key exactly", () => 
     new Set([
       ...Object.keys(headerValues(docRow({}), null)),
       ...WRITABLE_DOCUMENT_FIELDS,
+      ...PAYMENT_SYSTEM_CUSTOM_FIELDS,
     ]).size,
   );
 });
@@ -95,3 +97,14 @@ test("the shadowing vectors called out in review are all rejected keys", () => {
     assert.equal(RESERVED_DOCUMENT_FIELD_KEYS.has(key), true, key);
   }
 });
+
+for (const kind of ["vendor_payment", "customer_payment"] as const) {
+  for (const field of PAYMENT_SYSTEM_CUSTOM_FIELDS) {
+    test(`${kind} flow writes refuse payment-system field ${field}`, async () => {
+      await assert.rejects(
+        createDocumentsFlowAdapter(kind).setField("payment-id", field, "forged", { orgId: "org-id" }),
+        new RegExp(`payment field \\\"${field}\\\" is not writable by flows`),
+      );
+    });
+  }
+}

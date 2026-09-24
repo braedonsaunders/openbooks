@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runScript, type ScriptContext } from "./scripting.ts";
+import { PAYMENT_SYSTEM_CUSTOM_FIELDS } from "../platform/payment-system-fields.ts";
 
 const context: ScriptContext = {
   trigger: "custom_gl_lines",
@@ -100,3 +101,17 @@ test("restrictions do not leak into subsequent non-deterministic script contexts
   assert.equal(ordinary.status, "ok", ordinary.abortReason ?? "(no abort reason)");
   assert.deepEqual(ordinary.returned, { clock: "number", random: "number" });
 });
+
+for (const trigger of ["before_submit", "before_post"] as const) {
+  for (const field of PAYMENT_SYSTEM_CUSTOM_FIELDS) {
+    test(`payment ${trigger} scripts cannot replace custom.${field}`, async () => {
+      const result = await runScript(
+        `function main() { return { set: { custom: { ${JSON.stringify(field)}: "forged" } } }; }`,
+        { ...context, trigger, document: { ...context.document, kind: "vendor_payment" } },
+        2_000,
+      );
+      assert.equal(result.status, "error");
+      assert.ok(result.abortReason?.includes(`custom.${field}`), result.abortReason ?? "payment mutation was not named");
+    });
+  }
+}
