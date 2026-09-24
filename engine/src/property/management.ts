@@ -2063,12 +2063,20 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
         throw new PropertyManagementError(`Close the GL module for ${scope.name} in book ${scope.code} before finalizing CAM actuals`);
       }
     }
+    // A void means the transaction never happened: exclude every line of a
+    // voided document — the in-window original (status 'reversed') AND its
+    // reversal, which the void posts in a later period outside this window.
+    // Counting the original without its out-of-window offset would bill
+    // tenants for voided costs. Manual corrections carry no document and
+    // are unaffected: both legs still net inside the window as before.
     const sourceTotals = () => tx.execute<{ amount: string; lines: number; last_change: string }>(sql`
       select coalesce(sum(jl.amount),0)::text as amount, count(*)::int as lines,
         coalesce(max(greatest(je.posted_at,je.updated_at))::text,'') as last_change
       from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
+      left join documents vd on vd.id = je.source_document_id and vd.org_id = jl.org_id
       where jl.org_id=${orgId} and je.book_id=${bookId} and jl.subsidiary_id=${pool.subsidiary_id}
         and je.status in ('posted','reversed') and je.posting_date between ${pool.period_starts_on} and ${pool.period_ends_on} and jl.location_id=${pool.location_id}
+        and (vd.id is null or vd.status <> 'voided')
         and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`);
     const actual = await sourceTotals();
     const actualAmount = exactMoney(actual.rows[0]?.amount ?? "0", "CAM actual amount");
