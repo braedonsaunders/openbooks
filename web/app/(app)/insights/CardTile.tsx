@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import type { InsightQuery, QueryResult, VizSettings, VizType } from '@openbooks/analytics'
 import { InsightResultView } from '@openbooks/analytics/viz'
 import { Skeleton } from '@openbooks/ui'
@@ -52,10 +53,19 @@ export function CardTile({
       body: JSON.stringify({ query: card.query }),
     })
       .then(async (res) => {
-        const data = await res.json()
+        // The status is checked before the body is parsed: a non-JSON error
+        // body must fail the tile with the named refusal, never a SyntaxError
+        // escaping the effect.
+        if (!res.ok) {
+          const message = await readApiErrorMessage(res, t('errors.queryFailed'))
+          if (mySeq !== seq.current) return
+          setError(message)
+          return
+        }
+        const data = (await res.json().catch(() => null)) as QueryResult | null
         if (mySeq !== seq.current) return
-        if (!res.ok) setError(data.error ?? t('errors.queryFailed'))
-        else setResult(data as QueryResult)
+        if (!data || !Array.isArray(data.rows)) setError(t('cardTile.loadFailed'))
+        else setResult(data)
       })
       .catch(() => {
         if (mySeq === seq.current) setError(t('cardTile.loadFailed'))
