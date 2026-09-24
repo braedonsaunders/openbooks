@@ -3,6 +3,7 @@ import { db, pool, schema } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { PostingError, type PostingDeps } from "../ledger/posting-contracts.ts";
 import { ensureReadRole, runUserSql } from "../platform/sqlapi.ts";
+import { selectOnlyOrg } from "./org-selection.ts";
 
 /**
  * End-to-end demo using imported accounting data:
@@ -14,8 +15,12 @@ import { ensureReadRole, runUserSql } from "../platform/sqlapi.ts";
  */
 
 async function main() {
-  const [org] = await db.select().from(schema.orgs);
-  if (!org) throw new Error("no organizations exist; run the bootstrap first");
+  // The demo is only meaningful against one org: with several tenants,
+  // taking whatever sorts first would post demo bills into an arbitrary org.
+  const org = selectOnlyOrg(
+    (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`)).rows,
+    "demo-e2e.ts",
+  );
   const orgId = org.id;
 
   const acct = async (like: string) => {

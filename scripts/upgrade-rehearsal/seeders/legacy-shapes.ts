@@ -42,10 +42,22 @@ async function main(): Promise<void> {
   const client = new pg.Client({ connectionString: requireEnv("OPENBOOKS_DB_URL") });
   await client.connect();
   try {
-    const orgs = (await client.query<{ id: string }>(
-      `select id from public.orgs order by created_at limit 1`,
+    // The rehearsal database holds exactly one org: with several tenants,
+    // taking whatever sorts first would seed legacy shapes into an
+    // arbitrary org. (Inline here by design — this file imports nothing
+    // from the engine so it runs on both the alpha.22 and alpha.23
+    // runtimes — rather than sharing the provisioning guard.)
+    const orgs = (await client.query<{ id: string; name: string }>(
+      `select id, name from public.orgs order by created_at`,
     )).rows;
-    if (orgs.length === 0) throw new Error("legacy-shapes seeder found no org to seed into");
+    if (orgs.length !== 1) {
+      throw new Error(
+        `legacy-shapes seeder runs against exactly one org but found ${orgs.length}` +
+          (orgs.length === 0
+            ? " — seed an org first"
+            : ` — available orgs: ${orgs.map((org) => `${org.name} (${org.id})`).join(", ")}`),
+      );
+    }
     const orgId = orgs[0]!.id;
     const sub = (await client.query<{ id: string }>(
       `select id from public.subsidiaries where org_id = $1 order by created_at limit 1`,
