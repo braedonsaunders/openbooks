@@ -1189,24 +1189,29 @@ export async function acknowledgeDocument(input: {
       throw new HrmDocumentsError("FORBIDDEN", "this link is invalid or expired — ask HR to re-send the document");
     }
     return withOrgTransaction(claims.orgId, async () => {
-      const { orgId, doc, signer } = await assertTokenSigner(db, input.token!);
+      const { orgId, doc: tokenDoc, signer } = await assertTokenSigner(db, input.token!);
+      const doc = await loadDocument(db, orgId, tokenDoc.id, true);
       await requireAcknowledgmentOnlyAndOpen(db, orgId, doc);
       if (signer.status === "signed") {
         throw new HrmDocumentsError("REFUSED", "this link already acknowledged — acknowledgment is recorded once");
       }
-      await db.execute(sql`
+      const signerUpdate = await db.execute(sql`
         update hrm_document_signers set status = 'signed', signed_at = now(), updated_at = now(),
                evidence = ${JSON.stringify({ acknowledged: true, timestamp: new Date().toISOString() })}::jsonb
-         where org_id = ${orgId} and id = ${signer.id}
+         where org_id = ${orgId} and id = ${signer.id} and status in ('pending', 'viewed')
+        returning id
       `);
-      await recordEvent(db, orgId, doc.id, "acknowledged", null);
+      if (signerUpdate.rows.length !== 1) {
+        throw new HrmDocumentsError("REFUSED", "this link already acknowledged — acknowledgment is recorded once");
+      }
       const updated = (await db.execute<DocumentRow>(sql`
         update hrm_documents set status = 'acknowledged', completed_at = now(), updated_at = now()
-         where org_id = ${orgId} and id = ${doc.id}
+         where org_id = ${orgId} and id = ${doc.id} and status in ('sent', 'viewed', 'partially_signed')
         returning id, employment_id, party_id, template_id, category_key, title, file_id,
                   status, sent_at, completed_at::text as completed_at,
                   expires_at, retain_until::text as retain_until, legal_hold
       `)).rows[0]!;
+      await recordEvent(db, orgId, doc.id, "acknowledged", null);
       const { applyCompletionRetention } = await import("./retention.ts");
       await applyCompletionRetention(db, orgId, updated.id, null);
       return toDTO(await loadDocument(db, orgId, updated.id));
@@ -1219,7 +1224,7 @@ export async function acknowledgeDocument(input: {
   const actorId: string = input.actorId;
   const documentId: string = input.documentId;
   return withOrgTransaction(orgId, async () => {
-    const doc = await loadDocument(db, orgId, documentId);
+    const doc = await loadDocument(db, orgId, documentId, true);
     await requireAcknowledgmentOnlyAndOpen(db, orgId, doc);
     const ownParty = await loadActorPartyId(db, orgId, actorId);
     const isOwner = ownParty !== null && ownParty === doc.party_id;
@@ -1232,18 +1237,18 @@ export async function acknowledgeDocument(input: {
     } else if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) {
       await requireHrmDocumentsManage(db, orgId, actorId);
     }
-    if (doc.status === "acknowledged") {
-      throw new HrmDocumentsError("REFUSED", "this document is already acknowledged");
-    }
-    await recordEvent(db, orgId, doc.id, "acknowledged", actorId);
     const updated = (await db.execute<DocumentRow>(sql`
       update hrm_documents set status = 'acknowledged', completed_at = now(),
              updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${doc.id}
+       where org_id = ${orgId} and id = ${doc.id} and status in ('sent', 'viewed', 'partially_signed')
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
+    if (!updated) {
+      throw new HrmDocumentsError("REFUSED", "this document is no longer open for acknowledgment");
+    }
+    await recordEvent(db, orgId, doc.id, "acknowledged", actorId);
     const { applyCompletionRetention } = await import("./retention.ts");
     await applyCompletionRetention(db, orgId, updated.id, actorId);
     return toDTO(await loadDocument(db, orgId, updated.id));

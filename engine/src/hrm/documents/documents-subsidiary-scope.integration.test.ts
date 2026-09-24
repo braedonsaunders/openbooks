@@ -325,6 +325,27 @@ test("in-session acknowledgment refuses signature templates and terminal documen
   });
 });
 
+test("concurrent in-session acknowledgment records exactly one transition and event", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    await db.execute(sql`
+      update hrm_documents set status = 'sent'
+       where org_id = ${h.org.orgId} and id = ${h.docAId}
+    `);
+    const outcomes = await Promise.allSettled([
+      acknowledgeDocument({ orgId: h.org.orgId, actorId: h.adminId, documentId: h.docAId }),
+      acknowledgeDocument({ orgId: h.org.orgId, actorId: h.adminId, documentId: h.docAId }),
+    ]);
+    assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+    assert.equal(outcomes.filter((outcome) => outcome.status === "rejected").length, 1);
+    const acknowledgments = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_document_events
+       where org_id = ${h.org.orgId} and document_id = ${h.docAId} and kind = 'acknowledged'
+    `)).rows[0]!.count;
+    assert.equal(acknowledgments, "1");
+    assert.equal(await docStatus(h.org.orgId, h.docAId), "acknowledged");
+  });
+});
+
 test("upload refuses an undeclared category and files a declared one", { skip: !DB }, async () => {
   await withHarness(async (h: Harness) => {
     const filed = {
