@@ -156,69 +156,72 @@ function jsonRequest(url: string, method: string, body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("candidates routes gate on the hrm feature and the recruiting permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    assert.match(readFileSync(new URL("./route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.manage"\)/);
-    assert.match(readFileSync(new URL("./[id]/route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.read"\)/);
-  });
-} else {
-  test("a missing feature flag 404s before the service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status, 404);
-    assert.equal(
-      (await itemRoute!.GET(new Request("http://openbooks.test/x"), { params: Promise.resolve({ id: CANDIDATE_ID }) })).status,
-      404,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status, 404);
+  assert.equal(
+    (await itemRoute!.GET(new Request("http://openbooks.test/x"), { params: Promise.resolve({ id: CANDIDATE_ID }) })).status,
+    404,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create validates the body through the real parser before the service runs", async () => {
-    reset();
-    const url = "http://openbooks.test/api/hrm/recruiting/candidates";
-    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
-    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { displayName: "Ada", source: "newspaper" }))).status, 400);
-    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { displayName: "Ada", mergeInto: "nope" }))).status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status, 401);
+  assert.equal(
+    (await itemRoute!.GET(new Request("http://openbooks.test/x"), { params: Promise.resolve({ id: CANDIDATE_ID }) })).status,
+    401,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create forwards org, actor, and body, then 201s", async () => {
-    reset();
-    const response = await collectionRoute!.POST(
-      jsonRequest("http://openbooks.test/api/hrm/recruiting/candidates", "POST", {
-        displayName: "Ada Candidate",
-        email: "ada@example.test",
-        source: "direct",
-      }),
-    );
-    assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { candidate: { id: "candidate-1" }, mergedInto: null });
-    assert.equal(routeState.calls[0]!.fn, "create");
-    assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).displayName, "Ada Candidate");
-  });
+test("create validates the body through the real parser before the service runs", async () => {
+  reset();
+  const url = "http://openbooks.test/api/hrm/recruiting/candidates";
+  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
+  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { displayName: "Ada", source: "newspaper" }))).status, 400);
+  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { displayName: "Ada", mergeInto: "nope" }))).status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("item GET validates the id and resolves the drawer", async () => {
-    reset();
-    assert.equal(
-      (await itemRoute!.GET(new Request("http://openbooks.test/x"), { params: Promise.resolve({ id: "nope" }) })).status,
-      400,
-    );
-    const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), {
-      params: Promise.resolve({ id: CANDIDATE_ID }),
-    });
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { candidate: { id: CANDIDATE_ID } });
-  });
+test("create forwards org, actor, and body, then 201s", async () => {
+  reset();
+  const response = await collectionRoute!.POST(
+    jsonRequest("http://openbooks.test/api/hrm/recruiting/candidates", "POST", {
+      displayName: "Ada Candidate",
+      email: "ada@example.test",
+      source: "direct",
+    }),
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { candidate: { id: "candidate-1" }, mergedInto: null });
+  assert.equal(routeState.calls[0]!.fn, "create");
+  assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).displayName, "Ada Candidate");
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("a candidate with this email already exists (Ada)");
-    routeState.serviceThrow = refusal;
-    const response = await collectionRoute!.POST(
-      jsonRequest("http://openbooks.test/api/hrm/recruiting/candidates", "POST", { displayName: "Ada Clone", email: "ada@example.test" }),
-    );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
+test("item GET validates the id and resolves the drawer", async () => {
+  reset();
+  assert.equal(
+    (await itemRoute!.GET(new Request("http://openbooks.test/x"), { params: Promise.resolve({ id: "nope" }) })).status,
+    400,
+  );
+  const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), {
+    params: Promise.resolve({ id: CANDIDATE_ID }),
   });
-}
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { candidate: { id: CANDIDATE_ID } });
+});
+
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("a candidate with this email already exists (Ada)");
+  routeState.serviceThrow = refusal;
+  const response = await collectionRoute!.POST(
+    jsonRequest("http://openbooks.test/api/hrm/recruiting/candidates", "POST", { displayName: "Ada Clone", email: "ada@example.test" }),
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
