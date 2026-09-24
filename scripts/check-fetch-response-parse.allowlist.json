@@ -150,16 +150,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/insights/CardStudio.tsx",
-    "fn": "CardStudio",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/insights/query (web/app/api/insights/query/route.ts): runInsightQuery sits inside try/catch-all answering NextResponse.json (400/500); no rethrow; isFeatureEnabled outside is a framework read whose failure mode is infra. Verified by reading the handler."
-  },
-  {
-    "path": "web/app/(app)/insights/CardStudio.tsx",
-    "fn": "setPublished",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/insights/CardTile.tsx",
     "fn": "CardTile",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
