@@ -11,6 +11,7 @@ import { seedPayrollComponents } from "../run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { form941Worksheet, w2Slips } from "../yearend.ts";
+import { resolveUsSuiYtd, usEmployeeYtd } from "./compute-statutory.ts";
 
 // The pack registry side effect every pay run reads through.
 void PAYROLL_COUNTRY_PACKS;
@@ -241,6 +242,75 @@ test(
       const quarters = await form941Worksheet(fx.orgId, 2026);
       assert.equal(quarters.length, 1);
       assert.equal(quarters[0]!.wages, "3800.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "US SUI refuses out-of-state wage history until its transfer treatment is configured",
+  { skip: !DB },
+  async () => {
+    // Oregon's Employment Department says prior taxable wages paid in other
+    // states may reduce Oregon's wage-base room (UI PUB 217,
+    // https://www.oregon.gov/employ/Businesses/Documents/Tax/uipub217.pdf).
+    // California separately allows certain same-year out-of-state wage
+    // credits on transfer (EDD Employer's Guide,
+    // https://edd.ca.gov/siteassets/files/pdf_pub_ctr/de44.pdf). The test
+    // therefore requires a named refusal until state-specific history and
+    // eligibility can distinguish these rules.
+    const fx = await usPayrollOrg();
+    try {
+      const employee = await usEmployee(fx, "Multi-state SUI employee");
+      for (const [region, rate, wageBase] of [
+        ["TX", "0.03", "7000"],
+        ["OR", "0.03", "56700"],
+      ] as const) {
+        await db.execute(sql`
+          insert into payroll_statutory_rates
+            (org_id, country, rate_key, region, tax_year, rate_values, created_by, updated_by)
+          values (${fx.orgId}, 'US', 'us_sui', ${region}, 2026,
+                  ${JSON.stringify({ rate, wageBase })}::jsonb, ${fx.actorId}, ${fx.actorId})`);
+      }
+      const firstRun = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+      });
+      const firstResult = await calculatePayRun({
+        orgId: fx.orgId, documentId: firstRun.documentId, actorId: fx.actorId,
+      });
+      assert.deepEqual(firstResult.errors, []);
+      await commitPayRun({ orgId: fx.orgId, documentId: firstRun.documentId, actorId: fx.actorId });
+
+      await db.execute(sql`
+        update employee_payroll_profiles set province = 'OR'
+         where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(
+          settings, '{payroll,us,sui,OR}', '{"rate":"0.03","wageBase":"56700"}'::jsonb, true
+        ) where id = ${fx.orgId}`);
+      const priorStateStub = (await db.execute<{ province: string }>(sql`
+        select province from pay_stubs
+         where org_id = ${fx.orgId} and employee_party_id = ${employee}
+      `)).rows[0];
+      assert.equal(priorStateStub?.province, "TX", "the committed stub preserves the prior work state");
+      const stateHistory = await usEmployeeYtd({
+        tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
+        documentId: randomUUID(),
+      }, "OR");
+      assert.equal(stateHistory.suiOtherRegions, "TX", "SUI history is state-dimensioned independently of FUTA");
+
+      assert.throws(
+        () => resolveUsSuiYtd("OR", stateHistory),
+        /US SUI cannot be calculated for OR: prior insurable wages are recorded in TX/,
+      );
+      const sameStateHistory = await usEmployeeYtd({
+        tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
+        documentId: randomUUID(),
+      }, "TX");
+      assert.equal(resolveUsSuiYtd("TX", sameStateHistory), PERIOD_WAGES,
+        "same-state SUI history remains usable; FUTA retains its independent aggregate");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

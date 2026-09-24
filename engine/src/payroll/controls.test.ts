@@ -384,7 +384,7 @@ test(
         documentId: current.documentId,
       } as const;
       const caYtd = await employeeYtd(context);
-      const usYtd = await usEmployeeYtd(context);
+      const usYtd = await usEmployeeYtd(context, "ON");
       assert.equal(cmp(caYtd.pensionable, "1000"), 0,
         "Canada YTD ignores an uncommitted calculated stub");
       assert.equal(cmp(caYtd.cpp, "1000"), 0,
