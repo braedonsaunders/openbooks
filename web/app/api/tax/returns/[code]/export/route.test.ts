@@ -1,6 +1,32 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { PDFDocument } from "pdf-lib";
+
+declare global {
+  var __exportBoxes:
+    | Array<{
+        lineCode: string;
+        label: string;
+        value: string;
+        computed: boolean;
+        editable: boolean;
+        pdfField: string | null;
+      }>
+    | undefined;
+  var __exportPdfBytes: Uint8Array | undefined;
+}
+
+/** A minimal AcroForm PDF carrying exactly the named text fields. */
+async function acroFormPdf(fieldNames: string[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage();
+  const form = doc.getForm();
+  fieldNames.forEach((name, index) => {
+    form.createTextField(name).addToPage(page, { x: 50, y: 700 - index * 40, width: 200, height: 20 });
+  });
+  return doc.save();
+}
 
 // C-71: the export route called computeTaxReturn with NO scope opts while
 // the view sent no scope params, so exporting a scoped or translated preview
@@ -55,7 +81,7 @@ const mockSources = new Map<string, string>([
         return {
           formCode, formName: 'Form ' + formCode, from, to,
           submissionChannel: 'portal_manual', watermark: null,
-          boxes: [{ lineCode: '1', label: 'Probe box', value: '20.0000', computed: false, editable: false, pdfField: null }],
+          boxes: globalThis.__exportBoxes ?? [{ lineCode: '1', label: 'Probe box', value: '20.0000', computed: false, editable: false, pdfField: null }],
         }
       }
     `,
@@ -211,6 +237,58 @@ test("GET refuses an out-of-scope subsidiary without reaching the engine", async
 
   assert.equal(response.status, 404);
   assert.equal(routeState.calls.length, 0);
+});
+
+test("GET official refuses by name when a non-zero box is unmatched", async () => {
+  globalThis.__exportBoxes = [
+    { lineCode: "109", label: "Net tax", value: "20.0000", computed: false, editable: false, pdfField: "FIELD_109" },
+  ];
+  globalThis.__exportPdfBytes = await acroFormPdf(["WRONG_FIELD"]);
+  try {
+    const response = await get("?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed");
+
+    assert.equal(response.status, 422);
+    const body = (await response.json()) as { error: string };
+    assert.ok(body.error.includes("109 (FIELD_109)"), body.error);
+    assert.ok(body.error.includes("re-upload"), body.error);
+  } finally {
+    globalThis.__exportBoxes = undefined;
+    globalThis.__exportPdfBytes = undefined;
+  }
+});
+
+test("GET official downloads when every mapped field matches", async () => {
+  globalThis.__exportBoxes = [
+    { lineCode: "109", label: "Net tax", value: "20.0000", computed: false, editable: false, pdfField: "FIELD_109" },
+  ];
+  globalThis.__exportPdfBytes = await acroFormPdf(["FIELD_109"]);
+  try {
+    const response = await get("?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed");
+
+    assert.equal(response.status, 200);
+    assert.ok(
+      response.headers.get("content-type")?.includes("pdf"),
+      response.headers.get("content-type") ?? "missing content-type",
+    );
+  } finally {
+    globalThis.__exportBoxes = undefined;
+    globalThis.__exportPdfBytes = undefined;
+  }
+});
+
+test("GET official downloads when only zero boxes are unmatched", async () => {
+  globalThis.__exportBoxes = [
+    { lineCode: "109", label: "Net tax", value: "0.0000", computed: false, editable: false, pdfField: "FIELD_109" },
+  ];
+  globalThis.__exportPdfBytes = await acroFormPdf(["WRONG_FIELD"]);
+  try {
+    const response = await get("?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed");
+
+    assert.equal(response.status, 200);
+  } finally {
+    globalThis.__exportBoxes = undefined;
+    globalThis.__exportPdfBytes = undefined;
+  }
 });
 
 test("GET refuses an unreadable adjustment by name without reaching the engine", async () => {
