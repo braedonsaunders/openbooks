@@ -289,6 +289,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       const exportTask = task.create({ taskType: task.TaskType.MAP_REDUCE });
       exportTask.scriptId = EXPORT_SCRIPT_ID;
       exportTask.deploymentId = EXPORT_DEPLOYMENT_ID;
+      exportTask.params = { custscript_openbooks_export_job_id: jobId };
       return { schemaVersion: SCHEMA_VERSION, jobId, taskId: exportTask.submit(), partitions: input.partitions.length };
     };
 

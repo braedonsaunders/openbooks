@@ -3,7 +3,7 @@
  * @NScriptType MapReduceScript
  * @NModuleScope SameAccount
  */
-define(['N/file', 'N/query', 'N/search'], (file, query, search) => {
+define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, search) => {
   const SCHEMA_VERSION = 1;
   const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
   const jobsFolder = () => file.load({ id: MARKER_PATH }).folder;
@@ -19,11 +19,17 @@ define(['N/file', 'N/query', 'N/search'], (file, query, search) => {
     return String(value);
   };
 
-  const getInputData = () => search.create({
-    type: 'file',
-    filters: [['folder', 'anyof', jobsFolder()], 'AND', ['name', 'startswith', 'ob-request-']],
-    columns: ['internalid', 'name'],
-  });
+  const getInputData = () => {
+    const jobId = runtime.getCurrentScript().getParameter({ name: 'custscript_openbooks_export_job_id' });
+    if (typeof jobId !== 'string' || jobId.length === 0) {
+      throw new Error('NetSuite bulk export job ID is required');
+    }
+    return search.create({
+      type: 'file',
+      filters: [['folder', 'anyof', jobsFolder()], 'AND', ['name', 'startswith', `ob-request-${jobId}-`]],
+      columns: ['internalid', 'name'],
+    });
+  };
 
   const saveJson = (name, body) => file.create({
     name,

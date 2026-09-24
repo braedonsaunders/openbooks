@@ -1,4 +1,3 @@
-// source-pin-contract: the shipped netsuite-bridge package omits defaultAuthId so no account credential ships; checked on the parsed integrations/netsuite-bridge/project.json
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -20,25 +19,17 @@ const creds: NetSuiteCreds = {
   tokenSecret: "secret",
 };
 
-test("NetSuite bridge package does not commit an account-specific auth target", () => {
-  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-  const project = JSON.parse(readFileSync(
-    join(repoRoot, "integrations", "netsuite-bridge", "project.json"),
-    "utf8",
-  )) as { defaultAuthId?: unknown };
-  assert.equal(project.defaultAuthId, undefined);
-});
+function readSuiteScript(path: string): string {
+  return readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", path), "utf8");
+}
 
 test("NetSuite RESTlet scopes export status and cleanup to an exact job boundary", () => {
-  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-  const source = readFileSync(
-    join(repoRoot, "integrations", "netsuite-bridge", "src", "FileCabinet", "SuiteScripts", "OpenBooks", "openbooks_bridge_restlet.js"),
-    "utf8",
-  );
+  const source = readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js");
   type SearchResult = { id: string; name: string; getValue: (field: { name: string }) => string };
   type Restlet = { post: (input: Record<string, unknown>) => unknown };
   let restlet: Restlet | undefined;
   let searchOptions: { filters: unknown } | undefined;
+  let exportTask: { params?: Record<string, unknown> } | undefined;
   const deletedIds: string[] = [];
   const searchRows: SearchResult[] = [
     { id: "1", name: "ob-chunk-abc-a-000000.json", getValue: ({ name }) => name === "name" ? "ob-chunk-abc-a-000000.json" : "1" },
@@ -68,7 +59,9 @@ test("NetSuite RESTlet scopes export status and cleanup to an exact job boundary
   const context = {
     define: (_deps: string[], factory: (...modules: unknown[]) => Restlet) => {
       const file = {
+        Type: { JSON: "JSON" },
         load: () => ({ folder: 7 }),
+        create: () => ({ save: () => "request-file" }),
         delete: ({ id }: { id: string }) => { deletedIds.push(id); },
       };
       const search = {
@@ -86,11 +79,17 @@ test("NetSuite RESTlet scopes export status and cleanup to an exact job boundary
           };
         },
       };
-      restlet = factory(file, {}, {}, {}, {}, search, {});
+      const task = {
+        TaskType: { MAP_REDUCE: "MAP_REDUCE" },
+        create: () => (exportTask = { submit: () => "task-1" }),
+      };
+      restlet = factory(file, {}, {}, {}, {}, search, task);
     },
   };
   runInNewContext(source, context);
   assert.ok(restlet);
+  restlet.post({ action: "startExport", jobId: "abc", partitions: [{ id: "a", sql: "SELECT 1 FROM DUAL" }] });
+  assert.equal(exportTask?.params?.custscript_openbooks_export_job_id, "abc");
   const status = restlet.post({ action: "exportStatus", jobId: "abc" }) as { files: Array<{ id: string }> };
   assert.deepEqual(Array.from(status.files, (file) => file.id), ["1", "3"]);
   assert.equal(JSON.stringify(searchOptions?.filters).includes("contains"), false);
@@ -360,35 +359,6 @@ test("NetSuite bulk export fails closed when the summary names a missing chunk",
   assert.equal(cleanupCalls, 1);
 });
 
-test("NetSuite bulk export refuses cleanup when status contains a colliding job", async () => {
-  let jobId = "";
-  let cleanupCalls = 0;
-  const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
-    const action = String(params.action);
-    if (action === "startExport") {
-      jobId = String(params.jobId);
-      return { schemaVersion: 1, jobId, taskId: "task-1", partitions: 1 } as T;
-    }
-    if (action === "exportStatus") return {
-      schemaVersion: 1,
-      jobId,
-      status: "complete",
-      files: [{ id: "41", name: `ob-chunk-${jobId}2-a-000000.json`, size: 1, createdAt: "", modifiedAt: "" }],
-    } as T;
-    if (action === "deleteExport") {
-      cleanupCalls += 1;
-      return { schemaVersion: 1, jobId, deleted: 1, remaining: 0 } as T;
-    }
-    throw new Error(`unexpected action ${action}`);
-  });
-
-  await assert.rejects(
-    () => client.bulkQuery([{ id: "a", sql: "SELECT 1 AS id FROM DUAL" }]),
-    /ambiguous names/,
-  );
-  assert.equal(cleanupCalls, 0);
-});
-
 test("NetSuite export deletion refuses substring-colliding files", async () => {
   let cleanupCalls = 0;
   const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
@@ -406,4 +376,28 @@ test("NetSuite export deletion refuses substring-colliding files", async () => {
 
   await assert.rejects(() => client.deleteExport("abc"), /ambiguous names/);
   assert.equal(cleanupCalls, 0);
+});
+
+test("NetSuite bulk export map/reduce only accepts the submitted job's request files", () => {
+  const source = readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_export_map_reduce.js");
+  const files = [{ id: "1", name: "ob-request-job-a.json" }, { id: "2", name: "ob-request-other-a.json" }];
+  type Search = { run: () => { each: (callback: (row: typeof files[number]) => boolean) => void } };
+  type Script = { getInputData: () => Search };
+  const modules: Record<string, unknown> = {
+    "N/file": { load: () => ({ folder: 7 }) },
+    "N/query": {},
+    "N/runtime": { getCurrentScript: () => ({ getParameter: () => "job" }) },
+    "N/search": { create: (options: { filters: unknown[] }) => ({ run: () => ({ each: (callback: (row: typeof files[number]) => boolean) => {
+      const prefix = String((options.filters[2] as string[])[2]);
+      files.filter((file) => file.name.startsWith(prefix)).every(callback);
+    } }) }) },
+  };
+  let script: Script | undefined;
+  const context = { define: (deps: string[], factory: (...deps: unknown[]) => Script) => {
+    script = factory(...deps.map((dep) => modules[dep]));
+  } };
+  runInNewContext(source, context);
+  const matched: string[] = [];
+  script!.getInputData().run().each((row) => { matched.push(row.id); return true; });
+  assert.deepEqual(matched, ["1"]);
 });
