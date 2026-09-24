@@ -24,6 +24,7 @@ const { db, withBypassContext } = (await import(root + 'engine/src/platform/db.t
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
 const { JOURNAL_ENTRY_TABLE } = (await import(root + 'web/lib/customization/entity-list-query/journal-entries.ts')) as typeof import('./customization/entity-list-query/journal-entries.ts')
+const { journalScopeWhere } = (await import(root + 'web/lib/customization/entity-list-query/journal-entries.ts')) as typeof import('./customization/entity-list-query/journal-entries.ts')
 
 /** GL-native standalone origins posted by the engines (no source document). */
 const NATIVE_ORIGINS = [
@@ -79,6 +80,45 @@ test('journal list shows every GL-native engine origin', { skip: !process.env.OP
       if (seen.get(tag) !== origin) missing.push(origin)
     }
     assert.deepEqual(missing, [], `journal list hides GL-native origins: ${missing.join(', ')}`)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('the journal list exposes a pay-run entry only inside the caller subsidiary lens', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const entryId = randomUUID()
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
+    const entryNumber = `PAY-RUN-JOURNAL-${entryId.slice(0, 8)}`
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
+        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entryNumber}, ${org.date}, ${org.periodId},
+                ${entryNumber}, 'draft', 'payroll', ${actorId}, ${actorId})`)
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, is_open_item)
+        values
+          (${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, 10.00, 'CAD', 10.00, 1, false),
+          (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing}, ${org.subsidiaryId}, -10.00, 'CAD', -10.00, 1, false)`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`)
+      await db.execute(sql`
+        insert into documents
+          (org_id, kind, document_number, document_date, currency, subsidiary_id, status, posted_entry_id, posting_period_id)
+        values (${org.orgId}, 'pay_run', ${entryNumber}, ${org.date}, 'CAD', ${org.subsidiaryId}, 'posted', ${entryId}, ${org.periodId})`)
+    })
+
+    const visibleToEntity = await withBypassContext(() => db.execute<{ entry_number: string }>(sql`
+      select e.entry_number from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
+       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set([org.subsidiaryId]))}`))
+    assert.ok(visibleToEntity.rows.some((row) => row.entry_number === entryNumber))
+
+    const visibleToNoSubsidiaries = await withBypassContext(() => db.execute<{ entry_number: string }>(sql`
+      select e.entry_number from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
+       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set<string>())}`))
+    assert.equal(visibleToNoSubsidiaries.rows.some((row) => row.entry_number === entryNumber), false)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
