@@ -3,6 +3,12 @@ import { z } from "zod";
 import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { featureEnabled } from "../organization/feature-registry.ts";
+import {
+  resolveRunScope,
+  resolveRunSubjectSubsidiaries,
+  runScopeFor,
+  runSubjectVisible,
+} from "./run-scope.ts";
 import { AUTOMATION_STATUSES } from "@openbooks/schema/src/hrm-automations.ts";
 import {
   assertPublishableAutomationActions,
@@ -289,22 +295,48 @@ export async function listAutomationRuns(
   actorId: string,
   automationId: string,
   status?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<{ id: string; status: string; version: number; subjectKind: string | null; createdAt: string }[]> {
   await requireAutomations(orgId, actorId, "automations.read");
+  const allowed = await resolveRunScope(orgId, actorId, allowedSubsidiaryIds);
   return withOrg(orgId, async () => {
     const rows = await db.execute(sql`
-      select id, status, version, subject_kind as "subjectKind", created_at as "createdAt"
+      select id, status, version, subject_kind as "subjectKind", subject_id as "subjectId",
+             created_at as "createdAt"
         from automation_runs
        where org_id = ${orgId} and automation_id = ${automationId}
          and (${status ?? null}::text is null or status = ${status ?? null}::text)
        order by created_at desc limit 100
     `);
-    return rows.rows as { id: string; status: string; version: number; subjectKind: string | null; createdAt: string }[];
+    const runs = rows.rows as {
+      id: string; status: string; version: number;
+      subjectKind: string | null; subjectId: string | null; createdAt: string
+    }[];
+    // The subject id scopes the read but is not part of the list contract.
+    const contract = (run: (typeof runs)[number]) => ({
+      id: run.id, status: run.status, version: run.version,
+      subjectKind: run.subjectKind, createdAt: run.createdAt,
+    });
+    if (allowed === null) return runs.map(contract);
+    const subsidiaries = await resolveRunSubjectSubsidiaries(orgId, runs);
+    return runs
+      .filter((run) => runSubjectVisible(allowed, runScopeFor(subsidiaries, run.subjectKind, run.subjectId)))
+      .map(contract);
   });
 }
 
-export async function getAutomationRun(orgId: string, actorId: string, runId: string): Promise<unknown> {
+export async function getAutomationRun(
+  orgId: string,
+  actorId: string,
+  runId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<unknown> {
   await requireAutomations(orgId, actorId, "automations.read");
+  // Run history is scoped by the run subject's subsidiary: a restricted
+  // caller sees only runs whose subject sits in their lens, and an
+  // out-of-scope (or missing-subject) run answers exactly like a missing
+  // run — the uniform not-found below, never a scope disclosure.
+  const allowed = await resolveRunScope(orgId, actorId, allowedSubsidiaryIds);
   return withOrg(orgId, async () => {
     const rows = await db.execute(sql`
       select id, automation_id as "automationId", version, trigger_payload as "triggerPayload",
@@ -312,8 +344,14 @@ export async function getAutomationRun(orgId: string, actorId: string, runId: st
              started_at as "startedAt", finished_at as "finishedAt", error, steps
         from automation_runs where org_id = ${orgId} and id = ${runId} limit 1
     `);
-    const row = rows.rows[0];
+    const row = rows.rows[0] as { subjectKind: string | null; subjectId: string | null } | undefined;
     if (!row) throw new AutomationServiceError("run not found — reload the runs tab and try again");
+    if (allowed !== null) {
+      const subsidiaries = await resolveRunSubjectSubsidiaries(orgId, [row]);
+      if (!runSubjectVisible(allowed, runScopeFor(subsidiaries, row.subjectKind, row.subjectId))) {
+        throw new AutomationServiceError("run not found — reload the runs tab and try again");
+      }
+    }
     return row;
   });
 }
