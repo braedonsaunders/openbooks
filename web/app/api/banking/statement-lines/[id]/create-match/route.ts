@@ -4,7 +4,7 @@ import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/co
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
-import { addJournalMatchFromLine } from '../../../../../../lib/banking-rules'
+import { addJournalMatchFromLine, JournalPostingDeniedError } from '../../../../../../lib/banking-rules'
 import { bankingErrorResponse } from '../../../util'
 
 export const runtime = 'nodejs'
@@ -31,6 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof PostingError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof JournalPostingDeniedError) return NextResponse.json({ error: e.message }, { status: 403 })
     // Unconfigured org control accounts refuse the match before any GL write.
     if (e instanceof ControlAccountsIncompleteError) {
       return NextResponse.json({ error: e.message }, { status: 422 })

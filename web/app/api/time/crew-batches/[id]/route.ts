@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { can } from '../../../../../lib/authz'
+import { postPermission } from '../../../../../lib/document-kinds'
 import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
 import { paymentControlDeps } from '@openbooks/engine/src/payments/payment-accounts.ts'
 import {
@@ -149,6 +150,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (body.action === 'post') {
       const gate = await batchGate('time.manage')
       if (gate instanceof NextResponse) return gate
+      // Posting the batch creates APPROVED project_charge documents and
+      // posts each to the GL, so it takes the kind's postPermission — the
+      // same map the generic document actions route enforces — on top of
+      // time.manage. A time manager without gl.post cannot post equipment
+      // charges here. Refused BEFORE postBatch commits anything, by name.
+      const batchPostPerm = postPermission('project_charge')
+      if (!can(gate, batchPostPerm)) {
+        return NextResponse.json({ error: `missing permission: ${batchPostPerm}` }, { status: 403 })
+      }
       const result = await postBatch({
         orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,

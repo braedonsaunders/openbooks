@@ -6,6 +6,7 @@ import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { startReconciliation, createMatchWithJournal, excludeStatementLine } from '@openbooks/engine/src/banking/banking.ts'
 import { controlDeps } from "../../engine/src/ledger/document-service.ts";
+import { can, resolveAuthzByUserId } from "./authz";
 import { nextDocumentNumber } from "./bills.ts";
 import {
   type RuleCriteria,
@@ -344,6 +345,18 @@ function previewSplit(line: BankLine, outcome: RuleOutcome): { accountId: string
  * match points at). `amount` is signed from the bank's perspective: the bank
  * line carries it verbatim, the offsets its negation, split per `resolveSplit`.
  */
+/**
+ * Posting a categorizing journal writes the GL, so creating one takes
+ * gl.post on top of banking.reconcile — the same authority the journals
+ * actions route demands. The grant is re-resolved per journal (never a
+ * saved permission set), so a revocation fails closed mid-batch, and the
+ * refusal lands before any document, line, submission, or posting write.
+ */
+export class JournalPostingDeniedError extends Error {
+  override readonly name = 'JournalPostingDeniedError'
+  readonly status = 403
+}
+
 export async function createCategorizingJournal(
   orgId: string,
   userId: string,
@@ -357,6 +370,12 @@ export async function createCategorizingJournal(
     currency: string
   },
 ): Promise<string> {
+  const poster = await resolveAuthzByUserId(orgId, userId)
+  if (poster === null || !can(poster, 'gl.post')) {
+    throw new JournalPostingDeniedError(
+      'missing permission: gl.post — categorizing journals post to the ledger; leave the line unmatched for a gl.post holder',
+    )
+  }
   const documentNumber = await nextDocumentNumber(orgId, 'journal', 'JE-')
   const [doc] = await db
     .insert(schema.documents)
