@@ -80,8 +80,8 @@ test("payment-run oracle: no pay permission sees existing and missing ids identi
     const allowed = await guardPaymentRunPermission(runId);
     assert.ok(!(allowed instanceof NextResponse));
 
-    // Caller holding only the other direction still fails closed on the
-    // direction check (existing names its permission; missing stays 404).
+    // Wrong-direction callers learn nothing: an ap.pay-only caller sees an
+    // existing inbound run exactly like a missing id (uniform 404).
     const inboundId = randomUUID();
     await withBypassContext(
       () => db.execute(sql`insert into payment_runs(id,org_id,run_number,bank_account_id,subsidiary_id,method,direction,purpose,currency,created_by)
@@ -89,7 +89,27 @@ test("payment-run oracle: no pay permission sees existing and missing ids identi
     );
     const wrongDir = await guardPaymentRunPermission(inboundId);
     assert.ok(wrongDir instanceof NextResponse);
-    assert.equal(wrongDir.status, 403);
+    assert.equal(wrongDir.status, 404);
+    assert.deepEqual(await wrongDir.json(), { error: "not found" });
+    const wrongDirMissing = await guardPaymentRunPermission(randomUUID());
+    assert.ok(wrongDirMissing instanceof NextResponse);
+    assert.equal(wrongDirMissing.status, 404);
+    assert.deepEqual(await wrongDirMissing.json(), { error: "not found" });
+
+    // Symmetrically, an ar.pay-only caller sees an existing outbound run
+    // exactly like a missing id.
+    state.permissions = new Set<string>(["ar.pay"]);
+    const outboundDenied = await guardPaymentRunPermission(runId);
+    assert.ok(outboundDenied instanceof NextResponse);
+    assert.equal(outboundDenied.status, 404);
+    assert.deepEqual(await outboundDenied.json(), { error: "not found" });
+    const outboundMissing = await guardPaymentRunPermission(randomUUID());
+    assert.ok(outboundMissing instanceof NextResponse);
+    assert.equal(outboundMissing.status, 404);
+    assert.deepEqual(await outboundMissing.json(), { error: "not found" });
+    // And the matching inbound direction passes.
+    const inboundAllowed = await guardPaymentRunPermission(inboundId);
+    assert.ok(!(inboundAllowed instanceof NextResponse));
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -6,6 +6,7 @@ import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contrac
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '@/lib/authz'
 import { isMaskedFileContentError } from '@/lib/file-storage'
 import { isUuid } from '../../../lib/list-params'
@@ -40,13 +41,19 @@ export async function guardPaymentRunPermission(
 ): Promise<Authz | NextResponse> {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  // Permission before existence: a caller holding neither direction's
-  // permission learns nothing — existing and missing ids answer the same
-  // uniform 404, never a 403 naming the needed permission.
+  // Permission before existence (canonical shape 4 in
+  // engine/src/organization/subsidiary-scope.ts): a caller holding neither
+  // direction's permission learns nothing — existing and missing ids answer
+  // the same uniform 404, never a 403 naming the needed permission.
   const payPerm = `ap.${capability}` as const;
   const receivePerm = `ar.${capability}` as const;
-  if (!can(authz, payPerm) && !can(authz, receivePerm)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  try {
+    assertAnyPermission((permission) => can(authz, permission), [payPerm, receivePerm])
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    throw error
   }
   if (!isUuid(runId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const row = await db.execute<{ direction: string }>(sql`
@@ -55,8 +62,12 @@ export async function guardPaymentRunPermission(
   `)
   const run = row.rows[0]
   if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Wrong-direction callers learn nothing either: the direction-specific
+  // permission fails closed with the same uniform 404, so an ap.pay-only
+  // caller cannot distinguish an existing inbound run from a missing id
+  // (and symmetrically for ar.pay-only vs outbound, both capabilities).
   const permission = `${run.direction === 'inbound' ? 'ar' : 'ap'}.${capability}`
-  if (!can(authz, permission)) return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
+  if (!can(authz, permission)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return authz
 }
 

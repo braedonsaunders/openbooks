@@ -7,6 +7,7 @@ import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments/pay
 import { updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
+import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
@@ -54,8 +55,11 @@ const paymentPatchBody = z.object({
 })
 
 /** Resolve the document's kind, then gate on ap.pay / ar.pay accordingly.
- *  Subsidiary scope is enforced here too, so every verb (GET/PATCH/DELETE)
- *  inherits the same fail-closed record boundary. */
+ *  Permission before existence (canonical shape 4 in
+ *  engine/src/organization/subsidiary-scope.ts): a caller holding neither
+ *  ap.pay nor ar.pay learns nothing — existing and missing ids answer the
+ *  same uniform 404. Subsidiary scope is enforced here too, so every verb
+ *  (GET/PATCH/DELETE) inherits the same fail-closed record boundary. */
 async function gateForDocument(
   id: string,
   orgId: string | null,
@@ -63,6 +67,14 @@ async function gateForDocument(
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  try {
+    assertAnyPermission((permission) => can(authz, permission), ['ap.pay', 'ar.pay'])
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    throw error
+  }
   const r = (await db.execute<{ kind: PaymentKind; subsidiaryId: string | null }>(sql`
     select kind, subsidiary_id as "subsidiaryId" from documents
      where id = ${id} and kind in ('vendor_payment', 'customer_payment')
@@ -72,9 +84,12 @@ async function gateForDocument(
   const denied = guardSubsidiaryScope(authz, r.rows[0].subsidiaryId)
   if (denied) return denied
   const kind = r.rows[0].kind
+  // Wrong-direction callers learn nothing either: the kind-specific
+  // permission fails closed with the same uniform 404, so an ap.pay-only
+  // caller cannot distinguish an existing customer receipt from a missing id.
   const perm = paymentPermission(kind)
   if (!can(authz, perm)) {
-    return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   return { authz, kind }
 }
