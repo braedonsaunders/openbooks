@@ -285,7 +285,7 @@ export const RI_CERTIFICATE: PayrollCertificate = {
       label: "Line 1 — Total number of Rhode Island withholding allowances",
       kind: "count",
       min: "0",
-      max: "99",
+      max: "10",
       default: "0",
       help:
         "Each weekly allowance is $19.23 (the booklet's other frequencies scale "

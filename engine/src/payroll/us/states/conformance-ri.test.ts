@@ -60,6 +60,18 @@ test("RI no RI W-4 withholds at zero allowances", () => {
   assert.equal(empty.factors.RI_EXEMPTION, money("0"));
 });
 
+test("RI refuses allowance counts above the Form RI W-4 maximum", () => {
+  // RI W-4 line 1E directs employees with more than ten allowances to enter 10.
+  // https://tax.ri.gov/sites/g/files/xkgbur541/files/2026-01/RI%20W-4%202026.pdf
+  assert.throws(
+    () => RI_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 52, wages: "2195.00",
+      basis: "resident", certificate: cert({ allowances: "11" }),
+    }),
+    /RI W-4 .*allowances: 11 is above the declared maximum 10/,
+  );
+});
+
 test("RI exemption phases out above the printed weekly wage", () => {
   const phased = RI_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "5592.32",
