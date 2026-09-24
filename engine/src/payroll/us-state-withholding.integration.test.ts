@@ -357,6 +357,42 @@ test(
 );
 
 /* --------------------------------------------------------------------- */
+/* 2b. Mis-scoped certificates — the read path revalidates, not just POST   */
+/* --------------------------------------------------------------------- */
+
+test(
+  "a certificate for the old region after a move is ignored AND named",
+  { skip: !DB },
+  async () => {
+    const fx = await usPayrollOrg();
+    try {
+      // Filed while the employee worked in Pennsylvania, kept on file after
+      // the move to New Jersey: REV-419 is scoped to PA, so neither key
+      // membership nor its answers may relieve or drive New Jersey
+      // withholding. The run stops naming the form instead of honouring it.
+      const moved = await usEmployee(fx, "Moved Molly", {
+        state: "NJ",
+        certificates: [{
+          key: "us_pa_rev419", region: "PA", answers: { resident_state: "NJ" },
+        }],
+      });
+
+      const { run, result } = await runPayroll(fx);
+
+      assert.equal(await stubOf(fx, run.documentId, moved), null);
+      const refusal = result.errors.find((error) => error.employee === "Moved Molly");
+      assert.ok(refusal, "the mis-scoped certificate is refused by name");
+      assert.equal(refusal!.kind, "refusal");
+      assert.match(refusal!.message, /REV-419/);
+      assert.match(refusal!.message, /now works in NJ/);
+      assert.match(refusal!.message, /ignored/);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+/* --------------------------------------------------------------------- */
 /* 3. Sub-region — New York City rides beside the state, not instead of it */
 /* --------------------------------------------------------------------- */
 
