@@ -312,3 +312,13 @@ test("POST without a subsidiary runs the pool for the root when an older sibling
     },
   ]);
 });
+
+test("POST refuses a custom short tax-year window instead of assuming a full-year factor", async () => {
+  reset(null);
+
+  const response = await post({ taxYear: 2026, yearStart: "2026-07-01", yearEnd: "2026-12-31" });
+
+  assert.equal(response.status, 422);
+  assert.match(await response.text(), /short tax-year windows are not supported/);
+  assert.deepEqual(routeState.runCalls, [], "no pool result may use an implicit factor of 1 for a short year");
+});
