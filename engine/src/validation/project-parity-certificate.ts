@@ -45,6 +45,7 @@ import { isUuid } from "../platform/uuid.ts";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
 import {
   emptyPopulationGate,
+  evaluateCrewGate,
   isEmptyCrewPopulation,
   isEmptyPopulation,
 } from "./parity-gates.ts";
@@ -1611,50 +1612,14 @@ if (!fieldTicketCrew) {
 } else if (isEmptyCrewPopulation(fieldTicketCrew)) {
   gates.fieldTicketCrewAndHours = emptyPopulationGate(target.ticketCrew.length, paths.fieldTicketCrew);
 } else {
-  const currentSourceTicketIds = new Set(
-    fieldTicketHeaders!.map((ticket) => String(ticket.id)),
+  // The whole target population is compared: rows outside the current source
+  // tickets are target-only (counted and mismatched), never dropped.
+  const { differences: crewDifferences, ...crewGate } = evaluateCrewGate(
+    fieldTicketCrew,
+    target.ticketCrew,
   );
-  const targetCrew = new Map<string, bigint>();
-  for (const row of target.ticketCrew.filter((candidate) =>
-    currentSourceTicketIds.has(String(candidate.source_id)),
-  )) {
-    const key = [
-      row.source_id,
-      row.source_employee_id,
-      row.source_item_id,
-      row.worked_on,
-      row.time_kind,
-    ]
-      .map((value) => String(value ?? ""))
-      .join("|");
-    addAmount(targetCrew, key, row.hours);
-  }
-  const keys = new Set([...fieldTicketCrew.keys(), ...targetCrew.keys()]);
-  let exact = 0;
-  for (const key of keys) {
-    const sourceHours = fieldTicketCrew.get(key) ?? 0n;
-    const targetHours = targetCrew.get(key) ?? 0n;
-    if (sourceHours === targetHours) {
-      exact++;
-      continue;
-    }
-    differences.push({
-      layer: "field_ticket_crew_hours",
-      sourceRef: key,
-      field: "hours",
-      source: fromUnits(sourceHours),
-      target: fromUnits(targetHours),
-    });
-  }
-  gates.fieldTicketCrewAndHours = {
-    status: exact === keys.size ? "exact" : "different",
-    sourceCount: fieldTicketCrew.size,
-    targetCount: targetCrew.size,
-    exactCount: exact,
-    mismatchCount: keys.size - exact,
-    detail:
-      "Aggregated by source ticket, employee, item, work date, and regular/overtime/double-time tier",
-  };
+  differences.push(...crewDifferences);
+  gates.fieldTicketCrewAndHours = crewGate;
 }
 
 const strictPassed = Object.values(gates).every(
