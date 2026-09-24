@@ -6,7 +6,7 @@ import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts"
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
-import { requireHrmSelfRead } from "../authorization.ts";
+import { HrmAuthorizationError, loadApprovalPerson, requireHrmSelfRead } from "../authorization.ts";
 import { AiRailsError } from "./errors.ts";
 import { AI_CAPABILITIES, assertAutonomyAtOrBelowMax, requireCapability } from "./registry.ts";
 
@@ -342,10 +342,160 @@ export async function overdueReviews(
 }
 
 /**
+ * Draft subjects a non-recipient reviewer may mark. Mirrors DRAFT_KINDS in
+ * drafting.ts, restated here because that module imports this one
+ * (logDecision) — importing it back would cycle the modules. Only drafts
+ * carry a reviewer path; every other decision kind is recipient-only.
+ */
+const REVIEWABLE_DRAFT_KINDS: ReadonlySet<string> = new Set([
+  "job_description",
+  "review_manager",
+  "review_self",
+  "onboarding_plan",
+  "offer_letter_clauses",
+]);
+
+/** Uniform not-found for every mark refusal: missing, cross-org, foreign recipient, or out of scope. */
+function markDenied(decisionId: string): AiRailsError {
+  return new AiRailsError(
+    "ai_decision_missing",
+    `decision ${decisionId} matched no row — it is missing or outside this organization; reload and retry`,
+  );
+}
+
+/**
+ * Whether the caller's allowed subsidiaries cover an employer. Null scope
+ * is unrestricted; anything else must contain the employer id. A null
+ * employer (a subject floating outside any legal entity) fails closed.
+ */
+function employerInScope(
+  allowed: Set<string> | null,
+  employerSubsidiaryId: string | null,
+): boolean {
+  if (allowed === null) return true;
+  return employerSubsidiaryId !== null && allowed.has(employerSubsidiaryId);
+}
+
+/**
+ * Non-recipient reviewer path for marking a draft outcome: the caller must
+ * hold the draft kind's required grant for its subject, in subsidiary
+ * scope — the same authorization drafting required, minus authorship.
+ * Anything else (wrong grant, wrong subject, missing subject, out of
+ * scope) refuses with the uniform not-found, so a self-service holder of
+ * one HRM grant can never record an outcome on another user's sensitive
+ * decision.
+ */
+async function assertDraftReviewerAccess(
+  exec: SqlExecutor,
+  args: {
+    readonly orgId: string;
+    readonly actorId: string;
+    readonly decisionId: string;
+    readonly subjectKind: string;
+    readonly subjectId: string | null;
+  },
+): Promise<void> {
+  const { orgId, actorId, decisionId, subjectKind, subjectId } = args;
+  const denied = (): AiRailsError => markDenied(decisionId);
+  const has = (permission: string): Promise<boolean> =>
+    actorHasPermission(exec, orgId, actorId, permission);
+  if (subjectId === null) throw denied();
+  if (subjectKind === "job_description") {
+    if (!(await has("hrm.recruiting.read"))) throw denied();
+    const req = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+      select employer_subsidiary_id as "employerSubsidiaryId"
+        from hrm_requisitions
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+    if (!req) throw denied();
+    if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), req.employerSubsidiaryId)) {
+      throw denied();
+    }
+    return;
+  }
+  if (subjectKind === "review_manager" || subjectKind === "review_self") {
+    if (!(await has("hrm.performance.manage"))) throw denied();
+    const review = (await exec.execute<{
+      kind: string;
+      employmentId: string;
+      reviewerPartyId: string;
+    }>(sql`
+      select kind, employment_id::text as "employmentId",
+             reviewer_party_id::text as "reviewerPartyId"
+        from hrm_reviews
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+    // The decision's kind must match the review it cites, and only the
+    // assigned manager (or HR, via the retention read) reviews it — the
+    // same audience drafting required.
+    if (!review || review.kind !== (subjectKind === "review_self" ? "self" : "manager")) {
+      throw denied();
+    }
+    // Only authorization denials fall through to the HR path —
+    // infrastructure failures propagate untouched.
+    let partyId: string | null = null;
+    try {
+      partyId = (await loadApprovalPerson(exec, orgId, actorId)).partyId;
+    } catch (error) {
+      if (!(error instanceof HrmAuthorizationError)) throw error;
+    }
+    if (partyId !== review.reviewerPartyId && !(await has("hrm.retention.read"))) {
+      throw denied();
+    }
+    const employment = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+      select employer_subsidiary_id as "employerSubsidiaryId"
+        from worker_employments
+       where org_id = ${orgId} and id = ${review.employmentId}`)).rows[0];
+    if (!employment) throw denied();
+    if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), employment.employerSubsidiaryId)) {
+      throw denied();
+    }
+    return;
+  }
+  if (subjectKind === "onboarding_plan") {
+    if (!(await has("hrm.process.read"))) throw denied();
+    const template = (await exec.execute<{ one: number }>(sql`
+      select 1 as one from hrm_process_templates
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+    // Templates are org-wide configuration with no entity lineage, so the
+    // grant alone suffices; a process subject scopes by its employment.
+    if (template) return;
+    const process = (await exec.execute<{ employmentId: string }>(sql`
+      select employment_id::text as "employmentId" from hrm_processes
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+    if (!process) throw denied();
+    const employment = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+      select employer_subsidiary_id as "employerSubsidiaryId"
+        from worker_employments
+       where org_id = ${orgId} and id = ${process.employmentId}`)).rows[0];
+    if (!employment) throw denied();
+    if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), employment.employerSubsidiaryId)) {
+      throw denied();
+    }
+    return;
+  }
+  if (subjectKind === "offer_letter_clauses") {
+    if (!(await has("hrm.recruiting.manage"))) throw denied();
+    const offer = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+      select employer_subsidiary_id as "employerSubsidiaryId"
+        from hrm_offers
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+    if (!offer) throw denied();
+    if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), offer.employerSubsidiaryId)) {
+      throw denied();
+    }
+    return;
+  }
+  throw denied();
+}
+
+/**
  * Mark what the human did with a shown output (accepted, edited,
  * rejected). The log is append-only — the refuse-update trigger rejects
  * UPDATE — so an outcome is a NEW row carrying the original digests,
  * never an edit. Zero matched originals fail.
+ *
+ * Only the original recipient, or a reviewer holding the decision's
+ * required grant for its subject in scope, may mark: any other caller
+ * gets the uniform not-found.
  */
 export async function markDecision(
   exec: SqlExecutor,
@@ -366,6 +516,7 @@ export async function markDecision(
   }
   const original = (await exec.execute<{
     capabilityKey: string;
+    actorUserId: string;
     subjectKind: string;
     subjectId: string | null;
     inputDigest: string;
@@ -374,17 +525,27 @@ export async function markDecision(
     sources: unknown;
     model: string;
   }>(sql`
-    select capability_key as "capabilityKey", subject_kind as "subjectKind",
+    select capability_key as "capabilityKey", actor_user_id::text as "actorUserId",
+           subject_kind as "subjectKind",
            subject_id::text as "subjectId", input_digest as "inputDigest",
            output_digest as "outputDigest", output_summary as "outputSummary",
            sources, model
       from ai_decisions
      where org_id = ${orgId}::uuid and id = ${input.decisionId}::uuid`)).rows[0];
   if (!original) {
-    throw new AiRailsError(
-      "ai_decision_missing",
-      `decision ${input.decisionId} matched no row — it is missing or outside this organization; reload and retry`,
-    );
+    throw markDenied(input.decisionId);
+  }
+  if (original.actorUserId !== actorId) {
+    if (original.capabilityKey !== "hrmDrafting" || !REVIEWABLE_DRAFT_KINDS.has(original.subjectKind)) {
+      throw markDenied(input.decisionId);
+    }
+    await assertDraftReviewerAccess(exec, {
+      orgId,
+      actorId,
+      decisionId: input.decisionId,
+      subjectKind: original.subjectKind,
+      subjectId: original.subjectId,
+    });
   }
   const sources = Array.isArray(original.sources)
     ? (original.sources as { kind: string; id: string }[])
