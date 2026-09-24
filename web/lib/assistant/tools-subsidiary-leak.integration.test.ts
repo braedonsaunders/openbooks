@@ -32,7 +32,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { getAuthz } = await import('../authz');
 const { executeAssistantTool } = await import('./registry');
 
-const PROBE_PERMS = ["ap.read", "ar.read", "parties.read", "projects.read", "assistant.use"];
+const PROBE_PERMS = ["ap.read", "ar.read", "parties.read", "projects.read", "reports.read", "assistant.use"];
 
 async function seedScopedOrg() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -202,6 +202,41 @@ test('project_profitability hides hidden-subsidiary source documents on a visibl
   }
 });
 
+test('rank_projects excludes hidden-subsidiary commitments through the assistant tool', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, hidden } = await seedScopedOrg();
+  const projectId = randomUUID();
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true}'::jsonb,true) where id=${org.orgId}`);
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,contract_value)
+        values (${projectId},${org.orgId},${org.subsidiaryId},'SCOPE-RANK','Scope ranking',${org.customerId},'active',true,0)`);
+      for (const [label, subsidiaryId, amount] of [
+        ['VISIBLE', org.subsidiaryId, '100'],
+        ['HIDDEN', hidden, '900'],
+      ] as const) {
+        const documentId = randomUUID();
+        await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,currency,status,party_id,subsidiary_id,subtotal,total)
+          values (${documentId},${org.orgId},'purchase_order',${`${label}-${documentId}`},${org.date},'CAD','draft',${org.vendorId},${subsidiaryId},${amount},${amount})`);
+        await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount,project_id,subsidiary_id)
+          values (${org.orgId},${documentId},1,${org.accounts.cogs},'Open commitment',1,${amount},${amount},${projectId},${subsidiaryId})`);
+        await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${documentId}`);
+      }
+    });
+    await withOrgContext(org.orgId, async () => {
+      const authz = await getAuthz();
+      assert.ok(authz);
+      const result = await executeAssistantTool(authz, 'rank_projects', { withActivityOnly: false });
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.ok(result.ok);
+      const project = (result.data as { projects: { id: string; committedCost: string }[] }).projects.find((row) => row.id === projectId);
+      assert.equal(project?.committedCost, '100.0000');
+    });
+  } finally {
+    state.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test('retainage balances total only posted lines in visible subsidiaries', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, hidden } = await seedScopedOrg();
   try {
@@ -233,6 +268,23 @@ test('retainage balances total only posted lines in visible subsidiaries', { ski
       assert.equal(data.total, '100.0000');
       assert.equal(data.lines, 1);
       assert.deepEqual(data.rows.map((row) => row.balance), ['100.0000']);
+    });
+  } finally {
+    state.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test('tax_return refuses when the caller has no filing-entity scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org } = await seedScopedOrg();
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const authz = await getAuthz();
+      assert.ok(authz);
+      const result = await executeAssistantTool({ ...authz, allowedSubsidiaryIds: new Set() }, 'tax_return', {
+        formCode: 'UNCONFIGURED', fromDate: org.date, toDate: org.date,
+      });
+      assert.deepEqual(result, { ok: false, error: 'forbidden' });
     });
   } finally {
     state.user = null;

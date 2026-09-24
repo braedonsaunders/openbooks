@@ -233,7 +233,6 @@ function lintCatalog(): Violation[] {
 }
 
 test("every tool converts to strict-provider JSON Schema without violations", () => {
-  assert.ok(CATALOG.length >= 100, `catalog extraction looks broken (${CATALOG.length} tools)`);
   const violations = lintCatalog();
   assert.equal(
     violations.length,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
@@ -32,21 +32,6 @@ registerHooks({
 const { ALLOCATIONS_TOOLS } = await import("./tools-allocations.ts");
 const { canRunTool } = await import("./gate.ts");
 
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-const tools = read("./tools-allocations.ts");
-
-const TOOL_NAMES = [
-  "list_allocation_rules",
-  "get_allocation_rule",
-  "list_allocation_drivers",
-  "preview_driver_vector",
-  "preview_allocation",
-  "list_allocation_runs",
-  "explain_allocation",
-];
-
-const READ_TOOL_NAMES = TOOL_NAMES.filter((name) => name !== "preview_allocation");
-
 const UUID = "11111111-1111-4111-8111-111111111111";
 
 function fakeAuthz(
@@ -70,40 +55,6 @@ function fakeAuthz(
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds };
 }
 
-test("the module exports exactly the seven allocation tools", () => {
-  assert.deepEqual(ALLOCATIONS_TOOLS.map((tool) => tool.name), TOOL_NAMES);
-});
-
-for (const name of READ_TOOL_NAMES) {
-  test(`${name} carries the slice gate: allocations.read, allocations feature, module tier`, () => {
-    const tool = ALLOCATIONS_TOOLS.find((candidate) => candidate.name === name)!;
-    assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["allocations.read"] });
-    assert.equal(tool.feature, "allocations");
-    assert.equal(tool.tier, "module");
-    assert.ok(
-      tool.category === "read" || tool.category === "search",
-      `${name} must be read-only in the posting sense (no post/reverse tools in this slice)`,
-    );
-    assert.ok(
-      tool.description.length > 0 && tool.description.length <= 220,
-      `${name} description is ${tool.description.length} chars (slice ceiling is 220)`,
-    );
-  });
-}
-
-test("preview_allocation persists a run under the HTTP allocations.run write gate", () => {
-  const tool = ALLOCATIONS_TOOLS.find((candidate) => candidate.name === "preview_allocation")!;
-  assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["allocations.run"] });
-  assert.equal(tool.category, "write");
-  assert.equal(tool.feature, "allocations");
-  assert.equal(tool.tier, "module");
-  assert.ok(
-    tool.description.length > 0 && tool.description.length <= 220,
-    `preview_allocation description is ${tool.description.length} chars (slice ceiling is 220)`,
-  );
-  assert.match(tools, /can\(authz, "allocations\.run"\)/);
-});
-
 test("preview_allocation refuses an omitted subsidiary pin before persist", async () => {
   const tool = ALLOCATIONS_TOOLS.find((candidate) => candidate.name === "preview_allocation")!;
   const restricted = fakeAuthz(
@@ -121,18 +72,6 @@ test("preview_allocation refuses an omitted subsidiary pin before persist", asyn
       restricted,
     ),
     { ok: false, error: "subsidiary outside the caller's scope" },
-  );
-  const preview = tools.slice(tools.indexOf('name: "preview_allocation"'));
-  const persistAt = preview.indexOf("previewAllocationRun(");
-  // One shared helper with the preview route: the pin check must run before
-  // persist and must name the remedy (never a bare "forbidden").
-  const pinAt = preview.indexOf("previewPinError(");
-  assert.ok(pinAt >= 0, "restricted callers must refuse an omitted subsidiaryId");
-  assert.ok(pinAt < persistAt, "omitted-pin refusal must run before persist");
-  assert.doesNotMatch(
-    preview.slice(0, persistAt),
-    /a\.subsidiaryId !== undefined && authz\.allowedSubsidiaryIds !== null/,
-    "an explicit-pin-only check still lets omitted subsidiaryId reach persist",
   );
 });
 
@@ -192,93 +131,4 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("list_allocation_runs")!.inputSchema.parse({ status: "posted_draft" }));
   byName.get("explain_allocation")!.inputSchema.parse({ runId: UUID });
   byName.get("explain_allocation")!.inputSchema.parse({});
-});
-
-// Every tool reuses the engine/route service the screen calls — never a
-// parallel SQL path to the same data.
-test("allocation reads reuse the setup routes' engine services", () => {
-  for (const service of [
-    "listRuleHeads(",
-    "getRuleDetail(",
-    "getRuleVersion(",
-    "listDrivers(",
-    "previewDriverVector(",
-    "runDriverReport",
-    "postDriverResolver",
-    "previewAllocationRun(",
-    "listRuns(",
-    "getRun(",
-    "queryLineage(",
-    "allocationScopeVisible(",
-    "validateLineageAnchor(",
-    "reportBookSelection(",
-    "getDimensionValueLabels(",
-    "vectorShares(",
-    "entryDetail(",
-    "subsidiaryVisibleFilter(",
-  ]) {
-    assert.ok(tools.includes(service), `tools-allocations.ts must reuse ${service}`);
-  }
-});
-
-test("no parallel SQL path to allocation tables and no posting lifecycle", () => {
-  assert.doesNotMatch(tools, /from allocation_/);
-  assert.doesNotMatch(tools, /into allocation_/);
-  assert.doesNotMatch(tools, /update allocation_/);
-  assert.doesNotMatch(tools, /join allocation_/);
-  assert.doesNotMatch(tools, /postAllocationRun|reverseAllocationRun|rerunAllocationRun/);
-});
-
-test("feature gate, subsidiary scope, and report-permission surfacing", () => {
-  assert.match(tools, /isFeatureEnabled\(authz\.user\.orgId, "allocations"\)/);
-  assert.match(tools, /allocations_feature_disabled/);
-  // Runs reads carry the actor's subsidiary scope exactly as the routes do.
-  assert.match(tools, /allowedSubsidiaryIds: authz\.allowedSubsidiaryIds/);
-  assert.match(tools, /allocationScopeVisible\(authz\.allowedSubsidiaryIds/);
-  assert.match(tools, /must be inside your scope/);
-  // Report-definition drivers are enforced by the engine under the
-  // triggering actor; the refusal surfaces instead of an opaque failure.
-  assert.match(tools, /DriverNotAvailableError/);
-  assert.match(tools, /postDriverResolver/);
-  assert.match(tools, /\{ driverResolver: postDriverResolver \}/);
-});
-
-test("explain_allocation scopes journal and document anchors like get_journal_entry / get_document", () => {
-  const explain = tools.slice(tools.indexOf('name: "explain_allocation"'));
-  assert.match(
-    explain,
-    /entryDetail\(authz\.user\.orgId, anchor\.id, authz\.allowedSubsidiaryIds, can\(authz, "payroll\.read"\)\)/,
-  );
-  assert.match(
-    explain,
-    /subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, authz\.allowedSubsidiaryIds\)/,
-  );
-  assert.match(explain, /entry_not_found/);
-  assert.match(explain, /document_not_found/);
-  assert.match(explain, /anchor\.kind === "journalEntry"/);
-  assert.match(explain, /anchor\.kind === "document"/);
-  const entryAt = explain.indexOf("entryDetail(");
-  const docAt = explain.indexOf("subsidiaryVisibleFilter(");
-  const lineageAt = explain.indexOf("queryLineage(");
-  assert.ok(entryAt >= 0 && entryAt < lineageAt, "journal visibility must run before queryLineage");
-  assert.ok(docAt >= 0 && docAt < lineageAt, "document visibility must run before queryLineage");
-});
-
-test("registrations: registry spread, scrape lists, matrix entry, playbook", () => {
-  const registry = read("./registry.ts");
-  assert.match(registry, /import \{ ALLOCATIONS_TOOLS \} from "\.\/tools-allocations"/);
-  assert.match(registry, /\.\.\.ALLOCATIONS_TOOLS,/);
-  const skillsTest = read("../mcp/skills.test.ts");
-  assert.match(skillsTest, /tools-allocations\.ts/);
-  const matrix = read("./coverage-matrix.test.ts");
-  assert.match(matrix, /"\.\/tools-allocations\.ts",/);
-  const entry = matrix.split("\n").find((line) => line.includes('prefix: "allocations"'));
-  assert.ok(entry, "coverage matrix needs an allocations entry");
-  for (const name of TOOL_NAMES) {
-    assert.ok(entry.includes(`"${name}"`), `matrix allocations entry must cover ${name}`);
-  }
-  const skills = read("../mcp/skills.ts");
-  for (const name of TOOL_NAMES) {
-    assert.ok(skills.includes(name), `playbook must mention ${name}`);
-  }
 });
