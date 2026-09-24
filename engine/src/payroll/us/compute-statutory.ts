@@ -323,6 +323,8 @@ export async function computeUsStatutory(
       // reduced base. States that honor qualified deductions take them
       // explicitly through taxQualifiedDeductions (the Nebraska minimum).
       wages: income,
+      federalFilingStatus: filingStatus,
+      federalTaxExempt: bool(empFact("US", emp, "tax_exempt")),
       supplemental: nonPeriodic,
       supplementalPaymentTiming,
       regularWageTaxWithheldThisYear: ytd.regularWageTaxWithheldThisYear,
