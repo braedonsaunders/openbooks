@@ -242,6 +242,54 @@ test(
 );
 
 test(
+  "a binding weekly AP cap silences the shortfall it would otherwise fire",
+  { skip: !DB },
+  async () => {
+    // The forecast timeline pays AP up to the board's weekly cap: with
+    // weeklyApCap at 1, a 9000 bill can never outrun 1000 cash, so the
+    // shortfall that fires uncapped must stay silent. A hardcoded unlimited
+    // schedule would still fire it.
+    const org = await createScratchOrg();
+    try {
+      await seedBankCash(org, "CAP-CASH", "1000.0000");
+      await db.execute(sql`
+        insert into party_payment_stats (org_id, party_id, account_type, settled_on, n, sum_days, sum_days_sq)
+        values (${org.orgId}, ${org.vendorId}, 'liability_payable', ${org.date}, 5, 450, 40500)`);
+      await seedVendorBill(org, "BILL-CAP-1", "9000.0000", await daysFromToday(org.orgId, 9));
+
+      const uncapped = await scan(org.orgId);
+      assert.equal(
+        uncapped.filter((finding) => finding.findingType === "cash_forecast_shortfall").length,
+        1,
+        "the fixture fires uncapped",
+      );
+      // jsonb_set creates no missing intermediate object on this fleet's
+      // Postgres, so a one-shot '{analytics,cashflow}' set on a fresh org
+      // matches one row and changes nothing. Build the levels that exist.
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          update orgs
+             set settings = jsonb_set(
+               jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}',
+                 coalesce(settings -> 'analytics', '{}'::jsonb)),
+               '{analytics,cashflow}',
+               coalesce(settings -> 'analytics' -> 'cashflow', '{}'::jsonb)
+                 || '{"weeklyApCap": "1.0000"}'::jsonb)
+           where id = ${org.orgId}`);
+      });
+      const capped = await scan(org.orgId);
+      assert.equal(
+        capped.filter((finding) => finding.findingType === "cash_forecast_shortfall").length,
+        0,
+        `a 1/week cap cannot outrun cash, got ${fingerprints(capped)}`,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "the crunch sees reimbursement payables on the employee-payable control",
   { skip: !DB },
   async () => {

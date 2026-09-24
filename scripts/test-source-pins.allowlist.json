@@ -2,12 +2,7 @@
   "$comment": "Burn-down of tests that assert on repository source text (change detectors). Entries may only be lowered or removed. See scripts/check-test-source-pins.mjs.",
   "files": {
     "engine/src/connectors/netsuite-bridge.test.ts": 1,
-    "engine/src/continuous-close/continuous-close-cash.test.ts": 2,
-    "engine/src/continuous-close/continuous-close-forensics.test.ts": 1,
-    "engine/src/continuous-close/continuous-close-payroll.test.ts": 1,
-    "engine/src/continuous-close/continuous-close-projects.test.ts": 1,
     "engine/src/continuous-close/continuous-close-proposals.test.ts": 1,
-    "engine/src/continuous-close/continuous-close-tax.test.ts": 1,
     "engine/src/continuous-close/continuous-close.test.ts": 4,
     "engine/src/crm/crm-math.test.ts": 3,
     "engine/src/fx/providers.test.ts": 4,

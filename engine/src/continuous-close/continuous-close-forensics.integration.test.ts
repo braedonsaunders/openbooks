@@ -135,6 +135,61 @@ test(
 );
 
 test(
+  "the sentinel population spans all seven spend kinds and excludes voided documents",
+  { skip: !DB },
+  async () => {
+    // The scheduled sentinel dashboard defines the spend population this
+    // pack must watch: the same seven non-voided kinds. A weekend posting
+    // in any of the seven flags; a voided one never does, even material.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const saturday = lastSaturday(await businessToday(org.orgId));
+      const ids: string[] = [];
+      for (const kind of [
+        "vendor_bill",
+        "vendor_credit",
+        "vendor_payment",
+        "check",
+        "expense_report",
+        "journal",
+        "customer_credit",
+      ]) {
+        ids.push(
+          await insertSpendDoc(org, {
+            kind,
+            number: `FORENSIC-POP-${kind}`,
+            date: saturday,
+            total: "2500.0000",
+          }),
+        );
+      }
+      const voidedId = await insertSpendDoc(org, {
+        kind: "vendor_bill",
+        number: "FORENSIC-POP-VOID",
+        date: saturday,
+        total: "2500.0000",
+      });
+      await withBypassContext(async () => {
+        await db.execute(sql`update documents set voided_at = now() where id = ${voidedId}`);
+      });
+
+      const findings = await scan(org.orgId);
+      const weekend = new Set(
+        findings
+          .filter((finding) => finding.findingType === "forensic_weekend_postings")
+          .map((finding) => finding.fingerprint),
+      );
+      for (const id of ids) {
+        assert.ok(weekend.has(`forensic-weekend:${id}`), `weekend ${id} flags`);
+      }
+      assert.ok(!weekend.has(`forensic-weekend:${voidedId}`), "the voided posting never flags");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
   "forensic findings never leak across orgs",
   { skip: !DB },
   async () => {
