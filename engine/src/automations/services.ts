@@ -6,6 +6,7 @@ import { featureEnabled } from "../organization/feature-registry.ts";
 import { AUTOMATION_STATUSES } from "@openbooks/schema/src/hrm-automations.ts";
 import {
   assertPublishableAutomationActions,
+  assertTriggerCanEnable,
   assertValidScheduleTrigger,
   parseAutomationActions,
   parseAutomationConditions,
@@ -159,12 +160,13 @@ export async function updateAutomation(input: {
 }): Promise<AutomationDTO> {
   await requireAutomations(input.orgId, input.actorId, "automations.manage");
   return withOrgTransaction(input.orgId, async () => {
-    const current = await db.execute<{ version: number }>(sql`
-      select version from automations where org_id = ${input.orgId} and id = ${input.automationId} for update
+    const current = await db.execute<{ version: number; status: string }>(sql`
+      select version, status from automations where org_id = ${input.orgId} and id = ${input.automationId} for update
     `);
     if (current.rows.length === 0) {
       throw new AutomationServiceError("automation not found — reload the list and try again");
     }
+    const currentStatus = current.rows[0]!.status;
     const sets: string[] = [];
     const params: unknown[] = [];
     void sets;
@@ -178,6 +180,10 @@ export async function updateAutomation(input: {
     if (input.trigger !== undefined) {
       const trigger = parseAutomationTrigger(input.trigger);
       assertValidScheduleTrigger(trigger);
+      // Swapping an ENABLED recipe onto an event-sourced trigger would arm
+      // a recipe that can never fire: drafts may keep them, enabled rows
+      // refuse the swap by name.
+      if (currentStatus === "enabled") assertTriggerCanEnable(trigger);
       patch["trigger"] = JSON.stringify(trigger);
     }
     if (input.rules !== undefined) patch["rules"] = JSON.stringify(parseAutomationRules(input.rules));
@@ -231,6 +237,9 @@ export async function setAutomationStatus(input: {
       // A broken recipe can never be enabled: re-validate on the way in.
       const trigger = parseAutomationTrigger(row.trigger);
       assertValidScheduleTrigger(trigger);
+      // Event-sourced triggers stage nothing in production: enabling one
+      // would arm a recipe that idles forever looking healthy.
+      assertTriggerCanEnable(trigger);
       assertPublishableAutomationActions(parseAutomationActions(row.actions));
     }
     const updated = await db.execute<AutomationDTO>(sql`

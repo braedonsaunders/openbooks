@@ -56,6 +56,10 @@ export type BuilderRun = {
 }
 
 const TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'document', 'manual'] as const
+// field_change, event and document are not offered: no production writer
+// stages their events, so enabling a recipe on one is refused by the API —
+// offering them would report success for work that never happened.
+const UNAVAILABLE_TRIGGER_KINDS = ['field_change', 'event', 'document'] as const
 // delay, approve_step, start_flow and webhook are not offered: none has
 // real execution semantics (no continuation store, no gate minting, no
 // flow dispatch, no webhook transport), so offering them would report
@@ -233,8 +237,18 @@ export function AutomationBuilder({
             <div className="mt-2 grid gap-2">
               <Label htmlFor="ab-trigger-kind">{t('list.triggerLabel')}</Label>
               <Select id="ab-trigger-kind" value={kind} onChange={(e) => setTrigger({ kind: e.target.value })}>
-                {TRIGGER_KINDS.map((k) => <option key={k} value={k}>{t(`triggerKinds.${k}`)}</option>)}
+                {TRIGGER_KINDS.map((k) => {
+                  const unavailable = (UNAVAILABLE_TRIGGER_KINDS as readonly string[]).includes(k)
+                  return (
+                    <option key={k} value={k} disabled={unavailable}>
+                      {t(`triggerKinds.${k}`)}{unavailable ? ` (${t('triggerKindUnavailable')})` : ''}
+                    </option>
+                  )
+                })}
               </Select>
+              {(UNAVAILABLE_TRIGGER_KINDS as readonly string[]).includes(kind) ? (
+                <p className="text-sm text-amber-700 dark:text-amber-300">{t('triggerKindUnavailableNote')}</p>
+              ) : null}
               {kind === 'schedule' ? (
                 <>
                   <Label htmlFor="ab-cron">{t('builder.cronLabel')}</Label>

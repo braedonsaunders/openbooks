@@ -5404,6 +5404,8 @@
       "document": "文档",
       "manual": "手动"
     },
+    "triggerKindUnavailable": "暂不可用",
+    "triggerKindUnavailableNote": "这些触发器类型尚无法触发 — 启用将被拒绝。",
     "builder": {
       "pageTitle": "自动化构建器",
       "description": "触发器、对象与条件、操作、模拟和运行日志。",

@@ -231,6 +231,32 @@ export function invalidScheduleCronReason(cron: string, timezone?: string): stri
 }
 
 /**
+ * Trigger kinds no production writer stages events for (field_change,
+ * event, document): stageAutomationEvent's only caller is a test, so a
+ * recipe on these sits enabled and never fires — idle forever looking
+ * healthy. Enabling is refused by name until writers stage their events;
+ * drafts may keep these triggers as work-in-progress. Null when the
+ * trigger can actually fire once enabled.
+ */
+export function eventSourcedTriggerRefusal(trigger: AutomationTrigger): string | null {
+  if (trigger.kind !== "field_change" && trigger.kind !== "event" && trigger.kind !== "document") {
+    return null;
+  }
+  return (
+    `trigger kind '${trigger.kind}' is not available yet — no writer stages its events, ` +
+    `so the recipe would sit enabled and never fire; use a schedule, date_relative, or manual trigger instead`
+  );
+}
+
+/** Enable-time refusal for event-sourced triggers (create stays draft-safe). */
+export function assertTriggerCanEnable(trigger: AutomationTrigger): void {
+  const refusal = eventSourcedTriggerRefusal(trigger);
+  if (refusal) {
+    throw new AutomationContractError(refusal);
+  }
+}
+
+/**
  * Save-time refusal for schedule triggers (create / update / enable): an
  * invalid cron or timezone can never be stored on an enabled-bound recipe.
  * Parsing itself stays lenient so rows stored before this check still READ

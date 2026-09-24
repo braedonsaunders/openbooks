@@ -5404,6 +5404,8 @@
       "document": "ドキュメント",
       "manual": "手動"
     },
+    "triggerKindUnavailable": "まだ利用できません",
+    "triggerKindUnavailableNote": "これらのトリガータイプはまだ実行できません — 有効化は拒否されます。",
     "builder": {
       "pageTitle": "自動化ビルダー",
       "description": "トリガー、対象と条件、アクション、シミュレーション、実行ログ。",

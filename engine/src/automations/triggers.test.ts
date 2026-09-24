@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assertPublishableAutomationActions,
+  assertTriggerCanEnable,
   assertValidScheduleTrigger,
+  eventSourcedTriggerRefusal,
   invalidScheduleCronReason,
   parseAutomationActions,
   parseAutomationConditions,
@@ -125,4 +127,30 @@ test("a schedule that cannot parse is refused at save with the value named", () 
   );
   // Non-schedule triggers are untouched by the cron check.
   assertValidScheduleTrigger(parseAutomationTrigger({ kind: "manual" }));
+});
+
+test("event-sourced triggers refuse enabling by name while drafts stay saveable", () => {
+  // stageAutomationEvent's only production caller is nobody: no writer
+  // stages field_change/event/document events, so enabling one would arm a
+  // recipe that idles forever looking healthy.
+  for (const kind of ["field_change", "event", "document"] as const) {
+    const base =
+      kind === "field_change"
+        ? { kind, entity: "employment", field: "status" }
+        : kind === "event"
+          ? { kind, subjectKind: "hrm_employment_change_request", eventKind: "approved" }
+          : { kind, event: "signed" as const };
+    const trigger = parseAutomationTrigger(base);
+    assert.match(eventSourcedTriggerRefusal(trigger) ?? "", new RegExp(`trigger kind '${kind}' is not available yet`));
+    assert.match(eventSourcedTriggerRefusal(trigger) ?? "", /never fire/);
+    assert.throws(() => assertTriggerCanEnable(trigger), AutomationContractError);
+  }
+  // Firable triggers are untouched: parsing stays lenient and enabling open.
+  for (const trigger of [
+    parseAutomationTrigger({ kind: "schedule", cron: "0 9 * * *", timezone: "UTC" }),
+    parseAutomationTrigger({ kind: "manual" }),
+  ]) {
+    assert.equal(eventSourcedTriggerRefusal(trigger), null);
+    assertTriggerCanEnable(trigger);
+  }
 });

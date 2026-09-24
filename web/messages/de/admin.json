@@ -5404,6 +5404,8 @@
       "document": "Dokument",
       "manual": "Manuell"
     },
+    "triggerKindUnavailable": "Noch nicht verfügbar",
+    "triggerKindUnavailableNote": "Diese Triggertypen können noch nicht auslösen — das Aktivieren wird verweigert.",
     "builder": {
       "pageTitle": "Automatisierungs-Editor",
       "description": "Trigger, Wer und Wann, Aktionen, Simulation und Ausführungsprotokoll.",

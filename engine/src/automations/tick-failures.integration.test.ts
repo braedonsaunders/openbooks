@@ -348,6 +348,48 @@ test("a stored invalid schedule cron records a failed run and parks the recipe",
   });
 });
 
+test("event-sourced recipes refuse enabling by name; firable recipes still enable", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const action = { kind: "send_notification", to: "manager", body: "hi" };
+    // Drafts save fine — the refusal arms only at enable time.
+    const draft = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "watched field",
+      trigger: { kind: "field_change", entity: "employment", field: "status", to: "active" },
+      rules: {},
+      conditions: {},
+      actions: [action],
+    });
+    await assert.rejects(
+      setAutomationStatus({ orgId: h.org.orgId, actorId: h.adminId, automationId: draft.id, status: "enabled" }),
+      /trigger kind 'field_change' is not available yet/,
+    );
+    // A schedule recipe still enables through the same path.
+    const sched = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "morning",
+      trigger: { kind: "schedule", cron: "0 9 * * *", timezone: "UTC" },
+      rules: {},
+      conditions: {},
+      actions: [action],
+    });
+    const enabled = await setAutomationStatus({ orgId: h.org.orgId, actorId: h.adminId, automationId: sched.id, status: "enabled" });
+    assert.equal(enabled.status, "enabled");
+    // Swapping an enabled recipe onto an event trigger refuses too.
+    await assert.rejects(
+      updateAutomation({
+        orgId: h.org.orgId,
+        actorId: h.adminId,
+        automationId: sched.id,
+        trigger: { kind: "event", subjectKind: "hrm_employment_change_request", eventKind: "approved" },
+      }),
+      /trigger kind 'event' is not available yet/,
+    );
+  });
+});
+
 test("a failed date_relative subject is not counted fired", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const today = new Date().toISOString().slice(0, 10);

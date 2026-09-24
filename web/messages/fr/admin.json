@@ -5404,6 +5404,8 @@
       "document": "Document",
       "manual": "Manuel"
     },
+    "triggerKindUnavailable": "Pas encore disponible",
+    "triggerKindUnavailableNote": "Ces types de déclencheur ne peuvent pas encore se déclencher — l'activation sera refusée.",
     "builder": {
       "pageTitle": "Éditeur d'automatisation",
       "description": "Déclencheur, qui et quand, actions, simulation et journal.",

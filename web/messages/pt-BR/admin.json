@@ -5404,6 +5404,8 @@
       "document": "Documento",
       "manual": "Manual"
     },
+    "triggerKindUnavailable": "Ainda não disponível",
+    "triggerKindUnavailableNote": "Esses tipos de gatilho ainda não podem disparar — a ativação será recusada.",
     "builder": {
       "pageTitle": "Editor de automação",
       "description": "Gatilho, quem e quando, ações, simulação e histórico.",
