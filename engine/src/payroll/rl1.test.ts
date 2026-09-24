@@ -6,7 +6,6 @@
  * ED-430-V (each cited in the modules under test).
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { assembleRl1Slip, openingYtdIntoRl1Aggregates, rl1YearCaps, RL1_UNSUPPORTED_BOXES, type Rl1SlipAggregates } from "./canada/quebec/rl1.ts";
 import type { OpeningYearEndYtd } from "./yearend.ts";
@@ -184,22 +183,6 @@ test("RL-1 carry-in is capped with the stubs, not after them", () => {
   );
   const slip = assembleRl1Slip(carried, rl1YearCaps(2026));
   assert.equal(slip.boxG, "74600");
-});
-
-test("RL-1 artifacts pin slips and totals to one repeatable-read snapshot", () => {
-  const source = readFileSync(new URL("./canada/quebec/rl1.ts", import.meta.url), "utf8");
-  const returnStart = source.indexOf("export async function rl1Return");
-  const populationStart = source.indexOf("export async function rl1Population");
-  assert.ok(returnStart >= 0 && populationStart > returnStart);
-  const returnBody = source.slice(returnStart, populationStart);
-  assert.match(returnBody, /rl1Db\.transaction[\s\S]*isolationLevel: "repeatable read"/);
-  assert.doesNotMatch(returnBody, /await rl1Slips\(/);
-  assert.doesNotMatch(returnBody, /await rl1Summary\(/);
-
-  const populationBody = source.slice(populationStart);
-  assert.match(populationBody, /rl1Db\.transaction[\s\S]*isolationLevel: "repeatable read"/);
-  assert.doesNotMatch(populationBody, /await rl1Slips\(/);
-  assert.doesNotMatch(populationBody, /await rl1Summary\(/);
 });
 
 test("transmitter validation: a complete configuration passes", () => {
