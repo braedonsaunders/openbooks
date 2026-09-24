@@ -196,10 +196,16 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
           </ul>
         )}
       </section>
-      {document.fileId && (
+      {drawer.versions.length > 0 && (
         <section>
           <h3 className="mb-2 text-sm font-semibold">{msg(labels, 'versions')}</h3>
-          <p className="text-sm text-slate-500">{document.fileId}</p>
+          <ul className="space-y-1">
+            {drawer.versions.map((version) => (
+              <li key={`${version.versionNumber}-${version.createdAt}`} className="text-sm text-slate-600 dark:text-slate-300">
+                {version.filename} · #{version.versionNumber} · {viewer.date(version.createdAt, { dateStyle: 'medium', timeZone: 'UTC' })}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
       {(document.retainUntil || document.retentionAction) && (

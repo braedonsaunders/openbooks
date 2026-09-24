@@ -196,6 +196,7 @@ export async function loadDocumentsHome(
     closeHref: string
     title: string
     document: Awaited<ReturnType<typeof getDocumentDetail>> | null
+    versions: { filename: string; versionNumber: number; createdAt: string }[]
     signerNames: Record<string, string>
     missingDetail: string | null
     loadError: boolean
@@ -206,11 +207,20 @@ export async function loadDocumentsHome(
   } | null = null
   if (documentId) {
     let document: Awaited<ReturnType<typeof getDocumentDetail>> | null = null
+    let versions: { filename: string; versionNumber: number; createdAt: string }[] = []
     let signerNames = new Map<string, string>()
     let loadError = false
     try {
       document = await getDocumentDetail({ orgId: authz.orgId, actorId: authz.userId, documentId })
       signerNames = await partyNames(authz.orgId, document.signers.map((s) => s.signerPartyId))
+      if (document.fileId) {
+        versions = (await db.execute<{ filename: string; versionNumber: number; createdAt: string }>(sql`
+          select f.name as filename, v.version_number as "versionNumber", v.created_at::text as "createdAt"
+            from files f join file_versions v on v.file_id = f.id
+           where f.org_id = ${authz.orgId}::uuid and f.id = ${document.fileId}::uuid
+           order by v.version_number desc
+        `)).rows
+      }
     } catch (error) {
       if (error instanceof HrmDocumentsError && (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')) {
         document = null
@@ -223,6 +233,7 @@ export async function loadDocumentsHome(
       title: document?.title ?? t('documents.drawer.title'),
       canManage: authz.canManage,
       document: loadError ? null : document,
+      versions: loadError ? [] : versions,
       signerNames: Object.fromEntries(signerNames),
       missingDetail: loadError ? t('documents.drawer.loadFailed') : document ? null : t('documents.drawer.missing'),
       loadError,
