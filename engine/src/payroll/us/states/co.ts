@@ -3,20 +3,16 @@
  *
  * Source (fetched from tax.colorado.gov, not memory):
  *   DR 1098, Colorado Income Tax Withholding Worksheet for Employers
- *     (rev. 11/14/23), https://tax.colorado.gov/sites/tax/files/documents/DR1098_2023.pdf
- *     and the current form listing at https://tax.colorado.gov/DR1098 /
- *     https://tax.colorado.gov/withholding-forms ("Only the most recent version
- *     of each form is published on this page").
+ *     (rev. 10/21/25), https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf
  *   Form DR 0004, Colorado Employee Withholding Certificate — optional; when
  *     absent, DR 1098 line 2a falls back to the employee's federal W-4
  *     Step 1(c) filing status.
  *   Wage Withholding FAQs, tax.colorado.gov/withholding-FAQ — tables are no
  *     longer published; this worksheet is the only lawful method.
  *
- * The 11/14/23 worksheet is the Department's posted method. It is not a
- * year-stamped booklet. The constants below are the digits that PDF prints
- * (4.40%, $10,000 MFJ / qualifying surviving spouse, $5,000 otherwise). A
- * later revision must replace this edition — the figures are not extrapolated.
+ * The 10/21/25 worksheet prescribes the 2026 method: 4.40%, $11,000 MFJ /
+ * qualifying surviving spouse, and $5,500 otherwise. These values are effective
+ * for 2026 pay dates only; earlier editions remain separate tax-year editions.
  *
  * Worksheet order, verbatim:
  *   1c  annualize wages (period wages × pay periods in the year)
@@ -59,16 +55,15 @@ export interface CoYearRates {
 }
 
 /**
- * The currently posted DR 1098 (rev. 11/14/23). Applied to 2026 pay dates
- * because that is the worksheet the Department still publishes as current —
- * not because a 2026 booklet was scaled from 2023.
+ * The Department's 2026 worksheet (rev. 10/21/25), effective for 2026 pay dates.
+ * Official source: https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf
  */
 export const CO_RATES_2026: CoYearRates = {
   year: 2026,
   status: "published",
   rate: "0.044",
-  jointAllowance: "10000",
-  otherAllowance: "5000",
+  jointAllowance: "11000",
+  otherAllowance: "5500",
 };
 
 const CO_EDITIONS_BY_YEAR: Record<number, CoYearRates> = {
@@ -77,11 +72,12 @@ const CO_EDITIONS_BY_YEAR: Record<number, CoYearRates> = {
 
 export const CO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   year: 2026,
-  label: "DR 1098 (11/14/23)",
+  label: "DR 1098 (10/21/25)",
   effectiveFrom: "2026-01-01",
   citation:
     "Colorado Department of Revenue, DR 1098 Colorado Income Tax Withholding Worksheet "
-    + "for Employers (rev. 11/14/23), lines 1c–2f; Form DR 0004",
+    + "for Employers (rev. 10/21/25), lines 1c–2f; Form DR 0004; "
+    + "https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf",
   status: "published",
   region: "CO",
 }];
@@ -171,7 +167,7 @@ export const CO_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "CO" },
   purpose: "withholding",
   citation:
-    "Colorado Form DR 0004; DR 1098 (rev. 11/14/23) lines 2a and 2e; "
+    "Colorado Form DR 0004; DR 1098 (rev. 10/21/25) lines 2a and 2e; "
     + "tax.colorado.gov/withholding-FAQ",
   summary:
     "Optional Colorado certificate. When it is not on file, DR 1098 calculates from the "
@@ -187,7 +183,7 @@ export const CO_CERTIFICATE: PayrollCertificate = {
       help:
         "If filled, this is DR 1098 line 2a in full. If blank — or no DR 0004 is on file — "
         + "line 2a is $10,000 for married filing jointly or qualifying surviving spouse, "
-        + "and $5,000 otherwise, exactly as the 11/14/23 worksheet prints.",
+        + "and $5,500 otherwise, exactly as the 10/21/25 worksheet prints for 2026.",
     },
     {
       key: "filing_status",
@@ -200,8 +196,8 @@ export const CO_CERTIFICATE: PayrollCertificate = {
         { value: "other", label: "Single, married filing separately, or head of household" },
       ],
       help:
-        "DR 1098 line 2a reads the federal W-4 when DR 0004 line 2 is blank. The default "
-        + "is the $5,000 'otherwise' bucket — the worksheet's own fallback, not a guess.",
+        "DR 1098 line 2a reads the federal W-4 when DR 0004 line 2 is blank. The 2026 default "
+        + "is the $5,500 'otherwise' bucket, as prescribed by the 10/21/25 worksheet.",
     },
     {
       key: "additional_per_period",
@@ -230,5 +226,5 @@ export const CO_REGION: PayrollRegionWithholding = {
   certificateKey: "us_co_dr0004",
   subRegions: [],
   subRegionConflictRule: "both",
-  citation: "DR 1098 (rev. 11/14/23); Colorado withholding tax filing requirements",
+  citation: "DR 1098 (rev. 10/21/25); Colorado withholding tax filing requirements",
 };

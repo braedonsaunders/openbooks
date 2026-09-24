@@ -1,10 +1,10 @@
 /**
  * Colorado DR 1098 goldens.
  *
- * Every expected figure is the worksheet's own arithmetic on the digits the
- * 11/14/23 PDF prints (4.40%, $10,000 / $5,000). DR 1098 publishes no worked
- * dollar example, so these are labelled substitutes — the same honesty
- * conformance-tranche2.test.ts uses for Ohio and Michigan.
+ * Source: Colorado Department of Revenue, DR 1098 (rev. 10/21/25),
+ * https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf
+ * It prescribes the 2026 allowance amounts and 4.40% rate but gives no worked
+ * dollar example, so expected values below are independent worksheet arithmetic.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -15,8 +15,8 @@ import { money, resolvedCertificate } from "./conformance-support.ts";
 const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
   resolvedCertificate(CO_CERTIFICATE, answers);
 
-test("CO DR 1098 — weekly $1,000, otherwise status, no DR 0004 allowance: $39.77", () => {
-  // 1c $52,000 − 2a $5,000 = $47,000 × 4.40% = $2,068.00 ÷ 52 = $39.7692… → $39.77
+test("CO DR 1098 — 2026 weekly $1,000, otherwise status, no DR 0004 allowance: $39.35", () => {
+  // Official 2026 DR 1098: $52,000 − $5,500 = $46,500 × 4.40% = $2,046 ÷ 52 = $39.346… → $39.35.
   const result = CO_WITHHOLDING.compute({
     payDate: "2026-03-06",
     periodsPerYear: 52,
@@ -24,13 +24,13 @@ test("CO DR 1098 — weekly $1,000, otherwise status, no DR 0004 allowance: $39.
     basis: "resident",
     certificate: cert({ filing_status: "other" }),
   });
-  assert.equal(result.tax, money("39.77"));
-  assert.equal(result.factors.CO_ANNUAL_ALLOWANCE, money("5000"));
+  assert.equal(result.tax, money("39.35"));
+  assert.equal(result.factors.CO_ANNUAL_ALLOWANCE, money("5500"));
   assert.equal(result.year, CO_RATES_2026.year);
 });
 
-test("CO DR 1098 — weekly $1,000, married filing jointly default: $35.54", () => {
-  // 1c $52,000 − 2a $10,000 = $42,000 × 4.40% = $1,848.00 ÷ 52 = $35.5384… → $35.54
+test("CO DR 1098 — 2026 weekly $1,000, married filing jointly default: $34.69", () => {
+  // Official 2026 DR 1098: $52,000 − $11,000 = $41,000 × 4.40% = $1,804 ÷ 52 = $34.692… → $34.69.
   const result = CO_WITHHOLDING.compute({
     payDate: "2026-03-06",
     periodsPerYear: 52,
@@ -38,8 +38,8 @@ test("CO DR 1098 — weekly $1,000, married filing jointly default: $35.54", () 
     basis: "resident",
     certificate: cert({ filing_status: "married_joint" }),
   });
-  assert.equal(result.tax, money("35.54"));
-  assert.equal(result.factors.CO_ANNUAL_ALLOWANCE, money("10000"));
+  assert.equal(result.tax, money("34.69"));
+  assert.equal(result.factors.CO_ANNUAL_ALLOWANCE, money("11000"));
 });
 
 test("CO DR 1098 — DR 0004 line 2 overrides the W-4 default", () => {
@@ -63,7 +63,7 @@ test("CO DR 1098 — extra withholding is added after the rate", () => {
     basis: "resident",
     certificate: cert({ filing_status: "other", additional_per_period: "25" }),
   });
-  assert.equal(result.tax, money("64.77"));
+  assert.equal(result.tax, money("64.35"));
 });
 
 test("CO refuses a year the posted worksheet has not been loaded for", () => {
