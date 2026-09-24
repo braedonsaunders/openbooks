@@ -32,6 +32,7 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   payPeriodFor,
+  roundUsFinalWithholding,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
   type UsStatePayPeriod,
@@ -168,7 +169,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   const periodTax = idPeriodTax(taxable, published, married, rates);
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = periodTax + extra;
+  const total = roundUsFinalWithholding(periodTax + extra, ID_WITHHOLDING.finalRounding);
   trace("ID_WITHHELD", total);
 
   return {
@@ -201,6 +202,7 @@ export const ID_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: ID_TAX_YEAR_EDITIONS,
   printedPeriods: ID_PERIODS,
+  finalRounding: "nearest_dollar",
   compute,
 };
 
@@ -266,7 +268,7 @@ export const ID_CERTIFICATE: PayrollCertificate = {
       key: "additional_per_period",
       label: "Line 2 — Additional amount to withhold each paycheck",
       kind: "amount",
-      decimals: 4,
+      decimals: 0,
       min: "0",
       help:
         "Whole dollars on Form ID W-4. Added AFTER the percentage method is "

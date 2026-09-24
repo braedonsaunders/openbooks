@@ -960,6 +960,16 @@ test("NC's head-of-household schedule is a different standard deduction", () => 
   assert.equal(joint.factors.NC_SCHEDULE, "single_married_surviving");
 });
 
+test("NC-4 Line 2 refuses fractional dollars", () => {
+  assert.throws(
+    () => NC_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "resident",
+      certificate: nc4({ additional_per_period: "5.25" }),
+    }),
+    /NC-4 Line 2 .*decimal loses precision beyond 0 decimal places/,
+  );
+});
+
 // NC-30 § 13 (2026), Form NC-4 NRA instructions and example:
 // https://www.ncdor.gov/income-tax-withholding-tables-and-instructions-employers/open
 test("NC-4 NRA always uses Single and limits Line 2 for low wages", () => {

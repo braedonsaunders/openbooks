@@ -30,6 +30,7 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   payPeriodFor,
+  roundUsFinalWithholding,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
   type UsStatePayPeriod,
@@ -159,7 +160,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   const reducedWithholding = certificateAmount(input.certificate, "reduced_withholding_per_period");
   if (reducedWithholding != null) {
-    const tax = U(reducedWithholding);
+    const tax = roundUsFinalWithholding(U(reducedWithholding), MO_WITHHOLDING.finalRounding);
     trace("MO_REDUCED_WITHHOLDING", tax);
     return { state: "MO", year: rates.year, tax: D(tax), taxSupplemental: D(0n), factors };
   }
@@ -179,7 +180,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("MO_ANNUAL_TAX", annualTax);
   const periodTax = moRoundToDollar(divIntCents(annualTax, P));
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = periodTax + extra;
+  const total = roundUsFinalWithholding(periodTax + extra, MO_WITHHOLDING.finalRounding);
   trace("MO_WITHHELD", total);
 
   return {
@@ -212,6 +213,7 @@ export const MO_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: MO_TAX_YEAR_EDITIONS,
   printedPeriods: MO_PERIODS,
+  finalRounding: "nearest_dollar",
   compute,
 };
 

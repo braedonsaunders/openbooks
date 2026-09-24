@@ -77,6 +77,19 @@ test("ID extra withholding is added and exempt is zero", () => {
   }).tax, money("0"));
 });
 
+test("ID W-4 Line 2 refuses fractional dollars", () => {
+  // Form ID W-4 Line 2 says "Enter whole dollars".
+  // https://tax.idaho.gov/document-mngr/forms_EFO00307
+  assert.throws(
+    () => ID_WITHHOLDING.compute({
+      payDate: "2026-08-15", periodsPerYear: 26, wages: "1212.00",
+      basis: "resident",
+      certificate: cert({ filing_status: "single", additional_per_period: "5.25" }),
+    }),
+    /ID W-4 Line 2 .*decimal loses precision beyond 0 decimal places/,
+  );
+});
+
 test("ID refuses a pre-sunset 2026 pay date and an untranscribed year", () => {
   assert.throws(
     () => ID_WITHHOLDING.compute({

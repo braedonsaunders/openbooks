@@ -29,6 +29,7 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   payPeriodFor,
+  roundUsFinalWithholding,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
   type UsStatePayPeriod,
@@ -138,7 +139,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("MS_ANNUAL_TAX", annualTax);
   const periodTax = msRoundToDollar(divIntCents(annualTax, P));
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = periodTax + extra;
+  const total = roundUsFinalWithholding(periodTax + extra, MS_WITHHOLDING.finalRounding);
   trace("MS_WITHHELD", total);
 
   return {
@@ -172,6 +173,7 @@ export const MS_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: MS_TAX_YEAR_EDITIONS,
   printedPeriods: MS_PERIODS,
+  finalRounding: "nearest_dollar",
   compute,
 };
 

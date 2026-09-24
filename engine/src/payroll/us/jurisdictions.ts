@@ -1059,8 +1059,8 @@ const NC_NC4: PayrollCertificate = {
     },
     {
       key: "additional_per_period", label: "Line 2 — Additional amount per pay period",
-      kind: "amount", decimals: 4, min: "0",
-      help: "In whole dollars on the form.",
+      kind: "amount", decimals: 0, min: "0",
+      help: "Enter whole dollars, as Form NC-4 Line 2 requires.",
     },
     {
       key: "nonresident_alien", label: "This is a nonresident alien withholding certificate (NC-4 NRA)",
