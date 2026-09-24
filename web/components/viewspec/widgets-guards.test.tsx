@@ -41,8 +41,8 @@ function propsOf(node: unknown): Record<string, unknown> {
 
 test("non-numeric amounts fall back to the default instead of NaN", () => {
   const roster = propsOf(BANKING_WIDGETS["banking-roster"]({ totalCash: "abc", totalCards: "abc" }));
-  assert.equal(roster.totalCash, 0);
-  assert.equal(roster.totalCards, 0);
+  assert.equal(roster.totalCash, '0.0000');
+  assert.equal(roster.totalCards, '0.0000');
   const recon = propsOf(
     BANKING_WIDGETS["reconcile-workspace"]({ stmtTotal: "abc", glTotal: "abc", matchedTotal: "abc" }),
   );
@@ -71,7 +71,8 @@ test("non-numeric amounts fall back to the default instead of NaN", () => {
 });
 
 test("genuine numbers still pass through untouched", () => {
-  assert.equal(propsOf(BANKING_WIDGETS["banking-roster"]({ totalCash: 42.5 })).totalCash, 42.5);
+  assert.equal(propsOf(BANKING_WIDGETS["banking-roster"]({ totalCash: '42.5' })).totalCash, '42.5');
+  assert.equal(propsOf(BANKING_WIDGETS["banking-roster"]({ totalCash: 42.5 })).totalCash, '0.0000');
   assert.equal(propsOf(AGENTS_WIDGETS["metric-tile"]({ value: 7 })).value, 7);
   assert.equal(propsOf(OPERATIONS_WIDGETS["new-filing"]({ defaultYear: 2026 })).defaultYear, 2026);
 });

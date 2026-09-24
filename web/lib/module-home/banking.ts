@@ -6,7 +6,8 @@ import { BANK_KINDS } from "../document-kinds.ts";
 import { reconcilableBankMembership } from '../banking-accounts'
 import { statementBookExpr } from '../gl-summary'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
-import { mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, mulDecimal, neg } from '@openbooks/engine/src/money/money.ts'
+import { financialChartCoordinate } from '../financial-chart'
 
 /**
  * Banking module home — one light round trip for the workspace landing
@@ -22,7 +23,7 @@ export interface BankingAccountRow {
   name: string
   type: string // 'asset_bank' | 'liability_card'
   currency: string | null
-  balance: number
+  balance: string
   unmatched: number
   openReconciliationId: string | null
   reconciledThrough: string | null
@@ -34,12 +35,12 @@ export interface BankingAccountRow {
 
 export interface BankingHome {
   accounts: BankingAccountRow[]
-  totalCash: number
-  totalCards: number
+  totalCash: string
+  totalCards: string
   unmatchedLines: number
   openRecons: number
   /** Net posted flow across bank accounts over the trailing 7 days. */
-  netFlow7d: number
+  netFlow7d: string
   /** Org cash (asset_bank) end-of-week balances, oldest → newest. */
   trend: { weekStart: string; balance: number }[]
   badges: {
@@ -183,32 +184,34 @@ export async function bankingHome(
     [...rosterRes.rows.map((r) => (typeof r.func === 'string' ? r.func : null)), ...flowsRes.rows.map((r) => r.func)],
     today,
   )
-  const tr = (amount: unknown, func: unknown): number =>
-    Number(mulDecimal(String(amount ?? 0), rates.get(lineFunctional(typeof func === "string" ? func : null, base))!))
+  const tr = (amount: unknown, func: unknown): string =>
+    mulDecimal(String(amount ?? 0), rates.get(lineFunctional(typeof func === "string" ? func : null, base))!)
 
-  const flows = new Map<string, Map<string, number>>()
+  const flows = new Map<string, Map<string, string>>()
   for (const r of flowsRes.rows) {
     const wk = String(r.wk).slice(0, 10)
     let m = flows.get(r.account_id)
     if (!m) flows.set(r.account_id, (m = new Map()))
-    m.set(wk, (m.get(wk) ?? 0) + tr(r.flow, r.func))
+    m.set(wk, add(m.get(wk) ?? '0.0000', tr(r.flow, r.func)))
   }
 
-  const byAccount = new Map<string, { row: Record<string, unknown>; balance: number }>()
+  const byAccount = new Map<string, { row: Record<string, unknown>; balance: string }>()
   for (const a of rosterRes.rows) {
-    const cur = byAccount.get(String(a.id)) ?? { row: a, balance: 0 }
-    cur.balance += tr(a.balance, a.func)
+    const cur = byAccount.get(String(a.id)) ?? { row: a, balance: '0.0000' }
+    cur.balance = add(cur.balance, tr(a.balance, a.func))
     byAccount.set(String(a.id), cur)
   }
 
+  const exactTrend = new Array<string>(weekStarts.length).fill('0.0000')
   const accounts: BankingAccountRow[] = [...byAccount.values()]
     .map(({ row: a, balance }) => {
     const weekly = flows.get(String(a.id))
     const spark: number[] = new Array(weekStarts.length)
     let running = balance
     for (let i = weekStarts.length - 1; i >= 0; i--) {
-      spark[i] = running
-      running -= weekly?.get(weekStarts[i]!) ?? 0
+      spark[i] = financialChartCoordinate(running)
+      if (a.type === 'asset_bank') exactTrend[i] = add(exactTrend[i]!, running)
+      running = add(running, neg(weekly?.get(weekStarts[i]!) ?? '0.0000'))
     }
     return {
       id: String(a.id),
@@ -227,24 +230,24 @@ export async function bankingHome(
     })
     // The roster query orders by type then raw leg balance; re-apply on the
     // translated per-account balances (identical for single-currency views).
-    .sort((x, y) => (x.type < y.type ? -1 : x.type > y.type ? 1 : y.balance - x.balance))
+    .sort((x, y) => (x.type < y.type ? -1 : x.type > y.type ? 1 : cmp(y.balance, x.balance)))
 
   const bankIds = new Set(accounts.filter((a) => a.type === 'asset_bank').map((a) => a.id))
-  let netFlow7d = 0
+  let netFlow7d = '0.0000'
   for (const r of flowsRes.rows) {
-    if (r.flow_7d != null && bankIds.has(r.account_id)) netFlow7d += tr(r.flow_7d, r.func)
+    if (r.flow_7d != null && bankIds.has(r.account_id)) netFlow7d = add(netFlow7d, tr(r.flow_7d, r.func))
   }
 
   const trend = weekStarts.map((weekStart, i) => ({
     weekStart,
-    balance: accounts.reduce((sum, a) => (a.type === 'asset_bank' ? sum + a.spark[i]! : sum), 0),
+    balance: financialChartCoordinate(exactTrend[i]!),
   }))
 
   const badge = badgesRes.rows[0] ?? {}
   return {
     accounts,
-    totalCash: accounts.reduce((s, a) => (a.type === 'asset_bank' ? s + a.balance : s), 0),
-    totalCards: accounts.reduce((s, a) => (a.type === 'liability_card' ? s + a.balance : s), 0),
+    totalCash: accounts.filter((a) => a.type === 'asset_bank').reduce((s, a) => add(s, a.balance), '0.0000'),
+    totalCards: accounts.filter((a) => a.type === 'liability_card').reduce((s, a) => add(s, a.balance), '0.0000'),
     unmatchedLines: accounts.reduce((s, a) => s + a.unmatched, 0),
     openRecons: accounts.reduce((s, a) => s + (a.openReconciliationId ? 1 : 0), 0),
     netFlow7d,

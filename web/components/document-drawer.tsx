@@ -39,7 +39,7 @@ import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
 import { ApprovalHistory } from './approval-history'
 import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
-import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, fromUnits, isZero, normalizeMoney, roundDiv, sum } from '@openbooks/engine/src/money/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 import { confirmDialog } from '../lib/confirm'
 import { promptDialog } from '../lib/prompt'
@@ -2204,7 +2204,7 @@ export function DocumentDrawer({
   const currencyMismatch = (): CurrencyMismatchedAccount | null => {
     const lines = (payload_ as { lines?: { accountId?: unknown; amount?: unknown }[] }).lines ?? []
     const refs = lines
-      .filter((l) => typeof l.amount === 'string' && l.amount !== '' && Number(l.amount) !== 0)
+      .filter((l) => typeof l.amount === 'string' && l.amount !== '' && !isZero(l.amount))
       .map((l) => ({ accountId: l.accountId, label: accountName(l.accountId) }))
     const override = customValues.controlAccountId
     if (typeof override === 'string' && override) {

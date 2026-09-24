@@ -54,9 +54,9 @@ test('open purchase-order value converts each order currency before summing', { 
     const home = await withOrgContext(org.orgId, () => purchasingHome(org.orgId))
     assert.equal(home.ordersEnabled, true, 'orders feature must be on for PO vitals')
     assert.equal(home.openPos, 2)
-    assert.equal(home.openPoValue, 235, 'CAD 100 + USD 100 at 1.35 spot')
+    assert.equal(home.openPoValue, '235.0000', 'CAD 100 + USD 100 at 1.35 spot')
     assert.equal(home.topExposure.length, 1)
-    assert.equal(home.topExposure[0]!.openPoValue, 235, 'hero roster converts too')
+    assert.equal(home.topExposure[0]!.openPoValue, '235.0000', 'hero roster converts too')
   } finally {
     await dropScratchOrg(org.orgId)
   }
