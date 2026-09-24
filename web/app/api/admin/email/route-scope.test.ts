@@ -52,3 +52,18 @@ test('restricted actors cannot change the organization outbound email transport'
   assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
   assert.deepEqual(state.saves, [], 'no organization email settings reach the storage service')
 })
+
+test('explicit blank email settings and an empty provider reach storage as clears', async () => {
+  state.allowedSubsidiaryIds = null
+  state.saves.length = 0
+  const response = await PUT(new Request('http://localhost/api/admin/email', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ expectedUpdatedAt: '1', enabled: false, provider: null, fromName: '', replyTo: '' }),
+  }))
+  assert.equal(response.status, 200, await response.clone().text())
+  const saved = state.saves[0] as [string, Record<string, unknown>]
+  assert.equal(saved[1].provider, null)
+  assert.equal(saved[1].fromName, null)
+  assert.equal(saved[1].replyTo, null)
+})

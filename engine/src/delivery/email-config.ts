@@ -64,7 +64,21 @@ export async function readOrgEmailConfigView(orgId: string): Promise<OrgEmailCon
   };
 }
 
-export type SaveOrgEmailInput = Omit<RawEmailConfig, "keyCiphertext" | "keyNonce"> & {
+export type SaveOrgEmailInput = Omit<RawEmailConfig,
+  "keyCiphertext" | "keyNonce" | "provider" | "fromName" | "fromEmail" | "replyTo" |
+  "mailgunDomain" | "mailgunRegion" | "smtpHost" | "smtpPort" | "smtpSecure" | "smtpUsername"
+> & {
+  /** undefined keeps; null removes this setting from the stored config. */
+  provider?: NonNullable<RawEmailConfig["provider"]> | null;
+  fromName?: string | null;
+  fromEmail?: string | null;
+  replyTo?: string | null;
+  mailgunDomain?: string | null;
+  mailgunRegion?: "us" | "eu" | null;
+  smtpHost?: string | null;
+  smtpPort?: number | null;
+  smtpSecure?: boolean | null;
+  smtpUsername?: string | null;
   /** New plaintext secret to seal, or undefined to keep the existing one. */
   secret?: string | null;
 };
@@ -162,7 +176,11 @@ export async function saveOrgEmailConfig(
     const existing = current.email ?? {};
     const { secret, ...fields } = input;
 
-    const next: RawEmailConfig = { ...existing, ...fields };
+    const next: RawEmailConfig = { ...existing };
+    for (const [key, value] of Object.entries(fields) as Array<[keyof typeof fields, (typeof fields)[keyof typeof fields]]>) {
+      if (value === null) delete next[key as keyof RawEmailConfig];
+      else if (value !== undefined) Object.assign(next, { [key]: value });
+    }
     if (secret === null) {
       delete next.keyCiphertext;
       delete next.keyNonce;

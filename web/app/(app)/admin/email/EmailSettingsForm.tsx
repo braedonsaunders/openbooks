@@ -9,7 +9,7 @@ import { EMAIL_PROVIDER_SPECS, type EmailProvider } from '@openbooks/emails/prov
 
 type View = {
   enabled?: boolean
-  provider?: EmailProvider
+  provider?: EmailProvider | null
   fromName?: string
   fromEmail?: string
   replyTo?: string
@@ -98,7 +98,7 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
 
       <div className={field}>
         <Label>{t('email.provider')}</Label>
-        <Select value={v.provider ?? ''} onChange={(e) => set({ provider: (e.target.value || undefined) as EmailProvider })}>
+        <Select value={v.provider ?? ''} onChange={(e) => set({ provider: e.target.value ? e.target.value as EmailProvider : null })}>
           <option value="">{t('email.selectProvider')}</option>
           {EMAIL_PROVIDER_SPECS.map((s) => (
             <option key={s.value} value={s.value}>{s.label}</option>
