@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
 import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { HrmConstructionError } from "@openbooks/engine/src/hrm/construction/errors.ts";
 
@@ -20,8 +21,7 @@ export function constructionErrorResponse(e: unknown): NextResponse {
     return NextResponse.json({ error: message }, { status });
   }
   if (e instanceof HrmAuthorizationError) {
-    const status = /not visible in this organization/.test(e.message) ? 404 : 403;
-    return NextResponse.json({ error: e.message }, { status });
+    return hrmAuthorizationResponse(e);
   }
   if (e instanceof UnrestrictedScopeError) {
     // Org-wide policy/config writes by subsidiary-restricted callers: the

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 
 /**
@@ -23,8 +24,7 @@ export function positionErrorResponse(e: unknown): NextResponse {
   if (e instanceof HrmAuthorizationError) {
     // Unknown/other-org subjects report uniformly not-found so existence
     // cannot be probed across tenants; missing grants are forbidden.
-    const status = /not visible in this organization/.test(e.message) ? 404 : 403;
-    return NextResponse.json({ error: e.message }, { status });
+    return hrmAuthorizationResponse(e);
   }
   console.error("[hrm] positions endpoint failed:", e);
   return NextResponse.json({ error: "internal error" }, { status: 500 });

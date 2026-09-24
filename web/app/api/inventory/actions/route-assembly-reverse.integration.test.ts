@@ -11,14 +11,17 @@ import { buildAssembly } from "@openbooks/engine/src/inventory/assembly.ts";
 import { getOnHand } from "@openbooks/engine/src/inventory/position.ts";
 
 const root = pathToFileURL(process.cwd() + "/").href;
-const state = { user: { orgId: "", id: "" } };
+const state: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } = {
+  user: { orgId: "", id: "" },
+  allowedSubsidiaryIds: null,
+};
 Object.assign(globalThis, { __inventoryApiAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardPermission(){return {user:globalThis.__inventoryApiAudit.user,allowedSubsidiaryIds:null}}",
+        "export async function guardPermission(){return {user:globalThis.__inventoryApiAudit.user,allowedSubsidiaryIds:globalThis.__inventoryApiAudit.allowedSubsidiaryIds}}",
       ) };
     }
     if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
@@ -62,6 +65,16 @@ test("API reverse of an assembly build restores stock, replays retries, and conf
       action: "reverse", idempotencyKey: key, movementId: built.movementId,
       date: org.date, memo: "built the wrong quantity, unwinding",
     };
+    // A restricted caller cannot distinguish a hidden movement from an
+    // absent id; the denial must happen before idempotency or reversal work.
+    state.allowedSubsidiaryIds = new Set([randomUUID()]);
+    const hidden = await reverse({ ...payload, idempotencyKey: `${key}-hidden` });
+    const absent = await reverse({ ...payload, movementId: randomUUID(), idempotencyKey: `${key}-absent` });
+    assert.equal(hidden.status, 404);
+    assert.deepEqual(hidden.json, absent.json);
+    assert.deepEqual(absent.json, { error: "not_found" });
+    state.allowedSubsidiaryIds = null;
+
     const first = await reverse(payload);
     assert.equal(first.status, 200, JSON.stringify(first.json));
     assert.equal(first.json.ok, true);

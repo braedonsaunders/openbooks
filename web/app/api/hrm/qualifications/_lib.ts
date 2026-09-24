@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
 
 /**
  * Shared error mapping for /api/hrm qualification routes. Engine
@@ -19,7 +20,7 @@ export function qualificationErrorResponse(e: unknown): NextResponse {
     return NextResponse.json({ error: message }, { status });
   }
   if (e instanceof HrmAuthorizationError) {
-    return NextResponse.json({ error: e.message }, { status: 403 });
+    return hrmAuthorizationResponse(e);
   }
   console.error("[hrm] qualifications endpoint failed:", e);
   return NextResponse.json({ error: "internal error" }, { status: 500 });

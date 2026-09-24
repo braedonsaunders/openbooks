@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
 import { HrmChangeRequestError } from "@openbooks/engine/src/hrm/change-requests.ts";
 import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
@@ -74,8 +75,7 @@ export function recruitingErrorResponse(e: unknown): NextResponse {
   if (e instanceof HrmAuthorizationError) {
     // Unknown/other-org subjects report uniformly not-found so existence
     // cannot be probed across tenants; missing grants are forbidden.
-    const status = /not visible in this organization/.test(e.message) ? 404 : 403;
-    return NextResponse.json({ error: e.message }, { status });
+    return hrmAuthorizationResponse(e);
   }
   if (e instanceof UnrestrictedScopeError) {
     // Org-wide configuration writes by subsidiary-restricted callers: the

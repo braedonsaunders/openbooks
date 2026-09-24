@@ -9,6 +9,8 @@ const state = {
   legacyOwner: "A",
   currentOwner: "B",
   directReads: 0,
+  transactionReads: 0,
+  groupScope: null as string | null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[
   Symbol.for("asset-change-route")
@@ -63,7 +65,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `const s=globalThis[Symbol.for('asset-change-route')];export const db={execute:async()=>({rows:s.directReads++===0?[{subsidiary_id:s.legacyOwner}]:[]}),transaction:async fn=>fn({execute:async()=>({rows:[{id:'asset',subsidiaryId:s.currentOwner}]})})};export async function withOrgTransaction(_orgId,fn){return fn()}`,
+        source: `const s=globalThis[Symbol.for('asset-change-route')];export const db={execute:async()=>({rows:s.directReads++===0?[{subsidiary_id:s.legacyOwner}]:[]}),transaction:async fn=>{s.transactionReads=0;return fn({execute:async()=>{s.transactionReads++;if(s.transactionReads===1)return {rows:[{id:'asset',subsidiaryId:s.currentOwner}]};if(s.transactionReads===5&&s.groupScope)return {rows:[{elimination_subsidiary_id:s.groupScope}]};return {rows:[]}}})}};export async function withOrgTransaction(_orgId,fn){return fn()}`,
       };
     if (url === "mock:asset-scope-db-dependency")
       return {
@@ -181,6 +183,22 @@ test("asset change setup reads are denied when the locked asset owner moved out 
   state.directReads = 0;
   const response = await route.GET(new Request("http://openbooks.test/changes"), context);
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "asset not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
+  state.scope = null;
+});
+
+test("group-book references outside scope are indistinguishable from absent asset history", async () => {
+  state.allowed = true;
+  state.scope = new Set(["A"]);
+  state.legacyOwner = "A";
+  state.currentOwner = "A";
+  state.groupScope = "B";
+  const hidden = await route.GET(new Request("http://openbooks.test/changes"), context);
+  assert.equal(hidden.status, 404);
+  assert.deepEqual(await hidden.json(), { error: "not_found" });
+
+  state.groupScope = null;
+  const visible = await route.GET(new Request("http://openbooks.test/changes"), context);
+  assert.equal(visible.status, 200);
   state.scope = null;
 });

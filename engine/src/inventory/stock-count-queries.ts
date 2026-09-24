@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { add, neg } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
-import { InventoryError, InventoryOwnershipError } from "./contracts.ts";
+import { InventoryError, InventoryNotFoundError } from "./contracts.ts";
 import {
   loadCountHeader,
   parseCountStatus,
@@ -178,7 +178,7 @@ export async function getStockCountDetail(
   return withOrgTransaction(orgId, async () => {
     const header = await loadCountHeader(db, orgId, countId, true);
     if (allowedSubsidiaryIds !== null && !allowedSubsidiaryIds.has(header.subsidiaryId)) {
-      throw new InventoryOwnershipError("subsidiary not permitted");
+      throw new InventoryNotFoundError("not_found");
     }
     const names = (await db.execute<{ location_name: string | null; subsidiary_name: string | null }>(sql`
       select (select name from locations where org_id = ${orgId} and id = ${header.locationId}) as location_name,
@@ -228,4 +228,3 @@ export async function getStockCountDetail(
     };
   });
 }
-

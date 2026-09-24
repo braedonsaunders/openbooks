@@ -16,12 +16,13 @@ import {
 } from '@openbooks/engine/src/inventory/stock-counts.ts'
 import { getStockCountDetail, listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 import { executeIdempotentInventoryAction } from '@openbooks/engine/src/inventory/action-idempotency.ts'
-import { InventoryError, InventoryOwnershipError } from '@openbooks/engine/src/inventory/contracts.ts'
+import { InventoryNotFoundError } from '@openbooks/engine/src/inventory/contracts.ts'
 import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
 import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
+import { recordNotFoundResponse } from '../../../../lib/api/record-not-found'
 
 export const runtime = 'nodejs'
 
@@ -45,6 +46,7 @@ const stockCountBody = z.looseObject({
 })
 
 function refusal(e: unknown) {
+  if (e instanceof InventoryNotFoundError) return recordNotFoundResponse()
   return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: inventoryErrorStatus(e) })
 }
 
@@ -64,18 +66,8 @@ export async function GET(req: Request) {
     const id = params.get('id')
     if (id) {
       if (!isUuid(id)) return NextResponse.json({ error: 'count required' }, { status: 422 })
-      // Fence restricted callers against the count's own subsidiary, resolved
-      // server-side from the row — the same shape as the movement reversal
-      // fence, because the subsidiary lives on the count, not the request.
-      const scope = await db.execute<{ subsidiary_id: string }>(
-        sql`select subsidiary_id from stock_counts where id = ${id} and org_id = ${user.orgId}`,
-      )
-      const subsidiaryId = scope.rows[0]?.subsidiary_id ?? null
-      if (gate.allowedSubsidiaryIds && (!subsidiaryId || !gate.allowedSubsidiaryIds.has(subsidiaryId))) {
-        return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })
-      }
-      // The detail rechecks the scope under the count lock inside its own
-      // snapshot: the probe above is a fast path only.
+      // The detail service locks the header and applies the caller's scope
+      // before reading any lines; it returns one not-found for hidden/missing.
       return NextResponse.json({ ok: true, ...(await getStockCountDetail(user.orgId, id, gate.allowedSubsidiaryIds)) })
     }
     // The list is subsidiary-scoped server-side: a restricted caller sees
@@ -136,9 +128,9 @@ export async function POST(req: Request) {
 
   async function fenceCount(countId: string): Promise<NextResponse | null> {
     const subsidiaryId = await countSubsidiary(countId)
-    if (!subsidiaryId) return NextResponse.json({ error: 'count not found in this organization' }, { status: 422 })
+    if (!subsidiaryId) return recordNotFoundResponse()
     if (allowedSubsidiaryIds && !allowedSubsidiaryIds.has(subsidiaryId)) {
-      return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })
+      return recordNotFoundResponse()
     }
     return null
   }
@@ -155,9 +147,9 @@ export async function POST(req: Request) {
       sql`select subsidiary_id from stock_counts where id = ${countId} and org_id = ${user.orgId} for update`,
     )
     const subsidiaryId = r.rows[0]?.subsidiary_id ?? null
-    if (!subsidiaryId) throw new InventoryError('count not found in this organization')
+    if (!subsidiaryId) throw new InventoryNotFoundError('not_found')
     if (allowedSubsidiaryIds && !allowedSubsidiaryIds.has(subsidiaryId)) {
-      throw new InventoryOwnershipError('subsidiary not permitted')
+      throw new InventoryNotFoundError('not_found')
     }
   }
 

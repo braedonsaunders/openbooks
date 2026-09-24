@@ -3,7 +3,7 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { InventoryOwnershipError } from "@openbooks/engine/src/inventory/contracts.ts";
+import { InventoryNotFoundError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
 import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "@openbooks/engine/src/inventory/transfer-orders.ts";
@@ -14,6 +14,7 @@ import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } fr
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
+import { recordNotFoundResponse } from "../../../../lib/api/record-not-found";
 import {
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
   type CataloguePermission,
@@ -225,26 +226,24 @@ export async function POST(req: Request) {
   const orgId = gate.user.orgId;
   const userId = gate.user.id;
 
-  /** Refuse restricted callers any order whose subsidiary they cannot see. */
+  /** Scope-filter an existing transfer order before an action can expose it. */
   const orderSubsidiaryInScope = async (orderId: unknown): Promise<boolean> => {
-    if (!gate.allowedSubsidiaryIds) return true;
     if (typeof orderId !== "string" || !isUuid(orderId)) return false;
     const r = await db.execute<{ subsidiary_id: string | null }>(
       sql`select subsidiary_id from transfer_orders where id = ${orderId} and org_id = ${orgId}`,
     );
     const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
-    return subsidiaryId !== null && gate.allowedSubsidiaryIds.has(subsidiaryId);
+    return subsidiaryId !== null && (!gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(subsidiaryId));
   };
 
-  /** Refuse restricted callers any landed-cost voucher whose subsidiary they cannot see. */
+  /** Scope-filter an existing voucher before an action can expose it. */
   const voucherSubsidiaryInScope = async (voucherId: unknown): Promise<boolean> => {
-    if (!gate.allowedSubsidiaryIds) return true;
     if (typeof voucherId !== "string" || !isUuid(voucherId)) return false;
     const r = await db.execute<{ subsidiary_id: string | null }>(
       sql`select subsidiary_id from landed_cost_vouchers where id = ${voucherId} and org_id = ${orgId}`,
     );
     const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
-    return subsidiaryId !== null && gate.allowedSubsidiaryIds.has(subsidiaryId);
+    return subsidiaryId !== null && (!gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(subsidiaryId));
   };
 
   /** Run one monetary action through the engine's canonical replay boundary. */
@@ -261,18 +260,18 @@ export async function POST(req: Request) {
    * / voucherSubsidiaryInScope probes above can authorize an A record while
    * a concurrent A→B reassignment lands before the service commits (the
    * service joins this transaction, so the lock covers its whole unit —
-   * including retries). Throw the inventory-domain 403 the probes answer
+   * including retries). Throw the inventory-domain 404 the probes answer
    * with; the outer catch maps it.
    */
-  // A row deleted between the probe and this lock is the service's own
-  // not-found to name — only a present-but-out-of-scope row refuses here.
+  // Missing and out-of-scope rows take the same generic not-found path here,
+  // including a rehome that wins between the probe and this lock.
   const lockedOrderFence = async (orderId: string): Promise<void> => {
     const r = await db.execute<{ subsidiary_id: string | null }>(
       sql`select subsidiary_id from transfer_orders where id = ${orderId} and org_id = ${orgId} for update`,
     );
     const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
-    if (subsidiaryId !== null && gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
-      throw new InventoryOwnershipError("subsidiary not permitted");
+    if (!r.rows[0] || subsidiaryId === null || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId))) {
+      throw new InventoryNotFoundError("not_found");
     }
   };
 
@@ -281,8 +280,8 @@ export async function POST(req: Request) {
       sql`select subsidiary_id from landed_cost_vouchers where id = ${voucherId} and org_id = ${orgId} for update`,
     );
     const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
-    if (subsidiaryId !== null && gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
-      throw new InventoryOwnershipError("subsidiary not permitted");
+    if (!r.rows[0] || subsidiaryId === null || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId))) {
+      throw new InventoryNotFoundError("not_found");
     }
   };
 
@@ -331,7 +330,7 @@ export async function POST(req: Request) {
       case "shipTransfer": {
         if (!body.id) return NextResponse.json({ error: "transfer order required" }, { status: 422 });
         if (!(await orderSubsidiaryInScope(body.id))) {
-          return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
+          return recordNotFoundResponse();
         }
         const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
           await lockedOrderFence(body.id!);
@@ -346,7 +345,7 @@ export async function POST(req: Request) {
       case "receiveTransfer": {
         if (!body.id) return NextResponse.json({ error: "transfer order required" }, { status: 422 });
         if (!(await orderSubsidiaryInScope(body.id))) {
-          return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
+          return recordNotFoundResponse();
         }
         const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
           await lockedOrderFence(body.id!);
@@ -407,7 +406,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "reversal reason must be between 5 and 500 characters" }, { status: 422 });
         }
         if (!(await voucherSubsidiaryInScope(body.id))) {
-          return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
+          return recordNotFoundResponse();
         }
         const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
           await lockedVoucherFence(body.id!);
@@ -438,8 +437,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
-    // One shared mapping: an engine ownership refusal is a 403, key reuse
-    // with different input is a 409, any other InventoryError is a 422.
+    if (e instanceof InventoryNotFoundError) return recordNotFoundResponse();
+    // One shared mapping keeps real ownership refusals at 403, key reuse at
+    // 409, hidden records at 404, and validation refusals at 422.
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
       { status: inventoryErrorStatus(e) },

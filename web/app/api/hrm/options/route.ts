@@ -13,6 +13,7 @@ import {
   listOwnLeaveEmploymentOptions,
 } from "@openbooks/engine/src/hrm/leave-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
@@ -131,7 +132,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ options });
   } catch (e) {
     if (e instanceof HrmAuthorizationError) {
-      return NextResponse.json({ error: (e as Error).message }, { status: 403 });
+      return hrmAuthorizationResponse(e);
     }
     if (e instanceof EmploymentReadError || e instanceof HrmPositionError) {
       return NextResponse.json({ error: (e as Error).message }, { status: 422 });
