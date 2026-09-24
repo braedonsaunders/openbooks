@@ -64,6 +64,7 @@ export function meSurveysSpec(data: MeSurveysPageData): PageSpec {
               invitationId: item('id'),
               respondLabel: data.respondLabel,
               actionFailed: data.actionFailed,
+              reissueFailed: data.reissueFailed,
             })),
           ],
         }),

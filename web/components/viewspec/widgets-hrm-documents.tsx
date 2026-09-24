@@ -98,6 +98,7 @@ export const HRM_DOCUMENT_WIDGETS = {
       invitationId={str(props, 'invitationId') ?? ''}
       respondLabel={str(props, 'respondLabel') ?? ''}
       actionFailed={str(props, 'actionFailed') ?? ''}
+      reissueFailed={str(props, 'reissueFailed') ?? ''}
     />
   ),
   // HR-19 end

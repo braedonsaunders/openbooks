@@ -2032,7 +2032,8 @@
     },
     "empty": "当前没有待填调查。",
     "respond": "填写",
-    "actionFailed": "此操作失败。"
+    "actionFailed": "此操作失败。",
+    "reissueFailed": "无法重新签发问卷链接——未收到令牌。请重试。"
   },
   "public": {
     "book": {

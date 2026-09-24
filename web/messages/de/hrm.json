@@ -2032,7 +2032,8 @@
     },
     "empty": "Derzeit keine offenen Befragungen.",
     "respond": "Antworten",
-    "actionFailed": "Diese Aktion ist fehlgeschlagen."
+    "actionFailed": "Diese Aktion ist fehlgeschlagen.",
+    "reissueFailed": "Der Umfragelink konnte nicht neu ausgestellt werden — kein Token erhalten. Versuchen Sie es erneut."
   },
   "public": {
     "book": {

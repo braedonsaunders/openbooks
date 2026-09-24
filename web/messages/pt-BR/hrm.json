@@ -2032,7 +2032,8 @@
     },
     "empty": "Sem pesquisas abertas agora.",
     "respond": "Responder",
-    "actionFailed": "Esta ação falhou."
+    "actionFailed": "Esta ação falhou.",
+    "reissueFailed": "Não foi possível reemitir o link da pesquisa — nenhum token retornou. Tente responder novamente."
   },
   "public": {
     "book": {

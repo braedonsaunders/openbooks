@@ -2032,7 +2032,8 @@
     },
     "empty": "Sin encuestas abiertas ahora.",
     "respond": "Responder",
-    "actionFailed": "Esta acción falló."
+    "actionFailed": "Esta acción falló.",
+    "reissueFailed": "No se pudo reemitir el enlace de la encuesta — no llegó ningún token. Inténtelo de nuevo."
   },
   "public": {
     "book": {

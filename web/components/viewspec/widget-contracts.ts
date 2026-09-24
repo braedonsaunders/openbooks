@@ -215,7 +215,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-me-document-actions': { props: ['acknowledgeLabel', 'acknowledgeable', 'actionFailed', 'documentId', 'signLabel', 'signNameLabel', 'signable'] },
   'hrm-me-export-dialog': { props: ['actionFailed', 'partyId', 'requestExportDone', 'requestExportLabel'] },
   'hrm-me-export-download': { props: ['downloadable', 'href', 'label'] },
-  'hrm-me-survey-respond': { props: ['actionFailed', 'invitationId', 'respondLabel'] },
+  'hrm-me-survey-respond': { props: ['actionFailed', 'invitationId', 'reissueFailed', 'respondLabel'] },
   'hrm-new-menu': { props: ['canCreateEmployee', 'canCreateProcess', 'canProposeChange', 'changeLabel', 'employeeLabel', 'processLabel'] },
   'hrm-note': { props: ['note'] },
   'hrm-onboarding-panel': { props: ['empty', 'noDueSoon', 'openCount', 'openLabel', 'overdue', 'overdueLabel', 'upcoming', 'upcomingLabel', 'viewAll', 'viewAllHref'] },
