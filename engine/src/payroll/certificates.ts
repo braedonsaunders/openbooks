@@ -486,9 +486,9 @@ export function certificateDeclarationProblem(certificate: PayrollCertificate): 
     return "declared as profile_columns but not every field names a column";
   }
   if (certificate.storage === "certificate_rows"
-    && certificate.fields.some((field) => field.storage?.kind === "column")) {
-    return "declared as certificate_rows but a field still names a profile column — a new "
-      + "certificate stores its answers in a row";
+    && certificate.fields.length > 0
+    && certificate.fields.every((field) => field.storage?.kind === "column")) {
+    return "declared as certificate_rows but has no row-backed fields";
   }
   for (const field of certificate.fields) {
     const problem = fieldDeclarationProblem(field);
