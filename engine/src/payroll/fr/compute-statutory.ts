@@ -33,8 +33,14 @@
  *   aux contribuables domiciliés en métropole ou hors de France, la
  *   deuxième aux contribuables domiciliés en Guadeloupe, à La Réunion et
  *   en Martinique et la troisième aux contribuables domiciliés en Guyane
- *   et à Mayotte" (§90). Only grille I is transcribed; any other domicile
- *   is refused by name — never approximated by grille I.
+ *   et à Mayotte" (§90). Only the métropole arm computes here: salaires
+ *   for French work paid to a person domiciled hors de France fall under
+ *   the retenue à la source of CGI art. 182 A — "différente du prélèvement
+ *   à la source (PAS), appliqué aux résidents fiscaux de France" (DGFiP,
+ *   Particularités de la fiscalité des non-résidents, fiche 03-2026) — so
+ *   a hors-de-France domicile is refused by name until the 182 A barème is
+ *   transcribed, never priced with grille I. DOM domiciles are refused by
+ *   name likewise.
  *
  * What this pass does NOT do (stated): APEC (cadres only, no channel),
  * a conventionally modified 60/40 split, AT/MP and versement mobilité
@@ -92,7 +98,24 @@ function rCent(u: bigint): bigint {
   return roundDiv(u, CENT_UNITS) * CENT_UNITS;
 }
 
-export type FrDomicile = "metropole_hors_france";
+export type FrDomicile = "metropole" | "hors_de_france";
+
+/**
+ * The CGI art. 182 A refusal both the pure grille function and the pack
+ * adapter raise: one text, two call sites. The remedy exists — transcribe
+ * the 182 A barème (see FR_REFUSED_2026) — so the refusal names it instead
+ * of pricing PAS money against the wrong mechanism.
+ */
+function horsDeFrance182ARefusal(): never {
+  throw new PayrollPackError(
+    `FR PAS refuses a hors-de-France domicile for wages: salaires for work in France paid to a person `
+    + `not fiscally domiciled in France fall under the retenue à la source of CGI art. 182 A — a separate `
+    + `annual barème after a 10 % abatement, "directement prélevée par votre employeur" (DGFiP, Particularités `
+    + `de la fiscalité des non-résidents, fiche 03-2026), "différente du prélèvement à la source (PAS), appliqué `
+    + `aux résidents fiscaux de France". The 182 A barème is not transcribed (see FR_REFUSED_2026) — refusing, `
+    + `never priced with grille I.`,
+  );
+}
 
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the factor
@@ -162,10 +185,11 @@ export function calculateFrPas2026(input: FrPas2026Input): FrPas2026Result {
   if (base < 0n) {
     throw new PayrollPackError(`FR PAS base must be non-negative, got "${input.base}"`);
   }
-  if (input.domicile !== "metropole_hors_france") {
+  if (input.domicile === "hors_de_france") horsDeFrance182ARefusal();
+  if (input.domicile !== "metropole") {
     throw new PayrollPackError(
       `FR PAS grille lookup refused for domicile "${input.domicile}": only `
-      + "grille I (métropole ou hors de France) is transcribed — grilles II "
+      + "grille I (métropole) computes — grilles II "
       + "(Guadeloupe, Réunion, Martinique) and III (Guyane, Mayotte) are "
       + "refused by name, never approximated (see FR_REFUSED_2026).",
     );
@@ -256,10 +280,18 @@ export async function computeFrStatutory(
       + "(métropole) is never substituted.",
     );
   }
-  if (domicile !== "metropole_hors_france") {
+  if (domicile === "hors_de_france") horsDeFrance182ARefusal();
+  if (domicile === "metropole_hors_france") {
+    throw new PayrollPackError(
+      `FR PAS needs a re-affirmed domicile (fr_pas_option): "metropole_hors_france" lumped métropole residents `
+      + `with persons domiciled hors de France, who price under different mechanisms (PAS grille I vs the CGI `
+      + `art. 182 A retenue) — re-affirm domicile as "metropole" or "hors_de_france".`,
+    );
+  }
+  if (domicile !== "metropole") {
     throw new PayrollPackError(
       "FR PAS needs an affirmed domicile (fr_pas_option … domicile = "
-      + "metropole_hors_france): the three grilles differ by domicile and "
+      + `"metropole" or "hors_de_france"): the grilles — and the 182 A retenue — differ by domicile and `
       + "an undeclared domicile must not fall through to grille I.",
     );
   }
@@ -278,7 +310,7 @@ export async function computeFrStatutory(
     payDate,
     periodsPerYear,
     transmittedRatePct: transmitted === "" ? null : transmitted,
-    domicile: "metropole_hors_france",
+    domicile: "metropole",
   });
   pushStatutory("pas", "deduction", "Prélèvement à la source", result.pas, 110);
   // Cotisations price on the brut. AT/MP and versement mobilité have no

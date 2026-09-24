@@ -66,7 +66,7 @@ function ctxFor(brut: string, transmitted: string): PayrollStatutoryComputeConte
     storedCertificates: [],
     certificateFor: (() => ({
       answers: {
-        domicile: "metropole_hors_france",
+        domicile: "metropole",
         taux_option: "personnalise",
         taux_transmis: transmitted,
       },
@@ -93,7 +93,7 @@ test("DEFECT 1: PAS prices the net imposable, not the brut (3 400 €, transmis 
     payDate: PAY,
     periodsPerYear: 12,
     transmittedRatePct: "5",
-    domicile: "metropole_hors_france",
+    domicile: "metropole",
   });
   assert.equal(defective.pas, "170.0000");
 
@@ -126,7 +126,7 @@ test("DEFECT 1: PAS prices the net imposable, not the brut (3 400 €, transmis 
     payDate: PAY,
     periodsPerYear: 12,
     transmittedRatePct: "5",
-    domicile: "metropole_hors_france",
+    domicile: "metropole",
   });
   assert.equal(statutory.pas, "139.4200");
 });

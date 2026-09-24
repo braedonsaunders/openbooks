@@ -197,7 +197,8 @@ export const FR_CONTRATS_COURTS_ABATTEMENT_2026 = {
  * live in FR_COTISATION_REFUSALS_2026 (./cotisations-2026.ts).
  */
 export const FR_REFUSED_2026: readonly string[] = [
-  "Grilles II (Guadeloupe, Réunion, Martinique) and III (Guyane, Mayotte): domicile-keyed grids the pack has no domicile channel for — refused by domicile name, never approximated by grille I",
+  "Retenue à la source des non-résidents (CGI art. 182 A): French-source salaires for work in France paid to persons not fiscally domiciled in France (art. 4 B) price under the 182 A annual barème after a 10 % abatement — 'directement prélevée par votre employeur' (DGFiP, Particularités de la fiscalité des non-résidents, fiche 03-2026) — 'différente du prélèvement à la source (PAS), appliqué aux résidents fiscaux de France'. The barème is not transcribed: affirming a hors-de-France domicile refuses the run by name, never priced with grille I",
+  "Grilles II (Guadeloupe, Réunion, Martinique) and III (Guyane, Mayotte): domicile-keyed grids that are not transcribed — refused by domicile name off the fr_pas_option certificate, never approximated by grille I",
   "Contrats-courts abattement (748 € then 766 €, transcribed above): needs contract start/end dates no pack channel carries",
   "Non-monthly grille scaling beyond the §180 monthly-equivalent rule: weekly/intermittent multi-bulletin and replacement-income period methods are documented, not implemented",
   "URSSAF cotisations transcribed in ./cotisations-2026.ts and AGIRC-ARRCO (T1/T2, CEG, CET) in ./retraite-2026.ts; still refused: APEC (cadre channel), AT/MP and versement mobilité (tenant-declared by design), and the Alsace-Moselle 1,30 % salary supplement (no department channel)",

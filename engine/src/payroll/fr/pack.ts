@@ -132,16 +132,20 @@ const FR_PAS_CERTIFICATE: PayrollCertificate = {
       label: "Domicile fiscal (grille applicable)",
       kind: "choice",
       choices: [
-        { value: "metropole_hors_france", label: "Métropole ou hors de France (grille I)" },
+        { value: "metropole", label: "Métropole (grille I)" },
+        { value: "hors_de_france", label: "Hors de France — domicile fiscal étranger (retenue CGI art. 182 A, non transcrite)" },
         { value: "guadeloupe_reunion_martinique", label: "Guadeloupe, Réunion, Martinique (grille II — non transcrite)" },
         { value: "guyane_mayotte", label: "Guyane, Mayotte (grille III — non transcrite)" },
       ],
-      // No default, required: the three grilles differ by domicile
-      // (BOI-IR-PAS-20-20-30-10 §90) and an undeclared domicile must not
-      // fall through to grille I. The engine refuses anything but
-      // metropole_hors_france by name.
+      // No default, required: the grilles differ by domicile
+      // (BOI-IR-PAS-20-20-30-10 §90), and salaires for French work paid to
+      // a person domiciled hors de France fall under the CGI art. 182 A
+      // retenue instead of PAS (DGFiP non-resident fiche 03-2026) — so an
+      // undeclared domicile must not fall through to grille I, and a
+      // hors-de-France domicile is refused by name until 182 A is
+      // transcribed. Only metropole prices; every other domicile refuses.
       required: true,
-      help: "Résidence principale à la date du versement. Seule la grille I (métropole ou hors de France) est transcrite ; les grilles II et III sont refusées par l'employeur.",
+      help: "Résidence principale à la date du versement. Seule la grille I (métropole) est transcrite et calculée ; hors de France (retenue 182 A), grilles II et III sont refusées par l'employeur.",
     },
     {
       key: "taux_option",
@@ -184,14 +188,17 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
     {
       region: "FR",
       label: "Prélèvement à la source (national)",
-      // Implemented for grille I (métropole ou hors de France): PAS plus
-      // the 2026 URSSAF cotisations and AGIRC-ARRCO T1/T2 + CEG + CET
-      // compute end to end. DOM domiciles, APEC and tenant-declared
-      // AT/MP/versement-mobilité rates stay refused by name (see
-      // FR_REFUSED_2026 and FR_COTISATION_REFUSALS_2026).
+      // Implemented for grille I (métropole): PAS plus the 2026 URSSAF
+      // cotisations and AGIRC-ARRCO T1/T2 + CEG + CET compute end to end.
+      // DOM domiciles, APEC and tenant-declared AT/MP/versement-mobilité
+      // rates stay refused by name (see FR_REFUSED_2026 and
+      // FR_COTISATION_REFUSALS_2026).
       implemented: true,
       // Non-residents face the specific retenue à la source (CGI art. 182 A),
-      // not PAS — a separate mechanism the skeleton does not implement either.
+      // not PAS — and the levy DOES reach their French wages, so this stays
+      // true while compute-statutory.ts refuses a hors-de-France domicile by
+      // name until the 182 A barème is transcribed (fail-closed, never
+      // priced with grille I).
       taxesNonresidentWages: true,
       residentWithholding: "required",
       residentWithholdingImplemented: true,
