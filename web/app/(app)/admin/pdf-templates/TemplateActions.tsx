@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 
 /**
@@ -46,12 +47,15 @@ export function NewTemplateButton({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recordType, name: name.trim() }),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('editor.saveFailed'))
-        return
-      }
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must toast the failure, never an unhandled rejection with no
+      // toast at all.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('editor.saveFailed')))
+      const data = (await res.json().catch(() => null)) as { id?: unknown } | null
+      if (typeof data?.id !== 'string' || !data.id) throw new Error(t('editor.saveFailed'))
       router.push(`/admin/pdf-templates/${data.id}`)
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('editor.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -89,12 +93,14 @@ export function DuplicateTemplateButton({
     setBusy(true)
     try {
       const res = await fetch(`/api/pdf-templates/${templateId}`)
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('editor.saveFailed'))
-        return
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('editor.saveFailed')))
+      const data = (await res.json().catch(() => null)) as { row?: unknown } | null
+      const src = (data?.row ?? null) as Record<string, unknown> | null
+      // Never navigate to /undefined: the copy needs a real source row and a
+      // real created id, or the failure toasts instead of routing nowhere.
+      if (!src || typeof src.name !== 'string' || typeof src.recordType !== 'string') {
+        throw new Error(t('editor.saveFailed'))
       }
-      const src = data.row
       const name = await promptDialog({
         title: t('list.duplicate'),
         initialValue: uniqueTemplateName(`${src.name} (copy)`, takenNames ?? new Set([src.name])),
@@ -115,12 +121,12 @@ export function DuplicateTemplateButton({
           marginMm: src.marginMm,
         }),
       })
-      const createdData = await created.json()
-      if (!created.ok) {
-        toast.error(createdData.error ?? t('editor.saveFailed'))
-        return
-      }
+      if (!created.ok) throw new Error(await readApiErrorMessage(created, t('editor.saveFailed')))
+      const createdData = (await created.json().catch(() => null)) as { id?: unknown } | null
+      if (typeof createdData?.id !== 'string' || !createdData.id) throw new Error(t('editor.saveFailed'))
       router.push(`/admin/pdf-templates/${createdData.id}`)
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('editor.saveFailed'))
     } finally {
       setBusy(false)
     }

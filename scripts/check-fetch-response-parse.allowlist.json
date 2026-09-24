@@ -50,16 +50,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/admin/pdf-templates/TemplateActions.tsx",
-    "fn": "create",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/pdf-templates (web/app/api/pdf-templates/route.ts): the write transaction sits inside try/catch-all answering NextResponse.json (409/500); no rethrow; prettifyTemplateHtml outside never throws (internal try/catch fallback). Verified by reading the handler and web/lib/pdf-templates/prettify.ts."
-  },
-  {
-    "path": "web/app/(app)/admin/pdf-templates/TemplateActions.tsx",
-    "fn": "duplicate",
-    "reason": "server always returns JSON; guard adoption pending. Same evidence as create above: POST /api/pdf-templates answers JSON on every path including the 409/500 catch-all."
-  },
-  {
     "path": "web/app/(app)/admin/scripts/ScriptDrawer.tsx",
     "fn": "save",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
