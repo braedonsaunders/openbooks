@@ -84,6 +84,7 @@ export function EntitlementOpeningsView({
     setSaving(true)
     setErrors([])
     setWarnings([])
+    const fallback = text('saveFailed', 'Nothing was saved.')
     try {
       const payload = dirtyIds.map((employeePartyId) => ({
         employeePartyId,
@@ -94,17 +95,42 @@ export function EntitlementOpeningsView({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ movementDate: asOf, rows: payload }),
       })
-      const body = (await response.json()) as {
+      // The body is parsed defensively and the status decides: a non-JSON
+      // error body (a proxy page, an empty 502) must surface the fallback
+      // with the status, never a SyntaxError from `response.json()` — the
+      // same status-first contract as readApiErrorMessage, keeping the
+      // server's per-row reasons when the refusal is JSON.
+      let body: {
         error?: string
         errors?: SaveError[]
         warnings?: SaveError[]
         created?: number
         updated?: number
         deleted?: number
+      } | null = null
+      try {
+        body = (await response.json()) as {
+          error?: string
+          errors?: SaveError[]
+          warnings?: SaveError[]
+          created?: number
+          updated?: number
+          deleted?: number
+        }
+      } catch {
+        body = null
       }
+      const named = typeof body?.error === 'string' && body.error.trim() !== '' ? body.error : null
       if (!response.ok) {
-        setErrors(body.errors ?? [{ employeePartyId: '', message: body.error ?? 'save failed' }])
-        toast.error(body.error ?? text('saveFailed', 'Nothing was saved.'))
+        const message = named ?? `${fallback} (status ${response.status})`
+        setErrors(body?.errors ?? [{ employeePartyId: '', message }])
+        toast.error(message)
+        return
+      }
+      if (!body) {
+        const message = `${fallback} (status ${response.status})`
+        setErrors([{ employeePartyId: '', message }])
+        toast.error(message)
         return
       }
       setDraft({})
@@ -114,6 +140,13 @@ export function EntitlementOpeningsView({
           ` (${body.created ?? 0} new, ${body.updated ?? 0} updated, ${body.deleted ?? 0} cleared)`,
       )
       router.refresh()
+    } catch (e) {
+      // A thrown fetch (the network is down, the server hung up) is a
+      // failure with a toast, never an unhandled rejection that leaves the
+      // grid showing stale edits as saved.
+      const message = e instanceof Error ? e.message : fallback
+      setErrors([{ employeePartyId: '', message }])
+      toast.error(message)
     } finally {
       setSaving(false)
     }

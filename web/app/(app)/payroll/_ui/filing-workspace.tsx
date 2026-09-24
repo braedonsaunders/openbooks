@@ -23,6 +23,7 @@ import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend
 import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { countryName } from '../../../../lib/countries'
 import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-html'
@@ -30,6 +31,7 @@ import {
   FilingCorrectionSection,
   FilingLifecycleBar,
   FilingStatusBadge,
+  fetchFilingSlip,
   useFilingLifecycle,
   type FilingLifecycle,
   type FilingRowReview,
@@ -38,6 +40,30 @@ import {
 export type FilingRow = Record<string, string | number | null>
 
 export const sectionKey = (section: YearEndFilingSection) => `${section.country}:${section.key}`
+
+/**
+ * Record a filing as issued. The status is checked before the body is
+ * parsed: a non-JSON error body (a proxy page, an empty 502) must surface
+ * the fallback with the status, never a SyntaxError from `res.json()`.
+ * Returns the pack's file refusal when the filing has no electronic file —
+ * legitimately recorded, with its reason surfaced, never swallowed.
+ */
+export async function recordFilingOriginal(
+  section: YearEndFilingSection,
+  year: number,
+  note: string,
+): Promise<string | null> {
+  const res = await fetch('/api/payroll/year-end/amendments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      country: section.country, filing: section.key, year, revision: 'original', note,
+    }),
+  })
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the filing could not be recorded'))
+  const body = (await res.json()) as { fileRefusal?: string | null }
+  return body.fileRefusal ?? null
+}
 
 /** Per-row issue-declaration key, so two issue filings never share state. */
 const issueKey = (section: YearEndFilingSection, row: FilingRow) =>
@@ -220,18 +246,10 @@ export function FilingWorkspace({
     setIssueError(null)
     setIssueBusy(true)
     try {
-      const res = await fetch('/api/payroll/year-end/amendments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          country: section.country, filing: section.key, year, revision: 'original', note,
-        }),
-      })
-      const body = (await res.json()) as { error?: string; fileRefusal?: string | null }
-      if (!res.ok) throw new Error(body.error ?? res.statusText)
       // A filing with no electronic file is legitimately recorded — but the
       // pack's reason there is none is surfaced, never swallowed.
-      if (body.fileRefusal) setIssueError(body.fileRefusal)
+      const fileRefusal = await recordFilingOriginal(section, year, note)
+      if (fileRefusal) setIssueError(fileRefusal)
       lifecycle.refresh()
     } catch (e) {
       setIssueError((e as Error).message)
@@ -576,19 +594,10 @@ export function SlipDrawer({
   }
   useEffect(() => {
     let alive = true
-    void fetch(slipHref('json'))
-      .then(async (res) => {
-        const body = (await res.json()) as { slip?: PayrollFilingSlipData; orgName?: string; currency?: string; error?: string }
+    void fetchFilingSlip(slipHref('json'))
+      .then((result) => {
         if (!alive) return
-        if (!res.ok || !body.slip) {
-          setState({ status: 'error', message: body.error ?? res.statusText })
-          return
-        }
-        if (!body.currency) {
-          setState({ status: 'error', message: 'slip response is missing its currency' })
-          return
-        }
-        setState({ status: 'ready', slip: body.slip, orgName: body.orgName ?? '', currency: body.currency })
+        setState({ status: 'ready', ...result })
       })
       .catch((e: Error) => {
         if (alive) setState({ status: 'error', message: e.message })

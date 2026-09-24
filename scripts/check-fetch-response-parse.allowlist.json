@@ -215,51 +215,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/payroll/_ui/NewRunButton.tsx",
-    "fn": "postRun",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payroll/_ui/filing-amendments.tsx",
-    "fn": "useFilingLifecycle",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payroll/_ui/filing-amendments.tsx",
-    "fn": "loadPreview",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payroll/_ui/filing-amendments.tsx",
-    "fn": "issue",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payroll/_ui/filing-workspace.tsx",
-    "fn": "recordOriginal",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payroll/_ui/filing-workspace.tsx",
-    "fn": "SlipDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payroll/opening-balances/EntitlementOpeningsView.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payroll/opening-balances/OpeningBalancesView.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payroll/retro/RetroWorkspace.tsx",
-    "fn": "call",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/projects/duplicates/ProjectDuplicatesView.tsx",
     "fn": "preview",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
