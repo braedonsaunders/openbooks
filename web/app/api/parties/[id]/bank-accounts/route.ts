@@ -6,7 +6,7 @@ import { encryptAccountNumber } from "@openbooks/engine/src/payments/rail-settin
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { guardPermission } from '../../../../../lib/authz'
-import { denyOutsidePartyScope } from './party-scope'
+import { denyLockedOutsidePartyScope, denyOutsidePartyScope } from './party-scope'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
@@ -92,18 +92,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const accountNumber = body.accountNumber!.trim()
   const country = normalizeCountryCode(body.country) ?? null
 
-  const inserted = (await db.execute<{ id: string }>(sql`
-    insert into party_bank_accounts
-      (org_id, party_id, bank_name, country, currency, routing,
-       account_number_encrypted, account_last_four, approval_status, is_active,
-       approved_at, approved_by, submitted_by, submitted_at, created_by)
-    values (${user.orgId}, ${partyId}, ${body.bankName?.trim() ?? null}, ${country},
-            ${body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
-            ${encryptAccountNumber(accountNumber)}, ${accountNumber.slice(-4)},
-            'pending', false, null, null, ${user.id}, now(), ${user.id})
-    returning id
-  `))
-  const accountId = inserted.rows[0]!.id
+  // The insert runs under the party lock with the scope rechecked: the
+  // unlocked precheck above may have authorized a party a concurrent rehome
+  // moves before this commits.
+  const accountId = await withOrgTransaction(user.orgId, async () => {
+    const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
+    if (lockedDenied) return lockedDenied
+    const inserted = (await db.execute<{ id: string }>(sql`
+      insert into party_bank_accounts
+        (org_id, party_id, bank_name, country, currency, routing,
+         account_number_encrypted, account_last_four, approval_status, is_active,
+         approved_at, approved_by, submitted_by, submitted_at, created_by)
+      values (${user.orgId}, ${partyId}, ${body.bankName?.trim() ?? null}, ${country},
+              ${body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
+              ${encryptAccountNumber(accountNumber)}, ${accountNumber.slice(-4)},
+              'pending', false, null, null, ${user.id}, now(), ${user.id})
+      returning id
+    `))
+    return inserted.rows[0]!.id
+  })
+  if (accountId instanceof NextResponse) return accountId
 
   await runRecordFlows(
     { kind: 'on_create', source: 'ui' },
@@ -194,6 +202,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // db handle follows this pinned context, so a failure cannot publish only
   // part of the new bank-detail revision.
   return withOrgTransaction(user.orgId, async () => {
+    const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
+    if (lockedDenied) return lockedDenied
     // Any material edit re-enters approval: pending + inactive + approval
     // cleared (the source platform workflow's @OLDRECORD@ comparison, done natively).
     const updated = (await db.execute<{ id: string }>(sql`
@@ -328,6 +338,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   // Retirement and its fraud evidence are one commit unit; an audit failure
   // must leave the bank details available for a safe retry.
   return withOrgTransaction(user.orgId, async () => {
+    const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
+    if (lockedDenied) return lockedDenied
     // Bind the caller's canonical six-digit token as timestamptz; a Date or
     // millisecond JSON round-trip would spuriously miss a microsecond row.
     const updated = (await db.execute<{ id: string }>(sql`

@@ -6,7 +6,7 @@ import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
-import { denyOutsidePartyScope } from '../party-scope'
+import { denyLockedOutsidePartyScope, denyOutsidePartyScope } from '../party-scope'
 
 /**
  * A submit refusal raised INSIDE the submit transaction so the dispatch rolls
@@ -54,6 +54,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // and the loser sees the winner's live gate and refuses instead of
   // double-driving the flow.
   return withOrgTransaction(user.orgId, async () => {
+    const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
+    if (lockedDenied) return lockedDenied
     const existing = (await db.execute<{
       approvalStatus: string
       retiredAt: string | null
