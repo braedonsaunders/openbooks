@@ -38,7 +38,7 @@ function authzFor(orgId: string, userId: string, allowedSubsidiaryIds: Set<strin
       envKind: 'sandbox', productionOrgId: orgId, isSuperAdmin: false,
       homeUserId: userId, homeOrgId: orgId,
     },
-    permissions: new Set(['dashboard.read', 'gl.read']),
+    permissions: new Set(['dashboard.read', 'gl.read', 'assistant.use']),
     allowedSubsidiaryIds,
   }
 }
@@ -164,6 +164,66 @@ test('recent journal and personal draft lists omit records from hidden subsidiar
     assert.ok(!scoped.recentEntries.some((entry) => entry.id === hiddenEntry))
     assert.deepEqual(all.draftDocuments.map((document) => document.id).sort(), [hiddenDraft, visibleDraft].sort())
     assert.deepEqual(scoped.draftDocuments.map((document) => document.id), [visibleDraft])
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
+
+test('dashboard continuous-close counts include only work items with visible account lineage', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const actor = await withBypass(() => createScratchUser(scratch.orgId, 'Agent Scope Reader', 'admin'))
+    const hiddenSubsidiary = randomUUID()
+    const hiddenAccount = randomUUID()
+    const visibleId = randomUUID()
+    const hiddenId = randomUUID()
+    const unresolvedId = randomUUID()
+    const unassignedId = randomUUID()
+    const visibleRun = new Date(Date.now() - 60_000).toISOString()
+    const hiddenRun = new Date().toISOString()
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden finding entity', 'CAD', 'CA')
+      `)
+      await db.execute(sql`
+        update accounts set subsidiary_id = ${scratch.subsidiaryId}
+         where id = ${scratch.accounts.bank} and org_id = ${scratch.orgId}
+      `)
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
+        values (${hiddenAccount}, ${scratch.orgId}, '1084', 'Hidden finding account', 'asset_bank', ${hiddenSubsidiary}, false, true)
+      `)
+      for (const finding of [
+        { id: visibleId, subjectType: 'account', subjectId: scratch.accounts.bank, at: visibleRun, summary: {} },
+        { id: hiddenId, subjectType: 'account', subjectId: hiddenAccount, at: hiddenRun, summary: { proposedCommand: { tool: 'test', input: {} } } },
+        { id: unresolvedId, subjectType: 'account', subjectId: randomUUID(), at: hiddenRun, summary: {} },
+        { id: unassignedId, subjectType: null, subjectId: null, at: hiddenRun, summary: {} },
+      ]) {
+        await db.execute(sql`
+          insert into ai_work_items
+            (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity, status,
+             confidence, materiality, subject_type, subject_id, summary, first_detected_at, last_detected_at)
+          values
+            (${finding.id}, ${scratch.orgId}, 'accounting', 'scope_test', 'test', ${`fp-${finding.id}`},
+             'warning', 'open', 1, 100, ${finding.subjectType}, ${finding.subjectId},
+             ${JSON.stringify(finding.summary)}::jsonb, ${finding.at}::timestamptz, ${finding.at}::timestamptz)
+        `)
+      }
+    })
+
+    const widgets = ['kpi-agent-findings']
+    const unrestricted = await withOrgContext(scratch.orgId, () =>
+      loadDashboardMetrics(authzFor(scratch.orgId, actor, null), widgets),
+    )
+    const restricted = await withOrgContext(scratch.orgId, () =>
+      loadDashboardMetrics(authzFor(scratch.orgId, actor, new Set([scratch.subsidiaryId])), widgets),
+    )
+    assert.equal(unrestricted.agentFindingsOpen, 4)
+    assert.equal(unrestricted.agentFindingsProposals, 1)
+    assert.equal(restricted.agentFindingsOpen, 1)
+    assert.equal(restricted.agentFindingsProposals, 0)
+    assert.equal(restricted.agentFindingsLastRun, visibleRun)
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

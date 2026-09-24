@@ -1,10 +1,10 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { subsidiaryScopeAllows } from "../authz";
 import { resolveStoredHref } from "@openbooks/engine/src/navigation/nav-registry.ts";
 import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import type { ContinuousCloseWorkItem } from "../../app/(app)/continuous-close/WorkItemDrawer";
+import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectInScope, workItemSubjectScopeFilter } from "./work-item-subsidiary-scope";
 
 type WorkItemDetailRow = {
   id: string;
@@ -85,19 +85,15 @@ export async function loadWorkItemDetail(
     sql`, `,
   )})`;
   const detail = await db.execute<WorkItemDetailRow & { subject_subsidiary_id: string | null }>(sql`
-    select w.*, f.rating, subj.subsidiary_id as subject_subsidiary_id
+    select w.*, f.rating, subj_acct.subsidiary_id as subject_subsidiary_id
       from ai_work_items w
       left join ai_work_item_feedback f on f.work_item_id = w.id and f.org_id = w.org_id and f.user_id = ${userId}
-      left join accounts subj
-        on subj.id = w.subject_id and w.subject_type = 'account' and subj.org_id = w.org_id
+      ${WORK_ITEM_SUBJECT_JOIN}
      where w.id = ${itemId} and w.org_id = ${orgId} and w.agent_key in ${readableSql}
+       ${workItemSubjectScopeFilter(allowedSubsidiaryIds)}
   `);
   const row = detail.rows[0];
-  if (!row) return null;
-  // The subject's subsidiary resolves through the account join, in the same
-  // row as the evidence below: non-account subjects and unattributed
-  // accounts fail closed for restricted callers, like a missing item.
-  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subject_subsidiary_id)) return null;
+  if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subject_subsidiary_id)) return null;
   const evidence = await db.execute<EvidenceRow>(sql`
     select id, kind, source_type, source_id, data
       from ai_work_item_evidence where work_item_id = ${itemId} and org_id = ${orgId}

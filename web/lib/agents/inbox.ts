@@ -3,9 +3,9 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import { can, type Authz } from "../authz";
-import { uuidArray } from "@openbooks/engine/src/organization/subsidiaries.ts";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import type { FindingDir, FindingSort } from "../list/agent-findings";
+import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopeFilter } from "./work-item-subsidiary-scope";
 
 /**
  * Agent Workbench inbox read model. ONE resolver backs the /agents inbox, the
@@ -206,7 +206,7 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
     ${filters.hasProposal === true ? sql`and (w.summary ? 'proposedCommand')` : sql``}
     ${filters.hasProposal === false ? sql`and not (w.summary ? 'proposedCommand')` : sql``}
     ${filters.subsidiaryId ? sql`and subj_acct.subsidiary_id = ${filters.subsidiaryId}` : sql``}
-    ${authz.allowedSubsidiaryIds === null ? sql`` : sql`and subj_acct.subsidiary_id = any(${uuidArray([...authz.allowedSubsidiaryIds])}::uuid[])`}
+    ${workItemSubjectScopeFilter(authz.allowedSubsidiaryIds)}
     ${sinceValid ? sql`and w.last_detected_at > ${sinceValid.toISOString()}` : sql``}
     ${filters.assignedToMe ? sql`and w.assignee_user_id = ${authz.user.id}` : sql``}
     ${filters.unassignedOnly ? sql`and w.assignee_user_id is null and w.assignee_role is null` : sql``}
@@ -222,9 +222,7 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
     left join app_roles assignee_r
       on assignee_r.id::text = w.assignee_role and assignee_r.org_id = w.org_id`;
 
-  const subjectJoin = sql`left join accounts subj_acct
-      on subj_acct.id = w.subject_id and w.subject_type = 'account' and subj_acct.org_id = w.org_id
-    left join subsidiaries subj_sub on subj_sub.id = subj_acct.subsidiary_id and subj_sub.org_id = w.org_id`;
+  const subjectJoin = WORK_ITEM_SUBJECT_JOIN;
 
   const [rows, totalResult, packCounts, severityCounts, statusCounts, openActiveCount, subsidiaryCounts, proposalCount, mineCount, unassignedCount, overdueCount] =
     await Promise.all([

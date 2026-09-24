@@ -69,6 +69,7 @@ const hooks = registerHooks({
         shortCircuit: true,
         source: `
           export function sql(strings, ...values) { return { strings: Array.from(strings), values }; }
+          sql.join = (parts, separator) => ({ parts, separator });
           sql.raw = (value) => ({ raw: String(value) });
         `,
       };
@@ -117,6 +118,6 @@ test("a finding without subject lineage is not-found to a restricted caller", as
   // The canned row carries no subject_subsidiary_id (a non-account subject
   // resolves to null lineage): unrestricted callers still load it, but any
   // restricted scope must fail closed with the same null as a missing item.
-  const item = await loadWorkItemDetail("org-1", "user-1", "work-item-old", ["collections"], new Set(["sub-a"]));
+  const item = await loadWorkItemDetail("org-1", "user-1", "work-item-old", ["collections"], new Set(["00000000-0000-4000-8000-000000000001"]));
   assert.equal(item, null);
 });
