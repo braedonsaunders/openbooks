@@ -176,6 +176,8 @@ export interface OfferDrawerData {
   id: string
   applicationId: string
   requisitionId: string
+  /** Persisted legal entity display name, loader-resolved — never the raw id. */
+  employerName: string
   jobTitle: string
   proposedStartOn: string
   compensationAmount: string
@@ -190,7 +192,7 @@ export interface OfferDrawerData {
   closeHref: string
   /** HR-21 "Draft from evidence" link for the letter clauses (offer_letter_clauses kind). */
   draft: { href: string; label: string } | null
-  labels: { send: string; accept: string; decline: string; withdraw: string; reason: string; failed: string }
+  labels: { employer: string; send: string; accept: string; decline: string; withdraw: string; reason: string; failed: string }
 }
 
 /** The requisition flyout body: facts, pipeline chips, applications, islands. */
@@ -418,6 +420,9 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
     <div className="space-y-6">
       <div>
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.jobTitle}</h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {detail.labels.employer}: {detail.employerName}
+        </p>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           {detail.compensationAmount} {detail.compensationCurrency} {detail.compensationBasis} · {detail.proposedStartOn}
         </p>

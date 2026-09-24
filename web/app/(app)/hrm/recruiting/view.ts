@@ -538,13 +538,25 @@ export async function loadRecruitingPage(
   } else if (offerId) {
     try {
       const detail = await getOfferDetail({ orgId: authz.user.orgId, actorId: authz.user.id, offerId })
+      // The saved offer's legal entity: resolve the persisted employer's
+      // display name (never the raw id) so the reviewer sees which entity
+      // employs the candidate. Fail closed like the requisition branch.
+      const offerEmployerName = (await db.execute<{ name: string }>(sql`
+        select name from subsidiaries
+         where org_id = ${authz.user.orgId}::uuid and id = ${detail.employerSubsidiaryId}
+         limit 1`)).rows[0]?.name
+      if (!offerEmployerName) {
+        throw new Error(`offer ${offerId} names an employer outside this organization`)
+      }
       offer = {
         ...detail,
+        employerName: offerEmployerName,
         closeHref: recruitingHref(preservedParams, { status }),
         draft: draftLabel
           ? { href: `${recruitingHref(preservedParams, { status, offer: offerId })}&draft=offer_letter_clauses:${offerId}`, label: draftLabel }
           : null,
         labels: {
+          employer: t('recruiting.drawer.employer'),
           send: t('recruiting.offerActions.send'),
           accept: t('recruiting.offerActions.accept'),
           decline: t('recruiting.offerActions.decline'),
@@ -767,7 +779,14 @@ export async function loadRecruitingPage(
     drawer: drawerOpen
       ? {
           closeHref: recruitingHref(preservedParams, { status }),
-          title: t('recruiting.drawer.title', { number: requisition?.requisitionNumber ?? '' }),
+          // Record-type-correct drawer titles: an open offer or candidate
+          // drawer is titled for its own record (with the persisted
+          // employer as offer review context), never for the requisition.
+          title: offer
+            ? t('recruiting.drawer.offerTitle', { employer: offer.employerName })
+            : candidate
+              ? t('recruiting.drawer.candidateTitle', { name: candidate.displayName })
+              : t('recruiting.drawer.title', { number: requisition?.requisitionNumber ?? '' }),
           description: null,
           requisition,
           candidate,

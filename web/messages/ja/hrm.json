@@ -617,6 +617,9 @@
     },
     "drawer": {
       "title": "求人 {number}",
+      "offerTitle": "オファー · {employer}",
+      "candidateTitle": "候補者 {name}",
+      "employer": "雇用主",
       "pipeline": "パイプライン",
       "applications": "応募",
       "noApplications": "まだ候補者が紐付いていません。",
