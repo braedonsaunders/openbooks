@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db, schema, withBypassContext, withOrg } from "../platform/db.ts";
 import { addCalendarDays } from "../platform/business-date.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
@@ -256,12 +257,18 @@ async function fireSchedule(
   // flows, so the cursor lives on the automation row instead.
   const occurrence = lastCronOccurrenceBetween(trigger.cron, after, now, trigger.timezone);
   if (!occurrence) return { fired: false, failed: false };
+  // Scheduled firings run with the publisher's own authority: permission
+  // AND subsidiary scope resolve from the publisher, so a publisher whose
+  // scope no longer covers the subject fails loudly instead of firing
+  // cross-entity.
+  const scheduleActorId = await tickActorFor(automation);
   const result = await executeAutomation({
     orgId: automation.orgId,
-    actorId: await tickActorFor(automation),
+    actorId: scheduleActorId,
     automationId: automation.id,
     triggerPayload: { kind: "schedule", occurredAt: occurrence.toISOString() },
     fingerprint: `schedule:${occurrence.toISOString()}`,
+    allowedSubsidiaryIds: await actorAllowedSubsidiaryIds(db, automation.orgId, scheduleActorId),
   });
   if (result.status === "failed") {
     // The durable run row keeps the error and the recipe surfaces error;
@@ -293,6 +300,7 @@ async function fireDateRelative(
     : addDaysCivil(today, -trigger.offsetDays);
   const outcome = { fired: 0, failed: 0, errors: [] as string[] };
   const actorId = await tickActorFor(automation);
+  const dateRelativeScope = await actorAllowedSubsidiaryIds(db, automation.orgId, actorId);
   // Keyset pages over the whole match set in id order: a fixed LIMIT with
   // no cursor visited only the first 200 rows and starved the rest
   // forever. Page size stays 200; the loop ends on an empty page.
@@ -316,6 +324,7 @@ async function fireDateRelative(
           subjectId: row.id,
           triggerPayload: { kind: "date_relative", matchDate },
           fingerprint: `date_relative:${matchDate}:${row.id}`,
+          allowedSubsidiaryIds: dateRelativeScope,
         });
         // A failed subject keeps its run row but is not counted fired.
         // The loop continues past failures so every subject is attempted
@@ -440,6 +449,7 @@ async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: numbe
           previous: (event.payload as Record<string, unknown>)?.["previous"] as Record<string, unknown> | undefined,
           triggerPayload: { kind: "queued", eventKind: event.eventKind },
           fingerprint: `${event.eventKind}:${event.triggerFingerprint}`,
+          allowedSubsidiaryIds: await actorAllowedSubsidiaryIds(db, event.orgId, actorId),
         });
         if (result.status === "failed") {
           failed += 1;

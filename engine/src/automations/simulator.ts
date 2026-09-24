@@ -24,26 +24,61 @@ export type SimulationResult = {
   steps: RunStep[];
 };
 
-async function lastSubjectIds(orgId: string, entity: string, limit: number): Promise<string[]> {
-  const table = entity === "employment"
-    ? "worker_employments"
-    : entity === "leave_request"
-      ? "hrm_leave_requests"
-      : entity === "timesheet_week"
-        ? "timesheet_weeks"
-        : entity === "document" || entity === "expense_report"
-          ? "documents"
-          : entity === "requisition"
-            ? "hrm_requisitions"
-            : entity === "application"
-              ? "hrm_applications"
-              : entity === "review"
-                ? "hrm_reviews"
-                : entity === "enrollment"
-                  ? "hrm_benefit_enrollments"
-                  : entity === "position"
-                    ? "positions"
-                    : null;
+async function lastSubjectIds(
+  orgId: string,
+  entity: string,
+  limit: number,
+  scope: ReadonlySet<string> | null,
+): Promise<string[]> {
+  // Sampling must not enumerate another entity's records: only subjects
+  // whose subsidiary lineage the snapshot can prove are sampled for
+  // restricted callers. Entities without snapshot lineage sample nothing —
+  // those callers simulate with an explicit subject id instead. An empty
+  // scope sees nothing at all.
+  if (scope !== null) {
+    if (entity !== "employment" && entity !== "leave_request") return [];
+    if (scope.size === 0) return [];
+  }
+  const subsidiaryFilter =
+    scope === null
+      ? sql``
+      : sql`and ${entity === "leave_request" ? sql`e.employer_subsidiary_id` : sql`r.employer_subsidiary_id`} = any(${`{${[...scope].join(",")}}`}::uuid[])`;
+  if (entity === "employment") {
+    const rows = await db.execute<{ id: string }>(sql`
+      select r.id from worker_employments r
+       where r.org_id = ${orgId}
+       ${subsidiaryFilter}
+       order by r.created_at desc
+       limit ${limit}
+    `);
+    return rows.rows.map((r) => r.id);
+  }
+  if (entity === "leave_request") {
+    const rows = await db.execute<{ id: string }>(sql`
+      select r.id from hrm_leave_requests r
+      left join worker_employments e on e.org_id = r.org_id and e.id = r.employment_id
+       where r.org_id = ${orgId}
+       ${subsidiaryFilter}
+       order by r.created_at desc
+       limit ${limit}
+    `);
+    return rows.rows.map((r) => r.id);
+  }
+  const table = entity === "timesheet_week"
+    ? "timesheet_weeks"
+    : entity === "document" || entity === "expense_report"
+      ? "documents"
+      : entity === "requisition"
+        ? "hrm_requisitions"
+        : entity === "application"
+          ? "hrm_applications"
+          : entity === "review"
+            ? "hrm_reviews"
+            : entity === "enrollment"
+              ? "hrm_benefit_enrollments"
+              : entity === "position"
+                ? "positions"
+                : null;
   if (!table) return [];
   const rows = await db.execute<{ id: string }>(sql`
     select id from ${sql.identifier(table)}
@@ -61,6 +96,8 @@ export async function simulateAutomation(input: {
   subjectEntity?: string | null;
   subjectId?: string | null;
   sampleSize?: number;
+  /** Subsidiaries the actor may act on; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<SimulationResult[]> {
   const ok = await actorHasPermission(db, input.orgId, input.actorId, "automations.read");
   if (!ok) {
@@ -76,7 +113,7 @@ export async function simulateAutomation(input: {
     if (input.subjectId && input.subjectEntity) {
       pairs.push({ entity: input.subjectEntity, id: input.subjectId });
     } else if (input.subjectEntity) {
-      const ids = await lastSubjectIds(input.orgId, input.subjectEntity, input.sampleSize ?? 5);
+      const ids = await lastSubjectIds(input.orgId, input.subjectEntity, input.sampleSize ?? 5, input.allowedSubsidiaryIds);
       if (ids.length === 0) {
         throw new Error(`no ${input.subjectEntity} records to simulate against — create one first, or pick a subject explicitly`);
       }
@@ -94,6 +131,7 @@ export async function simulateAutomation(input: {
         subjectEntity: pair.entity,
         subjectId: pair.id,
         mode: "simulated",
+        allowedSubsidiaryIds: input.allowedSubsidiaryIds,
       });
       results.push({
         subjectEntity: pair.entity,

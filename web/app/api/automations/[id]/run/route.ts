@@ -38,6 +38,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       automationId: id,
       ...(body.subjectEntity ? { subjectEntity: body.subjectEntity, subjectId: body.subjectId ?? null } : {}),
       triggerPayload: { kind: "manual" },
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     });
     return NextResponse.json({ run }, { status: 201 });
   } catch (e) {

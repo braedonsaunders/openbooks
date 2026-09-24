@@ -190,6 +190,7 @@ test("idempotency: the same trigger twice collapses onto one run row", { skip: !
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: recipe.id,
+      allowedSubsidiaryIds: null,
       triggerPayload: { kind: "manual", probe: "a" },
       fingerprint: "manual:probe-a",
     });
@@ -198,6 +199,7 @@ test("idempotency: the same trigger twice collapses onto one run row", { skip: !
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: recipe.id,
+      allowedSubsidiaryIds: null,
       triggerPayload: { kind: "manual", probe: "a" },
       fingerprint: "manual:probe-a",
     });
@@ -234,6 +236,7 @@ test("a failed step rolls the run's writes back and surfaces the error as a run 
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: recipe.id,
+      allowedSubsidiaryIds: null,
       triggerPayload: { kind: "manual" },
     });
     assert.equal(result.status, "failed");
@@ -275,6 +278,7 @@ test("simulate writes nothing: row counts identical before and after", { skip: !
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: recipe.id,
+      allowedSubsidiaryIds: null,
       subjectEntity: "employment",
       subjectId: employmentId,
     });
@@ -326,6 +330,7 @@ test("a legacy stored webhook action fails the run by name and sends nothing", {
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: legacyId,
+      allowedSubsidiaryIds: null,
       triggerPayload: { kind: "manual" },
     });
     assert.equal(result.status, "failed");
@@ -374,6 +379,7 @@ test("deferred actions refuse at publish; a legacy delay fails the run and runs 
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: legacyId,
+      allowedSubsidiaryIds: null,
       triggerPayload: { kind: "manual" },
     });
     assert.equal(result.status, "failed");
@@ -387,6 +393,7 @@ test("deferred actions refuse at publish; a legacy delay fails the run and runs 
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: legacyId,
+      allowedSubsidiaryIds: null,
     });
     assert.equal(simulations[0]!.steps[0]!.status, "failed");
     assert.match(simulations[0]!.steps[0]!.error ?? "", /no resumable continuation/);
@@ -409,6 +416,7 @@ test("send_email renders the registered template into the outbox payload", { ski
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: recipe.id,
+      allowedSubsidiaryIds: null,
       triggerPayload: { kind: "manual" },
     });
     assert.equal(result.status, "succeeded");
@@ -457,6 +465,7 @@ test("send_email with an unknown template refuses at publish and in legacy runs"
       orgId: h.org.orgId,
       actorId: h.adminId,
       automationId: legacyId,
+      allowedSubsidiaryIds: null,
       triggerPayload: { kind: "manual" },
     });
     assert.equal(result.status, "failed");
@@ -479,7 +488,7 @@ test("feature-off: triggers must not fire", { skip: !DB }, async () => {
     await setFeatures(h.org.orgId, { automations: false });
     assert.equal(await automationsFeatureOn(h.org.orgId), false);
     await assert.rejects(
-      executeAutomation({ orgId: h.org.orgId, actorId: h.adminId, automationId: recipe.id, triggerPayload: {} }),
+      executeAutomation({ orgId: h.org.orgId, actorId: h.adminId, automationId: recipe.id, triggerPayload: {}, allowedSubsidiaryIds: null }),
       (e: unknown) => e instanceof AutomationExecuteError && /switched off/.test((e as Error).message),
     );
     const runs = (await db.execute<{ n: number }>(sql`

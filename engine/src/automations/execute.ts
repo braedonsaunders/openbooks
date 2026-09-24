@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withOrg, withTransactionSavepoint } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { getFlowAdapter } from "../flows/registry.ts";
 import { enqueueFlowEmail } from "../scheduling/outbox.ts";
 import { openProcessInTx } from "../hrm/processes.ts";
@@ -353,6 +354,8 @@ export async function executeAutomation(input: {
   triggerPayload?: Record<string, unknown>;
   mode?: ExecuteMode;
   fingerprint?: string;
+  /** Subsidiaries the actor may act on; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<AutomationRunResult> {
   const mode = input.mode ?? "live";
   // Feature-off: triggers must not fire from any caller (the routes 404
@@ -390,6 +393,22 @@ export async function executeAutomation(input: {
         );
       }
       subject = await loadSubjectSnapshot(input.orgId, input.subjectEntity, input.subjectId, input.previous ?? null);
+      // Subject scope: a subject whose snapshot carries subsidiary lineage
+      // outside the actor's scope answers exactly like a deleted record —
+      // the same gone-refusal in live mode, the same subject-less steps in
+      // simulate — so a restricted caller can neither run against nor probe
+      // another entity's employment or leave record. Entities without
+      // subsidiary lineage keep their existing behavior.
+      if (subject) {
+        const subsidiaryId = subject.scope?.subsidiaryId;
+        if (
+          typeof subsidiaryId === "string" &&
+          subsidiaryId !== "" &&
+          !subsidiaryScopeAllows(input.allowedSubsidiaryIds, subsidiaryId)
+        ) {
+          subject = null;
+        }
+      }
       if (!subject && mode === "live") {
         throw new AutomationExecuteError("the automation subject is gone — the record was deleted; nothing fired");
       }
