@@ -80,7 +80,10 @@ export function myCompSpec(data: NonNullable<Awaited<ReturnType<typeof loadMyCom
               rows: f('statements'),
               rowKey: item('id'),
               empty: { title: f('statementsEmpty') },
-              columns: [column('period', text(item('period'))), column('generated', text(item('generated')))],
+              columns: [
+                column(f('statementsColumns.period'), text(item('period'))),
+                column(f('statementsColumns.generated'), text(item('generated'))),
+              ],
             }),
           ],
         }),
