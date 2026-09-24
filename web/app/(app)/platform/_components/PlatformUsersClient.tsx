@@ -5,6 +5,7 @@ import { Badge, PageContainer } from '@braedonsaunders/appkit-ui'
 import { PlatformUsersAdmin, type PlatformUserRecord } from '@braedonsaunders/appkit-superadmin/react'
 import type { PlatformUser } from '../../../../lib/platform-admin'
 import { asDate } from '../../../../lib/platform-console'
+import { Pagination } from '../../../../components/pagination'
 
 function toUser(user: PlatformUser): PlatformUserRecord {
   return {
@@ -23,7 +24,21 @@ function toUser(user: PlatformUser): PlatformUserRecord {
   }
 }
 
-export function PlatformUsersClient({ rows }: { rows: PlatformUser[] }) {
+export function PlatformUsersClient({
+  rows,
+  total,
+  page,
+  perPage,
+  basePath,
+  params,
+}: {
+  rows: PlatformUser[]
+  total: number
+  page: number
+  perPage: number
+  basePath: string
+  params: Record<string, string | string[] | undefined>
+}) {
   const router = useRouter()
   const byId = Object.fromEntries(rows.map((row) => [row.id, row]))
   return (
@@ -69,6 +84,7 @@ export function PlatformUsersClient({ rows }: { rows: PlatformUser[] }) {
         ]}
         onSelectUser={(user) => router.push(`/platform/users/${user.id}`)}
       />
+      <Pagination basePath={basePath} currentParams={params} total={total} page={page} perPage={perPage} />
     </PageContainer>
   )
 }

@@ -3,17 +3,28 @@
 import { Badge, PageContainer, PageHeader, RecordList } from '@braedonsaunders/appkit-ui'
 import type { PlatformGrant, PlatformOrganization, PlatformUser } from '../../../../lib/platform-admin'
 import { asDate } from '../../../../lib/platform-console'
+import { Pagination } from '../../../../components/pagination'
 import { GrantAccessForm } from './GrantAccessForm'
 import { PlatformMutationButton } from './PlatformMutationButton'
 import { revokeAccessAction } from '../actions'
 
 export function PlatformAccessClient({
   grants,
+  total,
+  page,
+  perPage,
+  basePath,
+  params,
   members,
   organizations,
   actingUsers,
 }: {
   grants: PlatformGrant[]
+  total: number
+  page: number
+  perPage: number
+  basePath: string
+  params: Record<string, string | string[] | undefined>
   members: Pick<PlatformUser, 'id' | 'name' | 'email' | 'orgName' | 'orgId'>[]
   organizations: Pick<PlatformOrganization, 'id' | 'name'>[]
   actingUsers: Pick<PlatformUser, 'id' | 'name' | 'email' | 'orgName' | 'orgId'>[]
@@ -100,6 +111,7 @@ export function PlatformAccessClient({
           getRowId={(row) => row.id}
           empty={{ title: 'No grants', description: 'Grant access above to map a login into another organization.' }}
         />
+        <Pagination basePath={basePath} currentParams={params} total={total} page={page} perPage={perPage} />
       </div>
     </PageContainer>
   )

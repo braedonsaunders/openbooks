@@ -4,6 +4,7 @@ import { Badge, PageContainer } from '@braedonsaunders/appkit-ui'
 import { PlatformTenantsAdmin, type PlatformTenantRecord } from '@braedonsaunders/appkit-superadmin/react'
 import type { PlatformOrganization } from '../../../../lib/platform-admin'
 import { asDate } from '../../../../lib/platform-console'
+import { Pagination } from '../../../../components/pagination'
 import { enterOrganizationAction } from '../actions'
 
 function toTenant(org: PlatformOrganization): PlatformTenantRecord {
@@ -24,7 +25,21 @@ const ENV_VARIANT = {
   preview: 'secondary',
 } as const
 
-export function PlatformTenantsClient({ rows }: { rows: PlatformOrganization[] }) {
+export function PlatformTenantsClient({
+  rows,
+  total,
+  page,
+  perPage,
+  basePath,
+  params,
+}: {
+  rows: PlatformOrganization[]
+  total: number
+  page: number
+  perPage: number
+  basePath: string
+  params: Record<string, string | string[] | undefined>
+}) {
   const byId = Object.fromEntries(rows.map((row) => [row.id, row]))
   return (
     <PageContainer>
@@ -80,6 +95,7 @@ export function PlatformTenantsClient({ rows }: { rows: PlatformOrganization[] }
         }}
         viewAsLabel="Open"
       />
+      <Pagination basePath={basePath} currentParams={params} total={total} page={page} perPage={perPage} />
     </PageContainer>
   )
 }
