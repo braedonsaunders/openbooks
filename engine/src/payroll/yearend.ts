@@ -255,9 +255,13 @@ async function openingYearEndYtdByEmployee(
            b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
            b.taxable_ytd, b.tax_ytd, b.fica_withheld_ytd
       from payroll_opening_balances b
+      -- Strict country match, never a coalesce default: an opening whose
+      -- employee has no profile row is refused by the unknown-country guard
+      -- before any reader runs, so falling through to any country here would
+      -- only ever misattribute. (A profile row always carries a country.)
       join employee_payroll_profiles prof
         on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
-       and coalesce(prof.country, 'CA') = ${country}
+       and prof.country = ${country}
      where b.org_id = ${orgId} and b.tax_year = ${taxYear}
        and (
          coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
@@ -295,7 +299,7 @@ async function openingEmployeeProfiles(
       from parties p
       left join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
-       and coalesce(prof.country, 'CA') = ${country}
+       and prof.country = ${country}
      where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
   `));
   return new Map(rows.rows.map((row) => [row.employee_party_id, {
@@ -488,7 +492,9 @@ export async function t4Summary(
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
      where l.org_id = ${orgId} and s.tax_year = ${taxYear}
-       and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
+       -- A null component country is SHARED baseline (run-setup.ts), not an
+       -- unknown to default: shared rows apply to every pack's employees.
+       and l.kind = 'employer_contribution' and (pc.country is null or pc.country = 'CA')
        ${employerAccountFilter}
        ${employeeFilter}
   `));
@@ -724,23 +730,39 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   const header = (await db.execute<{
       display_name: string; employee_number: string | null; job_title: string | null;
       hired_on: string | null; terminated_on: string | null; sin_last3: string | null;
-      frequency: string | null; country: string; filing_account_id: string | null;
+      frequency: string | null; country: string | null; filing_account_id: string | null;
     }>(sql`
     select p.display_name, er.employee_number, er.job_title,
            er.hired_on::text as hired_on, er.terminated_on::text as terminated_on,
-           prof.sin_last3, sched.frequency, coalesce(prof.country, 'CA') as country,
+           prof.sin_last3, sched.frequency, prof.country as country,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
       left join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
       left join pay_schedules sched on sched.id = prof.pay_schedule_id and sched.org_id = prof.org_id
+     -- Strict country selection (single equals, never a coalesce default), with
+     -- the unknown-attribution path kept open: a missing profile row passes
+     -- with its null country so the TypeScript refusal below fires by name.
+     -- A genuinely foreign employee matches no row and gets the null.
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
-       and coalesce(prof.country, 'CA') = 'CA'
+       and (prof.country = 'CA' or prof.employee_party_id is null)
   `));
   const row = header.rows[0];
   if (!row) return null;
-
+  // No coalesce default anywhere on this path: the predicate below lets a
+  // missing profile row through WITH its null country (rather than folding
+  // it into Canada), and null is UNKNOWN — not Canadian. Refuse by name (the
+  // remedy names where the country is set) rather than filing a Service
+  // Canada return for an employee of unknown attribution; a genuinely foreign
+  // employee matches no row and still gets the documented null.
+  if (row.country == null) {
+    throw new PayrollError(
+      `${row.display_name} has no payroll country on file — a Record of Employment is a Service `
+      + "Canada return and cannot be issued without one. Set the employee's country on their "
+      + "Payroll tab before issuing the ROE",
+    );
+  }
   // Block 6 and the Block 15 window are STATUTORY declarations derived from
   // the employee's pay-period type. An employee with no pay schedule used to
   // get `?? "biweekly"` / `?? 27` / `?? "B"` — an invented filing. Refuse by
@@ -788,7 +810,9 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   return {
     employeePartyId,
     employeeName: row.display_name,
-    country: row.country ?? "CA",
+    // Guaranteed "CA" by the refusal and the foreign-null above — never a
+    // default. The XML builder re-asserts it where the file is written.
+    country: row.country,
     payrollReference: row.employee_number,
     filingAccount: filingAccountRef(row.filing_account_id, accounts),
     payPeriodType: periodType,
@@ -821,21 +845,34 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
   terminatedOn: string | null;
   lastPayDate: string | null;
 }[]> {
-  const rows = (await db.execute<{ id: string; display_name: string; terminated_on: string | null; last_pay_date: string | null }>(sql`
-    select p.id, p.display_name, er.terminated_on::text as terminated_on,
+  const rows = (await db.execute<{ id: string; display_name: string; country: string | null; terminated_on: string | null; last_pay_date: string | null }>(sql`
+    select p.id, p.display_name, prof.country as country, er.terminated_on::text as terminated_on,
            max(s.pay_date)::text as last_pay_date
       from parties p
       join pay_stubs s on s.employee_party_id = p.id and s.org_id = p.org_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      join employee_payroll_profiles prof
+      -- LEFT JOIN, not inner: a terminated employee with stubs but no profile
+      -- row must be REFUSED by name below, never silently dropped from the
+      -- "ROE due" list (nor folded into Canada, which the old coalesce did).
+      left join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where p.org_id = ${orgId} and s.tax_year = ${taxYear}
-       and coalesce(prof.country, 'CA') = 'CA'
+       and (prof.country is null or prof.country = 'CA')
        and (extract(year from er.terminated_on)::int = ${taxYear} or r.run_type = 'termination')
-     group by p.id, p.display_name, er.terminated_on
+     group by p.id, p.display_name, prof.country, er.terminated_on
      order by p.display_name
   `));
+  const unknown = rows.rows.filter((row) => row.country == null);
+  if (unknown.length > 0) {
+    const names = unknown.map((row) => row.display_name).sort().join(", ");
+    throw new PayrollError(
+      `an ROE cannot be listed for ${names} — ${
+        unknown.length === 1 ? "the employee has" : "they have"
+      } no payroll country on file. Set each employee's country on their Payroll tab `
+      + "before issuing Records of Employment",
+    );
+  }
   return rows.rows.map((row) => ({
     employeePartyId: row.id,
     employeeName: row.display_name,

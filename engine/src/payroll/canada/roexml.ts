@@ -200,9 +200,12 @@ export function renderRoeXml(input: {
   records: RoeRecordToFile[];
 }): string {
   const { employer, records } = input;
+  // Strict: a null country is UNKNOWN, not Canadian — this builder is
+  // separately callable with records the queries never produced, and the old
+  // `?? "CA"` filed those as Canadian returns.
   const foreign = records
-    .filter(({ record }) => (record.country ?? "CA") !== "CA")
-    .map(({ record }) => `${record.employeeName} (${record.country})`);
+    .filter(({ record }) => record.country !== "CA")
+    .map(({ record }) => `${record.employeeName} (${record.country ?? "unknown country"})`);
   if (foreign.length > 0) {
     throw new PayrollError(
       `a Record of Employment is a Service Canada return and can only be filed for a `

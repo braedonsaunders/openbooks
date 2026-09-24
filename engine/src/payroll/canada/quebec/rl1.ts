@@ -305,9 +305,12 @@ async function openingRl1YtdByEmployee(
            b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
            b.taxable_ytd, b.tax_ytd
       from payroll_opening_balances b
+      -- Strict country match, never a coalesce default: an opening whose
+      -- employee has no profile row is refused by the unknown-country guard
+      -- before this reader runs. (A profile row always carries a country.)
       join employee_payroll_profiles prof
         on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
-       and coalesce(prof.country, 'CA') = 'CA'
+       and prof.country = 'CA'
      where b.org_id = ${orgId} and b.tax_year = ${taxYear}
        and (
          coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
@@ -348,9 +351,11 @@ async function openingRl1Profiles(
     select p.id as employee_party_id, p.display_name,
            coalesce(prof.province, '') as province
       from parties p
+      -- Strict country match: a missing profile row yields no province, so an
+      -- opening with no QC evidence anywhere still conjures no Québec slip.
       left join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
-       and coalesce(prof.country, 'CA') = 'CA'
+       and prof.country = 'CA'
      where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
   `));
   return new Map(rows.rows.map((row) => [row.employee_party_id, {
@@ -420,7 +425,9 @@ async function rl1SummaryInSnapshot(
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
      where l.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'QC'
-       and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
+       -- A null component country is SHARED baseline, not an unknown to
+       -- default: shared rows apply to every pack's employees.
+       and l.kind = 'employer_contribution' and (pc.country is null or pc.country = 'CA')
   `));
   const total = (pick: (slip: Rl1Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");

@@ -95,11 +95,17 @@ export const UNASSIGNED_FILING_ACCOUNT: FilingAccountRef = {
  */
 export function effectiveFilingAccountSql(profileAlias: string) {
   const profile = sql.raw(profileAlias);
+  // Strict country match: a profile with no country gets NO default account
+  // (null = unassigned), never Canada's. The old `coalesce(..., 'CA')` folded
+  // an unattributed employee into a Canadian program account — a false filing
+  // identity. Prospective calculation refuses an unknown country earlier
+  // (`resolveEmployeePayrollContext`), and year-end refuses it in
+  // `assertPayrollCountryKnown`, so null here only ever means "unassigned".
   return sql`coalesce(
     ${profile}.filing_account_id,
     (select fa.id from payroll_filing_accounts fa
       where fa.org_id = ${profile}.org_id and fa.is_active and fa.is_default
-        and fa.country = coalesce(${profile}.country, 'CA')
+        and fa.country = ${profile}.country
       limit 1)
   )`;
 }
