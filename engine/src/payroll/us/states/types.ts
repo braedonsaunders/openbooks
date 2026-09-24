@@ -45,6 +45,9 @@ export type UsStatePayPeriod =
   | "weekly" | "biweekly" | "semimonthly" | "monthly"
   | "quarterly" | "semiannual" | "annual" | "daily";
 
+/** Whether the supplemental amount shares the regular wage payment. */
+export type UsSupplementalPaymentTiming = "combined" | "separate";
+
 /** Pay periods per year → the printed period name, or null when there is none. */
 export function payPeriodFor(periodsPerYear: number): UsStatePayPeriod | null {
   switch (periodsPerYear) {
@@ -106,6 +109,8 @@ export interface UsStateWithholdingInput {
   wages: string;
   /** Supplemental wages this period (bonus, commission, severance). */
   supplemental?: string;
+  /** Required by the pack dispatcher whenever supplemental wages are present. */
+  supplementalPaymentTiming?: UsSupplementalPaymentTiming;
   /**
    * Federal income tax withheld by the CURRENT paycheck's Pub 15-T pass.
    * Alabama and Oregon subtract this amount in their state formulas; it is a
