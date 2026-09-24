@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
@@ -24,7 +24,7 @@ import { useBusinessToday } from '../../../components/business-date-provider'
 import { exportCsv } from '../analytics/_ui/exportCsv'
 import { ResultsGrid, resultToCsv, type QueryResult } from './ResultsGrid'
 import { SchemaBrowser, type SchemaTable } from './SchemaBrowser'
-import { queryResponseError, readQueryResponse } from './query-response'
+import { queryResponseError, readQueryResponse, type QueryResponseMessages } from './query-response'
 import { SNIPPETS } from './snippets'
 
 const STARTER = `select a.number, a.name, sum(g.debit_total - g.credit_total) as balance
@@ -76,6 +76,15 @@ export function QueryConsole() {
   const [snippetName, setSnippetName] = useState('')
 
   const [editorH, setEditorH] = useState(260)
+  // Refusal wording in the operator locale for the response decoder below —
+  // the helper takes messages as arguments and never hardcodes English.
+  const responseMessages = useMemo<QueryResponseMessages>(
+    () => ({
+      emptyResponse: (status: number) => t('errors.emptyResponse', { status }),
+      invalidResponse: (status: number) => t('errors.invalidResponse', { status }),
+    }),
+    [t],
+  )
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const workbenchRef = useRef<HTMLDivElement>(null)
   const snippetNameRef = useRef<HTMLInputElement>(null)
@@ -104,15 +113,20 @@ export function QueryConsole() {
   useEffect(() => {
     let alive = true
     fetch('/api/query/schema')
-      .then(async (response) => ({ response, data: await readQueryResponse<{ tables?: unknown; error?: unknown }>(response) }))
+      .then(async (response) => ({
+        response,
+        data: await readQueryResponse<{ tables?: unknown; error?: unknown }>(response, responseMessages),
+      }))
       .then(({ response, data }) => {
         if (!alive) return
         if (!response.ok) {
-          setSchemaError(queryResponseError(data, response.status))
+          setSchemaError(
+            queryResponseError(data, response.status, t('errors.requestFailed', { status: response.status })),
+          )
           return
         }
         if (!Array.isArray(data.tables)) {
-          setSchemaError('Query service returned an invalid schema response')
+          setSchemaError(t('errors.invalidSchema'))
           return
         }
         setSchema(data.tables as SchemaTable[])
@@ -122,6 +136,7 @@ export function QueryConsole() {
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Persist draft (debounced-ish via effect on change).
@@ -157,10 +172,12 @@ export function QueryConsole() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sql, maxRows }),
       })
-      const data = await readQueryResponse<QueryResult & { error?: unknown }>(res)
-      if (!res.ok) throw new Error(queryResponseError(data, res.status))
+      const data = await readQueryResponse<QueryResult & { error?: unknown }>(res, responseMessages)
+      if (!res.ok) {
+        throw new Error(queryResponseError(data, res.status, t('errors.requestFailed', { status: res.status })))
+      }
       if (!Array.isArray(data.columns) || !Array.isArray(data.rows) || typeof data.rowCount !== 'number') {
-        throw new Error('Query service returned an invalid result')
+        throw new Error(t('errors.invalidResult'))
       }
       setResult(data)
       pushHistory({ sql: sql.trim(), at: Date.now(), ms: data.durationMs, rows: data.rowCount, ok: true })
@@ -171,7 +188,7 @@ export function QueryConsole() {
     } finally {
       setBusy(false)
     }
-  }, [maxRows, pushHistory])
+  }, [maxRows, pushHistory, responseMessages, t])
 
   const run = useCallback(async () => {
     const el = editorRef.current

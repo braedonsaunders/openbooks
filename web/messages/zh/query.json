@@ -10,6 +10,13 @@
   "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
   "failed": "失败",
   "queryError": "查询错误",
+  "errors": {
+    "emptyResponse": "查询服务返回了空响应 (HTTP {status})",
+    "invalidResponse": "查询服务返回了无效响应 (HTTP {status})",
+    "requestFailed": "查询请求失败 (HTTP {status})",
+    "invalidSchema": "查询服务返回了无效的架构响应",
+    "invalidResult": "查询服务返回了无效的结果"
+  },
   "rowCount": "{count, plural, one {# 行} other {# 行}}",
   "truncated": "已截断至 {max}",
   "ranSelection": "已运行选定内容",

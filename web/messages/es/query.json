@@ -10,6 +10,13 @@
   "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
   "failed": "Falló",
   "queryError": "Error de consulta",
+  "errors": {
+    "emptyResponse": "El servicio de consultas devolvió una respuesta vacía (HTTP {status})",
+    "invalidResponse": "El servicio de consultas devolvió una respuesta no válida (HTTP {status})",
+    "requestFailed": "La consulta falló (HTTP {status})",
+    "invalidSchema": "El servicio de consultas devolvió un esquema no válido",
+    "invalidResult": "El servicio de consultas devolvió un resultado no válido"
+  },
   "rowCount": "{count, plural, one {# fila} other {# filas}}",
   "truncated": "Truncado en {max}",
   "ranSelection": "Selección ejecutada",
