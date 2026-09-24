@@ -37,7 +37,7 @@ test("AR printed percents, midrange lookup, and dollar rounding", () => {
   // $23,050 × 3.4% − $287.97 = $495.73, rounded to $496.00.
   assert.equal(D(mulRateCents(U("23050"), pctToRate("3.4")) - U("287.97")), money("495.73"));
   assert.equal(arRoundToDollar(U("495.73")), U("496"));
-  assert.equal(arAnnualGrossTax(U("23054"), AR_RATES_2026), U("496"));
+  assert.equal(arAnnualGrossTax(U("97815.26"), AR_RATES_2026), U("3725"));
   // Published $100 phase-down cells: $96,001–$96,100 adjustment $269.30.
   assert.equal(arMidrangeLookup(U("96050"), AR_RATES_2026), U("96050"));
   assert.equal(
