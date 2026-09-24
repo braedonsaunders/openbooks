@@ -8,10 +8,23 @@ import {
   INVALID_SCHEDULED_SCRIPT_CRON_CODE,
 } from '@openbooks/engine/src/scripting/scripting.ts'
 import { validateScriptConfiguration as validate, type ScriptValidationError as ValidationError } from '@openbooks/engine/src/scripting/script-config.ts'
+import {
+  assertProductionEnvForScheduledScript,
+  SCHEDULED_SCRIPT_NON_PRODUCTION_CODE,
+  ScheduledScriptNonProductionError,
+} from '@openbooks/engine/src/scripting/scheduled-env.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
+
+/** The schedule would never fire outside production — refuse by name, nothing written. */
+function nonProductionResponse(error: ScheduledScriptNonProductionError): NextResponse {
+  return NextResponse.json(
+    { error: error.message, code: SCHEDULED_SCRIPT_NON_PRODUCTION_CODE, envKind: error.envKind },
+    { status: 409 },
+  )
+}
 
 function validationResponse(error: ValidationError): NextResponse {
   return NextResponse.json(
@@ -33,6 +46,17 @@ export async function POST(req: Request) {
   const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
   const nextRunAt = cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
+  // Creating an ACTIVE schedule outside production would never fire (the
+  // scanner only reads production orgs) — refuse by name before writing.
+  // Inactive scheduled scripts and other trigger points are unaffected.
+  if (cron && body.isActive !== false) {
+    try {
+      await assertProductionEnvForScheduledScript(user.orgId)
+    } catch (error) {
+      if (error instanceof ScheduledScriptNonProductionError) return nonProductionResponse(error)
+      throw error
+    }
+  }
   // A script can mint or mutate posted documents on every matching event, so
   // its creation is audited with the full row in the same transaction.
   const row = await db.transaction(async (tx) => {
@@ -85,6 +109,19 @@ export async function PATCH(req: Request) {
     // retain the scheduler's cursor, including PostgreSQL microseconds.
     const schedulingChanged = before.rows[0].trigger_point !== body.triggerPoint
       || before.rows[0].cron !== cron || before.rows[0].is_active !== (body.isActive !== false)
+    // Activating a schedule outside production would never fire (the
+    // scanner only reads production orgs) — refuse by name before
+    // writing. Name-only edits, deactivations, and other trigger points
+    // pass through, so legacy rows are never newly trapped by an
+    // unrelated edit.
+    if (schedulingChanged && cron && body.isActive !== false) {
+      try {
+        await assertProductionEnvForScheduledScript(user.orgId)
+      } catch (error) {
+        if (error instanceof ScheduledScriptNonProductionError) return nonProductionResponse(error)
+        throw error
+      }
+    }
     const nextRunAt = schedulingChanged
       ? (cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null)
       : sql`next_run_at`
