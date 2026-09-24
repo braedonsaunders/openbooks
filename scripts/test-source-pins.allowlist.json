@@ -134,7 +134,6 @@
     "web/app/(app)/hrm/my-leave/my-leave.test.ts": 5,
     "web/app/(app)/hrm/org-chart/org-chart-page.test.ts": 4,
     "web/app/(app)/hrm/performance/performance-page.test.ts": 4,
-    "web/app/(app)/hrm/positions/positions-page.test.ts": 5,
     "web/app/(app)/hrm/processes/processes-page.test.ts": 6,
     "web/app/(app)/hrm/recruiting/recruiting-page.test.ts": 6,
     "web/app/(app)/hrm/surveys/surveys-page.test.ts": 4,
