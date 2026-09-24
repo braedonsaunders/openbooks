@@ -30,6 +30,8 @@
 import { sql } from "drizzle-orm";
 import { add, neg } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
+import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
+import "./employee-facts.ts";
 import {
   type PayrollCountryPack,
   type PayrollJurisdiction,
@@ -38,6 +40,7 @@ import {
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculateIeStatutory, ieWeekNumber } from "./compute.ts";
 import { iePayeReconciliationFiling } from "./filings.ts";
+import { IE_EMPLOYEE_FACTS } from "./employee-facts.ts";
 import type {
   PayrollCertificate,
   PayrollPackCertificates,
@@ -178,7 +181,29 @@ const IE_RPN: PayrollCertificate = {
 
 const IE_CERTIFICATES: PayrollPackCertificates = {
   country: "IE",
-  certificates: [IE_RPN],
+  certificates: [IE_RPN, {
+    key: "ie_prsi_class",
+    form: "Employer PRSI class record",
+    label: "PRSI class",
+    scope: { level: "country" },
+    purpose: "withholding",
+    citation:
+      "DSP PRSI Class A rates (https://www.gov.ie/en/department-of-social-protection/publications/prsi-class-a-rates/); "
+      + "DSP PRSI Class M rates (https://www.gov.ie/en/department-of-social-protection/publications/prsi-class-m-rates/)",
+    summary:
+      "Employer-recorded PRSI class determined from the employee's circumstances and DSP rules. "
+      + "Class A and Class M are supported; other classes refuse by name.",
+    storage: "certificate_rows",
+    fields: [{
+      key: "prsi_class",
+      label: "PRSI class letter",
+      kind: "code",
+      required: true,
+      help:
+        "Enter the class established by the employer under DSP rules. Class M has no contribution; "
+        + "unhandled classes refuse rather than falling through to Class A.",
+    }],
+  }],
 };
 
 const IE_WITHHOLDING = {
@@ -483,6 +508,15 @@ export async function computeIeStatutory(
   const rpn = certificateFor("ie_rpn");
   const hasRpn = rpn !== null && rpn.onFile;
   const answer = (key: string): string | null => (hasRpn ? (rpn!.answers[key] ?? null) : null);
+  const prsiClassCertificate = certificateFor("ie_prsi_class");
+  const prsiClassRaw = empFact("IE", {
+    ie_prsi_class: prsiClassCertificate?.answers.prsi_class ?? null,
+  }, "ie_prsi_class");
+  // Preserve the no-RPN emergency refusal; the unused class placeholder is
+  // checked only once a Revenue notice makes the calculation operable.
+  const prsiClass = hasRpn
+    ? resolveEmployeeFact("IE", "ie_prsi_class", prsiClassRaw)
+    : prsiClassRaw ?? "";
   const ytd = await ieEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
 
   // Taxable pay is gross less ordinary employee pension contributions
@@ -521,6 +555,7 @@ export async function computeIeStatutory(
     uscPaidYtd: add(ytd.usc, rpnNum("prior_cumulative_usc")),
     uscExempt: hasRpn && (answer("usc_exempt") === "true"),
     uscReducedEligible: false,
+    prsiClass: prsiClass ?? "",
     elapsedPeriods: elapsed,
   });
 
@@ -616,7 +651,5 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
   computeStatutory: computeIeStatutory,
   statutoryEngineLabel: "PAYE",
   factorLabels: { ...IE_FACTOR_LABELS },
-  // No `emp` facts: the engine reads credits and cut-off points off the
-  // certificate answers, never off bare profile keys.
-  employeeFacts: [],
+  employeeFacts: IE_EMPLOYEE_FACTS,
 };

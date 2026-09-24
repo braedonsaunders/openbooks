@@ -66,12 +66,13 @@ describe("IE payroll pack", () => {
   it("declares the RPN certificate, not a W-4 clone", () => {
     const declared = IE_PAYROLL_PACK.certificates();
     assert.equal(declared.country, "IE");
-    assert.equal(declared.certificates.length, 1);
-    const [rpn] = declared.certificates;
+    assert.equal(declared.certificates.length, 2);
+    const [rpn, prsiClass] = declared.certificates;
     assert.ok(rpn, "RPN certificate declared");
     assert.equal(rpn.form, "RPN");
     assert.equal(rpn.key, "ie_rpn");
     assert.equal(rpn.storage, "certificate_rows");
+    assert.equal(prsiClass?.key, "ie_prsi_class");
     const fields = new Set(rpn.fields.map((field) => field.key));
     for (const key of [
       "tax_credits_total",
@@ -219,9 +220,65 @@ describe("IE payroll pack", () => {
     await assert.rejects(
       IE_PAYROLL_PACK.computeStatutory(stub({
         run: { pay_date: "2026-03-15" },
-        certificateFor: () => ({ onFile: true, answers: { pay_basis: "cumulative" } }),
+        certificateFor: (key: string) => key === "ie_rpn"
+          ? ({ onFile: true, answers: { pay_basis: "cumulative" } })
+          : ({ onFile: true, answers: { prsi_class: "A" } }),
       })),
       /missing its tax-credit total; obtain and file a complete RPN/,
     );
+  });
+
+  it("requires the PRSI class and prices Class M with no PRSI contribution", async () => {
+    const stub = (overrides: Record<string, unknown>) =>
+      ({
+        tx: {
+          execute: async () => ({ rows: [{ tax: "0", usc: "0", taxbase: "0", gross: "0" }] }),
+        },
+        orgId: "org",
+        documentId: "doc",
+        employeePartyId: "emp",
+        taxYear: 2026,
+        region: "IE",
+        run: {},
+        emp: {},
+        periodsPerYear: 52,
+        income: "850.00",
+        nonPeriodic: "0",
+        pensionable: "850.00",
+        insurable: "850.00",
+        deduction: () => "0",
+        pushStatutory: () => undefined,
+        certificateFor: () => null,
+        assertRegionSupported: () => undefined,
+        ...overrides,
+      }) as never;
+    const rpn = {
+      onFile: true,
+      answers: {
+        pay_basis: "cumulative",
+        tax_credits_total: "4000",
+        rate_band_total: "44000",
+      },
+    };
+    const common = {
+      run: { pay_date: "2026-03-15" },
+      certificateFor: (key: string) => key === "ie_rpn"
+        ? rpn
+        : null,
+    };
+    await assert.rejects(
+      IE_PAYROLL_PACK.computeStatutory(stub(common)),
+      /cannot calculate without PRSI class.*must not be priced as Class A/s,
+    );
+
+    const factors = await IE_PAYROLL_PACK.computeStatutory(stub({
+      ...common,
+      certificateFor: (key: string) => key === "ie_rpn"
+        ? rpn
+        : ({ onFile: true, answers: { prsi_class: "M" } }),
+    }));
+    assert.equal(factors.IE_SUBCLASS, "M");
+    assert.equal(factors.IE_PRSI_EE, "0.0000");
+    assert.equal(factors.IE_PRSI_ER, "0.0000");
   });
 });

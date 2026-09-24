@@ -29,6 +29,7 @@ function week1(pay: string, payDate = "2026-04-15"): IeStatutoryInput {
     periodsPerYear: 52,
     basis: "week1",
     hasRpn: true,
+    prsiClass: "A",
     taxCreditsAnnual: "4000",
     rateBandAnnual: "44000",
     taxablePayPeriod: pay,
