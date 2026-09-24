@@ -1037,7 +1037,7 @@ export async function moveFolder(
 export async function updateFolder(
   orgId: string,
   id: string,
-  patch: { name?: string; isPrivate?: boolean; isInactive?: boolean },
+  patch: { name?: string; isPrivate?: boolean },
   updatedBy: string,
 ): Promise<boolean> {
   const setParts: ReturnType<typeof sql.raw>[] = [
@@ -1051,7 +1051,6 @@ export async function updateFolder(
     // default to the user flipping the flag.
     if (patch.isPrivate) setParts.push(sql`owner_id = coalesce(owner_id, ${updatedBy})`)
   }
-  if (patch.isInactive !== undefined) setParts.push(sql`is_inactive = ${patch.isInactive}`)
   const r = (await db.execute<{ id: string }>(sql`
     update folders set ${sql.join(setParts, sql`, `)}
      where id = ${id} and org_id = ${orgId} and not is_system
@@ -1064,7 +1063,6 @@ export type FolderPatch = {
   parentId?: string | null
   name?: string
   isPrivate?: boolean
-  isInactive?: boolean
 }
 
 export type FolderPatchResult = { ok: true } | { ok: false; reason: 'not found' | 'forbidden' | 'cannot move folder' | 'cannot rename system folder' | 'cannot update system folder' }
@@ -1084,18 +1082,17 @@ export async function patchFolder(
 ): Promise<FolderPatchResult> {
   const hasParent = Object.prototype.hasOwnProperty.call(patch, 'parentId')
   const hasName = patch.name !== undefined
-  const hasFlags = patch.isPrivate !== undefined || patch.isInactive !== undefined
+  const hasFlags = patch.isPrivate !== undefined
   return runMutation(audit.executor, async (tx) => {
     const before = (await tx.execute<{
       id: string
       name: string
       parentId: string | null
       isPrivate: boolean
-      isInactive: boolean
       isSystem: boolean
     }>(sql`
       select id, name, parent_folder_id as "parentId", is_private as "isPrivate",
-             is_inactive as "isInactive", is_system as "isSystem"
+             is_system as "isSystem"
         from folders
        where id = ${id} and org_id = ${orgId}
        for update
@@ -1147,7 +1144,6 @@ export async function patchFolder(
       updates.push(sql`is_private = ${patch.isPrivate}`)
       if (patch.isPrivate) updates.push(sql`owner_id = coalesce(owner_id, ${updatedBy})`)
     }
-    if (patch.isInactive !== undefined) updates.push(sql`is_inactive = ${patch.isInactive}`)
     if (updates.length > 2) {
       await tx.execute(sql`
         update folders set ${sql.join(updates, sql`, `)}
@@ -1186,7 +1182,6 @@ export async function patchFolder(
         action: 'update',
         changes: {
           isPrivate: patch.isPrivate ?? before.isPrivate,
-          isInactive: patch.isInactive ?? before.isInactive,
         },
         executor: tx,
       })

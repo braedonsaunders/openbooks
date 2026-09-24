@@ -105,6 +105,21 @@ test('compound folder edits validate and audit as one transaction', { skip: !env
       select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'folders' and row_id = ${movableId}
     `)).rows[0]!
     assert.equal(successAudit.n, 2, 'move and rename evidence commit with the compound edit')
+
+    const cascadeRequired = await PATCH(
+      new Request('http://openbooks.test/api/file-cabinet/folders/x', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isInactive: true }),
+      }),
+      { params: Promise.resolve({ id: movableId }) },
+    )
+    assert.equal(cascadeRequired.status, 400)
+    assert.match((await cascadeRequired.json()).error, /use DELETE to trash the subtree/)
+    const remainsActive = (await db.execute<{ isInactive: boolean }>(sql`
+      select is_inactive as "isInactive" from folders where id = ${movableId} and org_id = ${org.orgId}
+    `)).rows[0]!
+    assert.equal(remainsActive.isInactive, false, 'PATCH must not trash just the root folder')
   } finally {
     state.authz = null
     await dropScratchOrg(org.orgId)
