@@ -46,7 +46,9 @@
     {
       "path": "engine/src/sync/applications.ts",
       "tests": [
+        "engine/src/sync/allocation.test.ts",
         "engine/src/sync/applications-current-entry.test.ts",
+        "engine/src/sync/link-currency.test.ts",
         "engine/src/sync/applications.integration.test.ts"
       ]
     },

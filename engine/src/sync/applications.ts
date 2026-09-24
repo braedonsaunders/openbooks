@@ -108,7 +108,7 @@ interface OpenLine {
   sign: string;
 }
 
-interface PendingApplication {
+export interface PendingApplication {
   fromLineId: string;
   toLineId: string;
   amount: bigint;
@@ -144,7 +144,7 @@ interface PendingApplication {
  * cannot drift. The caller holds the per-org advisory lock, which serializes
  * same-org reconciliations exactly as the `for update` row lock does there.
  */
-async function allocateFxEntryNumber(
+export async function allocateFxEntryNumber(
   client: { query: (text: string, params?: unknown[]) => Promise<{ rows: Array<{ one: number }> }> },
   orgId: string,
   preferred: string,
@@ -172,6 +172,159 @@ function transactionCapacity(base: bigint, transaction: bigint, fxRate: string):
   if (byBase < capacity) capacity = byBase;
   while (capacity > 0n && toUnits(mulRate(fromUnits(capacity), fxRate)) > base) capacity--;
   return capacity;
+}
+
+/**
+ * An open line as the allocator sees it: identity and compatibility
+ * dimensions plus the two remaining capacities. The reconciler passes its
+ * hydrated lines straight through (extra fields are ignored); the allocator
+ * decrements `remaining`/`remainingTransaction` IN PLACE so later pairs in
+ * the same batch see what earlier pairs consumed.
+ */
+export interface AllocatableLine {
+  lineId: string;
+  date: string;
+  accountId: string;
+  partyId: string | null;
+  subsidiaryId: string;
+  currency: string;
+  sign: string;
+  fxRate: string;
+  functionalCurrency: string;
+  bookId: string;
+  periodId: string;
+  documentId: string;
+  remaining: bigint;
+  remainingTransaction: bigint;
+}
+
+/**
+ * Settlement allocation for one (payment, applied) pair over hydrated
+ * open-line capacity. Pure money math: `want` is the pair's stated total
+ * resolved to functional, `have` what earlier runs already applied.
+ *
+ * A dropped remaining decrement here over-settles (the same line settles
+ * twice), and a dropped `unallocated` add hides a genuine source
+ * over-application — so this function carries its own behavioral suite
+ * (allocation.test.ts) asserting exact rows, exact remainings, and exact
+ * unallocated cents on multi-line and multi-cap cases.
+ */
+export function allocatePairApplications(
+  paymentRef: string,
+  payLines: AllocatableLine[],
+  appLines: AllocatableLine[],
+  want: bigint,
+  have: bigint,
+): { rows: PendingApplication[]; unallocated: bigint; alreadySettled: boolean } {
+  const rows: PendingApplication[] = [];
+  let remaining = want - have;
+  if (remaining <= 0n) return { rows, unallocated: 0n, alreadySettled: true };
+  // Journal line numbers are only meaningful inside their own entry. They
+  // do not provide an ordering relation between the payment and applied
+  // documents, so a two-pointer merge can discard a valid match when the
+  // compatible parties appear in opposite orders. For each payment line,
+  // search the remaining applied lines for a compatible counterpart instead.
+  // The arrays remain line-number sorted for deterministic allocation among
+  // multiple compatible lines, but compatibility—not cross-entry position—
+  // decides which rows can settle one another.
+  for (const payLine of payLines) {
+    while (
+      remaining > 0n &&
+      payLine.remaining > 0n &&
+      payLine.remainingTransaction > 0n
+    ) {
+      const appLine = appLines.find(
+        (candidate) =>
+          candidate.remaining > 0n &&
+          candidate.remainingTransaction > 0n &&
+          candidate.lineId !== payLine.lineId &&
+          candidate.accountId === payLine.accountId &&
+          candidate.partyId === payLine.partyId &&
+          candidate.subsidiaryId === payLine.subsidiaryId &&
+          candidate.currency === payLine.currency &&
+          candidate.sign !== payLine.sign,
+      );
+      if (!appLine) break;
+
+      const sourceCapacity = transactionCapacity(
+        remaining,
+        payLine.remainingTransaction,
+        payLine.fxRate,
+      );
+      const targetCapacity = transactionCapacity(
+        appLine.remaining,
+        appLine.remainingTransaction,
+        appLine.fxRate,
+      );
+      const transactionAlloc = sourceCapacity < targetCapacity
+        ? sourceCapacity
+        : targetCapacity;
+      if (transactionAlloc <= 0n) break;
+      const sourceAmount = toUnits(
+        mulRate(fromUnits(transactionAlloc), payLine.fxRate),
+      );
+      const targetAmount = toUnits(
+        mulRate(fromUnits(transactionAlloc), appLine.fxRate),
+      );
+      const sourceSigned = payLine.sign === "-1" ? -sourceAmount : sourceAmount;
+      const targetSigned = appLine.sign === "-1" ? -targetAmount : targetAmount;
+      rows.push({
+        fromLineId: payLine.lineId,
+        toLineId: appLine.lineId,
+        amount: targetAmount,
+        sourceAmount,
+        sourceTransactionAmount: transactionAlloc,
+        targetTransactionAmount: transactionAlloc,
+        date: payLine.date,
+        currency: payLine.currency,
+        fxGainLossEntryId: null,
+        fxAdjustment: -(sourceSigned + targetSigned),
+        paymentRef,
+        sourceDocumentId: payLine.documentId,
+        bookId: payLine.bookId,
+        periodId: payLine.periodId,
+        subsidiaryId: payLine.subsidiaryId,
+        accountId: payLine.accountId,
+        partyId: payLine.partyId,
+        functionalCurrency: payLine.functionalCurrency,
+      });
+      payLine.remaining -= sourceAmount;
+      payLine.remainingTransaction -= transactionAlloc;
+      appLine.remaining -= targetAmount;
+      appLine.remainingTransaction -= transactionAlloc;
+      remaining -= sourceAmount;
+    }
+    if (remaining <= 0n) break;
+  }
+  return { rows, unallocated: remaining, alreadySettled: false };
+}
+
+/**
+ * Group pending settlement rows into one realized-FX evidence entry per
+ * independent control dimension. A source payment can carry several AR/AP
+ * parties or subsidiaries; combining their adjustments would book the
+ * aggregate to whichever account happened to be encountered first.
+ */
+export function groupSettlementRows(rows: PendingApplication[]): Map<string, PendingApplication[]> {
+  const groups = new Map<string, PendingApplication[]>();
+  for (const row of rows) {
+    const groupKey = [
+      row.paymentRef,
+      row.subsidiaryId,
+      row.accountId,
+      row.partyId ?? "",
+      row.functionalCurrency,
+    ].join("|");
+    const group = groups.get(groupKey) ?? [];
+    group.push(row);
+    groups.set(groupKey, group);
+  }
+  return groups;
+}
+
+/** Net FX drift of one evidence group: zero means no entry is posted. */
+export function settlementGroupAdjustment(group: PendingApplication[]): bigint {
+  return group.reduce((total, row) => total + row.fxAdjustment, 0n);
 }
 
 export async function reconcileApplications(
@@ -374,109 +527,17 @@ export async function reconcileApplications(
       let want = 0n;
       for (const link of pairLinks) want += resolveLinkFunctional(link, firstPay);
       const have = existingPair.get(key) ?? 0n;
-      let remaining = want - have;
-      if (remaining <= 0n) { alreadySettled++; continue; }
-      // Journal line numbers are only meaningful inside their own entry. They
-      // do not provide an ordering relation between the payment and applied
-      // documents, so a two-pointer merge can discard a valid match when the
-      // compatible parties appear in opposite orders. For each payment line,
-      // search the remaining applied lines for a compatible counterpart instead.
-      // The arrays remain line-number sorted for deterministic allocation among
-      // multiple compatible lines, but compatibility—not cross-entry position—
-      // decides which rows can settle one another.
-      for (const payLine of payLines) {
-        while (
-          remaining > 0n &&
-          payLine.remaining > 0n &&
-          payLine.remainingTransaction > 0n
-        ) {
-          const appLine = appLines.find(
-            (candidate) =>
-              candidate.remaining > 0n &&
-              candidate.remainingTransaction > 0n &&
-              candidate.lineId !== payLine.lineId &&
-              candidate.accountId === payLine.accountId &&
-              candidate.partyId === payLine.partyId &&
-              candidate.subsidiaryId === payLine.subsidiaryId &&
-              candidate.currency === payLine.currency &&
-              candidate.sign !== payLine.sign,
-          );
-          if (!appLine) break;
-
-          const sourceCapacity = transactionCapacity(
-            remaining,
-            payLine.remainingTransaction,
-            payLine.fxRate,
-          );
-          const targetCapacity = transactionCapacity(
-            appLine.remaining,
-            appLine.remainingTransaction,
-            appLine.fxRate,
-          );
-          const transactionAlloc = sourceCapacity < targetCapacity
-            ? sourceCapacity
-            : targetCapacity;
-          if (transactionAlloc <= 0n) break;
-          const sourceAmount = toUnits(
-            mulRate(fromUnits(transactionAlloc), payLine.fxRate),
-          );
-          const targetAmount = toUnits(
-            mulRate(fromUnits(transactionAlloc), appLine.fxRate),
-          );
-          const sourceSigned = payLine.sign === "-1" ? -sourceAmount : sourceAmount;
-          const targetSigned = appLine.sign === "-1" ? -targetAmount : targetAmount;
-          toInsert.push({
-            fromLineId: payLine.lineId,
-            toLineId: appLine.lineId,
-            amount: targetAmount,
-            sourceAmount,
-            sourceTransactionAmount: transactionAlloc,
-            targetTransactionAmount: transactionAlloc,
-            date: payLine.date,
-            currency: payLine.currency,
-            fxGainLossEntryId: null,
-            fxAdjustment: -(sourceSigned + targetSigned),
-            paymentRef,
-            sourceDocumentId: payLine.documentId,
-            bookId: payLine.bookId,
-            periodId: payLine.periodId,
-            subsidiaryId: payLine.subsidiaryId,
-            accountId: payLine.accountId,
-            partyId: payLine.partyId,
-            functionalCurrency: payLine.functionalCurrency,
-          });
-          payLine.remaining -= sourceAmount;
-          payLine.remainingTransaction -= transactionAlloc;
-          appLine.remaining -= targetAmount;
-          appLine.remainingTransaction -= transactionAlloc;
-          remaining -= sourceAmount;
-        }
-        if (remaining <= 0n) break;
-      }
-      unallocated += remaining;
+      const allocation = allocatePairApplications(paymentRef, payLines, appLines, want, have);
+      if (allocation.alreadySettled) { alreadySettled++; continue; }
+      toInsert.push(...allocation.rows);
+      unallocated += allocation.unallocated;
     }
 
     // A foreign-currency settlement may consume different functional carrying
     // values on its two sides even though the transaction amounts match. Post
     // one realized-FX journal per payment document and link every application
     // in that payment to the immutable evidence entry.
-    const fxGroups = new Map<string, PendingApplication[]>();
-    for (const row of toInsert) {
-      // Keep independent control dimensions in separate entries. A source
-      // payment can carry several AR/AP parties or subsidiaries; combining
-      // their adjustments would book the aggregate to whichever account
-      // happened to be encountered first.
-      const groupKey = [
-        row.paymentRef,
-        row.subsidiaryId,
-        row.accountId,
-        row.partyId ?? "",
-        row.functionalCurrency,
-      ].join("|");
-      const group = fxGroups.get(groupKey) ?? [];
-      group.push(row);
-      fxGroups.set(groupKey, group);
-    }
+    const fxGroups = groupSettlementRows(toInsert);
     // Re-verify every endpoint's entry is still posted, immediately before
     // writing. The endpoint locks above serialize manual applications, but a
     // controlled void reverses entries without taking line locks: it can
@@ -505,7 +566,7 @@ export async function reconcileApplications(
     }
     const fxAccountByCurrency = new Map<string, string>();
     for (const group of fxGroups.values()) {
-      const adjustment = group.reduce((total, row) => total + row.fxAdjustment, 0n);
+      const adjustment = settlementGroupAdjustment(group);
       if (adjustment === 0n) continue;
       const first = group[0]!;
       let fxAccountId = fxAccountByCurrency.get(first.functionalCurrency);
