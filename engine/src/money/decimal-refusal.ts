@@ -47,7 +47,10 @@ export type DecimalNullCause =
   | { cause: 'scientific' }
   | { cause: 'not-a-number' }
 
-const PLAIN_DECIMAL = /^([+-]?)(\d+)(?:\.(\d*))?$/
+// Same grammar as canonicalDecimal (exact-decimal.ts): plain digits with an
+// optional fraction, or a leading-dot fraction. A plain shape that reaches
+// the classifier was refused for scale by construction.
+const PLAIN_DECIMAL = /^([+-]?)(\d+(?:\.(\d*))?|\.(\d+))$/
 const GROUPING_SEPARATORS = [',', '_', "'", '\u2019', ' ', '\u00a0', '\u2009']
 const GROUPING_DISPLAY: Record<string, string> = { ' ': 'space', '\u00a0': 'non-breaking space', '\u2009': 'thin space' }
 const CURRENCY_SYMBOLS = ['$', '€', '£', '¥', '₹', '₩']
@@ -60,7 +63,7 @@ export function decimalNullCause(raw: unknown): DecimalNullCause {
   const plain = PLAIN_DECIMAL.exec(text)
   // A plain shape with an acceptable scale would not have refused, so a plain
   // shape here is over scale by construction.
-  if (plain) return { cause: 'scale', decimals: plain[3]?.length ?? 0 }
+  if (plain) return { cause: 'scale', decimals: (plain[3] ?? plain[4] ?? '').length }
   const ungrouped = text.replace(/[,_'\u2019\s\u00a0\u2009]/g, '')
   if (ungrouped !== text && PLAIN_DECIMAL.test(ungrouped)) {
     // When a dot and a comma both appear, the last one is the decimal

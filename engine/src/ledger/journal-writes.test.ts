@@ -38,6 +38,18 @@ test("a balanced two-line journal validates and normalizes", () => {
   assert.equal(v.lines[1]!.amount, "-100.5000");
 });
 
+test("leading-dot amounts post like the kernel reads them", () => {
+  const v = validateJournalInput({
+    documentDate: "2026-07-16",
+    lines: [
+      { accountId: A, amount: ".5" },
+      { accountId: B, amount: "-.5" },
+    ],
+  });
+  assert.equal(v.lines[0]!.amount, "0.5000");
+  assert.equal(v.lines[1]!.amount, "-0.5000");
+});
+
 test("account codes are accepted in place of ids", () => {
   const v = validateJournalInput({
     documentDate: "2026-07-16",

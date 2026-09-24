@@ -3,12 +3,17 @@
  * form coercion from crossing JavaScript's binary floating-point boundary. */
 
 export function canonicalDecimal(value: unknown, maxScale = 4): string | null {
+  // One grammar with the money kernel (money.ts toUnits/parseExactDecimal):
+  // an optional sign, digits with an optional fraction, or a leading-dot
+  // fraction (".5" normalizes to "0.5"). A trailing dot ("5.") is the
+  // zero-length fraction the kernel accepts and normalizes to "5".
   const raw = String(value ?? "").trim();
-  const match = raw.match(/^([+-]?)(\d+)(?:\.(\d*))?$/);
-  if (!match || maxScale < 0 || (match[3]?.length ?? 0) > maxScale) return null;
+  const match = raw.match(/^([+-]?)(\d+(?:\.(\d*))?|\.(\d+))$/);
+  const fractionRaw = match?.[3] ?? match?.[4] ?? "";
+  if (!match || maxScale < 0 || fractionRaw.length > maxScale) return null;
   const negative = match[1] === "-";
-  const whole = match[2]!.replace(/^0+(?=\d)/, "");
-  const fraction = (match[3] ?? "").replace(/0+$/, "");
+  const whole = (match[2]!.split(".")[0] || "0").replace(/^0+(?=\d)/, "");
+  const fraction = fractionRaw.replace(/0+$/, "");
   const zero = /^0+$/.test(whole) && fraction === "";
   return `${negative && !zero ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
