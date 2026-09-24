@@ -625,20 +625,53 @@ test("a restricted caller cannot save org-wide provider config, and nothing pers
   }
 });
 
-test("a restricted caller cannot point a surcharge rule at another entity's fee account", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("restricted callers cannot write org-wide surcharge rules, even with a foreign fee account", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const f = await seed();
   try {
     const own = await ownSubsidiaryId(f.orgId);
     const foreign = await seedForeignEntity(f.orgId, own);
     authorizeScope(f, new Set([own]));
     const res = await POST(postRequest(baseRule({ feeIncomeAccountId: foreign.incomeAccountId })));
-    assert.equal(res.status, 422);
-    assert.deepEqual(await res.json(), { error: "fee income account not found" });
+    assert.equal(res.status, 403);
+    assert.deepEqual(await res.json(), { error: "requires unrestricted subsidiary access" });
     assert.deepEqual(await storedRules(f.orgId), []);
-    // Their own scope still works: the shared-chart fee account saves.
-    const allowed = await POST(postRequest(baseRule({ feeIncomeAccountId: f.revenueAccount })));
-    assert.equal(allowed.status, 200);
-    assert.equal((await storedRules(f.orgId)).length, 1);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("surcharge rule save and delete require unrestricted subsidiary scope", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    const own = await ownSubsidiaryId(f.orgId);
+    authorize(f);
+    const created = await POST(postRequest(baseRule({
+      name: "Org-wide card fee",
+      feeIncomeAccountId: f.revenueAccount,
+    })));
+    assert.equal(created.status, 200);
+    const [before] = await storedRules(f.orgId);
+    assert.ok(before);
+
+    authorizeScope(f, new Set([own]));
+    const refusedSave = await POST(postRequest(baseRule({
+      id: before.id,
+      name: "Restricted edit",
+      feeIncomeAccountId: f.revenueAccount,
+    })));
+    assert.equal(refusedSave.status, 403);
+    assert.deepEqual(await refusedSave.json(), { error: "requires unrestricted subsidiary access" });
+
+    const refusedDelete = await POST(postRequest({ action: "deleteRule", id: before.id }));
+    assert.equal(refusedDelete.status, 403);
+    assert.deepEqual(await refusedDelete.json(), { error: "requires unrestricted subsidiary access" });
+
+    const after = await storedRules(f.orgId);
+    assert.equal(after.length, 1);
+    assert.equal(after[0]!.name, "Org-wide card fee");
+    assert.equal(after[0]!.isActive, true);
+    assert.equal((await audits(f.orgId)).length, 1, "refused writes produce no audit rows");
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);

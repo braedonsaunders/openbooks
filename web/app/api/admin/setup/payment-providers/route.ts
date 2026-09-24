@@ -153,6 +153,8 @@ export async function POST(req: Request) {
   const orgId = gate.user.orgId;
 
   if (body.action === "saveRule") {
+    const unrestrictedScope = guardUnrestrictedScope(gate);
+    if (unrestrictedScope) return unrestrictedScope;
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const calculation = body.calculation;
     if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
@@ -384,6 +386,8 @@ export async function POST(req: Request) {
   }
 
   if (body.action === "deleteRule") {
+    const unrestrictedScope = guardUnrestrictedScope(gate);
+    if (unrestrictedScope) return unrestrictedScope;
     if (typeof body.id !== "string" || !isUuid(body.id)) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
