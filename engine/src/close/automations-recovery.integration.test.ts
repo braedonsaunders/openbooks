@@ -631,3 +631,40 @@ test("a resumed start_flow attempt still finishes a crashed running flow run", {
     assert.equal(memo, "latched");
   });
 });
+
+test("a run_allocation rule routes into the allocation scheduler instead of failing as unsupported", { skip: !DB }, async () => {
+  await withProbe(async (fixture, _actors, runId) => {
+    // The allocations feature gates the close action, not the router: the
+    // router must reach runAllocationCloseAction, which then enforces it.
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(
+        settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
+      where id = ${fixture.orgId}
+    `);
+    const ruleId = await seedRule({
+      orgId: fixture.orgId,
+      action: "run_allocation",
+      config: { ruleIds: "all" },
+    });
+    const eventKey = `probe:${randomUUID()}`;
+
+    const result = await runCloseAutomations({
+      orgId: fixture.orgId,
+      runId,
+      trigger: "run_started",
+      eventKey,
+    });
+    // No allocation rules exist, so the action previews nothing — but the
+    // routing itself must succeed. Without the run_allocation branch the
+    // engine records `unsupported close automation action` and fails.
+    assert.deepEqual(result, { completed: 1, failed: 0 });
+
+    const executions = (await db.execute<{ status: string }>(sql`
+      select status from close_automation_executions
+       where org_id = ${fixture.orgId} and rule_id = ${ruleId} and event_key = ${eventKey}
+    `)).rows;
+    assert.equal(executions.length, 1);
+    assert.equal(executions[0]!.status, "completed");
+  });
+});
