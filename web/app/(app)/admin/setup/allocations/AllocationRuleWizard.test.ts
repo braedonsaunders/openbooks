@@ -1,72 +1,51 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import {
+  allowsUntagged,
+  defaultWizardDraft,
+  nextTargetWeight,
+  sourceFilterComplete,
+  wizardStepComplete,
+} from './rule-wizard'
 
-const wizardSource = readFileSync(fileURLToPath(new URL('./AllocationRuleWizard.tsx', import.meta.url)), 'utf8')
-const drawerSource = readFileSync(fileURLToPath(new URL('./RuleDrawer.tsx', import.meta.url)), 'utf8')
-const shellSource = readFileSync(fileURLToPath(new URL('../wizard/WizardShell.tsx', import.meta.url)), 'utf8')
-
-test('new-rule create is the house WizardShell, not a second stepper', () => {
-  assert.match(wizardSource, /<WizardShell/)
-  assert.match(wizardSource, /testId="allocation-rule-wizard"/)
-  assert.match(drawerSource, /<AllocationRuleWizard/)
-  assert.ok(!wizardSource.includes('<UrlDrawer'), 'create is the full-screen shell, not a skinny drawer')
+// The create wizard's source step gates on matcher-dimension semantics: a
+// `specific` filter with no picked values cannot advance, while `any` and
+// `untagged` are complete on their own. Hand-computed against the draft
+// shape, never through the component.
+test('a specific source filter is incomplete until values are picked', () => {
+  assert.equal(sourceFilterComplete({ mode: 'any', ids: [] }), true)
+  assert.equal(sourceFilterComplete({ mode: 'untagged', ids: [] }), true)
+  assert.equal(sourceFilterComplete({ mode: 'specific', ids: [] }), false)
+  assert.equal(sourceFilterComplete({ mode: 'specific', ids: ['dept-1'] }), true)
 })
 
-test('wizard walks when / source / split / targets / policy / review', () => {
-  for (const step of ['when', 'source', 'split', 'targets', 'policy', 'review']) {
-    assert.ok(wizardSource.includes(`step === '${step}'`), `${step} step must render`)
+test('the source step cannot advance with an unpicked specific filter', () => {
+  const draft = defaultWizardDraft()
+  draft.name = 'Overhead split'
+  draft.key = 'overhead-split'
+  draft.sourceFilters.department = { mode: 'specific', ids: [] }
+  assert.equal(wizardStepComplete('source', draft), false)
+  draft.sourceFilters.department = { mode: 'specific', ids: ['dept-1'] }
+  assert.equal(wizardStepComplete('source', draft), true)
+})
+
+test('untagged pooling is allowed only on taggable dimensions', () => {
+  for (const key of ['department', 'location', 'class', 'project']) {
+    assert.equal(allowsUntagged(key), true)
   }
-  assert.match(wizardSource, /wizard\.when\.entry\.title/)
-  assert.match(wizardSource, /wizard\.when\.period\.title/)
-  assert.match(wizardSource, /wizard\.when\.post\.title/)
-  assert.match(wizardSource, /wizard\.split\.ratio\.title/)
-  assert.match(wizardSource, /wizard\.split\.driver\.title/)
-})
-
-test('wizard writes through the existing rule APIs then opens the editor', () => {
-  for (const fragment of [
-    '/api/allocations/rules',
-    '/versions/${',
-    '/targets',
-    '/publish',
-    '/api/allocations/options',
-    '/api/allocations/drivers',
-    'hrefWithRule',
-  ]) {
-    assert.ok(wizardSource.includes(fragment), `${fragment} must be wired`)
+  for (const key of ['party', 'item', 'subsidiary']) {
+    assert.equal(allowsUntagged(key), false)
   }
-  assert.match(wizardSource, /definitionPayload/)
-  assert.match(wizardSource, /wizardTargetPayload/)
-  assert.match(wizardSource, /wizardDefinitionForm/)
 })
 
-test('wizard copy is catalogued and never interpolated as a key', () => {
-  assert.ok(!/t\(`[^`]*\$\{/.test(wizardSource), 'no dynamic i18n keys')
-  assert.ok(wizardSource.includes('transactionTypes.vendorBill'), 'transaction types reuse common.*')
-  assert.ok(wizardSource.includes('transactionTypes.journal'), 'journals are a first-class type')
-})
-
-test('destination SearchSelect sits above the wizard scrim', () => {
-  assert.match(shellSource, /z-50/)
-  assert.ok(!shellSource.includes('z-[100]'), 'wizard must not cover SearchSelect (z-[60])')
-  assert.match(wizardSource, /<SearchSelect/)
-  assert.match(wizardSource, /wizard\.targets\.value/)
-})
-
-test('source and destination pickers cover every matcher dimension', () => {
-  for (const fragment of [
-    'SOURCE_FILTER_KEYS',
-    'sourceExtraDims',
-    'subsidiaries',
-    'parties',
-    'items',
-    'segments',
-    'BUILTIN_TARGET_DIMENSIONS',
-  ]) {
-    assert.ok(wizardSource.includes(fragment), `${fragment} must be wired`)
-  }
-  assert.ok(!wizardSource.includes('sourceDepartmentMode'), 'department-only source cards are gone')
-  assert.ok(!wizardSource.includes('sourceDepartmentIds'), 'department chip wall is gone')
+test('the next target weight follows the row count', () => {
+  const draft = defaultWizardDraft()
+  assert.equal(nextTargetWeight(draft), '5')
+  draft.targets = [{ valueId: 'a', weight: '1' }]
+  assert.equal(nextTargetWeight(draft), '2')
+  draft.targets = [
+    { valueId: 'a', weight: '1' },
+    { valueId: 'b', weight: '2' },
+  ]
+  assert.equal(nextTargetWeight(draft), '3')
 })
