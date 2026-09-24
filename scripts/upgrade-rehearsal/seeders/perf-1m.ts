@@ -812,14 +812,21 @@ async function main(): Promise<void> {
     }
     // 0301 item_price_schedules on the auto-created BASE level. The table is
     // born in 0244, so sources older than that have no legacy rows by
-    // construction — skip when the table does not exist yet.
-    const levels = await db.execute<{ id: string }>(sql`
-      select l.id from price_levels l
-       where l.org_id = ${orgId} and l.code = 'BASE'
-         and exists (select 1 from information_schema.tables
-                      where table_schema = 'public' and table_name = 'price_levels')
-       limit 1`);
-    const baseLevelId = levels.rows[0]?.id ?? null;
+    // construction — skip when the table does not exist yet. The catalog
+    // probe runs first on its own: naming the absent table anywhere in the
+    // level query (even beside an EXISTS guard) fails with
+    // undefined_table before the guard is evaluated.
+    const catalog = await db.execute<{ present: boolean }>(sql`
+      select exists (select 1 from information_schema.tables
+                      where table_schema = 'public' and table_name = 'price_levels') as present`);
+    let baseLevelId: string | null = null;
+    if (catalog.rows[0]?.present === true) {
+      const levels = await db.execute<{ id: string }>(sql`
+        select l.id from price_levels l
+         where l.org_id = ${orgId} and l.code = 'BASE'
+         limit 1`);
+      baseLevelId = levels.rows[0]?.id ?? null;
+    }
     if (baseLevelId) {
       for (const [, row] of rateItems.rows.entries()) {
         await db.execute(sql`
