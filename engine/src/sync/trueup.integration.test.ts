@@ -325,3 +325,58 @@ test(
     }
   },
 );
+
+test(
+  "GL true-up to a deactivated account refuses by name with the remedy",
+  { skip: !DB },
+  async () => {
+    // G9: true-up residuals ran under the migration flag, which waived the
+    // inactive-account refusal, so a user-launched sync silently posted to
+    // a deactivated account. Residuals are ordinary postings: the run must
+    // refuse, naming the account and telling the operator to reactivate it
+    // or map the posting to an active account.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      await db.execute(sql`
+        update accounts
+           set custom = jsonb_set(custom, '{parityRef}', '"A"'::jsonb)
+         where org_id = ${org.orgId} and id = ${org.accounts.adjustment}
+      `);
+      await db.execute(sql`
+        update accounts
+           set custom = jsonb_set(custom, '{parityRef}', '"B"'::jsonb)
+         where org_id = ${org.orgId} and id = ${org.accounts.clearing}
+      `);
+      await db.execute(sql`
+        update accounts set is_active = false
+         where org_id = ${org.orgId} and id = ${org.accounts.adjustment}
+      `);
+      const source = {
+        name: "inactive-source",
+        refKey: "parityRef",
+        baseCurrency: "CAD",
+        monthlyActivity: async (): Promise<SourceAccountMonthRow[]> => [
+          { accountRef: "A", month: "2026-07", amount: "100.0000" },
+          { accountRef: "B", month: "2026-07", amount: "-100.0000" },
+        ],
+      } as unknown as MigrationSource;
+      await assert.rejects(
+        trueUpResidualGl(org.orgId, source, { actorId, syncRunId: "inactive-run" }),
+        (error: unknown) =>
+          errorChainMatches(error, new RegExp(
+            `${org.accounts.adjustment} is inactive.*reactivate`,
+          )),
+      );
+      const residuals = (await db.execute<{ entries: number }>(sql`
+        select count(*)::int as entries
+          from journal_entries
+         where org_id = ${org.orgId}
+           and entry_number like 'TRUEUP-2026-07-%'
+      `));
+      assert.equal(residuals.rows[0]?.entries, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
