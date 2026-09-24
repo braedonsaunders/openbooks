@@ -58,6 +58,17 @@ const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
+const { listReviewTemplates } = await import("@openbooks/engine/src/hrm/performance/review-cycles.ts");
+
+async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
+  for (const permission of permissions) {
+    await db.execute(sql`
+      insert into user_permission_overrides (org_id, user_id, permission, effect)
+      values (${orgId}, ${userId}, ${permission}, 'grant')
+      on conflict (user_id, permission) do update set effect = 'grant'
+    `);
+  }
+}
 
 function authenticate(f: { orgId: string; actorId: string }) {
   routeState.authz = {
@@ -183,4 +194,79 @@ test("string scale bounds from the drawer save as numbers; garbage is refused by
   assert.equal(refused.status, 400);
   const body = (await refused.json()) as { error: string };
   assert.match(body.error, /ratingScaleMin/);
+});
+
+test("inverted and over-wide scales are refused by name, never raw CHECK text", async () => {
+  // OM-17: bounds that parse as numbers but violate the scale shape must
+  // fail in the engine's own words (validateEntityIntegrity runs
+  // parseRatingScale before the write) — the raw Postgres CHECK text must
+  // never reach the dialog.
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
+     where id = ${org.orgId}`);
+  authenticate({ orgId: org.orgId, actorId });
+
+  const inverted = await POST(
+    postRequest("hrm-review-templates", {
+      name: "Inverted scale",
+      ratingScaleMin: 5,
+      ratingScaleMax: 1,
+      ratingScaleLabels: ["low", "high"],
+      isActive: true,
+    }),
+    call("hrm-review-templates"),
+  );
+  assert.equal(inverted.status, 400);
+  const invertedBody = (await inverted.json()) as { error: string };
+  assert.match(invertedBody.error, /inverted/);
+  assert.doesNotMatch(invertedBody.error, /check constraint|violates/i);
+
+  const wide = await POST(
+    postRequest("hrm-review-templates", {
+      name: "Wide scale",
+      ratingScaleMin: 1,
+      ratingScaleMax: 200,
+      ratingScaleLabels: ["low", "high"],
+      isActive: true,
+    }),
+    call("hrm-review-templates"),
+  );
+  assert.equal(wide.status, 400);
+  const wideBody = (await wide.json()) as { error: string };
+  assert.match(wideBody.error, /more than 99/);
+  assert.doesNotMatch(wideBody.error, /check constraint|violates/i);
+});
+
+test("a template created with drawer string bounds appears in the cycle picker", async () => {
+  // OM-17: the /hrm/performance?cycle=new template picker lists
+  // hrm_review_templates through listReviewTemplates — a template saved
+  // from the drawer (string bounds folded to numbers) must be pickable.
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
+     where id = ${org.orgId}`);
+  await grant(org.orgId, actorId, ["hrm.performance.manage"]);
+  authenticate({ orgId: org.orgId, actorId });
+
+  const created = await POST(
+    postRequest("hrm-review-templates", {
+      name: "Picker scale",
+      ratingScaleMin: "1",
+      ratingScaleMax: "5",
+      ratingScaleLabels: ["one", "two", "three", "four", "five"],
+      isActive: true,
+    }),
+    call("hrm-review-templates"),
+  );
+  assert.equal(created.status, 200, JSON.stringify(await created.clone().json().catch(() => null)));
+  const { id } = (await created.json()) as { id: string };
+
+  const options = await listReviewTemplates({ orgId: org.orgId, actorId });
+  assert.ok(
+    options.some((option) => option.id === id && option.name === "Picker scale"),
+    "the saved template is offered to the cycle dialog",
+  );
 });
