@@ -6,6 +6,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
+import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/compliance.ts'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 
@@ -58,8 +59,10 @@ export async function POST(req: Request) {
     /** Supersede this earlier certificate (a renewal). */
     supersedesId?: string | null
   }
-  if (!isUuid(body.partyId ?? '')) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
-  if (!isUuid(body.requirementId ?? '')) {
+  const partyId = body.partyId
+  if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+  const requirementId = body.requirementId
+  if (!requirementId || !isUuid(requirementId)) {
     return NextResponse.json({ error: 'requirementId is required' }, { status: 400 })
   }
   if (!body.effectiveFrom) return NextResponse.json({ error: 'effectiveFrom is required' }, { status: 400 })
@@ -75,22 +78,15 @@ export async function POST(req: Request) {
 
   // The requirement must belong to this org, and to the vendor's class — a
   // certificate against an inapplicable policy would never be evaluated and
-  // would quietly read as "on file".
-  const applicable = (await db.execute<{ id: string; requires_expiry: boolean }>(sql`
-    select req.id, req.requires_expiry
-      from compliance_requirements req
-      join vendor_roles vr on vr.org_id = req.org_id and vr.party_id = ${body.partyId}
-     where req.org_id = ${orgId} and req.id = ${body.requirementId} and req.is_active
-       and (req.class_id is null or req.class_id = vr.compliance_class_id)
-  `))
-  const requirement = applicable.rows[0]
+  // would quietly read as "on file". Shared with the waiver write.
+  const requirement = await loadApplicableRequirement(orgId, partyId, requirementId)
   if (!requirement) {
     return NextResponse.json(
       { error: 'that requirement does not apply to this vendor — check its compliance class' },
       { status: 422 },
     )
   }
-  if (requirement.requires_expiry && !body.expiresOn) {
+  if (requirement.requiresExpiry && !body.expiresOn) {
     return NextResponse.json({ error: 'this requirement needs an expiry date' }, { status: 422 })
   }
 

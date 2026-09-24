@@ -48,8 +48,15 @@ async function fixture() {
     db.execute(sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true}}'::jsonb where id = ${org.orgId}`),
   );
   const partyId = randomUUID();
+  const classId = randomUUID();
   await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
     values (${partyId},${org.orgId},'vendor','Waiver vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
+  await withBypassContext(() => db.execute(sql`
+    insert into compliance_classes (id, org_id, code, name, lien_waiver_enforcement, default_information_return, created_by, updated_by)
+    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`));
+  await withBypassContext(() => db.execute(sql`
+    insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
+    values (${org.orgId}, ${partyId}, ${classId}, ${actorId}, ${actorId})`));
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})

@@ -61,6 +61,14 @@ async function fixture() {
   await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
     values (${hiddenPartyId},${org.orgId},'vendor','Hidden vendor',${branchId},true,'{}'::jsonb),
            (${visiblePartyId},${org.orgId},'vendor','Visible vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
+  const scopeClassId = randomUUID();
+  await withBypassContext(() => db.execute(sql`
+    insert into compliance_classes (id, org_id, code, name, lien_waiver_enforcement, default_information_return, created_by, updated_by)
+    values (${scopeClassId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`));
+  await withBypassContext(() => db.execute(sql`
+    insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
+    values (${org.orgId}, ${hiddenPartyId}, ${scopeClassId}, ${actorId}, ${actorId}),
+           (${org.orgId}, ${visiblePartyId}, ${scopeClassId}, ${actorId}, ${actorId})`));
   await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
     values (${hiddenProjectId},${org.orgId},${branchId},'HID','Hidden project',${org.customerId},'active',true,'{}'::jsonb),
            (${visibleProjectId},${org.orgId},${org.subsidiaryId},'VIS','Visible project',${org.customerId},'active',true,'{}'::jsonb)`));
