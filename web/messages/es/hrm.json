@@ -703,6 +703,14 @@
       "hold": "En espera",
       "reject": "Rechazar"
     },
+    "offerStatus": {
+      "draft": "Borrador",
+      "sent": "Enviada",
+      "accepted": "Aceptada",
+      "declined": "Rechazada",
+      "withdrawn": "Retirada",
+      "expired": "Vencida"
+    },
     "offerCard": {
       "title": "Redactar las condiciones",
       "job": "Puesto",

@@ -171,7 +171,7 @@ export async function loadOffersTab(authz: Authz, t: T, tab: DepthTab): Promise<
     id: offer.id,
     candidate: offer.candidateName,
     job: offer.jobTitle,
-    status: offer.status,
+    status: t(`recruiting.offerStatus.${offer.status}`),
     signature: t(`recruiting.signature.${offer.signatureStatus ?? 'unsigned'}`),
     signatureVariant: signatureVariant(offer.signatureStatus),
     versions: t('recruiting.depth.versions', { count: offer.versionCount }),

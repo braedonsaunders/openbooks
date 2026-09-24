@@ -759,6 +759,14 @@
       "hold": "Hold",
       "reject": "Reject"
     },
+    "offerStatus": {
+      "draft": "Draft",
+      "sent": "Sent",
+      "accepted": "Accepted",
+      "declined": "Declined",
+      "withdrawn": "Withdrawn",
+      "expired": "Expired"
+    },
     "offerCard": {
       "title": "Draft the terms",
       "job": "Job title",

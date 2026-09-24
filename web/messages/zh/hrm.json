@@ -703,6 +703,14 @@
       "hold": "待定",
       "reject": "拒绝"
     },
+    "offerStatus": {
+      "draft": "草稿",
+      "sent": "已发送",
+      "accepted": "已接受",
+      "declined": "已拒绝",
+      "withdrawn": "已撤回",
+      "expired": "已过期"
+    },
     "offerCard": {
       "title": "拟定条件",
       "job": "岗位名称",

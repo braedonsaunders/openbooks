@@ -703,6 +703,14 @@
       "hold": "En attente",
       "reject": "Refuser"
     },
+    "offerStatus": {
+      "draft": "Brouillon",
+      "sent": "Envoyée",
+      "accepted": "Acceptée",
+      "declined": "Refusée",
+      "withdrawn": "Retirée",
+      "expired": "Expirée"
+    },
     "offerCard": {
       "title": "Rédiger les conditions",
       "job": "Intitulé",

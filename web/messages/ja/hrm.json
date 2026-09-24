@@ -703,6 +703,14 @@
       "hold": "保留",
       "reject": "辞退"
     },
+    "offerStatus": {
+      "draft": "下書き",
+      "sent": "送信済み",
+      "accepted": "承諾済み",
+      "declined": "辞退済み",
+      "withdrawn": "撤回済み",
+      "expired": "期限切れ"
+    },
     "offerCard": {
       "title": "条件を作成",
       "job": "職種",
