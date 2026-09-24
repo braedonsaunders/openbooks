@@ -1,6 +1,7 @@
 import {
   InventoryError,
   InventoryIdempotencyConflictError,
+  InventoryNotFoundError,
   InventoryOwnershipError,
 } from "@openbooks/engine/src/inventory/contracts.ts";
 
@@ -11,6 +12,7 @@ import {
  * idempotency-key reuse with different input is a conflict (409).
  */
 export function inventoryErrorStatus(error: unknown): number {
+  if (error instanceof InventoryNotFoundError) return 404;
   if (error instanceof InventoryOwnershipError) return 403;
   if (error instanceof InventoryIdempotencyConflictError) return 409;
   if (error instanceof InventoryError) return 422;

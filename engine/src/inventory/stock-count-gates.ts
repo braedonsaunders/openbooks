@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { add, cmp, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { InventoryError, InventoryOwnershipError } from "./contracts.ts";
+import { InventoryError, InventoryNotFoundError, InventoryOwnershipError } from "./contracts.ts";
 import type { Runner } from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary } from "./profile-policy.ts";
 import type { SubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -229,11 +229,9 @@ export async function loadCountHeader(
             from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`));
   const row = r.rows[0];
   if (!row) {
-    // Under RLS an unscoped read silently returns nothing, so a missing row
-    // is either a wrong id or another org's count — say both, not "not found".
-    throw new InventoryError(
-      "stock count not found in this organization — check the count id, or open a new count",
-    );
+    // Under RLS an absent result is either a wrong id or another org's row;
+    // callers must not distinguish those cases.
+    throw new InventoryNotFoundError("not_found");
   }
   return {
     id: row.id,

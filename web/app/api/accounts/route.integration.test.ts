@@ -290,6 +290,21 @@ test(
       assert.deepEqual(await mintShared.json(), { error: 'requires unrestricted subsidiary access' });
       const mintA = await POST(postRequest(randomUUID(), { name: 'A cash', type: 'asset_other', subsidiaryId: org.subsidiaryId }));
       assert.equal(mintA.status, 201);
+      // A hidden parent's type/summary state must not leak through 422s.
+      // Compare each hidden reference with a genuinely absent id.
+      const hiddenParentCreate = await POST(postRequest(randomUUID(), {
+        name: 'Child of hidden parent', type: 'expense', parentId: accountB,
+      }));
+      const missingParentCreate = await POST(postRequest(randomUUID(), {
+        name: 'Child of absent parent', type: 'expense', parentId: randomUUID(),
+      }));
+      assert.equal(hiddenParentCreate.status, 404);
+      assert.deepEqual(await hiddenParentCreate.json(), await missingParentCreate.json());
+      const hiddenParentPatch = await PATCH(patchRequest({ parentId: accountB }), {
+        params: Promise.resolve({ id: accountA }),
+      });
+      assert.equal(hiddenParentPatch.status, 404);
+      assert.deepEqual(await hiddenParentPatch.json(), { error: 'not_found' });
       const stored = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from accounts where org_id = ${org.orgId} and name in ('B cash', 'Shared cash')
       `);

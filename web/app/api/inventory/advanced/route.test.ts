@@ -10,6 +10,9 @@ const state = {
   permissionCalls: [] as unknown[],
   idempotencyCalls: [] as Array<{ operation: string; request: unknown }>,
   voucherSubsidiary: null as string | null,
+  orderSubsidiary: null as string | null,
+  missingVoucher: false,
+  missingOrder: false,
   reverseResult: null as unknown,
   reverseError: null as unknown,
   ErrorClasses: null as Record<string, new (message?: string) => Error> | null,
@@ -42,8 +45,11 @@ const mockSources = new Map<string, string>([
         execute: async (query) => {
           const text = sqlText(query)
           state.calls.push(text)
-          if (text.includes('landed_cost_vouchers') && state.voucherSubsidiary) {
+          if (text.includes('landed_cost_vouchers') && !state.missingVoucher && state.voucherSubsidiary) {
             return { rows: [{ subsidiary_id: state.voucherSubsidiary }] }
+          }
+          if (text.includes('transfer_orders') && !state.missingOrder && state.orderSubsidiary) {
+            return { rows: [{ subsidiary_id: state.orderSubsidiary }] }
           }
           return { rows: [] }
         },
@@ -70,8 +76,9 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.inventory-advanced-route-test')]
       export class InventoryError extends Error {}
       export class InventoryOwnershipError extends InventoryError {}
+      export class InventoryNotFoundError extends InventoryError {}
       export class InventoryIdempotencyConflictError extends InventoryError {}
-      state.ErrorClasses = { InventoryError, InventoryOwnershipError, InventoryIdempotencyConflictError }
+      state.ErrorClasses = { InventoryError, InventoryOwnershipError, InventoryNotFoundError, InventoryIdempotencyConflictError }
       export async function queryLotRecall(_orgId, filter) {
         state.recallFilters.push(filter)
         return []
@@ -139,6 +146,9 @@ function reset(scope: Set<string> | null): void {
   state.permissionCalls.length = 0;
   state.idempotencyCalls.length = 0;
   state.voucherSubsidiary = null;
+  state.orderSubsidiary = null;
+  state.missingVoucher = false;
+  state.missingOrder = false;
   state.reverseResult = null;
   state.reverseError = null;
 }
@@ -193,6 +203,7 @@ test("null subsidiary scope remains unrestricted", async () => {
 
 test("reversing a landed-cost voucher demands the reversal authority, not the posting grant", async () => {
   reset(null);
+  state.voucherSubsidiary = "00000000-0000-4000-8000-000000000001";
   const voucherId = "00000000-0000-4000-8000-000000000010";
   const response = await POST(
     post({
@@ -226,7 +237,7 @@ test("landed-cost reversal validates voucher, date, and reason at the boundary",
   assert.equal(state.idempotencyCalls.length, 0, "refused reversals never reach the engine");
 });
 
-test("restricted callers cannot reverse a voucher of a subsidiary they cannot see", async () => {
+test("absent and out-of-scope record targets share one 404 across advanced inventory actions", async () => {
   const allowed = "00000000-0000-4000-8000-000000000001";
   const voucherId = "00000000-0000-4000-8000-000000000010";
   reset(new Set([allowed]));
@@ -240,8 +251,29 @@ test("restricted callers cannot reverse a voucher of a subsidiary they cannot se
       idempotencyKey: "key-2",
     }),
   );
-  assert.equal(denied.status, 403);
+  assert.equal(denied.status, 404);
+  assert.deepEqual(await denied.json(), { error: "not_found" });
   assert.equal(state.idempotencyCalls.length, 0);
+
+  reset(new Set([allowed]));
+  state.missingVoucher = true;
+  const absentVoucher = await POST(post({
+    action: "reverseLandedVoucher", id: voucherId, date: "2026-08-28",
+    memo: "Freight was billed to the wrong receipt", idempotencyKey: "key-absent",
+  }));
+  assert.equal(absentVoucher.status, 404);
+  assert.deepEqual(await absentVoucher.json(), { error: "not_found" });
+
+  reset(new Set([allowed]));
+  state.orderSubsidiary = "00000000-0000-4000-8000-000000000002";
+  const hiddenOrder = await POST(post({ action: "shipTransfer", id: voucherId, idempotencyKey: "key-hidden-order" }));
+  assert.equal(hiddenOrder.status, 404);
+
+  reset(new Set([allowed]));
+  state.missingOrder = true;
+  const absentOrder = await POST(post({ action: "shipTransfer", id: voucherId, idempotencyKey: "key-absent-order" }));
+  assert.equal(absentOrder.status, 404);
+  assert.deepEqual(await hiddenOrder.json(), await absentOrder.json());
 
   reset(new Set([allowed]));
   state.voucherSubsidiary = allowed;
@@ -336,6 +368,7 @@ test("createTransfer without a transit warehouse sends null for engine defaultin
 
 test("an engine ownership refusal surfaces as 403, not a validation miss", async () => {
   reset(null);
+  state.voucherSubsidiary = "00000000-0000-4000-8000-000000000001";
   const OwnershipError = state.ErrorClasses!.InventoryOwnershipError!;
   state.reverseError = new OwnershipError("cross-entity voucher reversal refused");
   const response = await POST(

@@ -25,6 +25,8 @@ export class InventoryError extends Error {}
  * to 403: it is an authorization-boundary refusal, not a validation miss.
  */
 export class InventoryOwnershipError extends InventoryError {}
+/** A record is absent or outside the actor's organization/subsidiary scope. */
+export class InventoryNotFoundError extends InventoryError {}
 
 // ---------------------------------------------------------------------------
 // Canonical action idempotency boundary

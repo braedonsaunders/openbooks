@@ -11,6 +11,7 @@ import { assetBankHygieneWarning } from '../../../../lib/accounts-hygiene'
 import { isUuid } from '../../../../lib/list-params'
 import { loadAccount, orgBaseCurrency } from '../_lib'
 import { accountInputFields } from '../_input'
+import { recordNotFoundResponse } from '../../../../lib/api/record-not-found'
 
 export const runtime = 'nodejs'
 
@@ -121,12 +122,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       select type, subsidiary_id from accounts
        where id = ${effectiveParentId} and org_id = ${gate.user.orgId}
     `))
-    if (!parent.rows[0] || parent.rows[0].type !== nextType) {
-      return bad('parent_type_mismatch', 'type')
-    }
-    // The hierarchy places the account: a parent the caller cannot see is the
-    // same as a missing one.
+    if (!parent.rows[0]) return recordNotFoundResponse()
     if (guardSubsidiaryScope(gate, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
+      return recordNotFoundResponse()
+    }
+    if (parent.rows[0].type !== nextType) {
       return bad('parent_type_mismatch', 'type')
     }
   }
@@ -246,11 +246,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             select is_summary, type, subsidiary_id from accounts
              where id = ${parentId} and org_id = ${gate.user.orgId}
           `))
-          if (!parent.rows[0]?.is_summary) throw new PatchInvalid('parent_must_be_summary', 'parentId')
-          if (parent.rows[0].type !== nextType) throw new PatchInvalid('parent_type_mismatch', 'parentId')
+          if (!parent.rows[0]) throw new PatchNotFound()
           if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
-            throw new PatchInvalid('parent_must_be_summary', 'parentId')
+            throw new PatchNotFound()
           }
+          if (!parent.rows[0].is_summary) throw new PatchInvalid('parent_must_be_summary', 'parentId')
+          if (parent.rows[0].type !== nextType) throw new PatchInvalid('parent_type_mismatch', 'parentId')
           const cycle = (await tx.execute(sql`
             with recursive descendants as (
               select id from accounts where id = ${id} and org_id = ${gate.user.orgId}

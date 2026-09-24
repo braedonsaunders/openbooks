@@ -12,6 +12,7 @@ import { assetBankHygieneWarning } from '../../../lib/accounts-hygiene'
 import { isUuid } from '../../../lib/list-params'
 import { loadAccount, orgBaseCurrency } from './_lib'
 import { accountInputFields } from './_input'
+import { recordNotFoundResponse } from '../../../lib/api/record-not-found'
 
 export const runtime = 'nodejs'
 
@@ -83,14 +84,14 @@ export async function POST(request: Request) {
       select is_summary, type, subsidiary_id from accounts
        where id = ${parentId} and org_id = ${gate.user.orgId}
     `))
-    if (!parent.rows[0]) return bad('invalid_parent', 'parentId')
+    if (!parent.rows[0]) return recordNotFoundResponse()
+    // Check visibility before testing whether the parent can contain this
+    // account; those details are hidden for another subsidiary.
+    if (guardSubsidiaryScope(gate, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
+      return recordNotFoundResponse()
+    }
     if (!parent.rows[0].is_summary) return bad('parent_must_be_summary', 'parentId')
     if (parent.rows[0].type !== body.type) return bad('parent_type_mismatch', 'parentId')
-    // The hierarchy places the account: a parent the caller cannot see is the
-    // same as a missing one.
-    if (guardSubsidiaryScope(gate, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
-      return bad('invalid_parent', 'parentId')
-    }
   }
 
   const currencyRestriction = textOrNull(body.currencyRestriction)?.toUpperCase() ?? null

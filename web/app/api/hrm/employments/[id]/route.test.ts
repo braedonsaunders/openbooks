@@ -7,6 +7,7 @@ interface RouteState {
   employmentGate: { user: { id: string; orgId: string } } | { status: number };
   selfGate: { user: { id: string; orgId: string } } | { status: number };
   calls: Array<{ fn: string; args: unknown }>;
+  serviceError: Error | null;
 }
 
 const stateKey = Symbol.for("openbooks.hrm-employment-record-route-test");
@@ -21,6 +22,7 @@ const routeState: RouteState = {
   employmentGate: { user: { id: "user-1", orgId: "org-1" } },
   selfGate: { user: { id: "user-1", orgId: "org-1" } },
   calls: [],
+  serviceError: null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
@@ -49,6 +51,7 @@ const mockSources = new Map<string, string>([
       export class EmploymentReadError extends Error {}
       export async function getEmploymentRecord(args) {
         state.calls.push({ fn: 'record', args })
+        if (state.serviceError) throw state.serviceError
         return { record: { employmentId: args.employmentId } }
       }
     `,
@@ -109,6 +112,7 @@ function reset(): void {
   routeState.employmentGate = { user: { id: "user-1", orgId: "org-1" } };
   routeState.selfGate = { user: { id: "user-1", orgId: "org-1" } };
   routeState.calls = [];
+  routeState.serviceError = null;
 }
 
 function getRequest(): { req: Request; ctx: { params: Promise<{ id: string }> } } {
@@ -149,4 +153,24 @@ test("a caller with neither grant keeps the employment denial", async () => {
   const response = await recordRoute!.GET(req, ctx);
   assert.equal(response.status, 403);
   assert.deepEqual(routeState.calls, []);
+});
+
+test("an employment outside scope is the same not-found response as an absent record", async () => {
+  reset();
+  const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
+  routeState.serviceError = new HrmAuthorizationError(
+    "Employment is not visible in this organization and legal-entity scope.",
+  );
+  const { req, ctx } = getRequest();
+  const hidden = await recordRoute!.GET(req, ctx);
+  assert.equal(hidden.status, 404);
+  assert.deepEqual(await hidden.json(), { error: "not_found" });
+
+  reset();
+  routeState.serviceError = new HrmAuthorizationError(
+    "Employment access requires the hrm.employment.read permission — ask an administrator to grant it in /admin/roles.",
+  );
+  const missingGrant = await recordRoute!.GET(req, ctx);
+  assert.equal(missingGrant.status, 403);
+  assert.match(String((await missingGrant.json() as { error: string }).error), /requires the hrm\.employment\.read permission/);
 });

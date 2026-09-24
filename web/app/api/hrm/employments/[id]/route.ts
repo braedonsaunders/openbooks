@@ -8,6 +8,7 @@ import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.t
 import { TemporalError } from '@openbooks/engine/src/hrm/temporal.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { hrmAuthorizationResponse } from '../../../../../lib/api/record-not-found'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,7 +56,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // Authorization denial is uniform and safe to surface: it names the
     // permission and the remedy, never the record.
     if (error instanceof HrmAuthorizationError) {
-      return NextResponse.json({ error: error.message }, { status: 403 })
+      return hrmAuthorizationResponse(error)
     }
     // Computed domain refusals (gate off, malformed as-of, missing or
     // ambiguous revision) reach the caller with their code and remedy.

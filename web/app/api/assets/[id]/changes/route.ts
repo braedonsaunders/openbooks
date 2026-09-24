@@ -11,6 +11,7 @@ import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.
 import { guardFeaturePermission } from "@/lib/feature-gates";
 import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
+import { recordNotFoundResponse } from "../../../../../lib/api/record-not-found";
 export const runtime = "nodejs";
 const date = z.string().refine(isIsoCalendarDate, "enter a calendar date");
 const plan = z.array(z.object({ date, amount: exactMoney() })).max(1200);
@@ -144,18 +145,10 @@ export async function GET(
         return { deniedGroupScope: true as const };
       return { subsidiaries, books, groupBooks };
     });
-    if ("deniedGroupScope" in result)
-      return NextResponse.json(
-        {
-          error:
-            "this asset change includes a group entity outside your authorization",
-        },
-        { status: 403 },
-      );
+    if ("deniedGroupScope" in result) return recordNotFoundResponse();
     return NextResponse.json(result);
   } catch (error) {
-    if (error instanceof ScopeNotFoundError)
-      return NextResponse.json({ error: "asset not found" }, { status: 404 });
+    if (error instanceof ScopeNotFoundError) return recordNotFoundResponse();
     throw error;
   }
 }
