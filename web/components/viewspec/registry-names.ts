@@ -142,6 +142,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'document-row-actions',
   'documents-actions',
   'documents-breadcrumb',
+  'documents-link-notice',
   'email-evidence-cell',
   'email-settings-form',
   'email-subject-cell',
