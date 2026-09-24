@@ -174,6 +174,34 @@ test("manual values: exact decimals, overlap guard, end-dating, onDate read", { 
   }
 });
 
+test("manual driver windows stay non-overlapping under concurrent inserts", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const driver = await createDriver(org.orgId, actorId, {
+      key: "concurrent-window",
+      name: "Concurrent window",
+      dimension: "subsidiary",
+      sourceKind: "manual",
+    });
+    const writes = await Promise.allSettled(["2026-01-01", "2026-06-01"].map((effectiveFrom) =>
+      createDriverValue(org.orgId, actorId, driver.id, {
+        dimensionValueId: org.subsidiaryId,
+        effectiveFrom,
+        value: "1",
+      }),
+    ));
+    assert.equal(writes.filter((write) => write.status === "fulfilled").length, 1);
+    const refusal = writes.find((write) => write.status === "rejected");
+    assert.ok(refusal && refusal.status === "rejected");
+    assert.ok(refusal.reason instanceof DriverAdminError);
+    assert.equal(refusal.reason.code, "conflict");
+    assert.match(refusal.reason.message, /overlaps an existing value/);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("revision tokens round-trip; stale tokens refused", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

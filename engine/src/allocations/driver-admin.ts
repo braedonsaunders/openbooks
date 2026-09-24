@@ -86,6 +86,16 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
   return false;
 }
 
+function isExclusionViolation(error: unknown, constraint: string): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; constraint?: string };
+    if (candidate.code === "23P01" && candidate.constraint === constraint) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 /**
  * Optimistic-concurrency check on the canonical revision token (the same
  * documentRevisionSql spelling rule mutations use). undefined skips the
@@ -578,6 +588,9 @@ export async function createDriverValue(
         returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
       row = inserted.rows[0]!;
     } catch (error) {
+      if (isExclusionViolation(error, "allocation_driver_values_no_overlap")) {
+        fail("conflict", "effective window overlaps an existing value for this dimension value");
+      }
       if (isUniqueViolation(error, "allocation_driver_values_unique")) {
         fail("conflict", "a value already starts on this date for this dimension value");
       }
