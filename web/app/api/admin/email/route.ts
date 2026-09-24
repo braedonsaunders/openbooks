@@ -37,7 +37,8 @@ export async function PUT(req: Request) {
   if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
     return NextResponse.json({ error: 'Reload the email settings and supply their exact revision before saving' }, { status: 409 })
   }
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
+  // Omitted settings mean keep; explicit blank strings mean clear.
+  const clearableStr = (v: unknown) => v === undefined ? undefined : typeof v === 'string' ? v.trim() || null : undefined
   const provider = body.provider
   if (provider !== undefined && provider !== null && !isEmailProvider(provider)) {
     return NextResponse.json({ error: 'invalid provider' }, { status: 422 })
@@ -46,18 +47,18 @@ export async function PUT(req: Request) {
   try {
     const saved = await saveOrgEmailConfig(gate.user.orgId, {
       enabled: body.enabled === true,
-      provider: isEmailProvider(provider) ? provider : undefined,
-      fromName: str(body.fromName),
-      fromEmail: str(body.fromEmail),
-      replyTo: str(body.replyTo),
-      mailgunDomain: str(body.mailgunDomain),
-      mailgunRegion: body.mailgunRegion === 'eu' ? 'eu' : body.mailgunRegion === 'us' ? 'us' : undefined,
-      smtpHost: str(body.smtpHost),
-      smtpPort: typeof body.smtpPort === 'number' ? body.smtpPort : body.smtpPort ? Number(body.smtpPort) : undefined,
+      provider: provider === undefined ? undefined : isEmailProvider(provider) ? provider : null,
+      fromName: clearableStr(body.fromName),
+      fromEmail: clearableStr(body.fromEmail),
+      replyTo: clearableStr(body.replyTo),
+      mailgunDomain: clearableStr(body.mailgunDomain),
+      mailgunRegion: body.mailgunRegion === undefined ? undefined : body.mailgunRegion === 'eu' ? 'eu' : body.mailgunRegion === 'us' ? 'us' : null,
+      smtpHost: clearableStr(body.smtpHost),
+      smtpPort: body.smtpPort === undefined ? undefined : typeof body.smtpPort === 'number' ? body.smtpPort : body.smtpPort ? Number(body.smtpPort) : null,
       smtpSecure: body.smtpSecure === true,
-      smtpUsername: str(body.smtpUsername),
-      // secret: string ⇒ seal; null ⇒ clear; undefined ⇒ keep existing.
-      secret: body.secret === null ? null : str(body.secret),
+      smtpUsername: clearableStr(body.smtpUsername),
+      // secret: non-empty string ⇒ seal; null ⇒ clear; blank/omitted ⇒ keep.
+      secret: body.secret === null ? null : typeof body.secret === 'string' && body.secret.trim() ? body.secret.trim() : undefined,
     }, { kind: "user", userId: gate.user.id }, { expectedUpdatedAt: body.expectedUpdatedAt })
     return NextResponse.json(saved)
   } catch (err) {

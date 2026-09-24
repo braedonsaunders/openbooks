@@ -121,6 +121,21 @@ test("provider configuration writes carry attributable redacted before/after aud
     assert.equal(edited.changes.after.replyTo, "support@example.test");
     assert.equal(edited.changes.after.hasSecret, true);
 
+    // Explicit null is a persisted clear, while an omitted key keeps its
+    // existing value. Clearing provider identity is also audited.
+    await saveOrgEmailConfig(org.orgId, { provider: null, fromName: null, replyTo: null, enabled: false }, userActor);
+    const clearedSettings = (await readEmailAuditRows(org.orgId)).at(-1)!;
+    assert.equal(clearedSettings.changes.before.provider, "resend");
+    assert.equal(clearedSettings.changes.after.provider, undefined);
+    assert.equal(clearedSettings.changes.before.fromName, "Billing");
+    assert.equal(clearedSettings.changes.after.fromName, undefined);
+    assert.equal(clearedSettings.changes.before.replyTo, "support@example.test");
+    assert.equal(clearedSettings.changes.after.replyTo, undefined);
+    const afterClear = await storedEmail(org.orgId);
+    assert.equal(afterClear?.provider, undefined);
+    assert.equal(afterClear?.fromName, undefined);
+    assert.equal(afterClear?.replyTo, undefined);
+
     // Clearing the credential (an enabled config cannot be left credential-less,
     // so the clear disables delivery too) records removal.
     await saveOrgEmailConfig(
