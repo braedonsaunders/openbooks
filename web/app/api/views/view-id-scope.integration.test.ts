@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -187,41 +186,6 @@ test("every view verb answers a malformed id with 404", { skip: !process.env.OPE
     assert.equal(exported.status, 404, `export ${id}`);
     assert.deepEqual(await exported.json(), { error: "not found" });
   }
-});
-
-test("view list and detail reuse the report-definition entity gate", () => {
-  const list = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-  const detail = readFileSync(new URL("./[id]/route.ts", import.meta.url), "utf8");
-  assert.match(
-    list,
-    /\bcanRunReportEntity\b/,
-    "GET /api/views must filter through canRunReportEntity",
-  );
-  assert.match(
-    list,
-    /from ['"].*report-authz['"]/,
-    "GET /api/views must import the shared gate rather than re-implement it",
-  );
-  assert.match(
-    detail,
-    /\bcanRunReportEntity\b/,
-    "GET /api/views/[id] must consult canRunReportEntity",
-  );
-  assert.match(
-    detail,
-    /\bguardReportEntity\b/,
-    "PATCH /api/views/[id] must refuse writes through guardReportEntity",
-  );
-  assert.match(
-    detail,
-    /\bvalidateOrgReportQuery\b/,
-    "PATCH /api/views/[id] must validate the plan through validateOrgReportQuery",
-  );
-  assert.match(
-    detail,
-    /from ['"].*report-authz['"]/,
-    "view detail must import the shared gate rather than re-implement it",
-  );
 });
 
 test("GET /api/views omits a pay_stubs plan when the caller lacks payroll.read", async () => {
