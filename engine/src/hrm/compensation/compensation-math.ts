@@ -109,12 +109,20 @@ export function resolveMatrixGuideline(
     );
   }
   const colKey = compaQuartile(ratio);
-  const col = guideline.cols.includes(colKey) ? colKey : guideline.cols[0];
-  const cell = guideline.cells[rowKey]?.[col ?? ""];
+  // No column fallback: pricing a q4 compa-ratio from the q1 cell is a
+  // wrong-quartile merit figure, so a matrix without the employee's
+  // quartile refuses by name (only the row fallback above is documented).
+  if (!guideline.cols.includes(colKey)) {
+    throw new CompensationError(
+      "REFUSED",
+      `the cycle guideline has no column for compa-ratio quartile ${colKey} (performance ${JSON.stringify(rowKey)}) — complete the matrix before opening the cycle`,
+    );
+  }
+  const cell = guideline.cells[rowKey]?.[colKey];
   if (!cell || !(cell.min <= cell.max)) {
     throw new CompensationError(
       "REFUSED",
-      `the cycle guideline has no usable cell for performance ${JSON.stringify(rowKey)} in quartile ${col} — complete the matrix before opening the cycle`,
+      `the cycle guideline has no usable cell for performance ${JSON.stringify(rowKey)} in quartile ${colKey} — complete the matrix before opening the cycle`,
     );
   }
   return { min: cell.min, max: cell.max };
