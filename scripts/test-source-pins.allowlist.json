@@ -64,7 +64,6 @@
     "web/lib/customization/display.test.ts": 1,
     "web/lib/customization/entity-list-query/employment-directory.test.ts": 1,
     "web/lib/customization/list-view-default-refusal.test.tsx": 2,
-    "web/lib/data-export-calendar.test.ts": 1,
     "web/lib/data-io/export-row-limit.test.ts": 5,
     "web/lib/field-tickets-native-storage.test.ts": 3,
     "web/lib/field-tickets.test.ts": 2,
