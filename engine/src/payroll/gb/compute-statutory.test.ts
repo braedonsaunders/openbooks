@@ -107,7 +107,10 @@ function gbContext(overrides: {
     deduction: () => "0",
     pushStatutory,
     storedCertificates: [],
-    certificateFor: certificateForCodes(overrides.codes ?? {}),
+    certificateFor: certificateForCodes({
+      gb_nic_category: { category_letter: "A" },
+      ...(overrides.codes ?? {}),
+    }),
     bool: (value: string | null | undefined) => value === "true",
     assertRegionSupported: () => {},
     employerLevies: {},
@@ -187,6 +190,40 @@ test("a recorded student-loan plan refuses instead of completing without its ded
   await assert.rejects(
     () => computeGbStatutory(ctx),
     /records plan_2: HMRC student-loan and postgraduate-loan deductions are not yet implemented/,
+  );
+  assert.deepEqual(pushed, []);
+});
+
+test("a missing NIC category refuses instead of assuming category A", async () => {
+  const { ctx, pushed } = gbContext({
+    codes: {
+      ...NOTICE_1257L,
+      gb_nic_category: { category_letter: null },
+    },
+    income: "3000",
+    pensionable: "3000",
+  });
+
+  await assert.rejects(
+    () => computeGbStatutory(ctx),
+    /cannot calculate without National Insurance category letter.*must not assume category A/s,
+  );
+  assert.deepEqual(pushed, []);
+});
+
+test("a valid non-A NIC category refuses rather than applying category-A bands", async () => {
+  const { ctx, pushed } = gbContext({
+    codes: {
+      ...NOTICE_1257L,
+      gb_nic_category: { category_letter: "C" },
+    },
+    income: "3000",
+    pensionable: "3000",
+  });
+
+  await assert.rejects(
+    () => computeGbStatutory(ctx),
+    /cannot calculate National Insurance category C: this pack currently implements category A only/,
   );
   assert.deepEqual(pushed, []);
 });

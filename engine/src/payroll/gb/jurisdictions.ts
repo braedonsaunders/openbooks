@@ -183,9 +183,37 @@ const GB_TAX_CODE_NOTICE: PayrollCertificate = {
   ],
 };
 
+/** Employer-recorded category letter used to select the HMRC Class 1 table. */
+const GB_NIC_CATEGORY_RECORD: PayrollCertificate = {
+  key: "gb_nic_category",
+  form: "National Insurance category record",
+  label: "National Insurance category letter",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "HMRC National Insurance rates and categories (https://www.gov.uk/national-insurance-rates-letters/category-letters)",
+  summary:
+    "Employer-recorded category letter used to select the employee and employer Class 1 NIC rules. "
+    + "The employer must establish the correct letter from HMRC guidance.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "category_letter",
+      label: "Category letter",
+      kind: "choice",
+      required: true,
+      choices: ["A", "B", "C", "D", "E", "F", "H", "I", "J", "K", "L", "M", "N", "S", "V", "X", "Z"]
+        .map((value) => ({ value, label: value })),
+      help:
+        "Use the letter determined by the employee's circumstances and workplace. Payroll currently "
+        + "calculates category A only and refuses every other category by name.",
+    },
+  ],
+};
+
 export const GB_CERTIFICATES: PayrollPackCertificates = {
   country: "GB",
-  certificates: [GB_STARTER_CHECKLIST, GB_TAX_CODE_NOTICE],
+  certificates: [GB_STARTER_CHECKLIST, GB_TAX_CODE_NOTICE, GB_NIC_CATEGORY_RECORD],
 };
 
 // ===========================================================================

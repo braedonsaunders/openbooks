@@ -40,6 +40,7 @@ import type {
 } from "../packs.ts";
 import { computeGbStatutory, GB_FACTOR_LABELS } from "./compute-statutory.ts";
 import { gbPackFilings } from "./filings.ts";
+import { GB_EMPLOYEE_FACTS } from "./employee-facts.ts";
 import {
   GB_CERTIFICATES,
   GB_REGIONS,
@@ -210,5 +211,5 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   factorLabels: { ...GB_FACTOR_LABELS },
   // No `emp` facts: the engine reads the tax code and student-loan flags
   // off the certificate answers, never off bare profile keys.
-  employeeFacts: [],
+  employeeFacts: GB_EMPLOYEE_FACTS,
 };
