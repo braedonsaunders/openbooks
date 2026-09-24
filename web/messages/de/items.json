@@ -162,7 +162,7 @@
     "rates": "Sätze",
     "tierOverrides": "Zuschlagssätze für Arbeit",
     "tierOverridesHide": "Zuschlagssätze für Arbeit ausblenden",
-    "tierAuto": "auto"
+    "tierAuto": "Automatisch"
   },
   "rateBookDrawer": {
     "newTitle": "Neues Preisbuch",
