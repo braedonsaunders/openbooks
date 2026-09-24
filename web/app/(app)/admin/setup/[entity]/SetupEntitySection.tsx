@@ -29,7 +29,9 @@ import { RateBookDrawer, type RateBookLine, type RateBookItemOption } from './Ra
  * ANY base path (not just /admin/setup). The setup workspace, the Inventory
  * module, and the Items catalog all render the same generic CRUD surface —
  * only `basePath` changes, so search / pagination / drawer links stay local to
- * the host page. Reads the standard `q` / `showInactive` / `row` params.
+ * the host page. Reads the standard `q` / `showInactive` params and the
+ * drawer key (`row` by default, namespaced per section on multi-section
+ * hosts through `rowParam`).
  */
 
 /** Render one table cell for a column, given the raw (snake-keyed) row. */
@@ -89,6 +91,7 @@ export async function SetupEntitySection({
   canManage,
   allowedSubsidiaryIds = null,
   hideHeader = false,
+  rowParam = 'row',
 }: {
   entity: SetupEntity
   orgId: string
@@ -101,6 +104,10 @@ export async function SetupEntitySection({
   allowedSubsidiaryIds?: ReadonlySet<string> | null
   /** Re-homed module tabs own their single page header and create action. */
   hideHeader?: boolean
+  /** URL key this section's New/edit drawer reads and writes. A host page
+   *  mounting several sections gives each its own key (CK-09) so one URL
+   *  opens exactly one drawer; single-section surfaces keep `row`. */
+  rowParam?: string
 }) {
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const gated = setupEntityForFeatureState(baseEntity, {
@@ -115,10 +122,11 @@ export async function SetupEntitySection({
   )
   const t = await getTranslations('admin.setup')
   const locale = await getLocale()
-  const rowParam = typeof sp.row === 'string' ? sp.row : undefined
+  const rawRow = sp[rowParam]
+  const openRow = typeof rawRow === 'string' ? rawRow : undefined
   const showInactive = pickString(sp.showInactive) === 'true'
   const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
-  const closeHref = mergeHref(basePath, sp, { row: undefined })
+  const closeHref = mergeHref(basePath, sp, { [rowParam]: undefined })
 
   const searchColumns = entity.columns.map(
     (column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${list.q ?? ''}%`}`,
@@ -158,13 +166,13 @@ export async function SetupEntitySection({
   }
 
   const idColumn = entity.idColumn ?? 'id'
-  const open = rowParam
-    ? rowParam === 'new'
+  const open = openRow
+    ? openRow === 'new'
       ? { creating: true, row: (null) }
       : await (async () => {
           const selected = ((await db.execute(sql`
             select * from ${sql.raw(entity.table)}
-             where ${sql.raw(idColumn)} = ${rowParam}
+             where ${sql.raw(idColumn)} = ${openRow}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              limit 1`)))
           return { creating: false, row: selected.rows[0] ?? null }
@@ -255,7 +263,7 @@ export async function SetupEntitySection({
             ) : null}
           </p>
         </div>
-        {canManage ? <NewSetupButton entityKey={entity.key} label={t('new')} basePath={basePath} /> : null}
+        {canManage ? <NewSetupButton entityKey={entity.key} label={t('new')} basePath={basePath} rowParam={rowParam} /> : null}
       </div> : null}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -297,7 +305,7 @@ export async function SetupEntitySection({
                   <TableCell key={c.key}>
                     {canManage && (i === 0 || entity.key === 'item-rate-books') ? (
                       <Link
-                        href={mergeHref(basePath, sp, { row: String(row[idColumn]) })}
+                        href={mergeHref(basePath, sp, { [rowParam]: String(row[idColumn]) })}
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {renderCell(c, row, refLabels, t, locale)}

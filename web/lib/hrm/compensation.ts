@@ -203,10 +203,10 @@ export interface CompHomeData {
   architectureTitle: string
   canSetup: boolean
   /**
-   * OM-18: the search params the rehomed job-architecture sections read
-   * (sp.row opens the New/edit drawer in SetupEntitySection). The home
-   * page carries no other list state, so this is the section's own list
-   * params verbatim.
+   * OM-18/CK-09: the search params the rehomed job-architecture sections
+   * read (namespaced drawer keys open each section's New/edit drawer in
+   * SetupEntitySection). The home page carries no other list state, so
+   * this is the section's own list params verbatim.
    */
   setupParams: Record<string, string | string[] | undefined>
   /**
@@ -484,7 +484,9 @@ export async function loadCompensationHome(
     equityLabel: t('compensation.equity'),
     architectureTitle: t('compensation.architectureTitle'),
     canSetup: can(authz, 'admin.setup.manage'),
-    setupParams: setupSectionParams(sp),
+    // CK-09: the three job-architecture sections read their New/edit
+    // drawers from namespaced keys — one URL opens exactly one drawer.
+    setupParams: setupSectionParams(sp, ['family', 'level', 'band']),
     refusal: gapRefusal,
   }
 }

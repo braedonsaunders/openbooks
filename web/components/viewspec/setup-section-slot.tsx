@@ -19,10 +19,14 @@ export async function SetupSectionSlot({
   entityKey,
   sp,
   basePath,
+  rowParam = 'row',
 }: {
   entityKey: string
   sp: Record<string, string | string[] | undefined>
   basePath: string
+  /** Namespaced drawer key for hosts mounting several sections (CK-09):
+   *  each section reads and writes only its own key. */
+  rowParam?: string
 }) {
   const authz = await getAuthz()
   if (!authz) return null
@@ -36,6 +40,7 @@ export async function SetupSectionSlot({
       basePath={basePath}
       canManage={can(authz, 'admin.setup.manage')}
       allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
+      rowParam={rowParam}
     />
   )
 }

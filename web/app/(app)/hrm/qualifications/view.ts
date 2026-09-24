@@ -77,11 +77,13 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
             entityKey: 'qualification-types',
             basePath: '/hrm/qualifications',
             sp: data.currentParams,
+            rowParam: 'qtype',
           }),
           widgetBlock('setup-section', {
             entityKey: 'qualification-settings',
             basePath: '/hrm/qualifications',
             sp: data.currentParams,
+            rowParam: 'qsettings',
           }),
         ],
       }),

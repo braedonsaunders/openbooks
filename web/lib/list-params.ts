@@ -98,8 +98,9 @@ export function pickString(v: string | string[] | undefined): string | undefined
 /**
  * The search params a rehomed `setup-section` widget needs from its host
  * page's query string. The generic SetupEntitySection opens its New/edit
- * drawer from `sp.row` (the host's New button writes `row=new` onto the
- * CURRENT url client-side) and reads its list controls from `q` /
+ * drawer from its drawer key (`sp.row` by default; the host's New button
+ * writes `<key>=new` onto the CURRENT url client-side) and reads its list
+ * controls from `q` /
  * `showInactive` / `sort` / `dir` / `page` / `perPage` plus the registry-
  * declared enum filters (`f_<key>`); every other key rides along through
  * mergeHref on the section's own links. A host loader that builds its own
@@ -108,9 +109,13 @@ export function pickString(v: string | string[] | undefined): string | undefined
  */
 export function setupSectionParams(
   searchParams: Search,
+  /** Namespaced drawer keys for hosts mounting several setup sections
+   *  (CK-09): forwarded beside `row` so each section's sp carries the key
+   *  its drawer reads. */
+  rowParams: readonly string[] = [],
 ): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const key of ['row', 'q', 'showInactive', 'sort', 'dir', 'page', 'perPage']) {
+  for (const key of ['row', ...rowParams, 'q', 'showInactive', 'sort', 'dir', 'page', 'perPage']) {
     const value = pickString(searchParams[key])
     if (value !== undefined) out[key] = value
   }
