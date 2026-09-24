@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
-import { ScopeNotFoundError, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { lockScopeRow, ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "../../../../../engine/src/records/document-edit-policy.ts";
@@ -286,7 +286,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     await runDocumentVersionedTransaction<
       RouteTransaction,
-      { status: string; updatedAt: string },
+      { status: string; updatedAt: string; subsidiaryId: string | null },
       void
     >({
       expectedRevision,
@@ -294,14 +294,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // The row lock and exact revision comparison are the first operations in
       // the write transaction: a concurrent writer cannot slip between the
       // check and the header/line replacement.
-      lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
+      lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null }>(sql`
         select status,
-               ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
+               ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt",
+               subsidiary_id as "subsidiaryId"
           from documents
          where id = ${id} and kind = 'journal' and org_id = ${user.orgId}
          for update
       `)).rows[0] ?? null,
       mutate: async (tx, locked) => {
+        if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, locked.subsidiaryId)) {
+          throw new ScopeNotFoundError()
+        }
         if (locked.status !== 'draft') {
           throw new DocumentEditError(
             422,
@@ -366,6 +370,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         { status: e.status },
       )
     }
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // Composite org-scoped storage keys make cross-tenant references
     // unrepresentable; map their FK refusal to a domain 422 instead of a
     // raw 500. The whole save (lines + header + totals) rolls back, so a
@@ -381,9 +386,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     throw e
   }
 
-  const journal = await loadJournalDoc(id, user.orgId)
-  if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json(await withExactDocumentRevision(journal, id, user.orgId))
+  try {
+    const journal = await withOrgTransaction(user.orgId, async () => {
+      await lockScopeRow(db, user.orgId, 'document', id, gate.allowedSubsidiaryIds, 'share')
+      const loaded = await loadJournalDoc(id, user.orgId)
+      return loaded ? withExactDocumentRevision(loaded, id, user.orgId) : null
+    })
+    if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return NextResponse.json(journal)
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    throw error
+  }
 }
 
 /** Walk the driver-error cause chain for a tenant-coherent FK refusal (23503). */

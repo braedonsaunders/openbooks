@@ -18,7 +18,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: string[] | null;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
@@ -33,12 +33,12 @@ const mockAuthz = `
   export function guardSubsidiaryScope(authz, subsidiaryId) {
     if (authz.allowedSubsidiaryIds === null) return null
     if (subsidiaryId === null || subsidiaryId === undefined) return null
-    if (authz.allowedSubsidiaryIds.includes(subsidiaryId)) return null
+    if (authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
     return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
   }
   export function subsidiariesInScope(authz, ids) {
     if (authz.allowedSubsidiaryIds === null) return true
-    return ids.every((id) => authz.allowedSubsidiaryIds.includes(id))
+    return ids.every((id) => authz.allowedSubsidiaryIds.has(id))
   }
 `;
 
@@ -107,7 +107,7 @@ test(
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
         permissions: new Set(),
-        allowedSubsidiaryIds: [org.subsidiaryId],
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       };
       const documentId = randomUUID();
       await withBypassContext(async () => {
