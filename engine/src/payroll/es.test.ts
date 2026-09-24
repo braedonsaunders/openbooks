@@ -76,18 +76,18 @@ test("ES slots name IRPF withholding and Seguridad Social, every pushed key decl
 });
 
 test("ES profile jurisdictions resolve to declared employment calendars", () => {
-  // Every profile names its community, so the engine resolves
-  // jurisdictionKey("ES", "<code>") = "ES-<code>". A bare "ES" key
-  // declares a calendar no employee reaches, and the
+  // Every profile names its community: jurisdictionKey("ES", "<code>")
+  // resolves to "ES-<code>". A bare "ES" key declares no reachable calendar, and the
   // undeclared-jurisdiction gate then refuses every period containing a
   // mandatory holiday (proven: a January 2026 Madrid run refused both stubs
-  // over Año Nuevo). One entry per community sharing the national fiestas.
+  // over Año Nuevo).
   const byKey = new Map(ES_PAYROLL_PACK.jurisdictions.map((j) => [j.key, j]));
   assert.equal(ES_PAYROLL_PACK.jurisdictions.length, 19);
   for (const code of ES_PAYROLL_PACK.regions.known) {
     assert.equal(jurisdictionKey("ES", code), `ES-${code}`);
     assert.equal(payrollJurisdictionDeclared(`ES-${code}`), true, code);
-    assert.equal(byKey.get(`ES-${code}`)?.holidays.length, 9, code);
+    assert.equal(byKey.get(`ES-${code}`)?.holidays.length, 10, code);
+    assert.deepEqual(byKey.get(`ES-${code}`)?.holidays.find((holiday) => holiday.key === "epifania")?.rule, { kind: "fixed", month: 1, day: 6 });
   }
   assert.equal(
     undeclaredJurisdictionHolidayConflict({
