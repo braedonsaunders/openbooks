@@ -4,14 +4,15 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { displayRoleName, SEEDED_ROLE_NAMES } from './role-display.ts'
+import { BUILT_IN_ROLES } from '../../engine/src/organization/permissions.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const messagesDir = join(here, '..', 'messages')
 const catalog = (locale: string): Record<string, unknown> =>
   JSON.parse(readFileSync(join(messagesDir, locale, 'agents.json'), 'utf8'))
 
-// F-t11-010(a): the finding drawer's Team select rendered DB-seeded English
-// role names ("Accountant … Viewer") under fr/es. Unrenamed seed roles
+// The finding drawer's Team select rendered DB-seeded English role names
+// ("Accountant … Viewer") under fr/es (F-t11-010). Unrenamed seed roles
 // render via the catalog; a renamed (custom) role keeps its stored name.
 test('seeded role names resolve through the translator', () => {
   const t = (key: string) => `<${key}>`
@@ -21,7 +22,7 @@ test('seeded role names resolve through the translator', () => {
 })
 
 for (const locale of ['en', 'fr', 'es']) {
-  test(`F-t11-010: team role names are translated in ${locale}`, () => {
+  test(`team role names are translated in ${locale}`, () => {
     const assignment = (catalog(locale).drawer as Record<string, unknown>).assignment as
       | Record<string, unknown>
       | undefined
@@ -35,9 +36,7 @@ for (const locale of ['en', 'fr', 'es']) {
 }
 
 test('the seeded-name map matches the engine built-in roles', () => {
-  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'organization', 'permissions.ts'), 'utf8')
-  const region = seed.slice(seed.indexOf('BUILT_IN_ROLES'), seed.indexOf('BUILT_IN_ROLE_KEYS'))
-  assert.ok(region.length > 0, 'engine must declare BUILT_IN_ROLES')
-  const names = [...region.matchAll(/^\s*name: "([^"]+)"/gm)].map((m) => m[1])
+  const names = Object.values(BUILT_IN_ROLES).map((role) => role.name)
+  assert.ok(names.length > 0, 'engine must declare built-in roles')
   assert.deepEqual(new Set(Object.keys(SEEDED_ROLE_NAMES)), new Set(names))
 })
