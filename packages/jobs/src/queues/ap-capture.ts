@@ -17,6 +17,24 @@ export type ApCaptureJobData = {
   allowedSubsidiaryIds?: string[] | null;
 };
 
+/**
+ * Deterministic queue identity for one reprocess generation of a capture
+ * item. Same item + same attempt generation always yields the same id, so a
+ * double-click or retried request dedupes in BullMQ instead of running
+ * extraction twice; a later generation (the worker's claim increments
+ * `attempts` on every run) yields a new id, so a legitimate reprocess after
+ * a completed or failed run is never swallowed by a retained completed job.
+ * Wall-clock values must never feed this: a Date.now() id (the pre-fix
+ * shape) dedupes nothing.
+ */
+export function apCaptureReprocessJobId(captureItemId: string, attempts: number): string {
+  if (!captureItemId.trim()) throw new Error("ap-capture reprocess job identity requires the capture item id");
+  if (!Number.isSafeInteger(attempts) || attempts < 0) {
+    throw new Error("ap-capture reprocess job identity requires the non-negative attempt generation");
+  }
+  return `ap-capture|${captureItemId}|reprocess|a${attempts}`;
+}
+
 let queue: Queue<ApCaptureJobData> | undefined;
 
 export function getApCaptureQueue(): Queue<ApCaptureJobData> {

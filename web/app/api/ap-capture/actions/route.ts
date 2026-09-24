@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { enqueueApCapture } from '@openbooks/jobs'
+import { apCaptureReprocessJobId, enqueueApCapture } from '@openbooks/jobs'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -80,20 +80,26 @@ export async function POST(request: Request) {
             error.corrections = corrected
             throw error
           }
-          const changed = (await tx.execute<{ id: string }>(sql`
+          // The attempt generation is read inside the same transaction that
+          // queues the item, so a double-click or retried request derives the
+          // same deterministic job id and dedupes in BullMQ; a later
+          // generation (after the worker's claim increments attempts) mints a
+          // new one. A wall-clock id here would dedupe nothing (E01).
+          const changed = (await tx.execute<{ id: string; attempts: number }>(sql`
             update ap_capture_items set status = 'queued', last_error = null, updated_at = now(), updated_by = ${gate.user.id}
              where org_id = ${gate.user.orgId} and id = ${id} and status in ('failed','needs_review','ready','duplicate')
                and ${apCaptureVisibleExists(gate.user.orgId, id, gate.allowedSubsidiaryIds)}
-             returning id
+             returning id, attempts
           `))
           if (!changed.rows[0]) throw new Error('not_reprocessable')
+          const generation = changed.rows[0].attempts
           await tx.execute(sql`
             insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
             values (${gate.user.orgId}, ${id}, 'reprocess_queued',
                     ${corrected > 0 ? JSON.stringify({ discardedCorrections: corrected }) : '{}'}::jsonb,
                     ${gate.user.id})
           `)
-          return corrected
+          return { corrected, generation }
         }).catch((error: unknown) => {
           if (error instanceof Error && (error as Error & { errorCode?: string }).errorCode === 'confirm_required') {
             results.push({
@@ -109,7 +115,7 @@ export async function POST(request: Request) {
         })
         if (queued === null) continue
         try {
-          await enqueueApCapture({ orgId: gate.user.orgId, captureItemId: id, actorId: gate.user.id }, { jobId: `ap-capture|${id}|${Date.now()}` })
+          await enqueueApCapture({ orgId: gate.user.orgId, captureItemId: id, actorId: gate.user.id }, { jobId: apCaptureReprocessJobId(id, queued.generation) })
         } catch (error) {
           const message = error instanceof Error ? error.message.slice(0, 300) : 'queue_unavailable'
           await db.transaction(async (tx) => {
