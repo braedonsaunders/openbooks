@@ -167,7 +167,7 @@ test(
       const scope = await rescopePayScheduleRuns(db, {
         orgId: f.orgId, payScheduleId: f.scheduleId, actorId: f.actorId,
       });
-      assert.deepEqual(scope, { reresolved: 1, untouched: 0 });
+      assert.deepEqual(scope, { reresolved: 1, untouched: 0, skipped: [] });
 
       const doc = (await docOf(f.orgId, run.documentId))!;
       assert.equal(doc.subsidiary_id, f.usSubsidiaryId);
@@ -381,7 +381,15 @@ test(
       const scope = await rescopePayScheduleRuns(db, {
         orgId: f.orgId, payScheduleId: f.scheduleId, actorId: f.actorId,
       });
-      assert.deepEqual(scope, { reresolved: 0, untouched: 1 });
+      assert.equal(scope.reresolved, 0);
+      assert.equal(scope.untouched, 1);
+      // Committed history is not an error, but it must be reported BY NAME —
+      // otherwise the operator believes the whole schedule followed.
+      assert.equal(scope.skipped.length, 1);
+      assert.equal(scope.skipped[0]!.documentId, run.documentId);
+      assert.equal(scope.skipped[0]!.documentNumber, run.documentNumber);
+      assert.match(scope.skipped[0]!.reason, /left on its frozen entity/);
+      assert.match(scope.skipped[0]!.reason, /committed/);
 
       const doc = (await docOf(f.orgId, run.documentId))!;
       assert.equal(doc.subsidiary_id, f.usSubsidiaryId, "the posted run keeps its entity");
@@ -390,6 +398,100 @@ test(
         select run_status from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}
       `)).rows[0]!;
       assert.equal(status.run_status, "committed");
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "a commit racing a schedule rescope never resets the committed run; the rescope reports it as skipped",
+  { skip: !DB },
+  async () => {
+    // The race: the rescope snapshots a still-calculating run as discardable,
+    // a commit posts lines and flips the status concurrently, and the rescope
+    // then deletes the committed stubs and resets the run to draft —
+    // orphaning GL lines and time-entry claims. The rescope must lock each
+    // candidate and recheck under the lock (the commit path takes the same
+    // row lock first, so the two serialize), skipping whatever is no longer
+    // discardable by name.
+    const f = await seedTwoEntityOrg({ scopedSchedule: true });
+    try {
+      const run = await createPayRun({
+        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+
+      const otherSub = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
+                                  is_elimination, is_active, custom)
+        values (${otherSub}, ${f.orgId}, ${f.rootSubsidiaryId},
+                'CA West', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+      await db.execute(sql`
+        update pay_schedules set subsidiary_id = ${otherSub}
+         where id = ${f.scheduleId} and org_id = ${f.orgId}`);
+
+      const calculatedStubs = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from pay_stubs
+         where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
+      `)).rows[0]!.n;
+      assert.ok(calculatedStubs > 0, "the calculated run holds stubs for the race to threaten");
+
+      // The committing transaction: takes the run row lock (exactly what
+      // commitPayRun takes first) and holds it while the rescope starts, so
+      // the rescope's candidate snapshot still sees the calculating run.
+      // It then commits the run and releases the lock.
+      let lockedResolve!: () => void;
+      const locked = new Promise<void>((resolve) => { lockedResolve = resolve; });
+      let releaseResolve!: () => void;
+      const released = new Promise<void>((resolve) => { releaseResolve = resolve; });
+      const committer = db.transaction(async (tx) => {
+        await tx.execute(sql`
+          select r.document_id from pay_runs r
+            join documents d on d.id = r.document_id and d.org_id = r.org_id
+           where r.org_id = ${f.orgId} and r.document_id = ${run.documentId}
+           for update`);
+        lockedResolve();
+        await released;
+        // The commit posts lines and flips the status; the calculated stubs
+        // are already there, so only the flip is simulated — the race is
+        // about the rescope deleting them and resetting the status.
+        await tx.execute(sql`
+          update pay_runs set run_status = 'committed', updated_by = ${f.actorId}, updated_at = now()
+           where org_id = ${f.orgId} and document_id = ${run.documentId}`);
+      });
+      await locked;
+      const rescoper = db.transaction(async (tx) =>
+        rescopePayScheduleRuns(tx, {
+          orgId: f.orgId, payScheduleId: f.scheduleId, actorId: f.actorId,
+        }));
+      // Let the rescope snapshot the calculating run and block on the row
+      // lock; then let the commit land first.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      releaseResolve();
+      const [scope] = await Promise.all([rescoper, committer]);
+
+      assert.equal(scope.reresolved, 0);
+      assert.equal(scope.untouched, 1);
+      assert.equal(scope.skipped.length, 1, "the raced run is reported, not silently kept");
+      assert.equal(scope.skipped[0]!.documentId, run.documentId);
+      assert.equal(scope.skipped[0]!.documentNumber, run.documentNumber);
+
+      // The committed run is intact: status, stubs, and entity all stand.
+      const status = (await db.execute<{ run_status: string }>(sql`
+        select run_status from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}
+      `)).rows[0]!;
+      assert.equal(status.run_status, "committed", "the race must never reset a committed run to draft");
+      const stubs = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from pay_stubs
+         where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
+      `)).rows[0]!;
+      assert.equal(stubs.n, calculatedStubs, "the committed stubs must survive the rescope");
+      const doc = (await docOf(f.orgId, run.documentId))!;
+      assert.equal(doc.subsidiary_id, f.usSubsidiaryId, "the posted run keeps its entity");
+      assert.equal(doc.currency, "USD", "the posted run keeps its currency");
     } finally {
       await dropScratchOrgReporting(f.orgId);
     }

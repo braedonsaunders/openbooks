@@ -511,9 +511,10 @@ export async function invalidateCalculatedRun(
  * moving one without the other fixes the error message while leaving the
  * wrong-money half behind. The stale calculation is dropped (stubs, ledger
  * movements, totals, evidence digest) so the next test calculates against
- * the new entity from scratch; operator adjustments are kept. The caller
- * decides the run is uncommitted — this helper asserts nothing about
- * lifecycle, it only re-stamps.
+ * the new entity from scratch; operator adjustments are kept. The run's own
+ * row is locked and its status re-asserted as uncommitted under the lock, so
+ * a commit racing the re-scope serializes here instead of being reset to
+ * draft beneath its posted lines.
  */
 export async function reresolveRunToSubsidiary(
   tx: Pick<typeof db, "execute">,
@@ -532,13 +533,27 @@ export async function reresolveRunToSubsidiary(
       + "active subsidiary on the pay schedule, or discard this run and open a new one",
     );
   }
-  const runRow = (await tx.execute<{ pay_date: string; document_number: string }>(sql`
-    select r.pay_date::text as pay_date, d.document_number
+  // Defence in depth: hold the run's own row lock and re-assert it is still
+  // uncommitted before dropping its calculation. The rescope caller rechecks
+  // the full discardable predicate under the same lock; this assertion keeps
+  // every OTHER caller (re-test healing, future writers) from resetting a
+  // committed run to draft and orphaning its GL lines, even if they checked
+  // the status earlier in their own transaction. The commit path takes this
+  // same row lock first, so a commit racing a rescope serializes here.
+  const runRow = (await tx.execute<{ pay_date: string; document_number: string; run_status: string }>(sql`
+    select r.pay_date::text as pay_date, d.document_number, r.run_status
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${orgId} and r.document_id = ${documentId}`));
+     where r.org_id = ${orgId} and r.document_id = ${documentId}
+     for update of r, d`));
   const run = runRow.rows[0];
   if (!run) throw new PayrollError("pay run not found");
+  if (run.run_status === "committed") {
+    throw new PayrollError(
+      `pay run ${run.document_number} committed while its schedule was being re-scoped — `
+      + "it stays on its frozen entity; void it to move it",
+    );
+  }
   let runContext;
   try {
     runContext = resolvePayrollRunContext({
@@ -557,16 +572,15 @@ export async function reresolveRunToSubsidiary(
   }
   await tx.execute(sql`
     delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
-  await tx.execute(sql`
-    delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  // One shared invalidation: stubs, errors and acknowledgement go together.
+  await invalidateCalculatedRun(tx, { orgId, actorId, documentId });
   await tx.execute(sql`
     update documents set subsidiary_id = ${subsidiary.id}, currency = ${runContext.currency},
            updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and id = ${documentId}`);
   await tx.execute(sql`
-    update pay_runs set tax_year = ${runContext.taxYear}, run_status = 'draft',
-           gross_total = '0', net_total = '0', employer_cost_total = '0', employee_count = 0,
-           calculated_at = null, calculation_source_snapshot = null,
+    update pay_runs set tax_year = ${runContext.taxYear},
+           calculation_source_snapshot = null,
            calculation_source_digest = null, updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and document_id = ${documentId}`);
   await tx.execute(sql`
@@ -588,43 +602,87 @@ export async function reresolveRunToSubsidiary(
  * stay frozen; they are counted as untouched, not refused. An unscoped
  * schedule (subsidiary null) resolves nothing and returns zeros.
  */
+export interface RescopedRunSkipped {
+  documentId: string;
+  documentNumber: string | null;
+  reason: string;
+}
+
 export async function rescopePayScheduleRuns(
   runner: Pick<typeof db, "execute">,
   input: { orgId: string; payScheduleId: string; actorId: string },
-): Promise<{ reresolved: number; untouched: number }> {
+): Promise<{ reresolved: number; untouched: number; skipped: RescopedRunSkipped[] }> {
   const { orgId, payScheduleId, actorId } = input;
   const s = (await runner.execute<{ subsidiary_id: string | null }>(sql`
     select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${payScheduleId}`));
   const schedule = s.rows[0];
   if (!schedule) throw new PayrollError("pay schedule not found");
-  if (!schedule.subsidiary_id) return { reresolved: 0, untouched: 0 };
-  const runs = (await runner.execute<{
-    document_id: string; run_status: string; doc_status: string;
-    paid_at: string | null; paid_entry_id: string | null; has_lines: boolean;
-  }>(sql`
-    select r.document_id::text as document_id, r.run_status,
-           d.status as doc_status, r.paid_at::text as paid_at,
-           r.paid_entry_id::text as paid_entry_id,
-           exists (select 1 from document_lines l
-                    where l.org_id = ${orgId} and l.document_id = r.document_id) as has_lines
+  if (!schedule.subsidiary_id) return { reresolved: 0, untouched: 0, skipped: [] };
+  const runs = (await runner.execute<{ document_id: string }>(sql`
+    select r.document_id::text as document_id
       from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${orgId} and r.pay_schedule_id = ${payScheduleId}`));
+     where r.org_id = ${orgId} and r.pay_schedule_id = ${payScheduleId}
+     order by r.document_id`));
   let reresolved = 0;
   let untouched = 0;
-  for (const run of runs.rows) {
+  const skipped: RescopedRunSkipped[] = [];
+  for (const candidate of runs.rows) {
+    // Lock the candidate and recheck its lifecycle UNDER the lock. The
+    // snapshot above is only a candidate list: a commit that posts lines and
+    // flips the status after the snapshot would otherwise have its stubs
+    // deleted and its status reset to draft below, orphaning GL lines and
+    // time-entry claims. The commit path takes this same row lock first, so
+    // the two serialize — the loser of the race sees the winner's status.
+    const locked = (await runner.execute<{
+      run_status: string; doc_status: string; document_number: string | null;
+      paid_at: string | null; paid_entry_id: string | null; has_lines: boolean;
+    }>(sql`
+      select r.run_status, d.status as doc_status, d.document_number,
+             r.paid_at::text as paid_at, r.paid_entry_id::text as paid_entry_id,
+             exists (select 1 from document_lines l
+                      where l.org_id = ${orgId} and l.document_id = r.document_id) as has_lines
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where r.org_id = ${orgId} and r.document_id = ${candidate.document_id}
+       for update of r, d`));
+    const run = locked.rows[0];
+    if (!run) {
+      untouched += 1;
+      skipped.push({
+        documentId: candidate.document_id,
+        documentNumber: null,
+        reason: "the pay run disappeared while its schedule was being re-scoped — left untouched",
+      });
+      continue;
+    }
     const discardable =
       (run.run_status === "draft" || run.run_status === "calculated")
       && run.doc_status === "draft"
       && !run.has_lines && !run.paid_at && !run.paid_entry_id;
     if (!discardable) {
       untouched += 1;
+      // A run that stopped being discardable after the snapshot is not an
+      // error — history stays frozen — but it must be reported BY NAME, or
+      // the operator believes the whole schedule followed.
+      const number = run.document_number ?? candidate.document_id;
+      const why = run.run_status === "committed"
+        ? "it committed"
+        : run.has_lines
+          ? "it has general-ledger lines"
+          : run.paid_at || run.paid_entry_id
+            ? "it is paid"
+            : `its document is ${run.doc_status}`;
+      skipped.push({
+        documentId: candidate.document_id,
+        documentNumber: run.document_number,
+        reason: `pay run ${number} was left on its frozen entity: ${why} while its schedule was being re-scoped`,
+      });
       continue;
     }
     await reresolveRunToSubsidiary(runner, {
-      orgId, actorId, documentId: run.document_id, subsidiaryId: schedule.subsidiary_id,
+      orgId, actorId, documentId: candidate.document_id, subsidiaryId: schedule.subsidiary_id,
     });
     reresolved += 1;
   }
-  return { reresolved, untouched };
+  return { reresolved, untouched, skipped };
 }
