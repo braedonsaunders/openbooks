@@ -285,11 +285,13 @@ export async function buildChangeSet(
     let itemCount = 0;
     for (const t of tables) {
       // Inserts + updates: every sandbox row, matched to its production origin.
-      const diff = await db.execute<ChangeDiffRow>(sql.raw(`
+      // Table names cannot travel as bound parameters; values always can, so
+      // the org ids and seed below are bound while the table stays raw.
+      const diff = await db.execute<ChangeDiffRow>(sql`
         select s.id as sbx_id, p.id as prod_id, row_to_json(s) as sbx_row, row_to_json(p) as prod_row
-          from "${t}" s
-          left join "${t}" p on p.org_id = '${prod}' and ob_rebase(p.id, '${seed}') = s.id
-         where s.org_id = '${sbx}'`));
+          from ${sql.raw(`"${t}"`)} s
+          left join ${sql.raw(`"${t}"`)} p on p.org_id = ${prod} and ob_rebase(p.id, ${seed}) = s.id
+         where s.org_id = ${sbx}`);
       for (const d of diff.rows) {
         // Keep the raw production record before normalizing reference identities
         // for comparison. A reviewed repair must still match that actual base.
@@ -325,10 +327,10 @@ export async function buildChangeSet(
         itemCount++;
       }
       // Deletes: production rows with no sandbox counterpart.
-      const dels = await db.execute<IdRow>(sql.raw(`
-        select p.id, row_to_json(p) as expected_before from "${t}" p
-         where p.org_id = '${prod}'
-           and not exists (select 1 from "${t}" s where s.org_id = '${sbx}' and s.id = ob_rebase(p.id, '${seed}'))`));
+      const dels = await db.execute<IdRow>(sql`
+        select p.id, row_to_json(p) as expected_before from ${sql.raw(`"${t}"`)} p
+         where p.org_id = ${prod}
+           and not exists (select 1 from ${sql.raw(`"${t}"`)} s where s.org_id = ${sbx} and s.id = ob_rebase(p.id, ${seed}))`);
       for (const dr of dels.rows) {
         await db.insert(schema.changeSetItems).values({
           orgId: prod,

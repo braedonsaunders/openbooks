@@ -213,7 +213,13 @@ export async function loadContinuousClose(
     Math.max(1, Number.parseInt(pickString(sp.reportPage) ?? '1', 10) || 1),
   )
   const reportPerPage = 5
-  const readableSql = sql.raw(`(${readable.map((key) => `'${key}'`).join(',')})`)
+  // Agent keys travel as bound parameters, never interpolated into sql.raw:
+  // the readable set is authz-derived, but only bound values are immune to a
+  // quote by construction rather than by provenance.
+  const readableSql = sql`(${sql.join(
+    readable.map((key) => sql`${key}`),
+    sql`, `,
+  )})`
   const base = sql`w.org_id = ${authz.user.orgId} and w.agent_key in ${readableSql}`
   const where = sql`${base}
     ${agent ? sql`and w.agent_key = ${agent}` : sql``}

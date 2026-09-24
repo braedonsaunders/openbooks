@@ -137,9 +137,13 @@ export function netSuiteFamState(asset: Row, value: Row | null, histories: Row[]
 const json = (value: unknown): string => JSON.stringify(value);
 
 async function idMap(table: "accounts" | "subsidiaries" | "departments" | "projects" | "locations" | "parties", orgId: string) {
-  const result = (await db.execute<{ id: string; source_ref: string }>(sql.raw(
-    `select id, custom->>'nsId' as source_ref from ${table} where org_id = '${orgId.replaceAll("'", "''")}' and custom->>'nsId' is not null`,
-  )));
+  // The table is a literal union with constant call sites (identifiers cannot
+  // be bound); the org id is a value and is bound — manual quote-doubling is
+  // not an escaping strategy.
+  const result = (await db.execute<{ id: string; source_ref: string }>(sql`
+    select id, custom->>'nsId' as source_ref from ${sql.raw(table)}
+     where org_id = ${orgId} and custom->>'nsId' is not null
+  `));
   const out = new Map<string, string>();
   for (const row of result.rows) if (!out.has(row.source_ref)) out.set(row.source_ref, row.id);
   return out;

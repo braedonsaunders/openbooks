@@ -74,12 +74,17 @@ export async function loadApiSchema(
     builtIn.push(t)
   }
 
-  // Query live column metadata for all built-in tables at once.
+  // Query live column metadata for all built-in tables at once. Table names
+  // travel as bound parameters, never interpolated into sql.raw.
   const tables = [...new Set(builtIn.map((t) => t.table!))];
+  const tableArray = sql`ARRAY[${sql.join(
+    tables.map((t) => sql`${t}`),
+    sql`, `,
+  )}]::text[]`;
   const cols = await db.execute<ColumnRow>(sql`
     select table_name, column_name, data_type, is_nullable, column_default, is_generated
       from information_schema.columns
-     where table_schema = 'public' and table_name = any(${sql.raw(`ARRAY[${tables.map((t) => `'${t}'`).join(",")}]::text[]`)})
+     where table_schema = 'public' and table_name = any(${tableArray})
      order by table_name, ordinal_position`);
 
   const byTable = new Map<string, ColumnRow[]>();

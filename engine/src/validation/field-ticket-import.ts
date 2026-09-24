@@ -16,6 +16,7 @@
  */
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export interface ImportTicket {
   sourceId: string;
@@ -100,11 +101,36 @@ export function resolveTicketIdentity(
   );
 }
 
-async function sourceIdMap(table: string, orgId: string): Promise<Map<string, string>> {
+/**
+ * Refuse a non-UUID import target before any database work. The import CLI
+ * takes --org/TARGET_ORG/SANDBOX_ORG from the operator's shell, and an
+ * unvalidated value reaches SQL — so a quote in the value must die here with
+ * its remedy, never in a query.
+ */
+export function assertImportOrgId(orgId: string): string {
+  if (!isUuid(orgId)) {
+    throw new Error(
+      `--org must be a UUID (received ${JSON.stringify(orgId)}); ` +
+        "pass --org=<uuid>, TARGET_ORG, or SANDBOX_ORG from the target organization",
+    );
+  }
+  return orgId;
+}
+
+export async function sourceIdMap(
+  table: "projects" | "parties",
+  orgId: string,
+): Promise<Map<string, string>> {
+  // Table names cannot travel as bound parameters, so the identifier stays
+  // raw — but it is a two-member literal union with constant call sites, and
+  // the operator-controlled org id is bound, never interpolated. A previous
+  // spelling built org_id = '<value>' with sql.raw, so a quote in --org broke
+  // out and ran arbitrary SQL as the script role.
   const rows = (
-    await db.execute(sql.raw(
-      `select custom->>'nsId' k, id from "${table}" where org_id = '${orgId}' and custom->>'nsId' is not null`,
-    ))
+    await db.execute(sql`
+      select custom->>'nsId' k, id from ${sql.raw(`"${table}"`)}
+       where org_id = ${orgId} and custom->>'nsId' is not null
+    `)
   ).rows;
   return new Map<string, string>(
     rows.map((row) => [String(row.k), String(row.id)]),

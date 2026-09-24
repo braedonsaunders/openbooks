@@ -133,8 +133,13 @@ export type BudgetWorkspace = {
 }
 
 // The single P&L definition (engine records/account-types): the worksheet,
-// import, line guard and variances all filter on exactly this list.
-const accountTypesSql = sql.raw(`(${PNL_TYPES.map((t) => `'${t}'`).join(',')})`)
+// import, line guard and variances all filter on exactly this list. Values
+// travel as bound parameters — never interpolated into sql.raw — so the list
+// stays a value list even though its members are constants today.
+const accountTypesSql = sql`(${sql.join(
+  PNL_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+)})`
 
 function dimensionWhere(alias: string, dims: BudgetDimensions) {
   const col = (name: string) => sql.raw(`${alias}.${name}`)
