@@ -97,22 +97,39 @@ export async function createOrder(
     return bad('Due date must be a valid calendar date (YYYY-MM-DD)')
   }
 
-  if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
+  // The order's subsidiary is resolved BEFORE any write: a restricted caller
+  // omitting it would otherwise insert documents.subsidiary_id NULL (plus an
+  // audit row and possibly a party promotion) and only learn the row is
+  // invisible when the post-insert load 500s. Undefined defaults to the
+  // caller's single allowed subsidiary; with more than one in scope the
+  // caller must choose. Null (org-wide) always needs unrestricted scope.
+  let subsidiaryId: string | null | undefined = body.subsidiaryId
+  if (subsidiaryId === undefined && gate.allowedSubsidiaryIds) {
+    if (gate.allowedSubsidiaryIds.size === 1) {
+      subsidiaryId = [...gate.allowedSubsidiaryIds][0] ?? undefined
+    }
+    if (subsidiaryId === undefined) {
+      return bad(
+        'an order needs a subsidiary in your visible subsidiaries — choose one before saving',
+      )
+    }
+  }
+  if (subsidiaryId !== undefined && subsidiaryId !== null) {
     if (!(await subsidiaryFeatureEnabled(user.orgId))) {
       return bad('Subsidiaries are not enabled')
     }
-    if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(body.subsidiaryId)) {
+    if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
       return bad(
-        `subsidiary "${body.subsidiaryId}" is outside your visible subsidiaries — choose a subsidiary in scope or ask an administrator for access`,
+        `subsidiary "${subsidiaryId}" is outside your visible subsidiaries — choose a subsidiary in scope or ask an administrator for access`,
       )
     }
     const subsidiary = (await db.execute(sql`
       select 1 from subsidiaries
-       where id = ${body.subsidiaryId} and org_id = ${user.orgId}
+       where id = ${subsidiaryId} and org_id = ${user.orgId}
          and is_active and not is_elimination
     `))
     if (!subsidiary.rows[0]) return bad('order subsidiary must be an active operating subsidiary of this organization')
-  } else if (body.subsidiaryId === null && gate.allowedSubsidiaryIds) {
+  } else if (subsidiaryId === null && gate.allowedSubsidiaryIds) {
     return bad(
       'clearing the order subsidiary is not available with restricted subsidiary scope — choose a visible subsidiary instead',
     )
@@ -290,7 +307,7 @@ export async function createOrder(
     memo: body.memo ?? null,
     department_id: body.departmentId ?? null,
     project_id: body.projectId ?? null,
-    subsidiary_id: body.subsidiaryId ?? null,
+    subsidiary_id: subsidiaryId ?? null,
     extra_dims: body.extraDims ?? {},
     lines: lines.map((l) => ({
       item_id: l.itemId ?? null,
@@ -367,11 +384,15 @@ export async function createOrder(
         values
           (${requestId}, ${user.orgId}, ${cfg.kind}, ${documentNumber},
            ${body.partyId ?? null}, ${documentDate}, ${body.dueDate ?? null},
-           ${currency}, 'draft', ${body.subsidiaryId ?? null},
+           ${currency}, 'draft', ${subsidiaryId ?? null},
            ${body.departmentId ?? null}, ${body.projectId ?? null},
            ${JSON.stringify(headerDims ? headerDims.cleaned : {})}::jsonb,
            ${body.memo ?? null}, ${subtotal}, ${taxTotal}, ${total},
            ${user.id}, ${user.id})
+        // A conflicting id is expected and benign: the advisory lock plus
+        // claimIdempotentCreate above serialize same-key writers, so this arm
+        // only fires for a loser racing a just-committed first save — and a
+        // zero-row insert must never read as success, hence the throw below.
         on conflict (id) do nothing
         returning id
       `))
@@ -422,6 +443,19 @@ export async function createOrder(
            ${JSON.stringify({ before: null, after: snapshot })}::jsonb,
            ${user.id}, ${requestId})
       `)
+      // A restricted caller's row must be readable through their scope: if
+      // the post-insert load below could not see it, the whole save — row,
+      // lines, promotion, and audit — rolls back here instead of committing
+      // an invisible order and answering a 500 for it. Unrestricted callers
+      // skip the recheck (there is no lens to verify against).
+      if (gate.allowedSubsidiaryIds) {
+        const written = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+          select subsidiary_id from documents where id = ${requestId} and org_id = ${user.orgId}
+        `)).rows[0]
+        if (!written || !gate.allowedSubsidiaryIds.has(String(written.subsidiary_id ?? ''))) {
+          throw new Error('order_scope_invisible')
+        }
+      }
       return { replayed: false }
     })
     replayed = outcome.replayed
@@ -431,6 +465,9 @@ export async function createOrder(
       : String(error)
     if (message.includes('idempotency_key_conflict')) {
       return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+    }
+    if (message.includes('order_scope_invisible')) {
+      return bad('the saved order is outside your visible subsidiaries — nothing was kept; choose a subsidiary in scope and save again')
     }
     if (isTenantReferenceViolation(error)) {
       return bad('Referenced party, account, tax profile, or dimension must belong to this organization')

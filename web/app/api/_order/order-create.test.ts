@@ -54,6 +54,7 @@ interface DocRow {
   subtotal: string;
   tax_total: string;
   total: string;
+  subsidiary_id: string | null;
 }
 
 interface LineRow {
@@ -87,6 +88,8 @@ interface RouteState {
   allocations: number;
   queries: string[];
   lastParams: unknown[][];
+  /** Caller lens for scope tests (null = unrestricted). */
+  scope: Set<string> | null;
 }
 
 const state: RouteState = {
@@ -106,6 +109,7 @@ const state: RouteState = {
   allocations: 0,
   queries: [],
   lastParams: [],
+  scope: null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -211,6 +215,10 @@ const mockDb = `
       const rows = state.docs.filter((d) => params.includes(d.id) && params.includes(d.org_id))
       return { rows: rows.map((d) => ({ id: d.id })) }
     }
+    if (text.includes('select subsidiary_id from documents')) {
+      const rows = state.docs.filter((d) => params.includes(d.id) && params.includes(d.org_id))
+      return { rows: rows.map((d) => ({ subsidiary_id: d.subsidiary_id })) }
+    }
     if (text.includes('insert into documents')) {
       // (id, org, kind, number, party, docDate, due, currency, 'draft',
       //  subsidiary, dept, project, extraDims, memo, subtotal, tax, total,
@@ -224,6 +232,7 @@ const mockDb = `
       state.docs.push({
         id, org_id: orgId, kind, document_number: number, status: 'draft',
         currency, document_date: docDate, subtotal: params[13], tax_total: params[14], total: params[15],
+        subsidiary_id: params[8] ?? null,
       })
       return { rows: [{ id }] }
     }
@@ -251,11 +260,16 @@ const mockDb = `
       return { rows: rows.map((a) => ({ after: a.after })) }
     }
     if (text.includes('from documents d')) {
-      const rows = state.docs.filter((d) => params.includes(d.id) && params.includes(d.org_id))
+      // The fake database honours the scope predicate the loader sends: a
+      // restricted lens sees only rows stamped with a visible subsidiary.
+      const lens = state.scope ?? null
+      const rows = state.docs
+        .filter((d) => params.includes(d.id) && params.includes(d.org_id))
+        .filter((d) => !lens || (d.subsidiary_id !== null && lens.has(d.subsidiary_id)))
       return {
         rows: rows.map((d) => ({
           id: d.id, kind: d.kind, status: d.status, currency: d.currency,
-          subsidiary_id: null, project_id: null, department_id: null, memo: null,
+          subsidiary_id: d.subsidiary_id, project_id: null, department_id: null, memo: null,
           due_date: null, document_date: d.document_date, updated_at: '1',
           subtotal: d.subtotal, tax_total: d.tax_total, total: d.total,
           party_id: null, party_name: null, document_number: d.document_number,
@@ -333,10 +347,11 @@ const mockSources = new Map<string, string>([
   ["mock:db", mockDb],
   [
     "mock:feature-gates",
-    `export async function guardFeaturePermission() {
+    `const gateState = globalThis[Symbol.for('openbooks.order-create-route-test')]
+     export async function guardFeaturePermission() {
        return {
          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
-         allowedSubsidiaryIds: null,
+         allowedSubsidiaryIds: gateState.scope ?? null,
        }
      }`,
   ],
@@ -400,6 +415,7 @@ const KEY_C = "00000000-0000-4000-8000-000000001013";
 
 function reset(): void {
   state.features = {};
+  state.scope = null;
   state.subsidiaries = [];
   state.parties = [];
   state.departments = [];
@@ -712,4 +728,67 @@ test("sequential saves allocate distinct numbers, one per save", async () => {
   assert.notEqual(first.doc.document_number, second.doc.document_number);
   assert.equal(state.allocations, 2);
   assert.equal(state.docs.length, 2);
+});
+
+const SUB_OTHER = "00000000-0000-4000-8000-00000000b022";
+
+function restrictedScope(ids: string[]): void {
+  state.features = { multiSubsidiary: true };
+  state.subsidiaries = ids.map((id) => ({ id, active: true, elimination: false }));
+  state.scope = new Set(ids);
+}
+
+test("restricted save without a subsidiary defaults to the single allowed one", async () => {
+  reset();
+  restrictedScope([SUBSIDIARY_ID]);
+  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const res = await post(POST, "/api/estimates", KEY_A, lineBody());
+  assert.equal(res.status, 201);
+  assert.equal(state.docs.length, 1);
+  assert.equal(state.docs[0]!.subsidiary_id, SUBSIDIARY_ID);
+  const data = (await res.json()) as { doc: { id: string } };
+  assert.equal(data.doc.id, KEY_A);
+});
+
+test("restricted save without a subsidiary and several in scope names the remedy", async () => {
+  reset();
+  restrictedScope([SUBSIDIARY_ID, SUB_OTHER]);
+  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const res = await post(POST, "/api/estimates", KEY_A, lineBody());
+  assert.equal(res.status, 422);
+  assert.match(((await res.json()) as { error: string }).error, /subsidiary/i);
+  assert.equal(state.docs.length, 0);
+  assert.equal(state.lines.length, 0);
+  assert.equal(state.audits.length, 0);
+  assert.equal(state.allocations, 0);
+});
+
+test("restricted save with an out-of-scope subsidiary is refused before any write", async () => {
+  reset();
+  restrictedScope([SUBSIDIARY_ID]);
+  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const res = await post(POST, "/api/estimates", KEY_A, {
+    documentDate: "2026-01-15",
+    subsidiaryId: SUB_OTHER,
+    lines: [{ accountId: ACCOUNT_ID, description: "Widget", quantity: "1", unitPrice: "1" }],
+  });
+  assert.equal(res.status, 422);
+  assert.match(((await res.json()) as { error: string }).error, /outside your visible subsidiaries/);
+  assert.equal(state.docs.length, 0);
+  assert.equal(state.lines.length, 0);
+  assert.equal(state.audits.length, 0);
+});
+
+test("restricted save with an explicit null subsidiary names the remedy", async () => {
+  reset();
+  restrictedScope([SUBSIDIARY_ID]);
+  const POST = createModule.makePOST({ kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" });
+  const res = await post(POST, "/api/estimates", KEY_A, {
+    documentDate: "2026-01-15",
+    subsidiaryId: null,
+    lines: [{ accountId: ACCOUNT_ID, description: "Widget", quantity: "1", unitPrice: "1" }],
+  });
+  assert.equal(res.status, 422);
+  assert.match(((await res.json()) as { error: string }).error, /restricted subsidiary scope/);
+  assert.equal(state.docs.length, 0);
 });
