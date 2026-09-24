@@ -2,6 +2,7 @@
   "accountMenu": {
     "account": "アカウント",
     "menuAriaLabel": "アカウントメニュー",
+    "back": "戻る",
     "theme": "テーマ",
     "language": "言語",
     "menuLayout": "メニューレイアウト",

@@ -2,6 +2,7 @@
   "accountMenu": {
     "account": "账户",
     "menuAriaLabel": "账户菜单",
+    "back": "返回",
     "theme": "主题",
     "language": "语言",
     "menuLayout": "菜单布局",
