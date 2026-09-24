@@ -428,18 +428,34 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       mappingJson?: string;
       accountingBookId?: string;
     };
-    let creds: NetSuiteCreds | null = null;
-    if (secret?.consumerKey && cfg.account && cfg.host) {
-      creds = {
-        account: String(cfg.account),
-        host: String(cfg.host),
-        consumerKey: String(secret.consumerKey),
-        consumerSecret: String(secret.consumerSecret ?? ""),
-        tokenKey: String(secret.tokenKey ?? ""),
-        tokenSecret: String(secret.tokenSecret ?? ""),
-      };
+    // Every OAuth1 field is load-bearing: the old gate checked only the
+    // consumer key and coerced the rest via ?? '', so a blank tokenSecret
+    // passed the missing-credentials refusal and signed with an empty
+    // secret, dying later as a remote auth error. Require every field
+    // non-blank here and name each missing one.
+    const missing: string[] = [];
+    const need = (label: string, value: unknown) => {
+      if (typeof value !== "string" || value.trim() === "") missing.push(label);
+    };
+    need("account", cfg.account);
+    need("host", cfg.host);
+    need("consumer key", secret?.consumerKey);
+    need("consumer secret", secret?.consumerSecret);
+    need("token key", secret?.tokenKey);
+    need("token secret", secret?.tokenSecret);
+    if (missing.length > 0) {
+      throw new Error(
+        `NetSuite connection is missing credentials: ${missing.join(", ")} — set them on the connection before syncing`,
+      );
     }
-    if (!creds) throw new Error("NetSuite connection is missing credentials");
+    const creds: NetSuiteCreds = {
+      account: String(cfg.account),
+      host: String(cfg.host),
+      consumerKey: String(secret?.consumerKey),
+      consumerSecret: String(secret?.consumerSecret),
+      tokenKey: String(secret?.tokenKey),
+      tokenSecret: String(secret?.tokenSecret),
+    };
     return new NetSuiteSource(creds, {
       baseCurrency: cfg.baseCurrency,
       bridge: {
