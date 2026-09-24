@@ -623,6 +623,11 @@ export const CT_CERTIFICATE: PayrollCertificate = {
   label: "Employee's Withholding Certificate (Connecticut)",
   scope: { level: "region", region: "CT" },
   purpose: "withholding",
+  // Connecticut's annual exemption code E expires February 15 of the next year.
+  validity: {
+    kind: "following_year_date", monthDay: "02-15",
+    appliesWhen: { field: "withholding_code", values: ["E"] },
+  },
   citation:
     "Connecticut Form CT-W4 (Rev. 12/25); TPG-211, 2026 Withholding Calculation Rules "
     + "(Rev. 12/25); Informational Publication 2026(1), Connecticut Employer's Tax Guide, "

@@ -866,6 +866,8 @@ const GA_G4: PayrollCertificate = {
   label: "State of Georgia Employee's Withholding Allowance Certificate",
   scope: { level: "region", region: "GA" },
   purpose: "withholding",
+  // Georgia G-4 answers are effective only through February 15 of the next year.
+  validity: { kind: "following_year_date", monthDay: "02-15" },
   citation:
     "Georgia Form G-4 (Rev. 08/15/24); Employer's Withholding Tax Guide 2026 (revised June 2026)",
   summary:
