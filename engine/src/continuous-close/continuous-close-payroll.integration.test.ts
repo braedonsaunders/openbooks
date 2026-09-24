@@ -230,3 +230,65 @@ test(
     }
   },
 );
+
+test(
+  "a month the remittance summary cannot evaluate surfaces an explicit gap",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      const { input } = await calculatedRun(fx);
+      await commitPayRun(input);
+      // Model a legacy unknown historical liability: the guard refuses to
+      // un-attribute a committed line, so the trigger stands down for one
+      // statement exactly like markLegacy does for filing accounts.
+      const nulled = await db.transaction(async (tx) => {
+        await tx.execute(sql`alter table pay_stub_lines disable trigger pay_stub_line_liability_guard`);
+        try {
+          return await tx.execute(sql`
+            update pay_stub_lines set liability_account_id = null,
+                   liability_account_source = 'unknown', liability_account_evidence = null
+             where org_id = ${fx.orgId}
+               and kind in ('deduction', 'employer_contribution')
+               and amount <> 0`);
+        } finally {
+          await tx.execute(sql`alter table pay_stub_lines enable trigger pay_stub_line_liability_guard`);
+        }
+      });
+      assert.ok((nulled.rowCount ?? 0) > 0, "the fixture must hold an accrual the summary refuses on");
+      // The D18 configuration: the remittance detector is on while the
+      // unknown-accounts detector is off, so only the detector itself can
+      // keep the unevaluable month visible.
+      const detectors = defaultContinuousCloseDetectors("payroll").map((detector) =>
+        detector.detectorKey === "payroll_unknown_accounts" ? { ...detector, enabled: false } : detector,
+      );
+      assert.ok(
+        detectors.some((detector) => detector.detectorKey === "payroll_remittance_due" && detector.enabled),
+        "the remittance detector must be enabled for this proof",
+      );
+      const findings = await payrollFindings(fx.orgId, "1.0000", detectors);
+      const gaps = findings.filter((finding) => finding.findingType === "payroll_remittance_gap");
+      assert.ok(gaps.length > 0, `an unevaluable month must surface a gap, got ${fingerprints(findings)}`);
+      // The fixture run pays in July, so one gap must cover it and name the
+      // summary's own refusal — not a silent skip, not another detector.
+      const july = gaps.filter(
+        (finding) =>
+          String(finding.summary.from) <= "2026-07-18" && "2026-07-18" <= String(finding.summary.to),
+      );
+      assert.equal(july.length, 1, `exactly one gap covers the fixture month, got ${fingerprints(findings)}`);
+      assert.match(String(july[0]!.summary.reason), /could not evaluate: .*unknown historical liability/);
+      assert.equal(july[0]!.summary.href, "/payroll/remittances");
+      assert.ok(july[0]!.evidence.length >= 1, "the gap carries the refusal as evidence");
+      assert.ok(
+        !findings.some(
+          (finding) =>
+            finding.findingType === "payroll_remittance_due" &&
+            String(finding.fingerprint).includes("2026-07"),
+        ),
+        "the unevaluable month raises no dated group beside its gap",
+      );
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
