@@ -797,6 +797,8 @@
         "routing": "Enrutamiento",
         "done": "Listo",
         "remove": "Eliminar",
+        "removeServerConfirm": "¿Eliminar este acceso SFTP? Esta acción no se puede deshacer.",
+        "removeScheduleConfirm": "¿Eliminar esta regla de enrutamiento? Los archivos de esta carpeta dejarán de importarse.",
         "routingTitle": "Enrutamiento de importación — qué carpeta alimenta qué cuenta",
         "noRouting": "Aún sin enrutamiento — añade uno abajo.",
         "folderPlaceholder": "carpeta",

@@ -393,7 +393,7 @@ function SftpConnectionCard({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => setRouting(!routing)}>{routing ? t("sftpCard.done") : t("sftpCard.routing")}</Button>
-          <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/banking/sftp/${server.id}`, { method: "DELETE" }); onChange(); }}>{t("sftpCard.remove")}</Button>
+          <Button size="sm" variant="ghost" onClick={async () => { if (!confirm(t("sftpCard.removeServerConfirm"))) return; await fetch(`/api/banking/sftp/${server.id}`, { method: "DELETE" }); onChange(); }}>{t("sftpCard.remove")}</Button>
         </div>
       </div>
 
@@ -426,7 +426,7 @@ function SftpConnectionCard({
                   </span>
                 )}
                 <ScheduleBinding sc={sc} onChange={onChange} />
-                <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { await fetch(`/api/banking/sftp/schedules/${sc.id}`, { method: "DELETE" }); onChange(); }}>{t("sftpCard.remove")}</Button>
+                <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { if (!confirm(t("sftpCard.removeScheduleConfirm"))) return; await fetch(`/api/banking/sftp/schedules/${sc.id}`, { method: "DELETE" }); onChange(); }}>{t("sftpCard.remove")}</Button>
               </li>
             ))}
             {schedules.length === 0 && <li className="text-xs text-slate-400">{t("sftpCard.noRouting")}</li>}

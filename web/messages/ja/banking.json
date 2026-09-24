@@ -797,6 +797,8 @@
         "routing": "振り分け",
         "done": "完了",
         "remove": "削除",
+        "removeServerConfirm": "このSFTPログインを削除しますか？この操作は元に戻せません。",
+        "removeScheduleConfirm": "この振り分け設定を削除しますか？このフォルダーのファイルはインポートされなくなります。",
         "routingTitle": "インポートの振り分け — どのフォルダがどの勘定に取り込まれるか",
         "noRouting": "振り分けはまだありません — 以下で追加してください。",
         "folderPlaceholder": "フォルダ",

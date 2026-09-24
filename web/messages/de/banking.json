@@ -797,6 +797,8 @@
         "routing": "Routing",
         "done": "Fertig",
         "remove": "Entfernen",
+        "removeServerConfirm": "Diesen SFTP-Zugang entfernen? Das kann nicht rückgängig gemacht werden.",
+        "removeScheduleConfirm": "Diese Routing-Regel entfernen? Dateien in diesem Ordner werden nicht mehr importiert.",
         "routingTitle": "Import-Routing — welcher Ordner speist welches Konto",
         "noRouting": "Noch kein Routing — unten hinzufügen.",
         "folderPlaceholder": "Ordner",
