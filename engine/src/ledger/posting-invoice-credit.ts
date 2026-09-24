@@ -35,10 +35,10 @@ export interface PostingInvoiceSubject {
  * no converting order and relieves nothing.
  *
  * Skips, by design: no party (other validations own that), no active
- * customer role (supported writers always promote one), no configured limit,
- * and invoices in a foreign currency — those cannot be evaluated without
- * FX, so the order-side mixed-currency probe remains their backstop. A
- * missing role currency and a negative limit refuse by name, and a breach
+ * customer role (supported writers always promote one), and no configured
+ * limit. A configured limit in a different currency refuses by name: this
+ * gate has no effective-dated FX source and must not post unmeasured credit.
+ * A missing role currency and a negative limit refuse by name, and a breach
  * refuses with the figures. There is no override reason at posting: the
  * approved-with-reason path stays order-side-only, inside the approval
  * lifecycle where the reason is audited. Callers skip migration replay:
@@ -71,7 +71,11 @@ export async function assertCustomerInvoiceCredit(
       `customer credit limit cannot be negative; correct the credit limit on the customer section of the party record before posting invoice ${invoice.documentNumber}`,
     );
   }
-  if (invoice.currency !== role.currency) return;
+  if (invoice.currency !== role.currency) {
+    throw new PostingError(
+      `customer credit limit is configured in ${role.currency}, but invoice ${invoice.documentNumber} is in ${invoice.currency}; change the invoice currency to ${role.currency}, or update the customer credit-limit currency and amount to ${invoice.currency} before posting`,
+    );
+  }
 
   const mixedCurrency = await findMixedCurrencyExposure(tx, invoice.orgId, invoice.partyId, role.currency);
   if (mixedCurrency) {
