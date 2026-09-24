@@ -585,6 +585,11 @@ export async function listOpenRequestsForParty(args: {
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
         left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.kind = 'request' and f.requested_from_party_id = ${person.partyId}
+         and not exists (
+           select 1 from hrm_feedback answer
+            where answer.org_id = f.org_id and answer.kind = 'feedback'
+              and answer.context->>'fulfills_request_id' = f.id::text
+         )
        order by f.recorded_at desc
     `)).rows;
     const hidden = await retractedIds(db, orgId);
