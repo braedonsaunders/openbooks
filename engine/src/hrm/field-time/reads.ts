@@ -12,6 +12,21 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, refuse } from "./errors.ts";
+
+/** Actor identity for reads: own party when the login is linked, else null.
+ *  Unlike resolveOwnParty (which refuses — right for clock-in), an unlinked
+ *  supervisor must still see in-scope project batches, just no "own" ones. */
+async function ownPartyOrNull(orgId: string, userId: string, exec: SqlExecutor): Promise<string | null> {
+  const row = (await exec.execute<{ party_id: string | null }>(sql`
+    select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`)).rows[0];
+  return row?.party_id ?? null;
+}
+
+export interface CrewBatchActor {
+  actorUserId: string;
+  /** Subsidiaries the actor may see; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+}
 import { FIELD_TIME_CREW_ENTRY_FEATURE, FIELD_TIME_FEATURE } from "./settings.ts";
 import { clockStatus } from "./clock.ts";
 
@@ -168,6 +183,7 @@ export type CrewBatchSummary = {
 export async function listCrewBatches(
   orgId: string,
   filter: { status?: string | null; projectId?: string | null },
+  actor: CrewBatchActor,
   exec: SqlExecutor = db,
 ): Promise<CrewBatchSummary[]> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) {
@@ -176,6 +192,16 @@ export async function listCrewBatches(
       "Crew time entry is turned off — turn on fieldTimeCrewEntry in Company Settings → Features to see crew batches",
     );
   }
+  // Reads show own batches plus the projects in scope: a foreman sees their
+  // drafts on any project, a restricted approver sees every batch on their
+  // entities, and nobody enumerates another entity's batches.
+  const scope = actor.allowedSubsidiaryIds;
+  const ownPartyId = await ownPartyOrNull(orgId, actor.actorUserId, exec);
+  const ownArm = ownPartyId === null ? sql`false` : sql`b.foreman_party_id = ${ownPartyId}`;
+  const scopeArm =
+    scope === null || scope.size === 0
+      ? sql`false`
+      : sql`prj.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[])`;
   return (await exec.execute<CrewBatchSummary>(sql`
     select b.id::text as id, frm.display_name as "foremanName",
            prj.name as "projectName", b.worked_on::text as "workedOn", b.status,
@@ -188,6 +214,7 @@ export async function listCrewBatches(
      where b.org_id = ${orgId}
        ${filter.status ? sql`and b.status = ${filter.status}` : sql``}
        ${filter.projectId ? sql`and b.project_id = ${filter.projectId}` : sql``}
+       ${scope === null ? sql`` : sql`and (${ownArm} or ${scopeArm})`}
      group by b.id, frm.display_name, prj.name, b.worked_on, b.status
      order by b.worked_on desc, b.id`)).rows;
 }
@@ -218,13 +245,29 @@ export type BatchDetail = {
   events: Array<{ kind: string; actorName: string | null; reason: string | null; recordedAt: string }>;
 }
 
-export async function getBatchDetail(orgId: string, batchId: string, exec: SqlExecutor = db): Promise<BatchDetail> {
+export async function getBatchDetail(
+  orgId: string,
+  actor: CrewBatchActor,
+  batchId: string,
+  exec: SqlExecutor = db,
+): Promise<BatchDetail> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) {
     refuse(
       "field_time_crew_off",
       "Crew time entry is turned off — turn on fieldTimeCrewEntry in Company Settings → Features to see crew batches",
     );
   }
+  // Same own-or-in-scope rule as the list: an out-of-scope batch answers
+  // exactly like a missing one. Lines and events key off the immutable
+  // batch id, so no snapshot is needed — only the project display name is
+  // non-locked, and it is cosmetic, never authorization.
+  const scope = actor.allowedSubsidiaryIds;
+  const ownPartyId = await ownPartyOrNull(orgId, actor.actorUserId, exec);
+  const ownArm = ownPartyId === null ? sql`false` : sql`b.foreman_party_id = ${ownPartyId}`;
+  const scopeArm =
+    scope === null || scope.size === 0
+      ? sql`false`
+      : sql`prj.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[])`;
   const batch = (await exec.execute<{
     id: string; status: string; foreman_party_id: string; foreman_name: string | null;
     project_id: string; project_name: string | null; worked_on: string;
@@ -237,7 +280,8 @@ export async function getBatchDetail(orgId: string, batchId: string, exec: SqlEx
       from crew_time_batches b
       left join parties frm on frm.id = b.foreman_party_id and frm.org_id = b.org_id
       left join projects prj on prj.id = b.project_id and prj.org_id = b.org_id
-     where b.org_id = ${orgId} and b.id = ${batchId}`)).rows[0];
+     where b.org_id = ${orgId} and b.id = ${batchId}
+       ${scope === null ? sql`` : sql`and (${ownArm} or ${scopeArm})`}`)).rows[0];
   if (!batch) {
     throw new FieldTimeError("batch_unknown", "The crew batch is unknown in this organization — reload the crew list");
   }

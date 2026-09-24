@@ -2,6 +2,7 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { can } from '../../../../../lib/authz'
 import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
 import { paymentControlDeps } from '@openbooks/engine/src/payments/payment-accounts.ts'
 import {
@@ -37,7 +38,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const gate = read instanceof NextResponse ? await batchGate('time.crew.enter') : read
   if (gate instanceof NextResponse) return gate
   try {
-    return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
+    return NextResponse.json(await getBatchDetail(
+      gate.user.orgId,
+      { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
+      id,
+    ))
   } catch (error) {
     return fieldTime(error)
   }
@@ -85,52 +90,69 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (body.action === 'lines') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
-      await setBatchLines({ orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, lines: body.lines })
-      return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
+      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
+      await setBatchLines({
+        orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, lines: body.lines,
+        canManageAll: can(gate, 'time.manage'), allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+      return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id))
     }
     if (body.action === 'submit') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
+      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
       await submitBatch({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,
         signerName: body.signerName ?? null,
+        canManageAll: can(gate, 'time.manage'), allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
-      return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
+      return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id))
     }
     if (body.action === 'withdraw') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
+      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
       await withdrawBatch({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,
         reason: body.reason ?? null,
+        canManageAll: can(gate, 'time.manage'), allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
-      return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
+      return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id))
     }
     if (body.action === 'approve') {
       const gate = await batchGate('time.approve')
       if (gate instanceof NextResponse) return gate
+      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
       const status = await approveBatchStage({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,
         comment: body.comment ?? null,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
-      return NextResponse.json({ status, batch: await getBatchDetail(gate.user.orgId, id) })
+      return NextResponse.json({ status, batch: await getBatchDetail(gate.user.orgId, actor, id) })
     }
     if (body.action === 'reject') {
       const gate = await batchGate('time.approve')
       if (gate instanceof NextResponse) return gate
-      await rejectBatch({ orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, reason: body.reason })
-      return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
+      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
+      await rejectBatch({
+        orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, reason: body.reason,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+      return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id))
     }
     if (body.action === 'post') {
       const gate = await batchGate('time.manage')
       if (gate instanceof NextResponse) return gate
-      const result = await postBatch({ orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id })
+      const result = await postBatch({
+        orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
       // The entries and charge documents committed in one transaction
       // above; each charge now posts to the ledger through the EXISTING
       // equipment charge path. A ledger failure names the charge

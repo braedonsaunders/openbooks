@@ -89,7 +89,7 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
   const batches = await listCrewBatches(orgId, {
     status: segment === 'all' ? null : segment,
     projectId: sp.project ?? null,
-  })
+  }, { actorUserId: authed.user.id, allowedSubsidiaryIds: authed.allowedSubsidiaryIds })
   const batchId = sp.batch ?? null
   // Unsaved-create: ?new=1 opens the create workspace over no persisted
   // row. Opening writes nothing — the batch is persisted only by the form's
@@ -119,7 +119,11 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
   }
   let workspace: CrewPageData['workspace'] = null
   if (batchId) {
-    const detail = await getBatchDetail(orgId, batchId)
+    const detail = await getBatchDetail(
+      orgId,
+      { actorUserId: authed.user.id, allowedSubsidiaryIds: authed.allowedSubsidiaryIds },
+      batchId,
+    )
     const settings = await loadFieldTimeSettings(orgId)
     const equipmentOn = await isFeatureEnabled(orgId, 'fieldTimeEquipment')
     const [workers, timeTypes, tasks, units] = await Promise.all([

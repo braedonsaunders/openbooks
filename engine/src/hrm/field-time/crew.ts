@@ -21,6 +21,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { runRecordFlows } from "../../flows/index.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { subsidiaryScopeAllows } from "../../organization/subsidiary-scope.ts";
 import { keyedFingerprint } from "../../platform/secrets.ts";
 import { FieldTimeError, refuse } from "./errors.ts";
 import {
@@ -91,6 +92,56 @@ export async function assertForemanOnProject(
 }
 
 type BatchStatusRow = { id: string; status: string; project_id: string; foreman_party_id: string; worked_on: string };
+
+/**
+ * The actor's own party (users.party_id on the trusted runner); null when
+ * the login is not linked to a party. Resolved here, never taken from the
+ * caller — a caller-supplied party id would be impersonation.
+ */
+async function actorPartyId(orgId: string, actorUserId: string): Promise<string | null> {
+  const row = (await db.execute<{ party_id: string | null }>(sql`
+    select party_id from users where org_id = ${orgId} and id = ${actorUserId}`)).rows[0];
+  return row?.party_id ?? null;
+}
+
+/**
+ * Foreman-action ownership (canonical H-CREW rule): the actor is the
+ * batch's foreman, or a time.manage holder acting for them. Anyone else —
+ * including a foreman holding time.crew.enter on another batch — is
+ * refused with the same unknown-batch refusal as a missing id, so one
+ * foreman can never learn another's batch exists through this path.
+ */
+async function assertBatchOwnerOrSupervisor(
+  orgId: string,
+  actorUserId: string,
+  batch: BatchStatusRow,
+  canManageAll: boolean,
+): Promise<void> {
+  if (canManageAll) return;
+  const partyId = await actorPartyId(orgId, actorUserId);
+  if (partyId !== null && partyId === batch.foreman_party_id) return;
+  refuse("batch_unknown", "The crew batch is unknown in this organization — reload the crew list");
+}
+
+/**
+ * Project scope inside the write transaction (canonical shape 1): lock the
+ * batch's project row FOR UPDATE and assert the caller's subsidiary scope
+ * against the locked row, so a concurrent project rehome cannot move the
+ * write onto another entity mid-transaction. Unknown and out-of-scope
+ * projects answer identically.
+ */
+async function assertProjectInScope(
+  orgId: string,
+  projectId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<void> {
+  const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id::text as subsidiary_id from projects
+     where org_id = ${orgId} and id = ${projectId} for update`)).rows[0];
+  if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
+    refuse("project_unknown", "The project is unknown in this organization — pick a project and retry");
+  }
+}
 
 async function loadBatch(orgId: string, batchId: string): Promise<BatchStatusRow> {
   const row = (await db.execute<BatchStatusRow>(sql`
@@ -220,25 +271,39 @@ export async function createBatch(input: {
   workedOn: string;
   notes?: string | null;
   canManageAll: boolean;
+  /** Subsidiaries the actor may write in; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<string> {
   await requireCrewFeature(input.orgId);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.workedOn)) {
     refuse("invalid_worked_on", "Worked-on must be a calendar date — pick the day the crew worked");
   }
-  const project = (await db.execute<{ id: string }>(sql`
-    select id from projects where org_id = ${input.orgId} and id = ${input.projectId}`)).rows[0];
-  if (!project) refuse("project_unknown", "The project is unknown in this organization — pick a project and retry");
-  await assertForemanOnProject(input.orgId, input.foremanPartyId, input.projectId, input.canManageAll);
-  const id = (await db.execute<{ id: string }>(sql`
-    insert into crew_time_batches
-      (org_id, foreman_party_id, project_id, worked_on, status, notes, created_by, updated_by)
-    values
-      (${input.orgId}, ${input.foremanPartyId}, ${input.projectId}, ${input.workedOn}::date,
-       'draft', ${input.notes?.trim() || null}, ${input.actorUserId}, ${input.actorUserId})
-    returning id::text as id`)).rows[0]?.id;
-  if (!id) throw new FieldTimeError("batch_not_stored", "The crew batch was not stored — no row was written; retry");
-  await appendEvent(input.orgId, id, "created", input.actorUserId, null);
-  return id;
+  // The foreman is the actor (users.party_id) unless a time.manage holder
+  // acts for them: opening a batch under another foreman's party id without
+  // that grant is impersonation, refused by name.
+  if (!input.canManageAll) {
+    const partyId = await actorPartyId(input.orgId, input.actorUserId);
+    if (partyId === null || partyId !== input.foremanPartyId) {
+      refuse(
+        "foreman_not_self",
+        "Batches open under your own foreman identity — your login is not linked to that foreman; ask someone with time.manage to open it for them",
+      );
+    }
+  }
+  return withOrgTransaction(input.orgId, async () => {
+    await assertProjectInScope(input.orgId, input.projectId, input.allowedSubsidiaryIds);
+    await assertForemanOnProject(input.orgId, input.foremanPartyId, input.projectId, input.canManageAll);
+    const id = (await db.execute<{ id: string }>(sql`
+      insert into crew_time_batches
+        (org_id, foreman_party_id, project_id, worked_on, status, notes, created_by, updated_by)
+      values
+        (${input.orgId}, ${input.foremanPartyId}, ${input.projectId}, ${input.workedOn}::date,
+         'draft', ${input.notes?.trim() || null}, ${input.actorUserId}, ${input.actorUserId})
+      returning id::text as id`)).rows[0]?.id;
+    if (!id) throw new FieldTimeError("batch_not_stored", "The crew batch was not stored — no row was written; retry");
+    await appendEvent(input.orgId, id, "created", input.actorUserId, null);
+    return id;
+  });
 }
 
 /** Replace a draft/rejected batch's lines. Anything later refuses. */
@@ -247,9 +312,13 @@ export async function setBatchLines(input: {
   actorUserId: string;
   batchId: string;
   lines: CrewLineInput[];
+  canManageAll: boolean;
+  /** Subsidiaries the actor may write in; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
   await requireCrewFeature(input.orgId);
   const batch = await loadBatch(input.orgId, input.batchId);
+  await assertBatchOwnerOrSupervisor(input.orgId, input.actorUserId, batch, input.canManageAll);
   if (batch.status !== "draft" && batch.status !== "rejected") {
     refuse(
       "batch_locked",
@@ -260,6 +329,7 @@ export async function setBatchLines(input: {
   const equipmentOn = await lockAndCheckOrgFeature(db, input.orgId, FIELD_TIME_EQUIPMENT_FEATURE);
   const cleaned = await validateLines(input.orgId, input.lines, equipmentOn, settings.equipmentToleranceHours);
   await withOrgTransaction(input.orgId, async () => {
+    await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
     const still = (await db.execute<{ status: string }>(sql`
       select status from crew_time_batches
        where org_id = ${input.orgId} and id = ${input.batchId} for update`)).rows[0];
@@ -291,9 +361,13 @@ export async function submitBatch(input: {
   actorUserId: string;
   batchId: string;
   signerName?: string | null;
+  canManageAll: boolean;
+  /** Subsidiaries the actor may write in; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
   await requireCrewFeature(input.orgId);
   const batch = await loadBatch(input.orgId, input.batchId);
+  await assertBatchOwnerOrSupervisor(input.orgId, input.actorUserId, batch, input.canManageAll);
   if (batch.status !== "draft" && batch.status !== "rejected") {
     refuse("batch_not_submittable", `Only a draft batch can be submitted — this batch is ${batch.status}`);
   }
@@ -327,6 +401,7 @@ export async function submitBatch(input: {
        where org_id = ${input.orgId} and id = ${input.batchId}`);
   }
   await withOrgTransaction(input.orgId, async () => {
+    await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
     const moved = (await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = 'submitted', submitted_at = now(), updated_at = now(), updated_by = ${input.actorUserId}
@@ -352,15 +427,23 @@ export async function withdrawBatch(input: {
   actorUserId: string;
   batchId: string;
   reason?: string | null;
+  canManageAll: boolean;
+  /** Subsidiaries the actor may write in; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
   await requireCrewFeature(input.orgId);
-  const moved = (await db.execute<{ n: number }>(sql`
-    update crew_time_batches
-       set status = 'draft', submitted_at = null, updated_at = now(), updated_by = ${input.actorUserId}
-     where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)).rowCount ?? 0;
-  if (moved !== 1) {
-    refuse("batch_not_withdrawable", "Only a submitted batch can be withdrawn — approved and posted batches stay as history");
-  }
+  const batch = await loadBatch(input.orgId, input.batchId);
+  await assertBatchOwnerOrSupervisor(input.orgId, input.actorUserId, batch, input.canManageAll);
+  await withOrgTransaction(input.orgId, async () => {
+    await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
+    const moved = (await db.execute<{ n: number }>(sql`
+      update crew_time_batches
+         set status = 'draft', submitted_at = null, updated_at = now(), updated_by = ${input.actorUserId}
+       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)).rowCount ?? 0;
+    if (moved !== 1) {
+      refuse("batch_not_withdrawable", "Only a submitted batch can be withdrawn — approved and posted batches stay as history");
+    }
+  });
   await appendEvent(input.orgId, input.batchId, "withdrawn", input.actorUserId, input.reason ?? null);
 }
 
@@ -370,6 +453,8 @@ export async function approveBatchStage(input: {
   actorUserId: string;
   batchId: string;
   comment?: string | null;
+  /** Subsidiaries the actor may write in; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<string> {
   await requireCrewFeature(input.orgId);
   const batch = await loadBatch(input.orgId, input.batchId);
@@ -380,6 +465,7 @@ export async function approveBatchStage(input: {
   }
   const status = statusForStage(stage.order);
   await withOrgTransaction(input.orgId, async () => {
+    await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
     const moved = (await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = ${status}, updated_at = now(), updated_by = ${input.actorUserId}
@@ -403,6 +489,8 @@ export async function rejectBatch(input: {
   actorUserId: string;
   batchId: string;
   reason: string;
+  /** Subsidiaries the actor may write in; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
   await requireCrewFeature(input.orgId);
   if (!input.reason || input.reason.trim() === "") {
@@ -413,6 +501,7 @@ export async function rejectBatch(input: {
     refuse("batch_not_rejectable", `Only a batch in approval can be rejected — this batch is ${batch.status}`);
   }
   await withOrgTransaction(input.orgId, async () => {
+    await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
     const moved = (await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = 'rejected', submitted_at = null, updated_at = now(), updated_by = ${input.actorUserId}
@@ -545,6 +634,8 @@ export async function postBatch(input: {
   orgId: string;
   actorUserId: string;
   batchId: string;
+  /** Subsidiaries the actor may write in; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<{ entryIds: string[]; chargeDocumentIds: string[] }> {
   await requireCrewFeature(input.orgId);
   const batch = await loadBatch(input.orgId, input.batchId);
@@ -555,14 +646,18 @@ export async function postBatch(input: {
   const org = (await db.execute<{ base_currency: string }>(sql`
     select base_currency from orgs where id = ${input.orgId}`)).rows[0];
   if (!org) refuse("org_unknown", "The organization is unknown — reload and retry");
-  const project = (await db.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id::text as subsidiary_id from projects
-     where org_id = ${input.orgId} and id = ${batch.project_id}`)).rows[0];
-  if (!project) refuse("project_unknown", "The batch project is gone — withdraw the batch and re-enter it");
 
   // Feature off: equipment columns are ignored on the entries, never stored.
   const equipmentOn = await lockAndCheckOrgFeature(db, input.orgId, FIELD_TIME_EQUIPMENT_FEATURE);
   return withOrgTransaction(input.orgId, async () => {
+    // The project subsidiary is locked and asserted INSIDE the post
+    // transaction: a pre-read would let a concurrent rehome stamp and post
+    // another entity's charges for a scoped caller.
+    await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
+    const project = (await db.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id::text as subsidiary_id from projects
+       where org_id = ${input.orgId} and id = ${batch.project_id}`)).rows[0];
+    if (!project) refuse("project_unknown", "The batch project is gone — withdraw the batch and re-enter it");
     const entryIds: string[] = [];
     for (const line of lines) {
       const inserted = (await db.execute<{ id: string }>(sql`

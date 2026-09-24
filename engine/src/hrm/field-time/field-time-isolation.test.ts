@@ -118,8 +118,8 @@ test("feature-off: self and crew reads refuse by name", { skip: !DB }, async () 
     await withOrg(org.orgId, async () => {
       const { exec, seen } = recording();
       assert.equal(await refusesCode(myClockDay(org.orgId, randomUUID(), exec)), "field_time_off");
-      assert.equal(await refusesCode(listCrewBatches(org.orgId, {}, exec)), "field_time_crew_off");
-      assert.equal(await refusesCode(getBatchDetail(org.orgId, randomUUID(), exec)), "field_time_crew_off");
+      assert.equal(await refusesCode(listCrewBatches(org.orgId, {}, { actorUserId: randomUUID(), allowedSubsidiaryIds: null }, exec)), "field_time_crew_off");
+      assert.equal(await refusesCode(getBatchDetail(org.orgId, { actorUserId: randomUUID(), allowedSubsidiaryIds: null }, randomUUID(), exec)), "field_time_crew_off");
       assert.deepEqual(
         gatedStatements(seen),
         [],
