@@ -231,6 +231,8 @@
     },
     "empty": "No hay una tarjeta asignada; se usa la predeterminada de la organización.",
     "noBooks": "Cree primero una tarjeta de precios de mano de obra.",
+    "loadFailed": "No se pudieron cargar las asignaciones de tarifas laborales.",
+    "staleLoadFailed": "No se pudieron actualizar las asignaciones; las filas mostradas podrían estar desactualizadas.",
     "rateBookRequired": "Elija una tarjeta de tarifa",
     "created": "Tarjeta de tarifa asignada",
     "confirmDelete": "¿Quitar esta asignación?",

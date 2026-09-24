@@ -231,6 +231,8 @@
     },
     "empty": "未分配费率表，将使用组织默认值。",
     "noBooks": "请先创建费率表。",
+    "loadFailed": "无法加载费率分配。",
+    "staleLoadFailed": "无法刷新分配；当前显示的数据可能已过期。",
     "rateBookRequired": "请选择费率表",
     "created": "已分配费率表",
     "confirmDelete": "移除此分配？",

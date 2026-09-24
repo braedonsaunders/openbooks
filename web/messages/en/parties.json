@@ -231,6 +231,8 @@
     },
     "empty": "No labor rate card assigned — the organization default applies.",
     "noBooks": "Create a Labor Pricing rate card first.",
+    "loadFailed": "Could not load labor rate assignments.",
+    "staleLoadFailed": "Could not refresh assignments; the rows shown may be out of date.",
     "rateBookRequired": "Choose a labor rate card",
     "created": "Labor rate card assigned",
     "confirmDelete": "Remove this Labor Pricing assignment?",

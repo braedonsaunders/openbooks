@@ -231,6 +231,8 @@
     },
     "empty": "Nenhuma tabela atribuída; aplica-se a padrão.",
     "noBooks": "Crie primeiro uma tabela de tarifas.",
+    "loadFailed": "Não foi possível carregar as atribuições de tarifas.",
+    "staleLoadFailed": "Não foi possível atualizar as atribuições; as linhas exibidas podem estar desatualizadas.",
     "rateBookRequired": "Escolha uma tabela",
     "created": "Tabela atribuída",
     "confirmDelete": "Remover esta atribuição?",

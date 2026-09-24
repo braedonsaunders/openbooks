@@ -231,6 +231,8 @@
     },
     "empty": "Aucune fiche affectée — la valeur par défaut de l’organisation s’applique.",
     "noBooks": "Créez d’abord une fiche de tarification de la main-d’œuvre.",
+    "loadFailed": "Impossible de charger les affectations de taux de main-d’œuvre.",
+    "staleLoadFailed": "Impossible d’actualiser les affectations; les lignes affichées peuvent être périmées.",
     "rateBookRequired": "Choisissez une fiche de taux",
     "created": "Fiche de taux affectée",
     "confirmDelete": "Retirer cette affectation ?",
