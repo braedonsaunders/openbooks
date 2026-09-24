@@ -326,3 +326,69 @@ test(
     }
   },
 );
+
+test(
+  "re-resolving a source deletion updates its own tenant row and no other",
+  { skip: !DB },
+  async () => {
+    // The resolution upsert keys on (connection_id, source_ref) and pins
+    // the tenant on the conflict write: a bare org_id there is ambiguous
+    // (42702) and every repeat resolution fails. Resolving twice in one
+    // org must update the single row through the conflict branch, while
+    // the other org's resolution keeps its own action note.
+    const orgA = await createScratchOrg();
+    const orgB = await createScratchOrg();
+    const sharedRef = `shared-${randomUUID()}`;
+    try {
+      const actorA = await createScratchUser(orgA.orgId, "Deletion Controller A", "admin");
+      const actorB = await createScratchUser(orgB.orgId, "Deletion Controller B", "admin");
+      const connectionByOrg = new Map<string, string>();
+      for (const [org, actor, docNumber] of [
+        [orgA, actorA, "SO-RE-RESOLVE-A"],
+        [orgB, actorB, "SO-RE-RESOLVE-B"],
+      ] as const) {
+        const connectionId = randomUUID();
+        const documentId = randomUUID();
+        await db.execute(sql`
+          insert into connections (id, org_id, source, display_name, status)
+          values (${connectionId}, ${org.orgId}, 'netsuite', ${`NetSuite ${docNumber}`}, 'active')`);
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, status, document_number, document_date, currency,
+             subtotal, tax_total, total, custom)
+          values (${documentId}, ${org.orgId}, 'sales_order', 'approved',
+                  ${docNumber}, ${org.date}, 'CAD', '25', '0', '25',
+                  ${JSON.stringify({ nsId: sharedRef, connectionId })}::jsonb)`);
+        connectionByOrg.set(org.orgId, connectionId);
+      }
+      const resolve = (org: typeof orgA, actor: string, note: string) =>
+        resolveSourceDeletion({
+          orgId: org.orgId,
+          connectionId: connectionByOrg.get(org.orgId)!,
+          sourceRef: sharedRef,
+          action: "void",
+          actorId: actor,
+          note,
+        });
+      await resolve(orgA, actorA, "first look");
+      await resolve(orgA, actorA, "second look");
+      await resolve(orgB, actorB, "other tenant");
+
+      const rows = await db.execute<{ orgId: string; note: string | null; n: number }>(sql`
+        select org_id as "orgId", note, count(*)::int as n
+          from source_deletion_resolutions
+         where source_ref = ${sharedRef}
+         group by org_id, note`);
+      assert.deepEqual(
+        rows.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
+        [
+          { orgId: orgA.orgId, note: "second look", n: 1 },
+          { orgId: orgB.orgId, note: "other tenant", n: 1 },
+        ].sort((a, b) => a.orgId.localeCompare(b.orgId)),
+      );
+    } finally {
+      await dropScratchOrg(orgB.orgId);
+      await dropScratchOrg(orgA.orgId);
+    }
+  },
+);

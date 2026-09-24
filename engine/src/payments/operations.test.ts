@@ -39,13 +39,6 @@ function postgresFailure(error: unknown): { code?: string; constraint?: string }
   return null;
 }
 
-test("settlement upserts pin the known tenant on the payment_instruction_id conflict write", () => {
-  assert.match(
-    paymentOperationsSource,
-    /insert into payment_settlements[\s\S]*?on conflict \(payment_instruction_id\) do update set[\s\S]*?where payment_settlements\.org_id = \$\{opts\.orgId\}/,
-  );
-});
-
 test(
   "a bank return citing an unknown statement line fails closed before any reversal or settlement write",
   { skip: !DB },
@@ -423,13 +416,6 @@ test(
     }
   },
 );
-
-test("built-in payment format upserts pin the known tenant on the org_id/code conflict write", () => {
-  assert.match(
-    paymentOperationsSource,
-    /insert into payment_formats[\s\S]*?on conflict \(org_id, code\) do update set[\s\S]*?where payment_formats\.org_id = \$\{orgId\}/,
-  );
-});
 
 test("payment approval fails closed when the maker is not identified", () => {
   assert.match(

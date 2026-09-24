@@ -326,16 +326,6 @@ test(
   },
 );
 
-test("resolution upserts pin the known tenant on the connection_id/source_ref conflict write", () => {
-  const controlled = source.slice(
-    source.indexOf("export async function resolveSourceDeletion"),
-  );
-  assert.match(
-    controlled,
-    /on conflict \(connection_id, source_ref\) do update set[\s\S]*?where source_deletion_resolutions\.org_id = \$\{input\.orgId\}/,
-  );
-});
-
 test("source-deletion lookups bind the document to the importing connection", () => {
   const automatic = source.slice(
     source.indexOf("export async function mirrorSourceDeletion"),
