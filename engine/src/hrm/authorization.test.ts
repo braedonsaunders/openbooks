@@ -20,9 +20,12 @@ const {
   HrmAuthorizationError,
   loadActorPerson,
   loadApprovalPerson,
+  loadPartyEmployerSubsidiaries,
   requireHrmEmploymentApprove,
   requireHrmEmploymentManage,
   requireHrmEmploymentRead,
+  requirePartyInScope,
+  requireUnrestrictedHrmScope,
 } = await import("./authorization.ts");
 
 interface FakeUser {
@@ -118,6 +121,17 @@ function fakeExec(state: FakeState): SqlExecutor {
       }
       if (/from subsidiaries/i.test(text)) return { rows: [] };
       if (/from worker_employments/i.test(text)) {
+        if (/distinct employer_subsidiary_id/i.test(text)) {
+          const seen = new Set<string>();
+          const rows: { employerSubsidiaryId: string }[] = [];
+          for (const record of state.employments.values()) {
+            if (record.orgId !== str(params, 0) || record.workerPartyId !== str(params, 1)) continue;
+            if (seen.has(record.employerSubsidiaryId)) continue;
+            seen.add(record.employerSubsidiaryId);
+            rows.push({ employerSubsidiaryId: record.employerSubsidiaryId });
+          }
+          return { rows };
+        }
         const record = state.employments.get(`${str(params, 0)}:${str(params, 1)}`);
         return {
           rows: record
@@ -317,4 +331,63 @@ test("person loaders fail closed on unknown or inactive identity", async () => {
   await assert.rejects(loadActorPerson(exec, ORG, actor), HrmAuthorizationError);
   const person = await loadApprovalPerson(exec, ORG, actor);
   assert.equal(person.partyId, state.users.get(actor)!.partyId);
+});
+
+test("party lens admits a shared employer and refuses a foreign party with the uniform message", async () => {
+  const state = emptyState();
+  const exec = fakeExec(state);
+  const inScope = seedEmployment(state, ORG, SUB_A);
+  const foreign = seedEmployment(state, ORG, SUB_B);
+  const actor = seedUser(state, ["hrm.documents.read"]);
+  state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A] });
+  await requirePartyInScope(exec, ORG, actor, inScope.workerPartyId);
+  await assert.rejects(
+    requirePartyInScope(exec, ORG, actor, foreign.workerPartyId),
+    /not visible in this organization/,
+  );
+  const employers = await loadPartyEmployerSubsidiaries(exec, ORG, inScope.workerPartyId);
+  assert.deepEqual(employers, [SUB_A]);
+});
+
+test("party lens refuses a party with no employment row, even with no other signal", async () => {
+  const state = emptyState();
+  const exec = fakeExec(state);
+  const actor = seedUser(state, ["hrm.documents.read"]);
+  state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A] });
+  await assert.rejects(
+    requirePartyInScope(exec, ORG, actor, randomUUID()),
+    /not visible in this organization/,
+  );
+});
+
+test("party lens passes unrestricted actors without demanding an employment row", async () => {
+  const state = emptyState();
+  const exec = fakeExec(state);
+  const actor = seedUser(state, ["hrm.documents.read"]);
+  await requirePartyInScope(exec, ORG, actor, randomUUID());
+  await requirePartyInScope(exec, ORG, actor, null);
+});
+
+test("party lens refuses a delinked subject to restricted actors", async () => {
+  const state = emptyState();
+  const exec = fakeExec(state);
+  const actor = seedUser(state, ["hrm.documents.read"]);
+  state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A] });
+  await assert.rejects(
+    requirePartyInScope(exec, ORG, actor, null),
+    /not visible in this organization/,
+  );
+});
+
+test("unrestricted-scope gate refuses restricted actors by name with the remedy", async () => {
+  const state = emptyState();
+  const exec = fakeExec(state);
+  const actor = seedUser(state, ["hrm.documents.manage"]);
+  state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A] });
+  await assert.rejects(
+    requireUnrestrictedHrmScope(exec, ORG, actor, "Retention schedules"),
+    /organization-wide scope/,
+  );
+  state.restrictions.set(actor, { mode: "all" });
+  await requireUnrestrictedHrmScope(exec, ORG, actor, "Retention schedules");
 });

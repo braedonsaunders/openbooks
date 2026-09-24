@@ -690,6 +690,81 @@ export async function requireOrgChartRead(
 }
 // HR-19 end
 
+// H-lens begin: party-subject subsidiary lens shared across hrm/ (H wave).
+/**
+ * Party-subject subsidiary lens, shared by every HRM service whose subject
+ * is a person (documents, DSAR exports, surveys, directory reads) rather
+ * than one employment row. The subject's employers are the distinct
+ * employer_subsidiary_id values across their worker_employments rows on
+ * the trusted runner — never caller input. Callers check their own grant
+ * first (requireHrmDocumentsRead etc.); this is the scope half only.
+ */
+export async function loadPartyEmployerSubsidiaries(
+  exec: SqlExecutor,
+  orgId: string,
+  partyId: string,
+): Promise<string[]> {
+  const rows = (await exec.execute<{ employerSubsidiaryId: string }>(sql`
+    select distinct employer_subsidiary_id as "employerSubsidiaryId"
+      from worker_employments
+     where org_id = ${orgId} and worker_party_id = ${partyId}
+       and employer_subsidiary_id is not null
+  `)).rows;
+  return rows.map((row) => row.employerSubsidiaryId);
+}
+
+/**
+ * Scope half for party subjects: the actor sees the party when unrestricted
+ * (null scope) or when the actor's allowed set shares at least one employer
+ * with the subject's employments. A null party (a retention-anonymized row
+ * whose subject link is gone) and a party with no employment row in this
+ * org — unknown, cross-org, or a non-employee — are refused like an
+ * out-of-scope subject, so the refusal text can never confirm which half
+ * failed. The message matches the uniform not-visible shape every HRM
+ * route maps to not-found.
+ */
+export async function requirePartyInScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  partyId: string | null,
+): Promise<void> {
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed === null) return;
+  if (partyId === null) {
+    throw new HrmAuthorizationError(
+      "Subject is not visible in this organization and legal-entity scope.",
+    );
+  }
+  const employers = await loadPartyEmployerSubsidiaries(exec, orgId, partyId);
+  if (!employers.some((id) => allowed.has(id))) {
+    throw new HrmAuthorizationError(
+      "Subject is not visible in this organization and legal-entity scope.",
+    );
+  }
+}
+
+/**
+ * Org-wide configuration writes (retention schedules, org-wide enrollment
+ * windows and templates, org-wide recruiting rules): there is no single
+ * subject to scope by, so a subsidiary-restricted actor is refused by name.
+ * The refusal names the remedy — an administrator with organization-wide
+ * scope — and the remedy exists (the all-scope admin role).
+ */
+export async function requireUnrestrictedHrmScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  what: string,
+): Promise<void> {
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed === null) return;
+  throw new HrmAuthorizationError(
+    `${what} applies across legal entities — ask an administrator with organization-wide scope to change it instead.`,
+  );
+}
+// H-lens end
+
 /** Actor identity as the SoD legs see it: super-admin flag travels with the login. */
 export async function loadActorPerson(
   exec: SqlExecutor,
