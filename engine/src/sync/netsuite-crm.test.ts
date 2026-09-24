@@ -43,3 +43,9 @@ test('resolves opportunity currencies through configured ISO currencies', () => 
   assert.equal(resolveNetSuiteCrmCurrency('EUR', 'CAD', sourceCurrencies, configuredCurrencies), null)
   assert.equal(resolveNetSuiteCrmCurrency('not-a-currency', 'CAD', sourceCurrencies, configuredCurrencies), null)
 })
+
+test('uses source opportunity probability when valid and the configured default otherwise', () => {
+  assert.equal(resolveNetSuiteCrmOpportunityProbability('37', 10), 37)
+  assert.equal(resolveNetSuiteCrmOpportunityProbability(null, 25), 25)
+  assert.equal(resolveNetSuiteCrmOpportunityProbability('not-a-probability', 25), 25)
+})
