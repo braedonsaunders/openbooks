@@ -11,9 +11,10 @@ interface QueryRecord {
 
 interface RouteState {
   queries: QueryRecord[]
+  allowedSubsidiaryIds: Set<string> | null
 }
 
-const routeState: RouteState = { queries: [] }
+const routeState: RouteState = { queries: [], allowedSubsidiaryIds: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const mockAuthz = `
@@ -23,6 +24,7 @@ const mockAuthz = `
         orgId: '00000000-0000-4000-8000-000000000001',
         id: '00000000-0000-4000-8000-000000000002',
       },
+      allowedSubsidiaryIds: globalThis[Symbol.for('openbooks.setup-wizard-route-test')].allowedSubsidiaryIds,
     }
   }
 `
@@ -90,15 +92,19 @@ const mockDb = `
   }
 `
 
+let authzRealUrl = ''
+let dbRealUrl = ''
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('setup/wizard/route')) {
+      authzRealUrl = nextResolve(specifier, context).url
       return { url: 'mock:setup-wizard-authz', shortCircuit: true }
     }
     if (specifier === '@openbooks/engine/src/platform/db.ts') {
+      dbRealUrl = nextResolve(specifier, context).url
       return { url: 'mock:setup-wizard-db', shortCircuit: true }
     }
     if (specifier.startsWith('@/') && context.parentURL) {
@@ -108,17 +114,17 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     if (url === 'mock:setup-wizard-authz') {
-      return { format: 'module', source: mockAuthz, shortCircuit: true }
+      return { format: 'module', source: `export { guardUnrestrictedScope } from ${JSON.stringify(authzRealUrl)};\n${mockAuthz}`, shortCircuit: true }
     }
     if (url === 'mock:setup-wizard-db') {
-      return { format: 'module', source: mockDb, shortCircuit: true }
+      return { format: 'module', source: `export * from ${JSON.stringify(dbRealUrl)};\n${mockDb}`, shortCircuit: true }
     }
     return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?setup-wizard-route-test'
-const { PUT } = (await import(routeUrl)) as typeof import('./route.ts')
+const { PUT, POST } = (await import(routeUrl)) as typeof import('./route.ts')
 test.after(() => hooks.deregister())
 
 const baseBody = {
@@ -138,6 +144,7 @@ const baseBody = {
 
 function reset(): void {
   routeState.queries = []
+  routeState.allowedSubsidiaryIds = null
 }
 
 function rootUpdate(): QueryRecord {
@@ -187,4 +194,19 @@ test('the wizard takes the feature-gate fence before any gate reads or row locks
   assert.ok(fenceIndex > -1, 'the wizard must take the feature-gate fence inside its transaction')
   const orgLockIndex = routeState.queries.findIndex(({ text }) => text.includes('from orgs where id') && text.includes('for update'))
   assert.ok(orgLockIndex > fenceIndex, 'the fence must precede the org row lock, like the Features switchboard')
+})
+
+test('restricted actors cannot mutate setup wizard org settings', async () => {
+  reset()
+  routeState.allowedSubsidiaryIds = new Set(['subsidiary-a'])
+  const putResponse = await PUT(new Request('http://openbooks.test/api/admin/setup/wizard', {
+    method: 'PUT',
+    body: JSON.stringify({ ...baseBody, name: 'Should Not Save' }),
+  }))
+  const postResponse = await POST()
+  assert.equal(putResponse.status, 403)
+  assert.equal(postResponse.status, 403)
+  assert.deepEqual(await putResponse.json(), { error: 'requires unrestricted subsidiary access' })
+  assert.deepEqual(await postResponse.json(), { error: 'requires unrestricted subsidiary access' })
+  assert.deepEqual(routeState.queries, [], 'neither org settings write enters its transaction')
 })

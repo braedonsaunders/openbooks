@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
@@ -211,6 +211,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
   const { dashboard } = await params;
   const gate = await gateDashboard("admin.setup.manage", dashboard);
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
   if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
 

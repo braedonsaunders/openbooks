@@ -6,10 +6,11 @@ interface RouteState {
   revision: number
   executed: string[]
   updateResponses: ({ rows: unknown[] })[]
+  allowedSubsidiaryIds: Set<string> | null
 }
 
 const stateKey = Symbol.for('openbooks.true-cost-config-route-test')
-const state: RouteState = { revision: 0, executed: [], updateResponses: [] }
+const state: RouteState = { revision: 0, executed: [], updateResponses: [], allowedSubsidiaryIds: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 /** Flatten a drizzle SQL chunk into its template text for query assertions. */
@@ -45,7 +46,8 @@ const mockSources = new Map<string, string>([
     'mock:gates',
     `
       export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' } }
+        const state = globalThis[Symbol.for('openbooks.true-cost-config-route-test')]
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
     `,
   ],
@@ -100,17 +102,28 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/analytics/true-cost-engine', 'mock:engine'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
 ])
+let realAuthzUrl = ''
+let dbRealUrl = ''
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') return { format: 'module', source: '', shortCircuit: true, url: 'mock:server-only' }
+    if (specifier === '../../../../../lib/authz') {
+      realAuthzUrl = nextResolve(specifier, context).url
+      return { url: 'mock:authz', shortCircuit: true }
+    }
+    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+      dbRealUrl = nextResolve(specifier, context).url
+      return { url: 'mock:db', shortCircuit: true }
+    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
+    if (source !== undefined) return { format: 'module', source: url === 'mock:db' ? `export * from ${JSON.stringify(dbRealUrl)};\n${source}` : source, shortCircuit: true }
+    if (url === 'mock:authz') return { format: 'module', source: `export { guardUnrestrictedScope } from ${JSON.stringify(realAuthzUrl)}`, shortCircuit: true }
     if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
     return nextLoad(url, context)
   },
@@ -124,6 +137,7 @@ function reset(revision: number): void {
   state.revision = revision
   state.executed = []
   state.updateResponses = []
+  state.allowedSubsidiaryIds = null
 }
 
 function put(body: Record<string, unknown>): Promise<Response> {
@@ -153,6 +167,15 @@ test('PUT rejects a missing revision before attempting a write', async () => {
 
   assert.equal(response.status, 409)
   assert.match((await response.json()).error, /revision is required/)
+  assert.equal(state.executed.length, 0)
+})
+
+test('restricted actors cannot write org-wide True Cost settings', async () => {
+  reset(3)
+  state.allowedSubsidiaryIds = new Set(['subsidiary-a'])
+  const response = await put({ expectedRevision: 3, activeProfileId: profile.id, profiles: [profile] })
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
   assert.equal(state.executed.length, 0)
 })
 

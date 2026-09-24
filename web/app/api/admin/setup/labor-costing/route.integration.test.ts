@@ -75,12 +75,14 @@ const mockAuthz = `
     return ids.every((id) => id !== null && id !== undefined && id !== '' && scope.has(id))
   }
 `;
+let authzRealUrl = '';
 
 // The rate paths delegate to the real db module (real pool, real RLS, real
 // transaction) through this wrapper, which adds fault injection and statement
 // observation. Failures are thrown BEFORE delegating, so the surrounding
 // withOrgTransaction sees a genuine mid-transaction database error.
 const mockDbWrapper = (realUrl: string) => `
+  export * from ${JSON.stringify(realUrl)}
   const state = globalThis[Symbol.for('openbooks.labor-costing-route-test')]
   const real = await import(${JSON.stringify(realUrl)})
   function sqlText(query) {
@@ -123,6 +125,7 @@ const hooks = registerHooks({
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/labor-costing")) {
+      authzRealUrl = nextResolve(specifier, context).url;
       return { url: "mock:authz", shortCircuit: true };
     }
     // The route's own db import is wrapped, and so is the canonical
@@ -144,7 +147,7 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     if (url === "mock:authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
+      return { format: "module", source: `export { guardUnrestrictedScope } from ${JSON.stringify(authzRealUrl)};\n${mockAuthz}`, shortCircuit: true };
     }
     if (url === "mock:dbwrap") {
       // Delegate to the SAME real-module instance the fixtures use.
@@ -224,6 +227,25 @@ function saveRateBody(overrides: Record<string, unknown> = {}): Record<string, u
     ...overrides,
   };
 }
+
+test("a restricted setup actor cannot change org-wide labor costing policy", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: new Set([f.subsidiaryId]),
+    };
+    const res = await PUT(putRequest({ settings: { mode: "post", hoursPerDay: 8, annualHours: 2080, components: [] } }));
+    assert.equal(res.status, 403);
+    assert.deepEqual(await res.json(), { error: "requires unrestricted subsidiary access" });
+    assert.equal(await storedPolicy(f.orgId), null);
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
 
 type StoredRate = {
   id: string;

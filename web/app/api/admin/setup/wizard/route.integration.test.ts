@@ -30,6 +30,7 @@ const mockAuthz = `
     return authz
   }
 `;
+let authzRealUrl = ''
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -46,13 +47,14 @@ const hooks = registerHooks({
       specifier === "../../../../../lib/authz"
       && context.parentURL?.includes("setup/wizard")
     ) {
+      authzRealUrl = nextResolve(specifier, context).url
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
     if (url === "mock:authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
+      return { format: "module", source: `export { guardUnrestrictedScope } from ${JSON.stringify(authzRealUrl)};\n${mockAuthz}`, shortCircuit: true };
     }
     return nextLoad(url, context);
   },

@@ -54,6 +54,10 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
+  if (body.action === 'set-lifecycle' || body.action === 'set-application') {
+    const scopeDenied = guardUnrestrictedScope(gate)
+    if (scopeDenied) return scopeDenied
+  }
 
   if (body.action === 'publish') {
     const effectiveFrom = typeof body.effectiveFrom === 'string' ? body.effectiveFrom : ''
