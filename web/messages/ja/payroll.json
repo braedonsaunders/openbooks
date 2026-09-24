@@ -1077,6 +1077,7 @@
     "empty": "この期間に納付対象額のある確定済み計算はありません。",
     "unassigned": "納付先ベンダーが未割当",
     "assignVendor": "コンポーネント上でベンダーを割り当ててください",
+    "attributeEntity": "納付の前に給与計算を子会社に割り当ててください",
     "context": "給与総額 {gross} · {employees, plural, one {期間中の従業員 # 名} other {期間中の従業員 # 名}}",
     "withheld": "源泉徴収額",
     "employer": "事業主",

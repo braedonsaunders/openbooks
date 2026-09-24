@@ -1077,6 +1077,7 @@
     "empty": "本期间没有含可代缴金额的已确认核算。",
     "unassigned": "未指定代缴供应商",
     "assignVendor": "请在项目上指定供应商",
+    "attributeEntity": "代缴前请先将工资核算归属到子公司",
     "context": "工资总额 {gross} · {employees, plural, one {本期间 # 名员工} other {本期间 # 名员工}}",
     "withheld": "已代扣",
     "employer": "雇主",

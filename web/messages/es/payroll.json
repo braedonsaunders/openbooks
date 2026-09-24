@@ -1077,6 +1077,7 @@
     "empty": "No hay ciclos contabilizados con montos remitibles en este período.",
     "unassigned": "Sin proveedor de remesa asignado",
     "assignVendor": "Asigne un proveedor en los conceptos",
+    "attributeEntity": "Atribuya los ciclos de nómina a una subsidiaria antes de remitir",
     "context": "Nómina bruta {gross} · {employees, plural, one {# empleado} other {# empleados}} en el período",
     "withheld": "Retenido",
     "employer": "Empleador",
