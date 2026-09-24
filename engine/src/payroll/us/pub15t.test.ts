@@ -267,6 +267,7 @@ test("Additional Medicare when YTD wages already exceed $200,000", () => {
   });
   assert.equal(result.medicare, money("43.50")); // 3,000 × 1.45%, uncapped
   assert.equal(result.additionalMedicare, money("27.00"));
+  assert.equal(result.factors.MED2_TAXABLE, money("3000.00"));
 });
 
 test("period-frequency boundaries: annual pay and P=2000 calculate, 0 and 2001 refuse", () => {

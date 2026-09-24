@@ -72,7 +72,10 @@ async function form941Population(orgId: string, taxYear: number): Promise<Payrol
       { key: "fit", label: "Federal tax", align: "right", money: true },
       { key: "ssWages", label: "SS wages", align: "right", money: true },
       { key: "ssTax", label: "SS tax (both)", align: "right", money: true },
-      { key: "medicareTax", label: "Medicare tax (both)", align: "right", money: true },
+      { key: "medicareWages", label: "5c Medicare wages", align: "right", money: true },
+      { key: "medicareTax", label: "5c Medicare tax (both)", align: "right", money: true },
+      { key: "additionalMedicareWages", label: "5d Additional Medicare wages", align: "right", money: true },
+      { key: "additionalMedicareTax", label: "5d Additional Medicare tax", align: "right", money: true },
     ],
     rows: quarters.map((quarter) => ({
       rowId: `${quarter.filingAccountId ?? ""}:${quarter.quarter}`,
@@ -81,7 +84,10 @@ async function form941Population(orgId: string, taxYear: number): Promise<Payrol
       fit: quarter.federalIncomeTax,
       ssWages: quarter.ssWages,
       ssTax: quarter.ssTax,
+      medicareWages: quarter.medicareWages,
       medicareTax: quarter.medicareTax,
+      additionalMedicareWages: quarter.additionalMedicareWages,
+      additionalMedicareTax: quarter.additionalMedicareTax,
     })),
   };
 }
@@ -138,15 +144,17 @@ async function form941Slip(orgId: string, taxYear: number, rowId: string): Promi
       { code: "3", label: "Federal income tax withheld from wages, tips, and other compensation", value: quarter.federalIncomeTax },
       { code: "5a", label: "Taxable social security wages", value: quarter.ssWages },
       { code: "5c", label: "Taxable Medicare wages & tips", value: quarter.medicareWages },
+      { code: "5d", label: "Taxable wages & tips subject to Additional Medicare Tax withholding", value: quarter.additionalMedicareWages },
+      { code: "5d tax", label: "Additional Medicare Tax (employee)", value: quarter.additionalMedicareTax },
       {
         code: "5e",
         label: "Total social security and Medicare taxes (employee + employer)",
-        value: add(quarter.ssTax, quarter.medicareTax),
+        value: add(add(quarter.ssTax, quarter.medicareTax), quarter.additionalMedicareTax),
         emphasis: true,
       },
     ],
     notes: [
-      "Worksheet lines computed from committed stubs; Medicare tax includes Additional Medicare withholding.",
+      "Worksheet lines computed from committed stubs; line 5d reports Additional Medicare taxable wages and employee tax separately.",
     ],
   };
 }

@@ -927,7 +927,9 @@ export interface Form941Quarter {
   ssWages: string;
   ssTax: string; // employee + employer
   medicareWages: string;
-  medicareTax: string; // employee + employer, incl. Additional Medicare
+  medicareTax: string; // regular Medicare tax, employee + employer
+  additionalMedicareWages: string;
+  additionalMedicareTax: string; // employee withholding on line 5d
 }
 
 /**
@@ -965,7 +967,11 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
                 where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'ss')) as ss_tax,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'medicare')) as medicare_tax,
+           sum(coalesce((s.factors->>'MED2_TAXABLE')::numeric, 0)) as additional_medicare_wages,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'medicare_addl')) as additional_medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
@@ -980,6 +986,8 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
     ssTax: num(row.ss_tax),
     medicareWages: num(row.medicare_wages),
     medicareTax: num(row.medicare_tax),
+    additionalMedicareWages: num(row.additional_medicare_wages),
+    additionalMedicareTax: num(row.additional_medicare_tax),
   }));
 }
 

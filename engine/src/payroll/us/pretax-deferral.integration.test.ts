@@ -92,6 +92,15 @@ async function usPayrollOrg(): Promise<Fixture> {
         sui: { TX: { rate: "0.03", wageBase: "7000" } },
       })}::jsonb
     ) where id = ${org.orgId}`);
+  // This integration suite tests SUI and filing aggregation; configure the
+  // ordinary full-credit FUTA rate explicitly so it does not depend on a
+  // Schedule A transcription for the test year.
+  await db.execute(sql`
+    insert into payroll_statutory_rates
+      (org_id, country, rate_key, region, tax_year, rate_values, created_by, updated_by)
+    values (${org.orgId}, 'US', 'us_futa', 'TX', 2026, '{"rate":"0.006"}'::jsonb,
+            ${actorId}, ${actorId})
+  `);
 
   const subsidiaryId = randomUUID();
   await db.execute(sql`
@@ -172,6 +181,7 @@ function expectedFit(fitWages: string): string {
     ficaWages: PERIOD_WAGES,
     futaWages: PERIOD_WAGES,
     filingStatus: "single",
+    futaEffectiveRate: "0.006",
     sui: { rate: "0.03", wageBase: "7000" },
   }).fit;
 }
@@ -265,6 +275,48 @@ test(
       const quarters = await form941Worksheet(fx.orgId, 2026);
       assert.equal(quarters.length, 1);
       assert.equal(quarters[0]!.wages, "5800.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "Form 941 reports Additional Medicare wages and tax separately on line 5d",
+  { skip: !DB },
+  async () => {
+    const fx = await usPayrollOrg();
+    try {
+      const employee = await usEmployee(fx, "Additional Medicare employee");
+      await db.execute(sql`
+        update labor_cost_rates set rate = '5330000'
+         where org_id = ${fx.orgId} and employee_party_id = ${employee}
+           and effective_from = '2026-01-01'
+      `);
+      const run = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+      });
+      const result = await calculatePayRun({
+        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+      });
+      assert.deepEqual(result.errors, []);
+      await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+
+      const quarters = await form941Worksheet(fx.orgId, 2026);
+      assert.equal(quarters.length, 1);
+      assert.equal(quarters[0]!.medicareWages, "205000.0000");
+      assert.equal(quarters[0]!.medicareTax, "5945.0000");
+      assert.equal(quarters[0]!.additionalMedicareWages, "5000.0000");
+      assert.equal(quarters[0]!.additionalMedicareTax, "45.0000");
+      const usPack = PAYROLL_COUNTRY_PACKS.US;
+      assert.ok(usPack, "US payroll pack is registered");
+      const form941 = usPack.filings().yearEnd.find((filing) => filing.key === "941");
+      assert.ok(form941?.slip, "the US pack declares the Form 941 slip");
+      const slip = await form941.slip.build(fx.orgId, 2026, ":3");
+      assert.equal(slip.boxes.find((box) => box.code === "5d")?.value, "5000.0000");
+      assert.equal(slip.boxes.find((box) => box.code === "5d tax")?.value, "45.0000");
+      assert.equal(slip.boxes.find((box) => box.code === "5e")?.value, "28868.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
