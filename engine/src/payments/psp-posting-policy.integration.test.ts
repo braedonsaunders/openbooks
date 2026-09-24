@@ -32,7 +32,7 @@ for (const policy of ["restricted account", "inactive subsidiary", "inactive boo
         return { actorId, batchId, branchId };
       });
       const { actorId, batchId, branchId } = seeded;
-      await assert.rejects(postSettlementBatch(org.orgId, batchId, actorId), (error: unknown) => {
+      await assert.rejects(postSettlementBatch(org.orgId, batchId, actorId, null), (error: unknown) => {
         assert.ok(error instanceof PspSettlementError);
         assert.match(error.message, policy === "restricted account" ? /restricted to another subsidiary/
           : policy === "inactive subsidiary" ? /inactive/ : /active primary posting book/);
@@ -46,9 +46,9 @@ for (const policy of ["restricted account", "inactive subsidiary", "inactive boo
         where org_id=${org.orgId} and id=${org.accounts.bank}`));
       await withBypassContext(() => db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${branchId}`));
       await withBypassContext(() => db.execute(sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`));
-      const result = await postSettlementBatch(org.orgId, batchId, actorId);
+      const result = await postSettlementBatch(org.orgId, batchId, actorId, null);
       assert.ok(result.entryId);
-      assert.deepEqual(await postSettlementBatch(org.orgId, batchId, actorId), result);
+      assert.deepEqual(await postSettlementBatch(org.orgId, batchId, actorId, null), result);
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
@@ -76,7 +76,7 @@ test("PSP posting rechecks an account restriction committed while it waits", { s
     await writer.query("update accounts set subsidiary_id=$1,subsidiary_include_children=false where org_id=$2 and id=$3",
       [branchId, org.orgId, org.accounts.bank]);
     const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-    pending = postSettlementBatch(org.orgId, batchId, actorId)
+    pending = postSettlementBatch(org.orgId, batchId, actorId, null)
       .then((value) => ({ status: "fulfilled", value }), (reason: unknown) => ({ status: "rejected", reason }));
     let blocked = false;
     for (let attempt = 0; attempt < 400; attempt++) {

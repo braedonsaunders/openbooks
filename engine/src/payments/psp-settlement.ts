@@ -7,6 +7,7 @@ import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
+import { ScopeNotFoundError, assertUnrestrictedScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./acceptance.ts";
 
@@ -1023,6 +1024,7 @@ export async function postSettlementBatch(
   orgId: string,
   batchId: string,
   actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ entryId: string }> {
   await assertNotSandbox(orgId, "post a PSP settlement");
   return await withOrg(orgId, async () => {
@@ -1055,7 +1057,8 @@ export async function postSettlementBatch(
        for update of b
     `));
     const b = batch.rows[0];
-    if (!b) throw new PspSettlementError("settlement batch not found");
+    if (!b) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, b.subsidiary_id)) throw new ScopeNotFoundError();
     if (b.status === "posted") {
       if (!b.journal_entry_id) {
         throw new PspSettlementError(
@@ -1279,6 +1282,7 @@ export async function reverseSettlementBatch(
   batchId: string,
   actorId: string,
   input: { reversalDate: string; reason: string },
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ entryId: string }> {
   await assertNotSandbox(orgId, "reverse a PSP settlement");
   const reason = input.reason.trim();
@@ -1303,7 +1307,8 @@ export async function reverseSettlementBatch(
        for update
     `));
     const b = batch.rows[0];
-    if (!b) throw new PspSettlementError("settlement batch not found");
+    if (!b) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, b.subsidiary_id)) throw new ScopeNotFoundError();
     if (b.status === "void") {
       if (!b.reversal_entry_id) {
         throw new PspSettlementError("void batch is missing reversal evidence");
@@ -1438,7 +1443,9 @@ export async function savePspProviderConfig(
     apiKey?: string | null;
   },
   actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<void> {
+  assertUnrestrictedScope(allowedSubsidiaryIds);
   // Fail closed before any write: without this the storage CHECK surfaces
   // an unknown provider as a raw 500.
   if (input.provider !== "stripe" && input.provider !== "recurly" && input.provider !== "chargebee") {

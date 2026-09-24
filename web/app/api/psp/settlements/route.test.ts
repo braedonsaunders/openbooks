@@ -100,6 +100,11 @@ const mockSources = new Map<string, string>([
         if (authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
         return Response.json({ error: 'not found' }, { status: 404 })
       }
+
+      export function guardUnrestrictedScope(authz) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+      }
     `,
   ],
   [
@@ -138,6 +143,8 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')]
 
       export class PspSettlementError extends Error {}
+      export class ScopeNotFoundError extends Error {}
+      export class UnrestrictedScopeError extends Error {}
 
       export function parseStripeBalanceTransactions(_rows, externalRef, settlementDate) {
         return {
@@ -177,13 +184,15 @@ const mockSources = new Map<string, string>([
         return { batchId: '00000000-0000-4000-8000-0000000000b1', created: true }
       }
 
-      export async function postSettlementBatch(orgId, batchId, userId) {
-        state.domainCalls.push({ action: 'post', orgId, userId, input: { batchId } })
+      export async function postSettlementBatch(orgId, batchId, userId, allowedSubsidiaryIds) {
+        if (allowedSubsidiaryIds !== null && !allowedSubsidiaryIds.has(state.batchSubsidiaryId)) throw new ScopeNotFoundError()
+        state.domainCalls.push({ action: 'post', orgId, userId, input: { batchId, allowedSubsidiaryIds } })
         return { entryId: 'entry-post' }
       }
 
-      export async function reverseSettlementBatch(orgId, batchId, userId, input) {
-        state.domainCalls.push({ action: 'reverse', orgId, userId, input: { batchId, ...input } })
+      export async function reverseSettlementBatch(orgId, batchId, userId, input, allowedSubsidiaryIds) {
+        if (allowedSubsidiaryIds !== null && !allowedSubsidiaryIds.has(state.batchSubsidiaryId)) throw new ScopeNotFoundError()
+        state.domainCalls.push({ action: 'reverse', orgId, userId, input: { batchId, ...input, allowedSubsidiaryIds } })
         return { entryId: 'entry-reverse' }
       }
     `,
@@ -194,6 +203,7 @@ const mockUrls = new Map<string, string>([
   ["@/lib/api/json", "mock:json"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/payments/psp-settlement.ts", "mock:psp-settlement"],
+  ["@openbooks/engine/src/organization/subsidiary-scope.ts", "mock:psp-settlement"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/feature-gates", "mock:feature-gates"],
@@ -332,6 +342,22 @@ test("saveConfig accepts setup authority without reconciliation authority", asyn
       apiKey: null,
     },
   });
+});
+
+test("saveConfig refuses restricted setup authority before saving org-wide provider policy", async () => {
+  reset(["admin.setup.manage"]);
+  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+
+  const response = await post({
+    action: "saveConfig",
+    provider: "stripe",
+    displayName: "Restricted attempt",
+    isEnabled: true,
+  });
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.deepEqual(routeState.domainCalls, []);
 });
 
 const reconciliationActions: Array<{

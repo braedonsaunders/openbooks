@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { UnrestrictedScopeError } from "../organization/subsidiary-scope.ts";
 import { db } from "../platform/db.ts";
 import {
   importSettlementBatch,
@@ -19,6 +20,13 @@ import {
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("provider config service requires the explicit unrestricted-scope sentinel", async () => {
+  await assert.rejects(
+    savePspProviderConfig("not-an-org", { provider: "stripe", isEnabled: true }, "actor", new Set(["sub-a"])),
+    (error: unknown) => error instanceof UnrestrictedScopeError,
+  );
+});
 
 function errorChainMatches(error: unknown, pattern: RegExp): boolean {
   let current: unknown = error;
@@ -140,8 +148,8 @@ test(
       });
 
       const posts = await Promise.all([
-        postSettlementBatch(org.orgId, batchId, actor),
-        postSettlementBatch(org.orgId, batchId, actor),
+        postSettlementBatch(org.orgId, batchId, actor, null),
+        postSettlementBatch(org.orgId, batchId, actor, null),
       ]);
       assert.equal(
         posts[0].entryId,
@@ -201,11 +209,11 @@ test(
         reverseSettlementBatch(org.orgId, batchId, actor, {
           reversalDate: org.date,
           reason: "Provider confirmed payout cancellation",
-        }),
+        }, null),
         reverseSettlementBatch(org.orgId, batchId, actor, {
           reversalDate: org.date,
           reason: "Provider confirmed payout cancellation",
-        }),
+        }, null),
       ]);
       assert.equal(reversals[0].entryId, reversals[1].entryId);
       const reversalEntryId = reversals[0].entryId;
@@ -304,7 +312,7 @@ test(
         accounts,
       );
       await assert.rejects(
-        postSettlementBatch(org.orgId, usd.batchId, actor),
+        postSettlementBatch(org.orgId, usd.batchId, actor, null),
         /requires explicit rate and functional-currency evidence/,
       );
       const usdState = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
@@ -333,7 +341,7 @@ test(
            ${actor}, ${actor})
       `);
       await assert.rejects(
-        postSettlementBatch(org.orgId, locked.batchId, actor),
+        postSettlementBatch(org.orgId, locked.batchId, actor, null),
         /BANKING is closed/,
       );
       const lockedState = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
@@ -399,7 +407,7 @@ test(
         dispute_amount: "-50.0000",
         net_amount: "1050.0000",
       });
-      const { entryId } = await postSettlementBatch(org.orgId, imported.batchId, actor);
+      const { entryId } = await postSettlementBatch(org.orgId, imported.batchId, actor, null);
       const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, sum(amount)::text as amount
           from journal_lines
@@ -454,7 +462,7 @@ test(
          where id = ${imported.batchId} and org_id = ${org.orgId}
       `));
       assert.deepEqual(row.rows[0], { dispute_amount: "100.0000", net_amount: "900.0000" });
-      const { entryId } = await postSettlementBatch(org.orgId, imported.batchId, actor);
+      const { entryId } = await postSettlementBatch(org.orgId, imported.batchId, actor, null);
       const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, sum(amount)::text as amount
           from journal_lines
@@ -512,7 +520,7 @@ test(
       `);
 
       await assert.rejects(
-        postSettlementBatch(org.orgId, batchId, actor),
+        postSettlementBatch(org.orgId, batchId, actor, null),
         (error: unknown) =>
           error instanceof PspSettlementError &&
           error.message === "realized FX gain/loss account is not configured",
@@ -596,6 +604,7 @@ test(
           org.orgId,
           { provider: "stripe", isEnabled: true, defaultBankAccountId: foreignBank },
           actor,
+          null,
         ),
         (error: unknown) => {
           assert.ok(error instanceof PspSettlementError);
@@ -640,7 +649,7 @@ test(
                 ${actor}, ${actor})
       `);
       await assert.rejects(
-        postSettlementBatch(org.orgId, batchId, actor),
+        postSettlementBatch(org.orgId, batchId, actor, null),
         (error: unknown) => {
           assert.ok(error instanceof PspSettlementError);
           assert.match((error as Error).message, /same organization|postable|not found/i);
@@ -676,6 +685,7 @@ test(
           org.orgId,
           { provider: "wirecard" as unknown as "stripe", isEnabled: true },
           actor,
+          null,
         ),
         (error: unknown) => {
           assert.ok(error instanceof PspSettlementError);
@@ -857,7 +867,7 @@ test(
         clearingAccountId: org.accounts.clearing,
         subsidiaryId: org.subsidiaryId,
       });
-      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor);
+      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor, null);
       const gl = (await db.execute<{ account_id: string; memo: string; amount: string }>(sql`
         select account_id, memo, sum(amount)::text as amount
           from journal_lines

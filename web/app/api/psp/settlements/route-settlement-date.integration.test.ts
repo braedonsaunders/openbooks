@@ -24,6 +24,7 @@ registerHooks({
         }
         export function can() { return true }
         export function guardSubsidiaryScope() { return null }
+        export function guardUnrestrictedScope() { return null }
       `);
     if (specifier.endsWith("/lib/features"))
       return virtual(`
