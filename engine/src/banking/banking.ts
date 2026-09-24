@@ -2073,6 +2073,27 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
          where id = any(${sql.param(pairs.map((p) => p.statementLineId))})
            and org_id = ${ctx.orgId}
       `);
+      // One row per auto-match run, carrying the matched pairs — per-pair
+      // rows would spam the log on large sessions, while no row leaves
+      // machine-made matches unattributed.
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id)
+        values
+          (${ctx.orgId}, 'reconciliations', ${recon.id}, 'update',
+           ${JSON.stringify({
+             operation: "auto_match",
+             matched: pairs.length,
+             highConfidence: pairs.filter((p) => p.confidence === "0.9").length,
+             mediumConfidence: pairs.filter((p) => p.confidence === "0.7").length,
+             pairs: pairs.map((p) => ({
+               statementLineId: p.statementLineId,
+               journalLineId: p.journalLineId,
+               confidence: p.confidence,
+             })),
+           })}::jsonb,
+           ${ctx.userId})
+      `);
     }
 
     const totals = await refreshStatus(recon, ctx, tx);
@@ -2195,6 +2216,24 @@ async function createMatchInTransaction(
        set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
        where id = ${opts.statementLineId} and org_id = ${ctx.orgId}
   `);
+  // Manual and rule-built matches attribute the same way the line's
+  // exclude/restore writes do: actor, line, and target, beside the
+  // before/after the audit history cross-foots.
+  await tx.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id)
+    values
+      (${ctx.orgId}, 'bank_statement_lines', ${opts.statementLineId}, 'update',
+       ${JSON.stringify({
+         operation: "match",
+         reconciliationId: recon.id,
+         matchedBy,
+         journalLineIds,
+         before: { matchStatus: "unmatched" },
+         after: { matchStatus: "matched" },
+       })}::jsonb,
+       ${ctx.userId})
+  `);
   return refreshStatus(recon, ctx, tx);
 }
 
@@ -2248,12 +2287,12 @@ export async function unmatchStatementLine(
     if (!recon) throw new BankingError("Reconciliation not found");
     if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
 
-    const deleted = (await tx.execute<{ id: string }>(sql`
+    const deleted = (await tx.execute<{ id: string; journal_line_id: string }>(sql`
       delete from reconciliation_matches
        where reconciliation_id = ${recon.id}
          and statement_line_id = ${opts.statementLineId}
          and org_id = ${ctx.orgId}
-      returning id
+      returning id, journal_line_id
     `));
     if (deleted.rows.length === 0) {
       throw new BankingError("No matches for that statement line in this reconciliation");
@@ -2265,6 +2304,20 @@ export async function unmatchStatementLine(
          and not exists (
            select 1 from reconciliation_matches m where m.statement_line_id = l.id and m.org_id = l.org_id
          )
+    `);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'bank_statement_lines', ${opts.statementLineId}, 'update',
+         ${JSON.stringify({
+           operation: "unmatch",
+           reconciliationId: recon.id,
+           journalLineIds: deleted.rows.map((row) => row.journal_line_id),
+           before: { matchStatus: "matched" },
+           after: { matchStatus: "unmatched" },
+         })}::jsonb,
+         ${ctx.userId})
     `);
     return refreshStatus(recon, ctx, tx);
   });
