@@ -381,13 +381,24 @@ async function runClaimedSchedule(s: ScheduleRow): Promise<ScheduleRun> {
     }
 
     const claimToken = randomUUID();
-    const claimed = await withOrgContext(s.org_id, () => db.execute(sql`
-      update sftp_import_schedules
-         set run_claim_token = ${claimToken}, run_claimed_at = now()
-       where id = ${s.id} and org_id = ${s.org_id} and is_active
-       returning id
-    `));
-    if (!claimed.rows[0]) {
+    const claimedSchedule = await withOrgContext(s.org_id, () => db.transaction(async (tx) => {
+      const claimed = await tx.execute(sql`
+        update sftp_import_schedules
+           set run_claim_token = ${claimToken}, run_claimed_at = now()
+         where id = ${s.id} and org_id = ${s.org_id} and is_active
+         returning id
+      `);
+      if (!claimed.rows[0]) return null;
+      // Keep this read in the same transaction: UPDATE still holds the row
+      // lock, so a concurrent API rebind cannot slip between claim and config
+      // capture. SELECT is used instead of RETURNING because this runtime's
+      // column privileges differ for the newly-added binding field.
+      return (await tx.execute<{ expected_external_account_id: string | null }>(sql`
+        select expected_external_account_id from sftp_import_schedules
+         where id = ${s.id} and org_id = ${s.org_id}
+      `)).rows[0] ?? null;
+    }));
+    if (!claimedSchedule) {
       return {
         scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0,
         errors: ["this SFTP import schedule is no longer active; activate it before running"],
@@ -395,9 +406,18 @@ async function runClaimedSchedule(s: ScheduleRow): Promise<ScheduleRun> {
       };
     }
 
+    // The due-schedule list is only a discovery snapshot. A binding may have
+    // changed after discovery but before this claim acquired the row lock, so
+    // all identity decisions for this run must use the value returned by the
+    // claim write, not the stale snapshot.
+    const currentSchedule = {
+      ...s,
+      expected_external_account_id: claimedSchedule.expected_external_account_id,
+    };
+
     let run: ScheduleRun;
     try {
-      run = await withOrgContext(s.org_id, () => runSchedule(s));
+      run = await withOrgContext(s.org_id, () => runSchedule(currentSchedule));
     } catch (e) {
       run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] };
     }
@@ -420,8 +440,8 @@ async function runClaimedSchedule(s: ScheduleRow): Promise<ScheduleRun> {
 
     // The unbound schedule notice is part of the claimant's outcome work too;
     // another invocation that loses the lock never writes schedule evidence.
-    if (s.format !== "csv" && !normalizeExternalAccountId(s.expected_external_account_id)) {
-      await withOrgContext(s.org_id, () => ensureUnboundScheduleNotice(s));
+    if (currentSchedule.format !== "csv" && !normalizeExternalAccountId(currentSchedule.expected_external_account_id)) {
+      await withOrgContext(s.org_id, () => ensureUnboundScheduleNotice(currentSchedule));
     }
     return run;
   } finally {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import test from "node:test";
+import test, { before } from "node:test";
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -119,7 +119,7 @@ const itemUrl = "./route.ts?sftp-schedule-toggle-delete-test";
 const { PATCH, DELETE } = (await import(itemUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, withBypass, withOrgContext } =
+const { db, pool, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
 // The REAL notice identity (this specifier is not mocked): the route must
 // resolve exactly the rows the scheduler writes — a copy here would make
@@ -132,6 +132,27 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+before(async () => {
+  if (!DB) return;
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      alter table public.sftp_import_schedules
+        add column if not exists run_claim_token uuid,
+        add column if not exists run_claimed_at timestamptz;
+      do $$ begin
+        if not exists (select 1 from pg_constraint where conname = 'sftp_import_schedules_run_claim_pair') then
+          alter table public.sftp_import_schedules
+            add constraint sftp_import_schedules_run_claim_pair
+            check ((run_claim_token is null) = (run_claimed_at is null));
+        end if;
+      end $$;
+    `);
+  } finally {
+    client.release();
+  }
+});
 
 interface Fixture {
   orgId: string;
@@ -524,6 +545,40 @@ test(
       // A missing id refuses instead of reporting success.
       const missing = await patchStatus(fixture, randomUUID(), { expectedExternalAccountId: "x" });
       assert.equal(missing.status, 404);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
+
+test(
+  "schedule binding changes refuse while a scan owns the schedule",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const scheduleId = await createSchedule(fixture);
+      const claim = randomUUID();
+      await withBypass(() => db.execute(sql`
+        update sftp_import_schedules
+           set run_claim_token = ${claim}, run_claimed_at = now()
+         where id = ${scheduleId} and org_id = ${fixture.orgId}
+      `));
+
+      const outcome = await patchStatus(fixture, scheduleId, {
+        expectedExternalAccountId: "BR001-77",
+      });
+      assert.equal(outcome.status, 409);
+      assert.match(String((outcome.body as { error?: string }).error), /wait for the scan to finish/);
+      const stored = await withBypass(async () =>
+        (await db.execute<{ expected_external_account_id: string | null; run_claim_token: string | null }>(sql`
+          select expected_external_account_id, run_claim_token
+            from sftp_import_schedules where id = ${scheduleId} and org_id = ${fixture.orgId}
+        `)).rows[0]!,
+      );
+      assert.equal(stored.expected_external_account_id, null);
+      assert.equal(stored.run_claim_token, claim);
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }
