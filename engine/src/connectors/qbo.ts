@@ -10,6 +10,8 @@
  *   api       : https://{sandbox-,}quickbooks.api.intuit.com/v3/company/{realmId}
  */
 
+import { fetchWithConnectorRetry } from "./http-retry.ts";
+
 const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const SCOPE = "com.intuit.quickbooks.accounting";
@@ -57,7 +59,11 @@ function basicAuth(app: QboApp): string {
  *  the token endpoints carry the client secret and refresh token, and every
  *  API call carries the company bearer token. */
 function qboFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
-  return fetch(url, { ...init, redirect: "error" });
+  // Deadline plus bounded retry (429 honoring Retry-After, 5xx, network)
+  // through the shared connector helper, with a named refusal after
+  // exhaustion. redirect: "error" stays on every attempt and redirect
+  // refusals are never retried — still exactly one request per call.
+  return fetchWithConnectorRetry(url, { ...init, redirect: "error" }, { describe: "QBO" });
 }
 
 interface TokenResponse {
