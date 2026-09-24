@@ -10,6 +10,7 @@ import {
   parseExactDecimal,
 } from "./exact-decimal.ts";
 import { normalizeMoney } from "./money.ts";
+import { decimalNullCause, decimalNullRefusal } from "./decimal-refusal.ts";
 
 test("canonicalDecimal strips padding and signs without floats", () => {
   // A mutant that keeps raw text fails the padding rows; one that drops the
@@ -43,6 +44,8 @@ test("canonicalDecimal strips padding and signs without floats", () => {
     ["1.5", -1, null],
     [null, 4, null],
     [undefined, 4, null],
+    [100, 4, null],
+    [100.25, 4, null],
   ];
   for (const [input, scale, expected] of cases) {
     assert.equal(canonicalDecimal(input, scale), expected, `canonicalDecimal(${String(input)}, ${scale})`);
@@ -64,6 +67,15 @@ test("boundary and kernel agree on dot spellings and garbage stays refused", () 
   for (const garbage of ["abc", "1.2.3", "12,34", "$5", "1e3", ""]) {
     assert.equal(canonicalDecimal(garbage, 4), null, `${garbage} is refused`);
   }
+  assert.equal(canonicalDecimal(100.25, 4), null, "JSON numbers are refused rather than stringified");
+});
+
+test("JSON numeric input gets a named decimal-string remedy", () => {
+  assert.deepEqual(decimalNullCause(100.25), { cause: "json-number" });
+  assert.match(
+    decimalNullRefusal("amount", "a monetary amount", 100.25, 4),
+    /sent as a decimal string, not a JSON number/,
+  );
 });
 
 test("compareDecimal compares value, not spelling or scale", () => {

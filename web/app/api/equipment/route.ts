@@ -24,11 +24,11 @@ const createEquipmentSchema = z.looseObject({
   chargeItemId: z.string().optional().nullable(),
   fixedAssetId: z.string().optional().nullable(),
   rateBookId: z.string().optional().nullable(),
-  purchasePrice: z.union([z.string(), z.number()]).optional().nullable(),
+  purchasePrice: z.string({ error: "purchasePrice must be a decimal string; JSON numbers are refused to preserve precision" }).optional().nullable(),
   acquiredOn: z.string().optional().nullable(),
   inServiceOn: z.string().optional().nullable(),
   serialNumber: z.string().optional().nullable(),
-  capacityQuantity: z.union([z.string(), z.number()]).optional().nullable(),
+  capacityQuantity: z.string({ error: "capacityQuantity must be a decimal string; JSON numbers are refused to preserve precision" }).optional().nullable(),
   capacityUnit: z.string().optional().nullable(),
   status: z.string().optional(),
 });

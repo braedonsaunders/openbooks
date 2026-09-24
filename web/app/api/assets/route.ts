@@ -41,18 +41,18 @@ const createAssetSchema = z.looseObject({
   description: z.string().optional().nullable(),
   categoryId: z.string().optional().nullable(),
   subsidiaryId: z.string().optional().nullable(),
-  acquisitionCost: z.union([z.string(), z.number()]).optional().nullable(),
-  salvageValue: z.union([z.string(), z.number()]).optional().nullable(),
+  acquisitionCost: decimalString("acquisitionCost").optional().nullable(),
+  salvageValue: decimalString("salvageValue").optional().nullable(),
   acquiredOn: z.string().optional().nullable(),
   inServiceOn: z.string().optional().nullable(),
-  openingAccumulated: z.union([z.string(), z.number()]).optional().nullable(),
+  openingAccumulated: decimalString("openingAccumulated").optional().nullable(),
   openingAsOf: z.string().optional().nullable(),
   serialNumber: z.string().optional().nullable(),
   method: z.string().optional().nullable(),
   depreciationMethodId: z.string().optional().nullable(),
   lifeMonths: z.union([z.string(), z.number()]).optional().nullable(),
-  ratePercent: z.union([z.string(), z.number()]).optional().nullable(),
-  unitsTotal: z.union([z.string(), z.number()]).optional().nullable(),
+  ratePercent: decimalString("ratePercent").optional().nullable(),
+  unitsTotal: decimalString("unitsTotal").optional().nullable(),
   convention: z.string().optional().nullable(),
   assetAccountId: z.string().optional().nullable(),
   accumulatedDepreciationAccountId: z.string().optional().nullable(),
@@ -61,6 +61,10 @@ const createAssetSchema = z.looseObject({
   taxDepreciation: z.record(z.string(), z.unknown()).optional(),
   status: z.string().optional(),
 });
+
+function decimalString(field: string) {
+  return z.string({ error: `${field} must be sent as a decimal string, not a JSON number` });
+}
 
 function bad(error: string, field?: string, status = 422) {
   return NextResponse.json({ error, ...(field ? { field } : {}) }, { status });
