@@ -1735,12 +1735,23 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "65ec1f847284c54e4ff51d8cfad926a89cfdeecc94c467d2ae83f1c9d8f1bd31",
-    to: "05bc89024bb2d2a614e14b7fb564d505600c7a026a648c7acac59af23b17aa6c",
+    to: "1c2ea84ecdd366d6cb9deef2067de17114e2451ba80f7edc5b210f5b4f8c3d05",
     strategy: "reapply",
     reason:
       "same growth as the entries above, for databases at the merged "
       + "G4+G5+G6+G8+G9+G10 body: the delta is only the G11 payment-stats "
-      + "date-move trigger (plus the delta-function date overrides), all "
+      + "date-move trigger (plus the delta-function date overrides) and the G12 catalog additions, all "
+      + "idempotent on replay. Reapply, not restamp.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "05bc89024bb2d2a614e14b7fb564d505600c7a026a648c7acac59af23b17aa6c",
+    to: "1c2ea84ecdd366d6cb9deef2067de17114e2451ba80f7edc5b210f5b4f8c3d05",
+    strategy: "reapply",
+    reason:
+      "same growth as the entries above, for databases at the branch "
+      + "G4+G5+G6+G8+G9+G10+G11 body: the delta is only the G12 catalog "
+      + "additions (safe_relations array, one curated view, refresh), all "
       + "idempotent on replay. Reapply, not restamp.",
   },
   {
