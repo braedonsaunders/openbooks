@@ -16,8 +16,6 @@ export const runtime = 'nodejs'
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
-  const scopeDenied = guardSubsidiaryScope(gate, null)
-  if (scopeDenied) return scopeDenied
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const format = new URL(req.url).searchParams.get('format')?.toLowerCase() ?? 'pdf'
@@ -45,6 +43,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       from tax_filings where id = ${id} and org_id = ${gate.user.orgId} limit 1`))
   const row = saved.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // This immutable snapshot records the exact subsidiaries whose activity the
+  // return includes. Apply the row gate after the org-bound lookup so a
+  // restricted filer can reprint its own in-scope filing. A null snapshot
+  // represents an unrestricted, all-subsidiary return and remains hidden
+  // from a restricted caller.
+  const snapshotScope = row.subsidiary_ids
+  if (snapshotScope === null) {
+    const denied = guardSubsidiaryScope(gate, null)
+    if (denied) return denied
+  } else {
+    for (const subsidiaryId of snapshotScope) {
+      const denied = guardSubsidiaryScope(gate, subsidiaryId)
+      if (denied) return denied
+    }
+  }
   // Fail closed: a pre-snapshot filing whose currency the backfill could not
   // determine carries no honest denomination. Refuse the reprint with the
   // remedy (prepare a new version) rather than relabelling frozen boxes with
