@@ -116,7 +116,6 @@ const mockUrls = new Map<string, string>([
   ["../../review-cycles/_lib", "mock:lib"],
 ]);
 
-let itemRoute: typeof import("./route.ts") | undefined;
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     if (specifier === "server-only") {
@@ -133,7 +132,7 @@ const hooks = registerHooks({
   },
 });
 const routeUrl = "./route.ts?hrm-review-item";
-itemRoute = (await import(routeUrl)) as typeof import("./route.ts");
+const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const REVIEW_ID = "00000000-0000-4000-8000-000000000051";
