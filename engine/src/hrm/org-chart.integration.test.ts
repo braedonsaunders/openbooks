@@ -158,10 +158,11 @@ test("tree, vacancy, as-of manager change, and directory", { skip: !DB }, async 
 
     // Directory carries names, titles, and managers — never pay.
     const directory = await loadDirectory({ orgId: h.org.orgId, actorId: h.readerId, search: "Eddie" });
-    assert.equal(directory.length, 1);
-    assert.equal(directory[0]!.title, "Associate");
-    assert.equal(directory[0]!.managerName, "Mira Manager");
-    assert.ok(!("gross" in directory[0]!) && !("netPay" in directory[0]!));
+    assert.equal(directory.totalCount, 1);
+    assert.equal(directory.entries.length, 1);
+    assert.equal(directory.entries[0]!.title, "Associate");
+    assert.equal(directory.entries[0]!.managerName, "Mira Manager");
+    assert.ok(!("gross" in directory.entries[0]!) && !("netPay" in directory.entries[0]!));
 
     // No grant, no chart.
     const outsider = await createScratchUser(h.org.orgId, "Outsider", "outsider_self");
@@ -169,6 +170,44 @@ test("tree, vacancy, as-of manager change, and directory", { skip: !DB }, async 
       loadOrgChart({ orgId: h.org.orgId, actorId: outsider, asOf: "2026-09-21" }),
       (e: unknown) => e instanceof HrmAuthorizationError,
     );
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("directory pages continue past 200 rows and report the scoped total", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    await db.execute(sql`
+      with new_parties as (
+        insert into parties (id, org_id, kind, display_name, email, is_active, custom)
+        select gen_random_uuid(), ${h.org.orgId}, 'person',
+               'Directory Page ' || lpad(n::text, 3, '0'),
+               'directory-page-' || n || '@scratch.test', true, '{}'::jsonb
+          from generate_series(1, 205) n
+        returning id, org_id
+      ), new_employments as (
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        select gen_random_uuid(), p.org_id, p.id, ${h.org.subsidiaryId}, 1
+          from new_parties p
+        returning id, org_id
+      )
+      insert into worker_employment_versions
+        (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
+      select org_id, id, 1, 'active', '2020-01-01'::date, null, now()
+        from new_employments
+    `);
+
+    const first = await loadDirectory({ orgId: h.org.orgId, actorId: h.readerId, limit: 100, page: 1 });
+    const second = await loadDirectory({ orgId: h.org.orgId, actorId: h.readerId, limit: 100, page: 2 });
+    const third = await loadDirectory({ orgId: h.org.orgId, actorId: h.readerId, limit: 100, page: 3 });
+    const allEntries = [...first.entries, ...second.entries, ...third.entries];
+    assert.equal(first.totalCount, 208);
+    assert.equal(second.totalCount, 208);
+    assert.equal(third.totalCount, 208);
+    assert.deepEqual([first.entries.length, second.entries.length, third.entries.length], [100, 100, 8]);
+    assert.equal(new Set(allEntries.map((entry) => entry.employmentId)).size, 208);
+    assert.equal(allEntries.filter((entry) => entry.name.startsWith("Directory Page ")).length, 205);
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
@@ -253,8 +292,9 @@ test("chart and directory are fenced by employer scope and the self-service team
     assert.ok(hrChart.roots.some((r) => r.vacant && r.name.includes("Engineer A")));
     assert.ok(!hrChart.roots.some((r) => r.vacant && r.name.includes("Engineer B")));
     const hrDirectory = await loadDirectory({ orgId: org.orgId, actorId: hrA });
-    assert.deepEqual(hrDirectory.map((d) => d.name).sort(), ["Cora Ceo", "Mira Manager"]);
-    assert.ok(hrDirectory.every((d) => d.email?.includes("@scratch.test")));
+    assert.deepEqual(hrDirectory.entries.map((d) => d.name).sort(), ["Cora Ceo", "Mira Manager"]);
+    assert.equal(hrDirectory.totalCount, 2);
+    assert.ok(hrDirectory.entries.every((d) => d.email?.includes("@scratch.test")));
 
     // Mira's self-service chart is herself plus her direct report — never
     // the whole org, never vacancies, and her invisible manager hangs
@@ -276,9 +316,9 @@ test("chart and directory are fenced by employer scope and the self-service team
     assert.equal(eddieChart.headcount, 1);
     assert.equal(eddieChart.roots[0]!.name, "Eddie Employee");
     const eddieDirectory = await loadDirectory({ orgId: org.orgId, actorId: eddieSelf });
-    assert.equal(eddieDirectory.length, 1);
-    assert.equal(eddieDirectory[0]!.name, "Eddie Employee");
-    assert.equal(eddieDirectory[0]!.email, "eddie.employee@scratch.test");
+    assert.equal(eddieDirectory.entries.length, 1);
+    assert.equal(eddieDirectory.entries[0]!.name, "Eddie Employee");
+    assert.equal(eddieDirectory.entries[0]!.email, "eddie.employee@scratch.test");
   } finally {
     await dropScratchOrg(org.orgId);
   }

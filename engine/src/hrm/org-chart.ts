@@ -281,12 +281,20 @@ export async function loadOrgChart(query: {
   };
 }
 
+export interface DirectoryPage {
+  entries: DirectoryEntry[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
 export async function loadDirectory(query: {
   orgId: string;
   actorId: string;
   search?: string;
   limit?: number;
-}): Promise<DirectoryEntry[]> {
+  page?: number;
+}): Promise<DirectoryPage> {
   // Directory rows are live (current_date windows), so the team boundary
   // resolves against the org's business today, like team-read.ts.
   const scope = await resolveOrgChartScope(query.orgId, query.actorId, await businessToday(query.orgId));
@@ -294,6 +302,35 @@ export async function loadDirectory(query: {
     ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
     : sql``;
   const q = query.search?.trim() ?? "";
+  const wantedPage = Math.floor(Number(query.page ?? 1));
+  const requestedPage = Number.isFinite(wantedPage) ? Math.max(wantedPage, 1) : 1;
+  const wantedLimit = Math.floor(Number(query.limit ?? 50));
+  const pageSize = Number.isFinite(wantedLimit) ? Math.min(Math.max(wantedLimit, 1), 100) : 50;
+  const filters = sql`
+     where e.org_id = ${query.orgId}
+       ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, scope.allowed)}
+       ${selfFilter}
+       ${q ? sql`and (p.display_name ilike ${"%" + q + "%"} or coalesce(a.job_title, '') ilike ${"%" + q + "%"})` : sql``}
+  `;
+  const from = sql`
+      from worker_employments e
+      join worker_employment_versions v
+        on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
+           and v.effective_from <= current_date
+           and (v.effective_to is null or v.effective_to > current_date)
+           and v.status in ('active', 'on_leave', 'suspended')
+      join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+      left join employment_assignment_versions a
+        on a.org_id = e.org_id and a.employment_id = e.id and a.is_primary
+           and a.recorded_until is null
+           and a.effective_from <= current_date
+           and (a.effective_to is null or a.effective_to > current_date)
+      left join departments d on d.org_id = a.org_id and d.id = a.department_id
+  `;
+  const totalCount = Number((await db.execute<{ n: string }>(sql`
+    select count(distinct e.id)::text as n ${from} ${filters}
+  `)).rows[0]?.n ?? "0");
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(totalCount / pageSize)));
   const rows = (await db.execute<{
     employment_id: string;
     party_id: string;
@@ -316,27 +353,12 @@ export async function loadDirectory(query: {
                and (r.effective_to is null or r.effective_to > current_date)
              order by r.effective_from desc
              limit 1) as manager_name
-      from worker_employments e
-      join worker_employment_versions v
-        on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
-           and v.effective_from <= current_date
-           and (v.effective_to is null or v.effective_to > current_date)
-           and v.status in ('active', 'on_leave', 'suspended')
-      join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
-      left join employment_assignment_versions a
-        on a.org_id = e.org_id and a.employment_id = e.id and a.is_primary
-           and a.recorded_until is null
-           and a.effective_from <= current_date
-           and (a.effective_to is null or a.effective_to > current_date)
-      left join departments d on d.org_id = a.org_id and d.id = a.department_id
-     where e.org_id = ${query.orgId}
-       ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, scope.allowed)}
-       ${selfFilter}
-       ${q ? sql`and (p.display_name ilike ${"%" + q + "%"} or coalesce(a.job_title, '') ilike ${"%" + q + "%"})` : sql``}
-     order by name
-     limit ${Math.min(Math.max(query.limit ?? 50, 1), 200)}
+      ${from}
+     ${filters}
+     order by name, e.id
+     limit ${pageSize} offset ${(page - 1) * pageSize}
   `)).rows;
-  return rows.map((r) => ({
+  const entries = rows.map((r) => ({
     employmentId: r.employment_id,
     partyId: r.party_id,
     name: r.name,
@@ -345,4 +367,5 @@ export async function loadDirectory(query: {
     department: r.department,
     managerName: r.manager_name,
   }));
+  return { entries, totalCount, page, pageSize };
 }
