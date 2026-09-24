@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { ArrowDown, ArrowUp, Eye, EyeOff, FolderPlus, Pin, PinOff, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Select, cn } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import {
   MODULE_BY_KEY,
   NAV_GROUP_BY_KEY,
@@ -91,18 +92,27 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
 
   async function save() {
     setBusy(true)
-    const res = await fetch('/api/admin/navigation', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config }),
-    })
-    if (res.ok) {
-      toast.success(t('saved'))
-      router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('saveFailed'))
+    try {
+      const res = await fetch('/api/admin/navigation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config }),
+      })
+      if (res.ok) {
+        toast.success(t('saved'))
+        router.refresh()
+      } else {
+        // The status is checked first: a non-JSON 500 (proxy page, empty
+        // body) must toast the named refusal or the translated fallback,
+        // never a SyntaxError out of res.json() that hides it.
+        toast.error(await readApiErrorMessage(res, t('saveFailed')))
+      }
+    } catch {
+      // A dead network must toast and release busy, never wedge the editor.
+      toast.error(t('saveFailed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   return (
