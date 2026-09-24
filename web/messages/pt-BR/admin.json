@@ -5458,7 +5458,7 @@
       "simulateTitle": "Simular",
       "simulateHelp": "Teste sem gravações — informe entidade:id ou deixe vazio para amostrar.",
       "simulateSubjectLabel": "Assunto",
-      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateSubjectPlaceholder": "leave_request:'<id>'",
       "simulateButton": "Simular",
       "stepKind": "Etapa",
       "stepStatus": "Status",

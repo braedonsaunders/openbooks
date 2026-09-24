@@ -5458,7 +5458,7 @@
       "simulateTitle": "模拟",
       "simulateHelp": "无写入试运行 — 填写 entity:id，留空则抽样。",
       "simulateSubjectLabel": "主体",
-      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateSubjectPlaceholder": "leave_request:'<id>'",
       "simulateButton": "模拟运行",
       "stepKind": "步骤",
       "stepStatus": "状态",
