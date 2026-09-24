@@ -432,6 +432,8 @@
     "detectColumns": "列を検出",
     "optionalPlaceholder": "任意",
     "nothingNew": "解析されたすべての明細はこの勘定に既に存在します。新規にインポートするものはありません。",
+    "skippedNotice": "{count, plural, other {ソース行 {count} 件をインポートせずにスキップしました}}",
+    "skippedRow": "行 {line}: {reason}",
     "moreLines": "…他 {count, plural, one {# 件の明細} other {# 件の明細}}",
     "totalBadge": "合計 {count, number} 件",
     "possibleDuplicateBadge": "重複の可能性あり"

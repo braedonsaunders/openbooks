@@ -858,6 +858,57 @@ test(
   },
 );
 
+test("parser-skipped rows are reported in the preview and the import", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor };
+    await db.execute(sql`
+      update accounts
+         set reconcilable = true, currency_restriction = 'CAD'
+       where id = ${org.accounts.bank} and org_id = ${org.orgId}
+    `);
+    const skipped = [{ line: 1, reason: "skipped as a header row" }];
+    const preview = await importStatement(
+      {
+        accountId: org.accounts.bank,
+        source: "manual" as const,
+        statementDate: org.date,
+        openingBalance: "1000",
+        closingBalance: "995",
+        currency: "CAD",
+        lines: [{ postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" }],
+        skippedLines: skipped,
+        dryRun: true,
+      },
+      ctx,
+    );
+    assert.deepEqual(preview.skipped, skipped);
+    const imported = await importStatement(
+      {
+        accountId: org.accounts.bank,
+        source: "manual" as const,
+        statementDate: org.date,
+        openingBalance: "1000",
+        closingBalance: "995",
+        currency: "CAD",
+        lines: [{ postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" }],
+        skippedLines: skipped,
+      },
+      ctx,
+    );
+    assert.deepEqual(imported.skipped, skipped);
+    // The skipped row is reported, never written.
+    const stored = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from bank_statement_lines
+       where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
+    `));
+    assert.equal(stored.rows[0]!.n, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test(
   "a re-exported ID-less file with different bytes imports flagged, never skips",
   async () => {

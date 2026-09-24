@@ -87,7 +87,7 @@ const mockSources = new Map<string, string>([
 
       export function parseCsv(source) {
         state.parsedSources.push(source)
-        return [line]
+        return { lines: [line], skipped: [] }
       }
 
       export function parseOfx(source) {
