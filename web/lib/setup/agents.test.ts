@@ -18,8 +18,93 @@ const { CONTINUOUS_CLOSE_AGENT_KEYS, agentPackMeta, agentPackMetas } = await imp
  */
 
 const thisDir = import.meta.dirname
-const readRoute = (rel: string) =>
-  readFileSync(join(thisDir, '..', '..', 'app', 'api', 'admin', 'setup', 'agents', rel), 'utf8')
+
+/**
+ * Gate proofs for the thin API adapters: every setup-agents route demands
+ * `admin.setup.manage` (the Setup workspace gate), so a provider-page
+ * manager holding only `admin.ai.manage` is refused before any adapter
+ * runs — and each route delegates to its shared setup command.
+ */
+type GateCall = [string, ...unknown[]]
+const gateKey = Symbol.for('openbooks.setup-agents-gate-test')
+const gateState: { granted: Set<string>; calls: GateCall[] } = { granted: new Set(), calls: [] }
+;(globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = gateState
+
+const gateAuthz = `
+  import { NextResponse } from 'next/server'
+  const state = globalThis[Symbol.for('openbooks.setup-agents-gate-test')]
+  async function demand(permission) {
+    if (!state.granted.has(permission)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    return { user: { orgId: 'org-1', id: 'user-1' }, permissions: state.granted, allowedSubsidiaryIds: null }
+  }
+  export async function guardPermission(permission) { return demand(permission) }
+  export async function guardFeaturePermission(permission) { return demand(permission) }
+`
+const gateAdapters = `
+  const state = globalThis[Symbol.for('openbooks.setup-agents-gate-test')]
+  export async function getAgentsOverview(orgId) {
+    state.calls.push(['overview', orgId])
+    return []
+  }
+  export async function listAgentRuns(orgId, opts) {
+    state.calls.push(['activity', orgId, opts])
+    return { runs: [], total: 0, truncated: false }
+  }
+  export async function saveSetupAgentPolicy(orgId, userId, agentKey, data) {
+    state.calls.push(['save', orgId, userId, agentKey, data])
+    return { agentKey, enabled: true }
+  }
+  export async function runSetupAgentNow(orgId, userId, agentKey) {
+    state.calls.push(['run', orgId, userId, agentKey])
+    return { status: 'completed' }
+  }
+`
+const GATE_SELF = new URL(import.meta.url).href
+const gateMock = (name: string) => `${GATE_SELF}?mock=${name}`
+const gateMocks = new Map<string, string>([
+  ['../../../../../lib/authz', gateMock('authz')],
+  ['../../../../../lib/setup/agents', gateMock('adapters')],
+  ['../../../../../../lib/authz', gateMock('authz')],
+  ['../../../../../../lib/setup/agents', gateMock('adapters')],
+  ['../../../../../../../lib/feature-gates', gateMock('authz')],
+  ['../../../../../../../lib/setup/agents', gateMock('adapters')],
+])
+const gateHooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    }
+    const mocked = gateMocks.get(specifier)
+    if (mocked) return { url: mocked, shortCircuit: true }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    const parsed = new URL(url)
+    const name = parsed.searchParams.get('mock')
+    if (name === 'authz') return { format: 'module', source: gateAuthz, shortCircuit: true }
+    if (name === 'adapters') return { format: 'module', source: gateAdapters, shortCircuit: true }
+    return nextLoad(url, context)
+  },
+})
+const agentsApi = (rel: string) => `../../app/api/admin/setup/agents/${rel}?setup-agents-gate`
+const { GET: collectionGET } = (await import(agentsApi('route.ts'))) as typeof import('../../app/api/admin/setup/agents/route.ts')
+const { GET: activityGET } = (await import(agentsApi('activity/route.ts'))) as typeof import('../../app/api/admin/setup/agents/activity/route.ts')
+const { PUT: policyPUT } = (await import(agentsApi('[agentKey]/route.ts'))) as typeof import('../../app/api/admin/setup/agents/[agentKey]/route.ts')
+const { POST: runPOST } = (await import(agentsApi('[agentKey]/run/route.ts'))) as typeof import('../../app/api/admin/setup/agents/[agentKey]/run/route.ts')
+gateHooks.deregister()
+
+const SETUP_KEY = 'admin.setup.manage'
+const PROVIDER_KEY = 'admin.ai.manage'
+
+function asProviderManager() {
+  gateState.granted = new Set([PROVIDER_KEY])
+  gateState.calls = []
+}
+
+function asSetupManager() {
+  gateState.granted = new Set([SETUP_KEY])
+  gateState.calls = []
+}
 
 test('every registered agent pack has setup metadata', () => {
   const metas = agentPackMetas()
@@ -44,29 +129,65 @@ test('every pack declares at least one detector in the engine registry', () => {
   }
 })
 
-test('setup agent routes demand the setup gate, never the provider key', () => {
-  const collection = readRoute('route.ts')
-  assert.match(collection, /guardPermission\(['"]admin\.setup\.manage['"]\)/)
-  assert.doesNotMatch(collection, /admin\.ai\.manage/)
+test('the overview refuses a provider-key manager before any adapter runs', async () => {
+  asProviderManager()
+  const response = await collectionGET()
+  assert.equal(response.status, 403)
+  assert.deepEqual(gateState.calls, [])
 
-  const activity = readRoute('activity/route.ts')
-  assert.match(activity, /guardPermission\(['"]admin\.setup\.manage['"]\)/)
-  assert.doesNotMatch(activity, /admin\.ai\.manage/)
-
-  const policy = readRoute('[agentKey]/route.ts')
-  assert.match(policy, /guardPermission\(['"]admin\.setup\.manage['"]\)/)
-  assert.doesNotMatch(policy, /admin\.ai\.manage/)
-  assert.match(policy, /saveSetupAgentPolicy/, 'the policy route must reuse the shared setup adapter, not fork the save')
-
-  const run = readRoute('[agentKey]/run/route.ts')
-  assert.match(run, /guardFeaturePermission\(['"]admin\.setup\.manage['"],\s*['"]continuousClose['"]\)/)
-  assert.match(run, /runSetupAgentNow/, 'run-now must reuse the shared adapter over runContinuousCloseAgent')
+  asSetupManager()
+  const allowed = await collectionGET()
+  assert.equal(allowed.status, 200)
+  assert.deepEqual(await allowed.json(), { agents: [] })
+  assert.deepEqual(gateState.calls, [['overview', 'org-1']])
 })
 
-test('setup agent reads stay inside the requesting org', () => {
-  const lib = readFileSync(join(thisDir, 'agents.ts'), 'utf8')
-  assert.match(lib, /where org_id = /)
-  assert.doesNotMatch(lib, /withBypassContext/, 'setup reads must not bypass tenant scoping')
+test('the activity read refuses a provider-key manager before any adapter runs', async () => {
+  asProviderManager()
+  const response = await activityGET(new Request('http://openbooks.test/api/admin/setup/agents/activity'))
+  assert.equal(response.status, 403)
+  assert.deepEqual(gateState.calls, [])
+
+  asSetupManager()
+  const allowed = await activityGET(new Request('http://openbooks.test/api/admin/setup/agents/activity?limit=5'))
+  assert.equal(allowed.status, 200)
+  assert.deepEqual(gateState.calls, [['activity', 'org-1', { agentKey: undefined, limit: 5 }]])
+})
+
+test('a policy write refuses a provider-key manager and otherwise reuses the shared command', async () => {
+  const put = (body: unknown) =>
+    policyPUT(
+      new Request('http://openbooks.test/api/admin/setup/agents/accounting', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ agentKey: 'accounting' }) },
+    )
+  asProviderManager()
+  assert.equal((await put({ enabled: true })).status, 403)
+  assert.deepEqual(gateState.calls, [])
+
+  asSetupManager()
+  const allowed = await put({ enabled: true })
+  assert.equal(allowed.status, 200)
+  assert.deepEqual(gateState.calls, [['save', 'org-1', 'user-1', 'accounting', { enabled: true }]])
+})
+
+test('run-now refuses a provider-key manager and otherwise reuses the shared runner', async () => {
+  const post = () =>
+    runPOST(
+      new Request('http://openbooks.test/api/admin/setup/agents/accounting/run', { method: 'POST' }),
+      { params: Promise.resolve({ agentKey: 'accounting' }) },
+    )
+  asProviderManager()
+  assert.equal((await post()).status, 403)
+  assert.deepEqual(gateState.calls, [])
+
+  asSetupManager()
+  const allowed = await post()
+  assert.equal(allowed.status, 200)
+  assert.deepEqual(gateState.calls, [['run', 'org-1', 'user-1', 'accounting']])
 })
 
 test('every pack has title, description, reads and proposes copy in en/es/fr', () => {
