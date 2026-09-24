@@ -26,6 +26,7 @@
   },
   "subsidiaryHelp": "La filiale est déduite des constats liés à un compte ; les autres restent non rattachés.",
   "lastVisit": "Nouveautés depuis le {date}",
+  "lastVisitLoadFailed": "Impossible de charger les nouveaux constats.",
   "markSeen": "Marquer comme vu",
   "triage": {
     "hint": "j/k naviguer · Entrée ouvrir · x sélectionner · a appliquer (tiroir) · d rejeter (tiroir) · s classer à examiner",

@@ -26,6 +26,7 @@
   },
   "subsidiaryHelp": "子会社は勘定に紐付く検出から特定されます。それ以外の検出は未解決として扱われます。",
   "lastVisit": "{date} 以降の新着",
+  "lastVisitLoadFailed": "新しい指摘を読み込めませんでした。",
   "markSeen": "既読にする",
   "triage": {
     "hint": "j/k 移動 · Enter 開く · x 選択 · a 適用（ドロワー） · d 却下（ドロワー） · s レビューに保留",

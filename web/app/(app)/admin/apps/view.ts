@@ -162,7 +162,7 @@ export async function loadAdminExtensions(
     const app = detail.rows[0]
     if (app) {
       const [files, runs, published] = await Promise.all([
-        listAppFiles(orgId, appKey).catch(() => []),
+        listAppFiles(orgId, appKey),
         (db.execute(sql`
           select endpoint, status, units, logs, error_message, duration_ms, at
             from app_runs where app_id = ${app.id} and org_id = ${orgId} order by at desc limit 25`)),

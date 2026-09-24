@@ -26,6 +26,7 @@
   },
   "subsidiaryHelp": "A subsidiária é resolvida a partir de achados vinculados a contas; os demais ficam sem atribuição.",
   "lastVisit": "Novidades desde {date}",
+  "lastVisitLoadFailed": "Não foi possível carregar os novos apontamentos.",
   "markSeen": "Marcar como visto",
   "triage": {
     "hint": "j/k mover · Enter abrir · x selecionar · a aplicar (painel) · d dispensar (painel) · s guardar em revisão",

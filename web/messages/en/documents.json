@@ -192,6 +192,7 @@
   "activity": {
     "title": "Activity",
     "empty": "No activity recorded yet.",
+    "loadFailed": "Could not load activity.",
     "events": {
       "create": "created",
       "upload": "uploaded",

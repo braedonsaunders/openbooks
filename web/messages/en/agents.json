@@ -26,6 +26,7 @@
   },
   "subsidiaryHelp": "Subsidiary resolves through account-linked findings; every other finding buckets as unresolved.",
   "lastVisit": "New since {date}",
+  "lastVisitLoadFailed": "Could not load new findings.",
   "markSeen": "Mark seen",
   "triage": {
     "hint": "j/k move · Enter opens · x selects · a applies (drawer) · d dismisses (drawer) · s parks in review",
