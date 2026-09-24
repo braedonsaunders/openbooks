@@ -13,7 +13,7 @@ const { sql } = await import('drizzle-orm')
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { attachExisting, deleteFile, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
-const { buildZip } = await import('./file-zip')
+const { buildZip, filesZipManifest, folderZipManifest, MAX_ZIP_FILES } = await import('./file-zip')
 
 /**
  * Cabinet reads never apply the caller's subsidiary fence to record-folder
@@ -66,6 +66,46 @@ test('cabinet reads hide record-folder files outside the caller fence', { skip: 
     assert.ok(await getFile(org.orgId, fileId, { ...restricted, allowedSubsidiaryIds: null }))
     assert.ok(await getFileBlob(org.orgId, fileId, { ...restricted, allowedSubsidiaryIds: null }))
     assert.ok(await getFolder(org.orgId, folderId, { ...restricted, allowedSubsidiaryIds: null }))
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('ZIP manifests apply record visibility before enforcing the file cap', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const actorId = await createScratchUser(org.orgId, 'ZIP branch viewer', 'clerk')
+    const subA = randomUUID()
+    const subB = randomUUID()
+    await db.execute(sql`insert into subsidiaries
+      (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${subA}, ${org.orgId}, ${org.subsidiaryId}, 'ZIP A', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+             (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'ZIP B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`)
+    const docA = randomUUID()
+    const docB = randomUUID()
+    await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
+      values (${docA}, ${org.orgId}, 'customer_invoice', 'draft', 'ZIP-A', ${subA}, ${org.customerId}, ${org.date}, 'CAD', 1),
+             (${docB}, ${org.orgId}, 'customer_invoice', 'draft', 'ZIP-B', ${subB}, ${org.customerId}, ${org.date}, 'CAD', 1)`)
+    const folderId = randomUUID()
+    await db.execute(sql`insert into folders(id, org_id, name) values (${folderId}, ${org.orgId}, 'ZIP common')`)
+    await db.execute(sql`insert into files(id, org_id, folder_id, name, content_type, size_bytes)
+      select gen_random_uuid(), ${org.orgId}, ${folderId}, 'hidden-' || n::text || '.pdf', 'application/pdf', 1
+        from generate_series(1, ${MAX_ZIP_FILES + 1}) as n`)
+    await db.execute(sql`insert into file_attachments(org_id, file_id, target_table, target_id, created_by)
+      select ${org.orgId}, id, 'documents', ${docA}, ${actorId} from files
+       where org_id = ${org.orgId} and folder_id = ${folderId}`)
+    const visibleId = randomUUID()
+    await db.execute(sql`insert into files(id, org_id, folder_id, name, content_type, size_bytes)
+      values (${visibleId}, ${org.orgId}, ${folderId}, 'visible.pdf', 'application/pdf', 1)`)
+    await db.execute(sql`insert into file_attachments(org_id, file_id, target_table, target_id, created_by)
+      values (${org.orgId}, ${visibleId}, 'documents', ${docB}, ${actorId})`)
+
+    const viewer = { userId: actorId, isAdmin: false as const, baseline: 'viewer' as const, allowedSubsidiaryIds: new Set([subB]) }
+    const folderEntries = await folderZipManifest(org.orgId, folderId, viewer)
+    const selectedIds = (await db.execute<{ id: string }>(sql`select id from files where org_id = ${org.orgId} and folder_id = ${folderId}`)).rows.map((row) => row.id)
+    const selectedEntries = await filesZipManifest(org.orgId, selectedIds, viewer)
+    assert.deepEqual(folderEntries.map((entry) => entry.id), [visibleId])
+    assert.deepEqual(selectedEntries.map((entry) => entry.id), [visibleId])
   } finally {
     await dropScratchOrg(org.orgId)
   }

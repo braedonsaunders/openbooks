@@ -19,7 +19,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const folder = await getFolder(gate.user.orgId, id)
   if (!folder) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const entries = await folderZipManifest(gate.user.orgId, id)
+  const viewer = fileViewer(gate)
+  const entries = await folderZipManifest(gate.user.orgId, id, viewer)
   if (entries.length === 0) return NextResponse.json({ error: 'folder is empty' }, { status: 404 })
   if (entries.length > MAX_ZIP_FILES) {
     return NextResponse.json(
@@ -30,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   let bytes: Buffer
   try {
-    ;({ bytes } = await buildZip(gate.user.orgId, fileViewer(gate), entries))
+    ;({ bytes } = await buildZip(gate.user.orgId, viewer, entries))
   } catch (error) {
     if (error instanceof ZipSizeLimitError) {
       return NextResponse.json({ error: error.message }, { status: 413 })

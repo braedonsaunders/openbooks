@@ -2,7 +2,7 @@ import 'server-only'
 import JSZip from 'jszip'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { getFileBlob, type FileViewer } from './file-cabinet'
+import { fileReadPredicate, getFileBlob, type FileViewer } from './file-cabinet'
 import { isMaskedFileContentError } from './file-storage'
 
 /** Guardrails — zipping fetches every blob (often from object storage), so cap
@@ -48,7 +48,8 @@ export function safeZipPath(raw: string): string {
  * sub-folders, and their active files). One extra row over the cap is fetched
  * so callers can detect "too many".
  */
-export async function folderZipManifest(orgId: string, folderId: string): Promise<ZipEntry[]> {
+export async function folderZipManifest(orgId: string, folderId: string, viewer: FileViewer): Promise<ZipEntry[]> {
+  const visible = await fileReadPredicate(orgId, viewer)
   const r = (await db.execute<ZipEntry>(sql`
     with recursive tree as (
       select id, name, parent_folder_id, name::text as prefix
@@ -60,7 +61,8 @@ export async function folderZipManifest(orgId: string, folderId: string): Promis
     )
     select fi.id, (t.prefix || '/' || fi.name) as path
       from files fi join tree t on t.id = fi.folder_id
-     where fi.org_id = ${orgId} and not fi.is_inactive
+      left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
+     where ${visible}
      order by path
      limit ${MAX_ZIP_FILES + 1}
   `))
@@ -68,13 +70,15 @@ export async function folderZipManifest(orgId: string, folderId: string): Promis
 }
 
 /** File ids + names for an explicit set of file ids (bulk selection). */
-export async function filesZipManifest(orgId: string, fileIds: string[]): Promise<ZipEntry[]> {
+export async function filesZipManifest(orgId: string, fileIds: string[], viewer: FileViewer): Promise<ZipEntry[]> {
   if (fileIds.length === 0) return []
+  const visible = await fileReadPredicate(orgId, viewer)
   const r = (await db.execute<ZipEntry>(sql`
-    select id, name as path from files
-     where org_id = ${orgId} and not is_inactive
-       and id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(fileIds)}::jsonb) as _f(value))
-     order by name
+    select fi.id, fi.name as path from files fi
+    left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
+     where ${visible}
+       and fi.id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(fileIds)}::jsonb) as _f(value))
+     order by fi.name
      limit ${MAX_ZIP_FILES + 1}
   `))
   return r.rows

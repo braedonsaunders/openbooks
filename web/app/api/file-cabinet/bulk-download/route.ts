@@ -28,11 +28,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `too many files (limit ${MAX_ZIP_FILES})` }, { status: 413 })
   }
 
-  const entries = await filesZipManifest(gate.user.orgId, fileIds)
+  const viewer = fileViewer(gate)
+  const entries = await filesZipManifest(gate.user.orgId, fileIds, viewer)
   let bytes: Buffer
   let included: number
   try {
-    ;({ bytes, included } = await buildZip(gate.user.orgId, fileViewer(gate), entries))
+    ;({ bytes, included } = await buildZip(gate.user.orgId, viewer, entries))
   } catch (error) {
     if (error instanceof ZipSizeLimitError) {
       return NextResponse.json({ error: error.message }, { status: 413 })
