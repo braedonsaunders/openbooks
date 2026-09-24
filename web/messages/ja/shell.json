@@ -205,33 +205,5 @@
     "workingIssues": "既知の問題を検索中…",
     "workingFile": "製品の問題を登録中…",
     "workingDefault": "報告内容を確認中…"
-  },
-  "securityPage": {
-  "title": "サインインのセキュリティ",
-  "description": "認証アプリでアカウントを保護し、アクティブなブラウザーセッションを確認します。",
-  "authenticatorTitle": "多要素認証",
-  "enabled": "有効 · リカバリーコード残り {count} 件",
-  "disabledDescription": "パスワードまたは SSO 認証の後に時間ベースのコードを要求します。",
-  "confirmPassword": "現在のパスワードを確認",
-  "setupAuthenticator": "認証アプリを設定",
-  "setupKey": "認証アプリの設定キー",
-  "setupKeyHelp": "このキーを 6 桁コードの TOTP アカウントとして追加してください。",
-  "setupExpiry": "この設定は 10 分後、または確認に 5 回失敗すると期限切れになります。",
-  "confirmCode": "6 桁のコードを確認",
-  "enableMfa": "多要素認証を有効にする",
-  "currentCode": "現在の認証コードまたはリカバリーコード",
-  "passwordRequired": "パスワード（どちらの変更にも必要）",
-  "replaceRecoveryCodes": "リカバリーコードを再発行",
-  "disableMfa": "多要素認証を無効にする",
-  "saveRecoveryCodes": "リカバリーコードを今すぐ保存",
-  "recoveryCodesHelp": "各コードは 1 回だけ使えます。再表示はできません。",
-  "copyCodes": "コードをコピー",
-  "sessionsTitle": "アクティブなセッション",
-  "sessionsDescription": "パスワードを変更せずにブラウザーセッションを取り消します。",
-  "thisSession": "現在のセッション",
-  "browserSession": "ブラウザーセッション",
-  "lastUsed": "最終使用: {date}",
-  "revoke": "取り消す",
-  "revokeOtherSessions": "他のすべてのセッションを取り消す"
-}
+  }
 }

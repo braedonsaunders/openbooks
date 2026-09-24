@@ -205,33 +205,5 @@
     "workingIssues": "Procurando um problema conhecido…",
     "workingFile": "Registrando um relato de produto…",
     "workingDefault": "Analisando o seu relato…"
-  },
-  "securityPage": {
-  "title": "Segurança de acesso",
-  "description": "Proteja sua conta com um autenticador e confira as sessões ativas do navegador.",
-  "authenticatorTitle": "Autenticação multifator",
-  "enabled": "Ativada · restam {count} códigos de recuperação",
-  "disabledDescription": "Exija um código temporário após a autenticação por senha ou SSO.",
-  "confirmPassword": "Confirme sua senha atual",
-  "setupAuthenticator": "Configurar autenticador",
-  "setupKey": "Chave de configuração do autenticador",
-  "setupKeyHelp": "Adicione esta chave como uma conta TOTP de seis dígitos.",
-  "setupExpiry": "Esta configuração expira em 10 minutos ou após cinco confirmações incorretas.",
-  "confirmCode": "Confirme o código de seis dígitos",
-  "enableMfa": "Ativar autenticação multifator",
-  "currentCode": "Código atual do autenticador ou de recuperação",
-  "passwordRequired": "Senha (obrigatória para qualquer uma das alterações)",
-  "replaceRecoveryCodes": "Substituir códigos de recuperação",
-  "disableMfa": "Desativar autenticação multifator",
-  "saveRecoveryCodes": "Salve estes códigos de recuperação agora",
-  "recoveryCodesHelp": "Cada código funciona uma única vez. Eles não serão exibidos novamente.",
-  "copyCodes": "Copiar códigos",
-  "sessionsTitle": "Sessões ativas",
-  "sessionsDescription": "Revogue uma sessão do navegador sem alterar sua senha.",
-  "thisSession": "Esta sessão",
-  "browserSession": "Sessão do navegador",
-  "lastUsed": "Último uso: {date}",
-  "revoke": "Revogar",
-  "revokeOtherSessions": "Revogar todas as outras sessões"
-}
+  }
 }

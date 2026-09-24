@@ -1,5 +1,4 @@
 import { SecurityPanel } from "./security-panel";
-import { useTranslations } from "next-intl";
 
 /**
  * The native page body, moved out of `page.tsx` so the page and the widget registry share one
@@ -16,13 +15,12 @@ import { useTranslations } from "next-intl";
  * right.
  */
 export function SecurityPageContent() {
-  const t = useTranslations("shell.securityPage");
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6 lg:p-8">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-950 dark:text-white">{t("title")}</h1>
+        <h1 className="text-2xl font-semibold text-slate-950 dark:text-white">Sign-in security</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {t("description")}
+          Protect your account with an authenticator and review active browser sessions.
         </p>
       </div>
       <SecurityPanel />
