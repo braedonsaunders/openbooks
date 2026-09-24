@@ -23,10 +23,10 @@ import type {
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
-import { AL_CERTIFICATE, AL_REGION } from "./states/al.ts";
+import { AL_A4_MS_CERTIFICATE, AL_CERTIFICATE, AL_REGION } from "./states/al.ts";
 import { AR_CERTIFICATE, AR_REGION } from "./states/ar.ts";
 import { AZ_CERTIFICATE, AZ_REGION } from "./states/az.ts";
-import { CO_CERTIFICATE, CO_REGION } from "./states/co.ts";
+import { CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CO_REGION } from "./states/co.ts";
 import { CT_CERTIFICATE, CT_REGION } from "./states/ct.ts";
 import { DC_CERTIFICATE, DC_REGION } from "./states/dc.ts";
 import { DE_CERTIFICATE, DE_REGION } from "./states/de.ts";
@@ -865,6 +865,65 @@ const MA_M4: PayrollCertificate = {
   ],
 };
 
+/** Massachusetts Form M-4-MS, the separately filed annual military-spouse exemption certificate. */
+const MA_M4_MS: PayrollCertificate = {
+  key: "us_ma_m4_ms",
+  form: "M-4-MS",
+  label: "Massachusetts Annual Withholding Tax Exemption Certificate for Nonresident Military Spouse",
+  scope: { level: "region", region: "MA" },
+  purpose: "withholding",
+  validity: { kind: "calendar_year_end" },
+  citation:
+    "Massachusetts Department of Revenue, Form M-4-MS (Rev. 5/20), Annual Withholding Tax Exemption Certificate; "
+    + "MA Tax Information for Military Personnel and Their Spouses",
+  summary:
+    "A separate annual certificate for an eligible nonresident military spouse. The employee must revalidate each year and provide the required military identification, DD Form 2058, current Leave and Earnings Statement, and current military orders.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "claim_status", label: "M-4-MS claim", kind: "choice",
+      choices: [
+        { value: "qualified_domicile", label: "I qualify under my own domicile state" },
+        { value: "elect_servicemember_residence", label: "I elect the servicemember's state of residence for tax purposes" },
+        { value: "no_longer_qualified", label: "I no longer qualify for the exemption" },
+      ],
+      help: "Use the current year's M-4-MS and select the claim that matches the signed certificate. Selecting no longer qualified resumes ordinary M-4 withholding.",
+    },
+    {
+      key: "active_duty_servicemember_spouse", label: "Spouse is an active-duty servicemember",
+      kind: "flag", help: "M-4-MS applies to the civilian spouse of a member of the armed forces.",
+    },
+    {
+      key: "servicemember_orders_assign_ma", label: "Current military orders assign the servicemember to Massachusetts",
+      kind: "flag", help: "Retain the servicemember's current orders assigning them to a post of duty in Massachusetts.",
+    },
+    {
+      key: "spouse_present_to_accompany", label: "Spouse is in Massachusetts solely to be with the servicemember",
+      kind: "flag", help: "Required for the M-4-MS exemption whether the spouse relies on their own domicile or makes the federal residence election.",
+    },
+    {
+      key: "same_non_ma_domicile", label: "Spouse and servicemember share a domicile outside Massachusetts, or the spouse makes the federal residence election",
+      kind: "flag", help: "Records the non-Massachusetts shared domicile or the election under 50 U.S.C. § 4001(a)(2)(B), as selected on M-4-MS.",
+    },
+    {
+      key: "military_spouse_id_on_file", label: "Current military spouse identification is on file",
+      kind: "flag", help: "Massachusetts DOR requires a Military Spouse ID card with M-4-MS.",
+    },
+    {
+      key: "dd2058_on_file", label: "DD Form 2058 is on file",
+      kind: "flag", help: "Massachusetts DOR requires the servicemember's State of Legal Residence Certificate (DD Form 2058).",
+    },
+    {
+      key: "servicemember_les_on_file", label: "Current Leave and Earnings Statement is on file",
+      kind: "flag", help: "Massachusetts DOR requires the servicemember's Leave and Earnings Statement.",
+    },
+    {
+      key: "current_military_orders_on_file", label: "Current Massachusetts military orders are on file",
+      kind: "flag", help: "Massachusetts DOR requires current orders assigning the servicemember to a post of duty in Massachusetts.",
+    },
+  ],
+};
+
 /** Georgia Form G-4 (Rev. 08/15/24). */
 const GA_G4: PayrollCertificate = {
   key: "us_ga_g4",
@@ -977,9 +1036,9 @@ const US_CERTIFICATES: PayrollPackCertificates = {
   certificates: [
     W4, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
     NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
-    MA_M4, GA_G4, NC_NC4, CO_CERTIFICATE, CT_CERTIFICATE, DC_CERTIFICATE,
+    MA_M4, MA_M4_MS, GA_G4, NC_NC4, CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CT_CERTIFICATE, DC_CERTIFICATE,
     MD_CERTIFICATE, MD_MW507_NR, OR_CERTIFICATE, OR_TRANSIT_RECORD, DE_CERTIFICATE,
-    AL_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
+    AL_CERTIFICATE, AL_A4_MS_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
     RI_CERTIFICATE, VT_CERTIFICATE, HI_CERTIFICATE,
     ID_CERTIFICATE, KS_CERTIFICATE, LA_CERTIFICATE,
     MO_CERTIFICATE, MS_CERTIFICATE, MT_CERTIFICATE, ND_CERTIFICATE, NE_CERTIFICATE, NM_CERTIFICATE, OK_CERTIFICATE,

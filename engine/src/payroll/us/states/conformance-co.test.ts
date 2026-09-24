@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ResolvedCertificate } from "../../certificates.ts";
-import { CO_CERTIFICATE, CO_RATES_2026, CO_WITHHOLDING } from "./co.ts";
+import { CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CO_RATES_2026, CO_WITHHOLDING } from "./co.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
 const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
@@ -96,6 +96,32 @@ test("CO W-4-only exempt claim withholds zero; a filed DR 0004 resumes its works
     stateCertificateOnFile: true,
   });
   assert.equal(withDr0004.tax, money("44.00"));
+});
+
+// DR 1059 and the qualifying-spouse withholding rule:
+// https://tax.colorado.gov/sites/tax/files/documents/DR_1059_2023.pdf
+// https://tax.colorado.gov/sites/tax/files/documents/ITT_Military_Servicemembers_Feb_2025.pdf
+test("CO DR 1059 requires its current-year nonresident military-spouse attestations", () => {
+  const incomplete = resolvedCertificate(CO_DR1059_CERTIFICATE, {
+    spouse_is_nonresident: "true",
+  });
+  assert.throws(
+    () => CO_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+      certificate: cert(), supportingCertificates: { us_co_dr1059: incomplete },
+    }),
+    /Colorado military-spouse withholding exemption requires proof that the spouse is a qualifying U.S. servicemember; the servicemember is not a Colorado resident; the spouse is in Colorado solely to be with the servicemember; the servicemember is serving in compliance with military orders; the employee will notify the employer immediately if they become a Colorado resident/,
+  );
+  const complete = resolvedCertificate(CO_DR1059_CERTIFICATE, Object.fromEntries([
+    "spouse_is_nonresident", "servicemember_is_member", "servicemember_is_nonresident",
+    "spouse_present_to_accompany", "servicemember_serving_under_orders", "notify_if_residency_changes",
+  ].map((key) => [key, "true"])));
+  const result = CO_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+    certificate: cert(), supportingCertificates: { us_co_dr1059: complete },
+  });
+  assert.equal(result.tax, money("0"));
+  assert.equal(result.factors.CO_MILITARY_SPOUSE_EXEMPT, "1");
 });
 
 test("CO apportions nonresident wages by the verified service-day share", () => {

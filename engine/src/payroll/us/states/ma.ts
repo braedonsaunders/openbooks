@@ -36,8 +36,10 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { bmin, D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
-import { certificateAmount, certificateCount, certificateFlag } from "../../certificates.ts";
+import { certificateAmount, certificateChoice, certificateCount, certificateFlag } from "../../certificates.ts";
+import { PayrollError } from "../../error.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
@@ -186,6 +188,30 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = maRatesForPayDate(input.payDate);
   const period = maPeriodFor(input.periodsPerYear);
   const factors: Record<string, string> = { MA_PERIOD: period };
+
+  const militarySpouseCertificate = input.supportingCertificates?.us_ma_m4_ms;
+  if (militarySpouseCertificate?.onFile) {
+    const claim = certificateChoice(militarySpouseCertificate, "claim_status");
+    if (claim == null) {
+      throw new PayrollError(
+        "Massachusetts filed M-4-MS must state whether the employee qualifies, elects the servicemember's residence, or no longer qualifies",
+      );
+    }
+    if (claim !== "no_longer_qualified") {
+      requireMilitarySpouseEligibility(militarySpouseCertificate, "Massachusetts", [
+        { key: "active_duty_servicemember_spouse", description: "the employee is the civilian spouse of an active-duty servicemember" },
+        { key: "servicemember_orders_assign_ma", description: "current military orders assign the servicemember to Massachusetts" },
+        { key: "spouse_present_to_accompany", description: "the spouse is in Massachusetts solely to be with the servicemember" },
+        { key: "same_non_ma_domicile", description: "the spouse and servicemember have the same non-Massachusetts tax residence or the spouse elects that residence" },
+        { key: "military_spouse_id_on_file", description: "a current Military Spouse ID card is on file" },
+        { key: "dd2058_on_file", description: "the servicemember's DD Form 2058 is on file" },
+        { key: "servicemember_les_on_file", description: "the servicemember's current Leave and Earnings Statement is on file" },
+        { key: "current_military_orders_on_file", description: "the servicemember's current Massachusetts military orders are on file" },
+      ]);
+      factors.MA_MILITARY_SPOUSE_EXEMPT = "1";
+      return { state: "MA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    }
+  }
 
   // M-4 box D: a full-time student in seasonal, part-time or temporary work
   // whose annual income will not exceed $8,000. "Employer: Do not withhold if D
@@ -341,6 +367,7 @@ export function maSupplementalWithholding(input: {
  */
 export const MA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MA_PERIOD: "Massachusetts payroll period",
+  MA_MILITARY_SPOUSE_EXEMPT: "Massachusetts military-spouse wages exempt from withholding",
   MA_STUDENT_EXEMPT: "Massachusetts student exemption (M-4 box D)",
   MA_BELOW_WITHHOLDING_FLOOR: "Massachusetts low-wage no-withholding floor",
   MA_RETIREMENT_DEDUCTION: "Massachusetts retirement-contribution subtraction (Step 1)",
@@ -363,6 +390,7 @@ export const MA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MA",
   label: "Massachusetts income tax",
   certificateKey: "us_ma_m4",
+  supportingCertificateKeys: ["us_ma_m4_ms"],
   ratesModule: RATES_MODULE,
   editions: MA_TAX_YEAR_EDITIONS,
   printedPeriods: MA_PERIODS,

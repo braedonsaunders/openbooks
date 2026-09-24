@@ -326,6 +326,8 @@ export interface UsStateWithholdingInput {
    * which refuse a value the declaration does not admit.
    */
   certificate: ResolvedCertificate;
+  /** Other declared certificates this engine requires alongside its primary form. */
+  supportingCertificates?: Readonly<Record<string, ResolvedCertificate>>;
   /**
    * Whether the employee is a RESIDENT of the state or works there as a
    * nonresident. Several states withhold differently, and every state's
@@ -407,6 +409,8 @@ export interface UsStateWithholdingEngine {
    * certificate the RESOLVER consults — not something this engine reads.
    */
   certificateKey: string | null;
+  /** Additional pack-declared certificates read by this state calculation. */
+  supportingCertificateKeys?: readonly string[];
   /** The module a new edition is transcribed into — named in every refusal. */
   ratesModule: string;
   editions: readonly PayrollTaxYearEdition[];

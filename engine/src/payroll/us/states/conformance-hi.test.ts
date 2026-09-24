@@ -3,6 +3,10 @@
  *
  * Every expected figure is transcribed from Booklet A (Rev. 2025) or is that
  * publication's own arithmetic on its own printed numbers.
+ * HW-4 status declarations and the non-withholding eligibility conditions are
+ * transcribed from HW-4 (Rev. 2022) and Booklet A, section 11(b), (g):
+ * https://files.hawaii.gov/tax/forms/current/hw4_i.pdf
+ * https://files.hawaii.gov/tax/news/pubs/25BkltA.pdf
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -58,16 +62,53 @@ test("HI no HW-4 withholds as single with zero allowances", () => {
   assert.equal(empty.factors.HI_ALLOWANCES, money("0"));
 });
 
-test("HI extra withholding is added and exempt is zero", () => {
+test("HI extra withholding is added and HW-4 has no generic exempt status", () => {
   assert.equal(HI_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00",
     basis: "resident",
     certificate: cert({ filing_status: "single", allowances: "3", additional_per_period: "5.00" }),
   }).tax, money("14.58"));
+  assert.equal(HI_CERTIFICATE.fields.some((field) => field.key === "exempt"), false);
+});
+
+test("HI certified-disabled status requires the Department certification on file", () => {
+  assert.throws(
+    () => HI_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00", basis: "resident",
+      certificate: cert({ filing_status: "certified_disabled" }),
+    }),
+    /Hawaii certified-disabled withholding status requires the Department-prescribed disability certification on file/,
+  );
   assert.equal(HI_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00",
-    basis: "resident", certificate: cert({ exempt: "true" }),
+    basis: "resident",
+    certificate: cert({ filing_status: "certified_disabled", disability_certification_on_file: "true" }),
+  }).factors.HI_CERTIFIED_DISABLED_NOT_SUBJECT, "1");
+  assert.equal(HI_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00", basis: "resident",
+    certificate: cert({ filing_status: "certified_disabled", disability_certification_on_file: "true" }),
   }).tax, money("0"));
+});
+
+test("HI nonresident military-spouse status requires all statutory eligibility facts", () => {
+  assert.throws(
+    () => HI_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00", basis: "resident",
+      certificate: cert({ filing_status: "nonresident_military_spouse" }),
+    }),
+    /Hawaii military-spouse withholding exemption requires proof that the servicemember is in Hawaii solely under military or naval orders; the spouse is in Hawaii solely to be with the servicemember; the spouse and servicemember are domiciled in the same state outside Hawaii/,
+  );
+  const militarySpouse = HI_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00", basis: "resident",
+    certificate: cert({
+      filing_status: "nonresident_military_spouse",
+      servicemember_present_under_orders: "true",
+      spouse_present_to_accompany: "true",
+      same_non_hawaii_domicile: "true",
+    }),
+  });
+  assert.equal(militarySpouse.tax, money("0"));
+  assert.equal(militarySpouse.factors.HI_NONRESIDENT_MILITARY_SPOUSE_NOT_SUBJECT, "1");
 });
 
 test("HI refuses a year it has not transcribed", () => {
