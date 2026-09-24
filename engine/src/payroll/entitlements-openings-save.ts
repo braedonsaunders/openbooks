@@ -185,6 +185,16 @@ export async function saveEntitlementOpenings(input: {
               + `${lock.documentNumber ? ` (${lock.documentNumber})` : ""} already used the `
               + `${plan.code} carry-in; void that run before changing it`,
             );
+          } else {
+            // Non-strict bulk load: the locked bank stands, but the load says
+            // so by name. A bare continue here reported the load as applied
+            // while the employee's bank restarted at zero.
+            result.warnings.push({
+              employeePartyId: row.employeePartyId,
+              employeeName,
+              message: `${plan.code} carry-in consumed by committed run `
+                + `${lock.documentNumber ?? lock.payDate} on ${lock.payDate}; left unchanged`,
+            });
           }
           continue;
         }

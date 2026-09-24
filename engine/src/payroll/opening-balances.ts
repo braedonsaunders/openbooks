@@ -596,6 +596,14 @@ export interface OpeningBalanceSaveResult {
   created: number;
   updated: number;
   deleted: number;
+  /**
+   * Rows deliberately left untouched by a non-strict load: a committed run
+   * already consumed the carry-in, so the stored row (or its absence) stands
+   * and the load moves on. The skipped count is `skipped.length` — a load
+   * that reports only created/updated/deleted would read as fully applied
+   * while an employee restarts YTD at zero.
+   */
+  skipped: { employeePartyId: string; employeeName?: string; reason: string }[];
   /** Rows that could not be written, and why. Nothing is written on failure. */
   errors: { employeePartyId: string; employeeName?: string; message: string }[];
 }
@@ -630,7 +638,7 @@ export async function saveOpeningBalances(input: {
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<OpeningBalanceSaveResult> {
   const year = assertTaxYear(input.taxYear);
-  const result: OpeningBalanceSaveResult = { created: 0, updated: 0, deleted: 0, errors: [] };
+  const result: OpeningBalanceSaveResult = { created: 0, updated: 0, deleted: 0, skipped: [], errors: [] };
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
@@ -711,7 +719,18 @@ export async function saveOpeningBalances(input: {
         );
         continue;
       }
-      if (lock) continue; // non-strict bulk load: leave locked employees alone
+      // Non-strict bulk load: leave the locked employee alone, but SAY so by
+      // name. A bare continue here reported the load as fully applied while
+      // the employee restarted YTD at zero.
+      if (lock) {
+        result.skipped.push({
+          employeePartyId: row.employeePartyId,
+          employeeName,
+          reason: `carry-in consumed by committed run ${lock.documentNumber ?? lock.payDate} `
+            + `on ${lock.payDate} for ${year}; void that run before changing it`,
+        });
+        continue;
+      }
       try {
         const amounts = normalizeOpeningBalance(row.amounts);
         const stored = storedByEmployee.get(row.employeePartyId) ?? {};

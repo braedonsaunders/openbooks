@@ -167,7 +167,7 @@ export async function POST(req: Request) {
     // employee, and nothing was written.
     if (error instanceof OpeningBalanceSaveError) {
       return NextResponse.json(
-        { error: error.message, errors: error.result.errors, created: 0, updated: 0, deleted: 0 },
+        { error: error.message, errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
         { status: 409 },
       )
     }

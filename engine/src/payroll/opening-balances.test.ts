@@ -886,6 +886,59 @@ test(
 );
 
 test(
+  "a non-strict load reports the locked employee as skipped by name while the others apply",
+  { skip: !DB },
+  async () => {
+    // The silent-skip defect: a bulk load with strictLocks=false that met a
+    // locked employee hit a bare `continue` — no errors entry, no skipped
+    // count — and the result read as fully applied while that employee
+    // restarted YTD at zero.
+    const fx = await seedAdoption();
+    try {
+      const second = await seedEmployee(fx, { name: "Alex Second" });
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", cppYtd: "2000" } },
+          { employeePartyId: second, amounts: { pensionableYtd: "30000", cppYtd: "1500" } },
+        ],
+      });
+
+      // A committed run consumes only the first employee's carry-in.
+      const documentId = await seedRun(fx, { runStatus: "committed" });
+      await db.execute(sql`
+        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+                               periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
+                               pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
+        values (${fx.orgId}, ${documentId}, ${fx.employeeId}, 'ON', 26, '2026-07-21', 2026, 'CAD',
+                '2400', '1900', '2400', '2400', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
+
+      const result = await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, strictLocks: false,
+        rows: [
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "1", cppYtd: "1" } },
+          { employeePartyId: second, amounts: { pensionableYtd: "31000", cppYtd: "1600" } },
+        ],
+      });
+      assert.equal(result.errors.length, 0, "a skip is not a failure");
+      assert.equal(result.skipped.length, 1, "the locked row is counted, not absorbed");
+      assert.equal(result.skipped[0]!.employeePartyId, fx.employeeId);
+      assert.equal(result.skipped[0]!.employeeName, fx.employeeName);
+      assert.match(result.skipped[0]!.reason, /carry-in consumed by committed run/);
+
+      // The unlocked employee applies; the locked one stands exactly as it was.
+      const after = await openingBalancesForYear(fx.orgId, 2026);
+      const byEmployee = new Map(after.rows.map((row) => [row.employeePartyId, row]));
+      assert.equal(byEmployee.get(second)!.amounts?.pensionableYtd, "31000.0000");
+      assert.equal(byEmployee.get(fx.employeeId)!.amounts?.pensionableYtd, "40000.0000");
+      assert.equal(byEmployee.get(fx.employeeId)!.amounts?.cppYtd, "2000.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
   "a rejected bulk load writes nothing at all",
   { skip: !DB },
   async () => {

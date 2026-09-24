@@ -82,6 +82,7 @@ export function OpeningBalancesView({
   const [componentDraft, setComponentDraft] = useState<Record<string, Record<string, string>>>({})
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<SaveError[]>([])
+  const [skipped, setSkipped] = useState<SaveError[]>([])
   const [onlyMissing, setOnlyMissing] = useState(false)
 
   const years = useMemo(() => {
@@ -163,6 +164,7 @@ export function OpeningBalancesView({
     setSaving(true)
     setErrors([])
     const fallback = text('saveFailed', 'Nothing was saved.')
+    setSkipped([])
     try {
       const payload = dirtyIds.map((employeePartyId) => {
         const row = initial.rows.find((r) => r.employeePartyId === employeePartyId)
@@ -231,6 +233,7 @@ export function OpeningBalancesView({
       let body: {
         error?: string
         errors?: SaveError[]
+        skipped?: SaveError[]
         created?: number
         updated?: number
         deleted?: number
@@ -261,9 +264,18 @@ export function OpeningBalancesView({
       }
       setDraft({})
       setComponentDraft({})
+      // A non-strict bulk load leaves locked employees untouched: their
+      // carry-in is already inside a committed run. The save still succeeds
+      // for everyone else, so the skipped rows are listed by name rather than
+      // reported as an error — otherwise the operator believes the load
+      // applied while that employee restarts YTD at zero.
+      const skippedRows = body.skipped ?? []
+      setSkipped(skippedRows)
       toast.success(
         text('saved', 'Opening balances saved.') +
-          ` (${body.created ?? 0} new, ${body.updated ?? 0} updated, ${body.deleted ?? 0} cleared)`,
+          ` (${body.created ?? 0} new, ${body.updated ?? 0} updated, ${body.deleted ?? 0} cleared` +
+          (skippedRows.length > 0 ? `, ${skippedRows.length} skipped` : '') +
+          `)`,
       )
       router.refresh()
     } catch (e) {
@@ -344,6 +356,26 @@ export function OpeningBalancesView({
               <li key={`${error.employeePartyId}-${index}`}>
                 {error.employeeName ? `${error.employeeName}: ` : ''}
                 {error.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {skipped.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/60 dark:bg-amber-950/40">
+          <p className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
+            <Lock size={15} aria-hidden />
+            {text(
+              'skipped',
+              `${skipped.length} ${skipped.length === 1 ? 'employee was' : 'employees were'} left unchanged — a committed run already consumed their carry-in. Everyone else was saved.`,
+            )}
+          </p>
+          <ul className="mt-2 space-y-1 text-amber-700 dark:text-amber-300">
+            {skipped.map((row, index) => (
+              <li key={`${row.employeePartyId}-${index}`}>
+                {row.employeeName ? `${row.employeeName}: ` : ''}
+                {row.message}
               </li>
             ))}
           </ul>
