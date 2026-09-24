@@ -960,6 +960,61 @@ test("NC's head-of-household schedule is a different standard deduction", () => 
   assert.equal(joint.factors.NC_SCHEDULE, "single_married_surviving");
 });
 
+// NC-30 § 13 (2026), Form NC-4 NRA instructions and example:
+// https://www.ncdor.gov/income-tax-withholding-tables-and-instructions-employers/open
+test("NC-4 NRA always uses Single and limits Line 2 for low wages", () => {
+  const highWages = NC_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+    certificate: nc4({
+      filing_status: "head_household", allowances: "0", additional_per_period: "11",
+      nonresident_alien: "true", india_student_or_apprentice_resident: "false",
+    }),
+  });
+  assert.equal(highWages.factors.NC_SCHEDULE, "single_married_surviving");
+  assert.equal(highWages.factors.NC_NRA_SINGLE_SCHEDULE, "1");
+  assert.equal(highWages.tax, money("42")); // Single schedule $31 plus full Line 2 $11.
+
+  const lowWages = NC_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 12, wages: "500.00", basis: "nonresident",
+    certificate: nc4({
+      filing_status: "head_household", additional_per_period: "44",
+      nonresident_alien: "true", india_student_or_apprentice_resident: "false",
+    }),
+  });
+  assert.equal(lowWages.factors.NC_NRA_ADDITIONAL_CAP, money("21"));
+  assert.equal(lowWages.tax, money("21")); // NC-30's $500 monthly example.
+
+  const indiaStudent = NC_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 12, wages: "500.00", basis: "nonresident",
+    certificate: nc4({
+      additional_per_period: "0", nonresident_alien: "true",
+      india_student_or_apprentice_resident: "true",
+    }),
+  });
+  assert.equal(indiaStudent.factors.NC_NRA_INDIA_ZERO_ADJUSTMENT, "1");
+  assert.equal(indiaStudent.tax, money("0"));
+});
+
+test("NC-4 NRA refuses missing India-student classification or a nonzero India Line 2", () => {
+  assert.throws(
+    () => NC_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+      certificate: nc4({ nonresident_alien: "true", additional_per_period: "11" }),
+    }),
+    /requires confirmation whether the employee is a student or business apprentice resident of India/,
+  );
+  assert.throws(
+    () => NC_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+      certificate: nc4({
+        nonresident_alien: "true", additional_per_period: "11",
+        india_student_or_apprentice_resident: "true",
+      }),
+    }),
+    /Line 2 must be \$0 for a student or business apprentice who is a resident of India/,
+  );
+});
+
 test("NC's per-period standard deductions are the annual figures, divided", () => {
   // NC-30 prints both, and they have to agree: $12,750 ÷ 52 = $245.19,
   // ÷ 26 = $490.38, ÷ 24 = $531.25, ÷ 12 = $1,062.50; head of household
