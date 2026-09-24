@@ -564,6 +564,7 @@ export async function setGrant(input: {
   audit?: FileMutationAudit
 }): Promise<void> {
   await inDbTransaction(async (tx) => {
+    await lockCabinetAuthorization(tx, input.orgId)
     const gate =
       input.resourceType === 'folder'
         ? await viewerFolderGate(tx, input.orgId, input.audit, input.resourceId, 'manager')
@@ -649,7 +650,7 @@ export async function removeGrant(
       })
     }
     return true
-  })
+  }, orgId)
 }
 
 /** Title-case a snake_case identifier: "vendor_bill" -> "Vendor Bill". Must
@@ -1037,7 +1038,7 @@ export async function moveFolder(
     }
     return true
   }
-  return audit ? runMutation(audit.executor, work) : inDbTransaction(work)
+  return audit ? runMutation(audit.executor, work, audit.viewer ? orgId : undefined) : inDbTransaction(work)
 }
 
 export async function updateFolder(
@@ -1193,7 +1194,7 @@ export async function patchFolder(
       })
     }
     return { ok: true as const }
-  })
+  }, audit.viewer ? orgId : undefined)
 }
 
 const FOLDER_DESCENDANTS = (orgId: string, id: string): SQL => sql`
@@ -1271,7 +1272,7 @@ export async function deleteFolder(
       })
     }
     return { ok: true as const }
-  })
+  }, audit?.viewer ? orgId : undefined)
   return result
 }
 
@@ -1367,7 +1368,7 @@ export async function restoreFolder(
       executor: tx,
     })
     return true
-  })
+  }, audit.viewer ? orgId : undefined)
 }
 
 /** Shape of deleteFolder's audit evidence consulted by restoreFolder. */
@@ -1394,6 +1395,7 @@ export async function purgeFolder(
   // blocks the purge) or waits until after the deleted file is gone and fails.
   // This closes the check/delete race without relying on a process-local lock.
   const outcome = await inDbTransaction(async (tx) => {
+    if (audit?.viewer) await lockCabinetAuthorization(tx, orgId)
     const descendants = sql`
       with recursive descendants as (
         select id from folders where id = ${id} and org_id = ${orgId}
@@ -1848,7 +1850,7 @@ export async function createFile(input: {
         from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where fi.id = ${fileId} and fi.org_id = ${input.orgId}
     `))
     return meta.rows[0]!
-  })
+  }, input.audit?.viewer ? input.orgId : undefined)
 }
 
 /**
@@ -1939,7 +1941,7 @@ export async function replaceFile(input: {
       })
     }
     return true
-  })
+  }, input.audit?.viewer ? input.orgId : undefined)
 }
 
 /**
@@ -1979,6 +1981,7 @@ async function viewerFileGate(
   min: AccessLevel,
 ): Promise<boolean> {
   if (!audit?.viewer) return true
+  await lockCabinetAuthorization(exec, orgId)
   return accessAtLeast(await fileAccessLevel(orgId, audit.viewer, fileId, exec), min)
 }
 
@@ -1990,15 +1993,33 @@ async function viewerFolderGate(
   min: AccessLevel,
 ): Promise<boolean> {
   if (!audit?.viewer) return true
+  await lockCabinetAuthorization(exec, orgId)
   return accessAtLeast(await folderAccessLevel(orgId, audit.viewer, folderId, exec), min)
+}
+
+/**
+ * Serialize every viewer-authorized cabinet write with grant changes. One
+ * org-scoped transaction lock is intentionally conservative: a grant revoke
+ * either precedes the permission recheck or waits until the authorized write
+ * commits, including inherited folder grants and previously absent rows.
+ */
+async function lockCabinetAuthorization(exec: SqlExecutor, orgId: string): Promise<void> {
+  await exec.execute(sql`select pg_advisory_xact_lock(hashtextextended(${
+    `file-cabinet-auth:${orgId}`
+  }, 0))`)
 }
 
 async function runMutation<T>(
   executor: SqlExecutor | undefined,
   work: (tx: SqlExecutor) => Promise<T>,
+  authorizationOrgId?: string,
 ): Promise<T> {
-  if (executor) return work(executor)
-  return inDbTransaction(async (tx) => work(tx))
+  const run = async (tx: SqlExecutor) => {
+    if (authorizationOrgId) await lockCabinetAuthorization(tx, authorizationOrgId)
+    return work(tx)
+  }
+  if (executor) return run(executor)
+  return inDbTransaction(run)
 }
 
 export async function renameFile(
@@ -2041,7 +2062,7 @@ export async function renameFile(
       executor: tx,
     })
     return true
-  })
+  }, audit.viewer ? orgId : undefined)
 }
 
 export async function moveFile(
@@ -2091,7 +2112,7 @@ export async function moveFile(
       executor: tx,
     })
     return true
-  })
+  }, audit.viewer ? orgId : undefined)
 }
 
 /**
@@ -2138,7 +2159,7 @@ export async function deleteFile(
       executor: tx,
     })
     return true
-  })
+  }, audit.viewer ? orgId : undefined)
 }
 
 /** Restore a trashed file and its attributable before/after evidence atomically. */
@@ -2175,7 +2196,7 @@ export async function restoreFile(
       })
     }
     return true
-  })
+  }, audit?.viewer ? orgId : undefined)
 }
 
 /**
@@ -2263,6 +2284,7 @@ export async function purgeFile(
   audit?: FileMutationAudit,
 ): Promise<PurgeFileOutcome> {
   const deleted = await inDbTransaction(async (tx) => {
+    if (audit?.viewer) await lockCabinetAuthorization(tx, orgId)
     const owned = (await tx.execute<{ id: string }>(sql`
       select id from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
