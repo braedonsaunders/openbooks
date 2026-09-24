@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
@@ -171,53 +170,41 @@ function request(): Request {
   });
 }
 
-if (isVitest) {
-  // Vitest does not install the repository's Node ESM resolve hooks, and this
-  // Next route intentionally uses the production @/ alias. Keep the exact
-  // command useful in that runner with a source-boundary check; the normal
-  // node:test invocation above exercises the route end to end with mocks.
-  const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-  test("the decision route enforces and forwards subsidiary scope", () => {
-    assert.match(routeSource, /guardSubsidiaryScope\(authz, gate\.subsidiary_id\)/);
-    assert.match(routeSource, /allowedSubsidiaryIds: authz\.allowedSubsidiaryIds/);
-  });
-} else {
-  test("a restricted approver cannot decide a gate for another subsidiary", async () => {
-    reset(new Set(["00000000-0000-4000-8000-000000000099"]));
+test("a restricted approver cannot decide a gate for another subsidiary", async () => {
+  reset(new Set(["00000000-0000-4000-8000-000000000099"]));
 
-    const response = await postRoute!(request());
+  const response = await postRoute!(request());
 
-    assert.equal(response.status, 404);
-    assert.deepEqual(routeState.scopeChecks, [SUBJECT_SUBSIDIARY]);
-    assert.deepEqual(routeState.decisions, []);
-  });
+  assert.equal(response.status, 404);
+  assert.deepEqual(routeState.scopeChecks, [SUBJECT_SUBSIDIARY]);
+  assert.deepEqual(routeState.decisions, []);
+});
 
-  test("an in-scope approver carries the subsidiary scope into the engine", async () => {
-    reset(new Set([SUBJECT_SUBSIDIARY]));
+test("an in-scope approver carries the subsidiary scope into the engine", async () => {
+  reset(new Set([SUBJECT_SUBSIDIARY]));
 
-    const response = await postRoute!(request());
+  const response = await postRoute!(request());
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.decisions, [
-      {
-        gateId: GATE_ID,
-        decision: "approved",
-        userId: routeState.authz.user.id,
-        allowedSubsidiaryIds: routeState.authz.allowedSubsidiaryIds,
-        comment: undefined,
-        signature: undefined,
-      },
-    ]);
-  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.decisions, [
+    {
+      gateId: GATE_ID,
+      decision: "approved",
+      userId: routeState.authz.user.id,
+      allowedSubsidiaryIds: routeState.authz.allowedSubsidiaryIds,
+      comment: undefined,
+      signature: undefined,
+    },
+  ]);
+});
 
-  test("an engine throw delegates to the shared error mapping, never a 200", async () => {
-    reset(new Set([SUBJECT_SUBSIDIARY]));
-    const cause = "approval release failed: boom. The decision to approve was not recorded and the approval is still pending — retry your decision.";
-    routeState.decideThrow = cause;
+test("an engine throw delegates to the shared error mapping, never a 200", async () => {
+  reset(new Set([SUBJECT_SUBSIDIARY]));
+  const cause = "approval release failed: boom. The decision to approve was not recorded and the approval is still pending — retry your decision.";
+  routeState.decideThrow = cause;
 
-    const response = await postRoute!(request());
+  const response = await postRoute!(request());
 
-    assert.equal(response.status, 500);
-    assert.deepEqual(await response.json(), { error: `Error: ${cause}` });
-  });
-}
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: `Error: ${cause}` });
+});
