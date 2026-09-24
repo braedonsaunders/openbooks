@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
 /**
@@ -16,7 +17,7 @@ export const fileProfileChangeBody = z.object({
   reason: z.string().trim().min(1, "reason required").max(500),
 });
 
-const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be a YYYY-MM-DD date");
+const civilDate = civilDateInput();
 
 export const acknowledgeReviewBody = z.object({
   reviewId: uuid,

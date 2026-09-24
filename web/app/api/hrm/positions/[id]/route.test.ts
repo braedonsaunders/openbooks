@@ -178,6 +178,17 @@ test("an unknown id never reaches the service", async () => {
   assert.deepEqual(routeState.calls, []);
 });
 
+test("detail refuses an impossible as-of date before the service runs", async () => {
+  reset();
+  const response = await itemRoute!.GET(
+    new Request(`http://openbooks.test/api/hrm/positions/${POSITION_ID}?effectiveDate=2026-02-30`),
+    params,
+  );
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /effectiveDate.*real.*calendar date/);
+  assert.deepEqual(routeState.calls, []);
+});
+
 test("detail forwards org, actor, position, and date to the read service", async () => {
   reset();
   const response = await itemRoute!.GET(

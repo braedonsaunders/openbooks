@@ -1,3 +1,4 @@
+import { isCivilDate } from "../temporal.ts";
 /**
  * HR-20 crew batch service: foreman batch lifecycle with signatures,
  * multi-stage Flows approval, and posting.
@@ -275,7 +276,7 @@ export async function createBatch(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<string> {
   await requireCrewFeature(input.orgId);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.workedOn)) {
+  if (!isCivilDate(input.workedOn)) {
     refuse("invalid_worked_on", "Worked-on must be a calendar date — pick the day the crew worked");
   }
   // The foreman is the actor (users.party_id) unless a time.manage holder

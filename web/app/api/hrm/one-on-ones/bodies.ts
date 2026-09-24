@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
 /**
@@ -33,7 +34,7 @@ export const addOneOnOneItemBody = z.object({
   body: z.string().trim().min(1).max(4000),
   visibility: z.enum(["shared", "private"]).optional(),
   assigneePartyId: uuid.nullable().optional(),
-  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").nullable().optional(),
+  dueOn: civilDateInput().nullable().optional(),
 });
 
 export const patchOneOnOneItemBody = z.object({

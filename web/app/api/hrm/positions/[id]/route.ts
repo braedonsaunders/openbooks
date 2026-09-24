@@ -7,6 +7,7 @@ import {
   writePositionFunding,
 } from "@openbooks/engine/src/hrm/positions.ts";
 import { getPositionAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
+import { isCivilDate } from "@openbooks/engine/src/hrm/temporal.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
@@ -33,8 +34,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { searchParams } = new URL(req.url);
   const rawDate = searchParams.get("effectiveDate");
   const effectiveDate = rawDate ?? (await businessToday(gate.user.orgId));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) {
-    return NextResponse.json({ error: "effectiveDate must be YYYY-MM-DD" }, { status: 400 });
+  if (!isCivilDate(effectiveDate)) {
+    return NextResponse.json({ error: "effectiveDate must be a real YYYY-MM-DD calendar date" }, { status: 400 });
   }
   try {
     const position = await getPositionAsOf({

@@ -4,7 +4,17 @@ import {
   addMonthsUtc,
   monthsBetween,
   projectDerivedStatus,
+  requireDate,
 } from "./shared.ts";
+import { HrmQualificationError } from "./errors.ts";
+
+test("qualification service date validation rejects impossible calendar dates by field", () => {
+  assert.throws(
+    () => requireDate("2025-02-31", "issuedOn"),
+    (error: unknown) => error instanceof HrmQualificationError && /issuedOn.*real.*calendar date/.test(error.message),
+  );
+  assert.equal(requireDate("2024-02-29", "issuedOn"), "2024-02-29");
+});
 
 test("derived status: expiry day itself still counts (expiring, not expired)", () => {
   assert.equal(

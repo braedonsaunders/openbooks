@@ -1,3 +1,4 @@
+import { isCivilDate } from "../temporal.ts";
 /**
  * Pure performance and retention math (0196, HR-7). No server imports, so
  * unit tests run it directly like process-math.ts: rating-scale parsing and
@@ -22,24 +23,9 @@ export interface RatingScale {
   readonly labels: readonly string[];
 }
 
-/** Civil YYYY-MM-DD, finite AD range (the 0184 reader/storage contract). */
-const CIVIL_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 export function parseCivilDay(value: unknown, field: string): string {
-  if (typeof value !== "string" || !CIVIL_DATE_RE.test(value)) {
-    throw new PerformanceMathError(`${field} must be a civil date YYYY-MM-DD`);
-  }
-  const [y, m, d] = value.split("-").map(Number);
-  if (y! < 1 || y! > 9999 || m! < 1 || m! > 12 || d! < 1 || d! > 31) {
-    throw new PerformanceMathError(`${field} must be a civil date YYYY-MM-DD`);
-  }
-  // setUTCFullYear keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999 (the platform/business-date.ts utcDateFromParts idiom,
-  // copied here so this pure module loads no platform stack).
-  const dt = new Date(0);
-  dt.setUTCFullYear(y!, m! - 1, d!);
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m! - 1 || dt.getUTCDate() !== d) {
-    throw new PerformanceMathError(`${field} must be a real calendar date, got ${value}`);
+  if (!isCivilDate(value)) {
+    throw new PerformanceMathError(`${field} must be a real calendar date (civil YYYY-MM-DD)`);
   }
   return value;
 }

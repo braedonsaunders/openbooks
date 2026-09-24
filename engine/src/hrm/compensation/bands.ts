@@ -1,3 +1,4 @@
+import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
@@ -85,7 +86,6 @@ function toBandDTO(row: BandRow): PayBandDTO {
   };
 }
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function requireMoney(value: unknown, what: string): string {
   // Accept what a typed client serializes — a JSON number or a numeric
@@ -146,7 +146,7 @@ export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandD
   if (query.basis !== "annual" && query.basis !== "hourly") {
     throw new CompensationError("INVALID_INPUT", "band basis is annual or hourly");
   }
-  if (!DATE_RE.test(query.effectiveFrom)) {
+  if (!isCivilDate(query.effectiveFrom)) {
     throw new CompensationError("INVALID_INPUT", "effectiveFrom (YYYY-MM-DD) required");
   }
   const scope = query.scope;

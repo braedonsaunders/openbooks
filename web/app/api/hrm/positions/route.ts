@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { createPosition } from "@openbooks/engine/src/hrm/positions.ts";
 import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
+import { isCivilDate } from "@openbooks/engine/src/hrm/temporal.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { positionErrorResponse } from "./_lib";
@@ -26,8 +27,8 @@ export async function GET(req: Request) {
   const status = url.searchParams.get("status");
   const rawDate = url.searchParams.get("effectiveDate");
   const effectiveDate = rawDate ?? (await businessToday(gate.user.orgId));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) {
-    return NextResponse.json({ error: "effectiveDate must be YYYY-MM-DD" }, { status: 400 });
+  if (!isCivilDate(effectiveDate)) {
+    return NextResponse.json({ error: "effectiveDate must be a real YYYY-MM-DD calendar date" }, { status: 400 });
   }
   if (status !== null && !["planned", "open", "filled", "frozen", "closed"].includes(status)) {
     return NextResponse.json({ error: "unknown position status" }, { status: 400 });

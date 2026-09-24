@@ -1,3 +1,4 @@
+import { isCivilDate } from "../temporal.ts";
 import { RecruitingError } from "./errors.ts";
 
 /** UUID-shaped input validation shared by every recruiting service. */
@@ -30,7 +31,7 @@ export function requireReason(reason: unknown): string {
 }
 
 export function requireCivilDate(value: unknown, name: string): string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (typeof value !== "string" || !isCivilDate(value)) {
     throw new RecruitingError("INVALID_INPUT", `${name} must be YYYY-MM-DD`);
   }
   return value;

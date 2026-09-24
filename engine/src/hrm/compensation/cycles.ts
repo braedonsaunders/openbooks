@@ -1,3 +1,4 @@
+import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
@@ -186,7 +187,6 @@ function toLineDTO(row: LineRow, workerPartyId: string): CompCycleLineDTO {
   };
 }
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function requireCycleKind(kind: unknown): CycleKind {
   if (kind !== "merit" && kind !== "promotion" && kind !== "adjustment" && kind !== "cola") {
@@ -216,7 +216,7 @@ export async function createCycle(query: CreateCycleQuery): Promise<CompCycleDTO
   if (typeof query.name !== "string" || query.name.trim().length === 0) {
     throw new CompensationError("INVALID_INPUT", "a cycle name is required");
   }
-  if (!DATE_RE.test(query.effectiveOn)) {
+  if (!isCivilDate(query.effectiveOn)) {
     throw new CompensationError("INVALID_INPUT", "effectiveOn (YYYY-MM-DD) required — the date the new rates take effect");
   }
   if (typeof query.currency !== "string" || !/^[A-Z]{3}$/.test(query.currency)) {
