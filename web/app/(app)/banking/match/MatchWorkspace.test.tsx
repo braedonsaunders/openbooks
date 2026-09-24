@@ -165,6 +165,14 @@ const previewOk = () => Response.json({
   matches: [{ action: 'categorize', ruleMode: 'suggest', ruleId: 'rule-1', ruleName: 'Fee rule', lineId: STMT_ID }],
 })
 
+test('the account SearchSelect is associated with its translated label', async (t) => {
+  await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }))
+  const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === 'Account')
+  assert.ok(label, 'account label renders')
+  assert.ok(label.control, 'account label controls the SearchSelect trigger')
+  assert.equal(label.control.getAttribute('aria-label'), 'Account')
+})
+
 function suggestionChip(): HTMLButtonElement {
   const found = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Fee rule'))
   assert.ok(found, 'the suggested-rule chip must render')

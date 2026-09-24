@@ -3,7 +3,7 @@
 import { sum } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import type { MoneyValue } from '@/lib/money-format'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -105,6 +105,7 @@ export function MatchWorkspace({
   const tCommon = useTranslations('common')
   const tBanking = useTranslations('banking')
   const router = useRouter()
+  const accountPickerId = useId()
   const [busy, setBusy] = useState(false)
   const [selectedStmt, setSelectedStmt] = useState<string | null>(null)
   const [selectedGl, setSelectedGl] = useState<Set<string>>(new Set())
@@ -297,9 +298,11 @@ export function MatchWorkspace({
   // ---- account picker (always shown) --------------------------------------
   const picker = (
     <div className="flex flex-wrap items-center gap-2">
-      <Label className="text-sm">{t('accountLabel')}</Label>
+      <Label htmlFor={accountPickerId} className="text-sm">{t('accountLabel')}</Label>
       <div className="min-w-[18rem]">
         <SearchSelect
+          id={accountPickerId}
+          ariaLabel={t('accountLabel')}
           options={accounts.map((a) => ({ value: a.id, label: a.unmatched ? `${a.label}  ·  ${t('unmatchedCount', { count: a.unmatched })}` : a.label }))}
           value={account?.id ?? ''}
           onChange={(v) => pickAccount(v ?? '')}
