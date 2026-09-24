@@ -14,7 +14,7 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  WI_CERTIFICATE, WI_REGION, WI_W220, WI_RATES_2026, WI_WITHHOLDING, wiAnnualTax, wiDeduction,
+  WI_CERTIFICATE, WI_REGION, WI_W220, WI_W221, WI_RATES_2026, WI_WITHHOLDING, wiAnnualTax, wiDeduction,
   wiScheduleFor,
 } from "./wi.ts";
 import { pctToRate } from "./transcription.ts";
@@ -26,6 +26,7 @@ const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
 test("WI certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(WI_CERTIFICATE), null);
   assert.equal(certificateDeclarationProblem(WI_W220), null);
+  assert.equal(certificateDeclarationProblem(WI_W221), null);
   assert.equal(WI_REGION.implemented, true);
   assert.equal(WI_REGION.certificateKey, "us_wi_wt4");
 });
@@ -125,6 +126,31 @@ test("WI line 2 is added AFTER the formula, and no WT-4 means zero exemptions", 
     certificate: cert({ exempt: "true" }),
   });
   assert.equal(exempt.tax, money("0"));
+});
+
+test("WI W-221 exempts only a filed military-spouse election with all eligibility facts", () => {
+  const incomplete = resolvedCertificate(WI_W221, {
+    employee_is_servicemember_spouse: "true",
+  });
+  assert.throws(
+    () => WI_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+      certificate: cert(), supportingCertificates: { us_wi_w221: incomplete },
+    }),
+    /Wisconsin military-spouse withholding exemption requires proof that the servicemember is present in Wisconsin in compliance with military orders; the spouse is in Wisconsin solely to be with the servicemember; the spouse resides with the servicemember; the spouse elected a qualifying domicile that is not Wisconsin/,
+  );
+
+  const complete = resolvedCertificate(WI_W221, Object.fromEntries([
+    "employee_is_servicemember_spouse", "servicemember_present_under_orders",
+    "spouse_present_solely_to_accompany", "spouse_resides_with_servicemember",
+    "elected_domicile_not_wisconsin",
+  ].map((key) => [key, "true"])));
+  const result = WI_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "nonresident",
+    certificate: cert(), supportingCertificates: { us_wi_w221: complete },
+  });
+  assert.equal(result.tax, money("0"));
+  assert.equal(result.factors.WI_NONRESIDENT_MILITARY_SPOUSE_EXEMPT, "1");
 });
 
 test("WI refuses a year it has not transcribed", () => {
