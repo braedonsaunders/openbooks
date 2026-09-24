@@ -116,6 +116,16 @@ export const FINLAND_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 10,
         role: "reduced",
         rates: [
+          // The 10% band predates 2025: the Vero rates page records that
+          // most 10%-taxed supplies (books, medicines, transport,
+          // accommodation, culture, sport) moved to 14% on 2025-01-01,
+          // leaving newspapers, magazines and broadcasting at 10%. The
+          // broad row opens at the January 2013 reform — the same
+          // background the standard band's 24% row rests on, with the
+          // pre-2013 9% era refused like the 23% era. Equal 10% values on
+          // either side do NOT collapse: the 2025 narrowing repriced most
+          // of the basket to 14%, so each row prices a different basket.
+          { ratePercent: 10, effectiveFrom: "2013-01-01", effectiveTo: "2024-12-31", sourceId: "vero_reduced_rates_2025_2026" },
           { ratePercent: 10, effectiveFrom: "2025-01-01", sourceId: "vero_reduced_rates_2025_2026" },
         ],
       },
@@ -127,6 +137,12 @@ export const FINLAND_TAX_PACK: CountryTaxPackDefinition = {
         rates: [
           { ratePercent: 0, effectiveFrom: "2026-01-01", sourceId: "vero_zero_rating_2026" },
         ],
+        // Zero-rated sales are reported in the ALV return's turnover and
+        // base-information section (fields 309–320), which this pack
+        // declares out of scope: within the modelled boxes the amounts land
+        // only in the OB workpaper boxes.
+        workpaperOnlyReason:
+          "Zero-rated sales belong to the unmodelled ALV turnover/base section (fields 309–320, out of scope by declaration); no modelled government box carries them.",
       },
     ],
   },
