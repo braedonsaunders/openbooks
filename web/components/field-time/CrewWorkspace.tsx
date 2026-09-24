@@ -1,8 +1,10 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../lib/api-error'
 
 export interface CrewLine {
   id?: string
@@ -54,6 +56,7 @@ export function CrewWorkspace({
   equipmentOn,
   signatureRequired,
   signLabel,
+  create = null,
 }: {
   batchId: string
   status: string
@@ -66,6 +69,16 @@ export function CrewWorkspace({
   equipmentOn: boolean
   signatureRequired: boolean
   signLabel: string
+  /**
+   * Unsaved-create: the loader passes pickers plus the default worked day
+   * with an empty batchId, and the workspace renders the create form
+   * instead of batch rows. Creating writes nothing until the explicit
+   * Create posts one batch.
+   */
+  create?: {
+    projects: CrewOption[]
+    defaultWorkedOn: string
+  } | null
 }) {
   const t = useTranslations('timesheets')
   const [lines, setLines] = useState<CrewLine[]>(initialLines.length > 0 ? initialLines : [{ ...EMPTY_LINE }])
@@ -222,6 +235,12 @@ export function CrewWorkspace({
     </fieldset>
   )
 
+  // Unsaved-create renders the create form instead of batch rows. The branch
+  // sits after every hook so both modes run the same hook order.
+  if (create != null && batchId === '') {
+    return <CrewCreateForm workers={workers} projects={create.projects} defaultWorkedOn={create.defaultWorkedOn} />
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -289,6 +308,118 @@ export function CrewWorkspace({
         </div>
       ) : null}
 
+    </div>
+  )
+}
+
+/**
+ * The unsaved-create form the New Batch button opens (?new=1). Opening
+ * writes nothing — the batch exists only after the explicit Create posts
+ * once to /api/time/crew-batches and lands on the new batch. The server
+ * names what is missing (foreman, project, worked day), and the form shows
+ * that refusal instead of a parse error: the status is checked first.
+ */
+function CrewCreateForm({
+  workers,
+  projects,
+  defaultWorkedOn,
+}: {
+  workers: CrewOption[]
+  projects: CrewOption[]
+  defaultWorkedOn: string
+}) {
+  const t = useTranslations('timesheets')
+  const tCommon = useTranslations('common')
+  const router = useRouter()
+  const [foremanId, setForemanId] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [workedOn, setWorkedOn] = useState(defaultWorkedOn)
+  const [notes, setNotes] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function create() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/time/crew-batches', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          foremanPartyId: foremanId,
+          projectId,
+          workedOn,
+          notes: notes.trim() || null,
+        }),
+      })
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, t('field.sendFailed')))
+        return
+      }
+      const payload = (await res.json()) as { id?: string }
+      if (!payload.id) {
+        setError(t('field.sendFailed'))
+        return
+      }
+      router.push(`/time/crew?batch=${encodeURIComponent(payload.id)}` as never)
+      router.refresh()
+    } catch {
+      setError(t('field.sendFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4" role="dialog" aria-label={t('field.newBatch')}>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <Label>{t('field.foremanLabel')}</Label>
+          <Select value={foremanId} onChange={(event) => setForemanId(event.target.value)}>
+            <option value="">{t('field.chooseWorker')}</option>
+            {workers.map((worker) => (
+              <option key={worker.id} value={worker.id}>
+                {worker.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>{t('field.projectLabel')}</Label>
+          <Select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+            <option value="">{t('field.chooseProject')}</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>{t('field.workedOnLabel')}</Label>
+          <Input type="date" value={workedOn} onChange={(event) => setWorkedOn(event.target.value)} />
+        </div>
+        <div>
+          <Label>{t('field.memo')}</Label>
+          <Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={t('field.memoPlaceholder')} />
+        </div>
+      </div>
+
+      {error ? (
+        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={busy} onClick={create}>
+          {busy ? t('field.working') : tCommon('actions.create')}
+        </Button>
+        <Button variant="outline" disabled={busy} onClick={() => router.push('/time/crew' as never)}>
+          {t('field.cancel')}
+        </Button>
+      </div>
     </div>
   )
 }

@@ -24,10 +24,12 @@ export const HRM_FIELD_TIME_WIDGETS = {
       clockOutLabel={str(props, 'clockOutLabel') ?? ''}
     />
   ),
-  /** The foreman workspace: crew rows, sign-and-submit, stage actions. */
+  /** The foreman workspace: crew rows, sign-and-submit, stage actions — or the
+   * unsaved-create form when the loader passes `create` with no batch. */
   'hrm-crew-workspace': (props) => (
     <CrewWorkspace
       batchId={str(props, 'batchId') ?? ''}
+      create={(props.create as ComponentProps<typeof CrewWorkspace>['create']) ?? null}
       status={str(props, 'status') ?? ''}
       locked={props.locked === true}
       initialLines={(props.initialLines as ComponentProps<typeof CrewWorkspace>['initialLines']) ?? []}
