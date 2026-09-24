@@ -26,12 +26,73 @@ export function startSandboxScheduler(): void {
   void tick();
 }
 
+/**
+ * Age-based reaper for tick claims whose job was lost (E08). The tick flips
+ * ready→refreshing BEFORE the Redis enqueue; when the enqueue throws, the
+ * catch above releases the claim — but an accepted-then-lost job (Redis
+ * failover between accept and delivery) strands the sandbox in 'refreshing'
+ * forever: the tick selects only 'ready', and delete refuses 'refreshing'.
+ * A stale UNPROVEN claim (no worker proof token, older than
+ * STALE_SANDBOX_CLAIM_MS) returns to 'ready' with a named recovery note so
+ * the next tick re-queues it. Proven rows belong to a live (or
+ * worker-owned) refresh and are never touched by age alone.
+ */
+export const STALE_SANDBOX_CLAIM_MS = 60 * 60 * 1000;
+
+async function sandboxRefreshJobAlive(sandboxId: string, windowMs: number): Promise<boolean> {
+  // Queue-state reconciliation: a job id is deterministic per sandbox and
+  // cadence window, so a surviving job record proves the worker may yet
+  // start and the claim must not be released. Redis errors fall through to
+  // the age proof (false = not proven alive).
+  try {
+    const { getSandboxQueue } = await import("@openbooks/jobs");
+    const queue = getSandboxQueue();
+    const bucket = Math.floor(Date.now() / windowMs);
+    for (const candidate of [`sbxsched|${sandboxId}|${bucket}`, `sbxsched|${sandboxId}|${bucket - 1}`]) {
+      if (await queue.getJob(candidate)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function releaseStaleSandboxClaims(): Promise<number> {
+  const stale = (await withBypassContext(() =>
+    db.execute<{ id: string; orgId: string; cadence: string | null }>(sql`
+      select id, org_id as "orgId", refresh_schedule as "cadence"
+        from sandboxes
+       where status = 'refreshing'
+         and (last_error is null or last_error not like 'clone-rls-proof:%')
+         and updated_at < now() - make_interval(secs => ${STALE_SANDBOX_CLAIM_MS / 1000})
+    `)));
+  let released = 0;
+  for (const row of stale.rows) {
+    const window = (row.cadence && CADENCE_MS[row.cadence]) || TICK_INTERVAL_MS;
+    if (await sandboxRefreshJobAlive(row.id, window)) continue;
+    const done = (await withBypassContext(() =>
+      db.execute(sql`
+        update sandboxes set status = 'ready',
+               last_error = 'refresh worker never started: stale scheduler claim released for re-queue',
+               updated_at = now()
+         where id = ${row.id} and org_id = ${row.orgId} and status = 'refreshing'
+           and (last_error is null or last_error not like 'clone-rls-proof:%')
+      `)));
+    if (done.rowCount) {
+      released += 1;
+      console.error(`[sandbox-scheduler] released stale refreshing claim for sandbox ${row.id} back to ready`);
+    }
+  }
+  return released;
+}
+
 export async function tick(
   enqueue: typeof enqueueSandboxOp = enqueueSandboxOp,
 ): Promise<void> {
   if (running) return;
   running = true;
   try {
+    await releaseStaleSandboxClaims();
     // A timer tick carries no request context, so this cross-tenant scan and
     // its claim must cross an explicit trusted boundary — otherwise RLS denies
     // by default and the scanner silently sees no sandboxes at all.
