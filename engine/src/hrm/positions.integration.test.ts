@@ -732,6 +732,7 @@ test("position_assignment rides the change-request path with warnings in both le
     });
     assert.equal(detail.holders.length, 1);
     assert.equal(detail.holders[0]!.employmentId, employmentId);
+    assert.equal(detail.holders[0]!.workerName, "Position Holder");
     assert.equal(detail.vacancy.filledFte, "1.0000");
     assert.equal(detail.vacancy.vacantFte, "0.0000");
     assert.ok(detail.disagreementWarnings.length >= 1);

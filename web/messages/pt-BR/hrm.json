@@ -404,7 +404,7 @@
       "costPlan": "Plano de custos {amount} {currency}",
       "unfunded": "Sem financiamento registrado",
       "holder": "Titular atual",
-      "holderEmployment": "Emprego {id}",
+      "holderEmployment": "Emprego {name}",
       "noHolder": "Sem titular em {date}",
       "warnings": "Avisos",
       "refusal": "Requer atenção",

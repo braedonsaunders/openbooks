@@ -404,7 +404,7 @@
       "costPlan": "コスト計画 {amount} {currency}",
       "unfunded": "財源の記録なし",
       "holder": "現在の保持者",
-      "holderEmployment": "雇用 {id}",
+      "holderEmployment": "雇用 {name}",
       "noHolder": "{date} 時点で保持者なし",
       "warnings": "警告",
       "refusal": "要対応",

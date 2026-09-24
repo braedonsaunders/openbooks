@@ -404,7 +404,7 @@
       "costPlan": "成本计划 {amount} {currency}",
       "unfunded": "无拨款记录",
       "holder": "当前任职者",
-      "holderEmployment": "雇用 {id}",
+      "holderEmployment": "雇用 {name}",
       "noHolder": "截至 {date} 无任职者",
       "warnings": "警告",
       "refusal": "需要注意",

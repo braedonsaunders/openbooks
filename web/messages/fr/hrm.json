@@ -404,7 +404,7 @@
       "costPlan": "Budget {amount} {currency}",
       "unfunded": "Aucun financement enregistré",
       "holder": "Titulaire actuel",
-      "holderEmployment": "Emploi {id}",
+      "holderEmployment": "Emploi {name}",
       "noHolder": "Aucun titulaire au {date}",
       "warnings": "Avertissements",
       "refusal": "Nécessite une attention",

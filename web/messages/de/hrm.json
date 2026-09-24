@@ -404,7 +404,7 @@
       "costPlan": "Kostenplan {amount} {currency}",
       "unfunded": "Keine Finanzierung erfasst",
       "holder": "Aktueller Inhaber",
-      "holderEmployment": "Beschäftigung {id}",
+      "holderEmployment": "Beschäftigung {name}",
       "noHolder": "Kein Inhaber zum {date}",
       "warnings": "Warnungen",
       "refusal": "Erfordert Aufmerksamkeit",
