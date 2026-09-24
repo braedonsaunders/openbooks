@@ -142,79 +142,88 @@ function postRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("goals routes carry identity without a permission shortcut", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /getAuthz\(\)/);
-    assert.doesNotMatch(source, /guardPermission/);
-  });
-} else {
-  test("list narrows by employment and rejects bad ids before the service runs", async () => {
-    reset();
-    assert.equal(
-      (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/goals?employmentId=nope"))).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-    const narrowed = await collectionRoute!.GET(
-      new Request(`http://openbooks.test/api/hrm/goals?employmentId=${EMPLOYMENT_ID}`),
-    );
-    assert.equal(narrowed.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "list", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID } },
-    ]);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal(
+    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/goals"))).status,
+    404,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create validates the body through the real parser before the service runs", async () => {
-    reset();
-    assert.equal((await collectionRoute!.POST(postRequest({ title: "X" }))).status, 400);
-    assert.equal(
-      (await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, title: "  ", dueOn: "2030-12-31" }))).status,
-      400,
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.authz = null;
+  const response = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/goals"));
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("list narrows by employment and rejects bad ids before the service runs", async () => {
+  reset();
+  assert.equal(
+    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/goals?employmentId=nope"))).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+  const narrowed = await collectionRoute!.GET(
+    new Request(`http://openbooks.test/api/hrm/goals?employmentId=${EMPLOYMENT_ID}`),
+  );
+  assert.equal(narrowed.status, 200);
+  assert.deepEqual(routeState.calls, [
+    { fn: "list", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID } },
+  ]);
+});
+
+test("create validates the body through the real parser before the service runs", async () => {
+  reset();
+  assert.equal((await collectionRoute!.POST(postRequest({ title: "X" }))).status, 400);
+  assert.equal(
+    (await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, title: "  ", dueOn: "2030-12-31" }))).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("create refuses hostile payloads at the real boundary", async () => {
+  reset();
+  for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
+    const refused = await collectionRoute!.POST(
+      new Request("http://openbooks.test/api/hrm/goals", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      }),
     );
-    assert.deepEqual(routeState.calls, []);
-  });
+    assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+  }
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create refuses hostile payloads at the real boundary", async () => {
-    reset();
-    for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
-      const refused = await collectionRoute!.POST(
-        new Request("http://openbooks.test/api/hrm/goals", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body,
-        }),
-      );
-      assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
-    }
-    assert.deepEqual(routeState.calls, []);
+test("create forwards org, actor, and body, then 201s", async () => {
+  reset();
+  const response = await collectionRoute!.POST(
+    postRequest({ employmentId: EMPLOYMENT_ID, title: "Ship it", dueOn: "2026-12-31" }),
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(routeState.calls[0]!.args, {
+    orgId: "org-1",
+    actorId: "user-1",
+    employmentId: EMPLOYMENT_ID,
+    title: "Ship it",
+    description: null,
+    dueOn: "2026-12-31",
+    weight: null,
+    cycleId: null,
   });
+});
 
-  test("create forwards org, actor, and body, then 201s", async () => {
-    reset();
-    const response = await collectionRoute!.POST(
-      postRequest({ employmentId: EMPLOYMENT_ID, title: "Ship it", dueOn: "2026-12-31" }),
-    );
-    assert.equal(response.status, 201);
-    assert.deepEqual(routeState.calls[0]!.args, {
-      orgId: "org-1",
-      actorId: "user-1",
-      employmentId: EMPLOYMENT_ID,
-      title: "Ship it",
-      description: null,
-      dueOn: "2026-12-31",
-      weight: null,
-      cycleId: null,
-    });
-  });
-
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("only an active goal takes progress");
-    routeState.serviceThrow = refusal;
-    const response = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/goals"));
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("only an active goal takes progress");
+  routeState.serviceThrow = refusal;
+  const response = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/goals"));
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
