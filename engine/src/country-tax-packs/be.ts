@@ -120,6 +120,8 @@ export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 21,
         role: "standard",
         rates: [{ ratePercent: 21, effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
+        truncatedScheduleReason:
+          "21% opens at FPS applicability (2026-09-18): FPS publishes no rate history and the 1996 changeover was never read at gazette level, so the band is applicability-dated by review.",
       },
       {
         code: "BE-VAT-RED12",
@@ -127,6 +129,8 @@ export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 12,
         role: "reduced",
         rates: [{ ratePercent: 12, effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
+        truncatedScheduleReason:
+          "12% opens at FPS applicability (2026-09-18): FPS publishes no rate history, so the band is applicability-dated by review.",
       },
       {
         code: "BE-VAT-RED6",
@@ -134,6 +138,8 @@ export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 6,
         role: "reduced",
         rates: [{ ratePercent: 6, effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
+        truncatedScheduleReason:
+          "6% opens at FPS applicability (2026-09-18): FPS publishes no rate history, so the band is applicability-dated by review.",
       },
     ],
   },
