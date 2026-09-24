@@ -207,7 +207,11 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
   return page({
     route: '/hrm/recruiting',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    // Whole-page scroll in normal block flow: the register tables stack
+    // above rehomed setup sections with no internal scroll panel, so a
+    // viewport-height flex lock would collapse the tables under the
+    // sections and let them paint over the row links (CK-32b).
+    bodyClassName: 'space-y-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -222,7 +226,11 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
       }),
     ],
     body: [
-      grid('flex h-full min-h-0 flex-col gap-4', [
+      // The register sizes to its content: a shrinkable flex item here
+      // collapses below its rows and the setup sections spread below
+      // paint over the overflowed row links (CK-32b). A single-column
+      // grid cannot shrink under its content. The page scrolls as a whole.
+      grid('grid gap-4', [
         // HR-18: Openings and the enabled depth tabs are VIEWS, so they ride
         // the shared subtab strip — the same component as the route strip in
         // the header. They used to render as a `filter-chips` dropdown, which
