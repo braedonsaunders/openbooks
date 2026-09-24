@@ -20,6 +20,7 @@ import { resolveAsOf } from '../../../lib/cash/core'
 import { customersHome, type CustomerExposureRow, type CustomersHome } from '../../../lib/module-home/customers'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import { customerGroupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
 
@@ -56,13 +57,13 @@ export interface CustomerAttentionItem {
  * real figures.
  */
 const BLOCKED_HOME: CustomersHome = {
-  arOutstanding: 0,
-  arOverdue: 0,
+  arOutstanding: '0.0000',
+  arOverdue: '0.0000',
   openInvoices: 0,
   overdueInvoices: 0,
   activeCustomers: 0,
   dso: 0,
-  pipeline: { total: 0, weighted: 0, closed: 0 },
+  pipeline: { total: '0.0000', weighted: '0.0000', closed: '0.0000' },
   topExposure: [],
   trend: [],
   badges: {
@@ -70,7 +71,7 @@ const BLOCKED_HOME: CustomersHome = {
     openQuotes: 0,
     openSalesOrders: 0,
     receipts7d: 0,
-    collected7d: 0,
+    collected7d: '0.0000',
     customers: 0,
   },
   ordersEnabled: false,
@@ -256,13 +257,15 @@ export async function loadCustomers(
     },
     arOutstanding: moneyCompact(data.arOutstanding),
     arOverdue: moneyCompact(data.arOverdue),
-    arOverdueIsNegative: data.arOverdue > 0,
+    arOverdueIsNegative: cmp(data.arOverdue, '0') > 0,
     dsoText: t('home.vitals.days', { n: data.dso }),
     arHref: `/ar${subQs}`,
     trendTitle: t('home.trend.title'),
     trendHint: t('home.trend.hint'),
     trendLabels: data.trend.map((w) => weekLabel(w.weekStart, locale)),
-    trendSeries: [{ name: t('home.trend.series'), data: data.trend.map((w) => w.collected), color: '#10b981' }],
+    // Chart coordinates are a bounded visual projection only. All monetary
+    // aggregation, ranking, and text formatting above retain exact decimals.
+    trendSeries: [{ name: t('home.trend.series'), data: data.trend.map((w) => chartMoneyCoordinate(w.collected)), color: '#10b981' }],
     directoryTitle: t('home.directory.title'),
     directory,
     attentionTitle: t('home.attention.title'),
@@ -273,16 +276,22 @@ export async function loadCustomers(
 
 type T = Awaited<ReturnType<typeof getTranslations<'customers'>>>
 
+function chartMoneyCoordinate(amount: string): number {
+  const limit = Number.MAX_SAFE_INTEGER
+  const value = Number(amount)
+  return Number.isFinite(value) ? Math.max(-limit, Math.min(limit, value)) : value < 0 ? -limit : limit
+}
+
 export function needsAttention(
   exposure: CustomerExposureRow[],
   t: T,
-  moneyCompact: (value: number) => string,
+  moneyCompact: (value: string) => string,
 ): CustomerAttentionItem[] {
   const items: CustomerAttentionItem[] = []
   for (const r of exposure) {
-    if (r.overdue > 0) {
+    if (cmp(r.overdue, '0') > 0) {
       items.push({
-        tone: r.overdue > r.open / 2 ? 'negative' : 'warning',
+        tone: cmp(mulDecimal(r.overdue, '2'), r.open) > 0 ? 'negative' : 'warning',
         text: t('home.attention.overdueCustomer', { customer: r.name, amount: moneyCompact(r.overdue) }),
         href: '/ar',
       })

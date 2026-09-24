@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { useFormatter, useTranslations } from 'next-intl'
 import { Settings2 } from 'lucide-react'
 import { Badge, Button } from '@openbooks/ui'
+import { useMoney } from '../../../components/money-provider'
 import { PagedTable } from '../../../components/paged-table'
+import { compareDecimal } from '../../../lib/exact-decimal'
 
 interface BalanceRow {
   planId: string
@@ -53,6 +55,7 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
   const t = useTranslations('payroll.entitlements')
   const tc = useTranslations('common')
   const format = useFormatter()
+  const { money: formatMoney } = useMoney()
   const [data, setData] = useState<{
     currency: string
     balances: BalanceRow[]
@@ -114,8 +117,7 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
     return <p className="py-6 text-center text-sm text-slate-400">{tc('feedback.loading')}</p>
   }
 
-  const money = (value: string) => format.number(Number(value), {
-    style: 'currency',
+  const money = (value: string) => formatMoney(value, {
     currency: data.currency,
     currencyDisplay: 'narrowSymbol',
     minimumFractionDigits: 2,
@@ -174,7 +176,7 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
                   {t('worthToday', { amount: money(row.balanceMoney) })}
                 </p>
               ) : null}
-              {row.direction === 'owe' && Number(row.balance) < 0 ? (
+              {row.direction === 'owe' && compareDecimal(row.balance, '0') < 0 ? (
                 <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{t('owedBack')}</p>
               ) : null}
               {row.maxBalance ? (

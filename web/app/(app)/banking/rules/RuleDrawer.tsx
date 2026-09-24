@@ -12,6 +12,7 @@ import { ConditionBuilder } from '../../../../components/conditions/ConditionBui
 import { SplitLinesEditor, type AllocationLine, type CodingConfig } from '../../../../components/allocations/SplitLinesEditor'
 import { LivePreview } from '../../../../components/live-preview/LivePreview'
 import { bankRulePriority } from '../../../../lib/banking-rule-priority'
+import { compareDecimal } from '../../../../lib/exact-decimal'
 import type { ConditionGroup, FieldDef } from '../../../../lib/conditions'
 type Opt = {
   value: string
@@ -530,7 +531,7 @@ export function RuleDrawer({
                           <div key={m.lineId} className={cn('flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1 text-xs dark:bg-slate-900/50', m.stolenBy && 'opacity-60')}>
                             <span className="tabular-nums text-slate-400">{m.posted_on.slice(5)}</span>
                             <span className="flex-1 truncate text-slate-700 dark:text-slate-200">{m.description ?? m.counterparty_ref ?? '—'}</span>
-                            <span className={cn('tabular-nums font-medium', Number(m.amount) >= 0 ? 'text-teal-700 dark:text-teal-300' : 'text-slate-600 dark:text-slate-300')}>{money(m.amount)}</span>
+                            <span className={cn('tabular-nums font-medium', compareDecimal(m.amount, '0') >= 0 ? 'text-teal-700 dark:text-teal-300' : 'text-slate-600 dark:text-slate-300')}>{money(m.amount)}</span>
                             {m.stolenBy ? <span className="text-[10px] text-slate-400" title={m.stolenBy}>{t('preview.stolen')}</span> : null}
                           </div>
                         ))

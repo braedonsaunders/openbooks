@@ -3,6 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { EntityDrawer } from '../analytics/_ui/EntityDrawer'
 import type { CustomerExposureRow } from '../../../lib/module-home/customers'
 
@@ -52,7 +53,7 @@ export function RelationshipsTable({ rows, crmEnabled = true }: { rows: Customer
               <td className="px-3 py-2.5 text-center text-xs tabular-nums text-slate-500 dark:text-slate-400">{r.openInvoices}</td>
               <td className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{r.oldestDue ?? '—'}</td>
               <td className="px-3 py-2.5 text-right tabular-nums">
-                {r.overdue > 0 ? (
+                {cmp(r.overdue, '0') > 0 ? (
                   <span className="text-red-600 dark:text-red-400">{moneyCompact(r.overdue)}</span>
                 ) : (
                   <span className="text-slate-300 dark:text-slate-600">—</span>

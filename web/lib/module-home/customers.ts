@@ -4,7 +4,7 @@ import {
   addCalendarDays, businessToday, calendarQuarterBounds, weekStartsEndingOn,
 } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from '../fx-presentation'
 import { calculateForecast, type ForecastRow } from '../crm'
 import { crmOpportunityScope } from '../crm-scope'
@@ -23,16 +23,16 @@ import { paymentStats } from '../cash/core'
 export interface CustomerExposureRow {
   partyId: string
   name: string
-  open: number
-  overdue: number
+  open: string
+  overdue: string
   openInvoices: number
   openOpportunities: number
   oldestDue: string | null
 }
 
 export interface CustomersHome {
-  arOutstanding: number
-  arOverdue: number
+  arOutstanding: string
+  arOverdue: string
   openInvoices: number
   overdueInvoices: number
   activeCustomers: number
@@ -42,16 +42,16 @@ export interface CustomersHome {
    * intelligence quote (45-day documented default with no settlements).
    */
   dso: number
-  pipeline: { total: number; weighted: number; closed: number }
+  pipeline: { total: string; weighted: string; closed: string }
   topExposure: CustomerExposureRow[]
   /** Weekly collections (posted customer payments), oldest → newest. */
-  trend: { weekStart: string; collected: number }[]
+  trend: { weekStart: string; collected: string }[]
   badges: {
     openOpportunities: number
     openQuotes: number
     openSalesOrders: number
     receipts7d: number
-    collected7d: number
+    collected7d: string
     customers: number
   }
   /** False when Orders is off — hide quote/SO vitals rather than show zeros. */
@@ -72,7 +72,7 @@ async function pipelineInOrgCurrency(
   orgCurrency: string,
   asOf: string,
   rows: readonly ForecastRow[],
-): Promise<{ total: number; weighted: number; closed: number }> {
+): Promise<{ total: string; weighted: string; closed: string }> {
   const rates = new Map<string, string>()
   let total = '0.0000'
   let weighted = '0.0000'
@@ -112,7 +112,7 @@ async function pipelineInOrgCurrency(
     weighted = add(weighted, mulDecimal(row.weighted_amount ?? '0', rate))
     closed = add(closed, mulDecimal(row.closed_amount ?? '0', rate))
   }
-  return { total: Number(total), weighted: Number(weighted), closed: Number(closed) }
+  return { total, weighted, closed }
 }
 
 export async function customersHome(
@@ -283,34 +283,34 @@ export async function customersHome(
     [...arRes.rows.map((r) => (r.func ?? null) as string | null), ...topRes.rows.map((r) => (r.func ?? null) as string | null)],
     today,
   )
-  const trBal = (amount: unknown, func: unknown): number =>
-    Number(mulDecimal(String(amount ?? 0), balRates.get(lineFunctional(typeof func === "string" ? func : null, base))!))
+  const trBal = (amount: unknown, func: unknown): string =>
+    mulDecimal(String(amount ?? '0'), balRates.get(lineFunctional(typeof func === "string" ? func : null, base))!)
   // Each week bucket translates at its latest document date, so the rate
   // lookup never runs ahead of the data it translates.
   const trendCtx = await flowRates(
     orgId,
     trendRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
   )
-  const byWeek = new Map<string, number>()
+  const byWeek = new Map<string, string>()
   for (const r of trendRes.rows) {
     const wk = String(r.wk).slice(0, 10)
     const late = String(r.late ?? r.wk).slice(0, 10)
-    const collected = Number(mulDecimal(String(r.collected ?? 0), trendCtx.rateAt((r.func ?? null) as string | null, late)))
-    byWeek.set(wk, (byWeek.get(wk) ?? 0) + collected)
+    const collected = mulDecimal(String(r.collected ?? '0'), trendCtx.rateAt((r.func ?? null) as string | null, late))
+    byWeek.set(wk, add(byWeek.get(wk) ?? '0.0000', collected))
   }
-  const collected7d = Number(await translateFlows(
+  const collected7d = add('0.0000', await translateFlows(
     orgId,
     collectedRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
   ))
 
   // Open-receivables vitals: per-functional balances summed in presentation.
-  let arOutstanding = 0
-  let arOverdue = 0
+  let arOutstanding = '0.0000'
+  let arOverdue = '0.0000'
   let openInvoices = 0
   let overdueInvoices = 0
   for (const r of arRes.rows) {
-    arOutstanding += trBal(r.outstanding, r.func)
-    arOverdue += trBal(r.overdue, r.func)
+    arOutstanding = add(arOutstanding, trBal(r.outstanding, r.func))
+    arOverdue = add(arOverdue, trBal(r.overdue, r.func))
     openInvoices += Number(r.open_count ?? 0)
     overdueInvoices += Number(r.overdue_count ?? 0)
   }
@@ -319,8 +319,8 @@ export async function customersHome(
   // rank — the translated top 10, not the raw-functional top 10.
   const byParty = new Map<string, {
     name: string
-    open: number
-    overdue: number
+    open: string
+    overdue: string
     openInvoices: number
     openOpportunities: number
     oldestDue: string | null
@@ -328,10 +328,10 @@ export async function customersHome(
   for (const r of topRes.rows) {
     const partyId = String(r.party_id)
     const cur = byParty.get(partyId) ?? {
-      name: String(r.name), open: 0, overdue: 0, openInvoices: 0, openOpportunities: 0, oldestDue: null as string | null,
+      name: String(r.name), open: '0.0000', overdue: '0.0000', openInvoices: 0, openOpportunities: 0, oldestDue: null as string | null,
     }
-    cur.open += trBal(r.open, r.func)
-    cur.overdue += trBal(r.overdue, r.func)
+    cur.open = add(cur.open, trBal(r.open, r.func))
+    cur.overdue = add(cur.overdue, trBal(r.overdue, r.func))
     cur.openInvoices += Number(r.open_invoices ?? 0)
     cur.openOpportunities = Math.max(cur.openOpportunities, Number(r.open_opps ?? 0))
     const due = r.oldest_due ? String(r.oldest_due) : null
@@ -340,7 +340,7 @@ export async function customersHome(
   }
   const topExposure = [...byParty.entries()]
     .map(([partyId, b]) => ({ partyId, ...b }))
-    .sort((x, y) => y.open - x.open)
+    .sort((x, y) => cmp(y.open, x.open))
     .slice(0, 10)
 
   const badge = badgeRes.rows[0] ?? {}
@@ -357,7 +357,7 @@ export async function customersHome(
     dso: dsoStats.globalAvg,
     pipeline,
     topExposure,
-    trend: weekStarts.map((weekStart) => ({ weekStart, collected: byWeek.get(weekStart) ?? 0 })),
+    trend: weekStarts.map((weekStart) => ({ weekStart, collected: byWeek.get(weekStart) ?? '0.0000' })),
     badges: {
       openOpportunities: Number(badge.open_opps ?? 0),
       openQuotes: Number(badge.open_quotes ?? 0),

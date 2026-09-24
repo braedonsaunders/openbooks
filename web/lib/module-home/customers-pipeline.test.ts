@@ -88,7 +88,24 @@ const { customersHome } = await import('./customers')
 
 test('customer pipeline converts each forecast currency before org-currency formatting', async () => {
   const home = await customersHome('org-1')
-  assert.deepEqual(home.pipeline, { total: 235, weighted: 117.5, closed: 47 })
+  assert.deepEqual(home.pipeline, { total: '235.0000', weighted: '117.5000', closed: '47.0000' })
+})
+
+test('customer pipeline sums large decimal strings without a floating-point round trip', async (t) => {
+  const state = globalThis as typeof globalThis & { __customersPipelineForecast: unknown[] }
+  const previous = state.__customersPipelineForecast
+  state.__customersPipelineForecast = [
+    { currency: 'CAD', pipeline_amount: '12345678901234.1255', weighted_amount: '0.1255', closed_amount: '1.0001' },
+    { currency: 'CAD', pipeline_amount: '0.0001', weighted_amount: '0.0001', closed_amount: '0.0001' },
+  ]
+  t.after(() => { state.__customersPipelineForecast = previous })
+
+  const home = await customersHome('org-1')
+  assert.deepEqual(home.pipeline, {
+    total: '12345678901234.1256',
+    weighted: '0.1256',
+    closed: '1.0002',
+  })
 })
 
 // F-t02-008: dashboard $454,775.39 vs AR hub $293,651.99. The workspace read
