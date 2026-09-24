@@ -17,6 +17,7 @@ import { resolvePayrollRunContext } from "./packs.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { type ScheduleRow, DAY, iso, at, nextPeriodAfter } from "./run-calendar.ts";
 import { type PayRunType } from "./run-contracts.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 const RUN_TYPE_MEMO: Record<PayRunType, string> = {
   regular: "Pay run",
@@ -319,7 +320,7 @@ export async function attributePayRunEntity(input: {
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ documentNumber: string; reclassedLines: number }> {
   const { orgId, documentId, actorId, subsidiaryId } = input;
-  if (!/^[0-9a-f-]{36}$/i.test(subsidiaryId)) {
+  if (!isUuid(subsidiaryId)) {
     throw new PayrollError("choose a subsidiary to attribute this run to");
   }
   if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, subsidiaryId)) {
