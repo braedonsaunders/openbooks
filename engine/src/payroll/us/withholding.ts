@@ -117,6 +117,14 @@ const US_DEFAULT_SEPARATE_SUPPLEMENTAL_METHODS = Object.fromEntries(
 
 export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
   ...US_DEFAULT_SEPARATE_SUPPLEMENTAL_METHODS,
+  AL: {
+    kind: "flat",
+    // Alabama Withholding Tax Tables / Booklet A, January 2026, p. 3.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.05",
+      source: "https://www.revenue.alabama.gov/wp-content/uploads/2026/01/whbooklet_0126.pdf",
+    }],
+  } as const,
   DE: {
     kind: "refuse",
     // Delaware Employer's Guide Section 14:

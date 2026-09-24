@@ -210,6 +210,23 @@ test('Delaware refuses separately paid supplemental wages without Section 14 dif
   )
 })
 
+test('Alabama separately paid bonus uses the 5% rate effective in 2026', () => {
+  // Alabama Withholding Tax Booklet A (January 2026), p. 3.
+  // https://www.revenue.alabama.gov/wp-content/uploads/2026/01/whbooklet_0126.pdf
+  const result = computeUsWithholding({
+    levy: levy('AL', 'us_al_a4'),
+    payDate: '2026-01-01', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '1000.0000',
+    supplementalPaymentTiming: 'separate',
+    certificateFor: () => certificate('us_al_a4', { exemption: '0', dependents: '0' }),
+    tenantRates: () => undefined, federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0])
+
+  assert.equal(result?.tax, '50.0000')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_METHOD, 'flat')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.05')
+})
+
 test('US supplemental withholding refuses when payment timing was not captured', () => {
   const input = {
     levy: levy('DE', 'us_de_sdw4a'),
