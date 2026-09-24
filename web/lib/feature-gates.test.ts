@@ -2472,7 +2472,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/(app)/subcontracts/SubcontractsWorkspace.tsx'),
-    /\{multiCurrency \? <Field label="Currency">/,
+    /\{multiCurrency \? <Field label=\{t\("create\.currency"\)\}>/,
     'the subcontract form must hide the currency picker when Multi-currency is off',
   )
   assert.match(
