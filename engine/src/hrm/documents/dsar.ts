@@ -12,6 +12,8 @@ import { subsidiaryVisibleFilter, withScopeSnapshot } from "../../organization/s
 import { HrmDocumentsError } from "./errors.ts";
 import { storeCabinetFile } from "./cabinet.ts";
 import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
+import { decryptRespondentLink } from "../../hrm/surveys/responses.ts";
+import { dsarCoverageManifest } from "./dsar-coverage.ts";
 
 /**
  * HR-19 data-subject (DSAR) exports.
@@ -48,6 +50,12 @@ export const DSAR_MODULES = [
   "benefits",
   "documents",
   "payroll",
+  "recruiting",
+  "qualifications",
+  "statements",
+  "surveys",
+  "clock_events",
+  "exports",
 ] as const;
 
 export type DsarModule = (typeof DSAR_MODULES)[number];
@@ -320,6 +328,28 @@ async function failExport(
 }
 
 /**
+ * Cabinet bytes for an export-referenced file: the retrievable bytes plus
+ * the stored extension, or null when the record exists but no bytes remain
+ * (purged, orphaned, never stored). A masked-clone tombstone refuses by
+ * name — a subject-access export must never silently omit the file.
+ */
+async function fetchExportFileBytes(
+  orgId: string,
+  fileId: string,
+): Promise<{ bytes: Buffer; extension: string | null } | null> {
+  const blob = (await db.execute<{ storage_kind: string; bytes: Buffer | null; extension: string | null }>(sql`
+    select v.storage_kind, b.bytes, f.extension
+      from files f
+      join file_versions v on v.id = f.current_version_id
+      left join file_blobs b on b.version_id = v.id
+     where f.id = ${fileId} and f.org_id = ${orgId}
+  `)).rows[0];
+  if (blob) refuseMaskedStorageKind(blob.storage_kind);
+  if (!blob?.bytes) return null;
+  return { bytes: blob.bytes as Buffer, extension: blob.extension };
+}
+
+/**
  * Build one queued export: claim it, gather every module, zip, store with a
  * requester-only grant, mark ready. Throws nothing — failure marks the
  * row failed with the reason, and ONLY when this call still owns the claim.
@@ -414,6 +444,45 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       `)).rows;
       payload.employments = employments;
       payload.assignments = assignments;
+      // Employment-lifecycle records keyed by the subject's full employment
+      // set (the party subselect, never the versioned read above, so an
+      // employment without a current version still exports its history).
+      const subjectEmployments = sql`select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}`;
+      payload.employmentChanges = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, change_kind, reason, recorded_at::text as recorded_at
+          from employment_changes
+         where org_id = ${orgId} and employment_id in (${subjectEmployments})
+         order by recorded_at
+      `)).rows;
+      payload.exitRecords = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, reason_kind, is_voluntary, is_regrettable,
+               would_rehire, interview_held_on::text as interview_held_on,
+               interviewer_party_id, destination, notes, recorded_at::text as recorded_at
+          from hrm_exit_records
+         where org_id = ${orgId} and employment_id in (${subjectEmployments})
+         order by recorded_at
+      `)).rows;
+      payload.complianceFindings = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, kind, project_id, worked_on::text as worked_on,
+               detail, status, resolved_reason, recorded_at::text as recorded_at
+          from hrm_compliance_findings
+         where org_id = ${orgId} and employment_id in (${subjectEmployments})
+         order by recorded_at
+      `)).rows;
+      payload.employmentClassifications = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, classification_id, effective_from::text as effective_from,
+               effective_to::text as effective_to
+          from hrm_employment_classifications
+         where org_id = ${orgId} and employment_id in (${subjectEmployments})
+         order by effective_from
+      `)).rows;
+      payload.processes = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, kind, effective_date::text as effective_date,
+               status, cancel_reason, completed_at::text as completed_at
+          from hrm_processes
+         where org_id = ${orgId} and employment_id in (${subjectEmployments})
+         order by effective_date
+      `)).rows;
     });
 
     await gather("change_requests", async () => {
@@ -437,6 +506,15 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by r.starts_on
+      `)).rows;
+      payload.absences = (await db.execute<Record<string, unknown>>(sql`
+        select a.id, a.leave_request_id, a.employment_id, a.on_date::text as on_date,
+               a.hours, a.leave_type_id, a.source
+          from hrm_absences a
+         where a.org_id = ${orgId} and a.employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+         order by a.on_date
       `)).rows;
     });
 
@@ -471,13 +549,66 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       // Only reviews the person may see: shared/acknowledged reviews of
       // them, plus reviews they authored. Drafts and pending peer reviews
       // stay out — an export never leaks an unfinished assessment.
-      payload.reviews = (await db.execute<Record<string, unknown>>(sql`
+      const reviews = (await db.execute<Record<string, unknown> & { id: string }>(sql`
         select id, cycle_id, kind, status, submitted_at::text as submitted_at
           from hrm_reviews
          where org_id = ${orgId}
            and ((subject_party_id = ${partyId} and status in ('shared', 'acknowledged'))
                 or reviewer_party_id = ${partyId})
          order by submitted_at nulls last
+      `)).rows;
+      payload.reviews = reviews;
+      const reviewIds = reviews.map((r) => r.id);
+      payload.reviewAnswers = reviewIds.length
+        ? (await db.execute<Record<string, unknown>>(sql`
+            select id, review_id, section_title, question_prompt, position,
+                   answer_kind, rating, text
+              from hrm_review_answers
+             where org_id = ${orgId} and review_id in (${sql.join(
+               reviewIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by review_id, position
+          `)).rows
+        : [];
+      payload.goals = (await db.execute<Record<string, unknown> & { id: string }>(sql`
+        select g.id, g.employment_id, g.title, g.description, g.due_on::text as due_on,
+               g.weight, g.status, g.progress_percent
+          from hrm_goals g
+         where g.org_id = ${orgId} and g.employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+         order by g.due_on nulls last
+      `)).rows;
+      const goalIds = (payload.goals as ({ id: string })[]).map((g) => g.id);
+      payload.goalUpdates = goalIds.length
+        ? (await db.execute<Record<string, unknown>>(sql`
+            select id, goal_id, progress_percent, note, recorded_at::text as recorded_at
+              from hrm_goal_updates
+             where org_id = ${orgId} and goal_id in (${sql.join(
+               goalIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by recorded_at
+          `)).rows
+        : [];
+      payload.successionCandidates = (await db.execute<Record<string, unknown>>(sql`
+        select id, plan_id, employment_id, readiness, candidate_order, notes
+          from hrm_succession_candidates
+         where org_id = ${orgId} and employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+         order by candidate_order
+      `)).rows;
+      payload.talentReviews = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, cycle_id, performance_key, potential_key,
+               impact_of_loss, risk_of_loss, promotion_ready, notes,
+               reviewed_at::text as reviewed_at
+          from hrm_talent_reviews
+         where org_id = ${orgId} and employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+         order by reviewed_at nulls last
       `)).rows;
     });
 
@@ -490,6 +621,18 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by e.effective_from
+      `)).rows;
+      // Dependents are third parties, but their records live on the
+      // subject's employment file — the export carries them as part of
+      // that file, like any other HR record about the subject's account.
+      payload.benefitDependents = (await db.execute<Record<string, unknown>>(sql`
+        select d.id, d.employment_id, d.relationship, d.display_name,
+               d.birth_date::text as birth_date, d.is_active
+          from hrm_benefit_dependents d
+         where d.org_id = ${orgId} and d.employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+         order by d.display_name
       `)).rows;
     });
 
@@ -622,8 +765,430 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
         `)).rows);
       }
       payload.payStubLines = lines;
+      // Pay inputs about the subject's employments: allowances, benefit
+      // deductions and payroll inputs awaiting (or consumed by) a run, plus
+      // per-diem and travel entries. Same subject link as the stubs.
+      const subjectPartyEmployments = sql`select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}`;
+      payload.allowancePayrollInputs = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, entry_kind, amount::text as amount, currency,
+               coverage_date::text as coverage_date, status
+          from hrm_allowance_payroll_inputs
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by coverage_date
+      `)).rows;
+      payload.benefitPayrollInputs = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, kind, amount::text as amount, currency,
+               coverage_from::text as coverage_from, coverage_to::text as coverage_to, status
+          from hrm_benefit_payroll_inputs
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by coverage_from
+      `)).rows;
+      payload.payrollInputs = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, kind, absence_date::text as absence_date,
+               hours, status
+          from hrm_payroll_inputs
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by absence_date nulls last
+      `)).rows;
+      payload.perDiemEntries = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, worked_on::text as worked_on, amount::text as amount,
+               currency, status
+          from hrm_per_diem_entries
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by worked_on
+      `)).rows;
+      payload.travelPayEntries = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, worked_on::text as worked_on, amount::text as amount,
+               currency, status
+          from hrm_travel_pay_entries
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by worked_on
+      `)).rows;
     });
 
+    // Omission evidence for export-referenced files beyond documents:
+    // statement PDFs, qualification evidence and clock photos are the
+    // subject's records too — a missing file marks the export incomplete
+    // with its reason, never a silent gap.
+    const omittedStatements: { id: string; title: string; reason: string }[] = [];
+    const omittedQualificationFiles: { id: string; title: string; reason: string }[] = [];
+    const omittedClockPhotos: { id: string; title: string; reason: string }[] = [];
+    const markIncompleteOnOmissions = (
+      module: string,
+      omitted: { id: string; title: string; reason: string }[],
+    ) => {
+      if (omitted.length === 0) return;
+      const entry = included.find((s) => s.module === module);
+      const detail =
+        `${omitted.length} file(s) unavailable: ` +
+        omitted.map((o) => `${o.title} (${o.id}): ${o.reason}`).join("; ");
+      if (entry && entry.status === "included") {
+        entry.status = "incomplete";
+        entry.detail = detail;
+      } else if (!entry) {
+        included.push({ module, status: "incomplete", detail });
+      }
+    };
+
+    await gather("recruiting", async () => {
+      // Candidates are the subject link (party_id); external candidates
+      // without a party are nobody's DSAR subject and stay out. Scorecards
+      // gather both ways: assessments OF the subject's interviews, and
+      // assessments the subject authored as interviewer — mirroring the
+      // reviews module's subject-or-author rule.
+      const candidates = (await db.execute<Record<string, unknown> & { id: string }>(sql`
+        select id, display_name, email, phone, source, source_detail,
+               consent_recorded_at::text as consent_recorded_at, is_internal,
+               notes, created_at::text as created_at
+          from hrm_candidates
+         where org_id = ${orgId} and party_id = ${partyId}
+         order by created_at
+      `)).rows;
+      payload.candidates = candidates;
+      const candidateIds = candidates.map((c) => c.id);
+      payload.candidateConsents = candidateIds.length
+        ? (await db.execute<Record<string, unknown>>(sql`
+            select id, candidate_id, purpose, granted_at::text as granted_at,
+                   expires_at::text as expires_at, withdrawn_at::text as withdrawn_at, source
+              from hrm_candidate_consents
+             where org_id = ${orgId} and candidate_id in (${sql.join(
+               candidateIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by granted_at
+          `)).rows
+        : [];
+      const applications = candidateIds.length
+        ? (await db.execute<Record<string, unknown> & { id: string }>(sql`
+            select id, requisition_id, candidate_id, stage_id, status,
+                   applied_on::text as applied_on, rejected_reason,
+                   withdrawn_at::text as withdrawn_at, hired_employment_id
+              from hrm_applications
+             where org_id = ${orgId} and candidate_id in (${sql.join(
+               candidateIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by applied_on
+          `)).rows
+        : [];
+      payload.applications = applications;
+      const applicationIds = applications.map((a) => a.id);
+      payload.applicationEvents = applicationIds.length
+        ? (await db.execute<Record<string, unknown>>(sql`
+            select id, application_id, kind, reason, recorded_at::text as recorded_at
+              from hrm_application_events
+             where org_id = ${orgId} and application_id in (${sql.join(
+               applicationIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by recorded_at
+          `)).rows
+        : [];
+      const interviews = applicationIds.length
+        ? (await db.execute<Record<string, unknown> & { id: string }>(sql`
+            select id, application_id, kind, scheduled_at::text as scheduled_at,
+                   location, status, outcome, feedback, scorecard,
+                   completed_at::text as completed_at
+              from hrm_interviews
+             where org_id = ${orgId} and application_id in (${sql.join(
+               applicationIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by scheduled_at
+          `)).rows
+        : [];
+      payload.interviews = interviews;
+      const interviewIds = interviews.map((i) => i.id);
+      const scorecards = (await db.execute<Record<string, unknown> & { id: string }>(sql`
+        select id, interview_id, interviewer_party_id, overall,
+               submitted_at::text as submitted_at, private_notes, shared_notes
+          from hrm_scorecards
+         where org_id = ${orgId}
+           and (${interviewIds.length
+             ? sql`interview_id in (${sql.join(
+               interviewIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})`
+             : sql`false`}
+               or interviewer_party_id = ${partyId})
+         order by submitted_at nulls last
+      `)).rows;
+      payload.scorecards = scorecards;
+      const scorecardIds = scorecards.map((s) => s.id);
+      payload.scorecardRatings = scorecardIds.length
+        ? (await db.execute<Record<string, unknown>>(sql`
+            select id, scorecard_id, attribute_id, rating_key, note
+              from hrm_scorecard_ratings
+             where org_id = ${orgId} and scorecard_id in (${sql.join(
+               scorecardIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by scorecard_id
+          `)).rows
+        : [];
+      const offers = applicationIds.length
+        ? (await db.execute<Record<string, unknown> & { id: string }>(sql`
+            select id, application_id, job_title, proposed_start_on::text as proposed_start_on,
+                   compensation_amount::text as compensation_amount, compensation_currency,
+                   status, sent_at::text as sent_at, decline_reason
+              from hrm_offers
+             where org_id = ${orgId} and application_id in (${sql.join(
+               applicationIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by sent_at nulls last
+          `)).rows
+        : [];
+      payload.offers = offers;
+      const offerIds = offers.map((o) => o.id);
+      payload.offerVersions = offerIds.length
+        ? (await db.execute<Record<string, unknown>>(sql`
+            select id, offer_id, version, payload
+              from hrm_offer_versions
+             where org_id = ${orgId} and offer_id in (${sql.join(
+               offerIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by version
+          `)).rows
+        : [];
+      payload.talentPoolMembers = candidateIds.length
+        ? (await db.execute<Record<string, unknown>>(sql`
+            select id, pool_id, candidate_id, added_at::text as added_at, note
+              from hrm_talent_pool_members
+             where org_id = ${orgId} and candidate_id in (${sql.join(
+               candidateIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by added_at
+          `)).rows
+        : [];
+      payload.interviewPanel = (await db.execute<Record<string, unknown>>(sql`
+        select id, interview_id, party_id
+          from hrm_interview_panel
+         where org_id = ${orgId}
+           and (${interviewIds.length
+             ? sql`interview_id in (${sql.join(
+               interviewIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})`
+             : sql`false`}
+               or party_id = ${partyId})
+      `)).rows;
+    });
+
+    await gather("qualifications", async () => {
+      const qualifications = (await db.execute<
+        Record<string, unknown> & { id: string; evidence_file_id: string | null }
+      >(sql`
+        select id, employment_id, type_id, identifier, issued_on::text as issued_on,
+               expires_on::text as expires_on, status, evidence_file_id,
+               verified_at::text as verified_at, notes
+          from hrm_worker_qualifications
+         where org_id = ${orgId} and employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+         order by issued_on
+      `)).rows;
+      payload.qualifications = qualifications.map(({ evidence_file_id, ...rest }) => ({
+        ...rest,
+        hasEvidenceFile: evidence_file_id !== null,
+      }));
+      const qualificationIds = qualifications.map((q) => q.id);
+      payload.qualificationEvents = qualificationIds.length
+        ? (await db.execute<Record<string, unknown>>(sql`
+            select id, qualification_id, kind, reason, recorded_at::text as recorded_at
+              from hrm_qualification_events
+             where org_id = ${orgId} and qualification_id in (${sql.join(
+               qualificationIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+             order by recorded_at
+          `)).rows
+        : [];
+      let n = 0;
+      for (const q of qualifications) {
+        const fileId = q.evidence_file_id;
+        if (!fileId) continue;
+        const fetched = await fetchExportFileBytes(orgId, fileId);
+        if (!fetched) {
+          omittedQualificationFiles.push({
+            id: q.id,
+            title: `qualification evidence ${q.id.slice(0, 8)}`,
+            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+          });
+          continue;
+        }
+        n += 1;
+        entries.push({
+          name: `qualifications/${String(n).padStart(2, "0")}-evidence-${q.id.slice(0, 8)}.${fetched.extension ?? "bin"}`,
+          data: fetched.bytes,
+        });
+      }
+    });
+
+    await gather("statements", async () => {
+      const statements = (await db.execute<
+        Record<string, unknown> & { id: string; file_id: string | null; period_from: string }
+      >(sql`
+        select id, employment_id, cycle_id, period_from::text as period_from,
+               period_to::text as period_to, payload, file_id,
+               generated_at::text as generated_at
+          from hrm_comp_statements
+         where org_id = ${orgId} and employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+         order by period_from
+      `)).rows;
+      payload.compStatements = statements.map(({ file_id, ...rest }) => ({
+        ...rest,
+        hasFile: file_id !== null,
+      }));
+      payload.compCycleLines = (await db.execute<Record<string, unknown>>(sql`
+        select id, cycle_id, employment_id, status
+          from hrm_comp_cycle_lines
+         where org_id = ${orgId} and employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+         order by cycle_id
+      `)).rows;
+      payload.payInformationRequests = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id
+          from hrm_pay_information_requests
+         where org_id = ${orgId} and employment_id in (
+           select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
+         )
+      `)).rows;
+      let n = 0;
+      for (const s of statements) {
+        const fileId = s.file_id;
+        if (!fileId) continue;
+        const fetched = await fetchExportFileBytes(orgId, fileId);
+        const period = s.period_from;
+        if (!fetched) {
+          omittedStatements.push({
+            id: s.id,
+            title: `compensation statement ${period}`,
+            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+          });
+          continue;
+        }
+        n += 1;
+        entries.push({
+          name: `statements/${String(n).padStart(2, "0")}-${period}-${s.id.slice(0, 8)}.${fetched.extension ?? "pdf"}`,
+          data: fetched.bytes,
+        });
+      }
+    });
+
+    await gather("surveys", async () => {
+      const invitations = (await db.execute<Record<string, unknown> & { survey_id: string }>(sql`
+        select i.id, i.survey_id, s.name as survey_name,
+               i.sent_at::text as sent_at, i.responded_at::text as responded_at
+          from hrm_survey_invitations i
+          join hrm_surveys s on s.org_id = i.org_id and s.id = i.survey_id
+         where i.org_id = ${orgId} and i.party_id = ${partyId}
+         order by i.sent_at
+      `)).rows;
+      payload.surveyInvitations = invitations;
+      // Only attributable responses export: anonymous surveys store a NULL
+      // link by design and stay out (counted, never decrypted). Anything
+      // that no longer decrypts is unattributable and stays out too.
+      const rows = (await db.execute<{
+        id: string;
+        survey_id: string;
+        respondent_link_enc: Buffer | null;
+        submitted_at: string;
+        answers: unknown;
+        segment_snapshot: unknown;
+      }>(sql`
+        select id, survey_id, respondent_link_enc, submitted_at::text as submitted_at,
+               answers, segment_snapshot
+          from hrm_survey_responses
+         where org_id = ${orgId}
+         order by submitted_at
+      `)).rows;
+      const mine: Record<string, unknown>[] = [];
+      let anonymousSkipped = 0;
+      for (const row of rows) {
+        if (!row.respondent_link_enc) {
+          anonymousSkipped += 1;
+          continue;
+        }
+        let linkedParty: string | null = null;
+        try {
+          linkedParty = decryptRespondentLink(orgId, row.respondent_link_enc);
+        } catch {
+          linkedParty = null;
+        }
+        if (linkedParty !== partyId) continue;
+        const { respondent_link_enc: _dropped, ...rest } = row;
+        mine.push(rest);
+      }
+      payload.surveyResponses = mine;
+      payload.surveyAnonymousSkipped = anonymousSkipped;
+    });
+
+    await gather("clock_events", async () => {
+      const events = (await db.execute<
+        Record<string, unknown> & { id: string; photo_file_id: string | null; occurred_at: string }
+      >(sql`
+        select id, kind, occurred_at::text as occurred_at, device_id, source,
+               project_id, geo, geo_check, photo_file_id, status, void_reason
+          from time_clock_events
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by occurred_at
+      `)).rows;
+      payload.clockEvents = events.map(({ photo_file_id, ...rest }) => ({
+        ...rest,
+        hasPhoto: photo_file_id !== null,
+      }));
+      let n = 0;
+      for (const e of events) {
+        const photoId = e.photo_file_id;
+        if (!photoId) continue;
+        const fetched = await fetchExportFileBytes(orgId, photoId);
+        const when = e.occurred_at;
+        if (!fetched) {
+          omittedClockPhotos.push({
+            id: e.id,
+            title: `clock photo ${when}`,
+            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+          });
+          continue;
+        }
+        n += 1;
+        entries.push({
+          name: `clock-photos/${String(n).padStart(2, "0")}-${when.slice(0, 10)}-${e.id.slice(0, 8)}.${fetched.extension ?? "bin"}`,
+          data: fetched.bytes,
+        });
+      }
+    });
+
+    await gather("exports", async () => {
+      // The subject's own prior export ledger (metadata only, never file
+      // bytes: the current export must not nest itself). The row being
+      // built is excluded — it is still mid-build, not history.
+      payload.priorExports = (await db.execute<Record<string, unknown>>(sql`
+        select id, requested_at::text as requested_at, status, scope,
+               completed_at::text as completed_at, error
+          from hrm_data_subject_exports
+         where org_id = ${orgId} and party_id = ${partyId} and id != ${exportId}
+         order by requested_at
+      `)).rows;
+    });
+
+    // Omission downgrades run after their gathers resolve, where the module
+    // entries exist — mirroring the documents block above.
+    markIncompleteOnOmissions("qualifications", omittedQualificationFiles);
+    markIncompleteOnOmissions("statements", omittedStatements);
+    markIncompleteOnOmissions("clock_events", omittedClockPhotos);
+
+    // The manifest closes the completeness loop: every domain gathered
+    // with its status, plus every explicitly excluded table with its
+    // reviewed reason (dsar-coverage.ts). A reader can verify the export
+    // covers the whole personal-data inventory without trusting the code.
+    payload.manifest = dsarCoverageManifest(included);
     entries.unshift({ name: "export.json", data: Buffer.from(JSON.stringify(payload, null, 2), "utf8") });
     const zip = buildStoredZip(entries);
     const { fileId } = await storeCabinetFile(db, {
