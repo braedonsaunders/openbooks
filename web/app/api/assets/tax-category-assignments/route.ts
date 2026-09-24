@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -10,6 +11,10 @@ export const runtime = 'nodejs'
 export async function PATCH(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
+  // Category tax attributes decide how every entity's assets are reported on
+  // every filing: org-wide policy, unrestricted scope only.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { categoryId?: string; regime?: string; classCode?: string | null }
