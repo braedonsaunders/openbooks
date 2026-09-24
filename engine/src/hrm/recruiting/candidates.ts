@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { requireHrmRecruitingManageOrg } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
+import { requireCandidateOwnedInScope } from "./candidate-scope.ts";
 
 /**
  * Canonical recruiting candidate service (HR-6, 0195): the prospect before
@@ -15,10 +17,12 @@ import { requireActorId, requireId, requireOrgId } from "./input.ts";
 export const CANDIDATE_SOURCE_VALUES = ["referral", "job_board", "agency", "direct", "internal", "other"] as const;
 
 /**
- * A duplicate-email refusal that names the survivor structurally. Extends
- * RecruitingError so existing mappings still see a REFUSED with the remedy
- * in the message; routes that drive a merge-retry island read
- * candidateId/displayName instead of parsing the message.
+ * A duplicate-email refusal that names the survivor structurally.
+ * H-RECRUIT-DEDUPE: the message itself carries no name — the survivor's
+ * display name would turn any email guess into a PII oracle, so only the
+ * merge reference rides the message. Extends RecruitingError so existing
+ * mappings still see a REFUSED with the remedy in the message; routes
+ * that drive a merge-retry island read candidateId instead of parsing it.
  */
 export class DuplicateProspectError extends RecruitingError {
   readonly candidateId: string;
@@ -26,7 +30,7 @@ export class DuplicateProspectError extends RecruitingError {
   constructor(candidateId: string, survivorName: string) {
     super(
       "REFUSED",
-      `a candidate with this email already exists (${survivorName}) — pass mergeInto ${candidateId} to attach to the existing candidate instead of creating a duplicate`,
+      `a candidate with this email already exists — pass its id as mergeInto ${candidateId} to attach to the existing candidate instead of creating a duplicate`,
     );
     this.name = "DuplicateProspectError";
     this.candidateId = candidateId;
@@ -176,6 +180,16 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
     if (email) {
       const duplicate = await findCandidateByEmail(db, orgId, email);
       if (duplicate) {
+        // H-RECRUIT-DEDUPE on F3-62's single-transaction attach: the
+        // duplicate path answers identity questions, so ownership comes
+        // first — a survivor owned outside the actor's scope refuses
+        // exactly like an unknown candidate, and email guesses cannot
+        // probe other entities' pipelines. In-scope duplicates keep the
+        // structural retry (the id the island merges with); the merge
+        // below returns the survivor's full DTO, which this same
+        // ownership already covers.
+        const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+        await requireCandidateOwnedInScope(db, orgId, duplicate.id, allowed);
         if (!mergeInto || mergeInto !== duplicate.id) {
           throw new DuplicateProspectError(duplicate.id, duplicate.displayName);
         }

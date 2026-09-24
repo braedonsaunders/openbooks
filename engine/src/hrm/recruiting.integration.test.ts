@@ -25,7 +25,7 @@ import {
   openRequisition,
   resumeRequisition,
 } from "./recruiting/requisitions.ts";
-import { createCandidate } from "./recruiting/candidates.ts";
+import { DuplicateProspectError, createCandidate } from "./recruiting/candidates.ts";
 import {
   createApplication,
   moveApplicationStage,
@@ -508,7 +508,13 @@ test("duplicate candidate email refuses without mergeInto and merges with it", {
       (error: unknown) => recruitingError(error),
     );
     assert.ok(refusal, "the duplicate refuses");
-    assert.match(refusal.message, new RegExp(`mergeInto ${first.candidate.id}`), "the refusal names the merge remedy");
+    // H-RECRUIT-DEDUPE on F3-62's attach: the in-scope duplicate keeps the
+    // structural retry (the id the island merges with) with no name in the
+    // message — the merger can already see both on the funnel.
+    assert.ok(refusal instanceof DuplicateProspectError, "the refusal is structural, never a parsed message");
+    assert.equal(refusal.candidateId, first.candidate.id, "the retry reference rides structurally");
+    assert.ok(!refusal.message.includes("Ada"), "the survivor's name never rides the refusal");
+    assert.match(refusal.message, /mergeInto/, "the refusal names the merge remedy");
     const countBefore = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_candidates where org_id = ${orgId}`)).rows[0]!.n;
     const merged = await createCandidate({
