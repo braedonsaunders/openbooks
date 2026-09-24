@@ -22,6 +22,7 @@ async function seedTwoCurrencyReceivables() {
   const org = await withBypass(() => createScratchOrg())
   const usSub = randomUUID()
   const usCust = randomUUID()
+  let cadInvoice: { documentId: string; entryId: string } | undefined
   await withBypass(async () => {
     await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
@@ -46,6 +47,7 @@ async function seedTwoCurrencyReceivables() {
                (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${sub}, ${party}, false, ${'-' + total}, ${cur}, ${'-' + total}, ${fx})`)
       await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
       await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId} where id=${docId}`)
+      if (cur === 'CAD') cadInvoice = { documentId: docId, entryId }
     }
     for (const [num, sub, cur, fx] of [['RCPT-CAD', org.subsidiaryId, 'CAD', '1'], ['RCPT-USD', usSub, 'USD', '1']] as const) {
       const docId = randomUUID()
@@ -61,7 +63,7 @@ async function seedTwoCurrencyReceivables() {
       await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId} where id=${docId}`)
     }
   })
-  return { org, usCust }
+  return { org, usCust, cadInvoice: cadInvoice! }
 }
 
 /**
@@ -97,6 +99,47 @@ test('customers cockpit fails closed when a functional has no spot coverage', { 
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         await assert.rejects(customersHome(org.orgId), /no spot rate for USD/)
+      })
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('customers cockpit counts a corrected receivable once from its current posting', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const { org, cadInvoice } = await seedTwoCurrencyReceivables()
+  try {
+    await withBypass(async () => {
+      const reversalId = randomUUID()
+      const correctionId = randomUUID()
+      await db.execute(sql`update journal_entries set status='reversed' where id=${cadInvoice.entryId} and org_id=${org.orgId}`)
+      await db.execute(sql`insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id, reverses_entry_id)
+        values (${reversalId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`REV-${reversalId}`}, ${D}, ${org.periodId}, 'draft', 'manual', ${cadInvoice.documentId}, ${cadInvoice.entryId})`)
+      await db.execute(sql`insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${org.orgId}, ${reversalId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, false, '-100.1255', 'CAD', '-100.1255', '1'),
+               (${org.orgId}, ${reversalId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${org.customerId}, false, '100.1255', 'CAD', '100.1255', '1')`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${reversalId}`)
+      await db.execute(sql`insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
+        values (${correctionId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`CORR-${correctionId}`}, ${D}, ${org.periodId}, 'draft', 'manual', ${cadInvoice.documentId})`)
+      await db.execute(sql`insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${org.orgId}, ${correctionId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, true, '250', 'CAD', '250', '1'),
+               (${org.orgId}, ${correctionId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${org.customerId}, false, '-250', 'CAD', '-250', '1')`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${correctionId}`)
+      await db.execute(sql`update documents set posted_entry_id=${correctionId} where id=${cadInvoice.documentId} and org_id=${org.orgId}`)
+    })
+
+    await pinClock('2026-07-15', async () => {
+      await withOrgContext(org.orgId, async () => {
+        const home = await customersHome(org.orgId)
+        assert.equal(home.arOutstanding, '520.1694', 'the corrected CAD receivable replaces its earlier 100.1255 posting')
+        const row = home.topExposure.find((exposure) => exposure.partyId === org.customerId)
+        assert.ok(row, 'the corrected customer remains on the receivables roster')
+        assert.equal(row.open, '250.0000', 'the roster uses the corrected posting amount')
+        assert.equal(row.openInvoices, 1, 'the earlier posting is not counted as a second open invoice')
       })
     })
   } finally {

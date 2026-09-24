@@ -29,7 +29,6 @@
     "web/app/(app)/payroll/runs/[id]/view-approval.test.ts": 3,
     "web/app/(app)/property-management/CamTable.test.tsx": 2,
     "web/app/(app)/tax/provisions/view.test.ts": 1,
-    "web/lib/cash/open-items-current-projection.test.ts": 2,
     "web/lib/customization/list-view-default-refusal.test.tsx": 2
   }
 }
