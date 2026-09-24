@@ -61,13 +61,31 @@ test('every locale carries the me-compensation empty and refusal copy translated
   }
 })
 
-test('the English no-link remedy matches the engine refusal word for word', () => {
-  const actor = readFileSync(join(ROOT, 'engine', 'src', 'hrm', 'self-service', 'actor.ts'), 'utf8')
-  const match = actor.match(/"NO_LINK",\s*\n?\s*"([^"]*)"/)
-  assert.ok(match?.[1], 'the engine NO_LINK remedy moved — point this test at it, never hand-list the remedy')
+test('the English no-link remedy matches the engine refusal word for word', async () => {
+  // One remedy: the engine throws it, the page renders it. Drive the real
+  // actorPartyOf against an empty users read (a stubbed database, not a
+  // stubbed module) and compare the thrown message with the catalog.
+  const { actorPartyOf, SelfServiceError } = await import(
+    '../../engine/src/hrm/self-service/actor.ts'
+  )
+  // Hand-rolled database double in the house style (engine hrm tests fake
+  // the executor the same way); import type is erased, so no pool is built.
+  type Executor = Pick<
+    import('../../engine/src/platform/db.ts').SqlExecutor,
+    'execute'
+  >
+  const exec = {
+    execute: async () => ({ rows: [] as { partyId: string | null }[] }),
+  } as unknown as Executor
+  const thrown: unknown = await actorPartyOf(exec, 'org-1', 'user-1').then(
+    () => null,
+    (error: unknown) => error,
+  )
+  assert.ok(thrown instanceof SelfServiceError, 'an unlinked login must throw SelfServiceError')
+  assert.equal(thrown.code, 'NO_LINK')
   assert.equal(
     at(load('en'), 'myComp.notLinked'),
-    match[1],
+    thrown.message,
     'en myComp.notLinked drifted from the engine NO_LINK remedy — one remedy, keep them identical',
   )
 })
