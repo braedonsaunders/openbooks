@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { subsidiaryScopeAllows } from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { loadOwnEmploymentIds } from "../authorization.ts";
@@ -210,6 +212,23 @@ async function collectReview(
       throw aiSubjectRefused(
         "you are not this review's manager",
         "ask the assigned manager or HR to draft this review",
+      );
+    }
+    // A manager-review draft assembles the subject's shared calibrated
+    // priors, so the HR override reaches only subjects inside the actor's
+    // allowed subsidiaries — the same fence the decision-marking path
+    // applies. An out-of-scope draft refuses whole with the remedy, never
+    // a redacted half-draft; a null employer fails closed.
+    const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+    const employer = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+      select employer_subsidiary_id as "employerSubsidiaryId"
+        from worker_employments
+       where org_id = ${orgId} and id = ${review.employmentId}
+    `)).rows[0];
+    if (!subsidiaryScopeAllows(allowed, employer?.employerSubsidiaryId)) {
+      throw aiSubjectRefused(
+        "this review sits outside your allowed subsidiaries",
+        "ask the HR covering that subsidiary to draft this review",
       );
     }
   }
