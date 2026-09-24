@@ -270,6 +270,7 @@ async function loadTrustedEmploymentSubject(
   exec: SqlExecutor,
   orgId: string,
   employmentId: string,
+  forUpdate = false,
 ): Promise<TrustedEmploymentSubject> {
   const rows = (await exec.execute<{
     id: string;
@@ -285,6 +286,7 @@ async function loadTrustedEmploymentSubject(
            revision
       from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
+     ${forUpdate ? sql`for update` : sql``}
   `)).rows[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
@@ -306,6 +308,41 @@ async function loadTrustedEmploymentSubject(
     revision: rows.revision,
     [trustedHrmSubject]: true,
   };
+}
+
+/**
+ * Lock employment aggregates in stable id order before a scoped read or
+ * write. Re-checking the employer from the locked rows closes the window in
+ * which an entity rehome could commit after authorization but before use.
+ * List readers may request `outOfScope: "filter"`; writes and single-record
+ * reads refuse uniformly when any requested employment is not visible.
+ */
+export async function lockEmploymentsForScope(
+  exec: SqlExecutor,
+  ids: readonly string[],
+  scope: { orgId: string; actorId: string; outOfScope?: "refuse" | "filter" },
+): Promise<TrustedEmploymentSubject[]> {
+  const orderedIds = [...new Set(ids)].sort();
+  if (orderedIds.length === 0) return [];
+  const allowed = await actorAllowedSubsidiaryIds(exec, scope.orgId, scope.actorId);
+  const subjects: TrustedEmploymentSubject[] = [];
+  for (const id of orderedIds) {
+    let subject: TrustedEmploymentSubject;
+    try {
+      subject = await loadTrustedEmploymentSubject(exec, scope.orgId, id, true);
+    } catch (error) {
+      if (scope.outOfScope === "filter" && error instanceof HrmAuthorizationError) continue;
+      throw error;
+    }
+    if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
+      if (scope.outOfScope === "filter") continue;
+      throw new HrmAuthorizationError(
+        "Employment is not visible in this organization and legal-entity scope.",
+      );
+    }
+    subjects.push(subject);
+  }
+  return subjects;
 }
 
 /** Employer-scope half of every gate: the actor must see the employer entity. */
