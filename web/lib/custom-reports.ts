@@ -7,6 +7,7 @@ import { db, pool } from '@openbooks/engine/src/platform/db.ts'
 import {
   REPORT_ENTITY_MAP,
   customQueryReferencesBook,
+  resolvePeriodPresetLeaves,
   runCustomQuery,
   validateCustomQuery,
   type ReportCustomQuery,
@@ -826,37 +827,10 @@ async function resolvePeriodPresets(
   query: ReportCustomQuery,
   orgId?: string,
 ): Promise<ReportCustomQuery> {
-  if (!query.filters) return query
-  let touched = false
-
-  const walk = async (node: ReportRuleGroup): Promise<ReportRuleGroup> => {
-    const rules: (ReportRule | ReportRuleGroup)[] = []
-    for (const r of node.rules ?? []) {
-      if (r && typeof r === 'object' && Array.isArray((r as ReportRuleGroup).rules)) {
-        rules.push(await walk(r as ReportRuleGroup))
-        continue
-      }
-      const leaf = r as ReportRule
-      if (leaf.op === 'period_preset') {
-        touched = true
-        const presetId = typeof leaf.value === 'string' ? leaf.value : String(leaf.value ?? '')
-        const period = await resolvePeriod(presetId, { orgId })
-        rules.push({
-          combinator: 'and',
-          rules: [
-            { field: leaf.field, op: 'gte', value: period.from },
-            { field: leaf.field, op: 'lte', value: period.to },
-          ],
-        })
-      } else {
-        rules.push(leaf)
-      }
-    }
-    return { ...node, rules }
-  }
-
-  const filters = await walk(query.filters)
-  return touched ? { ...query, filters } : query
+  return resolvePeriodPresetLeaves(query, async (presetId) => {
+    const period = await resolvePeriod(presetId, { orgId })
+    return { from: period.from, to: period.to }
+  })
 }
 
 /**

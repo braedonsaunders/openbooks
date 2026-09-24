@@ -24,6 +24,7 @@ import {
   type FiscalPeriod,
   utcCivilDate,
 } from './fiscal-calendar'
+import type { ReportCustomQuery, ReportRule, ReportRuleGroup } from './types'
 
 /**
  * The org's fiscal position "as of today", with exact inclusive boundaries.
@@ -173,6 +174,46 @@ export type ResolvePresetInput = {
    * keeps every preset byte-identical (monthly-cadence orgs take this path).
    */
   periods?: FiscalPeriod[]
+}
+
+/** Resolve every stored period_preset leaf into concrete inclusive date bounds.
+ *  Callers provide the org-aware resolver so this pure package can be shared by
+ *  web report execution and engine allocation drivers without owning a DB. */
+export async function resolvePeriodPresetLeaves(
+  query: ReportCustomQuery,
+  resolveRange: (presetId: string) => Promise<Pick<DateRange, 'from' | 'to'>>,
+): Promise<ReportCustomQuery> {
+  if (!query.filters) return query
+  let touched = false
+
+  const walk = async (node: ReportRuleGroup): Promise<ReportRuleGroup> => {
+    const rules: (ReportRule | ReportRuleGroup)[] = []
+    for (const rule of node.rules ?? []) {
+      if (rule && typeof rule === 'object' && Array.isArray((rule as ReportRuleGroup).rules)) {
+        rules.push(await walk(rule as ReportRuleGroup))
+        continue
+      }
+      const leaf = rule as ReportRule
+      if (leaf.op !== 'period_preset') {
+        rules.push(leaf)
+        continue
+      }
+      touched = true
+      const presetId = typeof leaf.value === 'string' ? leaf.value : String(leaf.value ?? '')
+      const range = await resolveRange(presetId)
+      rules.push({
+        combinator: 'and',
+        rules: [
+          { field: leaf.field, op: 'gte', value: range.from },
+          { field: leaf.field, op: 'lte', value: range.to },
+        ],
+      })
+    }
+    return { ...node, rules }
+  }
+
+  const filters = await walk(query.filters)
+  return touched ? { ...query, filters } : query
 }
 
 /** Convert a current (fiscalYear, quarter 1-4) into another by shifting `n`

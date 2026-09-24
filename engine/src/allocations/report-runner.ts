@@ -10,6 +10,8 @@ import {
   payrollRestrictedEntity,
   REPORT_ENTITY_MAP,
   resolveDenominations,
+  resolvePeriodPresetLeaves,
+  resolvePreset,
   validateCustomQuery,
   type CompiledReportQuery,
   type ReportCustomQuery,
@@ -102,10 +104,21 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
     throw new DriverNotAvailableError("the report entity's feature is disabled");
   }
   const subsidiaryIds = await actorAllowedSubsidiaryIds(db, orgId, actorId);
-  const { query, temporal } = applyTemporalContract(entity, plan, input);
+  const { query: contractedQuery, temporal } = applyTemporalContract(entity, plan, input);
+  const startMonth = await fiscalStartMonth(orgId);
+  const query = await resolvePeriodPresetLeaves(contractedQuery, async (presetId) => {
+    const period = resolvePreset(presetId, { startMonth, today: input.to });
+    if (!period) {
+      throw new DriverAdminError(
+        "validation",
+        `preset '${presetId}' no longer resolves to a date range — choose a current period preset`,
+      );
+    }
+    return period;
+  });
   const compiled = compileCustomQuery(entity, query, orgId, {
     maxRows: MAX_REPORT_ROWS,
-    fiscalStartMonth: await fiscalStartMonth(orgId),
+    fiscalStartMonth: startMonth,
     asOf: input.to,
     allowedSubsidiaryIds: subsidiaryIds === null ? null : [...subsidiaryIds],
     allowedBookIds: await resolveBookScope(orgId, query),

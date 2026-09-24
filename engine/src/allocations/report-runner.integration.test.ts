@@ -272,6 +272,61 @@ test("fixed_query and balance_as_of weigh the report scope with the contract ech
   }
 });
 
+test("fixed_query allocation evidence resolves stored period presets", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await seedReportsReader(org.orgId);
+    for (const [date, amount] of [["2026-07-05", "1000.0000"], ["2026-07-25", "500.0000"]] as const) {
+      await postProjectGlEntry({
+        orgId: org.orgId,
+        actorId: actor,
+        origin: "manual",
+        entryNumber: `PRESET-SEED-${date}-${randomUUID().slice(0, 8)}`,
+        postingDate: date,
+        memo: "Preset allocation probe",
+        subsidiaryId: org.subsidiaryId,
+        currency: "CAD",
+        lines: [
+          { accountId: org.accounts.adjustment, amount },
+          { accountId: org.accounts.bank, amount: `-${amount}` },
+        ],
+      });
+    }
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, slug, name, report_type, query)
+      values (${definitionId}, ${org.orgId}, 'custom', 'driver-preset-test', 'Driver preset test', 'query',
+        ${JSON.stringify({
+          entity: "ledger_lines",
+          mode: "summarize",
+          columns: [],
+          breakouts: [{ column: "account_id" }],
+          measures: [{ fn: "sum", column: "debit" }],
+          filters: {
+            combinator: "and",
+            rules: [{ field: "posting_date", op: "period_preset", value: "last_7_days" }],
+          },
+        })}::jsonb)`);
+
+    const evidence = await runDriverReport({
+      orgId: org.orgId,
+      reportDefinitionId: definitionId,
+      dimensionColumn: "account_id",
+      valueColumn: "debit",
+      params: {},
+      from: "2026-07-01",
+      to: "2026-07-31",
+      actorId: actor,
+      temporalMode: "fixed_query",
+    });
+    const weights = new Map(evidence.rows.map((r) => [r.dimension, r.value] as [string, string]));
+    assert.equal(weights.get(org.accounts.adjustment), "500.0000");
+    assert.equal(weights.get(org.accounts.bank), "0.0000");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("report runner honors the feature parent gate (projects off disables timeTracking)", async () => {
   const org = await createScratchOrg();
   try {
