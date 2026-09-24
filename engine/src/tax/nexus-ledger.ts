@@ -47,24 +47,3 @@ export async function loadOrgFilingCalendar(
   );
 }
 
-/**
- * If [from, to] overlaps a registration obligation for `formCode`, clamp to
- * that obligation's reportable window so a mid-period registration does not
- * pull pre-registration activity into the return.
- */
-export async function clampTaxReturnWindow(
-  orgId: string,
-  formCode: string,
-  from: string,
-  to: string,
-): Promise<{ from: string; to: string }> {
-  const calendar = await loadOrgFilingCalendar(orgId, from, to);
-  const match = calendar.find(
-    (o) =>
-      o.returnFormCode === formCode &&
-      o.periodStart <= to &&
-      o.periodEnd >= from,
-  );
-  if (!match) return { from, to };
-  return { from: match.reportableFrom, to: match.reportableTo };
-}
