@@ -23,7 +23,7 @@ export async function listScopedAccountOptions(
     select a.id, a.number, a.name, a.type, a.subsidiary_id as "subsidiaryId", a.is_summary
       from accounts a
      where a.org_id = ${orgId}
-       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds)}
+       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${options.activeOnly ? sql`and a.is_active` : sql``}
        ${options.postingOnly ? sql`and not a.is_summary` : sql``}
        ${options.summaryOnly ? sql`and a.is_summary` : sql``}
