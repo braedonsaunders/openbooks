@@ -10,7 +10,7 @@ import test from 'node:test'
 // in Postgres as a raw numeric/DATE failure (HTTP 500 — the verb only maps
 // TaxRateProviderError to 422) instead of failing closed with a named 422.
 const root = pathToFileURL(process.cwd() + '/').href
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
+const state: { orgId: string; actorId: string; allowed: Set<string> | null } = { orgId: '', actorId: '', allowed: null }
 Object.assign(globalThis, { __taxQuoteMagnitudeState: state })
 const engineRoot = new URL('../../../../../engine/', import.meta.url).href
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
@@ -25,7 +25,11 @@ registerHooks({
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__taxQuoteMagnitudeState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowed };
+      }
+      export function guardUnrestrictedScope(authz) {
+        if (authz.allowedSubsidiaryIds === null) return null;
+        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 });
       }
     `)
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -35,7 +39,7 @@ registerHooks({
 const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { POST } = await import('./route.ts')
+const { POST, PUT } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
@@ -87,6 +91,29 @@ test('POST refuses an impossible quotedOn without writing evidence', { skip: !DB
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.equal(await quoteCount(), 0)
   } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('PUT by a subsidiary-restricted setup manager is refused with the provider untouched', { skip: !DB }, async () => {
+  const { org } = await fixture()
+  state.allowed = new Set([randomUUID()])
+  try {
+    const response = await PUT(
+      new Request('http://tax.test/api/tax/rate-provider', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'taxjar', isEnabled: true }),
+      }),
+    )
+    const body = (await response.json().catch(() => null)) as unknown
+    assert.equal(response.status, 403, JSON.stringify(body))
+    assert.deepEqual(body, { error: 'requires unrestricted subsidiary access' })
+    const rows = (await db.execute<{ provider: string }>(sql`
+      select provider from tax_rate_provider_configs where org_id = ${state.orgId}`)).rows
+    assert.equal(rows[0]!.provider, 'manual')
+  } finally {
+    state.allowed = null
     await dropScratchOrg(org.orgId)
   }
 })

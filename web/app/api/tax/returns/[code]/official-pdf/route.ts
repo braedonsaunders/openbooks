@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { createFile, deleteFile, ensureAttachmentsRoot } from '../../../../../../lib/file-cabinet'
 
 export const runtime = 'nodejs'
@@ -12,6 +12,9 @@ const MAX_BYTES = 25 * 1024 * 1024
 export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  // The official government PDF is org-wide statutory material.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { code } = await params
   const orgId = gate.user.orgId
 
@@ -82,6 +85,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
 export async function DELETE(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { code } = await params
   const old = (await db.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
     select id, official_pdf_file_id from tax_return_forms

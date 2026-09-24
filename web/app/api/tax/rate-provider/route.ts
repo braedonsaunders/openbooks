@@ -9,7 +9,7 @@ import {
   type ProviderDocumentKind,
   type TaxRateProviderKey,
 } from "@openbooks/engine/src/tax/rate-providers.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
@@ -26,6 +26,9 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  // The rate provider prices tax for every entity in the org.
+  const unrestricted = guardUnrestrictedScope(gate);
+  if (unrestricted) return unrestricted;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;

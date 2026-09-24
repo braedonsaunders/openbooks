@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isTaxProvisionSelection, packInstallationStatuses, provisionTaxPacks } from '@openbooks/engine/src/tax/pack-provisioning.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -21,6 +21,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  // Provisioning installs org-wide statutory packs used by every entity.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
