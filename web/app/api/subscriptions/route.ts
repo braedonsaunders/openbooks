@@ -531,8 +531,15 @@ export async function POST(req: Request) {
           const updated = (await tx.execute<Record<string, unknown>>(sql`
             update subscriptions set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId}
+               ${nextBillOn === undefined ? sql`` : sql`and next_bill_on = ${before.rows[0].next_bill_on}`}
             returning *
           `));
+          // The lock + fresh validation is the primary serialization boundary.
+          // Keep the old cursor in the UPDATE predicate as a final CAS fence so
+          // a future write path that bypasses this lock cannot overwrite a bill.
+          if (!updated.rows[0]) {
+            throw new SubscriptionError("subscription changed while it was being updated; reload and retry");
+          }
           const changes: Record<string, unknown> = { before: before.rows[0], after: updated.rows[0] };
           if (skippedWindow) {
             changes.nextBillOnSkip = {
