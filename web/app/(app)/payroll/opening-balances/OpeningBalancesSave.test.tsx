@@ -119,6 +119,7 @@ async function mountWith(
   t: TestContext,
   responder: () => Response | Promise<Response>,
   initial: (typeof props)['initial'],
+  fields: (typeof props)['fields'] = props.fields,
 ): Promise<void> {
   toasts.length = 0
   posted.length = 0
@@ -144,7 +145,7 @@ async function mountWith(
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <OpeningBalancesView {...props} initial={initial} />
+        <OpeningBalancesView {...props} fields={fields} initial={initial} />
       </NextIntlClientProvider>,
     )
     await tick()
@@ -200,6 +201,22 @@ test('a named 422 refusal lands in the error panel with its per-row reasons', as
   await click(save)
   assert.match(document.body.textContent ?? '', /Gross must be exact/)
   assert.deepEqual(successToasts(), [], 'a refused save must not toast success')
+})
+
+test('an orphaned employee keeps pack-specific carry-in inputs available', async (t) => {
+  const employee = props.initial.rows[0]!
+  const orphaned = {
+    ...props.initial,
+    rows: [{ ...employee, country: null }],
+  }
+  await mountWith(t, () => Response.json({ created: 0, updated: 0, deleted: 0 }), orphaned, [
+    { key: 'grossYtd', label: 'Canadian income', help: 'Canada', packs: ['CA'] },
+    { key: 'federalYtd', label: 'US federal income', help: 'United States', packs: ['US'] },
+  ])
+  // These columns are read by different statutory packs. With no surviving
+  // employee profile, the screen still lets an operator enter both amounts.
+  assert.ok(document.querySelector('input[aria-label="Ada — Canadian income"]'))
+  assert.ok(document.querySelector('input[aria-label="Ada — US federal income"]'))
 })
 
 test('a non-JSON 502 surfaces the fallback with the status, never a SyntaxError', async (t) => {
