@@ -7,6 +7,7 @@ import {
   ensureFiling,
   finalizeFiling,
   InformationReturnError,
+  loadPaymentTraces,
   markFilingFiled,
   recomputeFiling,
   updateFilingRecipient,
@@ -762,6 +763,74 @@ test("recipient edits keep the API contract: signed deltas over computed figures
       () => voidFiling({ orgId: org.orgId, filingId: randomUUID(), actorId, reason: "x" }),
       /not found/,
     );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("payment-trace cash counts the funding bank leg only, never a discount leg", { skip: !DB }, async () => {
+  // Cash out is the credit to the funding bank account. A vendor-payment
+  // discount is a second negative, non-open-item leg, but it never leaves
+  // the bank and must not inflate reportable cash: 3000 owed, 50 discount,
+  // 2950 paid — cash is 2950, not 3000.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const partyId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${partyId}, ${org.orgId}, 'vendor', 'Discount Vendor', null, true, '{}'::jsonb)`);
+    const paymentId = randomUUID();
+    const journalEntryId = randomUUID();
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, posting_date, currency, subtotal, tax_total, total,
+           custom, created_by, updated_by)
+        values
+          (${paymentId}, ${org.orgId}, 'vendor_payment', 'approved',
+           'IR-DISCOUNT-1', ${org.subsidiaryId}, ${partyId},
+           '2026-07-15', '2026-07-15', 'CAD', 3000, '0', 3000,
+           '{}'::jsonb, ${actorId}, ${actorId})`);
+      await tx.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin, created_by, updated_by)
+        values
+          (${journalEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'IR-DISCOUNT-1', '2026-07-15', ${org.periodId},
+           'Payment with discount fixture', 'draft', ${paymentId}, 'document',
+           ${actorId}, ${actorId})`);
+      await tx.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+           currency, txn_amount, fx_rate, party_id, is_open_item, memo)
+        values
+          (${org.orgId}, ${journalEntryId}, 1,
+           ${org.accounts.ap}, ${org.subsidiaryId}, 3000, 'CAD', 3000, 1,
+           ${partyId}, true, 'Payable settled'),
+          (${org.orgId}, ${journalEntryId}, 2,
+           ${org.accounts.bank}, ${org.subsidiaryId}, -2950, 'CAD', -2950, 1,
+           null, false, 'Cash out of the funding account'),
+          (${org.orgId}, ${journalEntryId}, 3,
+           ${org.accounts.adjustment}, ${org.subsidiaryId}, -50, 'CAD', -50, 1,
+           null, false, 'Vendor discount taken')`);
+      await tx.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now(), posted_by = ${actorId}
+         where org_id = ${org.orgId} and id = ${journalEntryId}`);
+      await tx.execute(sql`
+        update documents
+           set status = 'posted', posted_entry_id = ${journalEntryId},
+               posting_period_id = ${org.periodId}
+         where org_id = ${org.orgId} and id = ${paymentId}`);
+    });
+
+    const traces = await loadPaymentTraces({ orgId: org.orgId, taxYear: 2026 });
+    const vendorTraces = traces.get(partyId) ?? [];
+    assert.equal(vendorTraces.length, 1, "the discounted payment is traced");
+    assert.equal(vendorTraces[0]!.cash, "2950.0000", "cash is the bank leg, not bank plus discount");
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
