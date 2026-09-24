@@ -3,6 +3,7 @@ import { db } from "../platform/db.ts";
 import { cmp, sum } from "../money/money.ts";
 import { payrollTaxYear } from "./packs.ts";
 import { calculatePayRun, type CapturedStub } from "./run-calculation.ts";
+import type { PayRunCalculationError } from "./run-calculation-evidence.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { payRunCalculationSource } from "./run-calculation-evidence.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
@@ -343,7 +344,7 @@ export async function quantifyRetroCandidates(input: {
   const quantified: RetroQuantifiedPeriod[] = [];
   for (const [sourceDocumentId, candidates] of bySourceRun) {
     let stubs: CapturedStub[] = [];
-    let errors: { employee: string; message: string }[] = [];
+    let errors: PayRunCalculationError[] = [];
     let simulationFailure: string | null = null;
     try {
       // The seam. `simulate` implies a rolled-back dry run inside
@@ -391,7 +392,9 @@ export async function quantifyRetroCandidates(input: {
       }
       const recomputedLines = recomputed.get(candidate.employeePartyId);
       if (!recomputedLines) {
-        const named = errors.find((e) => e.employee === candidate.employeeName);
+        // Match on identity, not display name: two employees sharing a name
+        // would otherwise attach one's failure text to the other's candidate.
+        const named = errors.find((e) => e.employeePartyId === candidate.employeePartyId);
         quantified.push({
           candidate, outcome: "unavailable", difference: null,
           blockedReason: named
