@@ -9,7 +9,11 @@ import test from "node:test";
 // that is gone or belongs to another tenant. Unknown ids are now a 404;
 // known leases with nothing due still answer 200.
 const root = pathToFileURL(process.cwd() + "/").href;
-const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+const state: { orgId: string; actorId: string; allowedSubsidiaryIds: Set<string> | null } = {
+  orgId: "",
+  actorId: "",
+  allowedSubsidiaryIds: null,
+};
 Object.assign(globalThis, { __leasePostNotFoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
@@ -18,7 +22,7 @@ registerHooks({
     if (specifier === "@/lib/feature-gates") return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__leasePostNotFoundState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowedSubsidiaryIds };
       }
     `);
     if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
@@ -86,6 +90,66 @@ test("posting a known lease with nothing due still answers 200", async () => {
     assert.equal(result.status, 200, JSON.stringify(result.json));
     assert.equal(result.json.posted, 0);
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+async function seedLease(orgId: string, subsidiaryId: string): Promise<string> {
+  const one = randomUUID();
+  const { leaseId } = await createLeaseAgreement(orgId, null, {
+    subsidiaryId,
+    leaseNumber: `L-POST-SCOPE-${one.slice(0, 8)}`,
+    commencementOn: "2026-07-01",
+    termPeriods: 3,
+    paymentFrequency: "monthly",
+    paymentAmount: "1000",
+    annualDiscountRatePercent: "6",
+    classificationInputs: { transfersOwnership: true },
+    accounts: {
+      rouAsset: one,
+      leaseLiability: one,
+      interestExpense: one,
+      amortizationExpense: one,
+      leaseExpense: one,
+      payment: one,
+    },
+  });
+  return leaseId;
+}
+
+test("posting an out-of-scope lease answers exactly like a missing one", async () => {
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
+  try {
+    const leaseId = await seedLease(org.orgId, org.subsidiaryId);
+    state.allowedSubsidiaryIds = new Set([randomUUID()]);
+    const denied = await post(leaseId, { asOfDate: "2026-07-31" });
+    assert.equal(denied.status, 404, JSON.stringify(denied.json));
+    assert.match(String(denied.json.error), /lease not found/);
+
+    // The identical body a missing id gives, so the two are indistinguishable.
+    const missing = await post(randomUUID(), { asOfDate: "2026-07-31" });
+    assert.equal(missing.status, 404, JSON.stringify(missing.json));
+    assert.deepEqual(denied.json, missing.json);
+  } finally {
+    state.allowedSubsidiaryIds = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("posting an in-scope lease still answers 200", async () => {
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
+  try {
+    const leaseId = await seedLease(org.orgId, org.subsidiaryId);
+    state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
+    const result = await post(leaseId, { asOfDate: "2026-07-31" });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.equal(result.json.posted, 0);
+  } finally {
+    state.allowedSubsidiaryIds = null;
     await dropScratchOrg(org.orgId);
   }
 });
