@@ -17,7 +17,8 @@ import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  WV_CERTIFICATE, WV_REGION, WV_RATES_2026, WV_WITHHOLDING, wvPercentageMethod, wvRoundToDollar,
+  WV_CERTIFICATE, WV_IT104NR_CERTIFICATE, WV_REGION, WV_RATES_2026, WV_WITHHOLDING,
+  wvPercentageMethod, wvRoundToDollar,
 } from "./wv.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
@@ -26,6 +27,7 @@ const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
 
 test("WV certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(WV_CERTIFICATE), null);
+  assert.equal(certificateDeclarationProblem(WV_IT104NR_CERTIFICATE), null);
   assert.equal(WV_REGION.implemented, true);
   assert.equal(WV_REGION.certificateKey, "us_wv_it104");
 });
@@ -142,11 +144,36 @@ test("WV refuses a pay frequency it does not print a table for", () => {
   );
 });
 
-test("WV IT-104NR exemption stops withholding", () => {
+test("WV reciprocal nonresidence claim on IT-104 stops withholding", () => {
   assert.equal(WV_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
     certificate: cert({ exempt: "true" }),
   }).tax, money("0"));
+});
+
+test("WV IT-104NR military-spouse claim requires every attestation and military ID", () => {
+  const incomplete = resolvedCertificate(WV_IT104NR_CERTIFICATE, {
+    servicemember_is_armed_forces_member: "true",
+  });
+  assert.throws(
+    () => WV_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
+      certificate: cert(), supportingCertificates: { us_wv_it104nr: incomplete },
+    }),
+    /West Virginia military-spouse withholding exemption requires proof that the servicemember is present in West Virginia in compliance with military orders; the employee is present in West Virginia solely to be with the servicemember; the employee maintains domicile in another state; a copy of the spousal military identification card is attached/,
+  );
+
+  const complete = resolvedCertificate(WV_IT104NR_CERTIFICATE, Object.fromEntries([
+    "servicemember_is_armed_forces_member", "servicemember_present_under_orders",
+    "spouse_present_solely_to_accompany", "spouse_domiciled_outside_wv",
+    "spousal_military_id_on_file",
+  ].map((key) => [key, "true"])));
+  const result = WV_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
+    certificate: cert(), supportingCertificates: { us_wv_it104nr: complete },
+  });
+  assert.equal(result.tax, money("0"));
+  assert.equal(result.factors.WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT, "1");
 });
 
 test("WV refuses a year it has not transcribed", () => {

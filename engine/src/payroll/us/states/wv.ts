@@ -37,6 +37,7 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import { roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   payPeriodFor,
   refuseUnprintedPeriod,
@@ -311,10 +312,22 @@ export function wvPercentageMethod(input: {
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = wvRatesForPayDate(input.payDate);
 
-  if (
-    certificateFlag(input.certificate, "exempt")
-    || certificateFlag(input.certificate, "military_spouse_exempt")
-  ) {
+  const militarySpouseCertificate = input.supportingCertificates?.us_wv_it104nr;
+  if (militarySpouseCertificate?.onFile) {
+    requireMilitarySpouseEligibility(militarySpouseCertificate, "West Virginia", [
+      { key: "servicemember_is_armed_forces_member", description: "the employee's spouse is a member of the Armed Forces" },
+      { key: "servicemember_present_under_orders", description: "the servicemember is present in West Virginia in compliance with military orders" },
+      { key: "spouse_present_solely_to_accompany", description: "the employee is present in West Virginia solely to be with the servicemember" },
+      { key: "spouse_domiciled_outside_wv", description: "the employee maintains domicile in another state" },
+      { key: "spousal_military_id_on_file", description: "a copy of the spousal military identification card is attached" },
+    ]);
+    return {
+      state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+      factors: { WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "1" },
+    };
+  }
+
+  if (certificateFlag(input.certificate, "exempt")) {
     return {
       state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
       factors: { WV_EXEMPT: "1" },
@@ -371,6 +384,7 @@ export const WV_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: WV_TAX_YEAR_EDITIONS,
   printedPeriods: WV_PERIODS,
+  supportingCertificateKeys: ["us_wv_it104nr"],
   compute,
 };
 
@@ -435,14 +449,51 @@ export const WV_CERTIFICATE: PayrollCertificate = {
         + "Virginia and the only West Virginia-source income is wages. Upon a completed "
         + "IT-104NR the employer stops West Virginia withholding.",
     },
+  ],
+};
+
+/** Separate IT-104NR statement for a nonresident military spouse. */
+export const WV_IT104NR_CERTIFICATE: PayrollCertificate = {
+  key: "us_wv_it104nr",
+  form: "IT-104NR",
+  label: "West Virginia Certificate of Nonresidence — Military Spouse",
+  scope: { level: "region", region: "WV" },
+  purpose: "exemption",
+  citation: "West Virginia Form WV IT-104 / IT-104NR (Rev. 03/2023), military-spouse statement",
+  summary:
+    "The military-spouse exemption requires the separate IT-104NR statement, all eligibility "
+    + "conditions, and a copy of the spouse's military identification card.",
+  storage: "certificate_rows",
+  fields: [
     {
-      key: "military_spouse_exempt",
-      label: "IT-104NR — Military spouse (SCRA / MSRRA)",
-      kind: "flag",
-      help:
-        "The employee is in West Virginia solely to be with a servicemember spouse stationed "
-        + "here under orders and maintains a domicile in another state. Attach a copy of the "
-        + "spousal military identification card.",
+      key: "servicemember_is_armed_forces_member",
+      label: "Spouse is a member of the Armed Forces",
+      kind: "flag", required: true,
+      help: "IT-104NR condition (a).",
+    },
+    {
+      key: "servicemember_present_under_orders",
+      label: "Servicemember is present in West Virginia in compliance with military orders",
+      kind: "flag", required: true,
+      help: "IT-104NR condition (a).",
+    },
+    {
+      key: "spouse_present_solely_to_accompany",
+      label: "Employee is present in West Virginia solely to be with the servicemember",
+      kind: "flag", required: true,
+      help: "IT-104NR condition (b).",
+    },
+    {
+      key: "spouse_domiciled_outside_wv",
+      label: "Employee maintains domicile in another state",
+      kind: "flag", required: true,
+      help: "IT-104NR condition (c): record the state of domicile on the signed form.",
+    },
+    {
+      key: "spousal_military_id_on_file",
+      label: "Copy of spousal military identification card is attached",
+      kind: "flag", required: true,
+      help: "The IT-104NR instructions require the employee to attach this supporting document.",
     },
   ],
 };
