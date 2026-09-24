@@ -187,7 +187,8 @@
       },
       "auto": "auto",
       "manual": "manuell"
-    }
+    },
+    "postFailed": "Die Rückstellung konnte nicht gebucht werden."
   },
   "tabs": {
     "prepare": "Erklärung vorbereiten",

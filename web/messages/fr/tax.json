@@ -187,7 +187,8 @@
       },
       "auto": "auto",
       "manual": "manuel"
-    }
+    },
+    "postFailed": "La provision n’a pas pu être comptabilisée."
   },
   "tabs": {
     "prepare": "Préparer une déclaration",

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button } from "@openbooks/ui";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 export function ProvisionPostButton({ runId }: { runId: string }) {
   const t = useTranslations("tax.provisions");
@@ -15,12 +16,16 @@ export function ProvisionPostButton({ runId }: { runId: string }) {
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/tax/provisions/${runId}/post`, { method: "POST" });
-    const json = (await res.json().catch(() => ({}))) as { error?: string };
-    setBusy(false);
+    // The status is checked before the body is parsed: an empty or non-JSON
+    // error body (where `res.statusText` used to leak a bare "Conflict")
+    // falls back to a named message with the status, and a named refusal —
+    // which already carries its remedy — renders whole.
     if (!res.ok) {
-      setError(json.error ?? res.statusText);
+      setError(await readApiErrorMessage(res, t("postFailed")));
+      setBusy(false);
       return;
     }
+    setBusy(false);
     router.refresh();
   }
 
