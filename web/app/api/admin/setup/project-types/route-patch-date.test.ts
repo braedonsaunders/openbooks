@@ -44,6 +44,7 @@ const mockSources = new Map<string, string>([
           allowedSubsidiaryIds: null,
         };
       }
+      export function guardUnrestrictedScope() { return null; }
     `,
   ],
   [
@@ -77,6 +78,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.project-types-patch-date-test')]
       export function canonicalizeProjectFinancialProfile(profile) { return structuredClone(profile) }
+      export function assertValidProjectFinancialProfile(_profile) {}
       export async function publishProjectFinancialProfileInTransaction(_tx, input) {
         state.publishInputs.push({ effectiveFrom: input.effectiveFrom })
         return { id: 'version-1', effectiveFrom: input.effectiveFrom, effectiveTo: null }
