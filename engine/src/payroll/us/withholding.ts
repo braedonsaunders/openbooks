@@ -39,6 +39,7 @@
 import {
   certificateAmount,
   certificateCount,
+  certificateFlag,
   emptyResolvedCertificate,
   type ResolvedCertificate,
 } from "../certificates.ts";
@@ -78,6 +79,14 @@ export type UsSeparateSupplementalMethod =
     rates: readonly { effectiveFrom: string; rate: string; source: string }[];
     requiresRegularWithholding?: boolean;
     rounding?: "whole_dollar";
+  };
+
+export type UsCombinedSupplementalMethod =
+  | { kind: "state_formula" }
+  | {
+    kind: "flat_supplemental";
+    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+    honorsCertificateExemption?: true;
   };
 
 /**
@@ -176,6 +185,29 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     }],
   } as const,
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
+
+/**
+ * Declared withholding for a bonus included with regular wages. Most state
+ * formula engines price the combined amount; a jurisdiction that prescribes a
+ * distinct supplemental rate overrides that method here.
+ */
+const US_DEFAULT_COMBINED_SUPPLEMENTAL_METHODS = Object.fromEntries(
+  US_STATES.map((state) => [state, { kind: "state_formula" as const }]),
+) as Readonly<Record<(typeof US_STATES)[number], UsCombinedSupplementalMethod>>;
+
+export const US_COMBINED_SUPPLEMENTAL_METHODS = {
+  ...US_DEFAULT_COMBINED_SUPPLEMENTAL_METHODS,
+  AR: {
+    kind: "flat_supplemental",
+    // Arkansas DFA 2026 Employer Instructions, p. 4: tax the regular wages
+    // with the formula and deduct 3.9% of bonuses paid at the same time.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.039",
+      source: "https://www.dfa.arkansas.gov/wp-content/uploads/withholdInstructions_2026.pdf",
+    }],
+    honorsCertificateExemption: true,
+  },
+} satisfies Readonly<Record<(typeof US_STATES)[number], UsCombinedSupplementalMethod>>;
 
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the
@@ -283,8 +315,13 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     )
     : input.residentWithholdingFacts;
   const supplemental = input.supplemental == null ? 0n : U(input.supplemental);
+  const certificate = levy.certificateKey
+    ? input.certificateFor(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
+    : emptyResolvedCertificate(`${levy.label} publishes no withholding certificate`);
   let separateFlatRate: string | undefined;
   let separateFlatWholeDollar = false;
+  let combinedFlatRate: string | undefined;
+  let combinedFlatHonorsCertificateExemption = false;
   if (supplemental > 0n && input.supplementalPaymentTiming == null) {
     throw new UsWithholdingError(
       `separately paid or combined supplemental timing is missing for ${levy.label}; record whether this payment was issued with regular wages before calculating — refused by name`,
@@ -327,9 +364,25 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       );
     }
   }
-  const certificate = levy.certificateKey
-    ? input.certificateFor(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
-    : emptyResolvedCertificate(`${levy.label} publishes no withholding certificate`);
+  if (supplemental > 0n && input.supplementalPaymentTiming === "combined") {
+    const method = US_COMBINED_SUPPLEMENTAL_METHODS[
+      levy.region as keyof typeof US_COMBINED_SUPPLEMENTAL_METHODS
+    ];
+    if (method.kind === "flat_supplemental") {
+      const applicable = method.rates
+        .filter((rate) => rate.effectiveFrom <= input.payDate)
+        .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+        .at(-1);
+      if (!applicable) {
+        throw new UsWithholdingError(
+          `${levy.label} has no transcribed combined-supplemental rate for ${input.payDate}; `
+          + "transcribe the official rate effective on the payment date before calculating — refused by name",
+        );
+      }
+      combinedFlatRate = applicable.rate;
+      combinedFlatHonorsCertificateExemption = method.honorsCertificateExemption === true;
+    }
+  }
 
   if (levy.level === "region") {
     // Throws for a state that levies a tax the pack has not transcribed;
@@ -371,6 +424,42 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           ...regular.factors,
           US_SUPPLEMENTAL_METHOD: "flat",
           US_SUPPLEMENTAL_RATE: separateFlatRate,
+          US_SUPPLEMENTAL_TAX: D(supplementalTax),
+        },
+      };
+    }
+    if (combinedFlatRate) {
+      // Arkansas applies the formula to regular wages and a distinct 3.9% to
+      // a bonus paid with them. The AR4ECSP exemption still covers both legs.
+      const regular = engine.compute({
+        payDate: input.payDate,
+        periodStart: input.periodStart,
+        employerEmployeeCount: input.employerEmployeeCount,
+        periodEnd: input.periodEnd,
+        periodsPerYear: input.periodsPerYear,
+        wages: input.wages,
+        supplemental: "0",
+        federalIncomeTax: input.federalIncomeTax,
+        taxQualifiedDeductions: input.taxQualifiedDeductions,
+        certificate,
+        basis: levy.reach,
+        wageAllocations: input.wageAllocations,
+        residentWithholdingFacts,
+        regionTax: input.regionTax,
+        socialInsuranceDeducted: input.socialInsuranceDeducted,
+        ytd: input.ytd,
+      });
+      const exempt = combinedFlatHonorsCertificateExemption
+        && certificateFlag(certificate, "exempt");
+      const supplementalTax = exempt ? 0n : mulRateCents(supplemental, combinedFlatRate);
+      return {
+        code: engine.state,
+        label: engine.label,
+        tax: addMoney(regular.tax, D(supplementalTax)),
+        factors: {
+          ...regular.factors,
+          US_SUPPLEMENTAL_METHOD: "flat_supplemental",
+          US_SUPPLEMENTAL_RATE: combinedFlatRate,
           US_SUPPLEMENTAL_TAX: D(supplementalTax),
         },
       };
