@@ -13,6 +13,7 @@ import {
 } from "../testing/fixtures.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { decideGate } from "../flows/gates.ts";
+import { CompensationError } from "./compensation/errors.ts";
 import {
   createJobFamily,
   createJobLevel,
@@ -768,6 +769,57 @@ test("high-magnitude decimal-text percent preserves exact stored percent and wag
     const stored = await storedLine(org.orgId, line!.id);
     assert.equal(stored.proposed_pct, "9007199254.000001");
     assert.equal(stored.proposed_rate, "9007199354000.0010");
+  });
+});
+
+test("per-line approval racing a cycle push returns only named outcomes", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const { org } = h;
+    const { level } = await seedArchitecture(org.orgId, h.hrId);
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
+    const cycle = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Concurrent decision 2025", kind: "merit",
+      effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
+    });
+    await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3", reason: "race setup" });
+
+    const approver = await createScratchUser(org.orgId, "Race Approver", "race_approver");
+    await grantPermissions(org.orgId, approver, ["hrm.compensation.approve"]);
+    await linkPerson(org.orgId, approver);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+      assignees: [{ type: "user", userId: approver }],
+      mode: "any",
+    });
+    await submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const gate = (await db.execute<{ id: string }>(sql`
+      select id from flow_gates where subject_id = ${cycle.id} order by created_at`)).rows[0]!;
+    await decideGate({ gateId: gate.id, decision: "approved", userId: approver });
+
+    const [decision, push] = await Promise.allSettled([
+      approveLine({ orgId: org.orgId, actorId: approver, lineId: line!.id }),
+      pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }),
+    ]);
+    const decisionError = decision.status === "rejected" ? decision.reason : null;
+    const pushError = push.status === "rejected" ? push.reason : null;
+    assert.ok(
+      ![decisionError, pushError].some((error) => (error as { code?: string } | null)?.code === "40P01"),
+      "neither transaction reports PostgreSQL deadlock_detected",
+    );
+    if (decisionError !== null) {
+      assert.ok(decisionError instanceof CompensationError);
+      assert.equal(decisionError.code, "BAD_STATE");
+      assert.match(decisionError.message, /pushed line|cannot be decided/);
+    }
+    if (pushError !== null) {
+      assert.ok(pushError instanceof CompensationError);
+      assert.equal(pushError.code, "REFUSED");
+      assert.match(pushError.message, /lines still await decision/);
+    }
+    assert.ok(decision.status === "fulfilled" || push.status === "fulfilled");
   });
 });
 

@@ -767,6 +767,26 @@ async function loadLineForUpdate(orgId: string, lineId: string): Promise<LineRow
   return row;
 }
 
+/**
+ * Every operation that locks both records takes the cycle before its line.
+ * Resolve the immutable parent without a lock, then lock and re-read both
+ * records in that order so a stale parent cannot authorize a line action.
+ */
+async function loadCycleAndLineForUpdate(
+  orgId: string,
+  lineId: string,
+): Promise<{ cycle: CycleRow; line: LineRow }> {
+  const parent = (await db.execute<{ cycle_id: string }>(sql`
+    select cycle_id from hrm_comp_cycle_lines where org_id = ${orgId} and id = ${lineId}`)).rows[0];
+  if (!parent) throw new CompensationError("NOT_FOUND", "cycle line is not visible in this organization");
+  const cycle = await loadCycleForUpdate(orgId, parent.cycle_id);
+  const line = await loadLineForUpdate(orgId, lineId);
+  if (line.cycle_id !== cycle.id) {
+    throw new CompensationError("STALE_REVISION", "the line moved to another cycle while it was loaded — reload it and retry");
+  }
+  return { cycle, line };
+}
+
 export interface PacingRead {
   /**
    * Proposed + approved increase vs the cycle envelope, percent.
@@ -1043,8 +1063,7 @@ export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLin
     throw new CompensationError("INVALID_INPUT", "proposedRate must be a positive amount with at most 4 decimals");
   }
   return withOrgTransaction(orgId, async () => {
-    const line = await loadLineForUpdate(orgId, lineId);
-    const cycle = await loadCycleForUpdate(orgId, line.cycle_id);
+    const { cycle, line } = await loadCycleAndLineForUpdate(orgId, lineId);
     if (cycle.status !== "open" && cycle.status !== "in_review") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1164,8 +1183,7 @@ export async function reopenLine(query: {
   const lineId = requireId(query.lineId, "lineId");
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
-    const line = await loadLineForUpdate(orgId, lineId);
-    const cycle = await loadCycleForUpdate(orgId, line.cycle_id);
+    const { cycle, line } = await loadCycleAndLineForUpdate(orgId, lineId);
     if (line.status === "pushed") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1265,8 +1283,7 @@ async function decideLine(
 ): Promise<CompCycleLineDTO> {
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationApprove(db, orgId, actorId);
-    const line = await loadLineForUpdate(orgId, lineId);
-    const cycle = await loadCycleForUpdate(orgId, line.cycle_id);
+    const { cycle, line } = await loadCycleAndLineForUpdate(orgId, lineId);
     // Deciding moves another entity's wage: the Flows approve grant never
     // substitutes for entity scope — the cycle anchor and the line's
     // employer are rechecked under the locks first.
