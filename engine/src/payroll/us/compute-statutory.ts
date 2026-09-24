@@ -23,9 +23,33 @@ import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 export type UsYtdRow = {
   fica: string;
   futa: string;
+  suiCurrentRegion: string;
+  suiOtherRegions: string;
+  suiOpeningUnscoped: boolean;
   supplemental: string;
   fica_tax: string;
 };
+
+/** Resolve the SUI wage-base history only when every prior wage has known
+ * state provenance. Transfer credits differ by state: Oregon permits prior
+ * taxable wages from other states to limit its base (UI PUB 217,
+ * https://www.oregon.gov/employ/Businesses/Documents/Tax/uipub217.pdf), and
+ * California has a same-year out-of-state wage credit on employee transfer
+ * (EDD Employer's Guide, https://edd.ca.gov/siteassets/files/pdf_pub_ctr/de44.pdf).
+ * The shared FUTA base cannot determine either state's SUI credit. */
+export function resolveUsSuiYtd(
+  region: string,
+  ytd: Pick<UsYtdRow, "suiCurrentRegion" | "suiOtherRegions" | "suiOpeningUnscoped">,
+): string {
+  if (ytd.suiOtherRegions || ytd.suiOpeningUnscoped) {
+    const priorStates = ytd.suiOtherRegions || "an opening balance without state allocation";
+    throw new PayrollError(
+      `US SUI cannot be calculated for ${region}: prior insurable wages are recorded in ${priorStates}, ` +
+      "and state transfer credits require state-account wage history and eligibility. Complete the state-scoped SUI wage history before calculating this run; FUTA wages are not an SUI substitute.",
+    );
+  }
+  return ytd.suiCurrentRegion;
+}
 
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the factor
@@ -50,6 +74,7 @@ export const US_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
  */
 export async function usEmployeeYtd(
   ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId">,
+  region: string,
 ): Promise<UsYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
   const ficaWithheldColumn = US_OPENING_YTD_FIELDS.find((field) => field.key === "ficaWithheldYtd")!.column;
@@ -61,6 +86,11 @@ export async function usEmployeeYtd(
       coalesce((select insurable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum(s.insurable_earnings), 0) as futa,
+      coalesce((select insurable_ytd from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0) > 0 as "suiOpeningUnscoped",
+      coalesce(sum(s.insurable_earnings) filter (where s.province = ${region}), 0)::text as "suiCurrentRegion",
+      coalesce(string_agg(distinct s.province, ', ' order by s.province)
+        filter (where s.province <> ${region} and s.insurable_earnings > 0), '') as "suiOtherRegions",
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
@@ -99,7 +129,9 @@ export async function computeUsStatutory(
   // (the AU salary-sacrifice shape: PAYG moves, superannuation does not).
   const fitWages = reducedBases.income;
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
-  const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
+  const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region);
+  const sui = config.sui(region, filingAccountId);
+  const suiWagesYtd = sui ? resolveUsSuiYtd(region, ytd) : "0";
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
   const statutory = calculatePub15T({
     payDate: run.pay_date!, periodsPerYear: P,
@@ -118,10 +150,10 @@ export async function computeUsStatutory(
     ficaExempt: bool(empFact("US", emp, "fica_exempt")),
     futaExempt: bool(empFact("US", emp, "futa_exempt")),
     futaEffectiveRate: config.futaRate(region) ?? undefined,
-    sui: config.sui(region, filingAccountId),
+    sui,
     ytd: {
       ssWages: ytd.fica, medicareWages: ytd.fica,
-      futaWages: ytd.futa, suiWages: ytd.futa,
+      futaWages: ytd.futa, suiWages: suiWagesYtd,
       supplemental: ytd.supplemental,
     },
   });
