@@ -355,8 +355,14 @@ export function validateRuleVersion(
     }
     const minWeight: unknown = version.dynamicTarget?.minWeight;
     if (minWeight !== undefined && minWeight !== null) {
-      const parsed = Number(String(minWeight));
-      if (!Number.isFinite(parsed) || parsed < 0) {
+      let valid = false;
+      try {
+        valid = toUnits(String(minWeight)) >= 0n;
+      } catch {
+        // The runtime apportionment path parses this value with toUnits too;
+        // reject anything it cannot represent before a version can publish.
+      }
+      if (!valid) {
         problems.push({
           code: "dynamic_min_weight",
           message: `dynamic minWeight must be a non-negative decimal: "${String(minWeight)}"`,

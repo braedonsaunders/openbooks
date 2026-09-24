@@ -64,6 +64,12 @@ test("a well-formed fixed_percent version validates clean", () => {
   assert.deepEqual(problems, []);
 });
 
+test("dynamic minWeight accepts only exact non-negative decimal values", () => {
+  const dynamic = version({ targetKind: "dynamic", dynamicTarget: { dimension: "department", minWeight: "0x10" } });
+  assert.ok(codes(dynamic, [], ctx()).includes("dynamic_min_weight"));
+  assert.ok(!codes(version({ targetKind: "dynamic", dynamicTarget: { dimension: "department", minWeight: "16.25" } }), [], ctx()).includes("dynamic_min_weight"));
+});
+
 test("definitionHash is stable across target insert order and key order", () => {
   const v = version();
   const a = tgt({ sequence: 1, fixedPercent: "60", departmentId: "d1" });
