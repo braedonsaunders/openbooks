@@ -1707,24 +1707,38 @@ export async function listFolderContents(
 
 export async function getFile(orgId: string, id: string, viewer: FileViewer): Promise<FileDetail | null> {
   const scope = await resolveReadScope(orgId, viewer)
+  const attachmentTargetVisible = recordTargetVisiblePredicate(
+    orgId,
+    viewer.allowedSubsidiaryIds,
+    sql`fa.target_table`,
+    sql`fa.target_id`,
+  )
   const meta = (await db.execute(sql`
     select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
            fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
            fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
            fi.created_at as "createdAt", fi.created_by as "createdBy",
            fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
-           fo.name as "folderName"
+           fo.name as "folderName",
+           coalesce((
+             select jsonb_agg(jsonb_build_object(
+               'id', fa.id, 'targetTable', fa.target_table, 'targetId', fa.target_id,
+               'createdAt', fa.created_at
+             ) order by fa.created_at desc)
+               from file_attachments fa
+              where fa.file_id = fi.id and fa.org_id = fi.org_id
+                and ${attachmentTargetVisible ?? sql`true`}
+           ), '[]'::jsonb) as attachments
       from files fi
       left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
      where fi.id = ${id} and ${liveFilePredicate(orgId)}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
        and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
   `))
-  if (meta.rows.length === 0) return null
   const f = meta.rows[0]
+  if (!f) return null
 
-  const [versions, attachments] = await Promise.all([
-    db.execute(sql`
+  const versions = await db.execute(sql`
       select fv.id, fv.version_number as "versionNumber", fv.size_bytes as "sizeBytes",
              fv.content_type as "contentType", fv.content_hash as "contentHash",
              fv.created_at as "createdAt", fv.created_by as "createdBy"
@@ -1732,20 +1746,13 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
         join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
        where fv.file_id = ${id}
        order by fv.version_number desc
-    `),
-    db.execute(sql`
-      select id, target_table as "targetTable", target_id as "targetId",
-             created_at as "createdAt"
-        from file_attachments where file_id = ${id} and org_id = ${orgId}
-        order by created_at desc
-    `),
-  ])
-  const versionCount = (versions).rows.length
+    `)
+  const versionCount = versions.rows.length
   return {
     ...f,
     versionCount,
     versions: versions.rows as unknown as FileVersion[],
-    attachments: attachments.rows as unknown as FileAttachmentLink[],
+    attachments: f.attachments as FileAttachmentLink[],
   } as FileDetail
 }
 
