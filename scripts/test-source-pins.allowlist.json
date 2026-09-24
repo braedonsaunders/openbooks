@@ -79,7 +79,6 @@
     "web/app/api/consolidation/route.test.ts": 1,
     "web/app/api/data/export/route.test.ts": 2,
     "web/app/api/hrm/options/route.test.ts": 1,
-    "web/app/api/hrm/recruiting/candidates/route.test.ts": 1,
     "web/app/api/hrm/recruiting/interviews/[id]/slots/route.test.ts": 1,
     "web/app/api/hrm/recruiting/interviews/route.test.ts": 1,
     "web/app/api/hrm/recruiting/offers/route.test.ts": 1,
