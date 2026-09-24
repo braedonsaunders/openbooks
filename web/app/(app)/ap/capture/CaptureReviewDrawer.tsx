@@ -10,6 +10,7 @@ import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, Ta
 import type { CaptureIssue, NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { ReadOnlyValue } from '../../../../components/read-only-value'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { confirmDialog } from '../../../../lib/confirm'
 
 type Evidence = { fieldKey: string; lineIndex: number | null; confidence: string | null; pageNumber: number | null; polygon: { points: number[]; width: number; height: number } | null }
 
@@ -212,15 +213,29 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
     return () => window.clearTimeout(timer)
   }, [dirty, editable, save, form, vendorId, purchaseOrderId, documentKind])
 
+  async function runBulkAction(kind: 'reprocess' | 'reject', extra: Record<string, unknown> = {}) {
+    const response = await fetch('/api/ap-capture/actions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: kind, ids: [initial.id], ...extra }) })
+    // The status is checked before the body parses, and the single
+    // item's named refusal is toasted — never a SyntaxError, never the
+    // generic fallback that hides which document failed and why.
+    if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
+    return (await response.json()) as { results?: Array<{ ok: boolean; error?: string; errorCode?: string; corrections?: number }> }
+  }
+
   async function action(kind: 'reprocess' | 'reject') {
     setActing(kind)
     try {
-      const response = await fetch('/api/ap-capture/actions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: kind, ids: [initial.id] }) })
-      // The status is checked before the body parses, and the single
-      // item's named refusal is toasted — never a SyntaxError, never the
-      // generic fallback that hides which document failed and why.
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
-      const body = (await response.json()) as { results?: Array<{ ok: boolean; error?: string }> }
+      let body = await runBulkAction(kind)
+      const first = body?.results?.[0]
+      // Reprocessing would silently discard the operator's review
+      // corrections, so the route requires explicit confirmation naming
+      // the loss. Confirm here with the server's message (no new copy —
+      // the count and remedy live in it) and retry once with the flag.
+      if (first && !first.ok && first.errorCode === 'confirm_required' && kind === 'reprocess') {
+        const confirmed = await confirmDialog({ message: first.error ?? t('actionFailed'), tone: 'danger' })
+        if (!confirmed) return
+        body = await runBulkAction(kind, { confirmDiscardCorrections: true })
+      }
       if (!body?.results?.[0]?.ok) throw new Error(body?.results?.[0]?.error ?? t('actionFailed'))
       toast.success(t(kind === 'reject' ? 'rejected' : 'reprocessQueued'))
       router.push('/ap/capture')

@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   }
   const body = { action: parsed.action }
   const ids = parsed.ids
-  const results: Array<{ id: string; ok: boolean; error?: string; documentId?: string; rulesActivated?: ActivatedCaptureRule[] }> = []
+  const results: Array<{ id: string; ok: boolean; error?: string; errorCode?: string; corrections?: number; documentId?: string; rulesActivated?: ActivatedCaptureRule[] }> = []
   for (const id of ids) {
     try {
       if (body.action === 'reject') {
@@ -63,7 +63,23 @@ export async function POST(request: Request) {
         })
         results.push({ id, ok: true })
       } else if (body.action === 'reprocess') {
-        await db.transaction(async (tx) => {
+        // Reprocessing re-extracts from the provider and overwrites
+        // normalized, so the operator's review corrections recorded in
+        // ap_capture_corrections would be silently discarded. A corrected
+        // capture requires an explicit confirmDiscardCorrections flag; the
+        // confirmed queue records how many corrections it discarded.
+        const confirmDiscard = (parsedBody.data as { confirmDiscardCorrections?: unknown }).confirmDiscardCorrections === true
+        const queued = await db.transaction(async (tx) => {
+          const corrected = (await tx.execute<{ n: number }>(sql`
+            select count(*)::int as n from ap_capture_corrections
+             where org_id = ${gate.user.orgId} and capture_item_id = ${id}
+          `)).rows[0]!.n
+          if (corrected > 0 && !confirmDiscard) {
+            const error = new Error(`reprocessing discards ${corrected} operator correction${corrected === 1 ? '' : 's'} — resubmit with confirmDiscardCorrections to discard them and reprocess`) as Error & { errorCode?: string; corrections?: number }
+            error.errorCode = 'confirm_required'
+            error.corrections = corrected
+            throw error
+          }
           const changed = (await tx.execute<{ id: string }>(sql`
             update ap_capture_items set status = 'queued', last_error = null, updated_at = now(), updated_by = ${gate.user.id}
              where org_id = ${gate.user.orgId} and id = ${id} and status in ('failed','needs_review','ready','duplicate')
@@ -72,10 +88,26 @@ export async function POST(request: Request) {
           `))
           if (!changed.rows[0]) throw new Error('not_reprocessable')
           await tx.execute(sql`
-            insert into ap_capture_events (org_id, capture_item_id, event_kind, actor_id)
-            values (${gate.user.orgId}, ${id}, 'reprocess_queued', ${gate.user.id})
+            insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+            values (${gate.user.orgId}, ${id}, 'reprocess_queued',
+                    ${corrected > 0 ? JSON.stringify({ discardedCorrections: corrected }) : '{}'}::jsonb,
+                    ${gate.user.id})
           `)
+          return corrected
+        }).catch((error: unknown) => {
+          if (error instanceof Error && (error as Error & { errorCode?: string }).errorCode === 'confirm_required') {
+            results.push({
+              id,
+              ok: false,
+              error: error.message,
+              errorCode: 'confirm_required',
+              corrections: (error as Error & { corrections?: number }).corrections,
+            })
+            return null
+          }
+          throw error
         })
+        if (queued === null) continue
         try {
           await enqueueApCapture({ orgId: gate.user.orgId, captureItemId: id, actorId: gate.user.id }, { jobId: `ap-capture|${id}|${Date.now()}` })
         } catch (error) {
