@@ -9,8 +9,8 @@
     "description": "API キーをベアラートークンとして渡します。キーにはスコープがあり、キーのスコープと所有者の権限の両方が対象を含む場合にのみリクエストが許可されます。"
   },
   "customBadge": "カスタム",
-  "requires": "read:",
-  "writesRequire": "write:",
+  "requires": "読み取り:",
+  "writesRequire": "書き込み:",
   "fields": {
     "field": "フィールド",
     "type": "型",
