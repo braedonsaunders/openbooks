@@ -190,16 +190,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/parties/PartyDrawer.tsx",
-    "fn": "ActivitySublist",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/parties/PartyDrawer.tsx",
-    "fn": "TransactionSublist",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/projects/duplicates/ProjectDuplicatesView.tsx",
     "fn": "preview",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

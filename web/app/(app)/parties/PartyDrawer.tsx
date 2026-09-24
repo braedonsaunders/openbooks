@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
+import { readApiErrorMessage } from '@/lib/api-error'
 import {
   customFieldDefKey,
   defaultFormLayout,
@@ -2471,7 +2472,8 @@ interface ActivityResponse {
   statuses: ActivityRow['status'][]
 }
 
-function ActivitySublist({ partyId, canManage }: { partyId: string; canManage: boolean }) {
+/** Exported for the refusal-path regression test: the drawer mounts it by tab. */
+export function ActivitySublist({ partyId, canManage }: { partyId: string; canManage: boolean }) {
   const t = useTranslations('parties.drawer')
   const tcrm = useTranslations('crm')
   const tc = useTranslations('common')
@@ -2497,9 +2499,8 @@ function ActivitySublist({ partyId, canManage }: { partyId: string; canManage: b
       if (status) params.set('status', status)
       fetch(`/api/parties/${partyId}/activities?${params}`, { signal: controller.signal })
         .then(async (response) => {
-          const body = await response.json()
-          if (!response.ok) throw new Error(tc('feedback.loadFailed'))
-          setData(body as ActivityResponse)
+          if (!response.ok) throw new Error(await readApiErrorMessage(response, tc('feedback.loadFailed')))
+          setData((await response.json()) as ActivityResponse)
         })
         .catch((error) => {
           if (error instanceof DOMException && error.name === 'AbortError') return
@@ -2642,7 +2643,8 @@ function transactionTarget(row: TransactionRow): { path: string; param: string }
   return { path: '/banking/transactions', param: 'doc' }
 }
 
-function TransactionSublist({ partyId, role }: { partyId: string; role?: 'customer' | 'vendor' | 'employee' }) {
+/** Exported for the refusal-path regression test: the drawer mounts it by tab. */
+export function TransactionSublist({ partyId, role }: { partyId: string; role?: 'customer' | 'vendor' | 'employee' }) {
   const { money } = useMoney()
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
@@ -2665,9 +2667,8 @@ function TransactionSublist({ partyId, role }: { partyId: string; role?: 'custom
       if (status) params.set('status', status)
       fetch(`/api/parties/${partyId}/transactions?${params}`, { signal: controller.signal })
         .then(async (response) => {
-          const body = await response.json()
-          if (!response.ok) throw new Error(body.error ?? tc('feedback.loadFailed'))
-          setData(body as TransactionResponse)
+          if (!response.ok) throw new Error(await readApiErrorMessage(response, tc('feedback.loadFailed')))
+          setData((await response.json()) as TransactionResponse)
         })
         .catch((error) => {
           if (error instanceof DOMException && error.name === 'AbortError') return
