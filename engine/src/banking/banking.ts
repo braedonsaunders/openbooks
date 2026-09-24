@@ -653,30 +653,36 @@ function canonicalCsvMapping(mapping: CsvMapping): CsvMapping {
   return canonical;
 }
 
+/** A mapped cell holding a parseable amount (numericity, not mere text). */
+function csvCellParsesAsAmount(cell: string | undefined, rowNo: number): boolean {
+  const text = (cell ?? "").trim();
+  if (!text) return false;
+  try {
+    normalizeAmount(text, `CSV row ${rowNo}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A row carries a parseable amount plus a description: it reads as a
  * transaction, so an unparseable date refuses the import rather than
- * silently dropping the row.
+ * silently dropping the row. Either money column parsing counts — even
+ * both at once (the data rule refuses that shape by name). Mere TEXT in
+ * the money columns is a header ("Credit","Debit"), never money: the test
+ * is parsing, not non-emptiness.
  */
 function csvRowLooksLikeTransaction(cols: string[], mapping: CsvMapping, rowNo: number): boolean {
   const description = (cols[mapping.description] ?? "").trim();
   if (!description) return false;
-  const rawAmount = (cols[mapping.amount] ?? "").trim();
-  try {
-    if (mapping.debitAmount !== undefined) {
-      const rawDebit = (cols[mapping.debitAmount] ?? "").trim();
-      if (rawAmount && rawDebit) return true;
-      if (rawAmount) normalizeAmount(rawAmount, `CSV row ${rowNo}`);
-      else if (rawDebit) normalizeAmount(rawDebit, `CSV row ${rowNo}`);
-      else return false;
-    } else {
-      if (!rawAmount) return false;
-      normalizeAmount(rawAmount, `CSV row ${rowNo}`);
-    }
-  } catch {
-    return false;
+  if (mapping.debitAmount !== undefined) {
+    return (
+      csvCellParsesAsAmount(cols[mapping.amount], rowNo) ||
+      csvCellParsesAsAmount(cols[mapping.debitAmount], rowNo)
+    );
   }
-  return true;
+  return csvCellParsesAsAmount(cols[mapping.amount], rowNo);
 }
 
 /** A mapped cell holding a non-empty, non-numeric label (never a number). */
