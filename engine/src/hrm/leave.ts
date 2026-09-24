@@ -6,6 +6,7 @@ import {
   checkApprovalIdentitySeparation,
   loadActorPerson,
   loadApprovalPerson,
+  loadOwnEmploymentIds,
   requireHrmLeaveApprove,
   requireHrmLeaveManage,
   requireHrmLeaveManageOnEmployment,
@@ -640,6 +641,33 @@ async function requireFileAccess(
     : requireOwnEmploymentForRequest(exec, orgId, actorId, employmentId);
 }
 
+/**
+ * Transition authorization by TARGET, never by filer. Every request
+ * transition (submit, attach, withdraw, cancel) asks one question: is
+ * the actor the request's own employee (self-service), or do they hold
+ * hrm.leave.manage over the target employment in scope (on-behalf)?
+ * created_by says who parked the draft — a manager filing for their
+ * report creates a draft they themselves must be able to submit — so it
+ * never decides the path. Returns the on-behalf flag the notice waiver
+ * reads: true exactly when the actor is not the subject employee.
+ * No new column is needed for the audit trail: created_by (the filer)
+ * beside employment_id (the subject) already records who filed for whom.
+ */
+async function requireRequestAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<{ onBehalf: boolean }> {
+  const own = await loadOwnEmploymentIds(exec, orgId, actorId);
+  if (own.includes(employmentId)) {
+    await requireOwnEmploymentForRequest(exec, orgId, actorId, employmentId);
+    return { onBehalf: false };
+  }
+  await requireHrmLeaveManageOnEmployment(exec, orgId, actorId, employmentId);
+  return { onBehalf: true };
+}
+
 export interface FileLeaveRequestQuery {
   readonly orgId: string;
   readonly actorId: string;
@@ -747,8 +775,7 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
   const requestId = requireId(query.requestId, "requestId");
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
-    const onBehalf = current.created_by !== null && current.created_by !== actorId;
-    await requireFileAccess(db, orgId, actorId, current.employment_id, onBehalf);
+    const { onBehalf } = await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "draft") {
       throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be submitted — only drafts submit`);
     }
@@ -817,8 +844,7 @@ export async function recordLeaveAttachment(query: { orgId: string; actorId: str
   const attachmentId = requireId(query.attachmentId, "attachmentId");
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
-    const onBehalf = current.created_by !== null && current.created_by !== actorId;
-    await requireFileAccess(db, orgId, actorId, current.employment_id, onBehalf);
+    await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "draft") {
       throw new LeaveError("BAD_STATE", `a ${current.status} request is frozen — file a new request for a revised proposal instead`);
     }
@@ -851,8 +877,7 @@ export async function withdrawLeaveRequest(query: WithdrawLeaveRequestQuery): Pr
   const reason = requireReason(query.reason, "a withdrawal");
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
-    const onBehalf = current.created_by !== null && current.created_by !== actorId;
-    await requireFileAccess(db, orgId, actorId, current.employment_id, onBehalf);
+    await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "draft" && current.status !== "submitted") {
       throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be withdrawn — cancel it instead`);
     }
@@ -1116,8 +1141,7 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
   const reason = requireReason(query.reason, "a cancellation");
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
-    const onBehalf = current.created_by !== null && current.created_by !== actorId;
-    await requireFileAccess(db, orgId, actorId, current.employment_id, onBehalf);
+    await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "approved") {
       throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be cancelled — withdraw it instead`);
     }
