@@ -32,8 +32,7 @@ function errorChainMatches(error: unknown, pattern: RegExp): boolean {
   return false;
 }
 
-test(
-  "outbound payment-run creation claims each source once and ignores cross-run instruction transitions",
+test("outbound payment-run creation claims each source once and ignores cross-run instruction transitions",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();

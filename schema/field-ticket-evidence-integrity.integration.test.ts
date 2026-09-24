@@ -86,8 +86,7 @@ async function clearFieldTicketEvidence(orgId: string): Promise<void> {
   });
 }
 
-test(
-  "field-ticket signing evidence is valid, tenant-bound, replay-safe, and migration-replay safe",
+test("field-ticket signing evidence is valid, tenant-bound, replay-safe, and migration-replay safe",
   { skip: !DB, timeout: 120_000 },
   async () => {
     const org = await createScratchOrg();

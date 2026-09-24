@@ -112,8 +112,7 @@ async function insertAdjustment(client, adjustmentId, orgId, payRunDocumentId, e
   );
 }
 
-test(
-  "same-org pay-run adjustment can name its pay run; cross-tenant insert and update are refused",
+test("same-org pay-run adjustment can name its pay run; cross-tenant insert and update are refused",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });
@@ -177,8 +176,7 @@ test(
   },
 );
 
-test(
-  "0208 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
+test("0208 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });

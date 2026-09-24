@@ -219,8 +219,7 @@ async function ensureReplayRoles(control: pg.Client): Promise<void> {
       end $$;`);
 }
 
-test(
-  "no later migration silently rebuilds the governed document_lines view",
+test("no later migration silently rebuilds the governed document_lines view",
   { timeout: 60_000 },
   async () => {
     assert.deepEqual(
@@ -231,8 +230,7 @@ test(
   },
 );
 
-test(
-  "0064 upgrades and replays without losing the governed view contract",
+test("0064 upgrades and replays without losing the governed view contract",
   { skip: !DB, timeout: 300_000 },
   async () => {
     const baseUrl = new URL(ADMIN_DB_URL());

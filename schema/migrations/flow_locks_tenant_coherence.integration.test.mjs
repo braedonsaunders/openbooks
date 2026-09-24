@@ -100,8 +100,7 @@ async function restoreSingleColumnFk(client) {
   `);
 }
 
-test(
-  "same-org flow lock can name its flow; cross-tenant insert and update are refused",
+test("same-org flow lock can name its flow; cross-tenant insert and update are refused",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });
@@ -165,8 +164,7 @@ test(
   },
 );
 
-test(
-  "0215 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
+test("0215 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });

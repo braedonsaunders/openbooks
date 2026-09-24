@@ -241,8 +241,7 @@ async function assertSameTenantCascade(
   assert.equal(remaining.rows.length, 0, "same-tenant parent deletion must cascade its event");
 }
 
-test(
-  "0084 enforces tenant-coherent recognition events on replay and fresh bootstrap",
+test("0084 enforces tenant-coherent recognition events on replay and fresh bootstrap",
   { skip: !DB, timeout: 300_000 },
   async () => {
     const baseUrl = new URL(ADMIN_DB_URL());
