@@ -32,6 +32,7 @@ const aggregates = (overrides: Partial<Rl1SlipAggregates> = {}): Rl1SlipAggregat
   unionDues: "520.00",
   pensionable: "52000.00",
   insurable: "52000.00",
+  qpipInsurable: "52000.00",
   stubCount: 26,
   ...overrides,
 });
@@ -79,9 +80,26 @@ test("box G caps at the ADDITIONAL maximum when B.B has an amount", () => {
   assert.equal(inBand.boxG, "80000.00");
 });
 
+test("box I reads the QPIP program base, not the EI base (C-12/C-14)", () => {
+  // The same employee with diverging program bases: EI-insurable 52,000,
+  // QPIP-insurable 30,000 (e.g. benefits the QPIP program excludes but EI
+  // includes). Box I must carry the QPIP figure; the EI base must not leak in.
+  const low = assembleRl1Slip(
+    aggregates({ insurable: "52000.00", qpipInsurable: "30000.00" }),
+    rl1YearCaps(2026),
+  );
+  assert.equal(low.boxI, "30000.00");
+  // And the reverse: a QPIP base above the EI base passes through whole.
+  const high = assembleRl1Slip(
+    aggregates({ insurable: "52000.00", qpipInsurable: "60000.00" }),
+    rl1YearCaps(2026),
+  );
+  assert.equal(high.boxI, "60000.00");
+});
+
 test("box I caps at the QPIP maximum insurable earnings (RL-1.G s. 5.11)", () => {
   const slip = assembleRl1Slip(
-    aggregates({ insurable: "110000.00" }),
+    aggregates({ insurable: "52000.00", qpipInsurable: "110000.00" }),
     rl1YearCaps(2026),
   );
   assert.equal(slip.boxI, "103000");

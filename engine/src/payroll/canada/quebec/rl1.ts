@@ -130,6 +130,8 @@ export interface Rl1SlipAggregates {
   unionDues: string;
   pensionable: string;
   insurable: string;
+  /** The QPIP program's own insurable base (box I source), never the EI base. */
+  qpipInsurable: string;
   stubCount: number;
 }
 
@@ -159,7 +161,9 @@ export function assembleRl1Slip(
     boxF: row.unionDues,
     boxG: capMoney(row.pensionable, hasSecondAdditional ? caps.yampe : caps.ympe),
     boxH: row.qpip,
-    boxI: capMoney(row.insurable, caps.qpipMie),
+    // Box I is the QPIP program's OWN insurable base capped at the QPIP
+    // maximum — never the EI base (box C's source).
+    boxI: capMoney(row.qpipInsurable, caps.qpipMie),
     stubCount: row.stubCount,
   };
 }
@@ -193,6 +197,10 @@ async function rl1SlipsInSnapshot(
            sum(coalesce((c.factors->>'C2')::numeric, 0)) as qpp2,
            sum((c.factors->>'EI')::numeric) as ei,
            sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
+           -- The QPIP program's own insurable base (see the T4 reader for
+           -- the legacy fallback rationale: pre-program-model stubs read
+           -- their single accumulated base exactly).
+           sum(coalesce((c.factors->>'IE_QPIP')::numeric, c.insurable_earnings)) as qpip_insurable,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'earning'
@@ -223,6 +231,7 @@ async function rl1SlipsInSnapshot(
     unionDues: num(row.union_dues),
     pensionable: num(row.pensionable),
     insurable: num(row.insurable),
+    qpipInsurable: num(row.qpip_insurable),
     stubCount: Number(row.stub_count ?? 0),
   }));
 
@@ -246,6 +255,7 @@ async function rl1SlipsInSnapshot(
     employeeName: profiles.get(employeePartyId)?.name ?? employeePartyId,
     taxableIncome: "0", qpp: "0", qpp2: "0", ei: "0", qpip: "0",
     qcIncomeTax: "0", unionDues: "0", pensionable: "0", insurable: "0",
+    qpipInsurable: "0",
     stubCount: 0,
   }));
   const carried = carryOpeningYearEndYtd(seeded, openings, openingYtdIntoRl1Aggregates);
