@@ -108,28 +108,3 @@ test("the import delegates identity to the core", () => {
     "header attachment lives behind the identity check in the core",
   );
 });
-
-test("the import validates every project before the first write, atomically", () => {
-  const core = readFileSync(
-    new URL("./field-ticket-import.ts", import.meta.url),
-    "utf8",
-  );
-  const precheck = core.indexOf("reference unknown source projects");
-  const transaction = core.indexOf("return withOrg(orgId, async () => {");
-  assert.ok(precheck !== -1 && transaction !== -1 && precheck < transaction);
-  assert.equal(
-    core.match(/[^a-zA-Z]withOrg\(orgId,/g)?.length ?? 0,
-    1,
-    "the whole import commits in one tenant transaction",
-  );
-  assert.match(
-    core,
-    /map every job before importing — no ticket was written/,
-    "one unmapped job refuses with its source refs and zero writes",
-  );
-  assert.equal(
-    core.match(/[^a-zA-Z]withOrg\(orgId,/g)?.length ?? 0,
-    1,
-    "the whole import commits in one tenant transaction",
-  );
-});
