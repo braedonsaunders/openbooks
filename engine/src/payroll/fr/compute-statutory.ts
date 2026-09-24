@@ -312,7 +312,6 @@ export async function computeFrStatutory(
     transmittedRatePct: transmitted === "" ? null : transmitted,
     domicile: "metropole",
   });
-  pushStatutory("pas", "deduction", "Prélèvement à la source", result.pas, 110);
   // Cotisations price on the brut. AT/MP and versement mobilité have no
   // context channel for their tenant-declared rates, so those lines are
   // not pushed.
@@ -324,6 +323,21 @@ export async function computeFrStatutory(
     atmpRatePct: null,
     versementMobilitePct: null,
   });
+  // The 2026 RGDU is a per-employee, per-contract annual calculation. CSS
+  // L.241-13 requires the contract-period SMIC (including eligible
+  // complementary/overtime hours), annual remuneration and annual
+  // regularization; the resulting reduction is allocated over covered
+  // employer contributions. This adapter has none of those inputs and would
+  // otherwise emit gross employer contributions as if they were complete.
+  // Refuse before pushing any statutory line until the RGDU path is supported.
+  throw new PayrollPackError(
+    "FR RGDU refuses this payroll: the 2026 reduction générale dégressive unifiée "
+    + "is not calculated. Do not approve or post this run with gross employer "
+    + "contributions; calculate the RGDU with an authorized payroll process and "
+    + "retry only after the resulting supported payroll data is available "
+    + "(CSS art. L.241-13, effective 2026).",
+  );
+  pushStatutory("pas", "deduction", "Prélèvement à la source", result.pas, 110);
   pushStatutory("vieillesse", "deduction", "Assurance vieillesse (salariale)", cots.vieillesseSal, 120);
   pushStatutory("csg", "deduction", "CSG (salariale)", cots.csg, 130);
   pushStatutory("crds", "deduction", "CRDS (salariale)", cots.crds, 135);
