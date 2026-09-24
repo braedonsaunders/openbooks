@@ -164,78 +164,85 @@ function patchRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("item route gates on the hrm feature and the manage permission", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.performance\.manage"\)/);
-    assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-  });
-} else {
-  test("an unknown id never reaches the service", async () => {
-    reset();
-    const bad = { params: Promise.resolve({ id: "nope" }) };
-    assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "open" }), bad)).status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), params)).status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("detail resolves through the privacy scope", async () => {
-    reset();
-    const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { cycle: { id: CYCLE_ID, reviews: [] } });
-    assert.deepEqual(routeState.calls, [
-      { fn: "detail", args: { orgId: "org-1", actorId: "user-1", cycleId: CYCLE_ID } },
-    ]);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.authz = null;
+  routeState.gate = { status: 401 };
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), params)).status, 401);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "open" }), params)).status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("actions discriminate and validate at the real boundary", async () => {
-    reset();
-    assert.equal((await itemRoute!.PATCH(patchRequest({}), params)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close-it" }), params)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "to-calibrating", force: true }), params)).status, 200);
-    assert.equal(
-      (await itemRoute!.PATCH(patchRequest({ action: "to-calibrating", force: true, forceReason: "  " }), params)).status,
-      400,
+test("an unknown id never reaches the service", async () => {
+  reset();
+  const bad = { params: Promise.resolve({ id: "nope" }) };
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "open" }), bad)).status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("detail resolves through the privacy scope", async () => {
+  reset();
+  const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { cycle: { id: CYCLE_ID, reviews: [] } });
+  assert.deepEqual(routeState.calls, [
+    { fn: "detail", args: { orgId: "org-1", actorId: "user-1", cycleId: CYCLE_ID } },
+  ]);
+});
+
+test("actions discriminate and validate at the real boundary", async () => {
+  reset();
+  assert.equal((await itemRoute!.PATCH(patchRequest({}), params)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close-it" }), params)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "to-calibrating", force: true }), params)).status, 200);
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ action: "to-calibrating", force: true, forceReason: "  " }), params)).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "calibrating",
+      args: { orgId: "org-1", actorId: "user-1", cycleId: CYCLE_ID, force: true, forceReason: undefined },
+    },
+  ]);
+});
+
+test("open and close reach the service with the record id", async () => {
+  reset();
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "open" }), params)).status, 200);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close" }), params)).status, 200);
+  assert.deepEqual(routeState.calls.map((c) => c.fn), ["open", "close"]);
+});
+
+test("action routes refuse hostile payloads at the real boundary", async () => {
+  reset();
+  for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
+    const refused = await itemRoute!.PATCH(
+      new Request(`http://openbooks.test/api/hrm/review-cycles/${CYCLE_ID}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body,
+      }),
+      params,
     );
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "calibrating",
-        args: { orgId: "org-1", actorId: "user-1", cycleId: CYCLE_ID, force: true, forceReason: undefined },
-      },
-    ]);
-  });
+    assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+  }
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("open and close reach the service with the record id", async () => {
-    reset();
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "open" }), params)).status, 200);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close" }), params)).status, 200);
-    assert.deepEqual(routeState.calls.map((c) => c.fn), ["open", "close"]);
-  });
-
-  test("action routes refuse hostile payloads at the real boundary", async () => {
-    reset();
-    for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
-      const refused = await itemRoute!.PATCH(
-        new Request(`http://openbooks.test/api/hrm/review-cycles/${CYCLE_ID}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body,
-        }),
-        params,
-      );
-      assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
-    }
-    assert.deepEqual(routeState.calls, []);
-  });
-
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("1 pending manager reviews with required answers");
-    routeState.serviceThrow = refusal;
-    const response = await itemRoute!.PATCH(patchRequest({ action: "to-calibrating" }), params);
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("1 pending manager reviews with required answers");
+  routeState.serviceThrow = refusal;
+  const response = await itemRoute!.PATCH(patchRequest({ action: "to-calibrating" }), params);
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
