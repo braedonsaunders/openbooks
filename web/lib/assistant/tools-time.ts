@@ -608,7 +608,7 @@ const crewBatches: AssistantToolDef = {
       const batches = await listCrewBatches(authz.user.orgId, {
         status: a.status ?? null,
         projectId: a.projectId ?? null,
-      });
+      }, { actorUserId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds });
       return { ok: true, data: { batches, href: "/time/crew" } };
     } catch (error) {
       if (error instanceof Error && error.name === "FieldTimeError") return { ok: false, error: error.message };

@@ -12,7 +12,7 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db, withOrg } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { createBatch, setBatchLines, submitBatch } = await import("@openbooks/engine/src/hrm/field-time/crew.ts");
 const { releaseCrewTimeBatchApproval } = await import("./crew-batch-approval-release.ts");
 
@@ -43,13 +43,14 @@ async function seedSubmittedBatch(orgId: string, subsidiaryId: string, actor: st
     await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${orgId}, ${subsidiaryId}, 'JOB-REL', 'Release job', 'active', true, '{}'::jsonb)`);
     const batchId = await createBatch({
       orgId, actorUserId: actor, foremanPartyId: foreman,
-      projectId, workedOn: "2026-09-14", canManageAll: true,
+      projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
     });
     await setBatchLines({
       orgId, actorUserId: actor, batchId,
       lines: [{ employeePartyId: worker, hours: "8.0000" }],
+      canManageAll: true, allowedSubsidiaryIds: null,
     });
-    await submitBatch({ orgId, actorUserId: actor, batchId });
+    await submitBatch({ orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
     return batchId;
   });
 }
@@ -63,7 +64,11 @@ test("gate approval of a crew batch advances its stage; rejection returns it", {
   const org = await createScratchOrg();
   try {
     await enableFieldTime(org.orgId);
-    const actor = randomUUID();
+    // The release path resolves the approver's scope on the trusted
+    // runner: an unknown login resolves to an empty scope and refuses, so
+    // the test approver holds an all-entity (unrestricted) grant.
+    const actor = await createScratchUser(org.orgId, "Gate approver", "gate_approver");
+    await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb where org_id = ${org.orgId} and key = 'gate_approver'`);
     const approvedId = await seedSubmittedBatch(org.orgId, org.subsidiaryId, actor);
     await withOrg(org.orgId, async () => {
       await releaseCrewTimeBatchApproval(org.orgId, actor, approvedId, "approved", null);

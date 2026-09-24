@@ -30,7 +30,7 @@ export async function GET(req: Request) {
     const batches = await listCrewBatches(gate.user.orgId, {
       status: url.searchParams.get('status'),
       projectId: url.searchParams.get('projectId'),
-    })
+    }, { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
     return NextResponse.json({ batches })
   } catch (error) {
     return fieldTime(error)
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
       workedOn: parsedBody.data.workedOn,
       notes: parsedBody.data.notes ?? null,
       canManageAll: can(gate, 'time.manage'),
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     return NextResponse.json({ id })
   } catch (error) {
