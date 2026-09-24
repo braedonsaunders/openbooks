@@ -437,6 +437,7 @@ export async function loadRecruitingPage(
           attachPhone: t('recruiting.attach.phone'),
           attachSubmit: t('recruiting.attach.submit'),
           attachFailed: t('recruiting.attach.failed'),
+          attachMergedNote: t('recruiting.attach.mergedNote'),
           moveTitle: t('recruiting.move.title'),
           moveSubmit: t('recruiting.move.submit'),
           moveFailed: t('recruiting.move.failed'),

@@ -658,6 +658,7 @@
       "phone": "電話",
       "submit": "候補者を紐付け",
       "failed": "候補者を紐付けできませんでした。",
+      "mergedNote": "このメールの既存の候補者に紐付けました。",
       "rejectTitle": "辞退",
       "rejectReason": "理由"
     },

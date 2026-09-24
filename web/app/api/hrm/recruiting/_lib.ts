@@ -4,6 +4,7 @@ import { HrmChangeRequestError } from "@openbooks/engine/src/hrm/change-requests
 import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
+import { DuplicateProspectError } from "@openbooks/engine/src/hrm/recruiting/candidates.ts";
 
 /**
  * Shared error mapping for /api/hrm/recruiting/*. Engine refusals reach the
@@ -12,6 +13,14 @@ import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts"
  * 'internal error' for a computed refusal.
  */
 export function recruitingErrorResponse(e: unknown): NextResponse {
+  // The merge-retry island acts on the survivor structurally: a 409 whose
+  // candidate names the existing record, never a parsed message.
+  if (e instanceof DuplicateProspectError) {
+    return NextResponse.json(
+      { error: "duplicate-email", candidate: { id: e.candidateId, displayName: e.survivorName } },
+      { status: 409 },
+    );
+  }
   if (e instanceof RecruitingError) {
     const status =
       e.code === "INVALID_INPUT"

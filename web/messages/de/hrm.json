@@ -658,6 +658,7 @@
       "phone": "Telefon",
       "submit": "Kandidat zuordnen",
       "failed": "Der Kandidat konnte nicht zugeordnet werden.",
+      "mergedNote": "Bewerbung dem vorhandenen Kandidaten mit dieser E-Mail zugeordnet.",
       "rejectTitle": "Ablehnen",
       "rejectReason": "Grund"
     },

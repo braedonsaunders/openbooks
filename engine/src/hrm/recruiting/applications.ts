@@ -8,7 +8,7 @@ import { RecruitingError } from "./errors.ts";
 import { assertStageMoveAllowed } from "./funnel.ts";
 import { requireActorId, requireId, requireOrgId, requireReason, isUniqueViolation } from "./input.ts";
 import { firstStage, loadPipelineTemplate } from "./pipeline.ts";
-import { loadCandidate } from "./candidates.ts";
+import { createCandidate, loadCandidate, type CandidateDTO } from "./candidates.ts";
 // HR-18 begin: disposition sync for posting-sourced applications (0229).
 // Static edge applications→postings only; postings reaches back dynamically,
 // so the module graph stays acyclic. recordDispositionForApplication is a
@@ -223,6 +223,55 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
           : null,
     });
     return toDTO(inserted);
+  });
+}
+
+export interface AttachCandidateQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly requisitionId: string;
+  readonly displayName: unknown;
+  readonly email?: unknown;
+  readonly phone?: unknown;
+  readonly mergeInto?: unknown;
+}
+
+export interface AttachCandidateResult {
+  readonly candidate: CandidateDTO;
+  /** Set when createCandidate merged into a survivor: the application attaches to the survivor. */
+  readonly mergedInto: CandidateDTO | null;
+  readonly application: ApplicationDTO;
+}
+
+/**
+ * Attach a prospect to an open requisition in ONE transaction: the
+ * candidate row (or email-dedupe merge) and the application row commit
+ * together. A failed attach stores nothing — the prospect is never
+ * orphaned without an application, which the old two-POST island could
+ * leave behind when the second POST failed.
+ */
+export async function attachCandidate(query: AttachCandidateQuery): Promise<AttachCandidateResult> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const requisitionId = requireId(query.requisitionId, "requisitionId");
+  return withOrgTransaction(orgId, async () => {
+    const { candidate, mergedInto } = await createCandidate({
+      orgId,
+      actorId,
+      displayName: query.displayName,
+      email: query.email,
+      phone: query.phone,
+      mergeInto: query.mergeInto,
+    });
+    const survivor = mergedInto ?? candidate;
+    const application = await createApplication({
+      orgId,
+      actorId,
+      requisitionId,
+      candidateId: survivor.id,
+      ...(mergedInto ? { merged: true } : {}),
+    });
+    return { candidate, mergedInto, application };
   });
 }
 

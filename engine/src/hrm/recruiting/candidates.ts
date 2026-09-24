@@ -14,6 +14,26 @@ import { requireActorId, requireId, requireOrgId } from "./input.ts";
 
 export const CANDIDATE_SOURCE_VALUES = ["referral", "job_board", "agency", "direct", "internal", "other"] as const;
 
+/**
+ * A duplicate-email refusal that names the survivor structurally. Extends
+ * RecruitingError so existing mappings still see a REFUSED with the remedy
+ * in the message; routes that drive a merge-retry island read
+ * candidateId/displayName instead of parsing the message.
+ */
+export class DuplicateProspectError extends RecruitingError {
+  readonly candidateId: string;
+  readonly survivorName: string;
+  constructor(candidateId: string, survivorName: string) {
+    super(
+      "REFUSED",
+      `a candidate with this email already exists (${survivorName}) — pass mergeInto ${candidateId} to attach to the existing candidate instead of creating a duplicate`,
+    );
+    this.name = "DuplicateProspectError";
+    this.candidateId = candidateId;
+    this.survivorName = survivorName;
+  }
+}
+
 export interface CandidateDTO {
   readonly id: string;
   readonly partyId: string | null;
@@ -157,10 +177,7 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
       const duplicate = await findCandidateByEmail(db, orgId, email);
       if (duplicate) {
         if (!mergeInto || mergeInto !== duplicate.id) {
-          throw new RecruitingError(
-            "REFUSED",
-            `a candidate with this email already exists (${duplicate.displayName}) — pass mergeInto ${duplicate.id} to attach to the existing candidate instead of creating a duplicate`,
-          );
+          throw new DuplicateProspectError(duplicate.id, duplicate.displayName);
         }
         const survivor = await loadCandidate(db, orgId, duplicate.id);
         if (!survivor) {

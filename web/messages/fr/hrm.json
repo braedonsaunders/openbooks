@@ -658,6 +658,7 @@
       "phone": "Téléphone",
       "submit": "Rattacher le candidat",
       "failed": "Le candidat n'a pas pu être rattaché.",
+      "mergedNote": "Candidature rattachée au candidat existant avec cet e-mail.",
       "rejectTitle": "Refuser",
       "rejectReason": "Motif"
     },

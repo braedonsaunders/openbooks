@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
@@ -28,13 +29,18 @@ async function postJson(url: string, method: string, body: unknown): Promise<Res
   return fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
 }
 
-/** Attach a candidate to the requisition: create the prospect, then the candidacy. */
+/**
+ * Attach a candidate to the requisition in ONE server call: the prospect
+ * and the candidacy commit in a single transaction, so a failed attach
+ * stores nothing. The old two-POST flow orphaned the prospect whenever
+ * the application POST failed.
+ */
 export function ApplicationAttachIsland({
   requisitionId,
   labels,
 }: {
   requisitionId: string
-  labels: { name: string; email: string; phone: string; submit: string; failed: string }
+  labels: { name: string; email: string; phone: string; submit: string; failed: string; mergedNote: string }
 }) {
   const refresh = useRefresh()
   const [name, setName] = useState('')
@@ -43,43 +49,76 @@ export function ApplicationAttachIsland({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  async function attachOnce(body: Record<string, unknown>): Promise<{
+    res: Response
+    payload: {
+      attached?: { candidate?: { id?: unknown }; mergedInto?: { id?: unknown } | null }
+      error?: unknown
+      candidate?: { id?: unknown; displayName?: unknown }
+    }
+  }> {
+    const res = await postJson('/api/hrm/recruiting/attachments', 'POST', { requisitionId, ...body })
+    // The clone feeds the duplicate-shape check; the original body stays
+    // unread so readApiErrorMessage still names the server's refusal.
+    const payload = (await res.clone().json().catch(() => ({}))) as {
+      attached?: { candidate?: { id?: unknown }; mergedInto?: { id?: unknown } | null }
+      error?: unknown
+      candidate?: { id?: unknown; displayName?: unknown }
+    }
+    return { res, payload }
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const displayName = name.trim()
+    if (displayName.length === 0 || busy) return
     setBusy(true)
     setError(null)
     try {
-      const created = await postJson('/api/hrm/recruiting/candidates', 'POST', {
-        displayName: name.trim(),
-        email: email.trim() || null,
-        phone: phone.trim() || null,
-      })
-      if (!created.ok) {
-        setError(await readApiErrorMessage(created, labels.failed))
+      const draft = {
+        displayName,
+        ...(email.trim() ? { email: email.trim() } : {}),
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
+      }
+      let attempt = await attachOnce(draft)
+      // Email-dedupe retry (HR-20): a duplicate email with the SAME name
+      // attaches to the surviving candidate; anything else stays refused.
+      // Each attempt is atomic, so a refused first attempt stores nothing.
+      if (!attempt.res.ok && attempt.res.status === 409) {
+        const raw = attempt.payload
+        const existing = raw.error === 'duplicate-email' ? raw.candidate : undefined
+        if (
+          existing &&
+          typeof existing.id === 'string' &&
+          typeof existing.displayName === 'string' &&
+          existing.displayName.trim().toLowerCase() === displayName.toLowerCase()
+        ) {
+          const survivor = existing.id
+          // The merge is evidence, not telemetry: the operator typed a name
+          // that already exists under this email, and the application lands
+          // on the surviving candidate.
+          console.info('[hrm] recruiting attach: duplicate email merged into the existing candidate', {
+            requisitionId,
+            survivor,
+          })
+          toast.info(labels.mergedNote)
+          attempt = await attachOnce({ ...draft, mergeInto: survivor })
+        }
+      }
+      if (!attempt.res.ok) {
+        setError(await readApiErrorMessage(attempt.res, labels.failed))
         setBusy(false)
         return
       }
-      const payload = (await created.json().catch(() => ({}))) as {
-        candidate?: { id?: unknown }
-        mergedInto?: { id?: unknown } | null
-      }
+      const attached = attempt.payload.attached
       const survivor =
-        typeof payload.mergedInto?.id === 'string'
-          ? payload.mergedInto.id
-          : typeof payload.candidate?.id === 'string'
-            ? payload.candidate.id
+        typeof attached?.mergedInto?.id === 'string'
+          ? attached.mergedInto.id
+          : typeof attached?.candidate?.id === 'string'
+            ? attached.candidate.id
             : null
       if (survivor === null) {
         setError(labels.failed)
-        setBusy(false)
-        return
-      }
-      const attached = await postJson('/api/hrm/recruiting/applications', 'POST', {
-        requisitionId,
-        candidateId: survivor,
-        merged: payload.mergedInto !== null && payload.mergedInto !== undefined,
-      })
-      if (!attached.ok) {
-        setError(await readApiErrorMessage(attached, labels.failed))
         setBusy(false)
         return
       }

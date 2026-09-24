@@ -714,6 +714,7 @@
       "phone": "Phone",
       "submit": "Attach candidate",
       "failed": "The candidate could not be attached.",
+      "mergedNote": "Attached to the existing candidate with this email.",
       "rejectTitle": "Reject",
       "rejectReason": "Reason"
     },

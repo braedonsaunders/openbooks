@@ -658,6 +658,7 @@
       "phone": "Telefone",
       "submit": "Vincular candidato",
       "failed": "Não foi possível vincular o candidato.",
+      "mergedNote": "Candidatura vinculada ao candidato existente com este e-mail.",
       "rejectTitle": "Recusar",
       "rejectReason": "Motivo"
     },
