@@ -68,7 +68,7 @@ test(
             wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
 
       const jobA = randomUUID();
       const jobB = randomUUID();
@@ -446,7 +446,7 @@ test(
             wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
 
       const jobA = randomUUID();
       await db.execute(sql`
@@ -643,7 +643,7 @@ test(
             wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
 
       const jobA = randomUUID();
       await db.execute(sql`
@@ -752,7 +752,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
       const scheduleId = randomUUID();
       await db.execute(sql`
         insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -818,7 +818,7 @@ test(
             wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
       const scheduleId = randomUUID();
       await db.execute(sql`
         insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,

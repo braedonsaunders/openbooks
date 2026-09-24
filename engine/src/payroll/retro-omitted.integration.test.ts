@@ -63,7 +63,7 @@ test(
             wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
 
       const scheduleId = randomUUID();
       await db.execute(sql`

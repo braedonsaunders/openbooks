@@ -547,7 +547,7 @@ test(
             craRemittancePartyId: org.vendorId,
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
 
       const employeeId = randomUUID();
       await db.execute(sql`
@@ -1524,7 +1524,7 @@ test(
             vacationPayableAccountId: vacationPayable, wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
       // The vendor assigned BEFORE commit is the one history must keep.
       await db.execute(sql`
         update pay_components set remittance_party_id = ${org.vendorId}
@@ -1638,7 +1638,7 @@ test(
         insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
                                         is_adjustment, fiscal_calendar_id)
         values (${randomUUID()}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar})`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedPayrollComponents(org.orgId, actorId);
       const stampSetup = async (liability: string) => {
         await db.execute(sql`
           update pay_components set remittance_party_id = ${org.vendorId},
