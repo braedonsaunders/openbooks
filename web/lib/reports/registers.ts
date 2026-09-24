@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
 import { functionalReportReader } from "./currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
@@ -31,6 +32,13 @@ interface AccountRegisterLine extends Record<string, unknown> {
   doc_number: string | null;
 }
 
+/** Selected row: the output shape plus the collapse inputs (stripped before return). */
+interface AccountRegisterSelectRow extends AccountRegisterLine {
+  party_id: string | null;
+  account_id: string;
+  entry_origin: string;
+}
+
 export async function accountRegister(
   orgId: string,
   accountId: string,
@@ -41,6 +49,10 @@ export async function accountRegister(
   // Explicit book scope; the org's primary book when omitted — the same
   // one-book contract as every other journal reader (see gl-summary).
   bookId?: string | null,
+  // True when the reader holds payroll.read and may see per-employee pay
+  // detail. Defaults to false (fail closed): without it, party-tagged
+  // payroll lines collapse into one restricted line per entry per account.
+  canSeePayroll?: boolean,
 ) {
   const acct = (await db.execute<AccountRegisterAccount>(sql`
     select id, number, name, type, is_summary from accounts
@@ -78,7 +90,7 @@ export async function accountRegister(
       union select child.id from accounts child join account_scope parent on child.parent_id = parent.id where child.org_id = ${orgId}
     ) select id from account_scope
   ) ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}`);
-  const r = (await reportDb.execute<AccountRegisterLine>(sql`
+  const r = (await reportDb.execute<AccountRegisterSelectRow>(sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -88,8 +100,8 @@ export async function accountRegister(
        where child.org_id = ${orgId}
     )
     select ${reportDb.censusColumn}, e.id as entry_id, e.entry_number, e.posting_date::text as posting_date, e.memo as entry_memo,
-           l.line_number, l.amount, l.memo, p.display_name as party,
-           d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number
+           l.line_number, l.amount, l.memo, p.display_name as party, l.party_id, l.account_id,
+           d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number, e.origin as entry_origin
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
@@ -99,6 +111,39 @@ export async function accountRegister(
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${limit} offset ${offset}
   `));
+  // Confidentiality collapses BEFORE shaping below; the balance above is over
+  // the same posted set, so it still ties out. Without payroll.read the
+  // collapsed line keeps the account and the summed amount but names no
+  // employee and shows no per-employee memo (cheque numbers) or amount.
+  const mapped = r.rows.map((x) => ({
+    ...x,
+    entryId: x.entry_id,
+    accountId: x.account_id,
+    partyId: x.party_id,
+    payrollOrigin: x.doc_kind === 'pay_run' || x.entry_origin === 'payroll',
+  }))
+  const collapsed = canSeePayroll === true ? mapped : collapseRestrictedPayrollLines(
+    mapped,
+    // party_id is nulled on the collapsed line: the row object is serialized
+    // to API responses, and keeping the first grouped employee's id would
+    // defeat the collapse. Untouched rows keep their true party.
+    (first, total) => ({
+      ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, party_id: null, memo: null, amount: total,
+    }),
+  )
+  // Strip every collapse input/output key so rows keep their original shape:
+  // no helper uuids (the mapped partyId would otherwise carry a real employee
+  // id past the collapse) and no origin markers reach callers.
+  const confidential: AccountRegisterLine[] = collapsed.map((row) => {
+    // party_id never appeared in this output before: strip it alongside every
+    // collapse input/output key so rows keep their original shape.
+    const {
+      account_id: _accountId, party_id: _partyId, entry_origin: _entryOrigin,
+      entryId: _entryId, accountId: _accountUuid, partyId: _partyUuid, payrollOrigin: _payrollOrigin,
+      ...rest
+    } = row
+    return rest
+  })
   const c = (await reportDb.execute<{ n: string; bal: string }>(sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
@@ -117,7 +162,10 @@ export async function accountRegister(
        and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
   `));
   const totals = c.rows[0] ?? { n: "0", bal: "0" };
-  return { account: acct.rows[0], lines: r.rows, total: Number(totals.n), balance: totals.bal };
+  // `total` counts raw posted lines (the pagination/truncation basis);
+  // `lines` may be shorter after a confidentiality collapse, while `balance`
+  // always covers the full posted set.
+  return { account: acct.rows[0], lines: confidential, total: Number(totals.n), balance: totals.bal };
 }
 
 // ---------------------------------------------------------------------------
@@ -155,10 +203,26 @@ export interface RegisterResult {
  * (all posted lines before `from`), every posted line in the period with a
  * running balance, and the closing balance. Balances are debit-signed. AR uses
  * the `asset_receivable` control accounts, AP `liability_payable`.
+ *
+ * Payroll confidentiality remaps (not filters): the net-pay payable may
+ * legally be a `liability_payable` account, so per-employee net-pay lines can
+ * appear on the AP side. Without payroll.read those lines are attributed to
+ * the NULL (unassigned) section — party, name, and memo all null — in the
+ * opening, activity, and detail reads alike, so section closings still tie to
+ * the control while no employee section, name, or per-employee amount
+ * survives. A payroll.read reader sees the true per-party sections.
  */
 export async function partyRegister(
   side: AgingSide,
-  opts: { from: string; to: string; partyId?: string; orgId?: string; dims?: DimFilter; maxLines?: number; bookId?: string | null },
+  opts: {
+    from: string; to: string; partyId?: string; orgId?: string; dims?: DimFilter; maxLines?: number; bookId?: string | null;
+    /**
+     * True when the reader holds payroll.read and may see per-employee pay
+     * detail. Defaults to false (fail closed): without it, party-tagged
+     * payroll lines merge into the unassigned section.
+     */
+    canSeePayroll?: boolean;
+  },
 ): Promise<RegisterResult> {
   const resolvedOrgId = await resolveOrgId(opts.orgId)
   const acctType = side === "ap" ? "liability_payable" : "asset_receivable"
@@ -169,28 +233,45 @@ export async function partyRegister(
   // statement readers stay primary-only.
   const bookFilter = sql` and e.book_id = ${statementBookExpr(resolvedOrgId, opts.bookId)}`
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${opts.to} and a.type = ${acctType} and ${dimWhere(opts.dims)} ${partyFilter} ${bookFilter}`)
+  // Party attribution with the confidentiality remap folded in: restricted
+  // readers see payroll-party lines under NULL (the unassigned section) in
+  // every read below, so openings, activity, and detail agree by
+  // construction. Full-detail readers group by the true party.
+  const masked = opts.canSeePayroll === true
+  const payrollParty = sql`(d.kind = 'pay_run' or e.origin = 'payroll') and l.party_id is not null`
+  const partyIdExpr = masked
+    ? sql`l.party_id`
+    : sql`case when ${payrollParty} then null else l.party_id end`
+  const partyNameExpr = masked
+    ? sql`pt.display_name`
+    : sql`case when ${payrollParty} then null else pt.display_name end`
+  const lineMemoExpr = masked
+    ? sql`l.memo`
+    : sql`case when ${payrollParty} then null else l.memo end`
 
   const opening = (await reportDb.execute<{ party_id: string | null; bal: string }>(sql`
-    select ${reportDb.censusColumn}, l.party_id, coalesce(sum(l.amount), 0) as bal
+    select ${reportDb.censusColumn}, ${partyIdExpr} as party_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where a.type = ${acctType} and e.posting_date < ${opts.from}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
-     group by l.party_id
+     group by ${partyIdExpr}
   `))
   const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]))
 
   // Keep the detail cap presentation-only. Closing balances must include all
   // posted activity in the report window, including lines omitted by `limit`.
   const periodActivity = (await reportDb.execute<{ party_id: string | null; activity: string }>(sql`
-    select ${reportDb.censusColumn}, l.party_id, coalesce(sum(l.amount), 0) as activity
+    select ${reportDb.censusColumn}, ${partyIdExpr} as party_id, coalesce(sum(l.amount), 0) as activity
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
-     group by l.party_id
+     group by ${partyIdExpr}
   `))
   const activityByParty = new Map(periodActivity.rows.map((r) => [r.party_id, r.activity]))
 
@@ -199,8 +280,8 @@ export async function partyRegister(
       entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
       doc_kind: string | null; doc_id: string | null
     }>(sql`
-    select ${reportDb.censusColumn}, l.party_id, pt.display_name as party_name,
-           e.id as entry_id, e.entry_number, e.posting_date::text as date, l.memo, l.amount,
+    select ${reportDb.censusColumn}, ${partyIdExpr} as party_id, ${partyNameExpr} as party_name,
+           e.id as entry_id, e.entry_number, e.posting_date::text as date, ${lineMemoExpr} as memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -209,7 +290,7 @@ export async function partyRegister(
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
-     order by pt.display_name nulls last, e.posting_date, e.entry_number, l.line_number
+     order by ${partyNameExpr} nulls last, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
   `))
   const truncated = lines.rows.length > maxLines
@@ -304,10 +385,26 @@ export interface PartnerStatementResult {
 export async function partnerStatement(
   partyId: string,
   orgId: string,
-  opts: { from: string; to: string; side: AgingSide; dims?: DimFilter; bookId?: string | null },
+  opts: {
+    from: string; to: string; side: AgingSide; dims?: DimFilter; bookId?: string | null;
+    /**
+     * True when the reader holds payroll.read and may see per-employee pay
+     * detail. Defaults to false (fail closed): without it, party-tagged
+     * payroll lines merge into the unassigned section and never into this
+     * party's opening, activity, or closing.
+     */
+    canSeePayroll?: boolean;
+  },
 ): Promise<PartnerStatementResult> {
-  const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId, orgId, dims: opts.dims, bookId: opts.bookId })
-  const p = reg.parties[0]
+  const reg = await partyRegister(opts.side, {
+    from: opts.from, to: opts.to, partyId, orgId, dims: opts.dims, bookId: opts.bookId,
+    canSeePayroll: opts.canSeePayroll,
+  })
+  // The addressed party's own section — never parties[0]: under the
+  // confidentiality remap a party whose only lines are masked payroll has no
+  // section of its own, and the unassigned section's amounts must not stand
+  // in as its opening or closing.
+  const p = reg.parties.find((section) => section.partyId === partyId)
   const partySubsidiaryFilter = opts.dims?.subsidiaryIds
     ? opts.dims.subsidiaryIds.length > 0
       ? sql` and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[]))`
@@ -328,7 +425,7 @@ export async function partnerStatement(
   // The register only surfaces parties with window lines, but a statement is
   // addressed to one party: with no window activity the opening (= closing)
   // is still the pre-window control balance, never zero.
-  const opening = p?.opening ?? (await preWindowBalance(opts.side, opts.from, partyId, orgId, opts.dims, opts.bookId))
+  const opening = p?.opening ?? (await preWindowBalance(opts.side, opts.from, partyId, orgId, opts.dims, opts.bookId, opts.canSeePayroll))
   return {
     party: { id: partyId, name: nameRow.rows[0]?.display_name ?? p?.partyName ?? null },
     side: opts.side,
@@ -351,18 +448,27 @@ async function preWindowBalance(
   orgId: string,
   dims: DimFilter | undefined,
   bookId?: string | null,
+  canSeePayroll?: boolean,
 ): Promise<ExactDecimal> {
   const acctType = side === 'ap' ? 'liability_payable' : 'asset_receivable'
+  // Restricted readers remap payroll-party lines to the unassigned section in
+  // the register, so the same lines must not count toward this party's
+  // fallback opening either — or the remap would leak through the balance.
+  const payrollExclusion = canSeePayroll === true
+    ? sql``
+    : sql`and not ((d.kind = 'pay_run' or e.origin = 'payroll') and l.party_id is not null)`
   const rows = (await db.execute<{ balance: string }>(sql`
     select coalesce(sum(l.amount), 0) as balance
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
       join accounts a on a.id = l.account_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId}
        and e.status in ('posted', 'reversed') and a.type = ${acctType}
        and e.posting_date < ${from}
        and e.book_id = ${statementBookExpr(orgId, bookId)}
        and l.party_id = ${partyId}
+       ${payrollExclusion}
        and ${dimWhere(dims, sql`l`)}
   `))
   return (rows.rows[0]?.balance ?? '0') as ExactDecimal

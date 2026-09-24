@@ -247,7 +247,7 @@ test("explain_allocation scopes journal and document anchors like get_journal_en
   const explain = tools.slice(tools.indexOf('name: "explain_allocation"'));
   assert.match(
     explain,
-    /entryDetail\(authz\.user\.orgId, anchor\.id, authz\.allowedSubsidiaryIds\)/,
+    /entryDetail\(authz\.user\.orgId, anchor\.id, authz\.allowedSubsidiaryIds, can\(authz, "payroll\.read"\)\)/,
   );
   assert.match(
     explain,

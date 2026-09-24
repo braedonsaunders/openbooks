@@ -225,6 +225,7 @@ const generalLedgerTool: AssistantToolDef = {
       dims: reportDims(authz),
       orgId: authz.user.orgId,
       maxLines: a.accountId ? MAX_REPORT_ROWS : 1000,
+      canSeePayroll: can(authz, "payroll.read"),
     });
     const perAccountCap = a.accountId ? MAX_REPORT_ROWS : 10;
     const { items: accounts, truncated: accountsTruncated } = capList(r.accounts, 50);
@@ -343,6 +344,7 @@ const partnerStatementTool: AssistantToolDef = {
       to: range.to,
       side: a.side,
       dims: reportDims(authz),
+      canSeePayroll: can(authz, "payroll.read"),
     });
     const { items: lines, truncated } = capList(r.lines);
     return {

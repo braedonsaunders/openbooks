@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "./payroll-confidentiality";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { fiscalYearOf, fiscalYearRangeFor } from "@openbooks/reports";
 import { fiscalStartMonth } from "./fiscal";
@@ -147,14 +148,22 @@ interface JournalEntryDetailLineRow extends Record<string, unknown> {
   is_open_item: boolean;
   account_number: string | null;
   account_name: string;
+  account_id: string;
   party: string | null;
+  party_id: string | null;
   department: string | null;
+  doc_kind: string | null;
+  entry_origin: string;
 }
 
 export async function entryDetail(
   orgId: string,
   id: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+  // True when the reader holds payroll.read and may see per-employee pay
+  // detail. Defaults to false (fail closed): without it, party-tagged
+  // payroll lines collapse into one restricted line per account.
+  canSeePayroll?: boolean,
 ) {
   const entrySubsidiaryFilter = subsidiaryVisibleFilter(
     sql`e.subsidiary_id`,
@@ -172,14 +181,42 @@ export async function entryDetail(
   `));
   const lines = (await db.execute<JournalEntryDetailLineRow>(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
-           a.number as account_number, a.name as account_name,
-           p.display_name as party, d.name as department
+           a.number as account_number, a.name as account_name, l.account_id,
+           p.display_name as party, l.party_id, d.name as department,
+           doc.kind as doc_kind, e.origin as entry_origin
       from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join departments d on d.id = l.department_id and d.org_id = l.org_id
+      left join documents doc on doc.id = e.source_document_id and doc.org_id = e.org_id
      where l.entry_id = ${id} and l.org_id = ${orgId}${lineSubsidiaryFilter}
      order by l.line_number
   `));
-  return { entry: e.rows[0] ?? null, lines: lines.rows };
+  // Without payroll.read the collapsed line keeps the account and the summed
+  // amount but names no employee and shows no per-employee memo or amount.
+  const mapped = lines.rows.map((x) => ({
+    ...x,
+    entryId: id,
+    accountId: x.account_id,
+    partyId: x.party_id,
+    payrollOrigin: x.doc_kind === 'pay_run' || x.entry_origin === 'payroll',
+  }))
+  const confidential = canSeePayroll === true ? mapped : collapseRestrictedPayrollLines(
+    mapped,
+    (first, total) => ({
+      ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, party_id: null, memo: null, amount: total,
+    }),
+  )
+  // Strip every collapse input/output key so callers keep the original shape:
+  // no party ids and no origin markers reach API responses.
+  const shaped = confidential.map((row) => {
+    const {
+      account_id: _accountId, party_id: _partyId, doc_kind: _docKind, entry_origin: _entryOrigin,
+      entryId: _entryId, accountId: _accountUuid, partyId: _partyUuid, payrollOrigin: _payrollOrigin,
+      ...rest
+    } = row
+    return rest
+  })
+  return { entry: e.rows[0] ?? null, lines: shaped };
 }

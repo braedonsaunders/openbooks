@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
 import { functionalReportReader } from "./currency-basis";
 import { bucketSubsidiaryFilter, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
@@ -55,7 +56,15 @@ export interface GeneralLedgerResult {
 export async function generalLedger(
   from: string,
   to: string,
-  opts: { accountId?: string; dims?: DimFilter; maxLines?: number; orgId?: string; bookId?: string | null } = {},
+  opts: {
+    accountId?: string; dims?: DimFilter; maxLines?: number; orgId?: string; bookId?: string | null;
+    /**
+     * True when the reader holds payroll.read and may see per-employee pay
+     * detail. Defaults to false (fail closed): without it, party-tagged
+     * payroll lines collapse into one restricted line per entry per account.
+     */
+    canSeePayroll?: boolean;
+  } = {},
 ): Promise<GeneralLedgerResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 5000
@@ -123,13 +132,13 @@ export async function generalLedger(
   const lines = (await reportDb.execute<{
       account_id: string; number: string | null; name: string; type: string
       entry_id: string; entry_number: string | null; date: string
-      memo: string | null; party: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
+      memo: string | null; party: string | null; party_id: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null; entry_origin: string
     }>(sql`
     select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
            e.id as entry_id, e.entry_number, e.posting_date::text as date,
-           l.memo, p.display_name as party, l.amount,
-           d.kind as doc_kind, d.id as doc_id
+           l.memo, p.display_name as party, l.party_id, l.amount,
+           d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
        and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
@@ -141,7 +150,22 @@ export async function generalLedger(
      limit ${maxLines + 1}
   `))
   const truncated = lines.rows.length > maxLines
-  const rows = truncated ? lines.rows.slice(0, maxLines) : lines.rows
+  // Confidentiality collapses BEFORE the running balances below accumulate,
+  // so opening/closing ties out exactly whether or not the reader holds
+  // payroll.read. Without payroll.read the collapsed line keeps the account
+  // and the summed amount but names no employee and shows no per-employee
+  // memo (cheque numbers) or amount.
+  const visible = opts.canSeePayroll === true ? lines.rows.slice(0, maxLines) : collapseRestrictedPayrollLines(
+    lines.rows.slice(0, maxLines).map((r) => ({
+      ...r,
+      entryId: r.entry_id,
+      accountId: r.account_id,
+      partyId: r.party_id,
+      payrollOrigin: r.doc_kind === 'pay_run' || r.entry_origin === 'payroll',
+    })),
+    (first, total) => ({ ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, memo: null, amount: total }),
+  )
+  const rows = visible
 
   const accounts: GeneralLedgerAccount[] = []
   let current: GeneralLedgerAccount | null = null
@@ -211,7 +235,15 @@ export interface JournalReportResult {
 export async function journalReport(
   from: string,
   to: string,
-  opts: { dims?: DimFilter; maxLines?: number; orgId?: string; bookId?: string | null } = {},
+  opts: {
+    dims?: DimFilter; maxLines?: number; orgId?: string; bookId?: string | null;
+    /**
+     * True when the reader holds payroll.read and may see per-employee pay
+     * detail. Defaults to false (fail closed): without it, party-tagged
+     * payroll lines collapse into one restricted line per entry per account.
+     */
+    canSeePayroll?: boolean;
+  } = {},
 ): Promise<JournalReportResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 4000
@@ -243,11 +275,12 @@ export async function journalReport(
       )`
   const r = (await reportDb.execute<{
       id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
-      acct_number: string | null; acct_name: string; party: string | null; line_memo: string | null; amount: string
+      acct_number: string | null; acct_name: string; acct_id: string; party: string | null; party_id: string | null
+      line_memo: string | null; amount: string
       doc_kind: string | null; doc_id: string | null
     }>(sql`
     select ${reportDb.censusColumn}, e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
-           a.number as acct_number, a.name as acct_name, p.display_name as party,
+           a.number as acct_number, a.name as acct_name, l.account_id as acct_id, p.display_name as party, l.party_id,
            l.memo as line_memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from ${entryWindow} e
@@ -260,7 +293,21 @@ export async function journalReport(
      limit ${maxLines + 1}
   `))
   const truncated = r.rows.length > maxLines
-  let rows = truncated ? r.rows.slice(0, maxLines) : r.rows
+  // Confidentiality collapses BEFORE entries are assembled below, so entry
+  // totals still balance exactly. Without payroll.read the collapsed line
+  // keeps the account and the summed amount but names no employee and shows
+  // no per-employee memo (cheque numbers) or amount.
+  const confidential = opts.canSeePayroll === true ? r.rows : collapseRestrictedPayrollLines(
+    r.rows.map((x) => ({
+      ...x,
+      entryId: x.id,
+      accountId: x.acct_id,
+      partyId: x.party_id,
+      payrollOrigin: x.doc_kind === 'pay_run' || x.origin === 'payroll',
+    })),
+    (first, total) => ({ ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, line_memo: null, amount: total }),
+  )
+  let rows = truncated ? confidential.slice(0, maxLines) : confidential
   // The line cap must never split a journal entry: the sentinel row tells us
   // whether the first excluded line belongs to the final included entry. Drop
   // that whole entry so a capped report cannot expose an unbalanced partial.

@@ -60,11 +60,11 @@ test("tenant-row listings filter to the caller's subsidiary allowlist", () => {
 test("single-entry and register reads hand the allowlist to their shared services", () => {
   const tools = read("./tools.ts");
   assert.ok(
-    tools.includes("entryDetail(authz.user.orgId, a.entryId, authz.allowedSubsidiaryIds)"),
+    tools.includes("entryDetail(authz.user.orgId, a.entryId, authz.allowedSubsidiaryIds,"),
     "get_journal_entry must scope through entryDetail",
   );
   assert.ok(
-    tools.includes("accountRegister(authz.user.orgId, a.accountId, limit, 0, undefined, authz.allowedSubsidiaryIds)"),
+    tools.includes("accountRegister(authz.user.orgId, a.accountId, limit, 0, undefined, authz.allowedSubsidiaryIds,"),
     "account_register must scope through accountRegister",
   );
   assert.ok(

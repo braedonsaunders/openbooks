@@ -607,7 +607,7 @@ const explainAllocation: AssistantToolDef = {
           return { ok: false, error: "allocation_run_not_found" };
         }
       } else if (anchor.kind === "journalEntry") {
-        const seen = await entryDetail(authz.user.orgId, anchor.id, authz.allowedSubsidiaryIds);
+        const seen = await entryDetail(authz.user.orgId, anchor.id, authz.allowedSubsidiaryIds, can(authz, "payroll.read"));
         if (!seen.entry) return { ok: false, error: "entry_not_found" };
       } else if (anchor.kind === "document") {
         const seen = await db.execute<{ id: string }>(sql`

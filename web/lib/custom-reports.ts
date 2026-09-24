@@ -37,6 +37,8 @@ import { isFeatureEnabled } from './features'
 import { reportEntityFeatureKey } from './report-authz'
 import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { can } from './authz'
+import { applyPayrollConfidentialityToReportResult } from './report-payroll-collapse'
 
 /**
  * Server helpers for the custom-report studio (list/builder/run/schedule). The
@@ -249,10 +251,11 @@ export async function executeReport(
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
   const prepared = await prepareReportExecution(orgId, query, labels)
-  return runCustomQuery(pool, prepared.query, {
+  const result = await runCustomQuery(pool, prepared.query, {
     ...prepared.options,
     ...(maxRows === undefined ? {} : { maxRows }),
   })
+  return applyPayrollConfidentiality(orgId, prepared, result)
 }
 
 /** Execute one causally counted page for an entity that explicitly supports
@@ -265,9 +268,36 @@ export async function executeReportPage(
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
   const prepared = await prepareReportExecution(orgId, query, labels)
-  return runCustomQuery(pool, prepared.query, {
+  const result = await runCustomQuery(pool, prepared.query, {
     ...prepared.options,
     page,
+  })
+  return applyPayrollConfidentiality(orgId, prepared, result)
+}
+
+/**
+ * Rows-mode payroll collapse for the builder entities that can carry
+ * per-employee detail, keyed off the execution principal (never the stored
+ * plan): readers without payroll.read get merged restricted rows with
+ * balanced sums; payroll.read holders pass through untouched. One call site
+ * serves executeReport, executeReportPage, and the merged export path below,
+ * so interactive runs, pages, drills, and exports share the same shaping.
+ */
+async function applyPayrollConfidentiality(
+  orgId: string,
+  prepared: Awaited<ReturnType<typeof prepareReportExecution>>,
+  result: ReportRunResult,
+): Promise<ReportRunResult> {
+  const authz = await requireReportAuthz(orgId)
+  const entity = prepared.options.entityMap[prepared.query.entity]
+  if (!entity) return result
+  return applyPayrollConfidentialityToReportResult({
+    orgId,
+    query: prepared.query,
+    entity,
+    result,
+    labels: prepared.options.labels,
+    restricted: !can(authz, 'payroll.read'),
   })
 }
 
@@ -329,7 +359,7 @@ export async function executeReportAllPages(
     client.release()
   }
 
-  return mergeReportPages(pages, expectedRows ?? 0, prepared.options.labels)
+  return applyPayrollConfidentiality(orgId, prepared, mergeReportPages(pages, expectedRows ?? 0, prepared.options.labels))
 }
 
 /**

@@ -28,6 +28,7 @@ import {
   type TableSpanRow,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { getAuthz, can } from '@/lib/authz'
 import { dimensionOptions, partyRegister, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
@@ -152,9 +153,11 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     }
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const authz = await getAuthz()
+  const canSeePayroll = !!authz && can(authz, 'payroll.read')
   const [reg, opts, org] = subView
     ? await Promise.all([
-        partyRegister(side, { bookId: selectedBook.id, from: period.from, to: period.to, dims }),
+        partyRegister(side, { bookId: selectedBook.id, from: period.from, to: period.to, dims, canSeePayroll }),
         dimensionOptions(undefined, undefined, dims.subsidiaryIds),
         orgInfo(),
       ])

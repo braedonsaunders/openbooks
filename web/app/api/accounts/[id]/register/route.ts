@@ -87,6 +87,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       period,
       gate.allowedSubsidiaryIds,
     bookId,
+      can(gate, 'payroll.read'),
     )
     if (!result.account) return NextResponse.json({ error: 'not_found' }, { status: 404 })
     if (result.total > MAX_EXPORT_LINES) {
@@ -95,9 +96,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         { status: 422 },
       )
     }
+    // Completeness is the raw-line total (every posted line was fetched: the
+    // limit exceeds it) plus the amount tie-out below — never the visible
+    // line count, which payroll confidentiality may collapse below the raw
+    // total for readers without payroll.read.
     if (
-      result.lines.length !== result.total
-      || decimalCmp(
+      decimalCmp(
         decimalSum((result.lines as AccountRegisterExportLine[]).map((line) => line.amount)),
         result.balance,
       ) !== 0
@@ -168,6 +172,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     from || to || search ? { from: from || undefined, to: to || undefined, search } : undefined,
     gate.allowedSubsidiaryIds,
     bookId,
+    can(gate, 'payroll.read'),
   )
   if (!result.account) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   return NextResponse.json({ ...result, page, perPage: PER_PAGE })
