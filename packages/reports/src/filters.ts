@@ -37,8 +37,10 @@ function currentPeriodClause(col: string, unit: 'day' | 'week' | 'month' | 'year
 }
 
 /** Compile one leaf clause. Returns null when the clause is invalid or a
- *  no-op (unknown column, missing value) so half-built filters degrade
- *  gracefully. */
+ *  no-op (unknown column, missing value). Null is a leaf-level signal only:
+ *  compileRuleGroup never drops it (see below), and leaf callers that accept
+ *  half-built studio input must throw on null themselves.
+ */
 export function compileRule(
   entity: ReportEntity,
   rule: { column: string; op: string; value?: unknown },
@@ -118,7 +120,14 @@ export function compileRule(
 }
 
 /** Nested and/or tree. Throws on absurd trees (depth/size caps) since
- *  those only arise from hand-crafted payloads, not the studio UI. */
+ *  those only arise from hand-crafted payloads, not the studio UI.
+ *
+ *  An uncompilable leg THROWS — it is never silently dropped. Dropping a leg
+ *  runs the report unfiltered on that leg (whole-table when every leg drops),
+ *  and under `not: true` it inverts the remainder, returning exactly the rows
+ *  the operator asked to exclude. Stored plans pass validation first, so a
+ *  throw here names a plan the saver should have refused.
+ */
 export function compileRuleGroup(
   entity: ReportEntity,
   group: ReportRuleGroup,
@@ -132,10 +141,19 @@ export function compileRuleGroup(
     const parts: string[] = []
     for (const r of g.rules ?? []) {
       if (++ruleCount > MAX_TREE_RULES) throw new Error('Filter tree too large')
-      const compiled = isRuleGroup(r)
-        ? walk(r, depth + 1)
-        : compileRule(entity, { column: r.field, op: r.op, value: r.value }, params)
-      if (compiled) parts.push(compiled)
+      if (isRuleGroup(r)) {
+        const compiled = walk(r, depth + 1)
+        if (compiled === null) {
+          throw new Error('Filter group contains an empty subgroup that compiles to nothing')
+        }
+        parts.push(compiled)
+        continue
+      }
+      const compiled = compileRule(entity, { column: r.field, op: r.op, value: r.value }, params)
+      if (compiled === null) {
+        throw new Error(`Filter rule for '${r.field}' (${r.op}) cannot be compiled — refusing to run unfiltered`)
+      }
+      parts.push(compiled)
     }
     if (!parts.length) return null
     const joined = parts.length === 1 ? parts[0]! : `(${parts.join(combinator)})`

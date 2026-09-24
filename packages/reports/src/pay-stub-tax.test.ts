@@ -55,7 +55,21 @@ test('bound income_tax aggregates stub lines by system key, not factors', () => 
 
 test('bound entity still validates and compiles the built-in payroll register', () => {
   const register = BUILT_IN_REPORT_DEFINITIONS.find((d) => d.slug === 'payroll-register')!
-  const query = { ...register.query, entity: 'pay_stubs' }
+  // Production resolves period_preset to concrete bounds before compiling
+  // (prepareReportExecution); the compiler throws on an unresolved preset
+  // rather than silently dropping the date window, so compile the resolved
+  // shape here.
+  const query = {
+    ...register.query,
+    entity: 'pay_stubs',
+    filters: {
+      combinator: 'and' as const,
+      rules: [
+        { field: 'pay_date', op: 'gte' as const, value: '2026-01-01' },
+        { field: 'pay_date', op: 'lte' as const, value: '2026-12-31' },
+      ],
+    },
+  }
   // The shipped shape: income and social binders composed, exactly as the
   // catalog does. Columns and labels are unchanged — only expressions move.
   const bound = bindPayStubSocialKeys(bindPayStubIncomeTaxKeys(payStubs, KEYS), EI_KEYS, SOCIAL_KEYS)

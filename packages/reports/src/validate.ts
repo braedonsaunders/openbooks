@@ -151,6 +151,37 @@ export function validateCustomQuery(
       if (!REPORT_FILTER_OPERATORS.includes(op as never)) {
         throw new Error(`Invalid filter operator: ${op}`)
       }
+      // An empty-valued rule would compile to nothing and run unfiltered on
+      // that leg (or invert the remainder under NOT), while the studio keeps
+      // showing a filter that does nothing. Refuse it here by field and
+      // operator name so validation and compilation agree: value-less
+      // operators (is_null, relative dates, …) take no value, everything else
+      // must carry one. between_days_ago/due_within_days default to 30 days
+      // when the value is absent, so only an empty string is refused there —
+      // Number('') is 0, which would silently mean "today".
+      const rawValue = ro.value
+      if (op === 'in' || op === 'not_in') {
+        if (!Array.isArray(rawValue) || rawValue.length === 0) {
+          throw new Error(`Filter rule for '${String(field)}' (${op}) requires at least one value`)
+        }
+      } else if (op === 'between_days_ago' || op === 'due_within_days') {
+        if (rawValue === '') {
+          throw new Error(`Filter rule for '${String(field)}' (${op}) requires a number of days`)
+        }
+        if (rawValue !== null && rawValue !== undefined && !Number.isFinite(Number(rawValue))) {
+          throw new Error(`Filter rule for '${String(field)}' (${op}) requires a number of days`)
+        }
+      } else if (op === 'period_preset') {
+        if (typeof rawValue !== 'string' || !rawValue) {
+          throw new Error(`Filter rule for '${String(field)}' (${op}) requires a period preset`)
+        }
+      } else if (
+        op === 'eq' || op === 'neq' || op === 'gte' || op === 'lte' || op === 'contains'
+      ) {
+        if (rawValue === null || rawValue === undefined || rawValue === '') {
+          throw new Error(`Filter rule for '${String(field)}' (${op}) requires a value`)
+        }
+      }
       rules.push({ field, op: op as ReportRule['op'], value: sanitizeValue(ro.value) })
     }
     return {

@@ -35,7 +35,8 @@ export const REPORT_FILTER_OPERATORS = [
   // 'this_fiscal_year'). Unlike the calendar-only ops above, this respects the
   // org's fiscal start month. It is RESOLVED to concrete gte/lte bounds by the
   // web executor before the plan reaches the (DB-free) compiler; if it ever
-  // reaches compileRule unresolved it is a safe no-op.
+  // reaches compileRule unresolved the group compiler throws rather than
+  // dropping the date bounds and running unfiltered.
   'period_preset',
 ] as const
 export type ReportFilterOperator = (typeof REPORT_FILTER_OPERATORS)[number]
