@@ -30,15 +30,18 @@ export async function loadAccount(
   const subsidiaryScope = allowedSubsidiaryIds === undefined
     ? sql``
     : subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
+  const childScope = allowedSubsidiaryIds === undefined
+    ? sql``
+    : subsidiaryVisibleFilter(sql`child.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
   const result = (await db.execute<Record<string, unknown>>(sql`
     select a.*,
            case when parent.id is null then null else concat_ws(' ', parent.number, parent.name) end as parent_name,
            s.name as subsidiary_name,
            exists(select 1 from journal_lines l where l.org_id = a.org_id and l.account_id = a.id) as has_transactions,
            (select count(*)::int from accounts child
-             where child.org_id = a.org_id and child.parent_id = a.id) as child_count,
+             where child.org_id = a.org_id and child.parent_id = a.id ${childScope}) as child_count,
            (select count(*)::int from accounts child
-             where child.org_id = a.org_id and child.parent_id = a.id and child.is_active) as active_child_count
+             where child.org_id = a.org_id and child.parent_id = a.id and child.is_active ${childScope}) as active_child_count
       from accounts a
       left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
       left join subsidiaries s on s.id = a.subsidiary_id and s.org_id = a.org_id
