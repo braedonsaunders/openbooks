@@ -96,7 +96,7 @@
         "description": "Exécutez des requêtes sous contrôle des permissions pour l’analyse et l’intégration",
         "title": "Console de requêtes"
       },
-      "sandboxes": {
+  "sandboxes": {
         "description": "Créez, actualisez et promouvez des copies sandbox isolées de la production",
         "title": "Environnements"
       }
@@ -5134,6 +5134,9 @@
       "manifest": "Manifeste",
       "purged": "purgée ({reason}) · {when}",
       "retention": "Conservation",
+    "kinds": { "manual": "Manuelle", "scheduled": "Planifiée" },
+    "statuses": { "queued": "En attente", "running": "En cours", "completed": "Terminée", "failed": "Échec" },
+    "reasons": { "rotated": "rotation", "deleted": "suppression" },
       "rowsTables": "{rows} lignes · {tables} tables",
       "sha256": "SHA-256",
       "size": "Taille",
@@ -5544,6 +5547,59 @@
       "summary": "Résumé",
       "when": "Quand"
     }
+  },
+  "sandboxManager": {
+    "newEnvironment": "Nouvel environnement",
+    "description": "Un bac à sable est une copie isolée instantanée de la production. Les copies masquées brouillent les données personnelles; les e-mails, paiements et intégrations sont désactivés automatiquement dans tous les bacs à sable.",
+    "name": "Nom",
+    "namePlaceholder": "Bac à sable QA",
+    "tier": "Niveau",
+    "tiers": {
+      "masked": "Copie complète masquée (recommandée)",
+      "full": "Copie complète (non masquée)",
+      "dev": "Développement (personnalisations uniquement)",
+      "asOf": "À une date donnée (comptes à la clôture)",
+      "unknown": "Niveau inconnu"
+    },
+    "asOfPeriod": "Période de référence",
+    "choosePeriod": "Choisir une période…",
+    "periodOption": "{name} · fin : {endsOn} · {calendar}",
+    "create": "Créer le bac à sable",
+    "cutoffDescription": "La copie inclut les écritures comptables enregistrées au plus tard à la date de fin de la période choisie, quel que soit son calendrier.",
+    "reviewChanges": "Examiner les ensembles de modifications",
+    "none": "Aucun environnement pour le moment.",
+    "statuses": {
+      "ready": "Prêt",
+      "provisioning": "En préparation",
+      "refreshing": "Actualisation",
+      "deleting": "Suppression",
+      "failed": "Échec",
+      "unknown": "Inconnu"
+    },
+    "masked": "Masqué",
+    "storageSummary": "{records} enregistrements · {refreshed}{schedule, select, none {} other { · actualisation automatique : {schedule}}}",
+    "refreshed": "actualisé {when}",
+    "neverRefreshed": "jamais actualisé",
+    "enter": "Ouvrir",
+    "refreshTitle": "Récupérer les données de production en conservant vos personnalisations",
+    "refresh": "Actualiser",
+    "resetConfirm": "La réinitialisation complète supprime les personnalisations du bac à sable. Continuer ?",
+    "reset": "Réinitialiser",
+    "autoRefresh": "Actualisation automatique",
+    "schedule": {
+      "manual": "Manuelle",
+      "hourly": "Toutes les heures",
+      "daily": "Quotidienne",
+      "weekly": "Hebdomadaire",
+      "unknown": "Inconnue"
+    },
+    "deleteConfirm": "Supprimer définitivement « {name} » ?",
+    "delete": "Supprimer",
+    "changeSetName": "Nom de l’ensemble de modifications",
+    "changeSetDefaultName": "Modifications du bac à sable",
+    "captureChanges": "Capturer les modifications",
+    "captureFailed": "La capture n’a pas abouti. Consultez la liste des ensembles de modifications avant de réessayer.",
+    "captureTitle": "Capturer les changements de configuration pour une révision et une approbation indépendantes"
   },
   "sandboxes": {
     "changeSets": {

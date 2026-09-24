@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { promptDialog } from "../../../../lib/prompt";
 import { confirmDialog } from "../../../../lib/confirm";
@@ -54,6 +55,7 @@ export function SandboxManager({
   periods: PeriodOption[];
 }) {
   const { dateTime, number } = useViewerFormat();
+  const t = useTranslations("admin.sandboxManager");
   const [name, setName] = useState("");
   const [tier, setTier] = useState("masked");
   const [asOfPeriodId, setAsOfPeriodId] = useState("");
@@ -80,42 +82,41 @@ export function SandboxManager({
   return (
     <div className="space-y-6">
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">New environment</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("newEnvironment")}</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          A sandbox is an instant, isolated clone of production. Masked sandboxes scramble personal data on copy;
-          all sandboxes have email, payments, and integrations safely disabled automatically.
+          {t("description")}
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <div className="grow">
-            <Label htmlFor="sbx-name">Name</Label>
+            <Label htmlFor="sbx-name">{t("name")}</Label>
             <Input
               id="sbx-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="QA sandbox"
+              placeholder={t("namePlaceholder")}
             />
           </div>
           <div>
-            <Label htmlFor="sbx-tier">Tier</Label>
+            <Label htmlFor="sbx-tier">{t("tier")}</Label>
             <Select id="sbx-tier" value={tier} onChange={(e) => setTier(e.target.value)}>
-              <option value="masked">Masked full copy (recommended)</option>
-              <option value="full">Full copy (unmasked)</option>
-              <option value="dev">Dev (customizations only)</option>
-              <option value="as_of">As-of (books at a period close)</option>
+              <option value="masked">{t("tiers.masked")}</option>
+              <option value="full">{t("tiers.full")}</option>
+              <option value="dev">{t("tiers.dev")}</option>
+              <option value="as_of">{t("tiers.asOf")}</option>
             </Select>
           </div>
           {tier === "as_of" && (
             <div>
-              <Label htmlFor="sbx-period">As-of period</Label>
+              <Label htmlFor="sbx-period">{t("asOfPeriod")}</Label>
               <Select
                 id="sbx-period"
                 value={asOfPeriodId}
                 onChange={(e) => setAsOfPeriodId(e.target.value)}
               >
-                <option value="">Choose a period…</option>
+                <option value="">{t("choosePeriod")}</option>
                 {periods.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} · ends {p.endsOn} · {p.calendarName}
+                    {t("periodOption", { name: p.name, endsOn: p.endsOn, calendar: p.calendarName })}
                   </option>
                 ))}
               </Select>
@@ -137,21 +138,20 @@ export function SandboxManager({
               })
             }
           >
-            Create sandbox
+            {t("create")}
           </Button>
         </div>
         {tier === "as_of" && (
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            The clone includes ledger entries posted on or before the chosen period&apos;s end date,
-            whatever calendar their period belongs to.
+            {t("cutoffDescription")}
           </p>
         )}
       </Card>
 
       <div className="space-y-3">
-        <Button asChild variant="outline"><Link href="/admin/sandboxes/change-sets">Review change sets</Link></Button>
+        <Button asChild variant="outline"><Link href="/admin/sandboxes/change-sets">{t("reviewChanges")}</Link></Button>
         {sandboxes.length === 0 && (
-          <p className="text-sm text-slate-500 dark:text-slate-400">No environments yet.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t("none")}</p>
         )}
         {sandboxes.map((s) => (
           <Card key={s.id} className="p-4">
@@ -159,14 +159,16 @@ export function SandboxManager({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-900 dark:text-slate-100">{s.name}</span>
-                  <Badge variant={STATUS_VARIANT[s.status] ?? "secondary"}>{s.status}</Badge>
-                  <Badge variant="outline">{s.tier}</Badge>
-                  {s.masked && <Badge variant="secondary">masked</Badge>}
+                  <Badge variant={STATUS_VARIANT[s.status] ?? "secondary"}>{t.has(`statuses.${s.status}`) ? t(`statuses.${s.status}`) : t("statuses.unknown")}</Badge>
+                  <Badge variant="outline">{t.has(`tiers.${s.tier}`) ? t(`tiers.${s.tier}`) : t("tiers.unknown")}</Badge>
+                  {s.masked && <Badge variant="secondary">{t("masked")}</Badge>}
                 </div>
                 <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {number(s.storageRows)} records ·{" "}
-                  {s.lastRefreshAt ? `refreshed ${dateTime(new Date(s.lastRefreshAt))}` : "never refreshed"}
-                  {s.refreshSchedule ? ` · auto-refresh ${s.refreshSchedule}` : ""}
+                  {t("storageSummary", {
+                    records: number(s.storageRows),
+                    refreshed: s.lastRefreshAt ? t("refreshed", { when: dateTime(new Date(s.lastRefreshAt)) }) : t("neverRefreshed"),
+                    schedule: s.refreshSchedule ? t.has(`schedule.${s.refreshSchedule}`) ? t(`schedule.${s.refreshSchedule}`) : t("schedule.unknown") : "none",
+                  })}
                 </div>
                 {s.lastError && (
                   <div className="mt-1 text-xs text-red-600 dark:text-red-400">{s.lastError}</div>
@@ -179,7 +181,7 @@ export function SandboxManager({
                   disabled={s.status !== "ready"}
                   onClick={() => start(async () => void (await enterOrg(s.orgId)))}
                 >
-                  Enter
+                  {t("enter")}
                 </Button>
                 <Button
                   variant="outline"
@@ -191,9 +193,9 @@ export function SandboxManager({
                       rotateOpKey(s.id);
                     })
                   }
-                  title="Re-pull production data, keep your customizations"
+                  title={t("refreshTitle")}
                 >
-                  Refresh
+                  {t("refresh")}
                 </Button>
                 <Button
                   variant="outline"
@@ -201,26 +203,26 @@ export function SandboxManager({
                   disabled={pending || s.status !== "ready"}
                   onClick={() =>
                     start(async () => {
-                      if (await confirmDialog("Full reset discards sandbox customizations. Continue?")) {
+                      if (await confirmDialog(t("resetConfirm"))) {
                         await resetSandboxAction(s.id, opKeyFor(s.id));
                         rotateOpKey(s.id);
                       }
                     })
                   }
                 >
-                  Reset
+                  {t("reset")}
                 </Button>
                 <PromoteButton sandboxId={s.id} disabled={pending || s.status !== "ready"} />
                 <Select
-                  aria-label="Auto-refresh"
+                  aria-label={t("autoRefresh")}
                   className="h-8 w-28"
                   value={s.refreshSchedule ?? ""}
                   onChange={(e) => start(async () => void (await setScheduleAction(s.id, e.target.value || null)))}
                 >
-                  <option value="">Manual</option>
-                  <option value="hourly">Hourly</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
+                  <option value="">{t("schedule.manual")}</option>
+                  <option value="hourly">{t("schedule.hourly")}</option>
+                  <option value="daily">{t("schedule.daily")}</option>
+                  <option value="weekly">{t("schedule.weekly")}</option>
                 </Select>
                 <Button
                   variant="destructive"
@@ -228,14 +230,14 @@ export function SandboxManager({
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
-                      if (await confirmDialog(`Delete "${s.name}" permanently?`)) {
+                      if (await confirmDialog(t("deleteConfirm", { name: s.name }))) {
                         await deleteSandboxAction(s.id, opKeyFor(s.id));
                         rotateOpKey(s.id);
                       }
                     })
                   }
                 >
-                  Delete
+                  {t("delete")}
                 </Button>
               </div>
             </div>
@@ -247,19 +249,20 @@ export function SandboxManager({
 }
 
 function PromoteButton({ sandboxId, disabled }: { sandboxId: string; disabled: boolean }) {
+  const t = useTranslations("admin.sandboxManager");
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return <div className="space-y-1">
     <Button variant="secondary" size="sm" disabled={disabled || pending} onClick={() => start(async () => {
-      const name = await promptDialog({ title: "Change set name", initialValue: "Sandbox changes", confirmLabel: "Capture changes" });
+      const name = await promptDialog({ title: t("changeSetName"), initialValue: t("changeSetDefaultName"), confirmLabel: t("captureChanges") });
       if (!name) return;
       setError(null);
       try {
         const result = await promoteSandboxAction(sandboxId, name);
         router.push(`/admin/sandboxes/change-sets?changeSet=${encodeURIComponent(result.changeSetId)}`);
-      } catch { setError("Capture did not complete. Check the change-set list before trying again."); }
-    })} title="Capture configuration changes for independent review and approval">Capture changes</Button>
+      } catch { setError(t("captureFailed")); }
+    })} title={t("captureTitle")}>{t("captureChanges")}</Button>
     {error && <p role="alert" className="text-xs text-red-700 dark:text-red-400">{error}</p>}
   </div>;
 }

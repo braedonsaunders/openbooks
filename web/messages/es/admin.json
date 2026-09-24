@@ -143,7 +143,7 @@
         "description": "Ejecute consultas controladas por permisos para análisis e integración",
         "title": "Consola de consultas"
       },
-      "sandboxes": {
+  "sandboxes": {
         "description": "Cree, actualice y promueva copias sandbox aisladas de producción",
         "title": "Entornos"
       }
@@ -5134,6 +5134,9 @@
       "manifest": "Manifiesto",
       "purged": "purgada ({reason}) · {when}",
       "retention": "Retención",
+    "kinds": { "manual": "A petición", "scheduled": "Programada" },
+    "statuses": { "queued": "En cola", "running": "En curso", "completed": "Completada", "failed": "Fallida" },
+    "reasons": { "rotated": "rotada", "deleted": "eliminada" },
       "rowsTables": "{rows} filas · {tables} tablas",
       "sha256": "SHA-256",
       "size": "Tamaño",
@@ -5544,6 +5547,59 @@
       "summary": "Resumen",
       "when": "Cuándo"
     }
+  },
+  "sandboxManager": {
+    "newEnvironment": "Nuevo entorno",
+    "description": "Un sandbox es una copia aislada e inmediata de producción. Los sandbox enmascarados alteran los datos personales al copiar; el correo, los pagos y las integraciones se desactivan automáticamente en todos los sandbox.",
+    "name": "Nombre",
+    "namePlaceholder": "Sandbox de QA",
+    "tier": "Nivel",
+    "tiers": {
+      "masked": "Copia completa enmascarada (recomendada)",
+      "full": "Copia completa (sin enmascarar)",
+      "dev": "Desarrollo (solo personalizaciones)",
+      "asOf": "A una fecha (libros al cierre del período)",
+      "unknown": "Nivel desconocido"
+    },
+    "asOfPeriod": "Período de referencia",
+    "choosePeriod": "Elige un período…",
+    "periodOption": "{name} · termina {endsOn} · {calendar}",
+    "create": "Crear sandbox",
+    "cutoffDescription": "La copia incluye asientos registrados hasta la fecha de fin del período elegido, independientemente del calendario al que pertenezca.",
+    "reviewChanges": "Revisar conjuntos de cambios",
+    "none": "Aún no hay entornos.",
+    "statuses": {
+      "ready": "Listo",
+      "provisioning": "Preparando",
+      "refreshing": "Actualizando",
+      "deleting": "Eliminando",
+      "failed": "Error",
+      "unknown": "Desconocido"
+    },
+    "masked": "Enmascarado",
+    "storageSummary": "{records} registros · {refreshed}{schedule, select, none {} other { · actualización automática: {schedule}}}",
+    "refreshed": "actualizado {when}",
+    "neverRefreshed": "nunca actualizado",
+    "enter": "Entrar",
+    "refreshTitle": "Volver a copiar los datos de producción y conservar tus personalizaciones",
+    "refresh": "Actualizar",
+    "resetConfirm": "El restablecimiento completo descarta las personalizaciones del sandbox. ¿Continuar?",
+    "reset": "Restablecer",
+    "autoRefresh": "Actualización automática",
+    "schedule": {
+      "manual": "A petición",
+      "hourly": "Cada hora",
+      "daily": "Diaria",
+      "weekly": "Semanal",
+      "unknown": "Desconocida"
+    },
+    "deleteConfirm": "¿Eliminar “{name}” de forma permanente?",
+    "delete": "Eliminar",
+    "changeSetName": "Nombre del conjunto de cambios",
+    "changeSetDefaultName": "Cambios del sandbox",
+    "captureChanges": "Capturar cambios",
+    "captureFailed": "No se completó la captura. Revisa la lista de conjuntos de cambios antes de volver a intentarlo.",
+    "captureTitle": "Captura cambios de configuración para su revisión y aprobación independientes"
   },
   "sandboxes": {
     "changeSets": {

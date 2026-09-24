@@ -52,7 +52,7 @@
         "title": "Apps",
         "description": "App-Pakete erstellen und installieren — ein isoliertes Frontend plus ein kontrolliertes Backend"
       },
-      "sandboxes": {
+  "sandboxes": {
         "title": "Umgebungen",
         "description": "Isolierte Sandbox-Kopien der Produktion erstellen, aktualisieren und hochstufen"
       },
@@ -5237,6 +5237,9 @@
       "manifest": "Manifest",
       "purged": "gelöscht ({reason}) · {when}",
       "retention": "Aufbewahrung",
+    "kinds": { "manual": "Manuell", "scheduled": "Geplant" },
+    "statuses": { "queued": "In Warteschlange", "running": "Wird ausgeführt", "completed": "Abgeschlossen", "failed": "Fehlgeschlagen" },
+    "reasons": { "rotated": "rotiert", "deleted": "gelöscht" },
       "rowsTables": "{rows} Zeilen · {tables} Tabellen",
       "sha256": "SHA-256",
       "size": "Größe",
@@ -5544,6 +5547,59 @@
       "summary": "Zusammenfassung",
       "when": "Wann"
     }
+  },
+  "sandboxManager": {
+    "newEnvironment": "Neue Umgebung",
+    "description": "Eine Sandbox ist eine sofortige, isolierte Kopie der Produktion. Maskierte Sandboxes verfremden persönliche Daten beim Kopieren; E-Mail, Zahlungen und Integrationen werden in allen Sandboxes automatisch sicher deaktiviert.",
+    "name": "Bezeichnung",
+    "namePlaceholder": "QA-Sandbox",
+    "tier": "Stufe",
+    "tiers": {
+      "masked": "Vollständige maskierte Kopie (empfohlen)",
+      "full": "Vollständige Kopie (unmaskiert)",
+      "dev": "Entwicklung (nur Anpassungen)",
+      "asOf": "Stichtag (Bücher zum Periodenabschluss)",
+      "unknown": "Unbekannte Stufe"
+    },
+    "asOfPeriod": "Stichtagsperiode",
+    "choosePeriod": "Periode auswählen…",
+    "periodOption": "{name} · Ende {endsOn} · {calendar}",
+    "create": "Sandbox erstellen",
+    "cutoffDescription": "Die Kopie enthält Buchungen bis einschließlich des Enddatums der ausgewählten Periode, unabhängig vom zugehörigen Kalender.",
+    "reviewChanges": "Änderungssätze prüfen",
+    "none": "Noch keine Umgebungen vorhanden.",
+    "statuses": {
+      "ready": "Bereit",
+      "provisioning": "Wird eingerichtet",
+      "refreshing": "Wird aktualisiert",
+      "deleting": "Wird gelöscht",
+      "failed": "Fehlgeschlagen",
+      "unknown": "Unbekannt"
+    },
+    "masked": "Maskiert",
+    "storageSummary": "{records} Datensätze · {refreshed}{schedule, select, none {} other { · automatische Aktualisierung: {schedule}}}",
+    "refreshed": "aktualisiert {when}",
+    "neverRefreshed": "nie aktualisiert",
+    "enter": "Öffnen",
+    "refreshTitle": "Produktionsdaten erneut abrufen und Anpassungen beibehalten",
+    "refresh": "Aktualisieren",
+    "resetConfirm": "Beim vollständigen Zurücksetzen gehen Sandbox-Anpassungen verloren. Fortfahren?",
+    "reset": "Zurücksetzen",
+    "autoRefresh": "Automatische Aktualisierung",
+    "schedule": {
+      "manual": "Manuell",
+      "hourly": "Stündlich",
+      "daily": "Täglich",
+      "weekly": "Wöchentlich",
+      "unknown": "Unbekannt"
+    },
+    "deleteConfirm": "„{name}“ dauerhaft löschen?",
+    "delete": "Löschen",
+    "changeSetName": "Name des Änderungssatzes",
+    "changeSetDefaultName": "Sandbox-Änderungen",
+    "captureChanges": "Änderungen erfassen",
+    "captureFailed": "Die Erfassung wurde nicht abgeschlossen. Prüfen Sie die Änderungssatzliste, bevor Sie es erneut versuchen.",
+    "captureTitle": "Konfigurationsänderungen zur unabhängigen Prüfung und Genehmigung erfassen"
   },
   "sandboxes": {
     "changeSets": {

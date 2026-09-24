@@ -66,7 +66,7 @@ function Node({
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-          {t.has(`blocks.${node.kind}` as never) ? t(`blocks.${node.kind}` as never) : node.kind}
+          {t.has(`blocks.${node.kind}` as never) ? t(`blocks.${node.kind}` as never) : t('blocks.widget')}
         </span>
         {node.name ? (
           <span className={node.nameIsBinding ? `${TONE.mono} text-indigo-600 dark:text-indigo-400` : 'text-sm text-slate-500'}>

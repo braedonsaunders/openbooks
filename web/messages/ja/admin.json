@@ -52,7 +52,7 @@
         "title": "アプリ",
         "description": "アプリパッケージを構築・インストール — サンドボックス化されたフロントエンドと統制されたバックエンド"
       },
-      "sandboxes": {
+  "sandboxes": {
         "title": "環境",
         "description": "本番の分離されたサンドボックスコピーを作成、更新、昇格"
       },
@@ -5237,6 +5237,9 @@
       "manifest": "マニフェスト",
       "purged": "削除済み（{reason}）・{when}",
       "retention": "保持",
+    "kinds": { "manual": "手動", "scheduled": "スケジュール済み" },
+    "statuses": { "queued": "待機中", "running": "実行中", "completed": "完了", "failed": "失敗" },
+    "reasons": { "rotated": "ローテーション", "deleted": "削除" },
       "rowsTables": "{rows}行・{tables}テーブル",
       "sha256": "SHA-256",
       "size": "サイズ",
@@ -5544,6 +5547,59 @@
       "summary": "概要",
       "when": "日時"
     }
+  },
+  "sandboxManager": {
+    "newEnvironment": "新しい環境",
+    "description": "サンドボックスは本番環境を即時に複製した隔離環境です。マスクされたサンドボックスは複製時に個人データを置き換え、すべてのサンドボックスでメール、支払い、連携機能が自動的に無効になります。",
+    "name": "名前",
+    "namePlaceholder": "QA サンドボックス",
+    "tier": "種類",
+    "tiers": {
+      "masked": "マスク済み完全コピー（推奨）",
+      "full": "完全コピー（マスクなし）",
+      "dev": "開発用（カスタマイズのみ）",
+      "asOf": "期間締め時点の帳簿",
+      "unknown": "不明な種類"
+    },
+    "asOfPeriod": "基準期間",
+    "choosePeriod": "期間を選択…",
+    "periodOption": "{name} · 期末 {endsOn} · {calendar}",
+    "create": "サンドボックスを作成",
+    "cutoffDescription": "選択した期間の終了日までに転記された仕訳を、期間カレンダーに関係なく複製します。",
+    "reviewChanges": "変更セットを確認",
+    "none": "環境はまだありません。",
+    "statuses": {
+      "ready": "準備完了",
+      "provisioning": "準備中",
+      "refreshing": "更新中",
+      "deleting": "削除中",
+      "failed": "失敗",
+      "unknown": "不明"
+    },
+    "masked": "マスク済み",
+    "storageSummary": "{records} 件 · {refreshed}{schedule, select, none {} other { · 自動更新: {schedule}}}",
+    "refreshed": "更新 {when}",
+    "neverRefreshed": "未更新",
+    "enter": "開く",
+    "refreshTitle": "カスタマイズを保ったまま本番データを再取得",
+    "refresh": "更新",
+    "resetConfirm": "完全リセットするとサンドボックスのカスタマイズが破棄されます。続行しますか？",
+    "reset": "リセット",
+    "autoRefresh": "自動更新",
+    "schedule": {
+      "manual": "手動",
+      "hourly": "毎時",
+      "daily": "毎日",
+      "weekly": "毎週",
+      "unknown": "不明"
+    },
+    "deleteConfirm": "「{name}」を完全に削除しますか？",
+    "delete": "削除",
+    "changeSetName": "変更セット名",
+    "changeSetDefaultName": "サンドボックスの変更",
+    "captureChanges": "変更を記録",
+    "captureFailed": "記録を完了できませんでした。再試行する前に変更セット一覧を確認してください。",
+    "captureTitle": "独立したレビューと承認のために設定変更を記録"
   },
   "sandboxes": {
     "changeSets": {
