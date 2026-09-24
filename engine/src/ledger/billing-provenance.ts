@@ -100,16 +100,38 @@ export async function releaseBillingProvenance(
  * Without it the application stays 'billed' pointing at a document that no
  * longer exists, and the re-bill path dereferences that dangling id and throws —
  * the commitment can never be billed again.
+ *
+ * The release carries the same audit evidence as the customer-side
+ * counterpart: the void/delete actor, the reason, and the before/after
+ * status and bill link on an `audit_log` row in the caller's transaction,
+ * so the application's return to billable is attributable instead of a
+ * silent status flip.
  */
 export async function releaseVendorBillProvenance(
   tx: SqlExecutor,
   orgId: string,
   documentId: string,
+  audit: { actorId: string | null; reason: string },
 ): Promise<void> {
   await tx.execute(sql`
-    update vendor_pay_applications
-       set status = 'approved', vendor_bill_document_id = null, updated_at = now()
-     where org_id = ${orgId} and vendor_bill_document_id = ${documentId} and status = 'billed'
+    with source as (
+      select id, status from vendor_pay_applications
+       where org_id = ${orgId} and vendor_bill_document_id = ${documentId} and status = 'billed'
+       for update
+    ), released as (
+      update vendor_pay_applications vpa
+         set status = 'approved', vendor_bill_document_id = null,
+             updated_at = now(), updated_by = ${audit.actorId}
+        from source where vpa.id = source.id and vpa.org_id = ${orgId}
+      returning vpa.id, source.status as previous_status
+    )
+    insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+    select ${orgId}, 'vendor_pay_applications', id, 'billing_released',
+      jsonb_build_object(
+        'before', jsonb_build_object('status', previous_status, 'vendor_bill_document_id', ${documentId}::text),
+        'after', jsonb_build_object('status', 'approved', 'vendor_bill_document_id', null),
+        'reason', ${audit.reason}::text), ${audit.actorId}::uuid
+    from released
   `);
 }
 
