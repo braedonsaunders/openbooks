@@ -3,6 +3,7 @@ import type { db } from "../platform/db.ts";
 import { fromUnits, isZero, neg, normalizeMoney, roundDiv, sum, toUnits } from "../money/money.ts";
 import { resolveAccountGroups } from "../records/account-groups.ts";
 import { AllocationApportionError, apportion, fixedPercentWeights } from "./apportion.ts";
+import { resolveDriverVintage } from "./driver-asof.ts";
 import { selectRule, type AccountGroupResolver } from "./match.ts";
 import { AllocationRuleError, listRulesInEffect } from "./rules.ts";
 import type {
@@ -279,12 +280,22 @@ async function measureDriver(
   const driver = await loadDriver(runner, doc.orgId, rule.version.driverId);
   if (!driver) throw new PostAllocationError(`rule ${rule.rule.key} points at unknown driver`);
   if (!driver.isActive) throw new PostAllocationError(`rule ${rule.rule.key} points at inactive driver`);
+  // The version's driver vintage resolves through the one shared mapping the
+  // period runner uses: prior_period reads the period before the posting
+  // period, document_date reads the document's own date — never the live
+  // posting-date vector the old code measured unconditionally.
+  const vintage = await resolveDriverVintage(runner, doc.orgId, rule.version.driverAsOf, {
+    kind: "posting",
+    postingDate,
+    documentDate: doc.documentDate,
+  });
+  if ("refusal" in vintage) throw new PostAllocationError(`rule ${rule.rule.key}: ${vintage.refusal}`);
   const vector = await deps.driverResolver.resolve({
     orgId: doc.orgId,
     // The registry stores free-text dimensions; resolution treats an
     // unrecognized dimension as matching nothing (fail closed downstream).
     driver: driver as AllocationDriver,
-    asOf: { date: postingDate },
+    asOf: vintage.asOf,
     subsidiaryId: doc.subsidiaryId ?? null,
     actorId: deps.actorId ?? null,
   });

@@ -20,10 +20,12 @@ import {
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { resolveDriverVintage } from "./driver-asof.ts";
 import type {
   AccountScope,
   AllocationDimension,
   AllocationDriver,
+  AllocationDriverAsOf,
   AllocationImpact,
   AllocationResidualPolicy,
   AllocationRunStatus,
@@ -40,6 +42,15 @@ import type {
 } from "./types.ts";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The stored vintage knob, read defensively: anything outside the governed
+ * vocabulary measures the reference period, exactly like the previous inline
+ * mapping did for unrecognized values.
+ */
+function driverAsOf(raw: string): AllocationDriverAsOf {
+  return raw === "prior_period" || raw === "document_date" ? raw : "period";
+}
 
 /**
  * Period-mode allocation runs (shard A3).
@@ -700,19 +711,14 @@ async function resolveDriverVectorForRun(
   // production runner, which the single service factory provides by default.
   // Callers may still inject a test double through deps.
   const resolver = deps.driverResolver ?? allocationServiceDeps().driverResolver;
-  let asOf: { periodId: string } | { date: string };
-  if (opts.version.driver_as_of === "prior_period") {
-    const prior = (await tx.execute<{ id: string }>(sql`
-      select id from accounting_periods
-       where org_id = ${opts.orgId} and not is_adjustment and ends_on < ${opts.period.starts_on}
-       order by ends_on desc limit 1`)).rows[0];
-    if (!prior) throw new AllocationRunError("INVALID", `no prior period exists for driver lookback on ${opts.period.name}`);
-    asOf = { periodId: prior.id };
-  } else if (opts.version.driver_as_of === "document_date") {
-    asOf = { date: opts.period.ends_on };
-  } else {
-    asOf = { periodId: opts.period.id };
-  }
+  // The version's driver vintage resolves through the one shared mapping the
+  // posting seam uses, against this sweep's period.
+  const vintage = await resolveDriverVintage(tx, opts.orgId, driverAsOf(opts.version.driver_as_of), {
+    kind: "period",
+    period: { id: opts.period.id, name: opts.period.name, startsOn: opts.period.starts_on, endsOn: opts.period.ends_on },
+  });
+  if ("refusal" in vintage) throw new AllocationRunError("INVALID", vintage.refusal);
+  const asOf = vintage.asOf;
   // A2 honors these knobs when present: this rule's own lines stay out of
   // GL-backed driver vectors (idempotent re-runs) and the vector follows the
   // run's book. Plain DriverResolver doubles ignore the extra fields.
