@@ -12,7 +12,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 
-const { resolveModuleShortLabel } = await import("./resolve.ts");
+const { navPathname, resolveModuleShortLabel } = await import("./resolve.ts");
 
 const nav = (locale: string): { modules: Record<string, string>; modulesShort?: Record<string, string> } =>
   JSON.parse(readFileSync(new URL(`../../messages/${locale}/nav.json`, import.meta.url), "utf8"));
@@ -85,4 +85,12 @@ test("F-t12-018: missing shorts fall back even when the translator echoes keys",
     "has=true resolves the short",
   );
   assert.equal(called, 1, "present shorts resolve with a single lookup");
+});
+
+test("navPathname strips query and fragment so gating sees the module path", () => {
+  assert.equal(navPathname("/projects?tab=jobs"), "/projects");
+  assert.equal(navPathname("/projects#summary"), "/projects");
+  assert.equal(navPathname("/projects/jobs?tab=open#top"), "/projects/jobs");
+  assert.equal(navPathname("/projects"), "/projects");
+  assert.equal(navPathname("https://example.com/projects?tab=jobs"), "https://example.com/projects?tab=jobs");
 });

@@ -63,6 +63,17 @@ export function resolveModuleShortLabel(
   }
 }
 
+/**
+ * Same-origin pathname of a nav href: strips the ?query and #fragment so
+ * feature gating compares module boundaries, not decorations. Absolute
+ * (https://) links are returned untouched — they never match a module home.
+ */
+export function navPathname(href: string): string {
+  if (!href.startsWith('/')) return href
+  const end = href.search(/[?#]/)
+  return end === -1 ? href : href.slice(0, end)
+}
+
 export async function resolveNav(
   orgId: string,
   can: (permission: string | undefined) => boolean,
@@ -148,7 +159,12 @@ export async function resolveNav(
           mobile: item.mobile,
         })
       } else {
-        if (NAV_MODULES.some((module) => featureHiddenModules.has(module.key) && (item.href === module.href || item.href.startsWith(`${module.href}/`)))) continue
+        // Gate custom links by their same-origin PATHNAME: a saved link like
+        // /projects?tab=jobs still lands inside the Projects module, so with
+        // Projects disabled it must hide exactly like /projects itself. Query
+        // strings and fragments never change which module a link enters.
+        const linkPath = navPathname(item.href);
+        if (NAV_MODULES.some((module) => featureHiddenModules.has(module.key) && (linkPath === module.href || linkPath.startsWith(`${module.href}/`)))) continue
         if (item.extensionKey) {
           const entry = extensionContributions.find((entry) => entry.extensionKey === item.extensionKey && entry.contribution.kind === 'nav' && entry.contribution.href === item.href)
           if (!entry || entry.contribution.kind !== 'nav' || !can(entry.contribution.requiredPermission)) continue
