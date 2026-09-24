@@ -84,12 +84,18 @@ async function setupHarness(): Promise<Harness> {
 }
 
 /** A reserved employment identity: stable row at revision 1, no versions. */
-async function seedReservedEmployment(orgId: string, subsidiaryId: string): Promise<{ employmentId: string; workerPartyId: string }> {
-  const workerPartyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${workerPartyId}, ${orgId}, 'person', 'Hired Worker', true, '{}'::jsonb)
-  `);
+async function seedReservedEmployment(
+  orgId: string,
+  subsidiaryId: string,
+  linkedPartyId?: string,
+): Promise<{ employmentId: string; workerPartyId: string }> {
+  const workerPartyId = linkedPartyId ?? randomUUID();
+  if (linkedPartyId === undefined) {
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${workerPartyId}, ${orgId}, 'person', 'Hired Worker', true, '{}'::jsonb)
+    `);
+  }
   const employmentId = randomUUID();
   await db.execute(sql`
     insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
@@ -854,6 +860,50 @@ test("reads are org-scoped and employment-gated", { skip: !DB }, async () => {
   });
 });
 
+test("change-request list applies subsidiary scope before its visible-row limit", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const secondSubsidiary = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      select ${secondSubsidiary}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'Hidden entity', base_currency, country
+        from subsidiaries where id = ${h.org.subsidiaryId} and org_id = ${h.org.orgId}`);
+    const visibleEmployment = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const hiddenEmployment = await seedReservedEmployment(h.org.orgId, secondSubsidiary);
+    const visibleRequest = await createChangeRequestDraft({
+      orgId: h.org.orgId, actorId: h.submitterId, employmentId: visibleEmployment.employmentId,
+      payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
+    });
+    for (let index = 0; index < 3; index += 1) {
+      await createChangeRequestDraft({
+        orgId: h.org.orgId, actorId: h.submitterId, employmentId: hiddenEmployment.employmentId,
+        payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
+      });
+    }
+    const scopedReader = await createScratchUser(h.org.orgId, "Scoped request reader", "scoped_request_reader");
+    await db.execute(sql`
+      update app_roles
+         set permissions = '["hrm.employment.read"]'::jsonb,
+             subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [h.org.subsidiaryId] })}::jsonb
+       where org_id = ${h.org.orgId} and key = 'scoped_request_reader'`);
+    await grantPermissions(h.org.orgId, scopedReader, ["hrm.self.read", "hrm.self.request"]);
+
+    const listed = await listChangeRequests({
+      orgId: h.org.orgId, actorId: scopedReader, limit: 1,
+    });
+    assert.deepEqual(listed.map((request) => request.id), [visibleRequest.id]);
+
+    const ownParty = await linkPerson(h.org.orgId, scopedReader);
+    const ownEmployment = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId, ownParty);
+    await addLiveVersion(h.org.orgId, ownEmployment.employmentId, { status: "active", from: "2020-01-01" });
+    const ownProfileRequest = await createChangeRequestDraft({
+      orgId: h.org.orgId, actorId: scopedReader, employmentId: ownEmployment.employmentId,
+      payload: { kind: "profile_change", phone: "+1 555 0109" },
+    });
+    const allVisible = await listChangeRequests({ orgId: h.org.orgId, actorId: scopedReader, limit: 500 });
+    assert.deepEqual(new Set(allVisible.map((request) => request.id)), new Set([visibleRequest.id, ownProfileRequest.id]));
+  });
+});
+
 test("RLS hides one org's requests from another org's session", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const { employmentId } = await seedReservedEmployment(h.org.orgId, h.org.subsidiaryId);
@@ -936,5 +986,3 @@ test("concurrent two-session apply: exactly one wins", { skip: !DB }, async () =
     );
   });
 });
-
-
