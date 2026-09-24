@@ -276,13 +276,58 @@ test("restricted subsidiary scope hides org-wide runs", { skip: !DB }, async () 
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await seed({ orgId: org.orgId, actorId, periodId: org.periodId, bookId: org.bookId });
+    const subB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    const rule = (await db.execute<{ id: string }>(sql`
+      select id from allocation_rules where org_id = ${org.orgId} limit 1`)).rows[0]!;
+    const version = (await db.execute<{ id: string }>(sql`
+      select id from allocation_rule_versions where org_id = ${org.orgId} and rule_id = ${rule.id} limit 1`)).rows[0]!;
+    const visibleRun = randomUUID();
+    const visibleComputation = {
+      sources: [{ subsidiaryId: org.subsidiaryId }], targets: [{ coordinate: { subsidiaryId: org.subsidiaryId } }], lines: [],
+    };
+    await db.execute(sql`
+      insert into allocation_runs
+        (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
+         status, trigger_kind, source_total, allocated_total, residual, computation, fingerprint,
+         requested_by, created_at, created_by, updated_by)
+      values
+        (${visibleRun}, ${org.orgId}, ${rule.id}, ${version.id}, 'hash-visible', ${org.periodId}, ${org.bookId},
+         ${org.subsidiaryId}, 'previewed', 'manual', '10.00', '10.00', '0.00',
+         ${JSON.stringify(visibleComputation)}::jsonb, 'visible', ${actorId}, now() - interval '1 minute', ${actorId}, ${actorId})`);
+    // Enumerate every computation section that contributes subsidiaries to
+    // visibility, plus incomplete evidence that must fail closed.
+    const hiddenComputations: unknown[] = [
+      { sources: [{ subsidiaryId: subB }], targets: [], lines: [] },
+      { sources: [{ subsidiaryId: org.subsidiaryId }], targets: [{ coordinate: { subsidiaryId: subB } }], lines: [] },
+      { sources: [{ subsidiaryId: org.subsidiaryId }], targets: [], lines: [{ subsidiaryId: subB }] },
+      { sources: "unreadable", targets: [], lines: [] },
+    ];
+    for (const [index, computation] of hiddenComputations.entries()) {
+      await db.execute(sql`
+        insert into allocation_runs
+          (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
+           status, trigger_kind, source_total, allocated_total, residual, computation, fingerprint,
+           requested_by, created_at, created_by, updated_by)
+        values (${randomUUID()}, ${org.orgId}, ${rule.id}, ${version.id}, ${`hash-hidden-${index}`}, ${org.periodId}, ${org.bookId},
+          ${org.subsidiaryId}, 'previewed', 'manual', '20.00', '20.00', '0.00', ${JSON.stringify(computation)}::jsonb,
+          ${`hidden-${index}`}, ${actorId}, now() + (${index} * interval '1 second'), ${actorId}, ${actorId})`);
+    }
     // Both seeded runs are org-wide (subsidiary null).
     const restricted = await listRuns(org.orgId, { allowedSubsidiaryIds: new Set([org.subsidiaryId]) });
-    assert.deepEqual(restricted, { runs: [], total: 0 });
+    assert.equal(restricted.total, 1);
+    assert.deepEqual(restricted.runs.map(({ id }) => id), [visibleRun]);
+    // Visibility is applied before counting or paginating: newer hidden rows
+    // cannot bump the visible result off the page.
+    const page = await listRuns(org.orgId, { allowedSubsidiaryIds: new Set([org.subsidiaryId]), limit: 1, offset: 0 });
+    assert.equal(page.total, 1);
+    assert.deepEqual(page.runs.map(({ id }) => id), [visibleRun]);
     const empty = await listRuns(org.orgId, { allowedSubsidiaryIds: new Set() });
     assert.deepEqual(empty, { runs: [], total: 0 });
     const open = await listRuns(org.orgId, { allowedSubsidiaryIds: null });
-    assert.equal(open.total, 2);
+    assert.equal(open.total, 7);
   } finally {
     await dropScratchOrg(org.orgId);
   }
