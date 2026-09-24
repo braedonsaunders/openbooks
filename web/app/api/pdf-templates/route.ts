@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
+import { assertPrintablePage, compileTemplateHtml, PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../lib/authz";
 import { describeDbError, pgErrorCode } from "../../../lib/setup/coerce";
 import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents.ts";
@@ -94,9 +94,26 @@ export async function POST(req: Request) {
   }
   // Store the source human-readable (whitespace-only change; render-neutral).
   const prettySource = await prettifyTemplateHtml(compiled.sanitizedSource);
-  const paperSize = ["letter", "a4", "legal"].includes(body.paperSize ?? "") ? body.paperSize : "letter";
+  // Page geometry is refused, never coerced: a misspelled size printing
+  // Letter, or a 500 mm margin printing blank, is a silent misprint. Omitted
+  // values take the starter defaults.
+  const paperSizeInput = body.paperSize ?? "letter";
+  const marginMmInput = body.marginMm ?? 14;
+  try {
+    assertPrintablePage(paperSizeInput, marginMmInput);
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+  }
+  if (!Number.isInteger(marginMmInput)) {
+    return NextResponse.json({ error: `Margin must be a whole number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${String(marginMmInput)}.` }, { status: 400 });
+  }
+  // assertPrintablePage narrows paperSizeInput to the supported set.
+  const paperSize = paperSizeInput;
+  const marginMm = marginMmInput;
+  if (body.orientation !== undefined && body.orientation !== "landscape" && body.orientation !== "portrait") {
+    return NextResponse.json({ error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` }, { status: 400 });
+  }
   const orientation = body.orientation === "landscape" ? "landscape" : "portrait";
-  const marginMm = Math.min(50, Math.max(0, Math.round(Number(body.marginMm ?? 14)) || 14));
 
   try {
     const row = await db.transaction(async (tx) => {

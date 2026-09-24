@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
-import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
+import { assertPrintablePage, compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { can, guardPermission } from "../../../../lib/authz";
 import { unexpectedServerError } from "../../../../lib/api/unexpected";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
@@ -69,13 +69,27 @@ export async function POST(req: Request) {
   const real = sampleId ? await loadPdfRecordValues(meta.key, user.orgId, sampleId, scope) : null;
   const values = real?.values ?? sampleValues(meta);
 
+  // Preview geometry is refused like saved geometry: a misspelled size must
+  // not preview as Letter while the saved template would print the same lie.
+  const paperSizeInput = body.paperSize ?? "letter";
+  const marginMmInput = body.marginMm ?? 14;
+  try {
+    assertPrintablePage(paperSizeInput, marginMmInput);
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+  }
+  if (body.orientation !== undefined && body.orientation !== "landscape" && body.orientation !== "portrait") {
+    return NextResponse.json({ error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` }, { status: 400 });
+  }
+
   try {
     const pdf = await mergeAndPrintPdf(
       {
         compiledHtml,
-        paperSize: (["letter", "a4", "legal"].includes(body.paperSize ?? "") ? body.paperSize : "letter") as "letter" | "a4" | "legal",
+        // assertPrintablePage narrows paperSizeInput to the supported set.
+        paperSize: paperSizeInput,
         orientation: body.orientation === "landscape" ? "landscape" : "portrait",
-        marginMm: Math.min(50, Math.max(0, Math.round(Number(body.marginMm ?? 14)) || 0)),
+        marginMm: marginMmInput,
         headerHtml: header || null,
         footerHtml: footer || null,
       },

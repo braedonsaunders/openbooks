@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
+import { assertPrintablePage, compileTemplateHtml, PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../../lib/authz";
 import { describeDbError, pgErrorCode } from "../../../../lib/setup/coerce";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
@@ -74,15 +74,27 @@ export async function PATCH(req: Request, { params }: Params) {
   }
   // Store the source human-readable (whitespace-only change; render-neutral).
   const prettySource = await prettifyTemplateHtml(compiled.sanitizedSource);
-  const paperSize = ["letter", "a4", "legal"].includes(body.paperSize ?? "")
-    ? body.paperSize
-    : existing.paperSize;
+  // Page geometry is refused, never coerced (see the POST route): omitted
+  // values keep the stored row.
+  const paperSizeInput = body.paperSize ?? existing.paperSize;
+  const marginMmInput = body.marginMm ?? existing.marginMm;
+  try {
+    assertPrintablePage(paperSizeInput, marginMmInput);
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+  }
+  if (!Number.isInteger(marginMmInput)) {
+    return NextResponse.json({ error: `Margin must be a whole number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${String(marginMmInput)}.` }, { status: 400 });
+  }
+  // assertPrintablePage narrows paperSizeInput to the supported set.
+  const paperSize = paperSizeInput;
+  const marginMm = marginMmInput;
+  if (body.orientation !== undefined && body.orientation !== "landscape" && body.orientation !== "portrait") {
+    return NextResponse.json({ error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` }, { status: 400 });
+  }
   const orientation = body.orientation
     ? body.orientation === "landscape" ? "landscape" : "portrait"
     : existing.orientation;
-  const marginMm = body.marginMm !== undefined
-    ? Math.min(50, Math.max(0, Math.round(Number(body.marginMm)) || 0))
-    : existing.marginMm;
   const isDefault = body.isDefault ?? existing.isDefault;
   const isActive = body.isActive ?? existing.isActive;
   // Collection POST coerces isDefault with !!; an explicit PATCH value

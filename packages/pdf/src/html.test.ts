@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isAllowedPdfRequest, preparePdfChromeHtml } from './html'
+import { assertPrintablePage, isAllowedPdfRequest, preparePdfChromeHtml } from './html'
 import { pdfChromeSubresourceRequests } from './template'
+
+test('an unknown paper size or out-of-range margin is refused by name', () => {
+  assert.throws(() => assertPrintablePage('a3', 15), /Unknown paper size "a3".*letter, a4, legal/)
+  assert.throws(() => assertPrintablePage(undefined, 15), /Unknown paper size/)
+  assert.throws(() => assertPrintablePage('letter', 500), /Margin 500 mm is outside the printable 5–30 mm range/)
+  assert.throws(() => assertPrintablePage('letter', 0), /outside the printable/)
+  assert.throws(() => assertPrintablePage('letter', Number.NaN), /must be a number/)
+  assert.doesNotThrow(() => assertPrintablePage('letter', 15))
+  assert.doesNotThrow(() => assertPrintablePage('a4', 5))
+  assert.doesNotThrow(() => assertPrintablePage('legal', 30))
+})
 
 test('allows the print document and inline visual resources only', () => {
   assert.equal(isAllowedPdfRequest('document', 'about:blank'), true)
