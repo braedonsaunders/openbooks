@@ -41,6 +41,7 @@ export async function POST(
         documentId: id,
         reason,
         reversalDate: typeof body.reversalDate === "string" ? body.reversalDate : null,
+        reversalPeriodId: typeof body.reversalPeriodId === "string" ? body.reversalPeriodId : null,
         idempotencyKey,
       });
       return { status: 200, body: outcome.result, replayed: outcome.replayed };

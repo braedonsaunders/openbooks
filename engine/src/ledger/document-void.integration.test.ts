@@ -405,6 +405,124 @@ test("controlled void preserves the source and posts an exact open-period revers
   }
 });
 
+test("a void naming an adjustment-period reversal posts the reversal there", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Void Controller", "admin");
+    const adjustmentPeriodId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment, custom)
+      select ${adjustmentPeriodId}, ${org.orgId}, fiscal_calendar_id,
+             2026, 13, 'FY26 Adjustment', ${org.date}::date, ${org.date}::date, true,
+             '{}'::jsonb
+        from accounting_periods
+       where id = ${org.periodId}
+    `);
+    async function seedPostedBill(documentNumber: string): Promise<{ documentId: string; sourceEntryId: string }> {
+      const documentId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, fx_rate, status,
+           subtotal, tax_total, total, created_by)
+        values (
+          ${documentId}, ${org.orgId}, 'vendor_bill', ${documentNumber},
+          ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+          'CAD', '1', 'draft', '125', '0', '125', ${actorId}
+        )
+      `);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity,
+           unit_price, amount, tax_amount, created_by)
+        values (
+          ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '1',
+          '125', '125', '0', ${actorId}
+        )
+      `);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', updated_at = now()
+         where id = ${documentId} and org_id = ${org.orgId}
+      `);
+      const sourceEntryId = await postDocument(
+        documentId,
+        {
+          control: {
+            ar: org.accounts.ar,
+            ap: org.accounts.ap,
+            bank: org.accounts.bank,
+          },
+        },
+        { audit: { actorId, source: "test" } },
+      );
+      return { documentId, sourceEntryId };
+    }
+
+    // The named adjustment period carries the reversal ...
+    const overridden = await seedPostedBill("BILL-VOID-ADJ");
+    const withOverride = await requestDocumentVoid({
+      documentId: overridden.documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Reversal belongs in the adjustment period",
+      reversalDate: org.date,
+      reversalPeriodId: adjustmentPeriodId,
+      source: "api",
+    });
+    assert.equal(withOverride.status, "voided");
+    const overridePeriod = (await db.execute<{ period_id: string }>(sql`
+      select period_id from journal_entries where id = ${withOverride.reversalEntryId}
+    `));
+    assert.equal(overridePeriod.rows[0]!.period_id, adjustmentPeriodId);
+
+    // ... while omitting the override keeps the date-resolved regular period.
+    const plain = await seedPostedBill("BILL-VOID-REG");
+    const withoutOverride = await requestDocumentVoid({
+      documentId: plain.documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Ordinary void keeps the regular period",
+      reversalDate: org.date,
+      source: "api",
+    });
+    assert.equal(withoutOverride.status, "voided");
+    const regularPeriod = (await db.execute<{ period_id: string }>(sql`
+      select period_id from journal_entries where id = ${withoutOverride.reversalEntryId}
+    `));
+    assert.equal(regularPeriod.rows[0]!.period_id, org.periodId);
+
+    // A regular period, an unknown id, and a malformed reference all refuse
+    // by name instead of posting somewhere unasked.
+    const refused = await seedPostedBill("BILL-VOID-REF");
+    for (const reversalPeriodId of [org.periodId, randomUUID(), "not-a-period"]) {
+      const error = await requestDocumentVoid({
+        documentId: refused.documentId,
+        orgId: org.orgId,
+        actorId,
+        reason: "Invalid override must refuse",
+        reversalDate: org.date,
+        reversalPeriodId,
+        source: "api",
+      }).then(
+        () => null,
+        (cause: unknown) => cause,
+      );
+      assert.ok(error instanceof DocumentVoidError, `expected a named refusal for ${reversalPeriodId}`);
+      assert.equal(error.code, "reversal-period-uncovered");
+      assert.match(error.message, /reversal period .* is not a(n)? (valid period reference|adjustment period covering)/);
+    }
+    const untouched = (await db.execute<{ status: string; reversal_entry_id: string | null }>(sql`
+      select status, reversal_entry_id from documents where id = ${refused.documentId}
+    `));
+    assert.deepEqual(untouched.rows[0], { status: "posted", reversal_entry_id: null });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("delete and submit serialize on the document row before approval gates commit", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   let releaseHolder = () => {};

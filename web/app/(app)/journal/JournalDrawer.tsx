@@ -20,6 +20,7 @@ import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
+import { promptVoidReversalPeriod } from '../../../lib/void-reversal-period'
 import { formatJournalAmount, journalAmountUnits, journalLineUnits } from '../../../lib/journal-amounts'
 import {
   DOCUMENT_CHANGED_AFTER_OPEN,
@@ -766,6 +767,14 @@ export function JournalDrawer({
       confirmLabel: tc('actions.void'),
     })
     if (!reason) return
+    const reversal = await promptVoidReversalPeriod(doc.id, {
+      title: tc('amendment.voidReversalPeriodTitle'),
+      label: tc('amendment.voidReversalPeriodLabel'),
+      regularOption: tc('amendment.voidReversalPeriodRegular'),
+      confirm: tc('actions.void'),
+      cancel: tc('confirm.cancel'),
+    })
+    if (reversal.cancelled) return
     await execute(
       async () => {
         // The void API fences on the exact revision like every other document
@@ -777,7 +786,11 @@ export function JournalDrawer({
         const result = await fetchAction(`/api/documents/${doc.id}/void`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason, expectedUpdatedAt: voidRevision }),
+          body: JSON.stringify({
+            reason,
+            expectedUpdatedAt: voidRevision,
+            ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
+          }),
         })
         if (!result.ok && result.error.code === 'stale-revision') {
           // A stale revision means the re-pin raced a concurrent write:

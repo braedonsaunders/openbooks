@@ -113,6 +113,8 @@ export const documents = pgTable(
     voidRequestedAt: timestamp("void_requested_at", { withTimezone: true }),
     voidRequestedBy: uuid("void_requested_by"),
     voidReversalDate: date("void_reversal_date"),
+    /** Explicit adjustment-period override for the void's reversal journals (0333); null resolves by date. */
+    voidReversalPeriodId: uuid("void_reversal_period_id"),
     reversalEntryId: uuid("reversal_entry_id"),
 
     // Denormalized totals (fast lists), derived from this document's lines.

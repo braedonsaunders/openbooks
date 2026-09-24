@@ -32,13 +32,12 @@ function voidPermission(kind: string): string | null {
   }
 }
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+type VoidGuard = { authz: NonNullable<Awaited<ReturnType<typeof getAuthz>>>; id: string }
+
+/** The caller may drive this document's void — shared by GET and POST. */
+async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const found = (await db.execute<{ kind: string; subsidiaryId: string | null }>(sql`
     select kind, subsidiary_id as "subsidiaryId"
@@ -62,11 +61,47 @@ export async function POST(
   if (!can(authz, permission)) {
     return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
   }
+  return { authz, id }
+}
+
+/**
+ * Adjustment periods eligible as an explicit void-reversal override. Empty
+ * when the org uses none — the void UI then offers no period choice and the
+ * reversal resolves by date in the regular covering period.
+ */
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params
+  const gate = await guardVoidDocument(id)
+  if (gate instanceof NextResponse) return gate
+  const periods = (await db.execute<{ id: string; name: string; startsOn: string; endsOn: string }>(sql`
+    select p.id, p.name, p.starts_on::text as "startsOn", p.ends_on::text as "endsOn"
+      from accounting_periods p
+      join fiscal_calendars fc
+        on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+       and fc.is_default and fc.is_active
+     where p.org_id = ${gate.authz.user.orgId} and p.is_adjustment
+     order by p.starts_on, p.ends_on, p.id
+  `))
+  return NextResponse.json({ adjustmentPeriods: periods.rows })
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params
+  const gate = await guardVoidDocument(id)
+  if (gate instanceof NextResponse) return gate
+  const { authz } = gate
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     reason?: string
     reversalDate?: string | null
+    reversalPeriodId?: string | null
     expectedUpdatedAt?: string
   }
   if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
@@ -82,6 +117,7 @@ export async function POST(
       actorId: authz.user.id,
       reason: body.reason ?? '',
       reversalDate: body.reversalDate,
+      reversalPeriodId: body.reversalPeriodId,
       source: 'ui',
       expectedUpdatedAt: body.expectedUpdatedAt,
     })

@@ -265,7 +265,10 @@
     "deletePlaceholder": "说明为何必须删除已过账交易",
     "voidTitle": "作废该交易？",
     "correctionCreated": "已创建更正草稿",
-    "voidPlaceholder": "说明该交易必须冲销的原因"
+    "voidPlaceholder": "说明该交易必须冲销的原因",
+    "voidReversalPeriodTitle": "要冲销到哪个期间?",
+    "voidReversalPeriodLabel": "冲销期间",
+    "voidReversalPeriodRegular": "常规期间（默认）"
   },
   "approvalFlow": {
     "pendingWith": "等待 {names} 处理",

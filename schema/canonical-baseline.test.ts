@@ -697,6 +697,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // key), preserving sent/skipped history exactly with one audit_log row
     // per cleared row.
     "0329_dunning_sent_at_delivery_evidence.sql",
+    // Void reversals could never land in an adjustment period by date while
+    // the code promised an explicit document override with no field. 0333
+    // adds the nullable documents.void_reversal_period_id pointer (staged
+    // NOT VALID foreign key); null keeps date-resolved regular periods.
+    "0333_document_void_reversal_period.sql",
     // The migration chain relied on the bootstrap environments.sql backstop
     // for tenant isolation, so three tables shipped FORCE-without-ENABLE
     // (0026, 0153) or no RLS at all (0281) and read cross-tenant on a

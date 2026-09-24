@@ -1,0 +1,1 @@
+Pure additive shape with no operator decision: a nullable column with no default leaves every existing row null (voids keep date-resolved regular periods), the foreign key arrives NOT VALID with its own VALIDATE step so no table scan can block the install, and no backfill or data precondition exists for any install state.

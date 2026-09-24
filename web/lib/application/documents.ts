@@ -270,6 +270,7 @@ export async function voidDocument(
     documentId: string;
     reason: string;
     reversalDate?: string | null;
+    reversalPeriodId?: string | null;
     idempotencyKey: string;
   },
 ): Promise<{ replayed: boolean; result: unknown }> {
@@ -283,6 +284,7 @@ export async function voidDocument(
       documentId: input.documentId,
       reason: input.reason,
       reversalDate: input.reversalDate ?? null,
+      reversalPeriodId: input.reversalPeriodId ?? null,
     },
     execute: async () => {
       try {
@@ -292,6 +294,7 @@ export async function voidDocument(
           actorId: context.authz.user.id,
           reason: input.reason,
           reversalDate: input.reversalDate,
+          reversalPeriodId: input.reversalPeriodId,
           source: context.source,
         });
       } catch (error) {

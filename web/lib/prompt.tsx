@@ -25,6 +25,12 @@ type PromptOptions = {
   placeholder?: string
   confirmLabel?: string
   cancelLabel?: string
+  /**
+   * Fixed choice list. When present the modal renders a select instead of a
+   * text input and resolves the chosen value — including '' when the caller
+   * offers an explicit default option — or null on cancel/dismiss.
+   */
+  options?: { value: string; label: string }[]
 }
 
 type Request = PromptOptions & { id: number; resolve: (value: string | null) => void }
@@ -96,6 +102,10 @@ export function PromptRoot() {
   if (typeof document === 'undefined') return null
 
   function submit() {
+    if (req?.options) {
+      settle(value)
+      return
+    }
     const trimmed = value.trim()
     settle(trimmed ? trimmed : null)
   }
@@ -144,22 +154,37 @@ export function PromptRoot() {
                     {req.label}
                   </Label>
                 ) : null}
-                <Input
-                  id="prompt-input"
-                  ref={inputRef}
-                  value={value}
-                  placeholder={req.placeholder}
-                  onChange={(e) => setValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') settle(null)
-                  }}
-                />
+                {req.options ? (
+                  <select
+                    id="prompt-input"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    {req.options.map((opt) => (
+                      <option key={opt.value || '(default)'} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    id="prompt-input"
+                    ref={inputRef}
+                    value={value}
+                    placeholder={req.placeholder}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') settle(null)
+                    }}
+                  />
+                )}
               </div>
               <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-900/60">
                 <Button type="button" variant="outline" onClick={() => settle(null)}>
                   {req.cancelLabel ?? tc('confirm.cancel')}
                 </Button>
-                <Button type="submit" disabled={!value.trim()}>
+                <Button type="submit" disabled={req.options ? false : !value.trim()}>
                   {req.confirmLabel ?? tc('actions.save')}
                 </Button>
               </div>

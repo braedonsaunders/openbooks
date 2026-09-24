@@ -265,7 +265,10 @@
     "deletePlaceholder": "転記済み取引を削除する必要がある理由を記載してください",
     "voidTitle": "この取引を無効化しますか？",
     "correctionCreated": "修正下書きを作成しました",
-    "voidPlaceholder": "取引を振り戻す理由を記入してください"
+    "voidPlaceholder": "取引を振り戻す理由を記入してください",
+    "voidReversalPeriodTitle": "どの期間に振り戻しますか?",
+    "voidReversalPeriodLabel": "振り戻しの期間",
+    "voidReversalPeriodRegular": "通常期間（デフォルト）"
   },
   "approvalFlow": {
     "pendingWith": "{names}の承認待ち",
