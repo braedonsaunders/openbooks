@@ -58,19 +58,19 @@ test('banking cockpit denies every row to an empty subsidiary scope', { skip: !e
     })
 
     const denied = await withBypass(() => bankingHome(scratch.orgId, []))
-    assert.equal(denied.totalCash, '0.0000', 'empty scope reads no cash')
+    assert.equal(denied.totalCash, 0, 'empty scope reads no cash')
     assert.ok(
-      denied.accounts.every((a) => a.balance === '0.0000'),
+      denied.accounts.every((a) => a.balance === 0),
       'empty scope carries no bank balance on any roster row',
     )
     assert.ok(
       denied.trend.every((w) => w.balance === 0),
       'empty scope trend stays at zero',
     )
-    assert.equal(denied.netFlow7d, '0.0000', 'empty scope reads no flow')
+    assert.equal(denied.netFlow7d, 0, 'empty scope reads no flow')
 
     const all = await withBypass(() => bankingHome(scratch.orgId))
-    assert.equal(all.totalCash, '250.0000', 'unrestricted callers still see the balance')
+    assert.equal(all.totalCash, 250, 'unrestricted callers still see the balance')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

@@ -79,9 +79,9 @@ test('restricted spend excludes subsidiary-less bills', { skip: !process.env.OPE
       await withBypassContext(() => seedPostedBill(org, actorId, { number: 'BILL-NOSUB', subsidiaryId: null, total: '500' }))
 
       const home = await withOrgContext(org.orgId, () => purchasingHome(org.orgId, [branchId]))
-      assert.equal(home.spend30d, '100.0000', 'branch scope sees only the branch bill')
+      assert.equal(home.spend30d, 100, 'branch scope sees only the branch bill')
       const all = await withOrgContext(org.orgId, () => purchasingHome(org.orgId))
-      assert.equal(all.spend30d, '600.0000', 'unrestricted callers still see everything')
+      assert.equal(all.spend30d, 600, 'unrestricted callers still see everything')
     })
   } finally {
     await dropScratchOrg(org.orgId)
