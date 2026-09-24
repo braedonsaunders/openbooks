@@ -10,12 +10,14 @@ export const TIER_RANK: Record<RoleTier, number> = {
   viewer: 4,
 }
 
-export const ROLE_TIER_LABELS: Record<RoleTier, string> = {
-  admin: 'Administrator',
-  controller: 'Controller',
-  accountant: 'Accountant',
-  approver: 'Approver',
-  viewer: 'Viewer',
+export type RoleTierLabelKey = `roleNames.${RoleTier}`
+
+export const ROLE_TIER_LABEL_KEYS: Record<RoleTier, RoleTierLabelKey> = {
+  admin: 'roleNames.admin',
+  controller: 'roleNames.controller',
+  accountant: 'roleNames.accountant',
+  approver: 'roleNames.approver',
+  viewer: 'roleNames.viewer',
 }
 
 export function inferRoleTier(roleKeys: readonly string[]): RoleTier {

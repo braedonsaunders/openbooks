@@ -234,5 +234,12 @@
     "joinsOn": "ingressa em {date}",
     "overdueSteps": "{overdue, plural, one {# etapa de checklist} other {# etapas de checklist}} vencidas na sua equipe",
     "newJoiners": "{joiners, plural, one {# nova contratação} other {# novas contratações}} nos últimos 30 dias — agende a primeira conversa 1:1"
+  },
+  "roleNames": {
+    "admin": "Administrador",
+    "controller": "Controlador financeiro",
+    "accountant": "Contador",
+    "approver": "Aprovador",
+    "viewer": "Leitor"
   }
 }
