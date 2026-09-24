@@ -151,6 +151,47 @@ test('deleting a saved view confirms before the DELETE goes out', async () => {
   }
 })
 
+test('column move buttons expose translated names with their column context', async (t) => {
+  document.body.innerHTML = ''
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  /* eslint-disable react/no-children-prop */
+  await act(async () => {
+    root.render(
+      React.createElement(NextIntlClientProvider, {
+        locale: 'en',
+        messages,
+        timeZone: 'UTC',
+        children: React.createElement(ListViewDesigner, {
+          recordType: 'vendor_bill',
+          def: null,
+          canManageOrg: true,
+          userId: '00000000-0000-4000-8000-00000000a002',
+          showInListDefs: [],
+          filterOptions: {},
+          inventoryEnabled: false,
+          crmEnabled: false,
+          hrmEnabled: false,
+        }),
+      }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+  /* eslint-enable react/no-children-prop */
+
+  const moveUp = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Previous: "]')]
+  const moveDown = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Next: "]')]
+  assert.ok(moveUp.length > 0, 'each column has a named move-up control')
+  assert.equal(moveDown.length, moveUp.length, 'each column has a named move-down control')
+  assert.ok(moveUp.every((button) => button.getAttribute('aria-label')!.length > 'Previous: '.length))
+  assert.ok(moveDown.every((button) => button.getAttribute('aria-label')!.length > 'Next: '.length))
+})
+
 // F-t05-011 history: the delete confirmation names the fallback consequence,
 // so it must exist in every shipped locale.
 for (const locale of ['en', 'fr', 'es']) {
