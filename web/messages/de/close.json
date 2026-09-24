@@ -93,6 +93,7 @@
     "taskUpdated": "Aufgabe aktualisiert",
     "revaluationPosted": "Fremdwährungssalden neu bewertet",
     "consolidationPosted": "Beteiligungsbuchungen, Kurse und Eliminierungen gebucht",
+    "consolidationReversed": "Frühere Eliminierung storniert; für die Periode ist keine Eliminierung wirksam",
     "evidenceAdded": "Nachweis angehängt",
     "automationComplete": "Abschlussautomatisierung abgeschlossen"
   },

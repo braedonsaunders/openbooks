@@ -93,6 +93,7 @@
     "taskUpdated": "タスクを更新しました",
     "revaluationPosted": "外貨建残高を評価替えしました",
     "consolidationPosted": "持分調整、為替レート、消去仕訳を転記しました",
+    "consolidationReversed": "前期の消去仕訳を戻しました。この期間に有効な消去仕訳はありません",
     "evidenceAdded": "証跡を添付しました",
     "automationComplete": "決算の自動処理が完了しました"
   },

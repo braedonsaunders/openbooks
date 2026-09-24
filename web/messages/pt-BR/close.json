@@ -93,6 +93,7 @@
     "taskUpdated": "Tarefa atualizada",
     "revaluationPosted": "Saldos em moeda estrangeira reavaliados",
     "consolidationPosted": "Ajustes societários, taxas e eliminações contabilizados",
+    "consolidationReversed": "Eliminação anterior revertida; nenhuma eliminação vigente para o período",
     "evidenceAdded": "Evidência anexada",
     "automationComplete": "Automação de fechamento concluída"
   },

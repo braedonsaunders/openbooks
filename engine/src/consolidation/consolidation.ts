@@ -1017,7 +1017,8 @@ export async function runAutoElimination(
   entryId: string | null;
   lineCount: number;
   assetEntryIds?: string[];
-  status: "eliminated" | "no_elimination_required";
+  reversalEntryIds?: string[];
+  status: "eliminated" | "no_elimination_required" | "reversed";
 }> {
   // One elimination run per tenant/period at a time. Every read that decides
   // what to reverse or create happens on ONE REPEATABLE READ snapshot inside
@@ -1046,7 +1047,8 @@ async function runAutoEliminationIn(
   entryId: string | null;
   lineCount: number;
   assetEntryIds?: string[];
-  status: "eliminated" | "no_elimination_required";
+  reversalEntryIds?: string[];
+  status: "eliminated" | "no_elimination_required" | "reversed";
 }> {
   if (!userId)
     throw new ConsolidationError(
@@ -1137,11 +1139,15 @@ async function runAutoEliminationIn(
   // null with an explicit no_elimination_required state, and the transfer
   // journals are reported under assetEntryIds only. Falling back to the last
   // asset entry as entryId would present an asset-transfer journal as "the
-  // elimination entry" to the close route and UI.
+  // elimination entry" to the close route and UI. The same holds for a
+  // reversal: it undoes a prior elimination but is not itself one, so
+  // reversal ids travel under reversalEntryIds and never as entryId.
+  const reversalIds: string[] = [];
   const finishElimination = (entryId: string | null, lineCount: number) => ({
     entryId,
     lineCount: lineCount + assetLineCount,
     ...(assetEntryIds.length ? { assetEntryIds } : {}),
+    ...(reversalIds.length ? { reversalEntryIds: [...reversalIds] } : {}),
     status: (entryId ? "eliminated" : "no_elimination_required") as
       | "eliminated"
       | "no_elimination_required",
@@ -1284,7 +1290,6 @@ async function runAutoEliminationIn(
     );
   }
 
-  let lastReversalId: string | null = null;
   for (const p of prior.rows) {
     const rev = await tx.execute<{ id: string }>(sql`
       insert into journal_entries
@@ -1309,10 +1314,25 @@ async function runAutoEliminationIn(
          set status = 'reversed', updated_at = now(), updated_by = ${userId}
        where id = ${p.id} and org_id = ${orgId} and status = 'posted'
     `);
-    lastReversalId = reversalId;
+    reversalIds.push(reversalId);
   }
-  if (translatedActivity.length === 0)
-    return finishElimination(lastReversalId, 0);
+  if (translatedActivity.length === 0) {
+    // The intercompany source corrected away: the re-run reverses the prior
+    // elimination and posts no replacement. entryId stays null — the close
+    // UI must not open the reversal journal as "the elimination entry" —
+    // with an explicit reversed state and the reversal ids reported under
+    // their own field.
+    if (reversalIds.length > 0) {
+      return {
+        entryId: null,
+        lineCount: assetLineCount,
+        ...(assetEntryIds.length ? { assetEntryIds } : {}),
+        reversalEntryIds: [...reversalIds],
+        status: "reversed" as const,
+      };
+    }
+    return finishElimination(null, 0);
+  }
 
   // Reversed generations keep their rows (posted ledgers are never
   // rewritten), so the replacement's number must advance past every prior
@@ -1394,7 +1414,8 @@ export async function runCombinedConsolidation(
     entryId: string | null;
     lineCount: number;
     assetEntryIds?: string[];
-    status: "eliminated" | "no_elimination_required";
+    reversalEntryIds?: string[];
+  status: "eliminated" | "no_elimination_required" | "reversed";
   };
 }> {
   return withOwnershipSourceTransaction(orgId, async (tx) => ({
