@@ -11,6 +11,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -302,9 +303,8 @@ test(
         })}::jsonb where id = ${org.orgId}`);
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
-      // Every slot that applies in Ontario is mapped. The Quebec-only slots
-      // (qc_income_tax, qpip, hsf) are deliberately left unmapped: an
-      // Ontario-only tenant must not be asked for Revenu Québec accounts.
+      await seedOntarioEhtFixture(org.orgId, actorId);
+      // Ontario slots are mapped; QC-only slots stay unmapped for this ON-only employee.
       await setPackSlotAccount(org.orgId, actorId, "CA", "wcb", wcbPayable);
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
 
@@ -337,8 +337,7 @@ test(
                   'unbilled', 'actual', ${actorId}, ${actorId})`);
       }
 
-      // No ca_eht rate: under the exemption the employer owes no EHT, and
-      // zero is legitimate — the run pays without refusal.
+      // The explicit $1M exemption leaves this synthetic employer owing no EHT.
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",

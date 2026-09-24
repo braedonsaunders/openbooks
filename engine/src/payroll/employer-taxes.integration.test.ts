@@ -11,12 +11,18 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Lean WCB-only harness: one hourly ON employee at the given rate, three jobs. */
-async function seedWcbHarness(orgId: string, actorId: string, hourlyRate: string): Promise<{
+async function seedWcbHarness(
+  orgId: string,
+  actorId: string,
+  hourlyRate: string,
+  ehtExemption = "1000000",
+): Promise<{
   scheduleId: string;
   employeeId: string;
   jobA: string;
@@ -52,6 +58,7 @@ async function seedWcbHarness(orgId: string, actorId: string, hourlyRate: string
     })}::jsonb where id = ${orgId}`);
 
   await seedPayrollComponents(orgId, actorId, "CA");
+  await seedOntarioEhtFixture(orgId, actorId, ehtExemption);
   await setPackSlotAccount(orgId, actorId, "CA", "wcb", wcbPayable);
 
   const wcbGroupId = randomUUID();
@@ -130,12 +137,11 @@ test(
             eiPayableAccountId: craPayable,
             taxPayableAccountId: craPayable,
             wagesTo: "expense",
-            // Ontario EHT: 1.95% past a (deliberately tiny) $1,000 exemption.
-            ca: { eht: { enabled: true, rate: "1.95", annualExemption: "1000" } },
           },
         })}::jsonb where id = ${org.orgId}`);
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedOntarioEhtFixture(org.orgId, actorId, "1000");
       await setPackSlotAccount(org.orgId, actorId, "CA", "wcb", wcbPayable);
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
 
@@ -306,18 +312,13 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const harness = await seedWcbHarness(org.orgId, actorId, "30");
+      const harness = await seedWcbHarness(org.orgId, actorId, "30", "1000");
       const ehtPayable = randomUUID();
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
                               reconcilable, required_dimensions, custom, subsidiary_include_children)
         values (${ehtPayable}, ${org.orgId}, '2340', 'EHT payable', 'liability_current', false, true,
                 false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-      await db.execute(sql`
-        update orgs
-           set settings = jsonb_set(settings, '{payroll,ca}',
-                                    '{"eht": {"enabled": true, "rate": "1.95", "annualExemption": "1000"}}')
-         where id = ${org.orgId}`);
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
       await saveOpeningBalances({
         orgId: org.orgId, actorId, taxYear: 2026,
@@ -582,6 +583,7 @@ test(
         })}::jsonb where id = ${org.orgId}`);
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedOntarioEhtFixture(org.orgId, actorId);
       await setPackSlotAccount(org.orgId, actorId, "CA", "wcb", wcbPayable);
 
       const wcbGroupId = randomUUID();

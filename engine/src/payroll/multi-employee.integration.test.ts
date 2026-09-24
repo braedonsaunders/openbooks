@@ -9,6 +9,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { upsertUnionFringe } from "./union.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
@@ -68,10 +69,10 @@ async function payrollOrg(opts: { eht?: { rate: string; annualExemption: string 
         taxPayableAccountId: accounts.craPayable,
         vacationPayableAccountId: accounts.vacationPayable,
         wagesTo: "expense",
-        ...(opts.eht ? { ca: { eht: { enabled: true, ...opts.eht } } } : {}),
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
+  await seedOntarioEhtFixture(org.orgId, actorId, opts.eht?.annualExemption);
 
   const scheduleId = randomUUID();
   await db.execute(sql`

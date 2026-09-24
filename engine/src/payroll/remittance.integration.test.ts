@@ -19,7 +19,7 @@ import { attributePayRunEntity } from "./run-lifecycle.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedPayrollComponents } from "./run-setup.ts";
+import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
