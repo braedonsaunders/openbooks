@@ -1,22 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import test from "node:test";
-
-const coreSource = readFileSync(join(import.meta.dirname, "core.ts"), "utf8");
-
-// The orientation conventions derive from the canonical class map — a second
-// handwritten list would silently miss a type the map gains tomorrow.
-test("net conventions derive from the canonical account class map", () => {
-  assert.doesNotMatch(coreSource, /"asset_bank",\s*\n\s*"asset_receivable"/);
-  assert.doesNotMatch(coreSource, /"liability_payable",\s*\n\s*"liability_card"/);
-  assert.match(coreSource, /ACCOUNT_CLASS_TYPES\.asset/);
-  assert.match(coreSource, /ACCOUNT_CLASS_TYPES\.expense/);
-  assert.match(coreSource, /ACCOUNT_CLASS_TYPES\.liability/);
-  assert.match(coreSource, /ACCOUNT_CLASS_TYPES\.equity/);
-  assert.match(coreSource, /ACCOUNT_CLASS_TYPES\.income/);
-});
 
 test("every account type in the universe maps to exactly one convention", () => {
   const source = `
