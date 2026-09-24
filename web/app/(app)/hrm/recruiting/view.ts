@@ -31,6 +31,7 @@ import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { setupSectionParams } from '../../../../lib/list-params'
+import { recruitingHref } from '../../../../lib/hrm/workspace-href'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
@@ -305,15 +306,7 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
   })
 }
 
-function hrefFor(status: string | null, selection: { requisition?: string; candidate?: string; offer?: string } | null): string {
-  const params = new URLSearchParams()
-  if (status) params.set('status', status)
-  if (selection?.requisition) params.set('requisition', selection.requisition)
-  if (selection?.candidate) params.set('candidate', selection.candidate)
-  if (selection?.offer) params.set('offer', selection.offer)
-  const query = params.toString()
-  return query ? `/hrm/recruiting?${query}` : '/hrm/recruiting'
-}
+
 
 export async function recruitingTitle(): Promise<string> {
   const t = await getTranslations('hrm')
@@ -339,6 +332,10 @@ export async function loadRecruitingPage(
   // HR-18: route sub-tabs. A tab naming a switched-off surface falls back
   // to Openings, so feature-off tabs are absent, not errors.
   const tab: DepthTab = await resolveDepthTab(authz, sp.tab)
+  // F3-56: drawer hrefs preserve the depth tab, the status filter, and the
+  // rehomed setup-section params through the ONE shared helper — closing a
+  // drawer returns to the same tab/filter instead of the default view.
+  const preservedParams = { ...(status ? { status } : {}), tab, ...setupSectionParams(sp) }
   const depthTabs = await depthTabOptions(authz, t, status)
   const canManage = can(authz, 'hrm.recruiting.manage')
   const creating = sp.requisition === 'new' && canManage
@@ -370,7 +367,7 @@ export async function loadRecruitingPage(
     status: row.status,
     statusLabel: statusLabel(row.status),
     statusVariant: statusVariant(row.status),
-    href: hrefFor(status, { requisition: row.id }),
+    href: recruitingHref(preservedParams, { status, requisition: row.id }),
   }))
 
   // The drawers resolve through the canonical read service (PII redaction
@@ -416,9 +413,9 @@ export async function loadRecruitingPage(
       }
       requisition = {
         ...detail,
-        closeHref: hrefFor(status, null),
+        closeHref: recruitingHref(preservedParams, { status }),
         draft: draftLabel
-          ? { href: `${hrefFor(status, { requisition: requisitionId })}&draft=job_description:${requisitionId}`, label: draftLabel }
+          ? { href: `${recruitingHref(preservedParams, { status, requisition: requisitionId })}&draft=job_description:${requisitionId}`, label: draftLabel }
           : null,
         stageLabels: Object.fromEntries(detail.stages.map((stage) => [stage.id, stage.name])),
         statusLabels: Object.fromEntries(STATUSES.map((value) => [value, statusLabel(value)])),
@@ -515,7 +512,7 @@ export async function loadRecruitingPage(
       const detail = await getCandidateDetail({ orgId: authz.user.orgId, actorId: authz.user.id, candidateId })
       candidate = {
         ...detail,
-        closeHref: hrefFor(status, null),
+        closeHref: recruitingHref(preservedParams, { status }),
         labels: {
           applications: t('recruiting.drawer.applications'),
           interviews: t('recruiting.drawer.interviews'),
@@ -543,9 +540,9 @@ export async function loadRecruitingPage(
       const detail = await getOfferDetail({ orgId: authz.user.orgId, actorId: authz.user.id, offerId })
       offer = {
         ...detail,
-        closeHref: hrefFor(status, null),
+        closeHref: recruitingHref(preservedParams, { status }),
         draft: draftLabel
-          ? { href: `${hrefFor(status, { offer: offerId })}&draft=offer_letter_clauses:${offerId}`, label: draftLabel }
+          ? { href: `${recruitingHref(preservedParams, { status, offer: offerId })}&draft=offer_letter_clauses:${offerId}`, label: draftLabel }
           : null,
         labels: {
           send: t('recruiting.offerActions.send'),
@@ -707,12 +704,12 @@ export async function loadRecruitingPage(
   // HR-21: the shared evidence-draft drawer. No host field is editable
   // here, so Insert copies to the clipboard (the drawer's own fallback).
   const drawerBase = requisitionId
-    ? hrefFor(status, { requisition: requisitionId })
+    ? recruitingHref(preservedParams, { status, requisition: requisitionId })
     : candidateId
-      ? hrefFor(status, { candidate: candidateId })
+      ? recruitingHref(preservedParams, { status, candidate: candidateId })
       : offerId
-        ? hrefFor(status, { offer: offerId })
-        : hrefFor(status, null)
+        ? recruitingHref(preservedParams, { status, offer: offerId })
+        : recruitingHref(preservedParams, { status })
   const draftDrawer = await loadAiDraftDrawer({
     draftParam: typeof sp.draft === 'string' ? sp.draft : null,
     closeHref: drawerBase,
@@ -724,7 +721,7 @@ export async function loadRecruitingPage(
     tabs,
     canManage,
     addLabel: t('recruiting.add'),
-    addHref: hrefFor(status, { requisition: 'new' }),
+    addHref: recruitingHref(preservedParams, { status, requisition: 'new' }),
     basePath: '/hrm/recruiting',
     // HR-18: sub-tab strip + depth table payload (null on Openings).
     tab,
@@ -749,7 +746,7 @@ export async function loadRecruitingPage(
     // OM-18: the rehomed depth-tab sections read their New/edit drawer
     // from sp.row (SetupEntitySection) — the tab and the status filter
     // ride beside the section's list params, never instead of them.
-    currentParams: { ...(status ? { status } : {}), tab, ...setupSectionParams(sp) },
+    currentParams: preservedParams,
     columns: {
       number: t('recruiting.columns.number'),
       title: t('recruiting.columns.title'),
@@ -769,7 +766,7 @@ export async function loadRecruitingPage(
     draftDrawerOpen: draftDrawer !== null,
     drawer: drawerOpen
       ? {
-          closeHref: hrefFor(status, null),
+          closeHref: recruitingHref(preservedParams, { status }),
           title: t('recruiting.drawer.title', { number: requisition?.requisitionNumber ?? '' }),
           description: null,
           requisition,

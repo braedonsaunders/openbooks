@@ -269,7 +269,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
         formatLabel: f('generateDialog.formatLabel'),
         generateLabel: f('generateDialog.generateLabel'),
         cancelLabel: f('generateDialog.cancelLabel'),
-        closeHref: basePath,
+        closeHref: f('generateCloseHref'),
       }),
     ],
   })

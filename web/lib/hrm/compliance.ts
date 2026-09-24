@@ -11,6 +11,7 @@ import { listCompClasses, listCompRules } from '@openbooks/engine/src/hrm/constr
 import { listEntries, listPolicies } from '@openbooks/engine/src/hrm/construction/per-diem.ts'
 import { can, type Authz } from '../authz'
 import { setupSectionParams } from '../list-params'
+import { complianceHref } from './workspace-href'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 
 /**
@@ -93,6 +94,7 @@ export interface ComplianceData {
   formatsEmpty: boolean
   packName: string | null
   generateHref: string
+  generateCloseHref: string
   generateLabel: string
   actions: {
     acknowledge: string
@@ -176,7 +178,10 @@ export async function loadCompliancePage(
     policiesCount: 0,
     formatsEmpty: false,
     packName: null,
-    generateHref: `${basePath}?generate=1`,
+    // F3-55: the dialog open/close hrefs preserve the section, the kind
+    // filter, and the setup-section params through the shared helper.
+    generateHref: complianceHref(currentParams, { generate: '1' }),
+    generateCloseHref: complianceHref(currentParams),
     generateLabel: t('compliance.generate'),
     actions: {
       acknowledge: t('compliance.actions.acknowledge'),
