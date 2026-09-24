@@ -13,8 +13,8 @@
       "mode": "unit"
     },
     "engine/src/sync/applications.ts": {
-      "ratio": 0,
-      "measured": 23,
+      "ratio": 0.4,
+      "measured": 25,
       "mode": "unit"
     },
     "engine/src/payroll/canada/t4127.ts": {
