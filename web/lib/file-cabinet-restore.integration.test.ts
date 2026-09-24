@@ -19,7 +19,6 @@ const { deleteFile, deleteFolder, restoreFolder } = await import('./file-cabinet
  * skips rows that were already in the trash. Restoring that folder must be
  * the exact inverse: only the rows the folder delete deactivated come back —
  * an item a user trashed on its own beforehand stays in the trash (it has its
- * own restore), instead of being silently resurrected.
  */
 test('restoreFolder reactivates only what the folder delete deactivated', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -40,10 +39,11 @@ test('restoreFolder reactivates only what the folder delete deactivated', { skip
       (${childFile}, ${org.orgId}, ${child}, 'child.txt', 'text/plain', 1),
       (${trashedFile}, ${org.orgId}, ${root}, 'trashed.txt', 'text/plain', 1)`)
 
-    // Independently trashed BEFORE the folder: a file and a sub-folder.
     assert.equal(await deleteFile(org.orgId, trashedFile, { actorId }), true)
     assert.deepEqual(await deleteFolder(org.orgId, trashedChild, { actorId }), { ok: true })
     assert.deepEqual(await deleteFolder(org.orgId, root, { actorId }), { ok: true })
+    assert.deepEqual(await deleteFolder(org.orgId, root, { actorId }), { ok: false, reason: 'inactive' })
+    assert.equal((await db.execute(sql`select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'folders' and row_id = ${root} and action = 'delete'`)).rows[0]!.n, 1)
 
     assert.equal(await restoreFolder(org.orgId, root, { actorId }), true)
 

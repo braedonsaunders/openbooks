@@ -1210,8 +1210,8 @@ export async function deleteFolder(
 ): Promise<{ ok: boolean; reason?: string }> {
   const result = await runMutation(audit?.executor, async (tx) => {
     const descendants = FOLDER_DESCENDANTS(orgId, id)
-    const folder = (await tx.execute<{ id: string; isSystem: boolean }>(sql`
-      select id, is_system as "isSystem"
+    const folder = (await tx.execute<{ id: string; isSystem: boolean; isInactive: boolean }>(sql`
+      select id, is_system as "isSystem", is_inactive as "isInactive"
         from folders
        where id = ${id} and org_id = ${orgId}
        for update
@@ -1221,6 +1221,7 @@ export async function deleteFolder(
     if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) {
       return { ok: false, reason: 'forbidden' as const }
     }
+    if (folder.isInactive) return { ok: false, reason: 'inactive' as const }
     const beforeFolders = await tx.execute<{ id: string; isInactive: boolean }>(sql`
       select f.id, f.is_inactive as "isInactive"
         from folders f
