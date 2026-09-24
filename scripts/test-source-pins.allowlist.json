@@ -62,7 +62,6 @@
     "web/app/(app)/accounting/changes/accounting-events-ui.test.ts": 2,
     "web/app/(app)/accounts/AccountDrawer.test.ts": 6,
     "web/app/(app)/agents/agents-moved-notice.test.ts": 1,
-    "web/app/(app)/analytics/vendor-performance/VendorView.test.ts": 1,
     "web/app/(app)/assets/asset-popover-triggers.test.ts": 5,
     "web/app/(app)/assets/assets-tabs.test.ts": 1,
     "web/app/(app)/assets/equipment/EquipmentDrawer.test.tsx": 2,
