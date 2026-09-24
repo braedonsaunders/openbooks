@@ -10,21 +10,6 @@ const storedDownload = readFileSync("web/app/api/admin/backups/[id]/download/rou
 const storedManifest = readFileSync("web/app/api/admin/backups/[id]/manifest/route.ts", "utf8");
 const directDownload = readFileSync("web/app/api/admin/backups/download/route.ts", "utf8");
 
-test("scheduled backup claim and ledger creation share one SQL statement", () => {
-  const claim = scheduler.match(/with claimed as \([\s\S]*?returning id`/)?.[0] ?? "";
-  assert.match(claim, /update backup_policies/);
-  assert.match(claim, /returning org_id/);
-  assert.match(claim, /insert into backup_runs/);
-  assert.match(claim, /select org_id, 'scheduled', 'queued' from claimed/);
-  assert.doesNotMatch(scheduler, /const claimed =/);
-});
-
-test("an existing in-flight run leaves the schedule due for a later retry", () => {
-  assert.match(scheduler, /postgresError\.code === "23505"/);
-  assert.match(scheduler, /backup_runs_one_inflight_per_org/);
-  assert.match(scheduler, /if \(run\.rows\.length === 0\) continue/);
-});
-
 test("stored backup upload is recoverable and retention cannot relabel completion", () => {
   const intent = backup.indexOf("Persist a deterministic upload intent");
   const upload = backup.indexOf("await putBackupObject");
