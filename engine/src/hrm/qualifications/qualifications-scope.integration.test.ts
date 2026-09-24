@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -185,6 +185,38 @@ test("an unrestricted holder keeps the full surface", { skip: !DB }, async () =>
     });
     assert.equal(verified.storedStatus, "valid");
   } finally {
+    await dropScratchOrg(f.org.orgId);
+  }
+});
+
+test("qualification decisions wait for the employment scope lock", { skip: !DB }, async () => {
+  const f = await fixture();
+  let releaseHolder!: () => void;
+  let employmentLocked!: () => void;
+  const hold = new Promise<void>((resolve) => { releaseHolder = resolve; });
+  const locked = new Promise<void>((resolve) => { employmentLocked = resolve; });
+  const holder = withOrgTransaction(f.org.orgId, async () => {
+    await db.execute(sql`
+      select id from worker_employments
+       where org_id = ${f.org.orgId} and id = ${f.empA}
+       for update`);
+    employmentLocked();
+    await hold;
+  });
+  try {
+    await locked;
+    let finished = false;
+    const decision = verifyQualification(db, {
+      orgId: f.org.orgId, actorId: f.adminId, qualificationId: f.qualA.id,
+    }).finally(() => { finished = true; });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(finished, false, "the decision must wait until the locked employment scope is rechecked");
+    releaseHolder();
+    await holder;
+    assert.equal((await decision).storedStatus, "valid");
+  } finally {
+    releaseHolder();
+    await holder;
     await dropScratchOrg(f.org.orgId);
   }
 });
