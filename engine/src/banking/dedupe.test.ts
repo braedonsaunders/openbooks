@@ -158,7 +158,7 @@ test("live provider fetch retains exact response bytes for statement audit", asy
     ? Buffer.from(evidenceContent, "utf8")
     : Buffer.from(evidenceContent);
   assert.deepEqual(evidenceBytes, Buffer.from(rawResponse, "utf8"));
-  assert.equal(fetched.sourceEvidence.contentType, "application/json");
+  assert.deepEqual([fetched.lines[0]?.amount, fetched.sourceEvidence.contentType], ["-12.3400", "application/json"]);
 });
 
 test("paginated provider evidence keeps every response byte-for-byte recoverable", () => {
