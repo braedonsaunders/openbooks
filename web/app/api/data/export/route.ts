@@ -7,7 +7,7 @@ import { ExportRowLimitError } from '../../../../lib/data-io/resource-core'
 import type { CellValue } from '../../../../lib/data-io/types'
 import { toCsv, toJson, toXlsx } from '../../../../lib/data-io/serialize'
 import { csvResponse, safeName, xlsxResponse } from '../../../../lib/export'
-import { EXPORT_FORMATS, type ExportFormat } from '../../../../lib/data-io/types'
+import { requestedExportFormat, type ExportFormat } from '../../../../lib/data-io/types'
 
 export const runtime = 'nodejs'
 
@@ -30,9 +30,10 @@ export async function POST(req: Request) {
     format?: ExportFormat
   }
   const resourceKey = String(body.resource ?? '')
-  const format: ExportFormat = EXPORT_FORMATS.includes(body.format as ExportFormat)
-    ? (body.format as ExportFormat)
-    : 'csv'
+  const format: ExportFormat | null = requestedExportFormat(body.format)
+  if (format === null) {
+    return NextResponse.json({ error: 'format must be csv, xlsx or json' }, { status: 400 })
+  }
 
   // Bind the role-derived subsidiary fence before any resource read. The
   // generic registry otherwise defaults to an org-only adapter, which would
