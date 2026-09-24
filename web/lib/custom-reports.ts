@@ -47,10 +47,13 @@ import { applyPayrollConfidentialityToReportResult } from './report-payroll-coll
  */
 
 /** Ops whose meaning is "a time window on this field" — replaced wholesale
- *  when the viewer picks a period in the report screen's filter bar. */
-const TEMPORAL_OPS = new Set([
+ *  when the viewer picks a period in the report screen's filter bar. Every
+ *  member must stay a valid REPORT_FILTER_OPERATORS member: a dead op here
+ *  would claim to govern filters that can never exist (pinned by
+ *  custom-reports.temporal-ops.test.ts). */
+export const TEMPORAL_OPS: ReadonlySet<string> = new Set([
   'since_today', 'this_week', 'this_month', 'this_year', 'before_now',
-  'period_preset', 'gte', 'lte', 'between',
+  'period_preset', 'gte', 'lte',
 ])
 
 /**
