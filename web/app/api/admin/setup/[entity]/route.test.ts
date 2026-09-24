@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import pg from "pg";
@@ -175,30 +174,6 @@ async function seedDerivedRuleFixture(): Promise<DerivedRuleFixture> {
   const { id: ruleId } = (await created.json()) as { id: string };
   return { orgId: org.orgId, actorId, componentId, ruleId };
 }
-
-test("the setup route states the tax-rate domain before every write and maps storage duplicates to 409", () => {
-  // The domain checks moved verbatim from this route into the shared setup
-  // command layer — pin the library, not the thin route adapter. (The DB
-  // tests below still exercise the real route end to end.)
-  const source = readFileSync(new URL("../../../../../lib/setup/write.ts", import.meta.url), "utf8");
-  assert.match(source, /entity\.key === 'tax-rates'/);
-  assert.match(source, /taxRatePercentProblem\(raw\)/);
-  // The domain check rides validateEntityIntegrity, which must run before the
-  // create and update transactions alike.
-  const postValidation = source.indexOf("const integrityError = await validateEntityIntegrity");
-  const postWrite = source.indexOf("const newId = await setupWriteTransaction");
-  const patchValidation = source.lastIndexOf("const integrityError = await validateEntityIntegrity");
-  const patchWrite = source.indexOf("const found = await setupWriteTransaction");
-  assert.ok(postValidation >= 0 && postValidation < postWrite, "create validation must precede the write");
-  assert.ok(
-    patchValidation > postWrite && patchValidation < patchWrite,
-    "update validation must precede the write",
-  );
-  // Storage is the duplicate authority for every writer: a natural-key race
-  // surfaces as a deterministic 409 on both the create and update paths, with
-  // the driver SQLSTATE read through Drizzle's error wrapper.
-  assert.ok((source.match(/pgErrorCode\(e\) === '23505'/g)?.length ?? 0) >= 2);
-});
 
 test("generic setup PATCH and DELETE reject malformed row ids", { skip: !DB }, async () => {
   const org = await createScratchOrg();
