@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ChevronDown, Download, Loader2, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Popover, Select, UrlDrawer } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '../../../lib/confirm'
 import { SharePanel } from './SharePanel'
 import { ActivityLog } from './ActivityLog'
@@ -118,6 +119,7 @@ export function FolderDrawer({
   async function handleSave() {
     if (!name.trim()) return
     setSaving(true)
+    let fallback = tt('folderCreateFailed')
     try {
       if (mode === 'create') {
         const res = await fetch('/api/file-cabinet/folders', {
@@ -129,14 +131,14 @@ export function FolderDrawer({
             isPrivate,
           }),
         })
-        if (res.ok) {
-          toast.success(tt('folderCreated'))
-          router.push(closeHref())
-          router.refresh()
-        } else {
-          toast.error(tt('folderCreateFailed'))
-        }
+        // The status is checked before the body is parsed: the server's
+        // named refusal wins over the generic fallback.
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('folderCreateFailed')))
+        toast.success(tt('folderCreated'))
+        router.push(closeHref())
+        router.refresh()
       } else if (folder) {
+        fallback = tt('folderRenameFailed')
         const body: Record<string, unknown> = {
           name: name.trim(),
           parentId: parent || null,
@@ -147,14 +149,13 @@ export function FolderDrawer({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
-        if (res.ok) {
-          toast.success(tt('folderRenamed'))
-          setUiMode('view')
-          router.refresh()
-        } else {
-          toast.error(tt('folderRenameFailed'))
-        }
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('folderRenameFailed')))
+        toast.success(tt('folderRenamed'))
+        setUiMode('view')
+        router.refresh()
       }
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : fallback)
     } finally {
       setSaving(false)
     }
@@ -166,14 +167,12 @@ export function FolderDrawer({
     setDeleting(true)
     try {
       const res = await fetch(`/api/file-cabinet/folders/${folder.id}`, { method: 'DELETE' })
-      if (res.ok) {
-        toast.success(tt('folderDeleted'))
-        router.push(closeHref())
-        router.refresh()
-      } else {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(err.error ?? tt('folderDeleteFailed'))
-      }
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('folderDeleteFailed')))
+      toast.success(tt('folderDeleted'))
+      router.push(closeHref())
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : tt('folderDeleteFailed'))
     } finally {
       setDeleting(false)
     }
