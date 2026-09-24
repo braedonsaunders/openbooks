@@ -433,7 +433,7 @@
     "optionalPlaceholder": "optional",
     "nothingNew": "Jede geparste Zeile existiert bereits auf diesem Konto — nichts Neues zu importieren.",
     "skippedNotice": "{count, plural, one {# Quellzeile wurde zurückgestellt und nicht importiert} other {# Quellzeilen wurden zurückgestellt und nicht importiert}}",
-    "skippedRow": "Zeile {line}: {reason}",
+    "skippedRow": "Zeile {line} („{dateCell}“) wurde als Metadatenzeile zurückgestellt — nicht importiert",
     "moreLines": "…und {count, plural, one {# weitere Zeile} other {# weitere Zeilen}}",
     "totalBadge": "{count, number} insgesamt",
     "possibleDuplicateBadge": "Mögliches Duplikat"

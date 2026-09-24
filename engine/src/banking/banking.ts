@@ -654,11 +654,11 @@ function canonicalCsvMapping(mapping: CsvMapping): CsvMapping {
 }
 
 /**
- * A first row carries a parseable amount plus a description: it reads as a
+ * A row carries a parseable amount plus a description: it reads as a
  * transaction, so an unparseable date refuses the import rather than
  * silently dropping the row.
  */
-function csvFirstRowLooksLikeTransaction(cols: string[], mapping: CsvMapping): boolean {
+function csvRowLooksLikeTransaction(cols: string[], mapping: CsvMapping, rowNo: number): boolean {
   const description = (cols[mapping.description] ?? "").trim();
   if (!description) return false;
   const rawAmount = (cols[mapping.amount] ?? "").trim();
@@ -666,12 +666,12 @@ function csvFirstRowLooksLikeTransaction(cols: string[], mapping: CsvMapping): b
     if (mapping.debitAmount !== undefined) {
       const rawDebit = (cols[mapping.debitAmount] ?? "").trim();
       if (rawAmount && rawDebit) return true;
-      if (rawAmount) normalizeAmount(rawAmount, "CSV row 1");
-      else if (rawDebit) normalizeAmount(rawDebit, "CSV row 1");
+      if (rawAmount) normalizeAmount(rawAmount, `CSV row ${rowNo}`);
+      else if (rawDebit) normalizeAmount(rawDebit, `CSV row ${rowNo}`);
       else return false;
     } else {
       if (!rawAmount) return false;
-      normalizeAmount(rawAmount, "CSV row 1");
+      normalizeAmount(rawAmount, `CSV row ${rowNo}`);
     }
   } catch {
     return false;
@@ -679,14 +679,47 @@ function csvFirstRowLooksLikeTransaction(cols: string[], mapping: CsvMapping): b
   return true;
 }
 
+/** A mapped cell holding a non-empty, non-numeric label (never a number). */
+function csvCellIsLabel(cell: string | undefined): boolean {
+  const text = (cell ?? "").trim();
+  if (!text) return false;
+  try {
+    normalizeAmount(text, "CSV header probe");
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * A leading row whose mapped amount column holds a label (not a number)
+ * beside a populated description reads as the file's column-header row —
+ * "Date,Amount,Description" in any language, with no word list: numericity
+ * is the test, so every locale's labels classify alike. Consumed silently:
+ * labels carry no transaction, and reporting them would warn on every
+ * import. A row with a NUMERIC amount is never a header — it is either a
+ * transaction (refused above) or a disclaimer (reported below).
+ */
+function csvRowLooksLikeHeader(cols: string[], mapping: CsvMapping): boolean {
+  if (!(cols[mapping.description] ?? "").trim()) return false;
+  if (mapping.debitAmount !== undefined) {
+    return (
+      csvCellIsLabel(cols[mapping.amount]) || csvCellIsLabel(cols[mapping.debitAmount])
+    );
+  }
+  return csvCellIsLabel(cols[mapping.amount]);
+}
+
 /**
  * Parse CSV text into normalized statement lines using a column mapping.
- * The first row is skipped as a header only when its mapped date column
- * does not parse as a date AND the row carries no transaction (no parseable
- * amount with a description) — a leading disclaimer or metadata row is
- * reported in `skipped`, never silently discarded. A first row that looks
- * like a transaction but whose date fails refuses the import by row number:
- * dropping it would lose a real transaction, and guessing is not an option.
+ * Each leading row whose mapped date column does not parse is classified
+ * from the mapping alone: a transaction-looking row (parseable amount with
+ * a description) refuses the import by row number — dropping it would lose
+ * real money, and guessing is not an option; a column-header row (labels,
+ * never numbers) is consumed silently; any other metadata/disclaimer row
+ * is reported in `skipped` by code, never silently discarded. The first
+ * row with a parseable date starts the data; a later unparseable date
+ * still refuses, so a mid-file metadata row cannot slip past.
  */
 export function parseCsv(
   source: StatementSourceContent,
@@ -696,17 +729,18 @@ export function parseCsv(
   const rows = parseCsvRows(source);
   let start = 0;
   const skipped: SkippedStatementRow[] = [];
-  if (rows[0] && parseCsvDate(rows[0][mapping.date] ?? "") === null) {
-    if (csvFirstRowLooksLikeTransaction(rows[0], mapping)) {
+  for (; start < rows.length; start++) {
+    const rowNo = start + 1;
+    const rawDate = (rows[start]![mapping.date] ?? "").trim();
+    if (parseCsvDate(rawDate) !== null) break;
+    if (csvRowLooksLikeTransaction(rows[start]!, mapping, rowNo)) {
       throw new BankingError(
-        `CSV row 1 looks like a transaction (a parseable amount with a description) but its date "${(rows[0][mapping.date] ?? "").trim()}" does not parse — remove the row if it is a summary or metadata row, otherwise fix the date`,
+        `CSV row ${rowNo} looks like a transaction (a parseable amount with a description) but its date "${rawDate}" does not parse — remove the row if it is a summary or metadata row, otherwise fix the date`,
       );
     }
-    start = 1;
-    skipped.push({
-      line: 1,
-      reason: `skipped as a header row: date "${(rows[0][mapping.date] ?? "").trim()}" does not parse and the row carries no transaction amount with a description`,
-    });
+    if (!csvRowLooksLikeHeader(rows[start]!, mapping)) {
+      skipped.push({ line: rowNo, code: "csv_metadata_row", dateCell: rawDate });
+    }
   }
   const dataRows = rows.slice(start);
   if (dataRows.length === 0) throw new BankingError("CSV has a header but no data rows");
@@ -1182,14 +1216,20 @@ async function partitionIdlessLines(
 
 /**
  * A source row the parser set aside without importing: the 1-based file
- * line plus the human reason (today: a leading header row). Reported in the
- * import result and the dry-run preview — a skipped row is a visible fact,
- * never a silent loss. A row that looks like a transaction is never
- * skipped: the parse refuses instead (see parseCsv).
+ * line, a reason CODE, and the raw date-column cell the sentence renders.
+ * The code (not English prose) crosses the engine boundary so every locale
+ * renders the sentence from its own catalog. Reported in the import result
+ * and the dry-run preview — a skipped row is a visible fact, never a silent
+ * loss. Column-header rows are consumed, not skipped (see parseCsv); a row
+ * that looks like a transaction is never skipped: the parse refuses
+ * instead.
  */
+export type SkippedStatementRowCode = "csv_metadata_row";
 export interface SkippedStatementRow {
   line: number;
-  reason: string;
+  code: SkippedStatementRowCode;
+  /** Raw date-column cell of the set-aside row, for the localized sentence. */
+  dateCell: string;
 }
 
 export interface ImportResult {

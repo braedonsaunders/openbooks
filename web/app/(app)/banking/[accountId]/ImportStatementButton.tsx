@@ -17,7 +17,8 @@ interface PreviewLine {
 
 interface SkippedRow {
   line: number
-  reason: string
+  code: string
+  dateCell: string
 }
 
 interface StatementPreview {
@@ -530,7 +531,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   <p>{t('skippedNotice', { count: preview.skipped.length })}</p>
                   <ul className="mt-1 list-disc pl-5">
                     {preview.skipped.map((row) => (
-                      <li key={row.line}>{t('skippedRow', { line: row.line, reason: row.reason })}</li>
+                      <li key={row.line}>{t('skippedRow', { line: row.line, dateCell: row.dateCell })}</li>
                     ))}
                   </ul>
                 </div>
