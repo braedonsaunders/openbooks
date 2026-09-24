@@ -985,6 +985,15 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
 export const MAX_LEASE_SCHEDULE_HORIZON_MONTHS = 120;
 
 async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: string, actorId: string | null, leaseId: string, throughOn?: string): Promise<number> {
+  // Serialize overlapping regenerations for one lease. The daily scheduler
+  // rolls a 13-month window while an operator may cut a look-ahead horizon in
+  // the same minute; without this the loser reads a stale charge stream and
+  // its `created` count cannot be trusted. An advisory lock (never a lease
+  // row lock: escalation-apply already holds charge locks when it regenerates,
+  // and a row lock here would invert that order against billing) makes the
+  // loser wait, re-read committed charges, and count only genuinely new lines.
+  // Xact-scoped: held to the caller's commit, in every caller.
+  await runner.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"property-schedule:" + orgId + ":" + leaseId}, 0))`);
   const leaseResult = (await runner.execute<LeaseScheduleContextRow>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
   const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
   const currentMonth = startOfMonth(await businessToday(orgId));
@@ -998,6 +1007,14 @@ async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: 
   let created = 0;
   for (const charge of charges.rows) {
     for (const period of leaseChargeSchedule({ ...charge, leaseStartsOn: lease.startsOn, leaseEndsOn: lease.endsOn, throughOn: horizon, billingDay: lease.billingDay })) {
+      // The conflict is expected and benign, never a dropped write: the
+      // stream above is deterministic in the committed charges, so an
+      // (org, charge, period_start) that already exists was materialised by
+      // an earlier run or by the serialized overlapping run holding the
+      // advisory lock — with identical terms — or is a superseded line the
+      // escalation path deliberately retained as cancelled. Skipping it keeps
+      // exactly-once billing inputs without resurrecting superseded terms,
+      // and `created` below honestly counts newly materialised lines.
       const result = (await runner.execute(sql`
         insert into lease_schedule_lines(org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,created_by,updated_by)
         values(${orgId},${leaseId},${charge.id},${period.periodStartsOn},${period.periodEndsOn},${period.dueOn},${period.amount},${actorId},${actorId})
