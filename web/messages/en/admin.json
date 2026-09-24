@@ -5458,7 +5458,7 @@
       "simulateTitle": "Simulate",
       "simulateHelp": "Dry-run with no writes — pick entity:id or leave blank to sample.",
       "simulateSubjectLabel": "Subject",
-      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateSubjectPlaceholder": "leave_request:'<id>'",
       "simulateButton": "Simulate",
       "stepKind": "Step",
       "stepStatus": "Status",

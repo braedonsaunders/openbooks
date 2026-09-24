@@ -124,8 +124,8 @@
         "description": "Proveedor, modelos y clave API cifrada para el asistente"
       },
       "setup": {
-        "title": "Setup",
-        "description": "Tax, dimensions, payment terms, numbering & other configuration"
+        "title": "Configuración",
+        "description": "Impuestos, dimensiones, condiciones de pago, numeración y otras configuraciones"
       },
       "email": {
         "title": "Envío de correo",
@@ -956,7 +956,7 @@
     "documents_read": "Explorar el gestor de documentos",
     "documents_manage": "Subir, mover, renombrar y eliminar archivos",
     "feedback_use": "Informar de un problema del producto desde cualquier página",
-    "admin_setup_manage": "Manage setup & configuration",
+    "admin_setup_manage": "Gestionar configuración",
     "data_export": "Exportar datos",
     "data_import": "Importar datos",
     "crm_accounts_read": "Ver cuentas de CRM",
@@ -1444,12 +1444,12 @@
     },
     "assetDepreciationSetup": {
       "navTitle": "Depreciación contable",
-      "title": "Book Depreciation",
-      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
-      "tabsAria": "Book depreciation setup sections",
+      "title": "Depreciación contable",
+      "description": "Configure métodos de depreciación reutilizables y el método, la vida útil y la convención que cada libro contable aplica a una categoría de activo.",
+      "tabsAria": "Secciones de depreciación contable",
       "tabs": {
-        "methods": "Methods",
-        "books": "Book policies"
+        "methods": "Métodos",
+        "books": "Políticas por libro"
       }
     },
     "taxDepreciationSetup": {
@@ -1532,20 +1532,20 @@
       "searchPlaceholder": "Buscar tasas de impuesto…",
       "empty": "Ninguna tasa coincide con este código y la búsqueda."
     },
-    "new": "New",
+    "new": "Nuevo",
     "learnMore": "Más información.",
-    "empty": "Nothing here yet.",
-    "statusActive": "Active",
-    "statusArchived": "Archived",
-    "yes": "Yes",
-    "selectPlaceholder": "Select…",
-    "searchPlaceholder": "Search…",
-    "created": "Created",
-    "updated": "Saved",
-    "deleted": "Deleted",
-    "confirmDelete": "Delete this record? This cannot be undone.",
+    "empty": "Nada aquí todavía.",
+    "statusActive": "Activo",
+    "statusArchived": "Archivado",
+    "yes": "Sí",
+    "selectPlaceholder": "Seleccionar…",
+    "searchPlaceholder": "Buscar…",
+    "created": "Creado",
+    "updated": "Guardado",
+    "deleted": "Eliminado",
+    "confirmDelete": "¿Eliminar este registro? Esta acción no se puede deshacer.",
     "validation": {
-      "required": "{field} is required"
+      "required": "{field} es obligatorio"
     },
     "drawer": {
       "newTitle": "Nuevo: {name}",
@@ -1556,8 +1556,8 @@
       }
     },
     "errors": {
-      "duplicate": "A record with that code already exists.",
-      "inUse": "This record is in use and can't be deleted.",
+      "duplicate": "Ya existe un registro con ese código.",
+      "inUse": "Este registro está en uso y no se puede eliminar.",
       "primaryRequired": "Elija otro libro contable como principal antes de quitarle ese estado a este libro.",
       "primaryActiveRequired": "El libro contable principal debe permanecer activo.",
       "archiveOnly": "Los libros contables se conservan para el historial del mayor y solo se pueden archivar.",
@@ -2045,7 +2045,7 @@
     "entities": {
       "company": {
         "title": "Empresa y contabilidad",
-        "description": "Organization identity, base currency, fiscal year, and control accounts."
+        "description": "Identidad de la organización, moneda base, ejercicio fiscal y cuentas de control."
       },
       "tax-codes": {
         "title": "Códigos de impuesto",
@@ -2059,7 +2059,7 @@
       },
       "tax-groups": {
         "title": "Grupos de impuestos",
-        "description": "Bundle several tax codes to apply together on a line."
+        "description": "Agrupe varios códigos de impuestos para aplicarlos juntos en una línea."
       },
       "tax-return-forms": {
         "title": "Declaraciones de impuestos",
@@ -2072,7 +2072,7 @@
       },
       "classes": {
         "title": "Clases",
-        "description": "A reporting dimension for slicing transactions."
+        "description": "Una dimensión de informe para segmentar transacciones."
       },
       "segment-definitions": {
         "title": "Segmentos",
@@ -2084,15 +2084,15 @@
       },
       "departments": {
         "title": "Departamentos",
-        "description": "A reporting dimension for slicing transactions."
+        "description": "Una dimensión de informe para segmentar transacciones."
       },
       "locations": {
         "title": "Ubicaciones",
-        "description": "A reporting dimension for slicing transactions."
+        "description": "Una dimensión de informe para segmentar transacciones."
       },
       "payment-terms": {
         "title": "Condiciones de pago",
-        "description": "Net and early-payment discount terms for bills and invoices."
+        "description": "Condiciones netas y de descuento por pronto pago para facturas de proveedores y clientes."
       },
       "payment-cards": {
         "title": "Tarjetas corporativas",
@@ -2104,15 +2104,15 @@
       },
       "time-types": {
         "title": "Tipos de hora",
-        "description": "Cost multipliers and billable defaults for timesheets."
+        "description": "Multiplicadores de costo y valores de facturación predeterminados para hojas de horas."
       },
       "worker-comp-groups": {
         "title": "Grupos de compensación laboral",
-        "description": "Workers' compensation rate groups for labor costing."
+        "description": "Grupos de tasas de compensación laboral para el costeo de mano de obra."
       },
       "asset-categories": {
         "title": "Categorías de activos",
-        "description": "Default depreciation method and accounts for fixed assets."
+        "description": "Método de depreciación y cuentas predeterminados para activos fijos."
       },
       "depreciation-methods": {
         "title": "Métodos de depreciación",
@@ -2124,7 +2124,7 @@
       },
       "currencies": {
         "title": "Monedas",
-        "description": "Currency codes and their minor-unit precision."
+        "description": "Códigos de moneda y su precisión en unidades menores."
       },
       "sftp": {
         "title": "Servidores SFTP"
@@ -2135,7 +2135,7 @@
       },
       "subsidiaries": {
         "title": "Subsidiarias",
-        "description": "The legal entities inside your organization — a consolidation tree with one root."
+        "description": "Las entidades legales dentro de su organización — un árbol de consolidación con una raíz."
       },
       "intercompany-pairs": {
         "title": "Pares intercompañía",
@@ -2586,50 +2586,50 @@
     },
     "fields": {
       "accountId": "Cuenta",
-      "classAttribute": "Asset class attribute",
-      "countryCode": "Country",
-      "calculationModel": "Calculation model",
-      "regime": "Regime",
-      "classCode": "Class code",
+      "classAttribute": "Atributo de clase de activo",
+      "countryCode": "País",
+      "calculationModel": "Modelo de cálculo",
+      "regime": "Régimen",
+      "classCode": "Código de clase",
       "rate": "Tasa",
-      "method": "Method",
-      "firstYearFraction": "First-year fraction",
-      "allowRecapture": "Allow recapture",
-      "allowTerminalLoss": "Allow terminal loss",
-      "costCap": "Cost cap",
-      "depreciationSystem": "Depreciation system",
-      "macrsMethod": "MACRS method",
-      "recoveryPeriodYears": "Recovery period (years)",
-      "taxAttributes": "Tax attributes (JSON)",
-      "enhancedMultiplier": "Enhanced multiplier",
-      "acquiredFrom": "Acquired from",
-      "acquiredTo": "Acquired to",
+      "method": "Método",
+      "firstYearFraction": "Fracción del primer año",
+      "allowRecapture": "Permitir recuperación",
+      "allowTerminalLoss": "Permitir pérdida final",
+      "costCap": "Límite de costo",
+      "depreciationSystem": "Sistema de depreciación",
+      "macrsMethod": "Método MACRS",
+      "recoveryPeriodYears": "Período de recuperación (años)",
+      "taxAttributes": "Atributos fiscales (JSON)",
+      "enhancedMultiplier": "Multiplicador mejorado",
+      "acquiredFrom": "Adquirido desde",
+      "acquiredTo": "Adquirido hasta",
       "code": "Code",
-      "name": "Name",
-      "appliesTo": "Applies to",
-      "recoverablePercent": "Recoverable %",
+      "name": "Nombre",
+      "appliesTo": "Aplica a",
+      "recoverablePercent": "Porcentaje recuperable",
       "calculationType": "Tipo de cálculo",
       "withholdingAccountId": "Cuenta de retención",
       "priceIncludesTax": "El precio incluye impuestos",
       "compoundOnPrevious": "Componer sobre componentes anteriores",
       "roundingScale": "Decimales de redondeo fiscal",
-      "isActive": "Active",
+      "isActive": "Activo",
       "pricingMethod": "Método de precio", "percentage": "Porcentaje", "costBasis": "Base de costo", "isBase": "Nivel base", "priceLevelId": "Nivel de precio",
       "isPrimary": "Libro principal",
-      "country": "Country",
-      "region": "Region",
-      "collectedAccountId": "Tax collected account",
-      "paidAccountId": "Tax paid account",
-      "taxCodeId": "Tax code",
+      "country": "País",
+      "region": "Región",
+      "collectedAccountId": "Cuenta de impuestos cobrados",
+      "paidAccountId": "Cuenta de impuestos pagados",
+      "taxCodeId": "Código de impuesto",
       "ratePercent": "Tasa",
-      "effectiveFrom": "Effective from",
-      "effectiveTo": "Effective to",
-      "members": "Tax codes",
-      "reportCode": "Report code",
-      "lineCode": "Line code",
-      "label": "Label",
-      "basis": "Basis",
-      "sign": "Sign",
+      "effectiveFrom": "Vigente desde",
+      "effectiveTo": "Vigente hasta",
+      "members": "Códigos de impuestos",
+      "reportCode": "Código de informe",
+      "lineCode": "Código de línea",
+      "label": "Etiqueta",
+      "basis": "Base",
+      "sign": "Signo",
       "submissionChannel": "Método de presentación",
       "governmentFormat": "Formato gubernamental",
       "submissionUrl": "URL de presentación gubernamental",
@@ -2638,18 +2638,18 @@
       "sequence": "Orden",
       "formula": "Fórmula",
       "pdfField": "Campo PDF",
-      "parentId": "Parent",
-      "netDays": "Net days",
-      "discountDays": "Discount days",
-      "discountPercent": "Discount %",
+      "parentId": "Superior",
+      "netDays": "Días netos",
+      "discountDays": "Días de descuento",
+      "discountPercent": "Descuento %",
       "documentKind": "Document",
-      "prefix": "Prefix",
-      "nextNumber": "Next number",
-      "padding": "Padding",
-      "gapless": "Gapless",
+      "prefix": "Prefijo",
+      "nextNumber": "Siguiente número",
+      "padding": "Relleno",
+      "gapless": "Sin saltos",
       "classification": "Clasificación",
-      "costMultiplier": "Cost multiplier",
-      "isBillableDefault": "Billable by default",
+      "costMultiplier": "Multiplicador de costo",
+      "isBillableDefault": "Facturable por defecto",
       "showOnFieldTicket": "Mostrar en partes de campo",
       "category": "Categoría",
       "postsGl": "Contabiliza en el libro mayor",
@@ -2658,24 +2658,24 @@
       "convention": "Convención",
       "lifeMonths": "Vida (meses)",
       "depreciationMethodId": "Método de depreciación",
-      "departmentId": "Department",
-      "defaultMethod": "Default method",
+      "departmentId": "Departamento",
+      "defaultMethod": "Método predeterminado",
       "defaultDepreciationMethodId": "Fórmula predeterminada",
       "defaultConvention": "Convención de depreciación",
       "endOfLife": "Fin de vida",
-      "defaultLifeMonths": "Default life (months)",
+      "defaultLifeMonths": "Vida útil predeterminada (meses)",
       "assetAccountId": "Cuenta de inventario",
-      "accumulatedDepreciationAccountId": "Accumulated depreciation account",
-      "depreciationExpenseAccountId": "Depreciation expense account",
-      "gainLossAccountId": "Gain / loss account",
-      "minorUnits": "Minor units",
-      "legalName": "Legal name",
-      "baseCurrency": "Base currency",
-      "isElimination": "Elimination",
-      "fromSubsidiaryId": "From subsidiary",
-      "toSubsidiaryId": "To subsidiary",
-      "dueFromAccountId": "Due-from account",
-      "dueToAccountId": "Due-to account",
+      "accumulatedDepreciationAccountId": "Cuenta de depreciación acumulada",
+      "depreciationExpenseAccountId": "Cuenta de gastos de depreciación",
+      "gainLossAccountId": "Cuenta de ganancias / pérdidas",
+      "minorUnits": "Unidades menores",
+      "legalName": "Razón social",
+      "baseCurrency": "Moneda base",
+      "isElimination": "Eliminación",
+      "fromSubsidiaryId": "Filial de origen",
+      "toSubsidiaryId": "Filial de destino",
+      "dueFromAccountId": "Cuenta por cobrar intercompañía",
+      "dueToAccountId": "Cuenta por pagar intercompañía",
       "asOf": "A fecha de",
       "fromCurrency": "Moneda de origen",
       "toCurrency": "Moneda de destino",
@@ -3081,31 +3081,31 @@
         "other": "Otro"
       },
       "taxDepreciationModel": {
-        "pool": "Class pool",
-        "macrs": "Per-asset MACRS"
+        "pool": "Grupo por clase",
+        "macrs": "MACRS por activo"
       },
       "macrsSystem": {
         "gds": "GDS",
         "ads": "ADS"
       },
       "macrsMethod": {
-        "200db": "200% declining balance",
-        "150db": "150% declining balance",
-        "straightLine": "Straight line"
+        "200db": "Decreciente al 200 %",
+        "150db": "Decreciente al 150 %",
+        "straightLine": "Línea recta"
       },
       "taxDepreciationConvention": {
-        "halfYear": "Half-year",
-        "midQuarter": "Mid-quarter",
-        "midMonth": "Mid-month"
+        "halfYear": "Semestral",
+        "midQuarter": "Mitad del trimestre",
+        "midMonth": "Mitad del mes"
       },
       "poolMethod": {
-        "declining": "Declining balance",
-        "straightLine": "Straight line"
+        "declining": "Saldo decreciente",
+        "straightLine": "Línea recta"
       },
       "appliesTo": {
-        "sales": "Sales",
-        "purchases": "Purchases",
-        "both": "Both"
+        "sales": "Ventas",
+        "purchases": "Compras",
+        "both": "Ambos"
       },
       "taxCalculationType": {
         "standard": "Impuesto estándar",
@@ -3119,12 +3119,12 @@
       "basis": {
         "collected": "Impuesto cobrado (repercutido)",
         "paid": "Impuesto pagado / créditos (soportado)",
-        "net": "Net amount",
-        "tax": "Tax amount"
+        "net": "Importe neto",
+        "tax": "Importe fiscal"
       },
       "sign": {
-        "positive": "Add (+)",
-        "negative": "Subtract (−)"
+        "positive": "Sumar (+)",
+        "negative": "Restar (−)"
       },
       "channel": {
         "printPdf": "Imprimir y enviar por correo (PDF oficial)",
@@ -4782,12 +4782,12 @@
       "description": "Extensiones instalables y el mercado de aplicaciones."
     },
     "bankFeeds": {
-      "title": "Bank Feeds",
-      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+      "title": "Feeds bancarios",
+      "description": "Conectividad bancaria automatizada — archivos SFTP y conexiones en vivo de Plaid, GoCardless y TrueLayer."
     },
     "subscriptionBilling": {
-      "title": "Subscription Billing",
-      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+      "title": "Facturación por suscripción",
+      "description": "Planes y suscripciones que generan automáticamente facturas recurrentes (SaaS / anticipo)."
     },
     "onlinePayments": {
       "title": "Pagos en línea",
@@ -5458,7 +5458,7 @@
       "simulateTitle": "Simular",
       "simulateHelp": "Prueba sin escrituras: elija entidad:id o deje vacío para muestrear.",
       "simulateSubjectLabel": "Sujeto",
-      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateSubjectPlaceholder": "leave_request:'<id>'",
       "simulateButton": "Simular",
       "stepKind": "Paso",
       "stepStatus": "Estado",

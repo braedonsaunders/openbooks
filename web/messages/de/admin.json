@@ -5458,7 +5458,7 @@
       "simulateTitle": "Simulieren",
       "simulateHelp": "Testlauf ohne Schreibvorgänge — Entität:ID wählen oder leer lassen für eine Stichprobe.",
       "simulateSubjectLabel": "Subjekt",
-      "simulateSubjectPlaceholder": "leave_request:<ID>",
+      "simulateSubjectPlaceholder": "leave_request:'<ID>'",
       "simulateButton": "Simulieren",
       "stepKind": "Schritt",
       "stepStatus": "Status",
