@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import type { CandidateDrawerData, OfferDrawerData } from "./sections.tsx";
 
@@ -16,7 +15,6 @@ import type { CandidateDrawerData, OfferDrawerData } from "./sections.tsx";
  * the island only needs router.refresh, stubbed below like the house
  * web-integration pattern.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
