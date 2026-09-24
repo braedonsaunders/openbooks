@@ -75,6 +75,26 @@ export async function canRunReportStatement(authz: Authz, kind: string | null | 
   return isFeatureEnabled(authz.user.orgId, featureKey)
 }
 
+export type ReportDefinitionGateRow = {
+  report_type: string | null
+  query: unknown
+  statement: { kind?: string } | null
+}
+
+/**
+ * Visibility gate for the report-definition READ surfaces (the definitions
+ * list and detail endpoints). Statements carry no entity plan — `query` is
+ * null by design — so the entity gate would hide every built-in statement;
+ * they answer the statement feature gate instead, while query plans answer
+ * the entity gate. Any other report_type stays hidden: no reader was ever
+ * granted a type the catalog does not name.
+ */
+export async function canSeeReportDefinition(authz: Authz, def: ReportDefinitionGateRow): Promise<boolean> {
+  if (def.report_type === 'statement') return canRunReportStatement(authz, def.statement?.kind)
+  if (def.report_type === 'query') return canRunReportEntity(authz, def.query)
+  return false
+}
+
 /**
  * Refuse a plan whose entity is missing or unknown, whose permission the
  * caller does not hold, or whose Features switch is off. Returns null when

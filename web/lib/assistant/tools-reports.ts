@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { db, withOrg } from "@openbooks/engine/src/platform/db.ts";
 import { can, type Authz } from "../authz";
-import { canRunReportEntity, canRunReportStatement } from "../report-authz";
+import { canSeeReportDefinition } from "../report-authz";
 import {
   agingDetail,
   cashFlowIndirect,
@@ -39,14 +39,18 @@ import {
 
 /** A definition over a permission- or feature-gated report entity (e.g.
  *  payroll wages, projects) is hidden from users who could not run it —
- *  mirrors the reports hub and the shared report-authz gate. */
+ *  mirrors the reports hub and the shared report-authz gate. Statements
+ *  carry no entity plan, so they answer the statement feature gate; the
+ *  entity gate alone would hide every built-in statement. */
 async function definitionPermitted(
   authz: Authz,
-  entity: string | null,
-  statementKind: string | null,
+  row: { report_type: string; entity: string | null; statement_kind: string | null },
 ): Promise<boolean> {
-  if (!(await canRunReportEntity(authz, { entity }))) return false;
-  return canRunReportStatement(authz, statementKind);
+  return canSeeReportDefinition(authz, {
+    report_type: row.report_type,
+    query: row.entity == null ? null : { entity: row.entity },
+    statement: row.statement_kind == null ? null : { kind: row.statement_kind },
+  });
 }
 
 /** Reports render through next-intl when a request locale exists; background
@@ -91,7 +95,7 @@ const listReportDefinitions: AssistantToolDef = {
     `));
     const visible = [];
     for (const row of rows.rows) {
-      if (await definitionPermitted(authz, row.entity, row.statement_kind)) visible.push(row);
+      if (await definitionPermitted(authz, row)) visible.push(row);
     }
     return {
       ok: true,
@@ -151,13 +155,13 @@ const runReport: AssistantToolDef = {
     if (authz.allowedSubsidiaryIds !== null) return { ok: false, error: "forbidden" };
     const a = raw as RangeArgs & { definitionId: string };
     const orgId = authz.user.orgId;
-    const def = (await db.execute<{ entity: string | null; statement_kind: string | null }>(sql`
-      select query->>'entity' as entity, statement->>'kind' as statement_kind
+    const def = (await db.execute<{ report_type: string; entity: string | null; statement_kind: string | null }>(sql`
+      select coalesce(report_type, 'query') as report_type, query->>'entity' as entity, statement->>'kind' as statement_kind
         from report_definitions
        where id = ${a.definitionId} and org_id = ${orgId} and archived_at is null
     `));
     if (!def.rows[0]) return { ok: false, error: "report_not_found" };
-    if (!(await definitionPermitted(authz, def.rows[0].entity, def.rows[0].statement_kind))) {
+    if (!(await definitionPermitted(authz, def.rows[0]))) {
       return { ok: false, error: "forbidden" };
     }
 
@@ -370,12 +374,12 @@ const listReportSchedules: AssistantToolDef = {
       id: unknown; definition_id: unknown; definition_name: unknown; cadence: unknown;
       day_of_week: unknown; day_of_month: unknown; hour: unknown; minute: unknown;
       timezone: unknown; recipient_emails: unknown; next_run_at: unknown; active: unknown;
-      entity: string | null; statement_kind: string | null;
+      report_type: string | null; entity: string | null; statement_kind: string | null;
     }>(sql`
       select s.id, s.definition_id, d.name as definition_name, s.cadence,
              s.day_of_week, s.day_of_month, s.hour, s.minute, s.timezone,
              s.recipient_emails, s.next_run_at, s.active,
-             d.query->>'entity' as entity, d.statement->>'kind' as statement_kind
+             d.report_type as report_type, d.query->>'entity' as entity, d.statement->>'kind' as statement_kind
         from report_schedules s
         left join report_definitions d on d.id = s.definition_id and d.org_id = s.org_id
        where s.org_id = ${authz.user.orgId} and (d.id is null or d.archived_at is null)
@@ -385,8 +389,13 @@ const listReportSchedules: AssistantToolDef = {
     `));
     const schedules = [];
     for (const row of rows.rows) {
-      if (!(await definitionPermitted(authz, row.entity, row.statement_kind))) continue;
+      if (!(await definitionPermitted(authz, {
+        report_type: row.report_type ?? 'query',
+        entity: row.entity,
+        statement_kind: row.statement_kind,
+      }))) continue;
       const schedule: Record<string, unknown> = { ...row };
+      delete schedule.report_type;
       delete schedule.entity;
       delete schedule.statement_kind;
       schedules.push(schedule);

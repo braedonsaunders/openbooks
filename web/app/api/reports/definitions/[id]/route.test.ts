@@ -102,6 +102,7 @@ const mockSources = new Map<string, string>([
       export async function canAccessReportDefinition() { return true }
       export async function canRunReportEntity() { return true }
       export async function canRunReportStatement() { return true }
+      export async function canSeeReportDefinition() { return true }
       export async function guardReportEntity() { return null }
     `,
   ],

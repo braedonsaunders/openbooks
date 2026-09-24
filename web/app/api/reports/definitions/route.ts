@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
-import { canRunReportEntity, canRunReportStatement, guardReportEntity } from '../../../../lib/report-authz'
+import { canSeeReportDefinition, guardReportEntity } from '../../../../lib/report-authz'
 import { slugifyReportName, uniqueReportSlug } from '../../../../lib/custom-reports'
 import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/api/idempotency'
@@ -34,16 +34,17 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   await ensureReportDefinitions(user.orgId)
-  const rows = (await db.execute<{ query: unknown; statement: { kind?: string } | null }>(sql`
-    select id, kind, slug, name, description, query, statement, updated_at
+  const rows = (await db.execute<{ report_type: string | null; query: unknown; statement: { kind?: string } | null }>(sql`
+    select id, kind, report_type, slug, name, description, query, statement, updated_at
       from report_definitions
      where org_id = ${user.orgId} and archived_at is null
      order by kind, name
   `))
   const visible = []
   for (const row of rows.rows) {
-    if (!(await canRunReportEntity(gate, row.query))) continue
-    if (!(await canRunReportStatement(gate, row.statement?.kind))) continue
+    // Statements answer the statement feature gate and query plans the
+    // entity gate; the entity gate alone hides every built-in statement.
+    if (!(await canSeeReportDefinition(gate, row))) continue
     visible.push(row)
   }
   return NextResponse.json({

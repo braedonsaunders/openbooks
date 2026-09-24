@@ -805,7 +805,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('lib/assistant/tools-reports.ts'),
-    /canRunReportEntity/,
+    /canSeeReportDefinition/,
     'list_report_definitions / run_report must hide optional-module plans when the feature is off',
   )
   assert.match(
