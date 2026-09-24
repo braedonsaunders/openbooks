@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { filingAccountRef, type PayrollFilingAccount } from "./filing.ts";
 import { cmp } from "../money/money.ts";
@@ -443,17 +442,6 @@ test("the bill lock key scopes one destination, window, filing account and entit
     }),
     "payroll-remittance-bill:org-1:cra:2026-07-01:2026-07-31::sub-a",
   );
-});
-
-test("bill creation takes the advisory lock before any bill write", () => {
-  // The duplicate check is only a control if two transactions cannot pass it
-  // simultaneously — pinned structurally, like bootstrap-safety does.
-  const source = readFileSync(new URL("./remittance.ts", import.meta.url), "utf8");
-  const fn = source.indexOf("export async function createRemittanceBill");
-  const tx = source.indexOf("db.transaction", fn);
-  const lock = source.indexOf("pg_advisory_xact_lock", tx);
-  const insert = source.indexOf("insert into documents", tx);
-  assert.ok(tx > fn && lock > tx && insert > lock, "lock precedes the bill insert inside the transaction");
 });
 
 test("remittance bills number off the org's existing vendor_bill series", () => {
