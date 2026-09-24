@@ -447,6 +447,171 @@ test("the sandbox has no host db, fs, or net primitives except injected adapters
   assert.equal(names.includes("require"), false);
 });
 
+test("the guest-visible host surface is exactly the sealed set", async () => {
+  // A new host function changes what the guest can reach: it must be added
+  // to the expected surface here AND given a straggler call below, so it
+  // cannot skip the post-outcome seal by accident.
+  const r = await runAppEndpoint({
+    source: `function handler() { return Object.getOwnPropertyNames(ob).sort(); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(r.status, "ok");
+  assert.deepEqual(r.response!.body, [
+    "__journal_create",
+    "__platform_create",
+    "__platform_delete",
+    "__platform_get",
+    "__platform_list",
+    "__platform_query",
+    "__platform_schema",
+    "__platform_update",
+    "__records_get",
+    "__records_list",
+    "__storage_delete",
+    "__storage_get",
+    "__storage_list",
+    "__storage_set",
+    "journal",
+    "log",
+    "platform",
+    "records",
+    "request",
+    "storage",
+  ]);
+});
+
+test("a post-outcome straggler cannot append logs or reach adapters", async () => {
+  // The wall-clock timer and the host-call deadline share one absolute
+  // deadline, so with an adapter that outlives it the two timers expire on
+  // the same millisecond and either may fire first: the host deadline may
+  // win (the guest catches, finishes pre-seal, the run reports ok) or the
+  // wall may win (the timeout outcome is determined while the guest is
+  // still suspended, and the guest resumes AFTER the seal). Only the
+  // wall-won path exercises the seal, so repeat until it is observed.
+  // The catch block below then calls every host function; each must refuse
+  // instead of charging budget or reaching its adapter. When adding a host
+  // function, add its call here too.
+  const stragglerSource = `function handler() {
+      try { ob.storage.get("slow"); }
+      catch (e) {
+        var ops = [
+          () => ob.log("straggler"),
+          () => ob.storage.get("k"),
+          () => ob.storage.set("k", 1),
+          () => ob.storage.list(""),
+          () => ob.storage.delete("k"),
+          () => ob.records.list("t"),
+          () => ob.records.get("t", "1"),
+          () => ob.journal.create({}),
+          () => ob.platform.schema(),
+          () => ob.platform.list("t", {}),
+          () => ob.platform.get("t", "1"),
+          () => ob.platform.create("t", {}),
+          () => ob.platform.update("t", "1", {}),
+          () => ob.platform.delete("t", "1"),
+          () => ob.platform.query({})
+        ];
+        for (var i = 0; i < ops.length; i++) { try { ops[i](); } catch (ignored) {} }
+      }
+      return "done";
+    }`;
+  const buildAdapters = (): { adapters: AppHostAdapters; calls: string[] } => {
+    const calls: string[] = [];
+    const adapters = withPlatform(fakeAdapters(true));
+    adapters.storage = {
+      get: async (key) => {
+        calls.push(`get:${key}`);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        return "too late";
+      },
+      set: async (key) => {
+        calls.push(`set:${key}`);
+      },
+      list: async () => {
+        calls.push("list");
+        return [];
+      },
+      delete: async (key) => {
+        calls.push(`delete:${key}`);
+      },
+    };
+    adapters.records = {
+      list: async () => {
+        calls.push("records.list");
+        return [];
+      },
+      get: async () => {
+        calls.push("records.get");
+        return null;
+      },
+    };
+    adapters.journal = {
+      create: async () => {
+        calls.push("journal.create");
+        return { id: "j1" };
+      },
+    };
+    adapters.platform = {
+      query: async () => {
+        calls.push("platform.query");
+        return {};
+      },
+      schema: async () => {
+        calls.push("platform.schema");
+        return [];
+      },
+      list: async () => {
+        calls.push("platform.list");
+        return [];
+      },
+      get: async () => {
+        calls.push("platform.get");
+        return null;
+      },
+      create: async () => {
+        calls.push("platform.create");
+        return {};
+      },
+      update: async () => {
+        calls.push("platform.update");
+        return {};
+      },
+      delete: async () => {
+        calls.push("platform.delete");
+        return {};
+      },
+    };
+    return { adapters, calls };
+  };
+  // Warm the sandbox once so a cold first compile cannot outlast the test's
+  // deadline before the first host call (that path resolves the host
+  // deadline synchronously and never suspends past the wall).
+  const warm = await runAppEndpoint({
+    source: `function handler() { return 1 }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(warm.status, "ok");
+  let timeoutsObserved = 0;
+  for (let attempt = 0; attempt < 25 && timeoutsObserved === 0; attempt++) {
+    const { adapters, calls } = buildAdapters();
+    const r = await runAppEndpoint({
+      source: stragglerSource,
+      request: req(),
+      adapters,
+      timeoutMs: 20,
+    });
+    if (r.status !== "timeout") continue;
+    timeoutsObserved++;
+    // Let the suspended guest resume post-seal and run its straggler calls.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.deepEqual(r.logs, [], "a sealed ob.log must not mutate the returned logs");
+    assert.deepEqual(calls, ["get:slow"], "no sealed host function may reach its adapter");
+  }
+  assert.equal(timeoutsObserved, 1, "expected the wall to win at least once in 25 tries");
+});
+
 test("raw records, journal, and platform host functions fail closed without adapters", async () => {
   const records = await runAppEndpoint({
     source: `function handler() { return JSON.parse(ob.__records_get("equipment", "r1")); }`,

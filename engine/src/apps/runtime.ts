@@ -248,6 +248,8 @@ export async function runAppEndpoint(opts: {
     const obHandle = vm.newObject();
 
     const logFn = vm.newFunction("log", (...args) => {
+      const closed = refuseIfSealed();
+      if (closed) return closed;
       const over = charge(COST.log);
       if (over) return over;
       logs.push(args.map((a) => JSON.stringify(vm.dump(a))).join(" "));
