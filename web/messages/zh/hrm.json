@@ -617,6 +617,9 @@
     },
     "drawer": {
       "title": "需求 {number}",
+      "offerTitle": "录用通知 · {employer}",
+      "candidateTitle": "候选人 {name}",
+      "employer": "雇主",
       "pipeline": "流程",
       "applications": "应聘",
       "noApplications": "暂无关联候选人。",
