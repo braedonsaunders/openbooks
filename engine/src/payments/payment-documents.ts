@@ -113,6 +113,35 @@ export async function updateDraftPayment(
     if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
     if (doc.status !== "draft") throw new PaymentError("only draft payments can be edited");
 
+    // A draft claimed by an open run is the run's frozen plan: editing its
+    // allocations or amounts here would desynchronize the approved run file,
+    // the remittance advice, and the cash the run is about to post. Refuse
+    // with the run's identity and status so the operator can pick the
+    // release that fits (reject, roll back, or cancel the run) and re-plan,
+    // instead of editing under a live run and posting something nobody
+    // approved. Closed runs release their drafts for re-planning; the one
+    // exception — a bank-return re-claim posting still-pending instructions
+    // of a terminal run — is fenced instead by the posting amount
+    // comparison, which fails the instruction rather than sending drifted
+    // cash.
+    const claimed = (await db.execute<{ runNumber: string; status: string }>(sql`
+      select run.run_number as "runNumber", run.status
+        from payment_instructions instruction
+        join payment_runs run
+          on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
+       where instruction.payment_document_id = ${id} and instruction.org_id = ${orgId}
+         and instruction.status in ('pending', 'approved', 'generated')
+         and run.status in ('draft', 'pending_approval', 'approved', 'processing',
+                            'generated', 'delivered', 'partially_failed')
+       limit 1
+    `)).rows[0];
+    if (claimed) {
+      throw new PaymentError(
+        `payment is claimed by open payment run ${claimed.runNumber} (${claimed.status}) — ` +
+          `reject, roll back, or cancel the run and re-plan the payment before editing it`,
+      );
+    }
+
     const custom = (doc.custom ?? {}) as {
       bankAccountId?: string;
       allocations?: AllocationInput[];

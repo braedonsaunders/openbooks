@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrgTransaction } from "../platform/db.ts";
+import { toUnits } from "../money/money.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
@@ -148,9 +149,15 @@ async function postClaimedPaymentInstruction(
       payment_document_id: string | null;
       status: string;
       document_status: string | null;
+      instruction_amount: string;
+      instruction_currency: string;
+      document_total: string | null;
+      document_currency: string | null;
     }>(sql`
       select instruction.id, instruction.payment_document_id, instruction.status,
-             document.status as document_status
+             document.status as document_status,
+             instruction.amount as instruction_amount,
+             instruction.currency as instruction_currency
         from payment_instructions instruction
         left join documents document
           on document.id = instruction.payment_document_id
@@ -165,6 +172,49 @@ async function postClaimedPaymentInstruction(
     }
     if (!instruction.payment_document_id) {
       return { status: "failed", error: "instruction has no payment document" };
+    }
+
+    // The run's amount is the approved plan, but the bank line carries the
+    // document's total — so a draft edited under the run (or under a
+    // terminal run's bank-return re-claim, where the edit guard releases)
+    // would otherwise send cash nobody approved while the run file and
+    // remittance still state the planned amount. Lock the document row
+    // (Postgres forbids locking the nullable side of the outer join above,
+    // so this is a second locked read in the same unit) and compare: an
+    // edit racing this post either committed first (mismatch → this
+    // instruction fails loudly and the run goes partially failed instead of
+    // sending drifted cash) or waits on the document lock (then finds a
+    // non-draft and refuses itself). Fail closed on unreadable amounts.
+    const lockedDoc = (await db.execute<{
+      total: string | null;
+      currency: string | null;
+    }>(sql`
+      select total, currency
+        from documents
+       where id = ${instruction.payment_document_id} and org_id = ${orgId}
+       for update
+    `)).rows[0];
+    if (!lockedDoc || lockedDoc.total === null || lockedDoc.currency === null) {
+      return { status: "failed", error: "instruction payment document is missing" };
+    }
+    let amountsMatch = instruction.instruction_currency === lockedDoc.currency;
+    if (amountsMatch) {
+      try {
+        amountsMatch =
+          toUnits(lockedDoc.total) === toUnits(instruction.instruction_amount);
+      } catch {
+        amountsMatch = false;
+      }
+    }
+    if (!amountsMatch) {
+      return {
+        status: "failed",
+        error:
+          `payment no longer matches its run instruction: the run planned ` +
+          `${instruction.instruction_amount} ${instruction.instruction_currency} but the ` +
+          `document now totals ${lockedDoc.total} ${lockedDoc.currency} — ` +
+          `release the run (reject, roll back, or cancel it), correct the payment, and re-plan before reposting`,
+      };
     }
 
     // A payment posted individually from its own flyout only needs its run
