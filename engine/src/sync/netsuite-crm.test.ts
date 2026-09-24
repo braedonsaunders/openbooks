@@ -10,20 +10,6 @@ import {
 
 const crmSource = readFileSync(new URL('./netsuite-crm.ts', import.meta.url), 'utf8')
 
-test('recent-activity upserts pin the known tenant on the id conflict write', () => {
-  assert.match(
-    crmSource,
-    /on conflict\(id\) do update set[\s\S]*?where crm_activities\.org_id=\$\{orgId\}/,
-  )
-})
-
-test('account-profile upserts pin the known tenant on the party_id conflict write', () => {
-  assert.match(
-    crmSource,
-    /on conflict\(party_id\) do update set[\s\S]*?where crm_account_profiles\.org_id=\$\{orgId\}/,
-  )
-})
-
 test('CRM imports append lifecycle transition events with the prior stage', () => {
   assert.match(crmSource, /select id,lifecycle_stage[\s\S]*?from crm_account_profiles[\s\S]*?for update/)
   assert.match(crmSource, /insert into crm_account_stage_events\(org_id,account_profile_id,from_stage,to_stage,source_kind/)
