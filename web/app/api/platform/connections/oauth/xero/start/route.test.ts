@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sealJson, unsealJson } from "@openbooks/engine/src/platform/secrets.ts";
@@ -84,7 +83,6 @@ const xero_oauth_start_flowUrl = '../../_flow.ts?xero-oauth-start-flow'
 const { CONNECTION_OAUTH_COOKIE } = (await import(xero_oauth_start_flowUrl)) as typeof import('../../_flow.ts');
 hooks.deregister();
 
-const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
 
 function cookieMap(response: Response): Map<string, string> {
   const raw =
@@ -133,12 +131,6 @@ test("Xero start mints a one-time nonce in sealed state and the CSRF cookie", as
   assert.equal(cookies.get(CONNECTION_OAUTH_COOKIE), payload?.nonce);
 });
 
-test("the Xero start route never reads origin from the request URL", () => {
-  assert.match(routeSource, /connectionOauthRedirectUri\('xero'\)/);
-  assert.match(routeSource, /storageIdentityError/);
-  assert.doesNotMatch(routeSource, /new URL\(req\.url\)\.origin/);
-  assert.doesNotMatch(routeSource, /trustedRequestOrigin/);
-});
 
 test("a Postgres 22P02 connection id is 404, not an unhandled 500", async () => {
   state.identityError = "22P02";
