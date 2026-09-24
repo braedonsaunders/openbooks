@@ -29,16 +29,23 @@ const { ChangeRequestRowActions } = await import('./ChangeRequestRowActions')
 Object.assign(globalThis, { React })
 const hrmMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/hrm.json', import.meta.url), 'utf8'))
 const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
+const uiMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8'))
+const missingMessages: string[] = []
 
 function provider(children: React.ReactNode): React.ReactNode {
   return (
-    <NextIntlClientProvider locale="en" messages={{ hrm: hrmMessages, common: commonMessages }}>
+    <NextIntlClientProvider
+      locale="en"
+      messages={{ hrm: hrmMessages, common: commonMessages, ui: uiMessages }}
+      onError={(error) => missingMessages.push(error.message)}
+    >
       {children}
     </NextIntlClientProvider>
   )
 }
 
 test('the propose dialog renders its employment picker shell without fetching', () => {
+  missingMessages.length = 0
   const html = renderToStaticMarkup(
     provider(
       <ProposeChangeDialog
@@ -53,6 +60,10 @@ test('the propose dialog renders its employment picker shell without fetching', 
   )
   assert.match(html, /Employment/)
   assert.match(html, /role="dialog"/, 'the picker is exposed as a dialog')
+  assert.ok(
+    !missingMessages.some((message) => message.includes('ui.')),
+    `the picker must resolve shared UI copy: ${missingMessages.join(', ')}`,
+  )
 })
 
 test('a terminal row renders no lifecycle actions', () => {
