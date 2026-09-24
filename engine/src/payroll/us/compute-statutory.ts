@@ -30,6 +30,7 @@ export type UsYtdRow = {
   suiOpeningUnscoped: boolean;
   supplemental: string;
   regularWageTaxWithheldThisYear: boolean;
+  regularWageTaxWithheldKeys: string[];
   fica_tax: string;
 };
 
@@ -101,6 +102,26 @@ export async function usEmployeeYtd(
         coalesce((s.factors->>'B')::numeric, 0) = 0
         and coalesce((s.factors->>${`SIT_${region}`})::numeric, 0) > 0
       ), false) as "regularWageTaxWithheldThisYear",
+      coalesce((
+        select array_agg(distinct fact.key)
+        from pay_stubs history
+        join pay_runs committed_run
+          on committed_run.document_id = history.pay_run_document_id
+         and committed_run.org_id = history.org_id
+        join documents committed_document
+          on committed_document.id = committed_run.document_id
+         and committed_document.org_id = committed_run.org_id
+        cross join lateral jsonb_each_text(history.factors) as fact(key, value)
+        where history.org_id = ${orgId}
+          and history.employee_party_id = ${employeePartyId}
+          and history.tax_year = ${taxYear}
+          and history.pay_run_document_id <> ${documentId}
+          and committed_run.run_status = 'committed'
+          and committed_document.status <> 'voided'
+          and coalesce((history.factors->>'B')::numeric, 0) = 0
+          and (fact.key like 'SIT_%' or fact.key like 'LIT_%')
+          and coalesce(fact.value::numeric, 0) > 0
+      ), ARRAY[]::text[]) as "regularWageTaxWithheldKeys",
       coalesce((select ${sql.raw(ficaWithheldColumn)} from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'SS')::numeric), 0)
@@ -305,6 +326,7 @@ export async function computeUsStatutory(
       supplemental: nonPeriodic,
       supplementalPaymentTiming,
       regularWageTaxWithheldThisYear: ytd.regularWageTaxWithheldThisYear,
+      regularWageTaxWithheldFor: ytd.regularWageTaxWithheldKeys,
       wageAllocations: ctx.workAllocations,
       residentWithholdingFacts: levy.basis === "resident_out_of_region"
         ? resolveUsResidentWithholdingFacts(

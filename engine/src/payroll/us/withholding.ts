@@ -69,17 +69,26 @@ import {
 
 export class UsWithholdingError extends PayrollError {}
 
+export interface UsSupplementalFlatMethod {
+  kind: "flat";
+  rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+  requiresRegularWithholding?: boolean;
+  rounding?: "whole_dollar";
+}
+
+export type UsSeparateSupplementalSubRegionMethod = UsSupplementalFlatMethod | {
+  kind: "refuse";
+  detail: string;
+};
+
 export type UsSeparateSupplementalMethod =
   | { kind: "refuse"; detail: string }
   | { kind: "not_applicable" }
   | { kind: "aggregate"; source: string }
   | { kind: "differential"; source: string }
-  | {
-    kind: "flat";
-    rates: readonly { effectiveFrom: string; rate: string; source: string }[];
-    requiresRegularWithholding?: boolean;
-    rounding?: "whole_dollar";
-  };
+  | (UsSupplementalFlatMethod & {
+    subRegionMethods?: Readonly<Record<string, UsSeparateSupplementalSubRegionMethod>>;
+  });
 
 export type UsCombinedSupplementalMethod =
   | { kind: "state_formula" }
@@ -154,6 +163,32 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
       effectiveFrom: "2026-01-01", rate: "0.05",
       source: "https://revenuefiles.mt.gov/files/Forms/Montana_Employer_and_Information_Agent_Guide_with_Tax_Tables.pdf",
     }],
+  } as const,
+  NY: {
+    kind: "flat",
+    // NYS-50-T-NYS (1/26), p. 3: the 11.70% separate supplemental rate is
+    // available only when the employee's regular wages had NYS withholding.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.1170",
+      source: "https://www.tax.ny.gov/pdf/publications/withholding/nys50_t_nys.pdf",
+    }],
+    requiresRegularWithholding: true,
+    subRegionMethods: {
+      NYC: {
+        kind: "flat",
+        // NYS-50-T-NYC (1/26), p. 3: NYC separately-paid supplemental wages
+        // use 4.25% when tax was withheld from regular NYC wages.
+        rates: [{
+          effectiveFrom: "2026-01-01", rate: "0.0425",
+          source: "https://www.tax.ny.gov/pdf/publications/withholding/nys50_t_nyc.pdf",
+        }],
+        requiresRegularWithholding: true,
+      },
+      YONKERS: {
+        kind: "refuse",
+        detail: "New York separate-supplemental treatment for Yonkers depends on its resident/nonresident schedule and is not transcribed",
+      },
+    },
   } as const,
   NC: {
     kind: "flat",
@@ -276,6 +311,8 @@ export interface UsWithholdingInput {
   supplementalPaymentTiming?: "combined" | "separate";
   /** Committed same-year regular-wage withholding history for conditional flat methods. */
   regularWageTaxWithheldThisYear?: boolean;
+  /** Prior committed tax-factor keys, including local levies. */
+  regularWageTaxWithheldFor?: readonly string[];
   /** Resolved exact work shares used by state and local allocation rules. */
   wageAllocations?: readonly UsWageAllocation[];
   /** Verified out-of-region wage source and current work-region tax amounts. */
@@ -340,7 +377,20 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     );
   }
   if (supplemental > 0n && input.supplementalPaymentTiming === "separate") {
-    const method = US_SEPARATE_SUPPLEMENTAL_METHODS[levy.region as keyof typeof US_SEPARATE_SUPPLEMENTAL_METHODS];
+    const declaredMethod = US_SEPARATE_SUPPLEMENTAL_METHODS[
+      levy.region as keyof typeof US_SEPARATE_SUPPLEMENTAL_METHODS
+    ];
+    const subRegionMethods = declaredMethod.kind === "flat" && "subRegionMethods" in declaredMethod
+      ? declaredMethod.subRegionMethods as Readonly<Record<string, UsSeparateSupplementalSubRegionMethod>>
+      : undefined;
+    const method: UsSeparateSupplementalMethod | UsSeparateSupplementalSubRegionMethod =
+      input.levy.level === "sub_region" && subRegionMethods
+        ? subRegionMethods[input.levy.subRegion!]
+          ?? {
+            kind: "refuse",
+            detail: `no separate-supplemental method is declared for ${input.levy.region}/${input.levy.subRegion}`,
+          }
+        : declaredMethod;
     if (method.kind === "not_applicable") return null;
     if (method.kind === "refuse") {
       throw new UsWithholdingError(
@@ -349,9 +399,14 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       );
     }
     if (method.kind === "flat") {
+      const hasRegularWithholding = input.levy.level === "region"
+        ? input.regularWageTaxWithheldThisYear === true
+        : input.regularWageTaxWithheldFor?.includes(
+          `LIT_${input.levy.region}-${input.levy.subRegion}`,
+        ) === true;
       if (
         "requiresRegularWithholding" in method && method.requiresRegularWithholding
-        && input.regularWageTaxWithheldThisYear !== true
+        && !hasRegularWithholding
       ) {
         throw new UsWithholdingError(
           `${levy.label} cannot use its separate-supplemental flat rate without committed evidence of regular-wage withholding; `
@@ -519,6 +574,41 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         `${levy.label} is declared with a published engine (${engineCode}) that is not registered `
         + "in engine/src/payroll/us/states/index.ts",
       );
+    }
+    if (separateFlatRate) {
+      const regular = engine.compute({
+        payDate: input.payDate,
+        periodStart: input.periodStart,
+        employerEmployeeCount: input.employerEmployeeCount,
+        periodEnd: input.periodEnd,
+        periodsPerYear: input.periodsPerYear,
+        wages: input.wages,
+        supplemental: "0",
+        federalIncomeTax: input.federalIncomeTax,
+        taxQualifiedDeductions: input.taxQualifiedDeductions,
+        certificate,
+        basis: levy.reach,
+        wageAllocations: input.wageAllocations,
+        residentWithholdingFacts,
+        regionTax: input.regionTax,
+        socialInsuranceDeducted: input.socialInsuranceDeducted,
+        ytd: input.ytd,
+      });
+      const rawSupplementalTax = mulRateCents(supplemental, separateFlatRate);
+      const supplementalTax = separateFlatWholeDollar
+        ? roundDiv(rawSupplementalTax, 10_000n) * 10_000n
+        : rawSupplementalTax;
+      return {
+        code: engine.state,
+        label: engine.label,
+        tax: addMoney(regular.tax, D(supplementalTax)),
+        factors: {
+          ...regular.factors,
+          US_SUPPLEMENTAL_METHOD: "flat",
+          US_SUPPLEMENTAL_RATE: separateFlatRate,
+          US_SUPPLEMENTAL_TAX: D(supplementalTax),
+        },
+      };
     }
     const result = engine.compute({
       payDate: input.payDate,

@@ -372,6 +372,41 @@ test('Virginia separate supplemental flat election requires regular withholding 
   )
 })
 
+test('New York separate supplemental rates follow the NYS and NYC schedules', () => {
+  // NYS-50-T-NYS and NYS-50-T-NYC (1/26), p. 3, publish 11.70% and 4.25%
+  // respectively. Both flat options require withholding from their own
+  // regular-wage levy; a state withholding fact cannot unlock the city rate.
+  const nys = computeUsWithholding({
+    levy: levy('NY', 'us_ny_it2104'), payDate: '2026-06-01', periodEnd: PERIOD_END,
+    periodsPerYear: 26, wages: '0.0000', supplemental: '500.0000',
+    supplementalPaymentTiming: 'separate', regularWageTaxWithheldThisYear: true,
+    federalIncomeTax: '0.00', certificateFor: () => certificate('us_ny_it2104', {}),
+    tenantRates: () => undefined,
+  })
+  assert.equal(nys?.tax, '58.5000')
+  assert.equal(nys?.factors.US_SUPPLEMENTAL_RATE, '0.1170')
+
+  const nycLevy: ResolvedWithholdingLevy = {
+    ...levy('NY', 'us_ny_it2104'), level: 'sub_region', subRegion: 'NYC',
+    label: 'New York City income tax',
+  }
+  const nycInput = {
+    levy: nycLevy, payDate: '2026-06-01', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '500.0000', supplementalPaymentTiming: 'separate' as const,
+    federalIncomeTax: '0.00', certificateFor: () => certificate('us_ny_it2104', {}),
+    tenantRates: () => undefined,
+  }
+  assert.throws(
+    () => computeUsWithholding({ ...nycInput, regularWageTaxWithheldThisYear: true }),
+    /New York City income tax cannot use its separate-supplemental flat rate without committed evidence of regular-wage withholding.*refused by name/,
+  )
+  const nyc = computeUsWithholding({
+    ...nycInput, regularWageTaxWithheldFor: ['LIT_NY-NYC'],
+  })
+  assert.equal(nyc?.tax, '21.2500')
+  assert.equal(nyc?.factors.US_SUPPLEMENTAL_RATE, '0.0425')
+})
+
 test('US regional and subregional methods receive exact, sourced allocation facts', () => {
   const allocation = {
     region: 'MI', subRegion: 'DETROIT', workShare: '0.250000', source: 'approved work-location record',
