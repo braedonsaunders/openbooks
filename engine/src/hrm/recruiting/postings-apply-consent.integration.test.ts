@@ -156,3 +156,24 @@ test("anonymous apply writes no consent for a matched candidate without prior co
     await dropScratchOrg(h.org.orgId);
   }
 });
+
+test("concurrent public applications with the same email reuse one candidate row", async () => {
+  const h = await setupHarness();
+  try {
+    const email = `concurrent-${randomUUID()}@example.test`;
+    const firstPosting = await seedPublishedPosting(h, "Backend engineer");
+    const secondPosting = await seedPublishedPosting(h, "Platform engineer");
+    const [first, second] = await Promise.all([
+      applyViaPosting({ orgId: h.org.orgId, postingId: firstPosting, displayName: "Applicant One", email }),
+      applyViaPosting({ orgId: h.org.orgId, postingId: secondPosting, displayName: "Applicant Two", email: email.toUpperCase() }),
+    ]);
+    assert.equal(first.candidateId, second.candidateId, "both openings attach to the one email survivor");
+    const candidates = await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from hrm_candidates
+       where org_id = ${h.org.orgId} and lower(email) = lower(${email})
+    `);
+    assert.equal(candidates.rows[0]?.count, 1);
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});

@@ -476,6 +476,14 @@ export async function applyViaPosting(
     if (!featureEnabled(features, "hrmRecruiting") || !featureEnabled(features, "hrmJobBoards")) {
       throw new RecruitingError("REFUSED", NOT_ACCEPTING);
     }
+    if (email !== null) {
+      // The public form can create candidates concurrently. Serialize the
+      // org-wide case-insensitive email lookup and insert so only one row
+      // can become the survivor for this identity within this organization.
+      await db.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended(${orgId} || ':' || lower(${email}), 0))
+      `);
+    }
     const posting = (await db.execute<{ requisitionId: string; status: string }>(sql`
       select p.requisition_id as "requisitionId", p.status,
              r.status as "requisitionStatus", r.pipeline_template_id as "pipelineTemplateId"
@@ -519,6 +527,12 @@ export async function applyViaPosting(
       `)).rows[0];
       if (!inserted) throw new RecruitingError("REFUSED", "the application was not recorded — no row was written; retry the request");
       candidateId = inserted.id;
+    }
+    const candidateLock = (await db.execute<{ id: string }>(sql`
+      select id from hrm_candidates where org_id = ${orgId} and id = ${candidateId} for update
+    `)).rows[0];
+    if (!candidateLock) {
+      throw new RecruitingError("REFUSED", "the candidate changed before the application was recorded — retry the application");
     }
     const existing = (await db.execute<{ id: string }>(sql`
       select id from hrm_applications
