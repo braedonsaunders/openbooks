@@ -53,6 +53,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
 
   const t = (await getTranslations('reports')) as unknown as Translator
   const stamp = await businessToday(gate.user.orgId)
+  // The data below is resolved live inside this request, so capture the
+  // actual generation instant once: it is both the export stamp and the data
+  // as-of, and every format stamps the same moment. The business-day stamp
+  // names the file only — it must never stand in for when the data was read.
+  const generatedAt = new Date()
   const filename = `${safeName(kind)}-${stamp}`
   const branding = await orgBranding()
 
@@ -67,13 +72,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       return xlsxResponse(await exportDataToXlsx(data, {
         reportName: data.title,
         dateRangeLabel: data.dateRangeLabel,
-        generatedAt: new Date(`${stamp}T00:00:00Z`),
+        generatedAt,
       }), filename)
     }
     const { page, showSummary } = resolveLayout(null)
     return pdfResponse(await exportDataToPdf(data, branding, page, {
       showSummary,
-      generatedAt: new Date(`${stamp}T00:00:00Z`),
+      generatedAt,
     }), filename)
   }
 
@@ -102,7 +107,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
           title,
           periodPhrase,
           scale: q.scale,
-          generatedAt: new Date(`${stamp}T00:00:00Z`),
+          generatedAt,
         }), filename)
       }
       if (format === 'xlsx') {
@@ -112,7 +117,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
             title,
             periodPhrase,
             accountLabel: t('export.columns.accountName'),
-            generatedAt: new Date(`${stamp}T00:00:00Z`),
+            generatedAt,
           }),
           filename,
         )
