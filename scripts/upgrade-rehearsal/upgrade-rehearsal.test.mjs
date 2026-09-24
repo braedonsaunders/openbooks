@@ -1,3 +1,4 @@
+// source-pin-contract: upgrade-rehearsal release-only trigger policy and publish refusal without upgrade-verification (upgrade-rehearsal.yml, publish-container.yml)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
