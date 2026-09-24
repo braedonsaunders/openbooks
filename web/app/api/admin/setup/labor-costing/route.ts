@@ -110,6 +110,13 @@ type WageScope = {
   subsidiaryId: string | null
 }
 
+/** These selectors resolve across the organization, so every mutation of
+ * their effective-dated rows requires an unrestricted setup actor. */
+function isOrgWideWageScope(scope: Pick<WageScope, 'employeePartyId' | 'jobTitle' | 'tradeId' | 'departmentId' | 'subsidiaryId'>): boolean {
+  return scope.jobTitle !== null || scope.tradeId !== null ||
+    (scope.employeePartyId === null && scope.departmentId === null && scope.subsidiaryId === null)
+}
+
 /** Exact serialized state of one labor_cost_rates row — numeric read back as
  * text and dates as YYYY-MM-DD — the unit of audit before/after evidence. */
 type RateRow = {
@@ -383,9 +390,7 @@ export async function POST(req: Request) {
     // Job-title, trade, and unanchored default rates resolve across every
     // subsidiary. A subsidiary-limited setup actor may write only rates with
     // an employee, department, or subsidiary anchor.
-    const orgWideRate = jobTitle !== null || tradeId !== null ||
-      (employeePartyId === null && departmentId === null && subsidiaryId === null)
-    if (orgWideRate) {
+    if (isOrgWideWageScope({ employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId })) {
       const scopeDenied = guardUnrestrictedScope(gate)
       if (scopeDenied) return scopeDenied
     }
@@ -520,10 +525,13 @@ export async function POST(req: Request) {
            where r.org_id = ${orgId} and r.id = ${body.id}`)
         const row = located.rows[0]
         if (!row) return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
-        const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? null, {
-          orgWideNull: true,
-        })
-        if (denied) return { ok: false, response: denied }
+        if (isOrgWideWageScope(row)) {
+          const denied = guardUnrestrictedScope(gate)
+          if (denied) return { ok: false, response: denied }
+        } else {
+          const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? null)
+          if (denied) return { ok: false, response: denied }
+        }
 
         await db.execute(scopeLock(orgId, row))
         const before = (
@@ -574,10 +582,13 @@ export async function POST(req: Request) {
            where r.org_id = ${orgId} and r.id = ${body.id}`)
         const row = located.rows[0]
         if (!row) return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
-        const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? null, {
-          orgWideNull: true,
-        })
-        if (denied) return { ok: false, response: denied }
+        if (isOrgWideWageScope(row)) {
+          const denied = guardUnrestrictedScope(gate)
+          if (denied) return { ok: false, response: denied }
+        } else {
+          const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? null)
+          if (denied) return { ok: false, response: denied }
+        }
 
         await db.execute(scopeLock(orgId, row))
         const before = (

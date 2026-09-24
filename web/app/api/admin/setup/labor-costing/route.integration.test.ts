@@ -280,6 +280,48 @@ test("restricted save-rate refuses org-wide job-title, trade, and default rates 
   }
 });
 
+test("restricted end-rate and delete-rate refuse org-wide rows without rate or audit writes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const endCreated = await POST(postRequest(saveRateBody({ jobTitle: "Organization-wide field technician" })));
+    const deleteCreated = await POST(postRequest(saveRateBody({ rate: 125, effectiveFrom: "2026-02-01" })));
+    assert.equal(endCreated.status, 200);
+    assert.equal(deleteCreated.status, 200);
+    const beforeRates = await storedRates(f.orgId);
+    const beforeAudit = Number((await db.execute(sql`
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
+    const endId = beforeRates.find((rate) => rate.rate === "100.0000")!.id;
+    const deleteId = beforeRates.find((rate) => rate.rate === "125.0000")!.id;
+
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: new Set([f.subsidiaryId]),
+    };
+    for (const response of [
+      await POST(postRequest({ action: "end-rate", id: endId, effectiveTo: "2026-06-30" })),
+      await POST(postRequest({ action: "delete-rate", id: deleteId })),
+    ]) {
+      assert.equal(response.status, 403);
+      assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    }
+
+    assert.deepEqual(await storedRates(f.orgId), beforeRates);
+    const afterAudit = Number((await db.execute(sql`
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
+    assert.equal(afterAudit, beforeAudit);
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
 type StoredRate = {
   id: string;
   rate: string;
