@@ -5,6 +5,9 @@
   "list": {
     "name": "Name",
     "paper": "Papier",
+    "paperLetter": "Letter",
+    "paperA4": "A4",
+    "paperLegal": "Legal",
     "default": "Standard",
     "builtInStarter": "Integrierte Startvorlage",
     "builtIn": "Integriert",

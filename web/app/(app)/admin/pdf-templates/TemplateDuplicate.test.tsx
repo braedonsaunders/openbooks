@@ -512,3 +512,59 @@ test("F-x6-003: starter row Duplicate opens the name prompt in the list", async 
     host.remove();
   }
 });
+
+// F4T-15: paper-size names come from the catalog, never hardcoded English —
+// under fr a letter/landscape row renders "Lettre · Paysage", not "Letter".
+test("F4T-15: paper names render in the operator locale", async () => {
+  const messagesFr = (await import("../../../../messages/fr")).default;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    /* eslint-disable react/no-children-prop */
+    root.render(
+      React.createElement(NextIntlClientProvider, {
+        locale: "fr",
+        messages: messagesFr,
+        timeZone: "UTC",
+        children: React.createElement(TemplatesList, {
+          templates: [
+            {
+              id: "00000000-0000-4000-8000-000000000097",
+              name: "Facture",
+              description: null,
+              recordType: "customer_invoice",
+              paperSize: "letter",
+              orientation: "landscape",
+              isActive: true,
+              isDefault: false,
+            },
+          ],
+          starters: [],
+          recordTypes: [{ key: "customer_invoice", label: "Facture client" }],
+        }),
+      }),
+    );
+    /* eslint-enable react/no-children-prop */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    const paperCell = [...host.querySelectorAll("span")].find((s) =>
+      s.textContent?.includes("·"),
+    );
+    assert.ok(paperCell, "the paper cell must render");
+    assert.ok(
+      !paperCell.textContent?.includes("Letter"),
+      `paper name must not be hardcoded English, got ${paperCell.textContent}`,
+    );
+    assert.ok(
+      paperCell.textContent?.includes("Lettre"),
+      `paper name must render in French, got ${paperCell.textContent}`,
+    );
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
