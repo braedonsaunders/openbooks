@@ -4,6 +4,11 @@ import { db, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, normalizeMoney } from "../money/money.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import {
+  findMixedCurrencyExposure,
+  lockCustomerRole,
+  measureCustomerExposure,
+} from "../receivables/credit-policy.ts";
+import {
   submitAndReleaseIfUngated,
   type SubmissionReleaseResult,
 } from "../flows/index.ts";
@@ -59,14 +64,6 @@ interface SalesOrderRow extends Record<string, unknown> {
   updated_at: string;
 }
 
-interface CustomerRoleRow extends Record<string, unknown> {
-  id: string;
-  credit_limit: string | null;
-  currency: string | null;
-  is_on_hold: boolean;
-  hold_reason: string | null;
-}
-
 /** Effective permission check for engine-side authority gates: engine/src/organization/actor-permissions.ts. */
 
 /**
@@ -107,14 +104,7 @@ async function creditDecision(
     creditOverrideReason?: string;
   },
 ): Promise<SalesOrderCreditDecision | null> {
-  const role = (await tx.execute<CustomerRoleRow>(sql`
-    select id, credit_limit, currency, is_on_hold, hold_reason
-      from customer_roles
-     where org_id = ${input.orgId}
-       and party_id = ${input.order.party_id}
-       and is_active
-     for update
-  `)).rows[0];
+  const role = await lockCustomerRole(tx, input.orgId, input.order.party_id!);
   if (!role) return null;
 
   if (role.is_on_hold) {
@@ -145,42 +135,12 @@ async function creditDecision(
     );
   }
 
-  const mixedCurrency = (await tx.execute<{ kind: string; currency: string }>(sql`
-    select exposure.kind, exposure.currency
-      from documents exposure
-     where exposure.org_id = ${input.orgId}
-       and exposure.party_id = ${input.order.party_id}
-       and exposure.currency <> ${role.currency}
-       and (
-         (
-           exposure.kind = 'sales_order'
-           and exposure.status in ('pending_approval', 'approved')
-           and greatest(
-             exposure.total - coalesce((
-               select sum(billed.total)
-                 from document_links link
-                 join documents billed
-                   on billed.id = link.to_document_id
-                  and billed.org_id = link.org_id
-                  and billed.kind = 'customer_invoice'
-                  and billed.status = 'posted'
-                 and billed.currency = exposure.currency
-                 and billed.party_id = exposure.party_id
-                where link.org_id = exposure.org_id
-                  and link.from_document_id = exposure.id
-             ), 0),
-             0
-           ) > 0
-         )
-         or (
-           exposure.kind = 'customer_invoice'
-           and exposure.status = 'posted'
-           and coalesce(exposure.open_balance, 0) > 0
-         )
-       )
-     order by exposure.kind, exposure.id
-     limit 1
-  `)).rows[0];
+  const mixedCurrency = await findMixedCurrencyExposure(
+    tx,
+    input.orgId,
+    input.order.party_id!,
+    role.currency,
+  );
   if (mixedCurrency) {
     throw new SalesOrderIssueError(
       `customer has open ${mixedCurrency.kind.replaceAll("_", " ")} exposure in ${mixedCurrency.currency}; credit limit is enforced only in ${role.currency}`,
@@ -190,52 +150,16 @@ async function creditDecision(
     );
   }
 
-  const exposure = (await tx.execute<{
-    open_order_exposure: string;
-    unpaid_invoice_exposure: string;
-  }>(sql`
-    select
-      coalesce((
-        select sum(
-          greatest(
-            issued.total - coalesce((
-              select sum(billed.total)
-                from document_links link
-                join documents billed
-                  on billed.id = link.to_document_id
-                 and billed.org_id = link.org_id
-                 and billed.kind = 'customer_invoice'
-                 and billed.status = 'posted'
-                 and billed.currency = ${role.currency}
-                 and billed.party_id = issued.party_id
-               where link.org_id = issued.org_id
-                 and link.from_document_id = issued.id
-            ), 0),
-            0
-          )
-        )
-          from documents issued
-         where issued.org_id = ${input.orgId}
-           and issued.party_id = ${input.order.party_id}
-           and issued.kind = 'sales_order'
-           and issued.status in ('pending_approval', 'approved')
-           and issued.currency = ${role.currency}
-      ), 0)::text as open_order_exposure,
-      coalesce((
-        select sum(invoice.open_balance)
-          from documents invoice
-         where invoice.org_id = ${input.orgId}
-           and invoice.party_id = ${input.order.party_id}
-           and invoice.kind = 'customer_invoice'
-           and invoice.status = 'posted'
-           and invoice.currency = ${role.currency}
-           and coalesce(invoice.open_balance, 0) > 0
-      ), 0)::text as unpaid_invoice_exposure
-  `)).rows[0]!;
+  const exposure = await measureCustomerExposure(
+    tx,
+    input.orgId,
+    input.order.party_id!,
+    role.currency,
+  );
 
   const limit = normalizeMoney(role.credit_limit);
-  const openOrderExposure = normalizeMoney(exposure.open_order_exposure);
-  const unpaidInvoiceExposure = normalizeMoney(exposure.unpaid_invoice_exposure);
+  const openOrderExposure = normalizeMoney(exposure.openOrderExposure);
+  const unpaidInvoiceExposure = normalizeMoney(exposure.unpaidInvoiceExposure);
   const orderAmount = normalizeMoney(input.order.total);
   const existingExposure = add(openOrderExposure, unpaidInvoiceExposure);
   const resultingExposure = add(existingExposure, orderAmount);

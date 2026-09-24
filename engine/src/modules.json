@@ -260,6 +260,7 @@
         "payroll",
         "platform",
         "projects",
+        "receivables",
         "records",
         "revenue",
         "scripting",
@@ -410,6 +411,7 @@
         "money",
         "organization",
         "platform",
+        "receivables",
         "records"
       ]
     },
