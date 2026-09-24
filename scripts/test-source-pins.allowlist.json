@@ -46,7 +46,6 @@
     "engine/src/validation/import-field-tickets.test.ts": 1,
     "engine/src/worker/backup-scheduler.test.ts": 13,
     "engine/src/worker/overhead-scheduler.test.ts": 1,
-    "web/app/(app)/assets/asset-popover-triggers.test.ts": 5,
     "web/app/(app)/assets/assets-tabs.test.ts": 1,
     "web/app/(app)/assets/equipment/EquipmentDrawer.test.tsx": 2,
     "web/app/(app)/assets/run-depreciation-feedback.test.ts": 7,
