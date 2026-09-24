@@ -1970,6 +1970,11 @@ export interface FileMutationAudit {
    * write themselves.
    */
   viewer?: FileViewer
+  /** Recheck and lock an attachment target in the same transaction as its link mutation. */
+  authorizeAttachmentTarget?: (
+    executor: SqlExecutor,
+    target: { targetTable: string; targetId: string },
+  ) => Promise<void>
 }
 
 /**
@@ -2237,6 +2242,35 @@ const RETAINED_ATTACHMENT: SQL = sql`(
      where a.id = fa.target_id and a.org_id = fa.org_id))
 )`
 
+/** Lock the mutable record row whose lifecycle controls evidence retention. */
+async function lockRetainedAttachmentTarget(
+  exec: SqlExecutor,
+  orgId: string,
+  targetTable: string,
+  targetId: string,
+): Promise<void> {
+  if (targetTable === 'documents') {
+    await exec.execute(sql`select id from documents where id = ${targetId} and org_id = ${orgId} for update`)
+  } else if (targetTable === 'compliance_records') {
+    await exec.execute(sql`select id from compliance_records where id = ${targetId} and org_id = ${orgId} for update`)
+  } else if (targetTable === 'fixed_assets') {
+    await exec.execute(sql`select id from fixed_assets where id = ${targetId} and org_id = ${orgId} for update`)
+  }
+}
+
+/** Lock every currently linked retention owner before rechecking the predicate. */
+async function lockFileAttachmentTargets(exec: SqlExecutor, orgId: string, fileId: string): Promise<void> {
+  const targets = (await exec.execute<{ targetTable: string; targetId: string }>(sql`
+    select target_table as "targetTable", target_id as "targetId"
+      from file_attachments
+     where org_id = ${orgId} and file_id = ${fileId}
+     order by target_table, target_id
+  `)).rows
+  for (const target of targets) {
+    await lockRetainedAttachmentTarget(exec, orgId, target.targetTable, target.targetId)
+  }
+}
+
 async function capturePurgeEvidence(
   exec: SqlExecutor,
   orgId: string,
@@ -2296,6 +2330,7 @@ export async function purgeFile(
     `))
     if (owned.rows.length === 0) return { outcome: 'not_found' as const }
     if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return { outcome: 'forbidden' as const }
+    await lockFileAttachmentTargets(tx, orgId, id)
     const material = (await tx.execute(sql`
       select fa.id
         from file_attachments fa
@@ -2423,8 +2458,11 @@ export async function uploadAndAttach(input: {
   createdBy: string | null
   /** Optional caller-owned transaction (invoice-backup replacement). */
   executor?: SqlExecutor
+  /** Recheck the caller's target scope and write permission under its row lock. */
+  authorizeTarget?: (executor: SqlExecutor) => Promise<void>
 }): Promise<AttachedFile> {
   return runMutation(input.executor, async (tx) => {
+    await input.authorizeTarget?.(tx)
     const folderId = await ensureRecordFolder(input.orgId, input.targetTable, input.targetId, tx)
     const file = await createFile({
       orgId: input.orgId,
@@ -2461,15 +2499,20 @@ export async function attachExisting(input: {
   targetTable: string
   targetId: string
   createdBy: string
+  executor?: SqlExecutor
+  authorizeTarget?: (executor: SqlExecutor) => Promise<void>
 }): Promise<string | null> {
-  const r = (await db.execute<{ id: string }>(sql`
-    insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
-    values (${input.orgId}, ${input.fileId}, ${input.targetTable}, ${input.targetId},
-            ${input.createdBy}, now())
-    on conflict (org_id, file_id, target_table, target_id) do nothing
-    returning id
-  `))
-  return r.rows[0]?.id ?? null
+  return runMutation(input.executor, async (tx) => {
+    await input.authorizeTarget?.(tx)
+    const r = (await tx.execute<{ id: string }>(sql`
+      insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
+      values (${input.orgId}, ${input.fileId}, ${input.targetTable}, ${input.targetId},
+              ${input.createdBy}, now())
+      on conflict (org_id, file_id, target_table, target_id) do nothing
+      returning id
+    `))
+    return r.rows[0]?.id ?? null
+  })
 }
 
 export type AttachmentLink = {
@@ -2485,8 +2528,8 @@ export type DetachOutcome = { ok: true } | { ok: false; reason: 'not found' | 'r
  * Detach a file from a record (does NOT delete the file). Refuses when the
  * link is retained evidence (RETAINED_ATTACHMENT: posted document, in-force
  * compliance record, fixed asset) — otherwise detaching would be the way
- * around purge's retention guard. The link row is locked before the check so
- * a concurrent posting cannot slip between the decision and the delete. With
+ * around purge's retention guard. The target row is locked before the link
+ * and retention recheck, so posting cannot slip between the decision and the delete. With
  * `audit`, the delete and its actor-attributed before-evidence commit as one
  * unit.
  */
@@ -2496,6 +2539,14 @@ export async function detachAttachment(
   audit?: FileMutationAudit,
 ): Promise<DetachOutcome> {
   return runMutation(audit?.executor, async (tx) => {
+    const identity = (await tx.execute<{ fileId: string; targetTable: string; targetId: string }>(sql`
+      select file_id as "fileId", target_table as "targetTable", target_id as "targetId"
+        from file_attachments
+       where id = ${attachmentId} and org_id = ${orgId}
+    `)).rows[0]
+    if (!identity) return { ok: false as const, reason: 'not found' as const }
+    await audit?.authorizeAttachmentTarget?.(tx, identity)
+    await lockRetainedAttachmentTarget(tx, orgId, identity.targetTable, identity.targetId)
     const link = (await tx.execute<{ fileId: string; targetTable: string; targetId: string; retained: boolean }>(sql`
       select fa.file_id as "fileId", fa.target_table as "targetTable", fa.target_id as "targetId",
              ${RETAINED_ATTACHMENT} as retained

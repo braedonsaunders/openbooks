@@ -196,7 +196,7 @@ test('DELETE detaches an in-scope, permitted attachment with actor attribution',
 
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { ok: true })
-  assert.deepEqual(routeState.detachCalls, [['org-1', attachmentId, { actorId: 'user-1' }]])
+  assert.deepEqual(routeState.detachCalls.map(([orgId, id, audit]) => [orgId, id, (audit as { actorId: string }).actorId, typeof (audit as { authorizeAttachmentTarget?: unknown }).authorizeAttachmentTarget]), [['org-1', attachmentId, 'user-1', 'function']])
 })
 
 test('DELETE refuses a malformed id before any lookup', async () => {
