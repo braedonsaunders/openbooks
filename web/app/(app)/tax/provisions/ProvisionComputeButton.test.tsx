@@ -221,6 +221,25 @@ test("a non-object grid element refusal renders in translated copy naming the ro
   }
 });
 
+// F3-82: a 201 with an empty body used to navigate to
+// /tax/provisions/undefined. A missing runId must refuse in the dialog
+// instead of pushing a nonsense route.
+test("a success without a run id refuses instead of navigating to undefined", async () => {
+  const restore = installFetch();
+  globalThis.__provisionPostStatus = { status: 201, body: {} };
+  const dialog = await mountDialog();
+  try {
+    await click(buttonsNamed("Compute")[0]!);
+    assert.equal(globalThis.__provisionPosts!.length, 1);
+    assert.deepEqual(globalThis.__provisionPushed, []);
+    const alert = document.querySelector('[role="alert"]');
+    assert.equal(alert?.textContent, "The provision could not be computed.");
+  } finally {
+    await dialog.unmount();
+    restore();
+  }
+});
+
 test("grid rows travel unfiltered and a valid grid with a pristine trailing row still saves", async () => {
   const restore = installFetch();
   globalThis.__provisionPostStatus = { status: 201, body: { runId: "run-9" } };

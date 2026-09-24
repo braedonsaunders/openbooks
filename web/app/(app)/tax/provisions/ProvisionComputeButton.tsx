@@ -87,7 +87,14 @@ export function ProvisionComputeButton() {
       setError(describeRowError(json.error));
       return;
     }
-    const json = (await res.json().catch(() => ({}))) as { runId?: string };
+    const json = (await res.json().catch(() => ({}))) as { runId?: unknown };
+    // A 2xx without a run id is a broken success: navigating on would land
+    // on /tax/provisions/undefined. Refuse in the dialog instead.
+    if (typeof json.runId !== "string" || json.runId === "") {
+      setBusy(false);
+      setError(t("computeFailed"));
+      return;
+    }
     setBusy(false);
     setOpen(false);
     router.push(`/tax/provisions/${json.runId}`);
