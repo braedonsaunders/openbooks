@@ -337,9 +337,7 @@ const T4_AMENDED_XML = `<?xml version="1.0" encoding="UTF-8"?>
  */
 const T4_CANCELLED_XML = T4_AMENDED_XML
   .replace("<sbmt_ref_id>T4-2026-A-abcdef12</sbmt_ref_id>", "<sbmt_ref_id>T4-2026-C-abcdef12</sbmt_ref_id>")
-  .replace("<rpt_tcd>A</rpt_tcd>", "<rpt_tcd>C</rpt_tcd>")
   .replace("<RPT_TCD>A</RPT_TCD>\n   <EMPT_INC_AMT>", "<RPT_TCD>C</RPT_TCD>\n   <EMPT_INC_AMT>")
-  .replace("<slp_cnt>1</slp_cnt>\n   <RPT_TCD>A</RPT_TCD>", "<slp_cnt>1</slp_cnt>\n   <RPT_TCD>C</RPT_TCD>");
 
 test("the amended T4 XML is byte-identical to the CRA-coded golden", () => {
   assert.equal(goldenT4("A"), T4_AMENDED_XML);
@@ -1445,8 +1443,7 @@ test(
       assert.equal(cancelled.submission.revision, "cancelled");
       assert.equal(cancelled.submission.supersedesId, issued.submission.id);
       assert.equal(cancelled.submission.note, "Employee belonged to the other entity");
-      assert.match(cancelled.file!.body, /<rpt_tcd>C<\/rpt_tcd>/);
-      assert.match(cancelled.file!.body, /<RPT_TCD>C<\/RPT_TCD>/);
+      assert.match(cancelled.file!.body, /<rpt_tcd>A<\/rpt_tcd>[\s\S]*<RPT_TCD>C<\/RPT_TCD>[\s\S]*<RPT_TCD>A<\/RPT_TCD>/);
       // The CRA's instruction: a cancelled slip carries the SAME information
       // as the original — which is only possible from the snapshot, because
       // the ledger no longer holds it.

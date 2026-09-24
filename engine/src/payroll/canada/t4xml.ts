@@ -341,6 +341,9 @@ export function renderT4Xml(input: {
 }): string {
   const { orgId, taxYear, transmitter, returns } = input;
   const rpt = input.reportTypeCode ?? "O";
+  // CRA T4 cancellations are an amended return (summary/T619 A) containing
+  // cancelled slips (slip C). The agency requires these codes to differ.
+  const returnRpt = rpt === "C" ? "A" : rpt;
   const returnXml: string[] = [];
   for (const ret of returns) {
     // The account's own number is the employer BN on its slips and summary;
@@ -395,7 +398,7 @@ export function renderT4Xml(input: {
       `   <bn>${esc(bn)}</bn>\n` +
       `   <tx_yr>${taxYear}</tx_yr>\n` +
       `   <slp_cnt>${ret.slips.length}</slp_cnt>\n` +
-      `   <RPT_TCD>${rpt}</RPT_TCD>\n` +
+      `   <RPT_TCD>${returnRpt}</RPT_TCD>\n` +
       `   <TOT_EMPT_INC_AMT>${amt(ret.summary.employmentIncome)}</TOT_EMPT_INC_AMT>\n` +
       `   <TOT_EMPE_CPP_AMT>${amt(ret.summary.employeeCpp)}</TOT_EMPE_CPP_AMT>\n` +
       `   <TOT_EMPE_CPP2_AMT>${amt(ret.summary.employeeCpp2)}</TOT_EMPE_CPP2_AMT>\n` +
@@ -412,7 +415,7 @@ export function renderT4Xml(input: {
     `<Submission xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n` +
     ` <T619>\n` +
     `  <sbmt_ref_id>T4-${taxYear}${rpt === "O" ? "" : `-${rpt}`}-${orgId.slice(0, 8)}</sbmt_ref_id>\n` +
-    `  <rpt_tcd>${rpt}</rpt_tcd>\n` +
+    `  <rpt_tcd>${returnRpt}</rpt_tcd>\n` +
     `  <trnmtr_nbr>${esc(transmitter.transmitterNumber)}</trnmtr_nbr>\n` +
     `  <trnmtr_tcd>1</trnmtr_tcd>\n` +
     `  <summ_cnt>${returns.length}</summ_cnt>\n` +
