@@ -703,6 +703,10 @@ async function sumReturnGlRaw(
       : opts.nullDocArm
         ? sql`and (d.subsidiary_id = any(${uuidArray(opts.scopeIds)}::uuid[]) or d.subsidiary_id is null)`
         : sql`and d.subsidiary_id = any(${uuidArray(opts.scopeIds)}::uuid[])`;
+  // A void means the transaction never happened: lines of a voided document
+  // are excluded outright — the in-window original (status 'reversed') and
+  // its reversal, which the void posts in a later period outside the box
+  // window. Manual tax adjustments carry no document and still net inside.
   const glRaw = new Map<string, string>();
   const baseCodesByLineCode = new Map<string, string[]>();
   for (const src of glSources) {
@@ -721,9 +725,10 @@ async function sumReturnGlRaw(
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
+          left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
            and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
-           and e.book_id = ${primaryBookId}
+           and e.book_id = ${primaryBookId} and (vd.id is null or vd.status <> 'voided')
            ${jlScope}
            and (
              exists (
@@ -762,9 +767,10 @@ async function sumReturnGlRaw(
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
            and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
-           and e.book_id = ${primaryBookId}
+           and e.book_id = ${primaryBookId} and (vd.id is null or vd.status <> 'voided')
            ${jlScope}`));
       total = r.rows[0]?.total ?? "0";
     } else {

@@ -4,8 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { computeTaxReturn } from "./return.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 // Live-Postgres regression: a taxable-base return box used to sum EVERY posted
 // document line carrying the box's tax codes, regardless of document kind. A
@@ -177,6 +178,77 @@ test("a tax journal in a secondary book does not leak into the return", { skip: 
     // Before the fix the secondary journal doubled both (40.0000 / -40.0000).
     assert.equal(values.get("1"), "20.0000");
     assert.equal(values.get("5"), "-20.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a voided invoice's out-of-window reversal does not leak into the return", { skip: !DB }, async () => {
+  // Live-Postgres regression: the journal-backed boxes (tax_collected /
+  // tax_paid / tax_amount) summed posted lines by tax code with no
+  // source-document check, so a July invoice voided with an August reversal
+  // still contributed its July originals — the entry status flips to
+  // 'reversed', which the box window admits, while the August reversal falls
+  // outside the window and nets nothing. The return now excludes lines whose
+  // source document is voided, like the CAM cards; manual tax adjustments
+  // carry no document and still net inside. The document-line taxable-base
+  // box needs no change: it only reads status 'posted'.
+  const org = await createScratchOrg();
+  try {
+    const codeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes
+        (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active)
+      values (${codeId}, ${org.orgId}, 'VAT-VOID', 'Void probe', 'both', 'standard',
+              ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+
+    const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
+    const voidedId = await seedTaxedDocument(org, "customer_invoice", "INV-VOID", codeId, "200.0000", "20.0000");
+    await postDocument(voidedId, { control });
+    await postDocument(
+      await seedTaxedDocument(org, "customer_invoice", "INV-KEPT", codeId, "120.0000", "12.0000"),
+      { control },
+    );
+
+    // The void posts its reversal in August, outside the July return window.
+    const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+      select fiscal_calendar_id
+        from accounting_periods
+       where id = ${org.periodId} and org_id = ${org.orgId}`);
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment, custom)
+      values (${randomUUID()}, ${org.orgId}, ${calendar.rows[0]!.fiscal_calendar_id},
+              2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, '{}'::jsonb)`);
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const voided = await requestDocumentVoid({
+      orgId: org.orgId,
+      documentId: voidedId,
+      actorId: actor,
+      reason: "entered wrong figures",
+      reversalDate: "2026-08-15",
+    });
+    assert.equal(voided.status, "voided");
+
+    const formCode = "VOID-SCOPE";
+    await db.execute(sql`
+      insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, 'Void scope probe', 'portal_manual', true)`);
+    await db.execute(sql`
+      insert into tax_report_lines
+        (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
+      values
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'Tax collected', ${codeId}, 'tax_collected', -1, 10),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '6', 'Sales base', ${codeId}, 'taxable_base', 1, 60)`);
+
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+    // The kept invoice only: 12 collected on a 120 base. Before the fix the
+    // voided July originals leaked into the collected box (32.0000); the base
+    // box already excludes non-posted documents and stays 120 either way.
+    assert.equal(values.get("1"), "12.0000");
+    assert.equal(values.get("6"), "120.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
