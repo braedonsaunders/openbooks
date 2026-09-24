@@ -74,14 +74,22 @@ function payload() {
   };
 }
 
-/** F-t06-004: a duplicate account number must surface the typed server message. */
-test("a duplicate account number surfaces the already-in-use message", async (t) => {
-  const calls: string[] = [];
+async function mountDrawer(
+  t: import("node:test").TestContext,
+  options: {
+    response?: () => Response;
+    createMode?: boolean;
+    baseCurrency?: string;
+    url?: string;
+  } = {},
+) {
+  const calls: { method: string; body: string | undefined }[] = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push(`${(init?.method ?? "GET").toUpperCase()} ${String(input)}`);
-    return Response.json({ error: "number_in_use", field: "number" }, { status: 422 });
+    calls.push({ method: (init?.method ?? "GET").toUpperCase(), body: init?.body?.toString() });
+    return options.response?.() ?? Response.json({ account: { id: "acct-created" } }, { status: 201 });
   }) as typeof fetch;
+  window.history.replaceState(null, "", options.url ?? "/accounts");
   globalThis.__acctTestRouter = { push() {}, replace() {}, refresh() {} };
   globalThis.__acctTestToasts = [];
   const host = document.createElement("div");
@@ -100,17 +108,51 @@ test("a duplicate account number surfaces the already-in-use message", async (t)
         <AccountDrawer
           payload={payload()}
           parents={[]}
-          currencies={[]}
+          currencies={[{ value: "USD", label: "US Dollar" }]}
           subsidiaries={[]}
           fieldDefs={[]}
           segments={[]}
           canManage
           closeHref="/accounts"
-          createMode
+          createMode={options.createMode ?? true}
+          baseCurrency={options.baseCurrency ?? "USD"}
         />
       </NextIntlClientProvider>,
     );
     await tick();
+  });
+  return { host, calls };
+}
+
+function setInput(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set as
+    | ((this: HTMLInputElement, value: string) => void)
+    | undefined;
+  setter?.call(input, value);
+  input.dispatchEvent(new window.Event("input", { bubbles: true }));
+}
+
+function reconcilableCheckbox(): HTMLInputElement {
+  const label = [...document.querySelectorAll("label")].find((el) =>
+    el.textContent?.includes("Reconcilable"),
+  );
+  const checkbox = label?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+  assert.ok(checkbox, "the reconcilable account option must render");
+  return checkbox;
+}
+
+function createButton(): HTMLButtonElement {
+  const button = [...document.querySelectorAll("button")].find((el) =>
+    el.textContent?.includes("Create account"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(button, "create account action must render");
+  return button;
+}
+
+/** F-t06-004: a duplicate account number must surface the typed server message. */
+test("a duplicate account number surfaces the already-in-use message", async (t) => {
+  const { calls } = await mountDrawer(t, {
+    response: () => Response.json({ error: "number_in_use", field: "number" }, { status: 422 }),
   });
   // Fill name then number (DOM order), then create. The drawer portals to
   // document.body, so query the document, not the mount host.
@@ -118,27 +160,18 @@ test("a duplicate account number surfaces the already-in-use message", async (t)
     (el) => (el as HTMLInputElement).type !== "checkbox",
   ) as HTMLInputElement[];
   assert.ok(inputs.length >= 2, "name and number inputs must render");
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set as
-    | ((this: HTMLInputElement, value: string) => void)
-    | undefined;
   await act(async () => {
-    setter?.call(inputs[0]!, "T06 Duplicate Number");
-    inputs[0]!.dispatchEvent(new window.Event("input", { bubbles: true }));
-    setter?.call(inputs[1]!, "6990");
-    inputs[1]!.dispatchEvent(new window.Event("input", { bubbles: true }));
+    setInput(inputs[0]!, "T06 Duplicate Number");
+    setInput(inputs[1]!, "6990");
     await tick();
   });
-  const create = [...document.querySelectorAll("button")].find((el) =>
-    el.textContent?.includes("Create account"),
-  ) as HTMLButtonElement;
-  assert.ok(create, "create button must render");
   await act(async () => {
-    create.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    createButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   });
   await tick();
   await tick();
   await tick();
-  assert.ok(calls.some((call) => call.startsWith("POST ")), "the duplicate must reach the API");
+  assert.equal(calls[0]?.method, "POST", "the duplicate must reach the API");
   // A transient toast alone reads as "nothing happened" once it dismisses:
   // the failure must also persist as a form-level alert (F-t06-018 precedent).
   const alert = document.querySelector('[role="alert"]');
@@ -148,9 +181,98 @@ test("a duplicate account number surfaces the already-in-use message", async (t)
   assert.equal(errors.length, 1, "the duplicate must also surface exactly one error toast");
   // The alert clears on the next edit.
   await act(async () => {
-    setter?.call(inputs[1]!, "6991");
-    inputs[1]!.dispatchEvent(new window.Event("input", { bubbles: true }));
+    setInput(inputs[1]!, "6991");
     await tick();
   });
   assert.equal(document.querySelector('[role="alert"]'), null, "the alert must clear on edit");
+});
+
+test("single-currency reconcilable accounts select and submit the base currency", async (t) => {
+  const { calls } = await mountDrawer(t);
+  const inputs = [...document.querySelectorAll("input")].filter(
+    (el) => (el as HTMLInputElement).type !== "checkbox",
+  ) as HTMLInputElement[];
+  assert.ok(inputs.length >= 2, "name and number inputs must render");
+  await act(async () => {
+    setInput(inputs[0]!, "Operating bank");
+    reconcilableCheckbox().click();
+    await tick();
+  });
+
+  const currency = document.querySelector('[aria-label="Currency restriction"]');
+  assert.ok(currency, "reconcilable accounts can set a settlement currency with Multi-currency off");
+  assert.equal(currency.textContent?.trim(), "US Dollar", "the org base currency is selected by default");
+  await act(async () => {
+    createButton().click();
+    await tick();
+  });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(calls[0]!.body ?? "{}"), {
+    name: "Operating bank",
+    number: null,
+    type: "expense",
+    description: null,
+    parentId: null,
+    isSummary: false,
+    isActive: true,
+    subsidiaryId: null,
+    subsidiaryIncludeChildren: true,
+    reconcilable: true,
+    monetary: null,
+    requiredDimensions: [],
+    custom: {},
+    currencyRestriction: "USD",
+  });
+});
+
+test("the reconcilable currency refusal remains visible in the form", async (t) => {
+  const { calls } = await mountDrawer(t, {
+    response: () => Response.json({ error: "reconcilable_currency_required" }, { status: 422 }),
+  });
+  const inputs = [...document.querySelectorAll("input")].filter(
+    (el) => (el as HTMLInputElement).type !== "checkbox",
+  ) as HTMLInputElement[];
+  await act(async () => {
+    setInput(inputs[0]!, "Operating bank");
+    reconcilableCheckbox().click();
+    await tick();
+    createButton().click();
+    await tick();
+  });
+
+  assert.equal(calls.length, 1, "the server refusal must be received");
+  assert.equal(
+    document.querySelector('[role="alert"]')?.textContent?.trim(),
+    "Reconcilable accounts need a settlement currency — choose one before saving.",
+  );
+});
+
+test("a reconcilable account refuses locally when no settlement currency is available", async (t) => {
+  const { calls } = await mountDrawer(t, { baseCurrency: "" });
+  const inputs = [...document.querySelectorAll("input")].filter(
+    (el) => (el as HTMLInputElement).type !== "checkbox",
+  ) as HTMLInputElement[];
+  await act(async () => {
+    setInput(inputs[0]!, "Operating bank");
+    reconcilableCheckbox().click();
+    await tick();
+    createButton().click();
+    await tick();
+  });
+
+  assert.equal(calls.length, 0, "the form must not send a request without a settlement currency");
+  assert.equal(
+    globalThis.__acctTestToasts?.at(-1)?.message,
+    "Reconcilable accounts need a settlement currency — choose one before saving.",
+  );
+});
+
+test("closing an account drawer removes its selector from the URL immediately", async (t) => {
+  await mountDrawer(t, { createMode: false, url: "/accounts?account=acct-1&page=2" });
+  const close = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null;
+  assert.ok(close, "the account drawer has a close action");
+  await act(async () => {
+    close.click();
+  });
+  assert.equal(`${window.location.pathname}${window.location.search}`, "/accounts");
 });
