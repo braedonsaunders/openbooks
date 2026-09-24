@@ -100,15 +100,17 @@ test('a zero or absent rate produces no charge', () => {
   assert.equal(priceAdjustments([labor('1000.00')], [adjustment({ value: null })]).length, 0)
 })
 
-test('a customer-targeted adjustment charges only that customer', () => {
+test('customer targeting fails closed for absent or unsupported line context', () => {
   const a = adjustment({ targets: [{ targetType: 'customer', targetValueId: 'cust-a', targetValueText: null }] })
   const lines = [
     { ...labor('1000.00'), customerId: 'cust-a' },
     { ...labor('2000.00'), customerId: 'cust-b' },
+    labor('3000.00'),
   ]
   const charges = priceAdjustments(lines, [a])
   assert.equal(charges.length, 1)
   assert.equal(charges[0]!.basis, '1000.0000')
+  for (const targetType of ['transaction_type', 'other']) assert.throws(() => priceAdjustments([labor('1000.00')], [adjustment({ targets: [{ targetType, targetValueId: null, targetValueText: null }] })]), /rate card adjustment "fuel" has unsupported target .*edit the card to use a supported invoice-line target before invoicing/)
 })
 
 test('a location-targeted adjustment charges only that location', () => {
@@ -122,11 +124,8 @@ test('a location-targeted adjustment charges only that location', () => {
   assert.equal(charges[0]!.basis, '500.0000')
 })
 
-test('a targeted adjustment with no line context matches nothing, never everything', () => {
-  for (const targetType of ['customer', 'project', 'subsidiary', 'location', 'class']) {
-    const a = adjustment({ targets: [{ targetType, targetValueId: 'some-id', targetValueText: null }] })
-    assert.equal(priceAdjustments([labor('1000.00')], [a]).length, 0, targetType)
-  }
+test('supported line targets do not match absent context', () => {
+  assert.equal(priceAdjustments([labor('1000.00')], [adjustment({ targets: [{ targetType: 'customer', targetValueId: 'some-id', targetValueText: null }] })]).length, 0)
 })
 
 test('an item_category target measures only that category', () => {
