@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { db } from "../platform/db.ts";
+import { lockScopeRows } from "../organization/subsidiary-scope.ts";
 import { cmp, neg, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { recordEntitlementMovements } from "./entitlements-stub.ts";
@@ -16,6 +17,7 @@ import {
   entitlementOpeningLocks,
 } from "./entitlements-openings.ts";
 import { type EntitlementPlan } from "./entitlements-types.ts";
+import type { PayrollSubsidiaryScope } from "./scope.ts";
 
 export interface EntitlementOpeningWrite {
   employeePartyId: string;
@@ -103,6 +105,8 @@ export async function saveEntitlementOpenings(input: {
   /** Adoption date every carry-in in this load is dated. */
   movementDate: string;
   rows: EntitlementOpeningWrite[];
+  /** Caller scope is rechecked under employee locks in the write transaction. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   note?: string | null;
   /** Reject (rather than skip) carry-ins a committed run consumed. Default true. */
   strictLocks?: boolean;
@@ -114,6 +118,9 @@ export async function saveEntitlementOpenings(input: {
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
+    // The route's preliminary check cannot protect this later write. Hold the
+    // same employee rows that a rehome updates, and authorize the locked value.
+    await lockScopeRows(tx, input.orgId, input.rows.map((row) => ({ kind: "party", id: row.employeePartyId })), input.allowedSubsidiaryIds ?? null, "share");
     const plans = await entitlementPlans(input.orgId, tx);
     if (plans.length === 0) {
       throw new PayrollError(

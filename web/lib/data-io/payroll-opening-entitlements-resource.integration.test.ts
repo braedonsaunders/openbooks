@@ -54,12 +54,12 @@ async function seedPlan(orgId: string, actorId: string): Promise<void> {
   });
 }
 
-async function seedEmployee(orgId: string, actorId: string, name: string): Promise<string> {
+async function seedEmployee(orgId: string, actorId: string, name: string, subsidiaryId?: string): Promise<string> {
   return withBypassContext(async () => {
     const id = randomUUID();
     await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+      insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
+      values (${id}, ${orgId}, 'person', ${name}, true, ${subsidiaryId ?? null}, '{}'::jsonb)`);
     await db.execute(sql`
       insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
                                  created_by, updated_by)
@@ -128,6 +128,63 @@ test(
       assert.equal(ok.created, 1);
       assert.equal(await ledgerCount(org.orgId), 1);
     } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "the entitlement import rechecks employee scope under the save lock after a concurrent rehome",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    await seedPlan(org.orgId, actorId);
+    const employeeId = await seedEmployee(org.orgId, actorId, "Rehomed Carry In", org.subsidiaryId);
+    const resource = payrollOpeningEntitlementsResource(org.orgId);
+    const ctx = {
+      orgId: org.orgId,
+      actorId,
+      dryRun: false,
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
+    let releaseRehome!: () => void;
+    let rehomePid = 0;
+    let finishRehome!: Promise<void>;
+    try {
+      const otherSubsidiaryId = randomUUID();
+      await withBypassContext(() => db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Carry In Entity', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
+
+      let signalReady!: () => void;
+      const ready = new Promise<void>((resolve) => { signalReady = resolve });
+      finishRehome = withBypassContext(() => db.transaction(async (tx) => {
+        rehomePid = Number((await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid);
+        await tx.execute(sql`update parties set subsidiary_id = ${otherSubsidiaryId} where id = ${employeeId} and org_id = ${org.orgId}`);
+        signalReady();
+        await new Promise<void>((resolve) => { releaseRehome = resolve });
+      }));
+      await ready;
+      const importing = resource.write([row("Rehomed Carry In", "250.00")], "insert", ctx);
+      let blocked = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const waiting = await withBypassContext(() => db.execute(sql`
+          select 1 from pg_stat_activity where ${rehomePid} = any(pg_blocking_pids(pid)) limit 1`));
+        if (waiting.rows.length) { blocked = true; break; }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.equal(blocked, true, "the import save must wait for the concurrent employee rehome");
+      releaseRehome();
+      await finishRehome;
+      const result = await importing;
+      assert.equal(result.failed, 1);
+      assert.equal(result.created, 0);
+      assert.match(result.errors[0]!.message, /not found/i);
+      assert.equal(await ledgerCount(org.orgId), 0);
+    } finally {
+      releaseRehome?.();
+      await finishRehome;
       await dropScratchOrgReporting(org.orgId);
     }
   },
