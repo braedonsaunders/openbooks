@@ -10,8 +10,9 @@ const stateKey = Symbol.for("openbooks.agents-overview-loader-test");
 interface LoaderState {
   user: { orgId: string; id: string } | null;
   permissions: Set<string>;
+  allowedSubsidiaryIds: Set<string> | null;
 }
-const loaderState: LoaderState = { user: null, permissions: new Set() };
+const loaderState: LoaderState = { user: null, permissions: new Set(), allowedSubsidiaryIds: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = loaderState;
 
 const mockAuthz = `
@@ -20,7 +21,10 @@ const mockAuthz = `
   export async function requirePermission(permission) {
     if (!state.user) throw new Error('NEXT_REDIRECT:/login');
     if (!permissionSetCovers(state.permissions, permission)) throw new Error('NEXT_REDIRECT:/');
-    return { user: state.user, permissions: state.permissions, allowedSubsidiaryIds: null };
+    return { user: state.user, permissions: state.permissions, allowedSubsidiaryIds: state.allowedSubsidiaryIds };
+  }
+  export async function guardRootSubsidiaryScope(authz) {
+    return authz.allowedSubsidiaryIds === null ? null : { status: 403 };
   }
 `;
 
@@ -38,13 +42,14 @@ const hooks = registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (context.parentURL?.includes("/admin/setup/agents/view.ts")) {
-      if (specifier === "../../../../../lib/authz") {
+    if (context.parentURL?.includes("/admin/setup/agents/") && context.parentURL.endsWith('/view.ts')) {
+      if (specifier.endsWith("/lib/authz")) {
         return { url: "mock:agents-overview-authz", shortCircuit: true };
       }
       if (specifier === "next-intl/server") {
         return { url: "mock:agents-overview-intl", shortCircuit: true };
       }
+      if (specifier === 'next/navigation') return { url: 'mock:agents-overview-navigation', shortCircuit: true };
     }
     if (context.parentURL?.startsWith("mock:") && specifier.startsWith("@openbooks/")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
@@ -58,11 +63,15 @@ const hooks = registerHooks({
     if (url === "mock:agents-overview-intl") {
       return { format: "module", source: mockIntl, shortCircuit: true };
     }
+    if (url === 'mock:agents-overview-navigation') {
+      return { format: 'module', source: 'export function notFound(){ throw new Error("NEXT_NOT_FOUND") }', shortCircuit: true };
+    }
     return nextLoad(url, context);
   },
 });
 
 const { loadAgentsOverview } = await import("./view.ts");
+const { loadAgentsActivity } = await import('./activity/view.ts');
 hooks.deregister();
 
 const { withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
@@ -76,6 +85,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 function asManager(orgId: string) {
   loaderState.user = { orgId, id: "00000000-0000-0000-0000-000000000001" };
   loaderState.permissions = new Set(["admin.setup.manage"]);
+  loaderState.allowedSubsidiaryIds = null;
 }
 
 test("a setup manager sees one overview row per registered pack", { skip: !DB }, async () => {
@@ -105,6 +115,19 @@ test("without the setup key the overview redirects", { skip: !DB }, async () => 
     loaderState.permissions = new Set(["assistant.use"]);
     await assert.rejects(withBypassContext(() => loadAgentsOverview()), /NEXT_REDIRECT:\//);
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test('restricted setup managers cannot load organization-wide agent activity', { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    asManager(org.orgId);
+    loaderState.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
+    await assert.rejects(withBypassContext(() => loadAgentsOverview()), /NEXT_NOT_FOUND/);
+    await assert.rejects(withBypassContext(() => loadAgentsActivity()), /NEXT_NOT_FOUND/);
+  } finally {
+    loaderState.allowedSubsidiaryIds = null;
     await dropScratchOrg(org.orgId);
   }
 });

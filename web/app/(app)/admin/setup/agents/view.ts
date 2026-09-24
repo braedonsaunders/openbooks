@@ -15,7 +15,8 @@ import {
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
+import { guardRootSubsidiaryScope, requirePermission } from '../../../../../lib/authz'
+import { notFound } from 'next/navigation'
 import { dateTime } from '../../../../../lib/format'
 import { pickString } from '../../../../../lib/list-params'
 import { getMoneyFormatter } from '../../../../../lib/money-server'
@@ -112,6 +113,7 @@ export async function loadAgentsOverview(
   sp: Record<string, string | string[] | undefined> = {},
 ): Promise<AgentsOverviewData> {
   const authz = await requirePermission('admin.setup.manage')
+  if (await guardRootSubsidiaryScope(authz)) notFound()
   const t = await getTranslations('admin')
   const rawSort = pickString(sp.sort)
   const sort: AgentsOverviewSort = (OVERVIEW_SORTS as readonly string[]).includes(rawSort ?? '')
