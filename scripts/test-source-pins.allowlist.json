@@ -49,7 +49,6 @@
     "web/app/(app)/expenses/ExpenseDrawer.test.tsx": 2,
     "web/app/(app)/field-tickets/FieldTicketDrawer-discard.test.ts": 3,
     "web/app/(app)/insights/CardTile.chrome.test.ts": 1,
-    "web/app/(app)/inventory/InventoryActionDrawer.test.tsx": 1,
     "web/app/(app)/inventory/ReverseLandedVoucherAction.test.tsx": 4,
     "web/app/(app)/items/ItemCostingEditor.test.ts": 2,
     "web/app/(app)/items/ItemDrawer.test.tsx": 4,
