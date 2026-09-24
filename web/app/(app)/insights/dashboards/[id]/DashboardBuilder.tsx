@@ -8,7 +8,9 @@ import { ChevronLeft, Pin, PinOff, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { InsightQuery, VizSettings, VizType } from '@openbooks/analytics'
 import { Badge, Button, Input, Label, PageHeader, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
+import { UNTITLED_DASHBOARD_NAME as UNTITLED_DASHBOARD } from '../../../../../lib/insight-untitled'
 import { DetailPageLayout } from '../../../../../components/page-layout'
 import { CardTile, type CardTileData } from '../../CardTile'
 
@@ -35,9 +37,6 @@ const HEIGHTS = [
   { value: 6, labelKey: 'builder.heights.medium' },
   { value: 8, labelKey: 'builder.heights.tall' },
 ]
-// Sentinel persisted to the DB for unnamed dashboards — stored data, never
-// translated. The page title shows the localized `builder.untitled` instead.
-const UNTITLED_DASHBOARD = 'Untitled dashboard'
 
 export function DashboardBuilder({
   dashboard,
@@ -206,16 +205,16 @@ export function DashboardBuilder({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publish: next, expectedUpdatedAt: revisionRef.current }),
       })
-      const data = await res.json()
-      if (!res.ok) toast.error(data.error ?? t('errors.updateFailed'))
-      else {
-        revisionRef.current = typeof data.updated_at === 'string' ? data.updated_at : null
-        setStatus(next ? 'published' : 'draft')
-        toast.success(next ? t('builder.publishedToast') : t('builder.draftToast'))
-      }
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('errors.updateFailed')))
+      const data = (await res.json().catch(() => null)) as { updated_at?: unknown } | null
+      revisionRef.current = typeof data?.updated_at === 'string' ? data.updated_at : null
+      setStatus(next ? 'published' : 'draft')
+      toast.success(next ? t('builder.publishedToast') : t('builder.draftToast'))
       router.refresh()
-    } catch {
-      toast.error(t('errors.updateFailed'))
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('errors.updateFailed'))
     } finally {
       setBusy(false)
     }
@@ -223,17 +222,21 @@ export function DashboardBuilder({
 
   async function togglePin() {
     setBusy(true)
-    const res = await fetch(`/api/insights/dashboards/${dashboard.id}/pin`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: !isPinned }),
-    })
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/insights/dashboards/${dashboard.id}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: !isPinned }),
+      })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('builder.pinFailed')))
       setIsPinned(!isPinned)
       toast.success(!isPinned ? t('builder.pinnedToast') : t('builder.unpinnedToast'))
-    } else toast.error(t('builder.pinFailed'))
-    setBusy(false)
-    router.refresh()
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('builder.pinFailed'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function remove() {
@@ -243,15 +246,17 @@ export function DashboardBuilder({
     })
     if (!confirmed) return
     setBusy(true)
-    const res = await fetch(`/api/insights/dashboards/${dashboard.id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      toast.error(t('builder.deleteFailed'))
+    try {
+      const res = await fetch(`/api/insights/dashboards/${dashboard.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('builder.deleteFailed')))
+      toast.success(t('builder.deletedToast'))
+      router.push('/insights/dashboards')
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('builder.deleteFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    toast.success(t('builder.deletedToast'))
-    router.push('/insights/dashboards')
-    router.refresh()
   }
 
   return (
