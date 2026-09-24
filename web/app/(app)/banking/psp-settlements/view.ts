@@ -8,6 +8,7 @@ import { page, pageHeader, frame, ref, widgetBlock, type PageSpec } from '@braed
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { subsidiaryUiOptions } from '../../../../lib/subsidiaries'
+import { listScopedAccountOptions } from '../../../../lib/scoped-options'
 import { getMoneyFormatter } from '@/lib/money-server'
 import type { PspAccountOption, PspSettlementRow, PspSubsidiaryOption } from './sections'
 
@@ -138,12 +139,11 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   // import validates (active, non-summary accounts of this org), labelled
   // `number · name` like every other account picker. The stored value stays
   // the UUID — only the affordance changes.
-  const accountRows = await db.execute<{ id: string; number: string | null; name: string }>(sql`
-    select id, number, name from accounts
-     where org_id = ${authz.user.orgId} and is_active and not is_summary
-     order by number nulls last, name limit 2000
-  `)
-  const accounts = accountRows.rows.map((a) => ({
+  const accountRows = await listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+    activeOnly: true,
+    postingOnly: true,
+  })
+  const accounts = accountRows.map((a) => ({
     id: String(a.id),
     label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
   }))
