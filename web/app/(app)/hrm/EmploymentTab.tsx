@@ -260,10 +260,11 @@ export function EmploymentTab({
             qualificationsError: e instanceof Error ? e.message : t('employment.qualifications.loadFailed'),
           }))
         }
-        // Benefits ride the benefits APIs beside the record: a 403/404 (no
-        // benefits grant, or the feature off) hides the section instead of
-        // failing the tab — the employment record is readable without
-        // benefits access. Anything else is an error with retry.
+        // Benefits ride the benefits APIs beside the record: a 403/404 leg
+        // (no benefits grant, or the feature off) hides the section instead
+        // of failing the tab — the employment record is readable without
+        // benefits access, and a partial pair never renders as complete.
+        // A failure that is not 403/404 is an error with retry.
         const benefitsForbidden = (res: Response): boolean => res.status === 403 || res.status === 404
         try {
           const [enrollmentsRes, dependentsRes] = await Promise.all([
@@ -271,12 +272,12 @@ export function EmploymentTab({
             fetch(`/api/hrm/dependents?employmentId=${employmentId}`),
           ])
           if (cancelled || requestId.current !== current) return
-          if (benefitsForbidden(enrollmentsRes) && benefitsForbidden(dependentsRes)) {
+          if (!enrollmentsRes.ok || !dependentsRes.ok) {
+            const unexpected = [enrollmentsRes, dependentsRes].find((res) => !res.ok && !benefitsForbidden(res))
+            if (unexpected) throw new Error(await readApiErrorMessage(unexpected, t('employment.benefits.loadFailed')))
             setState((s) => ({ ...s, benefits: 'hidden', benefitsError: null }))
             return
           }
-          if (!enrollmentsRes.ok) throw new Error(await readApiErrorMessage(enrollmentsRes, t('employment.benefits.loadFailed')))
-          if (!dependentsRes.ok) throw new Error(await readApiErrorMessage(dependentsRes, t('employment.benefits.loadFailed')))
           const enrollments = (await enrollmentsRes.json()) as { enrollments?: BenefitElection[] }
           const dependents = (await dependentsRes.json()) as { dependents?: BenefitDependent[] }
           if (cancelled || requestId.current !== current) return
@@ -296,9 +297,9 @@ export function EmploymentTab({
           }))
         }
         // HR-17: feedback (visibility-filtered by the service) and the
-        // competency profile ride beside the record like benefits do: both
-        // legs 403/404 hides the section, anything else is an error with
-        // retry.
+        // competency profile ride beside the record like benefits do: a
+        // 403/404 leg hides the section, a failure that is not 403/404 is
+        // an error with retry.
         const continuousForbidden = (res: Response): boolean => res.status === 403 || res.status === 404
         try {
           const [feedbackRes, profileRes] = await Promise.all([
@@ -307,12 +308,10 @@ export function EmploymentTab({
           ])
           if (cancelled || requestId.current !== current) return
           if (!feedbackRes.ok || !profileRes.ok) {
-            if (continuousForbidden(feedbackRes) && continuousForbidden(profileRes)) {
-              setState((s) => ({ ...s, continuous: 'hidden', continuousError: null }))
-              return
-            }
-            const failing = !feedbackRes.ok ? feedbackRes : profileRes
-            throw new Error(await readApiErrorMessage(failing, t('employment.continuous.loadFailed')))
+            const unexpected = [feedbackRes, profileRes].find((res) => !res.ok && !continuousForbidden(res))
+            if (unexpected) throw new Error(await readApiErrorMessage(unexpected, t('employment.continuous.loadFailed')))
+            setState((s) => ({ ...s, continuous: 'hidden', continuousError: null }))
+            return
           }
           const fb = (await feedbackRes.json()) as { feedback?: DrawerFeedback[] }
           const cp = (await profileRes.json()) as { profile?: DrawerCompetency[] }
