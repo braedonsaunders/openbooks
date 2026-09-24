@@ -257,24 +257,15 @@ test("ambiguous currency projection fails with actionable organization and entry
   assert.equal(await balance(inv.id), "100.0000");
 }));
 
-test("posted INSERT computes open_balance and the backfill heals NULL caches", { skip: !DB }, async () => {
-  // G8: the trigger watched UPDATE OF posted_entry_id, status only, so a
-  // direct INSERT of a posted document left open_balance NULL. 0338
-  // computes it on INSERT too and heals NULL caches on posted open-item
-  // documents. Proven on a populated row: post a real invoice, NULL its
-  // cache (the defect state), apply the shipped file, watch the exact
-  // balance come back — then insert a second posted row directly and watch
-  // the INSERT trigger compute it.
+test("posted INSERT computes open_balance and migration heals a stale non-NULL cache", { skip: !DB }, async () => {
+  // G8 covers direct posted inserts; the forward repair also fixes drifted
+  // non-NULL caches before the INSERT path is exercised.
   await fixture(async (org, actorId) => {
     const first = await invoice(org, actorId);
     assert.equal(await balance(first.id), "100.0000");
-    // The defect state: a posted open-item document with a NULL cache.
-    await db.execute(sql`update documents set open_balance = null where id = ${first.id}`);
-    assert.equal(await balance(first.id), null);
-    // Apply the shipped migration: the backfill heals the cache through
-    // the same guards every write passes (no suspension needed — the heal
-    // touches open_balance only, outside every guard's column list).
-    const migration = sql.raw(readFileSync("schema/migrations/generated/0338_posting_guards_and_summary_heals.sql", "utf8"));
+    await db.execute(sql`update documents set open_balance = 999 where id = ${first.id}`);
+    assert.equal(await balance(first.id), "999.0000");
+    const migration = sql.raw(readFileSync("schema/migrations/generated/0368_repair_document_open_balance_cache.sql", "utf8"));
     await db.transaction(async (tx) => {
       await tx.execute(migration);
     });
