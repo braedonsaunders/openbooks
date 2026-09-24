@@ -42,7 +42,7 @@ test("overlapping schedule regenerations serialize on the lease", { skip: !DB },
     const holderPid = (await holder.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
 
     let settled = false;
-    contender = scheduleLeaseCharges(org.orgId, actor, leaseId, "2026-12-31").then(
+    contender = scheduleLeaseCharges(org.orgId, actor, null, leaseId, "2026-12-31").then(
       (value) => { settled = true; return value; },
       (reason: unknown) => { settled = true; throw reason; },
     );
@@ -67,7 +67,7 @@ test("overlapping schedule regenerations serialize on the lease", { skip: !DB },
     assert.deepEqual([lines.n, lines.total], [6, "6000.0000"]);
 
     // A pure re-run replays the same deterministic stream and creates nothing.
-    assert.equal((await scheduleLeaseCharges(org.orgId, actor, leaseId, "2026-12-31")).created, 0);
+    assert.equal((await scheduleLeaseCharges(org.orgId, actor, null, leaseId, "2026-12-31")).created, 0);
   } finally {
     if (open) await holder.query("rollback").catch(() => undefined);
     holder.release();

@@ -26,12 +26,12 @@ async function fixture(action:(org:Awaited<ReturnType<typeof createScratchOrg>>,
 for (const mode of ['void','delete'] as const) {
  test(`rent source can be billed once after controlled ${mode}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,lease,_charge,schedule)=>{
   if(mode==='void') await db.execute(sql`update property_leases set auto_post=true where org_id=${org.orgId} and id=${lease}`);
-  const first=await billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease);
+  const first=await billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease);
   const invoice=first.invoices[0]!;
   assert.equal(first.billed,1);
   if(mode==='void'){
    await assert.rejects(requestDocumentVoid({orgId:org.orgId,actorId:actor,documentId:invoice,reason:'',reversalDate:'2026-07-31'}));
-   assert.equal((await billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease)).billed,0,'refused void must not release sources');
+   assert.equal((await billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease)).billed,0,'refused void must not release sources');
    const result=await requestDocumentVoid({orgId:org.orgId,actorId:actor,documentId:invoice,reason:'Correct rent billing source',reversalDate:'2026-07-31'});
    assert.equal(result.status,'voided');
    assert.ok(result.reversalEntryId);
@@ -43,14 +43,14 @@ for (const mode of ['void','delete'] as const) {
   assert.equal(audit[0]!.actor_id,actor);
   assert.equal(audit[0]!.changes.before.invoice_document_id,invoice);
   assert.equal(audit[0]!.changes.after.invoice_document_id,null);
-  const results=await Promise.all([billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease),billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease)]);
+  const results=await Promise.all([billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease),billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease)]);
   assert.equal(results.reduce((n,r)=>n+r.billed,0),1,'competing retries create exactly one replacement');
   const replacement=results.flatMap(r=>r.invoices)[0]!;
   assert.notEqual(replacement,invoice,'a voided predecessor cannot be adopted');
-  assert.equal((await billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease)).billed,0);
+  assert.equal((await billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease)).billed,0);
   if(mode==='void') {
    await requestDocumentVoid({orgId:org.orgId,actorId:actor,documentId:replacement,reason:'Second controlled correction',reversalDate:'2026-07-31'});
-   const third=await billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease);
+   const third=await billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease);
    assert.equal(third.billed,1);
    assert.notEqual(third.invoices[0],replacement);
    const history=(await db.execute<{custom:{propertyManagement:{predecessorInvoiceId:string}}}>(sql`select custom from documents where id=${third.invoices[0]} and org_id=${org.orgId}`)).rows[0]!;
@@ -61,7 +61,7 @@ for (const mode of ['void','delete'] as const) {
 }
 
 test('rent source release and audit roll back together and respect organization scope',{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,lease,_charge,schedule)=>{
- const first=await billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease);
+ const first=await billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease);
  const invoice=first.invoices[0]!;
  await assert.rejects(withOrgTransaction(org.orgId,async()=>{
   await releaseBillingProvenance(db,org.orgId,invoice,{actorId:actor,reason:'Rolled back correction'});

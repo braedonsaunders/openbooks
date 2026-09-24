@@ -190,7 +190,9 @@ function propertyResource(orgId: string): DataResource {
           }
           const currentAddress = current?.address ?? {}
           const address = { street: String(src.street ?? currentAddress.street ?? ''), city: String(src.city ?? currentAddress.city ?? ''), region: String(src.region ?? currentAddress.region ?? ''), postalCode: String(src.postalCode ?? currentAddress.postalCode ?? '') }
-          const common = { orgId: ctx.orgId, actorId: ctx.actorId, subsidiaryId, locationId, fixedAssetId, code, name, propertyType: String(src.propertyType ?? existing.rows[0]?.property_type ?? 'residential'), address, rentIncomeAccountId, camIncomeAccountId, depositLiabilityAccountId, defaultBankAccountId, ...(multiCurrencyOn ? { currency: String(src.currency ?? existing.rows[0]?.currency ?? '') } : {}) }
+          // The import route always supplies the caller's fence: rows outside
+          // it are refused inside the engine transaction, like the route.
+          const common = { orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, subsidiaryId, locationId, fixedAssetId, code, name, propertyType: String(src.propertyType ?? existing.rows[0]?.property_type ?? 'residential'), address, rentIncomeAccountId, camIncomeAccountId, depositLiabilityAccountId, defaultBankAccountId, ...(multiCurrencyOn ? { currency: String(src.currency ?? existing.rows[0]?.currency ?? '') } : {}) }
           if (existing.rows[0]) {
             await updateManagedProperty({ ...common, propertyId: existing.rows[0].id, status: String(src.status ?? existing.rows[0].status), custom: existing.rows[0].custom ?? {} })
             outcome.updated++
@@ -249,7 +251,7 @@ function unitResource(orgId: string): DataResource {
         const found = (await db.execute(sql`select * from property_units where org_id=${ctx.orgId} and property_id=${propertyId} and code=${code} limit 1`)) as { rows: PropertyUnitImportRow[] }
         if (found.rows[0] && mode === 'insert') throw new Error(`already exists (${String(src.propertyCode)} + ${code})`)
         if (!ctx.dryRun) {
-          const values = { orgId: ctx.orgId, actorId: ctx.actorId, code, name: src.name ? String(src.name) : null, unitType: src.unitType ? String(src.unitType) : null, rentableArea: src.rentableArea ? String(src.rentableArea) : null, bedrooms: src.bedrooms === '' || src.bedrooms == null ? null : Number(src.bedrooms) }
+          const values = { orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, code, name: src.name ? String(src.name) : null, unitType: src.unitType ? String(src.unitType) : null, rentableArea: src.rentableArea ? String(src.rentableArea) : null, bedrooms: src.bedrooms === '' || src.bedrooms == null ? null : Number(src.bedrooms) }
           if (found.rows[0]) await updatePropertyUnit({ ...values, unitId: found.rows[0].id, status: String(src.status ?? found.rows[0].status) })
           else {
             const created = await createPropertyUnit({ ...values, propertyId })
@@ -311,12 +313,12 @@ function leaseResource(orgId: string): DataResource {
         const found = (await db.execute(sql`select l.*,(select amount from lease_charges where org_id=l.org_id and lease_id=l.id and charge_type='base_rent' order by effective_from desc limit 1) as base_rent from property_leases l where l.org_id=${ctx.orgId} and l.lease_number=${leaseNumber} limit 1`)) as { rows: PropertyLeaseImportRow[] }
         if (found.rows[0] && mode === 'insert') throw new Error(`already exists (leaseNumber=${leaseNumber})`)
         const current = found.rows[0]
-        const values = { orgId: ctx.orgId, actorId: ctx.actorId, propertyId, unitId, tenantId, leaseNumber, startsOn: String(src.startsOn), endsOn: src.endsOn ? String(src.endsOn) : null, baseRent: String(src.baseRent), billingDay: Number(src.billingDay ?? current?.billing_day ?? 1), paymentTermsDays: Number(src.paymentTermsDays ?? current?.payment_terms_days ?? 0), securityDepositRequired: String(src.securityDepositRequired ?? current?.security_deposit_required ?? '0'), camMethod: String(src.camMethod ?? current?.cam_method ?? 'none') as 'none' | 'fixed' | 'pro_rata', camSharePercent: src.camSharePercent == null || src.camSharePercent === '' ? current?.cam_share_percent ?? null : String(src.camSharePercent), lateFeeType: String(src.lateFeeType ?? current?.late_fee_type ?? 'none') as 'none' | 'fixed' | 'percent', lateFeeValue: String(src.lateFeeValue ?? current?.late_fee_value ?? '0'), graceDays: Number(src.graceDays ?? current?.grace_days ?? 0), autoInvoice: src.autoInvoice == null || src.autoInvoice === '' ? current?.auto_invoice ?? true : coerceBoolean(src.autoInvoice), autoPost: src.autoPost == null || src.autoPost === '' ? current?.auto_post ?? false : coerceBoolean(src.autoPost) }
+        const values = { orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, propertyId, unitId, tenantId, leaseNumber, startsOn: String(src.startsOn), endsOn: src.endsOn ? String(src.endsOn) : null, baseRent: String(src.baseRent), billingDay: Number(src.billingDay ?? current?.billing_day ?? 1), paymentTermsDays: Number(src.paymentTermsDays ?? current?.payment_terms_days ?? 0), securityDepositRequired: String(src.securityDepositRequired ?? current?.security_deposit_required ?? '0'), camMethod: String(src.camMethod ?? current?.cam_method ?? 'none') as 'none' | 'fixed' | 'pro_rata', camSharePercent: src.camSharePercent == null || src.camSharePercent === '' ? current?.cam_share_percent ?? null : String(src.camSharePercent), lateFeeType: String(src.lateFeeType ?? current?.late_fee_type ?? 'none') as 'none' | 'fixed' | 'percent', lateFeeValue: String(src.lateFeeValue ?? current?.late_fee_value ?? '0'), graceDays: Number(src.graceDays ?? current?.grace_days ?? 0), autoInvoice: src.autoInvoice == null || src.autoInvoice === '' ? current?.auto_invoice ?? true : coerceBoolean(src.autoInvoice), autoPost: src.autoPost == null || src.autoPost === '' ? current?.auto_post ?? false : coerceBoolean(src.autoPost) }
         if (!ctx.dryRun) {
           if (current) await updatePropertyLease({ ...values, leaseId: current.id })
           else {
             const created = await createPropertyLease(values)
-            if (String(src.status ?? 'draft') === 'active') await activatePropertyLease(ctx.orgId, ctx.actorId, created.id)
+            if (String(src.status ?? 'draft') === 'active') await activatePropertyLease(ctx.orgId, ctx.actorId, ctx.allowedSubsidiaryIds ?? null, created.id)
           }
         }
         if (current) outcome.updated++; else outcome.created++
@@ -393,8 +395,8 @@ function leaseChargeResource(orgId: string): DataResource {
           if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) throw new Error('item is not available')
         }
         if (!ctx.dryRun) {
-          await addLeaseCharge({ orgId: ctx.orgId, actorId: ctx.actorId, leaseId: lease.rows[0].id, chargeType, description, amount: String(src.amount), frequency, effectiveFrom, effectiveTo: src.effectiveTo ? String(src.effectiveTo) : null, incomeAccountId, itemId, taxCodeId })
-          if (['active', 'notice'].includes(lease.rows[0].status)) await scheduleLeaseCharges(ctx.orgId, ctx.actorId, lease.rows[0].id)
+          await addLeaseCharge({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, leaseId: lease.rows[0].id, chargeType, description, amount: String(src.amount), frequency, effectiveFrom, effectiveTo: src.effectiveTo ? String(src.effectiveTo) : null, incomeAccountId, itemId, taxCodeId })
+          if (['active', 'notice'].includes(lease.rows[0].status)) await scheduleLeaseCharges(ctx.orgId, ctx.actorId, ctx.allowedSubsidiaryIds ?? null, lease.rows[0].id)
         }
         outcome.created++
       } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
@@ -438,7 +440,7 @@ function depositOpeningResource(orgId: string): DataResource {
         const lease = (await db.execute(sql`select id from property_leases where org_id=${ctx.orgId} and lease_number=${leaseNumber} limit 1`)) as { rows: { id: string }[] }
         const offsetAccountId = await resolver.resolveId({ resource: 'accounts', by: 'number' }, src.offsetAccount)
         if (!lease.rows[0] || !offsetAccountId) throw new Error('leaseNumber or offsetAccount was not found')
-        if (!ctx.dryRun) await recordSecurityDeposit({ orgId: ctx.orgId, actorId: ctx.actorId, leaseId: lease.rows[0].id, kind: 'adjustment_increase', occurredOn: String(src.occurredOn), amount: String(src.amount), offsetAccountId, memo: src.memo ? String(src.memo) : 'Imported security deposit opening balance', importKey: externalKey })
+        if (!ctx.dryRun) await recordSecurityDeposit({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, leaseId: lease.rows[0].id, kind: 'adjustment_increase', occurredOn: String(src.occurredOn), amount: String(src.amount), offsetAccountId, memo: src.memo ? String(src.memo) : 'Imported security deposit opening balance', importKey: externalKey })
         outcome.created++
       } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
       return outcome

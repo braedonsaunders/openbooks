@@ -46,11 +46,11 @@ async function seedSharedControl() {
   for (const propertyId of propertyIds) {
     index += 1;
     const lease = await createPropertyLease({
-      orgId: org.orgId, actorId, propertyId, tenantId: org.customerId,
+      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, propertyId, tenantId: org.customerId,
       leaseNumber: `L-SHARE-${index}`, startsOn: "2026-01-01", endsOn: null,
       baseRent: "1000", ...leaseTerms,
     });
-    await activatePropertyLease(org.orgId, actorId, lease.id);
+    await activatePropertyLease(org.orgId, actorId, null, lease.id);
     leaseIds.push(lease.id);
   }
   return { org, actorId, propertyIds, leaseIds };
@@ -82,9 +82,9 @@ test("PM1: properties sharing one location control reconcile together with zero 
   try {
     const orgId = fx.org.orgId;
     for (const leaseId of fx.leaseIds) {
-      await recordSecurityDeposit({ orgId, actorId: fx.actorId, leaseId, kind: "received", occurredOn: fx.org.date, amount: "100" });
+      await recordSecurityDeposit({ orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, kind: "received", occurredOn: fx.org.date, amount: "100" });
     }
-    const recon = await securityDepositReconciliation(orgId, fx.org.date);
+    const recon = await securityDepositReconciliation(orgId, null, fx.org.date);
     assert.equal(recon.rows.length, 2);
     // Each property holds $100; the shared GL control honestly reads $200.
     for (const row of recon.rows) {
@@ -112,12 +112,12 @@ test("PM1: a genuine imbalance on a shared control still reports a group discrep
   try {
     const orgId = fx.org.orgId;
     for (const leaseId of fx.leaseIds) {
-      await recordSecurityDeposit({ orgId, actorId: fx.actorId, leaseId, kind: "received", occurredOn: fx.org.date, amount: "100" });
+      await recordSecurityDeposit({ orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, kind: "received", occurredOn: fx.org.date, amount: "100" });
     }
     // A $10 manual debit to the shared liability account: the GL control now
     // reads $190 against $200 of subledger, with linked provenance untouched.
     await postManualLiability(orgId, fx.org.bookId, fx.org.subsidiaryId, fx.org.locationId, fx.org.accounts.deferred, fx.org.accounts.bank, "10", fx.org.date, fx.org.periodId);
-    const recon = await securityDepositReconciliation(orgId, fx.org.date);
+    const recon = await securityDepositReconciliation(orgId, null, fx.org.date);
     assert.equal(recon.totals.discrepancies, 2);
     assert.equal(recon.rows.length, 2);
     for (const row of recon.rows) {
@@ -152,12 +152,12 @@ test("PM1: a property with a unique location control keeps per-property variance
               'Solo Control Tower', 'commercial', 'active', 'CAD',
               ${org.accounts.revenue}, ${org.accounts.revenue}, ${org.accounts.deferred}, ${org.accounts.bank})`);
     const lease = await createPropertyLease({
-      orgId: org.orgId, actorId, propertyId, tenantId: org.customerId,
+      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, propertyId, tenantId: org.customerId,
       leaseNumber: "L-SOLO", startsOn: "2026-01-01", endsOn: null, baseRent: "1000", ...leaseTerms,
     });
-    await activatePropertyLease(org.orgId, actorId, lease.id);
-    await recordSecurityDeposit({ orgId: org.orgId, actorId, leaseId: lease.id, kind: "received", occurredOn: org.date, amount: "100" });
-    const recon = await securityDepositReconciliation(org.orgId, org.date);
+    await activatePropertyLease(org.orgId, actorId, null, lease.id);
+    await recordSecurityDeposit({ orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId: lease.id, kind: "received", occurredOn: org.date, amount: "100" });
+    const recon = await securityDepositReconciliation(org.orgId, null, org.date);
     assert.equal(recon.rows.length, 1);
     const row = recon.rows[0]!;
     assert.equal(row.status, "reconciled");
