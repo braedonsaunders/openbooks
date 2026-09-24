@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   AlertTriangle, ArrowDown, ArrowRightLeft, Box, Brain, Calculator,
   ChartArea, CheckCircle2, Clock, DollarSign, Info, Lightbulb, PieChart as PieIcon,
@@ -18,13 +18,18 @@ import { Donut, Chart } from '../_ui/charts'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { useSort } from '../_ui/useSort'
 import { useAnalyticsMoney } from '../_ui/format'
+import { countLabel } from '@/lib/format'
 
 /* ------------------------------------------------------------------ helpers */
 
 const TABS = ['overview', 'intelligence', 'departments', 'items', 'titles', 'employees', 'config'] as const
 type Tab = (typeof TABS)[number]
 const pct1 = (v: number | null | undefined, d = 1) => (v == null || isNaN(v) ? '—' : `${Number(v).toFixed(d)}%`)
-const hrs0 = (n: number) => `${Math.round(n).toLocaleString('en-US')}`
+/** Viewer-locale whole hours (F2-14b): one hook so every tab shares it. */
+function useHrs0() {
+  const locale = useLocale()
+  return (n: number) => `${countLabel(Math.round(n), locale)}`
+}
 
 /** Status colouring vs target: on / near (−10) / below. */
 function statusTone(pct: number, target: number) {
@@ -35,6 +40,7 @@ function statusTone(pct: number, target: number) {
 
 /** Trend chip: delta in pp, $ or plain hours — green when moving the good way. */
 function TrendDelta({ delta, goodIfUp, unit = 'pp', digits = 1 }: { delta: number; goodIfUp: boolean; unit?: 'pp' | 'money' | 'hours'; digits?: number }) {
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   if (!delta || Math.abs(delta) < (unit === 'pp' ? 0.05 : 0.5)) return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
@@ -134,6 +140,7 @@ interface EntriesResponse {
 function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   kind: 'employee' | 'item'; id: string; name: string; sub?: string; peer?: { title: string; empPct: number; peerAvg: number; peerCount: number }; from: string; to: string; onClose: () => void
 }) {
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: MoneyValue) => fmtMoney(n)
   const t = useTranslations('analytics.utilization')
@@ -314,6 +321,7 @@ type Flyout = { kind: 'employee' | 'item'; id: string; name: string; sub?: strin
 
 export function UtilizationView({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
@@ -372,6 +380,7 @@ function intelligenceScope(data: UtilizationData) {
 
 function OverviewTab({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
@@ -691,6 +700,7 @@ function AnomalyList({ items, empty }: { items: React.ReactNode[]; empty: string
 
 function AnomaliesSub({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const a = useAnomalies(data, t)
   return (
     <div className="space-y-5">
@@ -901,6 +911,7 @@ function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>)
 
 function WhatIfSub({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
@@ -1020,6 +1031,7 @@ type TreemapPoint = { name: string; value: number; data?: { pct?: number } }
 
 function TreemapSub({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const { depts, employees } = intelligenceScope(data)
 
   const treeData = useMemo(() => {
@@ -1068,7 +1080,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
           height={460}
           option={{
             tooltip: {
-              formatter: (p: TreemapPoint) => `<b>${escapeTooltipHtml(p.name)}</b><br/>${t('table.hours')}: <b>${Math.round(p.value).toLocaleString('en-US')}</b><br/>${t('chart.billable')}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
+              formatter: (p: TreemapPoint) => `<b>${escapeTooltipHtml(p.name)}</b><br/>${t('table.hours')}: <b>${hrs0(p.value)}</b><br/>${t('chart.billable')}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
             },
             series: [{
               type: 'treemap',
@@ -1076,7 +1088,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
               roam: false,
               nodeClick: 'zoomToNode',
               breadcrumb: { show: true, top: 4, itemStyle: { color: '#475569', textStyle: { color: '#f1f5f9' } } },
-              label: { show: true, formatter: (p: TreemapPoint) => `${p.name}\n${Math.round(p.value).toLocaleString('en-US')}h`, fontSize: 12, color: '#334155' },
+              label: { show: true, formatter: (p: TreemapPoint) => `${p.name}\n${hrs0(p.value)}h`, fontSize: 12, color: '#334155' },
               upperLabel: { show: true, height: 24, color: '#334155', fontWeight: 'bold' },
               itemStyle: { borderColor: 'rgba(255,255,255,0.9)', borderWidth: 3, gapWidth: 3 },
               levels: [
@@ -1099,6 +1111,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
 
 function DepartmentsTab({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
@@ -1180,6 +1193,7 @@ function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target
   const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number) => fmtMoney(n)
+  const hrs0 = useHrs0()
   const [sortKey, setSortKey] = useState<SortKey>(kind === 'employee' ? 'percentBilled' : 'nonBillableCost')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(kind === 'employee' ? 'asc' : 'desc')
 
@@ -1248,6 +1262,7 @@ function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target
 
 function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyout) => void }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
@@ -1298,6 +1313,7 @@ interface TitleGroup {
 
 function TitlesTab({ data }: { data: UtilizationData }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
@@ -1398,6 +1414,7 @@ function TitlesTab({ data }: { data: UtilizationData }) {
 
 function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyout) => void }) {
   const t = useTranslations('analytics.utilization')
+  const hrs0 = useHrs0()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   AlertTriangle,
   Calendar,
@@ -100,11 +100,12 @@ export function OpportunityViewSwitcher({ view = 'list' }: { view?: 'board' | 'l
 
 const moneyFormatters = new Map<string, (amount: string) => string>()
 
-function formatMoney(amount: string, currency: string): string {
-  let format = moneyFormatters.get(currency)
+function formatMoney(amount: string, currency: string, locale: string): string {
+  const key = `${locale}|${currency}`
+  let format = moneyFormatters.get(key)
   if (!format) {
-    format = (value: string) => createMoneyFormatter('en-US', currency).money(value, { maximumFractionDigits: 0 })
-    moneyFormatters.set(currency, format)
+    format = (value: string) => createMoneyFormatter(locale, currency).money(value, { maximumFractionDigits: 0 })
+    moneyFormatters.set(key, format)
   }
   return format(amount)
 }
@@ -129,6 +130,7 @@ export function OpportunityKanbanBoard({
 }) {
   const t = useTranslations('crm')
   const tc = useTranslations('common')
+  const locale = useLocale()
   const router = useRouter()
   // Overdue compares calendar days in the org's business day: `new
   // Date('YYYY-MM-DD')` is UTC midnight, so anything due today read as
@@ -284,11 +286,11 @@ export function OpportunityKanbanBoard({
                   {colTotals.map((total) => (
                     <div key={total.currency} className="flex items-baseline justify-between">
                       <span className="font-medium text-slate-900 dark:text-slate-200">
-                        {formatMoney(total.projected, total.currency)}
+                        {formatMoney(total.projected, total.currency, locale)}
                       </span>
                       {isPositiveKanbanAmount(total.weighted) && total.weighted !== total.projected && (
                         <span className="text-[11px] text-slate-400">
-                          Weighted: {formatMoney(total.weighted, total.currency)}
+                          Weighted: {formatMoney(total.weighted, total.currency, locale)}
                         </span>
                       )}
                     </div>
@@ -368,7 +370,7 @@ export function OpportunityKanbanBoard({
                       {/* Deal Amount & Projected */}
                       <div className="flex items-baseline justify-between border-t border-slate-100 pt-2 dark:border-slate-800/80">
                         <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                          {formatMoney(op.projectedAmount, op.currency)}
+                          {formatMoney(op.projectedAmount, op.currency, locale)}
                         </span>
                         {op.expectedCloseDate && (
                           <div

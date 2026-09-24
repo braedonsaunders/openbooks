@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getMoneyFormatter } from '@/lib/money-server'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import {
   grid,
   page,
@@ -94,6 +94,7 @@ export async function loadPayroll(
   const canRun = can(authz, 'payroll.run')
   const canManage = can(authz, 'payroll.manage')
   const t = await getTranslations('payroll')
+  const locale = await getLocale()
   const { money, moneyCompact } = await getMoneyFormatter()
   void sp
 
@@ -168,7 +169,7 @@ export async function loadPayroll(
     home.exceptions.missingProfilesTotal + home.exceptions.missingWagesTotal
 
   const schedules: PayrollScheduleListProps['schedules'] = home.schedules.map((schedule) =>
-    scheduleCardProps(schedule, canRun, t, money),
+    scheduleCardProps(schedule, canRun, t, money, locale),
   )
 
   const previousRun: PreviousRun | null = home.previousRun
@@ -200,7 +201,7 @@ export async function loadPayroll(
     ytdNetValue: moneyCompact(home.ytdNet),
     ytdNetSub: t('home.vitals.ytdNetSub'),
     nextPayLabel: t('home.vitals.nextPayDate'),
-    nextPayValue: home.nextPayDate ? shortDate(home.nextPayDate) : '—',
+    nextPayValue: home.nextPayDate ? shortDate(home.nextPayDate, locale) : '—',
     nextPaySub: home.nextPayDate ? null : t('home.vitals.noSchedule'),
     currentTitle: t('home.current.title'),
     scheduleList: {
@@ -222,9 +223,9 @@ export async function loadPayroll(
     previousRun: {
       run: previousRun
         ? {
-            periodStart: shortDate(previousRun.periodStart),
-            periodEnd: shortDate(previousRun.periodEnd),
-            payDate: shortDate(previousRun.payDate),
+            periodStart: shortDate(previousRun.periodStart, locale),
+            periodEnd: shortDate(previousRun.periodEnd, locale),
+            payDate: shortDate(previousRun.payDate, locale),
             net: money(previousRun.netTotal),
             employees: previousRun.employeeCount.toLocaleString(),
             posted: previousRun.posted,
@@ -300,6 +301,7 @@ export function scheduleCardProps(
   canRun: boolean,
   t: T,
   money: (v: string | number) => string,
+  locale: string,
 ): PayrollScheduleListProps['schedules'][number] {
   const run = schedule.run
   const wizardHref = run
@@ -309,9 +311,9 @@ export function scheduleCardProps(
     id: schedule.id,
     name: schedule.name,
     frequency: schedule.frequency,
-    periodStart: shortDate(schedule.periodStart),
-    periodEnd: shortDate(schedule.periodEnd),
-    payDate: shortDate(schedule.payDate),
+    periodStart: shortDate(schedule.periodStart, locale),
+    periodEnd: shortDate(schedule.periodEnd, locale),
+    payDate: shortDate(schedule.payDate, locale),
     employees: schedule.activeEmployees.toLocaleString(),
     runStatus: run?.runStatus ?? null,
     net: run && run.runStatus !== 'draft' ? money(run.netTotal) : null,

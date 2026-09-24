@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
@@ -54,6 +54,7 @@ export async function loadBankingCash(
 ): Promise<BankingCashData> {
   const authz = await requirePermission('banking.read')
   const t = await getTranslations('banking.cash')
+  const locale = await getLocale()
   const tBanking = await getTranslations('banking')
 
   const horizon = normalizeCashHorizonWeeks(sp.horizon, 8)
@@ -95,6 +96,7 @@ export async function loadBankingCash(
           subView.subsidiary?.ids,
           authz.allowedSubsidiaryIds,
           subView.subsidiary?.includeNullSubsidiary,
+          locale,
         )
       : null,
     userPageLayout(authz.user.id, 'banking-cash'),

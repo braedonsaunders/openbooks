@@ -94,7 +94,18 @@ export interface CashflowData {
   accountOptions: { id: string; number: string | null; name: string }[];
 }
 
-export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate: string | undefined, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<CashflowData> {
+export async function cashflowData(
+  orgId: string,
+  horizonWeeks: number,
+  asOfDate: string | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  /**
+   * Viewer BCP-47 locale for week labels (F2-14b); defaults to en-US like
+   * the F-t04-010 position readers. The analytics loader passes the request
+   * locale — the default serves the label-agnostic agent caller.
+   */
+  locale = "en-US",
+): Promise<CashflowData> {
   const subIds = allowedSubsidiaryIds === null ? undefined : [...allowedSubsidiaryIds];
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
@@ -125,7 +136,7 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
-  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
+  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
 
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
@@ -134,6 +145,7 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
     apByWeek: ap.byWeek,
     categories,
     apSettings: { weeklyCap, restrictToSafe },
+    locale,
   });
   const weeks = timeline.weeks;
 

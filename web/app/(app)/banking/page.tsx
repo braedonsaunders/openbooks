@@ -32,7 +32,8 @@ export default async function BankingHomePage({
 /* ------------------------------------------------------------------------- */
 
 /**
- * needsAttention, daysSince and weekLabel now live in ./view.ts — the loader
- * owns them and the widget registry renders it, so there is one implementation* and no second copy to drift (the purchasing precedent). STALE_STATEMENT_DAYS
+ * needsAttention and daysSince now live in ./view.ts — the loader
+ * owns them and the widget registry renders it, so there is one implementation* and no second copy to drift (the purchasing precedent). Week labels come
+ * from the shared trendWeekLabel in web/lib/format.ts. STALE_STATEMENT_DAYS
  * stays here: the loader defines its own copy for the badge computation.
  */

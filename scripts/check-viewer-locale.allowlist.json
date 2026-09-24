@@ -1,0 +1,67 @@
+[
+  {
+    "path": "web/lib/cash/core.ts",
+    "fn": "categoryWeekly",
+    "reason": "F-t04-010 reader default; all four UI position builders pass the viewer locale explicitly — the default serves the engine unit tests (core.test.ts asserts en-US week labels)"
+  },
+  {
+    "path": "web/lib/cash/core.ts",
+    "fn": "weekLabel",
+    "reason": "F-t04-010 reader default; the timeline builders pass the viewer locale explicitly — the default serves the engine unit tests (core.test.ts asserts Sep 7 / fr septembre)"
+  },
+  {
+    "path": "web/lib/cash/ap-position.ts",
+    "fn": "apPosition",
+    "reason": "F-t04-010 reader default; the AP loader passes getLocale() — the default serves the label-agnostic ap_position agent-tool caller"
+  },
+  {
+    "path": "web/lib/cash/ar-position.ts",
+    "fn": "arPosition",
+    "reason": "F-t04-010 reader default (F2-14b parity with apPosition); the AR loader passes getLocale() — the default serves the label-agnostic ar_position agent-tool caller"
+  },
+  {
+    "path": "web/lib/cash/cash-position.ts",
+    "fn": "buildTimeline",
+    "reason": "F-t04-010 reader default; all four timeline builders (ar/ap/cash positions, analytics cashflow) pass the viewer locale explicitly — the default serves direct engine consumers"
+  },
+  {
+    "path": "web/lib/cash/cash-position.ts",
+    "fn": "cashPosition",
+    "reason": "F-t04-010 reader default; the banking cash loader passes getLocale() — the default serves the entries-only API route, vitals/metrics aggregates, engine tests, and agent callers, none of which surface labels"
+  },
+  {
+    "path": "web/lib/analytics/cashflow-data.ts",
+    "fn": "cashflowData",
+    "reason": "F-t04-010 reader default; the analytics cashflow loader passes getLocale() — the default serves the label-agnostic agent-tool caller"
+  },
+  {
+    "path": "web/lib/data-io/export-cap.ts",
+    "fn": "ExportRowLimitError",
+    "reason": "refusal-text contract: export-row-limit.test.ts pins /50,000/ in the refusal message — localizing the count breaks the asserted refusal"
+  },
+  {
+    "path": "web/lib/data-io/record-resources.ts",
+    "fn": "(top-level)",
+    "reason": "machine canonicalization (useGrouping:false, significant digits) for import comparison against CSV/JSON export vocabulary — localizing breaks the round-trip, not a viewer label"
+  },
+  {
+    "path": "web/lib/information-return-format.ts",
+    "fn": "formatBoxAmount",
+    "reason": "government form print format ('Money as the form prints it', two decimals with thousands separators) — localizing corrupts the filing worksheet/facsimile"
+  },
+  {
+    "path": "web/lib/lien-waiver-form.ts",
+    "fn": "formatWaiverAmount",
+    "reason": "printed legal-document amounts kept as exact decimal text through Intl — localizing changes the operative release instrument"
+  },
+  {
+    "path": "web/lib/tax-form-facsimile-html.ts",
+    "fn": "formatExactFacsimileValue",
+    "reason": "government facsimile convention (2-decimal amounts with thousands separators, negatives in parentheses) — localizing breaks facsimile fidelity"
+  },
+  {
+    "path": "web/app/(app)/dashboard/_greeting.ts",
+    "fn": "hourInZone",
+    "reason": "numeric hour extraction parsed by Number() for the greeting stem — a non-latin-digit locale would fail the parse; not display formatting"
+  }
+]

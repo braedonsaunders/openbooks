@@ -4,7 +4,8 @@ import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announce
 
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { decimalLabel } from '../../../../../lib/format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
 import {
@@ -119,6 +120,7 @@ function cellDisplay(
   row: Record<string, unknown>,
   refLabels: Record<string, Map<string, string>>,
   t: (k: string) => string,
+  locale: string,
 ): { display: string; badgeVariant: SetupListCell['badgeVariant'] } {
   const raw = row[toSnake(col.key)]
   const option = col.options?.find((candidate) => candidate.value === String(raw))
@@ -143,7 +145,7 @@ function cellDisplay(
       // Locale-formatted, trailing zeros trimmed (1.7500 → 1.75, 40.0000 → 40).
       return {
         display: Number.isFinite(num)
-          ? num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
+          ? decimalLabel(num, locale, 0, 4)
           : String(raw),
         badgeVariant: null,
       }
@@ -206,6 +208,7 @@ export async function loadSetupEntity(
     : null
 
   const t = await getTranslations('admin.setup')
+  const locale = await getLocale()
   const isRegistryList = entity !== null
 
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
@@ -287,7 +290,7 @@ export async function loadSetupEntity(
           const href = mergeHref(`/admin/setup/${entity.key}`, sp, { row: rowId })
           const cells: Record<string, SetupListCell> = {}
           for (const c of entity.columns) {
-            const { display, badgeVariant } = cellDisplay(c, row, refLabels, t)
+            const { display, badgeVariant } = cellDisplay(c, row, refLabels, t, locale)
             cells[c.key] = {
               display,
               href,

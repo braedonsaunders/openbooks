@@ -105,6 +105,12 @@ export async function arPosition(
   apSettings: ApSettings,
   asOfDate: string | undefined,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
+  /**
+   * Viewer BCP-47 locale for week labels (F2-14b); defaults to en-US like
+   * the F-t04-010 apPosition reader. UI readers pass the request locale —
+   * the default serves the engine tests and label-agnostic agent callers.
+   */
+  locale = "en-US",
 ): Promise<ArPosition> {
   const subIds = allowedSubsidiaryIds === null ? undefined : [...allowedSubsidiaryIds];
   const asOfIso = await resolveAsOf(orgId, asOfDate);
@@ -125,7 +131,7 @@ export async function arPosition(
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
-  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
+  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,
@@ -133,6 +139,7 @@ export async function arPosition(
     apByWeek: ap.byWeek,
     categories,
     apSettings,
+    locale,
   });
 
   const summary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg);

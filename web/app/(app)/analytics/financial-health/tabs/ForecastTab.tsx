@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import { LineChart, Cog, Stethoscope, Table2, TriangleAlert } from 'lucide-react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { monthLabel } from '@/lib/format'
 import { EmptyState, Select } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
@@ -46,12 +47,12 @@ const METHOD_LABEL: Record<ForecastMethod, string> = {
   arima: 'ARIMA-style',
 }
 
-function futureLabels(lastMonth: string, horizon: number): string[] {
+function futureLabels(lastMonth: string, horizon: number, locale: string): string[] {
   const [y, m] = lastMonth.split('-').map(Number)
   const out: string[] = []
   for (let i = 1; i <= horizon; i++) {
     const d = new Date(Date.UTC(y!, m! - 1 + i, 1))
-    out.push(`${d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} '${String(d.getUTCFullYear()).slice(2)}`)
+    out.push(`${monthLabel(d, locale)} '${String(d.getUTCFullYear()).slice(2)}`)
   }
   return out
 }
@@ -59,6 +60,7 @@ function futureLabels(lastMonth: string, horizon: number): string[] {
 const SELECT = 'h-8 w-full text-sm'
 
 export function ForecastTab({ data }: { data: HealthData }) {
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const t = useTranslations('analytics.financialHealth.forecast')
   const tk = useTranslations('analytics.financialHealth.kpi')
@@ -94,7 +96,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
 
   const diag = diagnostics(series, result)
   const histLabels = hist.map((p) => p.label)
-  const futLabels = futureLabels(hist[hist.length - 1]!.month, horizon)
+  const futLabels = futureLabels(hist[hist.length - 1]!.month, horizon, locale)
   const labels = [...histLabels, ...futLabels]
   const N = series.length
   const history = [...series, ...Array(horizon).fill(null)]
