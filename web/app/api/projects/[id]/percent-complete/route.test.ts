@@ -138,8 +138,11 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.percent-complete-route-test')]
       export async function syncProjectRevenueContractsInTransaction(_tx, orgId, actorId, asOfDate, projectId) {
         state.syncCalls.push({ orgId, actorId, asOfDate, projectId })
+        // Like the engine: a skipped sync synced nothing.
         return {
-          synced: [{ projectId, projectCode: 'P-1', contractId: 'contract-1', obligationId: 'obligation-1', contractValue: '100.00', percentComplete: '37.5000', overridden: true, created: false }],
+          synced: state.syncSkipped
+            ? []
+            : [{ projectId, projectCode: 'P-1', contractId: 'contract-1', obligationId: 'obligation-1', contractValue: '100.00', percentComplete: '37.5000', overridden: true, created: false }],
           problems: [],
           skipped: state.syncSkipped,
         }
