@@ -9,6 +9,7 @@ import {
   isZeroDecimal,
   parseExactDecimal,
 } from "./exact-decimal.ts";
+import { normalizeMoney } from "./money.ts";
 
 test("canonicalDecimal strips padding and signs without floats", () => {
   // A mutant that keeps raw text fails the padding rows; one that drops the
@@ -26,7 +27,15 @@ test("canonicalDecimal strips padding and signs without floats", () => {
     ["100.10", 4, "100.1"],
     ["1.234", 2, null],
     ["1.234", 3, "1.234"],
-    [".5", 4, null],
+    // Leading-dot is the kernel's grammar too (toUnits accepts it): the
+    // boundary normalizes it rather than refusing it as "not a number".
+    [".5", 4, "0.5"],
+    ["-.5", 4, "-0.5"],
+    ["+.50", 2, "0.5"],
+    [".000", 4, "0"],
+    [".55555", 4, null],
+    [".", 4, null],
+    ["+", 4, null],
     ["abc", 4, null],
     ["", 4, null],
     ["1.2.3", 4, null],
@@ -37,6 +46,23 @@ test("canonicalDecimal strips padding and signs without floats", () => {
   ];
   for (const [input, scale, expected] of cases) {
     assert.equal(canonicalDecimal(input, scale), expected, `canonicalDecimal(${String(input)}, ${scale})`);
+  }
+});
+
+test("boundary and kernel agree on dot spellings and garbage stays refused", () => {
+  // The script-journal gate (persistJournalLineAmount) refuses exactly what
+  // canonicalDecimal refuses, while the kernel posts whatever toUnits reads.
+  // These spellings must agree: a spelling the kernel posts must pass the
+  // gate, and the gate's canonical output must post unchanged.
+  for (const spelling of [".5", "5.", "-.5", "+.5", "0.5", "5"]) {
+    const canonical = canonicalDecimal(spelling, 4);
+    assert.notEqual(canonical, null, `${spelling} passes the boundary`);
+    assert.equal(normalizeMoney(canonical!), normalizeMoney(spelling));
+  }
+  assert.equal(canonicalDecimal(".5", 4), "0.5");
+  assert.equal(canonicalDecimal("5.", 4), "5");
+  for (const garbage of ["abc", "1.2.3", "12,34", "$5", "1e3", ""]) {
+    assert.equal(canonicalDecimal(garbage, 4), null, `${garbage} is refused`);
   }
 });
 
