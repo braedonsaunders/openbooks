@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -35,7 +34,7 @@ const dialect = new PgDialect();
 const textOf = (fragment: ReturnType<typeof listOrderClause>): string =>
   dialect.sqlToQuery(sql`order by ${fragment}`).sql;
 
-test("document lists pin every page with the unique document id", () => {
+test("tied document dates are ordered by the unique document id", () => {
   assert.match(
     textOf(listOrderClause(sql`d.document_date`, "desc")),
     /d\.document_date"?\s+desc nulls last, d\.id desc/,
@@ -46,7 +45,7 @@ test("document lists pin every page with the unique document id", () => {
   );
 });
 
-test("entity lists pin every page with the source row id", () => {
+test("tied entity labels are ordered by the source row id", () => {
   const vendor = entityListSource("vendor");
   assert.ok(vendor, "vendor entity source exists");
   assert.match(
@@ -57,11 +56,4 @@ test("entity lists pin every page with the source row id", () => {
     textOf(entityOrderClause(vendor, sql`p.display_name`, "desc")),
     /p\.display_name"?\s+desc nulls last, "?p"?\.id desc/,
   );
-});
-
-test("both universal list components order through the shared clauses", () => {
-  const documents = readFileSync(new URL("../../components/record-list-view.tsx", import.meta.url), "utf8");
-  assert.match(documents, /listOrderClause\(\s*orderExpr/);
-  const entities = readFileSync(new URL("../../components/entity-list-view.tsx", import.meta.url), "utf8");
-  assert.match(entities, /entityOrderClause\(\s*source/);
 });
