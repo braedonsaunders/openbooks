@@ -67,6 +67,18 @@ test("Argentina IVA is national with no subnational jurisdictions", () => {
   assert.equal(ARGENTINA_TAX_PACK.jurisdictions.length, 0);
 });
 
+test("Argentina 27% band opens at the sourced 1992 differential, not at the fetch date", () => {
+  const codes = packTaxCodesForReturn(ARGENTINA_TAX_PACK, "AR_F2002");
+  const increased = codes.find((entry) => entry.code === "AR-VAT-INC27")!;
+  // Infoleg's EVOLUCION table restores the 27% differential alongside the
+  // 18% general rate under Ley 23.966 (note 2): a fetch-dated opening here
+  // refuses every real pre-2026 document priced at 27%.
+  assert.deepEqual(
+    increased.rates!.map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
+    [[27, "1992-03-01", null]],
+  );
+});
+
 test("Argentina standard band runs back to 1992 with the one-year grant, restoration and 2002 window kept", () => {
   const codes = packTaxCodesForReturn(ARGENTINA_TAX_PACK, "AR_F2002");
   assert.deepEqual(

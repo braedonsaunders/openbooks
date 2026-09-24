@@ -57,11 +57,12 @@ const AR_F2002_2026: TaxReturnPack = {
  * row. The 10.5% band is 50% of the general rate by art. 28's own rule, so
  * it tracks the 2002 window as 9.5% and reverts with it; pre-2002 10.5%
  * history is refused (the 50%-rule origin and any 9% era under the 18%
- * general rate are unsourced). The 27% band stays left-truncated: the table
- * shows a 27% differential restored alongside the 18% in 1992, but its scope
- * continuity into today's utilities band is unverified, so no origin is
- * claimed for it. Pre-1992 decree-era bands are refused: the table's
- * 1988–1992 columns cannot be mapped unambiguously.
+ * general rate are unsourced). The 27% band opens 1992-03-01: Infoleg's
+ * EVOLUCION table restores the 27% differential alongside the 18% general
+ * rate under Ley 23.966 (the table's note 2), and the utilities band is
+ * that differential's continuation — so provisioning no longer refuses
+ * pre-fetch 27% documents. Pre-1992 decree-era bands are refused: the
+ * table's 1988–1992 columns cannot be mapped unambiguously.
  *
  * Fetch refusals, named so the next person can finish the history: Infoleg
  * returned 403 to a bare client and loaded only with a browser user agent;
@@ -158,7 +159,7 @@ export const ARGENTINA_TAX_PACK: CountryTaxPackDefinition = {
         code: "AR-VAT-INC27",
         name: "Argentina IVA alícuota incrementada 27% — servicios públicos a responsables inscriptos",
         ratePercent: 27,
-        rates: [{ ratePercent: 27, effectiveFrom: "2026-09-18", sourceId: "infoleg_ley23349_art28" }],
+        rates: [{ ratePercent: 27, effectiveFrom: "1992-03-01", sourceId: "infoleg_ley23349_art28" }],
       },
     ],
   },
