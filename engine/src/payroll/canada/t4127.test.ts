@@ -10,10 +10,45 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { cmp } from "../../money/money.ts";
+import { payrollCertificate, resolveCertificate, type StoredCertificate } from "../certificates.ts";
+import "../packs.ts";
+import { computeCaStatutory } from "./compute-statutory.ts";
 import { calculateT4127 } from "./t4127.ts";
 import { claimCodeAmount, RATES_2026_JAN, RATES_2026_JUL, ratesForPayDate } from "./rates.ts";
 
 const money = (value: string) => `${value}00`; // "254.83" -> "254.8300"
+
+test("Ontario statutory withholding applies eligible dependants from the effective TD1ON", async () => {
+  const certificate = payrollCertificate("CA", "ca_td1_ON");
+  const tax = async (answers?: Record<string, string>) => {
+    const row: StoredCertificate | null = answers ? {
+      certificateKey: certificate.key, region: "ON", subRegion: null, answers,
+      effectiveFrom: "2026-01-01", supersededOn: null,
+    } : null;
+    const resolved = resolveCertificate({ certificate, stored: row ? [row] : [],
+      profile: { federal_claim_code: "1", provincial_claim_code: "1" }, asOf: "2026-02-13" });
+    let incomeTax = "";
+    await computeCaStatutory({ tx: { execute: async () => ({ rows: [{
+      pensionable: "0", insurable: "0", cpp: "0", cpp2: "0", ei: "0", qpip: "0",
+      qpip_employer: "0", non_periodic: "0", f5b: "0", qc_csb: "0",
+    }] }) } as never, orgId: "org", documentId: "run", employeePartyId: "employee",
+    employeeName: "Test Employee", taxYear: 2026, country: "CA", region: "ON",
+    run: { pay_date: "2026-02-13" }, emp: { federal_claim_code: "1", provincial_claim_code: "1" },
+    filingAccountId: null, periodsPerYear: 26, income: "1100.0000", nonPeriodic: "0.0000",
+    pensionable: "1100.0000", insurable: "1100.0000", deduction: () => "0.0000",
+    pushStatutory: (slot: string, _kind: string, _label: string, amount: string) => {
+      if (slot === "income_tax") incomeTax = amount;
+    }, storedCertificates: row ? [row] : [],
+    certificateFor: (key: string) => key === certificate.key ? resolved : null,
+    bool: () => false, assertRegionSupported: () => undefined,
+    employerLevies: { wcbAmount: "0", wcbAssessable: "0", ehtAmount: "0", ehtEarnings: "0",
+      hsfAmount: "0", hsfEarnings: "0" },
+    } as never);
+    return incomeTax;
+  };
+  assert.ok(cmp(await tax({ disabled_dependants: "0", dependants_under_19: "1" }), await tax()) < 0);
+});
 
 test("edition resolution: 122nd Jan–Jun, 123rd Jul–Dec, refuses unknown years", () => {
   assert.equal(ratesForPayDate("2026-01-01").edition, 122);
