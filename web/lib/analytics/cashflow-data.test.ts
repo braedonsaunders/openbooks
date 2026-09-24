@@ -26,9 +26,9 @@ test('cash forecast rolls fractional flows exactly above the safe integer range'
     },
   ]
   const categories = [{
-    id: 'insurance', name: 'Insurance', direction: 'outflow' as const, method: 'fixed_weekly' as const,
+    id: 'insurance', name: 'Insurance', direction: 'outflow' as const, method: 'manual_recurring' as const,
     weekly: ['0.2500', '0.1250'], total: '0.3750', logic: 'Scheduled premium',
-    meta: { method: 'Fixed weekly' }, breakdown: [],
+    meta: { method: 'Manual recurring' }, breakdown: [],
   }]
 
   const timeline = buildTimeline({
