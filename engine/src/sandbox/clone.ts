@@ -302,6 +302,27 @@ function generateCopySql(
   return `${tree}insert into "${t.name}" (${cols.join(", ")}) select ${exprs.join(", ")} from "${t.name}" where ${where}${order}`;
 }
 
+/**
+ * The clone plan's table set: the tier's full set, restricted to onlyTables
+ * when given. verify-rls derives its proof from this same selector, so the
+ * isolation proof always covers exactly the tables the clone actually
+ * copied — a dev-tier proof over ledger tables would be vacuous (dev never
+ * copies them) while production counts kept the total positive.
+ */
+export function selectCloneTables(
+  tables: TableInfo[],
+  tier: SandboxTier,
+  onlyTables?: Set<string>,
+): TableInfo[] {
+  // Dev also needs the legal-entity tree so copied roles have real scope
+  // targets. Keep it outside CUSTOMIZATION_LAYER: refresh must refresh that
+  // reference data even when preserving role customizations.
+  let selected =
+    tier === "dev" ? tables.filter((t) => CUSTOMIZATION_LAYER.has(t.name) || t.name === "subsidiaries") : tables;
+  if (onlyTables) selected = selected.filter((t) => onlyTables.has(t.name));
+  return selected;
+}
+
 export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   const cat = await loadCatalog();
   const { tables, rebaseSet } = cat;
@@ -312,12 +333,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     ? await loadMaskingPolicies(opts.productionOrgId)
     : new Map<string, Map<string, MaskTransform>>();
 
-  // Dev also needs the legal-entity tree so copied roles have real scope
-  // targets. Keep it outside CUSTOMIZATION_LAYER: refresh must refresh that
-  // reference data even when preserving role customizations.
-  let selected =
-    opts.tier === "dev" ? tables.filter((t) => CUSTOMIZATION_LAYER.has(t.name) || t.name === "subsidiaries") : tables;
-  if (opts.onlyTables) selected = selected.filter((t) => opts.onlyTables!.has(t.name));
+  let selected = selectCloneTables(tables, opts.tier, opts.onlyTables);
   // Copy parents before children: 152 FKs are non-deferrable, so `set constraints
   // all deferred` alone can't guarantee a valid order.
   const insOrder = insertionOrder(cat);

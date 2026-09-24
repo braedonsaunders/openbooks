@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { evaluateCloneRlsProof } from "../sandbox/verify-rls.ts";
+import {
+  evaluateCloneRlsProof,
+  unverifiedCloneRlsTables,
+} from "../sandbox/verify-rls.ts";
 import {
   REFRESH_CLONE_PROOF_PREFIX,
   refuseUnprovenRefreshReady,
@@ -51,6 +54,17 @@ function emptyTable(table: string) {
     bypassProduction: 0,
     bypassSandbox: 0,
     scopedProduction: 0,
+    scopedSandbox: 0,
+    scopedBogus: 0,
+  };
+}
+
+function oneSidedTable(table: string, production: number) {
+  return {
+    table,
+    bypassProduction: production,
+    bypassSandbox: 0,
+    scopedProduction: production,
     scopedSandbox: 0,
     scopedBogus: 0,
   };
@@ -183,6 +197,79 @@ test("clone RLS proof refuses a scoped count that does not match the named tenan
       assert.match(error.message, /4/);
       return true;
     },
+  );
+});
+
+test("clone RLS proof refuses a dev-tier-shaped proof with only production-side rows", () => {
+  // C-40: the old fixed trio (journal_lines, accounts, accounting_periods)
+  // is never copied on a dev tier, so every table reads N == N on
+  // production and 0 == 0 on the clone while observedRows stays positive
+  // from production counts. A proof with no both-sides observation must
+  // fail, naming the unverified tables instead of passing vacuously.
+  assert.throws(
+    () =>
+      evaluateCloneRlsProof({
+        productionOrgId: PRODUCTION_ORG,
+        sandboxOrgId: SANDBOX_ORG,
+        tables: [
+          oneSidedTable("journal_lines", 41),
+          oneSidedTable("accounts", 12),
+          oneSidedTable("accounting_periods", 7),
+        ],
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /zero verified rows/);
+      assert.match(error.message, /unverified tables: .*journal_lines/);
+      assert.match(error.message, /isolation cannot be proven/);
+      assert.match(error.message, new RegExp(PRODUCTION_ORG));
+      assert.match(error.message, new RegExp(SANDBOX_ORG));
+      return true;
+    },
+  );
+});
+
+test("clone RLS proof accepts verified tables while reporting one-sided ones", () => {
+  // A one-sided table is still leak-checked (a bogus leak throws) but never
+  // counted as proof; the verified tables carry the proof.
+  evaluateCloneRlsProof({
+    productionOrgId: PRODUCTION_ORG,
+    sandboxOrgId: SANDBOX_ORG,
+    tables: [
+      {
+        table: "subsidiaries",
+        bypassProduction: 2,
+        bypassSandbox: 2,
+        scopedProduction: 2,
+        scopedSandbox: 2,
+        scopedBogus: 0,
+      },
+      oneSidedTable("report_schedules", 3),
+    ],
+  });
+  assert.deepEqual(
+    unverifiedCloneRlsTables([
+      {
+        table: "subsidiaries",
+        bypassProduction: 2,
+        bypassSandbox: 2,
+        scopedProduction: 2,
+        scopedSandbox: 2,
+        scopedBogus: 0,
+      },
+      oneSidedTable("report_schedules", 3),
+      emptyTable("saved_views"),
+    ]),
+    ["report_schedules", "saved_views"],
+  );
+  assert.throws(
+    () =>
+      evaluateCloneRlsProof({
+        productionOrgId: PRODUCTION_ORG,
+        sandboxOrgId: SANDBOX_ORG,
+        tables: [oneSidedTable("report_schedules", 3)],
+      }),
+    /unverified tables: report_schedules/,
   );
 });
 
