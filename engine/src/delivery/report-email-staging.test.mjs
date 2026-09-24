@@ -100,9 +100,13 @@ function dueRow() {
 }
 
 // Consumed in call order: two crash-rebuild scans, the due scan, the
-// post-enqueue status update.
-function primeDb() {
-  state.queue.push({ rows: [] }, { rows: [] }, { rows: [dueRow()] }, { rows: [] })
+// pre-staging claim, the post-handoff confirm, then per-outcome extras
+// (the claim-restore on a provably-failed handoff).
+function primeDb(...extra) {
+  state.queue.push(
+    { rows: [] }, { rows: [] }, { rows: [dueRow()] },
+    { rows: [{ id: 'delivery-1' }] }, { rows: [{ id: 'delivery-1' }] }, ...extra,
+  )
 }
 
 function reset() {
@@ -118,7 +122,7 @@ const probeQueuedJob = async (jobId) => state.recorded.get(jobId) ?? null
 
 test('provable non-acceptance: a failed handoff with no queued job deletes every ref staged in that attempt', async () => {
   reset()
-  primeDb()
+  primeDb({ rows: [{ id: 'delivery-1' }] })
   await assert.rejects(
     dispatchReportDeliveries(
       async () => { throw new Error('Redis unavailable') },
@@ -158,7 +162,7 @@ test('lost acknowledgement: an enqueue that records the job then throws keeps th
 
 test('uncheckable queue: when the queue cannot be reached the blobs are kept and the error is rethrown', async () => {
   reset()
-  primeDb()
+  primeDb({ rows: [{ id: 'delivery-1' }] })
   await assert.rejects(
     dispatchReportDeliveries(
       async () => { throw new Error('Redis unavailable') },
@@ -167,6 +171,60 @@ test('uncheckable queue: when the queue cannot be reached the blobs are kept and
     ),
     /Redis unavailable/,
   )
+  assert.equal(state.live.size, 1)
+  assert.deepEqual(state.deleted, [])
+})
+
+test('a fenced-out dispatcher stages nothing and counts nothing', async () => {
+  reset()
+  // The due scan still sees the row (a snapshot from before the winner's
+  // claim committed), but the pre-staging claim matches zero rows: the
+  // winner owns this generation, so the loser must not stage, enqueue, or
+  // count.
+  state.queue.push({ rows: [] }, { rows: [] }, { rows: [dueRow()] }, { rows: [] })
+  let enqueued = 0
+  const dispatched = await dispatchReportDeliveries(
+    async () => { enqueued++; return [] },
+    new Date(),
+    { probeQueuedJob },
+  )
+  assert.equal(dispatched, 0)
+  assert.equal(enqueued, 0, 'the loser never reaches the queue')
+  assert.equal(state.stagedCount, 0, 'the loser stages no blob set')
+  assert.deepEqual(state.deleted, [])
+})
+
+test('an unconfirmed dispatch is not counted; its staged refs are deleted when the job never landed', async () => {
+  reset()
+  // The claim wins and the enqueue reports success, but the row leaves
+  // 'enqueued' before the confirm (a concurrent suppression): the staged
+  // refs belong to no live dispatch, and the queue holds no job for them,
+  // so they are deleted and nothing is counted.
+  state.queue.push(
+    { rows: [] }, { rows: [] }, { rows: [dueRow()] },
+    { rows: [{ id: 'delivery-1' }] }, { rows: [] },
+  )
+  const dispatched = await dispatchReportDeliveries(async () => [], new Date(), { probeQueuedJob })
+  assert.equal(dispatched, 0)
+  assert.equal(state.live.size, 0)
+  assert.equal(state.deleted.length, 1)
+})
+
+test('an unconfirmed dispatch whose job provably exists keeps its blobs but is still not counted', async () => {
+  reset()
+  // Same fenced-out confirm, but the queued job provably needs the staged
+  // refs (a suppression raced a live handoff): the blobs stay for the
+  // worker while the count reports only applied dispatches.
+  state.queue.push(
+    { rows: [] }, { rows: [] }, { rows: [dueRow()] },
+    { rows: [{ id: 'delivery-1' }] }, { rows: [] },
+  )
+  const dispatched = await dispatchReportDeliveries(
+    async (data, options) => { state.recorded.set(options.jobId, data) },
+    new Date(),
+    { probeQueuedJob },
+  )
+  assert.equal(dispatched, 0)
   assert.equal(state.live.size, 1)
   assert.deepEqual(state.deleted, [])
 })

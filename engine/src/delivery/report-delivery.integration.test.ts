@@ -1058,6 +1058,60 @@ test("a superseded renderer's bytes are never stored; the live renderer owns the
   }
 });
 
+test("concurrent dispatchers claim each delivery once: one stage, one enqueue, one count", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions
+        (id, org_id, kind, report_type, slug, name, query, created_by, updated_by)
+      values (${definitionId}, ${org.orgId}, 'custom', 'query', 'claim-race',
+              'Claim race', '{}'::jsonb, null, null)
+    `);
+    const runId = randomUUID();
+    await db.execute(sql`
+      insert into report_runs
+        (id, org_id, schedule_id, definition_id, trigger, status, scheduled_for,
+         recipient_emails, next_attempt_at)
+      values (${runId}, ${org.orgId}, null, ${definitionId}, 'scheduled', 'succeeded',
+              ${new Date(Date.now() - 60_000)}, '["solo@example.com"]'::jsonb, now())
+    `);
+    const pdf = Buffer.from("%PDF-1.7\nclaim race bytes");
+    await db.execute(sql`
+      insert into report_run_artifacts
+        (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
+      values (${org.orgId}, ${runId}, 'claim-race.pdf', 'application/pdf', ${pdf.length},
+              ${createHash("sha256").update(pdf).digest("hex")}, ${pdf})
+    `);
+    const deliveryId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, next_attempt_at)
+      values (${deliveryId}, ${org.orgId}, ${runId}, 'solo@example.com', 'pending', now())
+    `);
+    const enqueued: { jobId: string; attachments: number }[] = [];
+    const asOf = new Date(Date.now() + 60_000);
+    const dispatchOnce = () =>
+      dispatchReportDeliveries(async (data, options) => {
+        enqueued.push({ jobId: String(options?.jobId), attachments: (data.attachments ?? []).length });
+        return [];
+      }, asOf);
+    const [first, second] = await Promise.all([dispatchOnce(), dispatchOnce()]);
+    assert.equal(first + second, 1, "exactly one dispatcher counts the delivery");
+    assert.deepEqual(
+      enqueued,
+      [{ jobId: `report-delivery|${deliveryId}|0`, attachments: 1 }],
+      "exactly one blob set is staged and enqueued under one generation id",
+    );
+    const state = (await db.execute<{ status: string; dispatch_count: number }>(sql`
+      select status, dispatch_count from report_delivery_outbox where id=${deliveryId}
+    `)).rows[0]!;
+    assert.deepEqual(state, { status: "enqueued", dispatch_count: 1 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a fenced-out run dispatch is not counted (B-DLV-02/B2-DLV-1)", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -1108,8 +1162,9 @@ test("a fenced-out delivery dispatch is not counted (B-DLV-02)", { skip: !DB }, 
               ${new Date(Date.now() - 60_000)})
     `);
     const asOf = new Date(Date.now() + 60_000);
-    // The stub stands in for a racing callback: the row is already sent
-    // before this dispatcher's fenced update runs.
+    // The stub stands in for a racing callback: the claim lands first
+    // (dispatch_count 1), then the row is already sent before the
+    // confirm runs, so the dispatch is settled but never counted.
     const counted = await dispatchReportDeliveries(async () => {
       await db.execute(sql`
         update report_delivery_outbox set status='sent', sent_at=now(), updated_at=now()
@@ -1121,7 +1176,7 @@ test("a fenced-out delivery dispatch is not counted (B-DLV-02)", { skip: !DB }, 
     const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_delivery_outbox where id=${deliveryId}
     `)).rows[0]!;
-    assert.deepEqual(row, { status: "sent", dispatch_count: 0 });
+    assert.deepEqual(row, { status: "sent", dispatch_count: 1 });
   } finally {
     await dropScratchOrg(org.orgId);
   }
