@@ -224,3 +224,14 @@ test('a successful save re-enables estimate conversion from the visible revision
   })
   assert.equal(estimateButton().disabled, false, 'the successful save becomes the new conversion baseline')
 })
+
+test('missing expected close date exposes the forecast exclusion reason beside its field', async (t) => {
+  await mountDrawer(t)
+  const date = document.querySelector('input[type="date"]')
+  assert.ok(date, 'the expected close date field renders')
+  assert.equal(date.getAttribute('aria-describedby'), 'expected-close-hint')
+  assert.match(
+    document.getElementById('expected-close-hint')?.textContent ?? '',
+    /without an expected close date are excluded from the forecast/i,
+  )
+})
