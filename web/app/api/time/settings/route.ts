@@ -2,6 +2,7 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { validateFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
@@ -19,6 +20,13 @@ function bad(error: string, status = 422) {
  * orgs.settings->'fieldTime' — one source of truth, read by every
  * clock/crew path. Every rule is required; the service refuses without
  * them rather than guessing.
+ *
+ * The rules are org-wide policy with no subsidiary lineage — one write
+ * re-times every entity's clocks at once — so PUT needs unrestricted
+ * subsidiary scope (canonical shape 2): restricted callers get the named
+ * 403 and store nothing. GET stays open to every time.manage holder: the
+ * rules are operational policy disclosing no per-subsidiary material, and
+ * foremen need them to enter time.
  */
 export async function GET() {
   const gate = await guardFeaturePermission('time.manage', 'fieldTime')
@@ -32,6 +40,8 @@ export async function PUT(req: Request) {
   const gate = await guardFeaturePermission('time.manage', 'fieldTime')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
 
   const parsedBody = await parseJsonBody(req, fieldTimeSettingsBody);
   if (!parsedBody.ok) return parsedBody.response;
