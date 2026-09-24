@@ -477,6 +477,34 @@ export async function discardPayRun(input: {
 }
 
 /**
+ * Drop a run's derived calculation snapshot and return it to draft: stubs,
+ * calculation errors and the refusal acknowledgement TOGETHER.
+ *
+ * The three are one fact — "what the last calculate saw" — and every path
+ * that resets a calculated run to draft must clear all three. Clearing the
+ * stubs while leaving `calculation_errors` and `refusal_acknowledgement`
+ * behind shows exceptions (and an acknowledgement) for stubs that no longer
+ * exist until the next calculation, and an acknowledgement outliving its
+ * refusal set reads as authorizing a situation nobody saw. A recalculation
+ * re-derives all three wholesale, so nothing cleared here is lost.
+ */
+export async function invalidateCalculatedRun(
+  tx: Pick<typeof db, "execute">,
+  input: { orgId: string; actorId: string; documentId: string },
+): Promise<void> {
+  const { orgId, actorId, documentId } = input;
+  await tx.execute(sql`
+    delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  await tx.execute(sql`
+    update pay_runs
+       set run_status = 'draft', gross_total = 0, net_total = 0,
+           employer_cost_total = 0, employee_count = 0, calculated_at = null,
+           calculation_errors = '[]'::jsonb, refusal_acknowledgement = null,
+           updated_at = now(), updated_by = ${actorId}
+     where org_id = ${orgId} and document_id = ${documentId}`);
+}
+
+/**
  * Move one uncommitted run onto its schedule's current subsidiary.
  *
  * Entity and currency move TOGETHER — they froze together at creation, and
