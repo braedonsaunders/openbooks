@@ -27,6 +27,7 @@ import { listOpenRequestsForParty } from '@openbooks/engine/src/hrm/performance/
 import { getAuthz } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { meTabs } from '../../../../lib/hrm/self-service'
+import { businessTimeZone, formatInZone, formatTimeInZone } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
  * Me 1:1s — upcoming and past conversations with the agenda drawer
@@ -267,10 +268,20 @@ export async function loadMeOneOnOnesPage(
   if (oneId) {
     try {
       const one = await getOneOnOne({ orgId: authz.user.orgId, actorId: authz.user.id, id: oneId })
+      // The drawer names a wall time, so it renders in the org's zone —
+      // never the raw stored ISO with millis. A zone failure closes the
+      // drawer (detail null) instead of blanking the page.
+      const timeZone = await businessTimeZone(authz.user.orgId)
+      const inZone = (iso: string): string => {
+        const at = new Date(iso)
+        const hhmm = formatTimeInZone(at, timeZone)
+        return `${formatInZone(at, timeZone)} ${hhmm.slice(0, 2)}:${hhmm.slice(2)}`
+      }
+      const when = inZone(one.scheduledAt)
       detail = {
         id: one.id,
-        title: `${otherName(one)} · ${one.scheduledAt.slice(0, 16).replace('T', ' ')}`,
-        when: one.scheduledAt,
+        title: `${otherName(one)} · ${when}`,
+        when,
         with: otherName(one),
         status: one.status,
         canWrite: one.status === 'scheduled',
