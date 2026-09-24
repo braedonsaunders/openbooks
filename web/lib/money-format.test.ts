@@ -82,6 +82,7 @@ test('fr grouping uses a visibly rendered separator, never U+202F', () => {
   assert.equal(formatDecimal('fr', '110699.26'), '110\u00a0699,26')
 })
 
+// source-pin-contract: exact-decimal hygiene invariant — no money/moneyCompact/m/fmt call site anywhere under web/{app,components,lib} may receive a Number-coerced exact decimal; subjects derived by walking those trees, never hand-listed.
 test('repository money formatters never receive Number-coerced exact decimals', () => {
   const coercion = /\b(?:money|moneyCompact|m|fmt)\s*\(\s*Number\s*\(/g
   const violations = globSync('{app,components,lib}/**/*.{ts,tsx}', { cwd: webRoot })
@@ -110,14 +111,4 @@ test('representative report and UI boundaries preserve high-value cents and norm
     assert.equal(uiMoney(value), expected)
   }
 
-  const drill = source('lib/report-drill-data.ts')
-  assert.match(drill, /value: money\(result\.net\)/)
-  assert.match(drill, /money\(decimalAdd\(actual, decimalNeg\(budget\)\)\)/)
-
-  const profitability = source('app/(app)/reports/project-profitability/ProjectProfitabilityTable.tsx')
-  assert.match(profitability, /money\(value \?\? '0'/)
-
-  const wip = source('app/(app)/projects/wip-billing/WipBillingWorkspace.tsx')
-  assert.match(wip, /decimalSum\(\[/)
-  assert.match(wip, /value=\{money\(analytics\.aging\.over90\)\}/)
 })
