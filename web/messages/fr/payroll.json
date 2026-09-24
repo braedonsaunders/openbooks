@@ -561,7 +561,8 @@
       "saving": "Enregistrement…",
       "effectiveFrom": "Date d’effet",
       "title": "Certificats fiscaux",
-      "loading": "Chargement des certificats…"
+      "loading": "Chargement des certificats…",
+      "loadFailed": "Impossible de charger les certificats fiscaux."
     }
   },
   "setupWizard": {

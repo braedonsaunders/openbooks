@@ -561,7 +561,8 @@
       "saving": "Salvando…",
       "effectiveFrom": "Vigente a partir de",
       "title": "Certificados fiscais",
-      "loading": "Carregando certificados…"
+      "loading": "Carregando certificados…",
+      "loadFailed": "Não foi possível carregar os certificados fiscais."
     }
   },
   "setupWizard": {

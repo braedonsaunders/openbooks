@@ -561,7 +561,8 @@
       "saving": "Speichern…",
       "effectiveFrom": "Gültig ab",
       "title": "Steuerbescheinigungen",
-      "loading": "Zertifikate werden geladen…"
+      "loading": "Zertifikate werden geladen…",
+      "loadFailed": "Steuerbescheinigungen konnten nicht geladen werden."
     }
   },
   "setupWizard": {

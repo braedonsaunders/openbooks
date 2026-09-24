@@ -561,7 +561,8 @@
       "saving": "保存中…",
       "effectiveFrom": "発効日",
       "title": "税務証明書",
-      "loading": "証明書を読み込み中…"
+      "loading": "証明書を読み込み中…",
+      "loadFailed": "税務証明書を読み込めませんでした。"
     }
   },
   "setupWizard": {

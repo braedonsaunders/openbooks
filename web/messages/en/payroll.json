@@ -561,7 +561,8 @@
       "saving": "Saving…",
       "effectiveFrom": "Effective from",
       "title": "Tax certificates",
-      "loading": "Loading certificates…"
+      "loading": "Loading certificates…",
+      "loadFailed": "Could not load tax certificates."
     }
   },
   "setupWizard": {
