@@ -373,11 +373,12 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
       const named = due.invalid.map((n) => `node "${n.nodeId}": ${n.reason}`).join("; ");
       console.error(`[flows] scheduled flow ${flow.id} ("${flow.name}") has invalid schedule(s) — occurrence not claimed: ${named}`);
     }
-    if (due.nodeIds.length === 0 || !due.latest) continue;
+    const latest = due.latest;
+    if (due.nodeIds.length === 0 || !latest) continue;
 
     let claims: FlowOccurrenceClaim[];
     try {
-      claims = await claimDueFlowOccurrences(flow, due);
+      claims = await claimDueFlowOccurrences(flow, { nodeIds: due.nodeIds, latest });
     } catch (e) {
       console.error(`[flows] scheduled claim failed for flow ${flow.id}:`, e);
       continue;
