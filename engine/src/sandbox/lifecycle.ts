@@ -10,11 +10,18 @@ import {
   SANDBOX_CYCLE_BREAKERS,
   selfRefColumns,
 } from "./catalog.ts";
-import { copyClonedFileObjects, CUSTOMIZATION_LAYER, listSandboxS3VersionIds, runClone, type SandboxTier } from "./clone.ts";
+import {
+  copyClonedFileObjects,
+  CUSTOMIZATION_LAYER,
+  listSandboxS3VersionIds,
+  runClone,
+  type SandboxTier,
+} from "./clone.ts";
 import { deleteS3Blobs } from "../platform/file-storage.ts";
 import { neuterSandbox } from "../organization/sandbox-guard.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
 import { verifyCloneRls } from "./verify-rls.ts";
+import { assertProductionSandboxSource } from "./source-validation.ts";
 
 /** A zero-row sandbox lookup is a failure: the caller asked to act on a named id. */
 export function requireFoundSandbox<T>(
@@ -356,11 +363,11 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   // Only the cutoff period ID crosses into the clone: runClone resolves its
   // calendar and end date inside the copy snapshot, so no outer lookup can go
   // stale between here and the copy (SBOX1 addendum).
-  const prod = (await db.execute(sql`
-    select name, legal_name, base_currency, country, tax_ids, settings
+  const prod = (await db.execute<{ env_kind: string; name: string; legal_name: string | null; base_currency: string; country: string; tax_ids: unknown; settings: Record<string, unknown> | null }>(sql`
+    select env_kind, name, legal_name, base_currency, country, tax_ids, settings
       from orgs where id = ${input.productionOrgId}`));
   const p = prod.rows[0];
-  if (!p) throw new Error(`production org not found: ${input.productionOrgId}`);
+  assertProductionSandboxSource(p, input.productionOrgId);
 
   // The sandbox org row (orgs has no org_id, so it isn't RLS-scoped). The org
   // row is not cloned, so masking policies never see it: a masked sandbox
