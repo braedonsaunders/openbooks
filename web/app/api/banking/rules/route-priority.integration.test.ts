@@ -16,7 +16,6 @@ Object.assign(globalThis, { __bankRulePriorityState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
@@ -33,7 +32,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const CRITERIA = {
   version: 2,
@@ -70,7 +68,7 @@ async function priorities(orgId: string): Promise<number[]> {
   `))).rows.map((row) => row.priority);
 }
 
-test("bank-rule creation refuses an out-of-int32 priority without writing", { skip: !DB }, async () => {
+test("bank-rule creation refuses an out-of-int32 priority without writing", async () => {
   const { org } = await fixture();
   try {
     const response = await post({ name: "Probe rule", criteria: CRITERIA, outcome: OUTCOME, priority: 99999999999999999999 });
@@ -83,7 +81,7 @@ test("bank-rule creation refuses an out-of-int32 priority without writing", { sk
   }
 });
 
-test("bank-rule creation still files an ordinary priority", { skip: !DB }, async () => {
+test("bank-rule creation still files an ordinary priority", async () => {
   const { org } = await fixture();
   try {
     const response = await post({ name: "Probe rule", criteria: CRITERIA, outcome: OUTCOME, priority: 50 });
@@ -95,7 +93,7 @@ test("bank-rule creation still files an ordinary priority", { skip: !DB }, async
   }
 });
 
-test("bank-rule creation preserves an explicitly configured zero priority", { skip: !DB }, async () => {
+test("bank-rule creation preserves an explicitly configured zero priority", async () => {
   const { org } = await fixture();
   try {
     const response = await post({ name: "Zero priority rule", criteria: CRITERIA, outcome: OUTCOME, priority: 0 });

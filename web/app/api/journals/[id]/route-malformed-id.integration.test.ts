@@ -13,7 +13,6 @@ Object.assign(globalThis, { __journalIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__journalIdState;
@@ -29,7 +28,6 @@ registerHooks({
 const { withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET, PATCH, DELETE } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -56,7 +54,7 @@ async function call(verb: 'GET' | 'PATCH' | 'DELETE', id: string): Promise<{ sta
 }
 
 for (const verb of ['GET', 'PATCH', 'DELETE'] as const) {
-  test(`${verb} returns 404 for a malformed journal id`, { skip: !DB }, async () => {
+  test(`${verb} returns 404 for a malformed journal id`, async () => {
     const org = await fixture()
     try {
       const result = await call(verb, 'not-a-uuid')
@@ -66,7 +64,7 @@ for (const verb of ['GET', 'PATCH', 'DELETE'] as const) {
     }
   })
 
-  test(`${verb} still returns 404 for an unknown journal id`, { skip: !DB }, async () => {
+  test(`${verb} still returns 404 for an unknown journal id`, async () => {
     const org = await fixture()
     try {
       const result = await call(verb, randomUUID())

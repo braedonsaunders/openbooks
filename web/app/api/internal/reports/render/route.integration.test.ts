@@ -8,8 +8,6 @@ const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
 registerHooks({
   resolve(s, c, next) {
-    if (s === 'server-only')
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (s === 'next-intl/server')
       return {
         shortCircuit: true,
@@ -39,7 +37,6 @@ const { GET } = await import(root + 'web/app/api/internal/reports/render/route.t
  * under close authority — the publish path under the sender's close.run,
  * re-resolved at render time. Scheduled renders keep their own principal.
  */
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 const TOKEN = 'close-route-test-token'
 
 async function seedDefinition(orgId: string): Promise<string> {
@@ -95,7 +92,7 @@ function renderRequest(orgId: string, definitionId: string, runId: string | null
   })
 }
 
-test('close-package run renders under the sender close.run grant', { skip: !DB }, async () => {
+test('close-package run renders under the sender close.run grant', async () => {
   process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN
   const org = await withBypassContext(() => createScratchOrg())
   try {
@@ -130,7 +127,7 @@ test('close-package run renders under the sender close.run grant', { skip: !DB }
   }
 })
 
-test('a scheduled run lacking requiredPermissions renders and records them once', { skip: !DB }, async () => {
+test('a scheduled run lacking requiredPermissions renders and records them once', async () => {
   // RENDER-STAMP: the 0340 write-once transition. The schedule snapshot
   // predates recording; the render completes and the content-derived key
   // lands exactly once.
@@ -174,7 +171,7 @@ test('a scheduled run lacking requiredPermissions renders and records them once'
   }
 })
 
-test('close-package render without a run id or row refuses', { skip: !DB }, async () => {
+test('close-package render without a run id or row refuses', async () => {
   process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN
   const org = await withBypassContext(() => createScratchOrg())
   try {

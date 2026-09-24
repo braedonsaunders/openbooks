@@ -19,7 +19,6 @@ Object.assign(globalThis, { __compliancePatchBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -38,7 +37,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(): Promise<{ orgId: string; recordId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -89,7 +87,7 @@ async function coverageOf(orgId: string, recordId: string): Promise<string | nul
   return rows[0]?.coverage_amount ?? null;
 }
 
-test("certificate update refuses a non-calendar effective date without writing", { skip: !DB }, async () => {
+test("certificate update refuses a non-calendar effective date without writing", async () => {
   const { orgId, recordId } = await fixture();
   try {
     const response = await patch(recordId, { action: "update", revision: 1, effectiveFrom: "2026-09-31" });
@@ -102,7 +100,7 @@ test("certificate update refuses a non-calendar effective date without writing",
   }
 });
 
-test("certificate update refuses a coverage amount wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("certificate update refuses a coverage amount wider than numeric(19,4) without writing", async () => {
   const { orgId, recordId } = await fixture();
   try {
     const response = await patch(recordId, { action: "update", revision: 1, coverageAmount: "99999999999999999999.99" });
@@ -115,7 +113,7 @@ test("certificate update refuses a coverage amount wider than numeric(19,4) with
   }
 });
 
-test("certificate update still saves an ordinary amount", { skip: !DB }, async () => {
+test("certificate update still saves an ordinary amount", async () => {
   const { orgId, recordId } = await fixture();
   try {
     const response = await patch(recordId, { action: "update", revision: 1, coverageAmount: "2000000.00" });

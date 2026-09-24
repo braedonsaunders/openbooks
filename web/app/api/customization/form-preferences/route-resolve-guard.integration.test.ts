@@ -26,7 +26,6 @@ const virtual = (source: string) => ({
 
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "../../../../lib/authz") {
       return virtual(`
         export async function getAuthz() {
@@ -53,7 +52,6 @@ const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function put(body: unknown): Promise<{ status: number; json: unknown }> {
   const response = await withOrgContext(state.orgId, () =>
@@ -78,7 +76,6 @@ async function preferenceRows(): Promise<Array<{ layoutId: string | null }>> {
 
 test(
   "PUT refuses inactive or role-inaccessible layouts and does not write a preference",
-  { skip: !DB },
   async () => {
     const org = await createScratchOrg();
     try {

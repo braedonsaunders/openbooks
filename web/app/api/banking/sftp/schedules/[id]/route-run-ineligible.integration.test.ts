@@ -88,13 +88,6 @@ const mockImportJob = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "./authz" &&
       (context.parentURL?.includes("/lib/feature-gates") ||
@@ -138,7 +131,6 @@ const { db, withBypass, withOrgContext } =
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -226,7 +218,6 @@ async function runStatus(
 
 test(
   "run refuses an inactive schedule instead of reporting a fabricated success",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -257,7 +248,6 @@ test(
 
 test(
   "run refuses when the schedule's SFTP server is inactive",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -288,7 +278,6 @@ test(
 
 test(
   "run refuses for a non-production organization",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -314,7 +303,6 @@ test(
 
 test(
   "run refuses when the scan returns nothing for an eligible schedule",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -338,7 +326,6 @@ test(
 
 test(
   "run keeps a genuinely executed empty scan a success",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {

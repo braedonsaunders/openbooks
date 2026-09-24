@@ -32,9 +32,6 @@ const mockFeatures = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -119,7 +116,6 @@ async function storedSettings(
 
 test(
   "GET exposes the revision alongside the effective values",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     await seed();
     const res = await GET(getRequest(), params());
@@ -132,7 +128,6 @@ test(
 
 test(
   "concurrent edits from one base: the second 409s and nothing is lost",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
 
@@ -183,7 +178,6 @@ test(
 
 test(
   "a successful update writes one audit row with actor, before, and after",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await PUT(
@@ -217,7 +211,6 @@ test(
 
 test(
   "a missing revision is a 409 naming the remedy, never a blind overwrite",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await PUT(putRequest({ values: DEFAULTS }), params());
@@ -232,7 +225,6 @@ const UTILIZATION_DEFAULTS = { targetBillablePct: 70, costSpikeThreshold: 1000, 
 
 test(
   "a non-numeric threshold is a named 422 with nothing saved",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await PUT(
@@ -250,7 +242,6 @@ test(
 
 test(
   "an out-of-range threshold is a named 422 with nothing saved",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await PUT(
@@ -270,7 +261,6 @@ test(
 
 test(
   "unknown and missing thresholds are named 422s with nothing saved",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const unknown = await PUT(
@@ -296,7 +286,6 @@ test(
 
 test(
   "ledger-money thresholds validate exactly: bad cap and bad flag refuse, a good cap normalizes",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const badCap = await PUT(

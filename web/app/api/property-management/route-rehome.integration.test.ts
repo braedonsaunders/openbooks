@@ -24,7 +24,6 @@ const engineRoot = new URL('../../../../engine/', import.meta.url).href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pmRehomeRace: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier.startsWith('@openbooks/engine/')) {
     return next(new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href, context);
   }
@@ -43,7 +42,6 @@ const { createManagedProperty, createPropertyUnit } = await import('@openbooks/e
 const { GET, POST } = await import('./route.ts');
 const { GET: reconGET } = await import('./deposit-reconciliation/route.ts');
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const post = (body: Record<string, unknown>) => POST(new Request('http://openbooks.test/api/property-management', {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
 }));
@@ -81,7 +79,7 @@ function session(fx: Fixture): SessionUser {
     envKind: 'production', productionOrgId: fx.orgId, homeOrgId: fx.orgId, homeUserId: fx.actorId };
 }
 
-test('GET shows a restricted caller only their own entity', { skip: !DB }, async () => {
+test('GET shows a restricted caller only their own entity', async () => {
   const { orgId, fx } = await seed();
   try {
     state.user = session(fx);
@@ -103,7 +101,7 @@ test('GET shows a restricted caller only their own entity', { skip: !DB }, async
   }
 });
 
-test('deposit reconciliation scopes rows and totals to the caller entity', { skip: !DB }, async () => {
+test('deposit reconciliation scopes rows and totals to the caller entity', async () => {
   const { orgId, fx } = await seed();
   try {
     state.user = session(fx);
@@ -140,7 +138,7 @@ class RaceRetry extends Error {}
  * seconds, and a missing engine lock could never look like a timeout (the
  * POST would complete instead and fail loudly below).
  */
-test('POST blocked behind a rehome answers the uniform 404 and writes nothing', { skip: !DB }, async () => {
+test('POST blocked behind a rehome answers the uniform 404 and writes nothing', async () => {
   let lastRetry: unknown = null;
   for (let attempt = 1; attempt <= 8; attempt += 1) {
     try {

@@ -72,7 +72,6 @@ registerHooks({
     // this the hook matches that URL too, the double imports itself, and every
     // name it was meant to pass through disappears.
     if (specifier.startsWith("file:")) return nextResolve(specifier, context);
-    if (specifier === "server-only") return module_("export {}");
     if (specifier.endsWith("/lib/authz") || specifier.endsWith("lib/authz")) {
       const real = nextResolve(specifier, context).url;
       // A data: URL has no parent to resolve bare specifiers against, so the

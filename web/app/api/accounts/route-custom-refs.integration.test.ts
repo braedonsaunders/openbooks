@@ -22,9 +22,6 @@ const module_ = (source: string): { shortCircuit: true; format: "module"; url: s
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Re-export the REAL authz module and override only the session gate, so
     // the subsidiary-scope guards the routes call are the production
     // functions — the previous allow-all guard double could not produce a
@@ -53,11 +50,9 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test(
   "account create and PATCH refuse foreign reference custom values",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => (createScratchOrg()));
     const foreign = await withBypassContext(() => (createScratchOrg()));

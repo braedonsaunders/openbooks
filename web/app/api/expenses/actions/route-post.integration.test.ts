@@ -18,7 +18,6 @@ Object.assign(globalThis, { __expenseActionsPostAtomicState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__expenseActionsPostAtomicState;
@@ -44,7 +43,6 @@ installTrustedTestDatabaseBypass()
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function post(body: unknown): Promise<{ status: number; json: unknown }> {
   const response = await withOrgContext(state.orgId, () => POST(
@@ -158,7 +156,7 @@ async function documentState(documentId: string) {
   )).rows[0]!
 }
 
-test('a refused route post leaves the report, its memo, and script evidence untouched', { skip: !DB }, async () => {
+test('a refused route post leaves the report, its memo, and script evidence untouched', async () => {
   const { org, employeeId } = await setup()
   try {
     const documentId = await seedApprovedReport(org.orgId, employeeId, org.date, org.subsidiaryId, 'EXP-ROUTE-RB')
@@ -186,7 +184,7 @@ test('a refused route post leaves the report, its memo, and script evidence unto
   }
 })
 
-test('a successful route post applies the script mutation once with drained effects', { skip: !DB }, async () => {
+test('a successful route post applies the script mutation once with drained effects', async () => {
   const { org, employeeId } = await setup()
   try {
     const documentId = await seedApprovedReport(org.orgId, employeeId, org.date, org.subsidiaryId, 'EXP-ROUTE-OK')

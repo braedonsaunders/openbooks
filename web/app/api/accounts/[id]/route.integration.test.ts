@@ -37,11 +37,7 @@ const module_ = (source: string): { shortCircuit: true; format: "module"; url: s
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as the IR recipient route test).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // The route imports authz by relative path. Re-export the REAL module and
     // override only the session gate, so the subsidiary-scope guards under
     // test are the production functions — a hand-copied guard double could
@@ -301,7 +297,7 @@ async function waitForAdvisoryParking(): Promise<void> {
   );
 }
 
-test("concurrent reciprocal reparents commit at most one edge and refuse the cycle", { skip: !DB }, async () => {
+test("concurrent reciprocal reparents commit at most one edge and refuse the cycle", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   let holder: Client | null = null;
   try {
@@ -366,7 +362,7 @@ test("concurrent reciprocal reparents commit at most one edge and refuse the cyc
   }
 });
 
-test("concurrent valid reparents serialize on the hierarchy lock and both commit", { skip: !DB }, async () => {
+test("concurrent valid reparents serialize on the hierarchy lock and both commit", async () => {
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
@@ -503,7 +499,6 @@ test(
 
 test(
   "account PATCH rejects non-string names at the JSON boundary",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => (createScratchOrg()));
     try {
@@ -527,7 +522,6 @@ test(
 
 test(
   "account PATCH preserves omitted required custom fields on a partial edit",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => (createScratchOrg()));
     try {
@@ -562,7 +556,6 @@ test(
 
 test(
   "account GET and PATCH return the same not-found response for a hidden subsidiary record",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => (createScratchOrg()));
     try {

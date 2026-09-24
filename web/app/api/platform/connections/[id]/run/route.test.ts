@@ -189,9 +189,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { format: "module", shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
     const mock =
       specifier === "next/server"
         ? "mock:next-server"

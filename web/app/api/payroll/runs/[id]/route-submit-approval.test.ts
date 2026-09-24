@@ -136,9 +136,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // A mock: URL has no base for workspace resolution; the approval double
     // raises the REAL PayrollError (the boundary maps it to 422 by
     // instanceof), so resolve it to the workspace file explicitly.

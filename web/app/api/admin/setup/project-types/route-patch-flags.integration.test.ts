@@ -18,7 +18,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __projectTypeFlagsUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/setup/project-types/")) {
       return {
         shortCircuit: true,
@@ -54,7 +53,7 @@ async function typeRow(orgId: string, id: string) {
   return r.rows[0]!;
 }
 
-test("project-type PATCH refuses non-boolean isActive without writing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("project-type PATCH refuses non-boolean isActive without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
@@ -86,7 +85,7 @@ test("project-type PATCH refuses non-boolean isActive without writing", { skip: 
   }
 });
 
-test("project-type PATCH refuses a non-numeric sortOrder with a field error", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("project-type PATCH refuses a non-numeric sortOrder with a field error", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

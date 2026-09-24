@@ -14,9 +14,6 @@ const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url))
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next-intl/server') {
       return { shortCircuit: true, url: 'mock:apps-intl' }
     }

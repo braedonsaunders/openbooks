@@ -25,9 +25,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (
       specifier === '../../../../../lib/authz' &&
       context.parentURL?.includes('/api/records/')
@@ -55,7 +52,7 @@ const routeUrl = './route.ts?record-type-audit-test'
 const { GET, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
@@ -105,7 +102,6 @@ async function auditEvents(orgId: string, rowId: string) {
 
 test(
   'a builder PATCH commits before/after configuration evidence in the same unit',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { org, actorId } = await withBypass(async () => {
       const created = await createScratchOrg()
@@ -145,7 +141,6 @@ test(
 
 test(
   'a refused PATCH commits no audit event',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { org, actorId } = await withBypass(async () => {
       const created = await createScratchOrg()
@@ -177,7 +172,6 @@ test(
 
 test(
   'a draft DELETE leaves an immutable delete event with the removed configuration',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const { org, actorId } = await withBypass(async () => {
       const created = await createScratchOrg()

@@ -14,7 +14,6 @@ Object.assign(globalThis, { __revaluationDomainState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__revaluationDomainState;
@@ -29,7 +28,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -72,7 +70,7 @@ async function entryCount(): Promise<number> {
   return rows[0]!.n
 }
 
-test('POST reports an unknown period as a problem with nothing posted', { skip: !DB }, async () => {
+test('POST reports an unknown period as a problem with nothing posted', async () => {
   const { org } = await fixture()
   try {
     const result = await post({ periodId: randomUUID() })
@@ -85,7 +83,7 @@ test('POST reports an unknown period as a problem with nothing posted', { skip: 
   }
 })
 
-test('POST maps an unconfigured control account to 422 with nothing posted', { skip: !DB }, async () => {
+test('POST maps an unconfigured control account to 422 with nothing posted', async () => {
   const { org } = await fixture()
   try {
     await db.execute(sql`

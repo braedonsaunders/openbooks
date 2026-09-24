@@ -33,9 +33,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/")) {
       const base = join(process.cwd(), "web", specifier.slice(2));
       const hit = [".ts", ".tsx", "/index.ts"]
@@ -110,7 +107,6 @@ async function revisionOf(orgId: string, id: string): Promise<number> {
 
 test(
   "0277 resolves duplicate defaults to the template the resolver already returns, with audit",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     try {
@@ -158,7 +154,6 @@ test(
 
 test(
   "0277 keeps the lowest-named default when no default is active",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     try {
@@ -183,7 +178,6 @@ test(
 
 test(
   "storage refuses a second default directly",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     try {
@@ -217,7 +211,6 @@ test(
 
 test(
   "POST with isDefault swaps the default instead of adding a second",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     try {
@@ -246,7 +239,6 @@ test(
 
 test(
   "PATCH promotion swaps the default atomically and bumps revision",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     try {

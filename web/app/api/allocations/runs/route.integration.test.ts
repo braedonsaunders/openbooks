@@ -38,9 +38,6 @@ routeState.NextResponse = (await import("next/server")).NextResponse;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
       return { url: "mock:runs-authz", shortCircuit: true };
     }
@@ -78,7 +75,6 @@ const { postProjectGlEntry } = await import(
   "../../../../../engine/src/projects/recognition.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function authenticate(orgId: string, actorId: string, permissions: string[], allowedSubsidiaryIds: string[] | null = null): void {
   routeState.authz = { user: { orgId, id: actorId }, permissions: new Set(permissions), allowedSubsidiaryIds };
@@ -171,7 +167,7 @@ async function setup(): Promise<Setup> {
   return { orgId: org.orgId, actorId, ruleId, runId, periodId: org.periodId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, postingDate };
 }
 
-test("runs list filters + detail subsidiary scoping", { skip: !DB }, async () => {
+test("runs list filters + detail subsidiary scoping", async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.read", "allocations.run", "gl.post"]);
@@ -205,7 +201,7 @@ test("runs list filters + detail subsidiary scoping", { skip: !DB }, async () =>
   }
 });
 
-test("preview runs the real engine", { skip: !DB }, async () => {
+test("preview runs the real engine", async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.run"]);
@@ -228,7 +224,7 @@ test("preview runs the real engine", { skip: !DB }, async () => {
   }
 });
 
-test("S1: restricted preview without a pin is refused and persists nothing", { skip: !DB }, async () => {
+test("S1: restricted preview without a pin is refused and persists nothing", async () => {
   const s = await setup();
   try {
     const runCount = async (): Promise<number> => {
@@ -262,7 +258,7 @@ test("S1: restricted preview without a pin is refused and persists nothing", { s
   }
 });
 
-test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", { skip: !DB }, async () => {
+test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", async () => {
   const s = await setup();
   const postedId = randomUUID();
   const versionId = (await db.execute<{ id: string }>(sql`
@@ -318,7 +314,7 @@ test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", { s
   }
 });
 
-test("S4: a pinned run with foreign targets is invisible to the pin holder", { skip: !DB }, async () => {
+test("S4: a pinned run with foreign targets is invisible to the pin holder", async () => {
   const s = await setup();
   const subB = randomUUID();
   await db.execute(sql`
@@ -358,7 +354,7 @@ test("S4: a pinned run with foreign targets is invisible to the pin holder", { s
   }
 });
 
-test("S1: preview validates id shapes at the boundary", { skip: !DB }, async () => {
+test("S1: preview validates id shapes at the boundary", async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.run"]);
@@ -387,7 +383,7 @@ test("S1: preview validates id shapes at the boundary", { skip: !DB }, async () 
   }
 });
 
-test("preview resolves report drivers through the production composition", { skip: !DB }, async () => {
+test("preview resolves report drivers through the production composition", async () => {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   try {
@@ -501,7 +497,7 @@ test("preview resolves report drivers through the production composition", { ski
   }
 });
 
-test("post/reverse/rerun need gl.post + reason and run the real engine", { skip: !DB }, async () => {
+test("post/reverse/rerun need gl.post + reason and run the real engine", async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.run"]);
@@ -566,7 +562,7 @@ test("post/reverse/rerun need gl.post + reason and run the real engine", { skip:
   }
 });
 
-test("lineage drill anchors on one object", { skip: !DB }, async () => {
+test("lineage drill anchors on one object", async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.read"]);
@@ -588,7 +584,7 @@ test("lineage drill anchors on one object", { skip: !DB }, async () => {
   }
 });
 
-test("S3: lineage route scopes anchors and paginates", { skip: !DB }, async () => {
+test("S3: lineage route scopes anchors and paginates", async () => {
   const s = await setup();
   try {
     // Restricted to nothing: the pinned run's drill is a 404, not a 200 with

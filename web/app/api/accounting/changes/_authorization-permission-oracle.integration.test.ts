@@ -19,7 +19,6 @@ const state = {
 Object.assign(globalThis, { __finchangeOracleState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/accounting/changes/")) {
       return {
         shortCircuit: true,
@@ -56,9 +55,7 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 const { authorizeChange } = await import("./_authorization.ts");
 import { NextResponse } from "next/server";
 
-test("financial-change oracle: no family permission sees existing and missing ids identically", {
-  skip: !process.env.OPENBOOKS_DB_URL,
-}, async () => {
+test("financial-change oracle: no family permission sees existing and missing ids identically", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;

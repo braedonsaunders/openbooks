@@ -31,11 +31,7 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Forward Next.js-style aliases to the real modules they point at.
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
@@ -82,7 +78,7 @@ function putRequest(config: unknown): Request {
   });
 }
 
-test("saving a nav config with multiple app items round-trips and audits against live PG", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("saving a nav config with multiple app items round-trips and audits against live PG", async () => {
   const org = await createScratchOrg();
   const adminId = await createScratchUser(org.orgId, "Nav Admin", "admin");
   try {
@@ -146,7 +142,7 @@ test("saving a nav config with multiple app items round-trips and audits against
   }
 });
 
-test("a nav config referencing an uninstalled app is refused without persisting anything", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a nav config referencing an uninstalled app is refused without persisting anything", async () => {
   const org = await createScratchOrg();
   const adminId = await createScratchUser(org.orgId, "Nav Admin", "admin");
   try {
@@ -188,7 +184,7 @@ test("a nav config referencing an uninstalled app is refused without persisting 
   }
 });
 
-test("a module-only nav config skips the app catalog check and still round-trips", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a module-only nav config skips the app catalog check and still round-trips", async () => {
   const org = await createScratchOrg();
   const adminId = await createScratchUser(org.orgId, "Nav Admin", "admin");
   try {

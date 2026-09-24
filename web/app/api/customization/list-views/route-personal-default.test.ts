@@ -41,9 +41,6 @@ const mockCustomization = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier.startsWith('@/')) {
       return nextResolve(
         new URL(`../../../../../web/${specifier.slice(2)}.ts`, import.meta.url).href,

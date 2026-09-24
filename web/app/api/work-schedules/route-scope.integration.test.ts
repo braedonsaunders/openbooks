@@ -26,7 +26,6 @@ const virtual = (source: string) => ({
 });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation")
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
@@ -59,7 +58,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 const { GET, POST } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const WEEK = {
   pattern: "cycle",
@@ -127,7 +125,7 @@ async function scheduleCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("GET hides another subsidiary's workers, schedules and options", { skip: !DB }, async () => {
+test("GET hides another subsidiary's workers, schedules and options", async () => {
   const { org, empB, scheduleB, scheduleSubB } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -149,7 +147,7 @@ test("GET hides another subsidiary's workers, schedules and options", { skip: !D
   }
 });
 
-test("save cannot create a pattern for another subsidiary's worker or entity", { skip: !DB }, async () => {
+test("save cannot create a pattern for another subsidiary's worker or entity", async () => {
   const { org, branchId, empB } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -167,7 +165,7 @@ test("save cannot create a pattern for another subsidiary's worker or entity", {
   }
 });
 
-test("save of an org-wide pattern needs an unrestricted caller", { skip: !DB }, async () => {
+test("save of an org-wide pattern needs an unrestricted caller", async () => {
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -182,7 +180,7 @@ test("save of an org-wide pattern needs an unrestricted caller", { skip: !DB }, 
   }
 });
 
-test("save and delete cannot touch another subsidiary's pattern", { skip: !DB }, async () => {
+test("save and delete cannot touch another subsidiary's pattern", async () => {
   const { org, empA, scheduleB } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -206,7 +204,7 @@ test("save and delete cannot touch another subsidiary's pattern", { skip: !DB },
   }
 });
 
-test("an unrestricted caller keeps the full surface", { skip: !DB }, async () => {
+test("an unrestricted caller keeps the full surface", async () => {
   const { org, empA, scheduleA } = await fixture();
   try {
     state.allowedSubsidiaryIds = null;

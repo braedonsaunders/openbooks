@@ -18,7 +18,6 @@ Object.assign(globalThis, { __subscriptionShapeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -40,7 +39,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -74,7 +72,7 @@ async function versionCount(orgId: string): Promise<number> {
 }
 
 for (const element of [null, 42, "x"]) {
-  test(`createVersion refuses components[${JSON.stringify(element)}] with an indexed 422 and no draft`, { skip: !DB }, async () => {
+  test(`createVersion refuses components[${JSON.stringify(element)}] with an indexed 422 and no draft`, async () => {
     const { org, planId } = await fixture();
     try {
       const response = await post({
@@ -91,7 +89,7 @@ for (const element of [null, 42, "x"]) {
   });
 }
 
-test("createVersion still files a well-formed component list", { skip: !DB }, async () => {
+test("createVersion still files a well-formed component list", async () => {
   const { org, planId } = await fixture();
   try {
     const response = await post({
@@ -105,7 +103,7 @@ test("createVersion still files a well-formed component list", { skip: !DB }, as
   }
 });
 
-test("amend refuses a mistyped field with a named 422", { skip: !DB }, async () => {
+test("amend refuses a mistyped field with a named 422", async () => {
   const { org } = await fixture();
   try {
     const response = await post({
@@ -125,7 +123,7 @@ test("amend refuses a mistyped field with a named 422", { skip: !DB }, async () 
   }
 });
 
-test("amend persists only allowlisted fields in the request snapshot", { skip: !DB }, async () => {
+test("amend persists only allowlisted fields in the request snapshot", async () => {
   const { org, planId } = await fixture();
   try {
     const created = await post({

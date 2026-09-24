@@ -131,8 +131,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The real '@/lib/api/json' imports 'server-only', which is inert here.
-    if (specifier === 'server-only') return { url: 'data:text/javascript,export {}', shortCircuit: true }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)

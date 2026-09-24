@@ -14,7 +14,6 @@ Object.assign(globalThis, { __payOpsPatchMissingRowState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__payOpsPatchMissingRowState;
@@ -29,7 +28,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface Fixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>
@@ -75,7 +73,7 @@ async function patch(resource: string, id: string, body: unknown): Promise<Respo
   ))
 }
 
-test('schedule PATCH on a missing id answers 404, never ok:true', { skip: !DB }, async () => {
+test('schedule PATCH on a missing id answers 404, never ok:true', async () => {
   const { org } = await fixture()
   try {
     const response = await patch('schedules', randomUUID(), { name: 'Ghost rename' })
@@ -86,7 +84,7 @@ test('schedule PATCH on a missing id answers 404, never ok:true', { skip: !DB },
   }
 })
 
-test('mandate PATCH on a missing id answers 404, never ok:true', { skip: !DB }, async () => {
+test('mandate PATCH on a missing id answers 404, never ok:true', async () => {
   const { org } = await fixture()
   try {
     const response = await patch('mandates', randomUUID(), { status: 'suspended' })
@@ -97,7 +95,7 @@ test('mandate PATCH on a missing id answers 404, never ok:true', { skip: !DB }, 
   }
 })
 
-test("mandate PATCH on another org's id answers 404 and changes nothing", { skip: !DB }, async () => {
+test("mandate PATCH on another org's id answers 404 and changes nothing", async () => {
   const { org, mandateId } = await fixture()
   const other = await createScratchOrg()
   try {
@@ -114,7 +112,7 @@ test("mandate PATCH on another org's id answers 404 and changes nothing", { skip
   }
 })
 
-test('schedule PATCH on an existing schedule still saves', { skip: !DB }, async () => {
+test('schedule PATCH on an existing schedule still saves', async () => {
   const { org, scheduleId } = await fixture()
   try {
     const response = await patch('schedules', scheduleId, { name: 'Renamed schedule' })

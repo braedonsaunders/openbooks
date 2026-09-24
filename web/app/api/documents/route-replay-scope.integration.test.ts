@@ -19,7 +19,6 @@ Object.assign(globalThis, { __documentReplayScopeUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__documentReplayScopeUser.user}')
     }
@@ -32,7 +31,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function sessionUser(id: string, orgId: string): SessionUser {
   return {
@@ -51,7 +49,7 @@ const post = (body: unknown, key: string) =>
     }),
   )
 
-test('a replayed key for a rehomed document answers as missing', { skip: !DB }, async () => {
+test('a replayed key for a rehomed document answers as missing', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const branch = randomUUID()
@@ -97,7 +95,7 @@ test('a replayed key for a rehomed document answers as missing', { skip: !DB }, 
   }
 })
 
-test('an in-scope replay still returns the row', { skip: !DB }, async () => {
+test('an in-scope replay still returns the row', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const userId = await withBypassContext(() => createScratchUser(org.orgId, 'replay control', 'replay_control'))

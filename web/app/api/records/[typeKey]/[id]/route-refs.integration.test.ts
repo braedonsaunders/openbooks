@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:custom-record-route-refs-authz', shortCircuit: true }
     }
@@ -46,14 +43,13 @@ const routeUrl = './route.ts?custom-record-route-refs-test'
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
 
 test(
   'interactive custom-record PATCH refuses party and GL-account UUIDs owned by another organization',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeKey = `refs-${randomUUID().replaceAll('-', '').slice(0, 10)}`
     const recordId = randomUUID()

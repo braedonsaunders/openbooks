@@ -12,7 +12,6 @@ Object.assign(globalThis, { __budgetDraftState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetDraftState;
@@ -34,7 +33,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface DraftFixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>
@@ -79,7 +77,7 @@ async function copiedLines(scenarioId: string, orgId: string) {
   )).rows
 }
 
-test('draft from source preserves each line legal entity', { skip: !DB }, async () => {
+test('draft from source preserves each line legal entity', async () => {
   const { org, fy, subB, sourceId } = await fixture()
   try {
     const response = await post({ bookId: org.bookId, fiscalYear: fy, sourceScenarioId: sourceId })
@@ -97,7 +95,7 @@ test('draft from source preserves each line legal entity', { skip: !DB }, async 
   }
 })
 
-test('draft from source copies only caller-visible entities', { skip: !DB }, async () => {
+test('draft from source copies only caller-visible entities', async () => {
   const { org, fy, sourceId } = await fixture()
   try {
     state.allowed = new Set([org.subsidiaryId])
@@ -113,7 +111,7 @@ test('draft from source copies only caller-visible entities', { skip: !DB }, asy
   }
 })
 
-test('draft creation rejects a malformed explicit book id instead of defaulting', { skip: !DB }, async () => {
+test('draft creation rejects a malformed explicit book id instead of defaulting', async () => {
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
@@ -130,7 +128,7 @@ test('draft creation rejects a malformed explicit book id instead of defaulting'
   }
 })
 
-test('draft creation rejects a malformed source scenario id instead of creating blank', { skip: !DB }, async () => {
+test('draft creation rejects a malformed source scenario id instead of creating blank', async () => {
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
@@ -147,7 +145,7 @@ test('draft creation rejects a malformed source scenario id instead of creating 
   }
 })
 
-test('draft creation rejects a malformed explicit fiscal year instead of defaulting', { skip: !DB }, async () => {
+test('draft creation rejects a malformed explicit fiscal year instead of defaulting', async () => {
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
@@ -165,7 +163,7 @@ test('draft creation rejects a malformed explicit fiscal year instead of default
   }
 })
 
-test('draft creation rejects an unknown explicit kind instead of defaulting to budget', { skip: !DB }, async () => {
+test('draft creation rejects an unknown explicit kind instead of defaulting to budget', async () => {
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
@@ -182,7 +180,7 @@ test('draft creation rejects an unknown explicit kind instead of defaulting to b
   }
 })
 
-test('draft creation stores an explicit description for the unsaved-create Save', { skip: !DB }, async () => {
+test('draft creation stores an explicit description for the unsaved-create Save', async () => {
   const { org, fy } = await fixture()
   try {
     const response = await post({
@@ -202,7 +200,7 @@ test('draft creation stores an explicit description for the unsaved-create Save'
   }
 })
 
-test('draft creation refuses a non-string description instead of coercing it', { skip: !DB }, async () => {
+test('draft creation refuses a non-string description instead of coercing it', async () => {
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`

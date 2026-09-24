@@ -175,11 +175,7 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as expenses/[id]/route.test.ts).
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // Forward Next.js-style aliases to the real modules they point at,
     // anchored at this test's web root so every importing depth resolves
     // identically.

@@ -10,7 +10,6 @@ const routeState: { authz: { user: { orgId: string; id: string } } | null } = { 
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '@/lib/authz') return { shortCircuit: true, url: 'mock:item-price-history-authz' }
     if (specifier.startsWith('@/') && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
@@ -41,7 +40,6 @@ hooks.deregister()
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 interface Fixture { orgId: string; actorId: string; itemId: string; priceLevelId: string }
 
@@ -119,7 +117,7 @@ async function breakPrices(f: Fixture, scheduleId: string) {
   return (await db.execute<{ unit_price: string }>(sql`select unit_price::text from item_price_breaks where org_id=${f.orgId} and schedule_id=${scheduleId}`)).rows.map((row) => row.unit_price)
 }
 
-test('a retroactive price change without a reason is refused and changes nothing', { skip: !DB }, async () => {
+test('a retroactive price change without a reason is refused and changes nothing', async () => {
   const f = await fixture()
   try {
     const now = await today()
@@ -136,7 +134,7 @@ test('a retroactive price change without a reason is refused and changes nothing
   }
 })
 
-test('a reasoned correction creates a version while the prior version is retained', { skip: !DB }, async () => {
+test('a reasoned correction creates a version while the prior version is retained', async () => {
   const f = await fixture()
   try {
     const now = await today()
@@ -166,7 +164,7 @@ test('a reasoned correction creates a version while the prior version is retaine
   }
 })
 
-test('a prospective successor leaves a late transaction in the old window under the old price', { skip: !DB }, async () => {
+test('a prospective successor leaves a late transaction in the old window under the old price', async () => {
   const f = await fixture()
   try {
     const now = await today()
@@ -191,7 +189,7 @@ test('a prospective successor leaves a late transaction in the old window under 
   }
 })
 
-test('DELETE of an effective schedule needs a reason and then end-dates instead of deleting', { skip: !DB }, async () => {
+test('DELETE of an effective schedule needs a reason and then end-dates instead of deleting', async () => {
   const f = await fixture()
   try {
     const now = await today()
@@ -219,7 +217,7 @@ test('DELETE of an effective schedule needs a reason and then end-dates instead 
   }
 })
 
-test('DELETE of a never-effective schedule removes it, and of an ended schedule is refused', { skip: !DB }, async () => {
+test('DELETE of a never-effective schedule removes it, and of an ended schedule is refused', async () => {
   const f = await fixture()
   try {
     const now = await today()
@@ -248,7 +246,7 @@ test('DELETE of a never-effective schedule removes it, and of an ended schedule 
   }
 })
 
-test('POST over a retained prior version is refused instead of forking history', { skip: !DB }, async () => {
+test('POST over a retained prior version is refused instead of forking history', async () => {
   const f = await fixture()
   try {
     const now = await today()

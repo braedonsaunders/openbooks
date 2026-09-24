@@ -14,7 +14,6 @@ Object.assign(globalThis, { __equipmentPatchMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__equipmentPatchMagnitudeState;
@@ -29,7 +28,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -64,7 +62,7 @@ async function purchasePrice(unitId: string): Promise<string> {
   return rows[0]!.purchase_price
 }
 
-test('PATCH refuses a purchase price wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('PATCH refuses a purchase price wider than numeric(19,4) without writing', async () => {
   const { org, unitId } = await fixture()
   try {
     const result = await patch(unitId, { purchasePrice: '99999999999999999999', revision: 0 })
@@ -75,7 +73,7 @@ test('PATCH refuses a purchase price wider than numeric(19,4) without writing', 
   }
 })
 
-test('PATCH refuses a capacity quantity wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('PATCH refuses a capacity quantity wider than numeric(19,4) without writing', async () => {
   const { org, unitId } = await fixture()
   try {
     const result = await patch(unitId, { capacityQuantity: '99999999999999999999', capacityUnit: 'hours', revision: 0 })
@@ -86,7 +84,7 @@ test('PATCH refuses a capacity quantity wider than numeric(19,4) without writing
   }
 })
 
-test('PATCH still saves a column-maximum purchase price with identical read-back', { skip: !DB }, async () => {
+test('PATCH still saves a column-maximum purchase price with identical read-back', async () => {
   const { org, unitId } = await fixture()
   try {
     const result = await patch(unitId, { purchasePrice: '999999999999999.9999', revision: 0 })

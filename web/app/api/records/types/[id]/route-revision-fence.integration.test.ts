@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:record-type-revision-fence-authz', shortCircuit: true }
     }
@@ -46,7 +43,7 @@ const routeUrl = './route.ts?record-type-revision-fence-test'
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
@@ -101,7 +98,6 @@ function fieldsStillDeclareSubsidiary(fields: unknown): boolean {
 
 test(
   'a fenced type PATCH that drops subsidiary_id is refused by name and leaves the field',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeId = randomUUID()
     const { org, actorId } = await withBypass(async () => {
@@ -144,7 +140,6 @@ test(
 
 test(
   'a stale type PATCH refuses with 409 instead of overwriting a newer builder save',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeId = randomUUID()
     const { org, actorId } = await withBypass(async () => {
@@ -211,7 +206,6 @@ test(
 
 test(
   'a fenced drop is judged on the locked row so a concurrently added subsidiary_id stays',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeId = randomUUID()
     const { org, actorId } = await withBypass(async () => {

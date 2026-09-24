@@ -81,9 +81,6 @@ let dbRealUrl = ''
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../../lib/authz") {
       const real = nextResolve(specifier, context).url;
       return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}` };

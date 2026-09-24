@@ -21,7 +21,6 @@ Object.assign(globalThis, { __opportunityActivationState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -53,7 +52,6 @@ const { installTrustedTestDatabaseBypass } = await import(root + 'engine/src/tes
 // trusted test bypass installed by the --import preload. Re-install last so
 // scratch seeding keeps its authority.
 installTrustedTestDatabaseBypass()
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -116,7 +114,7 @@ async function listedNumbers(orgId: string): Promise<string[]> {
   return rows.map((r) => r.opportunity_number)
 }
 
-test('closing an account-less titled opportunity activates it into the Status=All list', { skip: !DB }, async () => {
+test('closing an account-less titled opportunity activates it into the Status=All list', async () => {
   const { org, openId, closedLostId } = await fixture()
   try {
     // The exact SIM OPP-00002 shape: real title, no account, no subsidiary,
@@ -138,7 +136,7 @@ test('closing an account-less titled opportunity activates it into the Status=Al
   }
 })
 
-test('a placeholder-titled stub stays hidden after an open save', { skip: !DB }, async () => {
+test('a placeholder-titled stub stays hidden after an open save', async () => {
   const { org, openId } = await fixture()
   try {
     const oppId = await seedOpp(org.orgId, 'OPP-SIM-1', 'New opportunity', openId)

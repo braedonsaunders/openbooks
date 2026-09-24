@@ -137,13 +137,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     // The route's scope guard loads through the real lib/authz; only the
     // session identity behind it is scripted. next-intl is never called on
     // the POST path but must still resolve at import time.

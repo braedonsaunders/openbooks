@@ -18,7 +18,6 @@ Object.assign(globalThis, { __expenseActionScopeUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__expenseActionScopeUser.user}')
     }
@@ -81,7 +80,7 @@ const actionCall = (body: unknown) =>
     body: JSON.stringify(body),
   }))
 
-test('expense submit, post, and recall refuse an out-of-scope report', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('expense submit, post, and recall refuse an out-of-scope report', async () => {
   const { org, visible, concealed } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {
@@ -107,7 +106,7 @@ test('expense submit, post, and recall refuse an out-of-scope report', { skip: !
   }
 })
 
-test('expense submit waits on a report rehome in flight instead of racing it', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('expense submit waits on a report rehome in flight instead of racing it', async () => {
   const { org, actor } = await fixture()
   const writer = await pool.connect()
   let pending: Promise<Response> | undefined

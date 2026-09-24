@@ -11,7 +11,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __entityRecents: state, React });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__entityRecents.user}' };
   const app = resolveAppModule(specifier, context, next, root)
   if (app) return app
@@ -60,7 +59,7 @@ async function postPaymentDoc(org: PayOrg, party: string, sub: string, date: str
  * and a payment posted in a parallel book is not a second payment.
  * Amounts translate to presentation (USD 100 at 1.35 reads CAD 135).
  */
-test('entity drill lists posted payments once with translated amounts', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('entity drill lists posted payments once with translated amounts', async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Cash reviewer', 'cash_reviewer'));

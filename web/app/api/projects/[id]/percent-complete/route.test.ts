@@ -166,9 +166,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { format: 'module', shortCircuit: true, url: 'mock:server-only' }
-    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
@@ -176,7 +173,6 @@ const hooks = registerHooks({
   load(url, context, nextLoad) {
     const source = mockSources.get(url)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
     return nextLoad(url, context)
   },
 })

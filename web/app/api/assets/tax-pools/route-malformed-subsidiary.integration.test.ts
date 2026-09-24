@@ -19,7 +19,6 @@ const state = {
 Object.assign(globalThis, { __taxPoolFlagsGate: state });
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       (specifier.endsWith("/lib/feature-gates") || specifier.endsWith("/lib/authz")) &&
       context.parentURL?.includes("/api/assets/tax-pools/")
@@ -52,7 +51,7 @@ const request = (body: unknown) =>
     body: JSON.stringify(body),
   });
 
-test("tax-pool POST maps a malformed subsidiaryId to 404 before SQL", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("tax-pool POST maps a malformed subsidiaryId to 404 before SQL", async () => {
   const org = await createScratchOrg();
   try {
     state.gate.user = { orgId: org.orgId, id: (await seedFlowActors(org.orgId)).adminId };

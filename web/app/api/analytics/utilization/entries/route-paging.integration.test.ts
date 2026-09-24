@@ -11,7 +11,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __utilEntriesPaging: state, React });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__utilEntriesPaging.user}' };
   const app = resolveAppModule(specifier, context, next, root)
   if (app) return app
@@ -38,7 +37,7 @@ async function get(query: string): Promise<{ status: number; body: PagingBody }>
   return { status: response.status, body: await response.json() as PagingBody };
 }
 
-test('utilization entries drill pages with full-population aggregates', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('utilization entries drill pages with full-population aggregates', async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Time reviewer', 'time_reviewer'));

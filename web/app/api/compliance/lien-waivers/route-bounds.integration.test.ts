@@ -18,7 +18,6 @@ Object.assign(globalThis, { __lienWaiverBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -43,7 +42,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { GET, POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -77,7 +75,7 @@ async function waiverCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("lien-waiver creation refuses a non-calendar through date without writing", { skip: !DB }, async () => {
+test("lien-waiver creation refuses a non-calendar through date without writing", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const base = { partyId, projectId, waiverType: "conditional_progress", amount: "1000.00", currency: "CAD" };
@@ -91,7 +89,7 @@ test("lien-waiver creation refuses a non-calendar through date without writing",
   }
 });
 
-test("lien-waiver creation refuses an amount wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("lien-waiver creation refuses an amount wider than numeric(19,4) without writing", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const response = await post({
@@ -106,7 +104,7 @@ test("lien-waiver creation refuses an amount wider than numeric(19,4) without wr
   }
 });
 
-test("lien-waiver creation refuses a decimal-comma amount with the dotted rewrite", { skip: !DB }, async () => {
+test("lien-waiver creation refuses a decimal-comma amount with the dotted rewrite", async () => {
   // B3-SAL-01: '12,34' is twelve-thirty-four written correctly in seven
   // installed locales — stripping the comma would release 1234, a 100x error.
   const { org, partyId, projectId } = await fixture();
@@ -130,7 +128,7 @@ test("lien-waiver creation refuses a decimal-comma amount with the dotted rewrit
   }
 });
 
-test("lien-waiver creation refuses an unknown currency without writing", { skip: !DB }, async () => {
+test("lien-waiver creation refuses an unknown currency without writing", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const base = { partyId, projectId, waiverType: "conditional_progress", throughDate: "2026-03-31", amount: "1000.00" };
@@ -144,7 +142,7 @@ test("lien-waiver creation refuses an unknown currency without writing", { skip:
   }
 });
 
-test("lien-waiver creation refuses a lowercase code without writing", { skip: !DB }, async () => {
+test("lien-waiver creation refuses a lowercase code without writing", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const response = await post({
@@ -160,7 +158,7 @@ test("lien-waiver creation refuses a lowercase code without writing", { skip: !D
   }
 });
 
-test("lien-waiver creation still files an ordinary waiver", { skip: !DB }, async () => {
+test("lien-waiver creation still files an ordinary waiver", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const response = await post({
@@ -174,7 +172,7 @@ test("lien-waiver creation still files an ordinary waiver", { skip: !DB }, async
   }
 });
 
-test("the waiver list shows a restricted caller only waivers for visible projects", { skip: !DB }, async () => {
+test("the waiver list shows a restricted caller only waivers for visible projects", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const hiddenSub = randomUUID();
@@ -206,7 +204,7 @@ test("the waiver list shows a restricted caller only waivers for visible project
   }
 });
 
-test("a lifecycle write on an out-of-scope waiver is a 404 that changes nothing", { skip: !DB }, async () => {
+test("a lifecycle write on an out-of-scope waiver is a 404 that changes nothing", async () => {
   const { org, partyId } = await fixture();
   try {
     const hiddenSub = randomUUID();

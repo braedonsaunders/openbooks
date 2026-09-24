@@ -33,9 +33,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead/route")) {
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(mockAuthz)}` };
     }
@@ -58,7 +55,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function storedApplication(orgId: string): Promise<unknown> {
   const r = await withBypassContext(() => db.execute(sql`
@@ -123,7 +119,7 @@ function post(body: unknown): Promise<Response> {
   }));
 }
 
-test("restricted actors cannot change org-wide overhead application settings", { skip: !DB }, async () => {
+test("restricted actors cannot change org-wide overhead application settings", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Setup Admin", "admin"));
@@ -139,7 +135,7 @@ test("restricted actors cannot change org-wide overhead application settings", {
   }
 });
 
-test("restricted actors cannot change org-wide overhead lifecycle settings", { skip: !DB }, async () => {
+test("restricted actors cannot change org-wide overhead lifecycle settings", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Lifecycle Admin", "admin"));
@@ -155,7 +151,7 @@ test("restricted actors cannot change org-wide overhead lifecycle settings", { s
   }
 });
 
-test("restricted actors cannot publish org-wide overhead rates", { skip: !DB }, async () => {
+test("restricted actors cannot publish org-wide overhead rates", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Publisher", "admin"));
@@ -174,7 +170,7 @@ test("restricted actors cannot publish org-wide overhead rates", { skip: !DB }, 
   }
 });
 
-test("restricted actors cannot publish org-wide project type overhead profiles", { skip: !DB }, async () => {
+test("restricted actors cannot publish org-wide project type overhead profiles", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Profile Admin", "admin"));
@@ -197,7 +193,7 @@ test("restricted actors cannot publish org-wide project type overhead profiles",
   }
 });
 
-test("restricted actors cannot backfill org-wide overhead journals", { skip: !DB }, async () => {
+test("restricted actors cannot backfill org-wide overhead journals", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Backfill Admin", "admin"));
@@ -248,7 +244,7 @@ test("restricted actors cannot backfill org-wide overhead journals", { skip: !DB
   }
 });
 
-test("set-application refuses a nonexistent posting account", { skip: !DB }, async () => {
+test("set-application refuses a nonexistent posting account", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
@@ -262,7 +258,7 @@ test("set-application refuses a nonexistent posting account", { skip: !DB }, asy
   }
 });
 
-test("set-application refuses an inactive account", { skip: !DB }, async () => {
+test("set-application refuses an inactive account", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
@@ -278,7 +274,7 @@ test("set-application refuses an inactive account", { skip: !DB }, async () => {
   }
 });
 
-test("set-application stores a real account with audit evidence", { skip: !DB }, async () => {
+test("set-application stores a real account with audit evidence", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
@@ -304,7 +300,7 @@ test("set-application stores a real account with audit evidence", { skip: !DB },
   }
 });
 
-test("set-lifecycle refuses a supplied mode outside the enum without writing", { skip: !DB }, async () => {
+test("set-lifecycle refuses a supplied mode outside the enum without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
@@ -319,7 +315,7 @@ test("set-lifecycle refuses a supplied mode outside the enum without writing", {
   }
 });
 
-test("set-lifecycle refuses a supplied cadence outside the enum without writing", { skip: !DB }, async () => {
+test("set-lifecycle refuses a supplied cadence outside the enum without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
@@ -334,7 +330,7 @@ test("set-lifecycle refuses a supplied cadence outside the enum without writing"
   }
 });
 
-test("set-application refuses a supplied mode outside the enum without writing", { skip: !DB }, async () => {
+test("set-application refuses a supplied mode outside the enum without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
@@ -349,7 +345,7 @@ test("set-application refuses a supplied mode outside the enum without writing",
   }
 });
 
-test("omitted mode/cadence keep the documented defaults", { skip: !DB }, async () => {
+test("omitted mode/cadence keep the documented defaults", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
@@ -366,7 +362,7 @@ test("omitted mode/cadence keep the documented defaults", { skip: !DB }, async (
   }
 });
 
-test("set-lifecycle audit failure rolls the policy back", { skip: !DB }, async () => {
+test("set-lifecycle audit failure rolls the policy back", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const suffix = randomUUID().replaceAll("-", "");
   const functionName = `overhead_audit_failure_${suffix}`;

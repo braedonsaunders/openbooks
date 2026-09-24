@@ -28,9 +28,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -60,7 +57,6 @@ const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await impo
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -103,7 +99,6 @@ function deleteRequest(fixture: Fixture): Request {
 
 test(
   "asset DELETE refuses an in-service asset with only planned lines",
-  { skip: !DB },
   async () => {
     const fixture = await seedAsset("in_service", "INSERVICE-NODELETE");
     try {
@@ -147,7 +142,6 @@ test(
 
 test(
   "asset DELETE still removes a draft asset",
-  { skip: !DB },
   async () => {
     const fixture = await seedAsset("draft", "DRAFT-CANDELETE");
     try {

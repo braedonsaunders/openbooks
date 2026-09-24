@@ -31,13 +31,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "../../../../lib/feature-gates" &&
       context.parentURL?.includes("/api/assets/draft/")
@@ -62,7 +55,6 @@ const { db, withBypassContext, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -128,7 +120,6 @@ function post(fixture: Fixture): Promise<Response> {
 
 test(
   "concurrent asset drafts receive distinct numbers and one default category",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {

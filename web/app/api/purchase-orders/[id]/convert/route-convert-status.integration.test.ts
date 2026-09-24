@@ -8,10 +8,8 @@ import test from 'node:test'
 // reject only draft/voided, so a pending_approval order converted into a
 // vendor bill before it was ever issued.
 const root = pathToFileURL(process.cwd() + '/').href
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
@@ -20,9 +18,8 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { convertOrder, ConversionError } = await import('../../../../../lib/order-cycle')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
-test('convert refuses a pending_approval purchase order', { skip: !DB }, async () => {
+test('convert refuses a pending_approval purchase order', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = randomUUID()
@@ -47,7 +44,7 @@ test('convert refuses a pending_approval purchase order', { skip: !DB }, async (
   }
 })
 
-test('convert refuses equipment lines with a named remedy when Equipment is off', { skip: !DB }, async () => {
+test('convert refuses equipment lines with a named remedy when Equipment is off', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = randomUUID()

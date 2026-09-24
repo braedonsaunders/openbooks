@@ -20,7 +20,6 @@ Object.assign(globalThis, { __deprInputBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
@@ -38,7 +37,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { buildSchedule } = await import("@openbooks/engine/src/assets/depreciation.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fx {
   orgId: string;
@@ -115,7 +113,7 @@ async function inputCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("depreciation evidence refuses a non-calendar effective date without writing", { skip: !DB }, async () => {
+test("depreciation evidence refuses a non-calendar effective date without writing", async () => {
   const fx = await fixture();
   try {
     const response = await post(fx, "2026-09-31", "100.00");
@@ -128,7 +126,7 @@ test("depreciation evidence refuses a non-calendar effective date without writin
   }
 });
 
-test("depreciation evidence refuses a value wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("depreciation evidence refuses a value wider than numeric(19,4) without writing", async () => {
   const fx = await fixture();
   try {
     const response = await post(fx, fx.date, "99999999999999999999.99");
@@ -141,7 +139,7 @@ test("depreciation evidence refuses a value wider than numeric(19,4) without wri
   }
 });
 
-test("depreciation evidence still records an ordinary amount", { skip: !DB }, async () => {
+test("depreciation evidence still records an ordinary amount", async () => {
   const fx = await fixture();
   try {
     const response = await post(fx, fx.date, "100.00");

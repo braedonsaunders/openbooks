@@ -56,11 +56,7 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as the navigation route test).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Both routes of this surface share the authz seam; guardPermission and
     // getAuthz/can are stubbed together.
     if (specifier === "@/lib/authz") {
@@ -99,7 +95,6 @@ const {
 } = await import("@openbooks/engine/src/compliance/information-returns.ts");
 const { createScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface ComputedFiling {
   filingId: string;
@@ -325,7 +320,7 @@ async function waitForRouteBlockedOnFilingRow(): Promise<void> {
   );
 }
 
-test("PATCH through the real route persists signed deltas and audits them once", { skip: !DB }, async () => {
+test("PATCH through the real route persists signed deltas and audits them once", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
@@ -364,7 +359,7 @@ test("PATCH through the real route persists signed deltas and audits them once",
   }
 });
 
-test("the finalize-versus-PATCH race cannot mutate frozen evidence through the real route", { skip: !DB }, async () => {
+test("the finalize-versus-PATCH race cannot mutate frozen evidence through the real route", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   let holder: Client | null = null;
   try {
@@ -430,7 +425,7 @@ test("the finalize-versus-PATCH race cannot mutate frozen evidence through the r
   }
 });
 
-test("when the edit wins the race its delta is part of the frozen evidence", { skip: !DB }, async () => {
+test("when the edit wins the race its delta is part of the frozen evidence", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
@@ -465,7 +460,7 @@ test("when the edit wins the race its delta is part of the frozen evidence", { s
   }
 });
 
-test("the action route refuses to void a FILED return and writes exactly one void audit", { skip: !DB }, async () => {
+test("the action route refuses to void a FILED return and writes exactly one void audit", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();

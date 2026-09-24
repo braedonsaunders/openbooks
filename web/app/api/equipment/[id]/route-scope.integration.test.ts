@@ -15,7 +15,6 @@ Object.assign(globalThis, { __equipmentScopeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__equipmentScopeState;
@@ -31,9 +30,8 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET } = await import('./route.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
-test('equipment GET answers an out-of-scope unit exactly like a missing one', { skip: !DB }, async () => {
+test('equipment GET answers an out-of-scope unit exactly like a missing one', async () => {
   const org = await createScratchOrg()
   try {
     state.orgId = org.orgId
@@ -61,7 +59,7 @@ test('equipment GET answers an out-of-scope unit exactly like a missing one', { 
   }
 })
 
-test('equipment GET waits on a unit rehome in flight instead of racing it', { skip: !DB }, async () => {
+test('equipment GET waits on a unit rehome in flight instead of racing it', async () => {
   const org = await createScratchOrg()
   const writer = await pool.connect()
   let pending: Promise<Response> | undefined

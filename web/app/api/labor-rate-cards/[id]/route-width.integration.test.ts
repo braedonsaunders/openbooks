@@ -17,7 +17,6 @@ Object.assign(globalThis, { __rateCardWidthState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -35,7 +34,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PUT } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -90,7 +88,7 @@ async function billRate(lineId: string): Promise<string> {
   return rows[0]!.bill_rate;
 }
 
-test("rate-card save refuses a bill rate wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("rate-card save refuses a bill rate wider than numeric(19,4) without writing", async () => {
   const { org, versionId, lineId } = await fixture();
   try {
     const response = await put(versionId, body(lineId, org.items.fifo, "99999999999999999999.99"));
@@ -102,7 +100,7 @@ test("rate-card save refuses a bill rate wider than numeric(19,4) without writin
   }
 });
 
-test("rate-card save still files an ordinary rate", { skip: !DB }, async () => {
+test("rate-card save still files an ordinary rate", async () => {
   const { org, versionId, lineId } = await fixture();
   try {
     const response = await put(versionId, body(lineId, org.items.fifo, "125.50"));

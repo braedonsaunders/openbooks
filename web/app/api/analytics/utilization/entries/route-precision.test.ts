@@ -19,7 +19,6 @@ const mockSources = new Map<string, string>([
        return { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null }
      }`,
   ],
-  ["mock:server-only", `export {}`],
   [
     "mock:db",
     `const state = globalThis[Symbol.for("openbooks.utilization-entries-precision-test")]
@@ -43,7 +42,6 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", "mock:authz"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["server-only", "mock:server-only"],
 ]);
 
 const hooks = registerHooks({

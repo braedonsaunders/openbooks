@@ -24,7 +24,6 @@ Object.assign(globalThis, { __budgetScopeUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__budgetScopeUser.user}')
     }
@@ -41,7 +40,6 @@ const { POST: act } = await import('./actions/route')
 const { GET: exportScenario } = await import('./export/route')
 const { PATCH: saveLines } = await import('./lines/route')
 const { POST: importScenario } = await import('./import/route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function sessionUser(id: string, orgId: string): SessionUser {
   return {
@@ -111,7 +109,7 @@ async function jsonResponse(response: Response) {
   return { status: response.status, json: await response.json() as Record<string, unknown> }
 }
 
-test('reads reveal only scenarios wholly within scope', { skip: !DB }, async () => {
+test('reads reveal only scenarios wholly within scope', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableBudgets(org.orgId)
@@ -186,7 +184,7 @@ test('reads reveal only scenarios wholly within scope', { skip: !DB }, async () 
   }
 })
 
-test('writes refuse a cross-scope scenario by name', { skip: !DB }, async () => {
+test('writes refuse a cross-scope scenario by name', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableBudgets(org.orgId)
@@ -228,7 +226,7 @@ test('writes refuse a cross-scope scenario by name', { skip: !DB }, async () => 
   }
 })
 
-test('an A-scoped approver is refused on A+B but approves A-only', { skip: !DB }, async () => {
+test('an A-scoped approver is refused on A+B but approves A-only', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableBudgets(org.orgId)

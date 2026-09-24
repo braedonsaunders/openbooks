@@ -21,7 +21,6 @@ const module_ = (source: string) => ({
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return module_('export {}')
     if (specifier.endsWith('/lib/authz')) {
       const real = nextResolve(specifier, context).url
       return module_(`

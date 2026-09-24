@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/platform/db.ts";
 
 /**
  * Timesheet rejection audit: bouncing a submitted week back to the employee
@@ -16,7 +15,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __rejectRouteState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       specifier.endsWith("/lib/feature-gates") &&
       context.parentURL?.includes("/api/timesheets/reject/")
@@ -122,7 +120,6 @@ async function cleanup(fixture: Awaited<ReturnType<typeof seedSubmittedWeek>>) {
 
 test(
   "rejecting a submitted week writes actor-attributed evidence including the reason",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await seedSubmittedWeek();
     state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
@@ -230,7 +227,6 @@ test(
 
 test(
   "a refused rejection leaves no audit evidence behind",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await seedSubmittedWeek();
     state.user = { orgId: fixture.org.orgId, id: fixture.actorId };

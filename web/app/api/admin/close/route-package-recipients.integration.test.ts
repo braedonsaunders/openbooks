@@ -14,7 +14,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __closePackageRecipientsUser: state });
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/close/")) {
       return {
         shortCircuit: true,
@@ -51,7 +50,7 @@ async function setup() {
   return { org };
 }
 
-test("save-package refuses a malformed recipient without writing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("save-package refuses a malformed recipient without writing", async () => {
   const { org } = await setup();
   try {
     const response = await withOrgContext(org.orgId, () => POST(request({
@@ -73,7 +72,7 @@ test("save-package refuses a malformed recipient without writing", { skip: !proc
   }
 });
 
-test("save-package still stores a fully valid recipient list", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("save-package still stores a fully valid recipient list", async () => {
   const { org } = await setup();
   try {
     const response = await withOrgContext(org.orgId, () => POST(request({

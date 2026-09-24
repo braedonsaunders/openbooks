@@ -24,9 +24,6 @@ Object.assign(globalThis, { __crmSetupQuotaScope: session })
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    }
     if (specifier === 'next-intl/server') {
       const crmUrl = pathToFileURL(join(messagesRoot, 'en', 'crm.json')).href
       return {
@@ -68,7 +65,6 @@ const { randomUUID } = await import('node:crypto')
 const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts')
 const { GET, POST } = await import('./route.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function asUser(user: SessionUser | null): void {
   session.user = user
@@ -135,7 +131,7 @@ function postQuota(body: Record<string, unknown>): Promise<Response> {
   )
 }
 
-test('a subsidiary-restricted caller reads no quotas but keeps the rest of setup', { skip: !DB }, async () => {
+test('a subsidiary-restricted caller reads no quotas but keeps the rest of setup', async () => {
   const { org, scopedUser, close } = await fixture()
   try {
     asUser(scopedUser)
@@ -150,7 +146,7 @@ test('a subsidiary-restricted caller reads no quotas but keeps the rest of setup
   }
 })
 
-test('an unrestricted caller still reads quotas with no notice', { skip: !DB }, async () => {
+test('an unrestricted caller still reads quotas with no notice', async () => {
   const { org, ownerUser, close } = await fixture()
   try {
     asUser(ownerUser)
@@ -164,7 +160,7 @@ test('an unrestricted caller still reads quotas with no notice', { skip: !DB }, 
   }
 })
 
-test('a subsidiary-restricted caller cannot save a quota for any owner', { skip: !DB }, async () => {
+test('a subsidiary-restricted caller cannot save a quota for any owner', async () => {
   const { org, ownerUser, scopedUser, quotaCount, close } = await fixture()
   try {
     asUser(scopedUser)
@@ -186,7 +182,7 @@ test('a subsidiary-restricted caller cannot save a quota for any owner', { skip:
   }
 })
 
-test('an unrestricted caller can still save a quota', { skip: !DB }, async () => {
+test('an unrestricted caller can still save a quota', async () => {
   const { org, ownerUser, quotaCount, close } = await fixture()
   try {
     asUser(ownerUser)

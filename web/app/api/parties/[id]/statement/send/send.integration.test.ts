@@ -8,7 +8,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __statementSendSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__statementSendSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -39,7 +38,7 @@ async function setup() {
  * when no transport is configured (never a 500, never a silent send), and
  * reject an explicitly invalid address before any render work.
  */
-test('statement send prefills, validates, and fails closed without transport', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('statement send prefills, validates, and fails closed without transport', async () => {
   const org = await setup()
   try {
     const params = Promise.resolve({ id: org.customerId })

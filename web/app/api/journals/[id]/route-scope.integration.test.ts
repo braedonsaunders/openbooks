@@ -20,7 +20,6 @@ Object.assign(globalThis, { __journalScopeUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__journalScopeUser.user}')
     }
@@ -80,7 +79,7 @@ async function revisionToken(documentId: string): Promise<string> {
 
 const ctxFor = (id: string) => ({ params: Promise.resolve({ id }) })
 
-test('journal drawer loads wait on a rehome before reading detail', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('journal drawer loads wait on a rehome before reading detail', async () => {
   const { org, visible } = await fixture()
   const writer = await pool.connect()
   let pending: Promise<Awaited<ReturnType<typeof loadJournalDoc>>> | undefined
@@ -109,7 +108,7 @@ test('journal drawer loads wait on a rehome before reading detail', { skip: !pro
   }
 })
 
-test('journal GET and DELETE enforce the caller subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('journal GET and DELETE enforce the caller subsidiary scope', async () => {
   const { org, visible, concealed } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {

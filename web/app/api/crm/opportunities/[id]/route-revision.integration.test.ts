@@ -14,7 +14,6 @@ Object.assign(globalThis, { __opportunityRevisionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -36,7 +35,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET, PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   return withBypassContext(async () => {
@@ -95,7 +93,7 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
   }
 }
 
-test('a stale opportunity revision refuses instead of replacing a newer save', { skip: !DB }, async () => {
+test('a stale opportunity revision refuses instead of replacing a newer save', async () => {
   const { org, statusId, itemA, itemB, oppId } = await fixture()
   try {
     // Both tabs read the same revision.

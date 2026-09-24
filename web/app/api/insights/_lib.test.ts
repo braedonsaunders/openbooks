@@ -19,7 +19,6 @@ const mockAuthz = `
 const root = pathToFileURL(process.cwd() + '/').href
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '@/lib/authz') return { url: 'mock:insights-test-authz', shortCircuit: true }
     if (specifier.startsWith('@/') && context.parentURL) {
       return nextResolve(new URL(root + 'web/' + specifier.slice(2) + '.ts').href, context)

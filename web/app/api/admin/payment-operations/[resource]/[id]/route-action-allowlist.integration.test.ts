@@ -14,7 +14,6 @@ Object.assign(globalThis, { __payOpsPatchAllowlistState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__payOpsPatchAllowlistState;
@@ -29,7 +28,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface Fixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>
@@ -85,7 +83,7 @@ async function scheduleAction(id: string, orgId: string): Promise<string> {
     select action from payment_schedules where id = ${id} and org_id = ${orgId}`)).rows[0]!.action
 }
 
-test('mandate PATCH rejects an unknown status instead of storing it', { skip: !DB }, async () => {
+test('mandate PATCH rejects an unknown status instead of storing it', async () => {
   const { org, mandateId } = await fixture()
   try {
     const response = await patch('mandates', mandateId, { status: 'actvie' })
@@ -96,7 +94,7 @@ test('mandate PATCH rejects an unknown status instead of storing it', { skip: !D
   }
 })
 
-test('mandate PATCH still accepts a known status', { skip: !DB }, async () => {
+test('mandate PATCH still accepts a known status', async () => {
   const { org, mandateId } = await fixture()
   try {
     const response = await patch('mandates', mandateId, { status: 'suspended' })
@@ -107,7 +105,7 @@ test('mandate PATCH still accepts a known status', { skip: !DB }, async () => {
   }
 })
 
-test('schedule PATCH rejects an unknown action instead of storing it', { skip: !DB }, async () => {
+test('schedule PATCH rejects an unknown action instead of storing it', async () => {
   const { org, scheduleId } = await fixture()
   try {
     const response = await patch('schedules', scheduleId, { action: 'submit_for_approva' })
@@ -118,7 +116,7 @@ test('schedule PATCH rejects an unknown action instead of storing it', { skip: !
   }
 })
 
-test('schedule PATCH still accepts a known action', { skip: !DB }, async () => {
+test('schedule PATCH still accepts a known action', async () => {
   const { org, scheduleId } = await fixture()
   try {
     const response = await patch('schedules', scheduleId, { action: 'submit_for_approval' })

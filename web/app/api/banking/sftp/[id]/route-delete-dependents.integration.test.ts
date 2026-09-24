@@ -58,13 +58,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "./authz" &&
       (context.parentURL?.includes("/lib/feature-gates") ||
@@ -102,7 +95,6 @@ const { db, withBypass, withOrgContext } =
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -215,7 +207,6 @@ async function serverExists(serverId: string): Promise<boolean> {
 
 test(
   "sftp server delete refuses a server that delivers a payment bank profile",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -243,7 +234,6 @@ test(
 
 test(
   "sftp server delete refuses a server with import schedules instead of orphaning them",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -277,7 +267,6 @@ test(
 
 test(
   "sftp server delete removes an unreferenced server with audit evidence",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -303,7 +292,6 @@ test(
 
 test(
   "sftp server delete of another organization's id reads as not found",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const other = await seed();

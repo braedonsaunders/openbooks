@@ -16,7 +16,6 @@ Object.assign(globalThis, { __waiverRequirementState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -35,7 +34,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const VALID = {
   reason: "Carrier renewal delayed by underwriter backlog",
@@ -99,7 +97,7 @@ async function waiverCount(orgId: string): Promise<number> {
 }
 
 for (const [label, key] of [["inactive", "inactiveId"], ["wrong-class", "wrongClassId"], ["other-org", "foreignId"]] as const) {
-  test(`waiver creation refuses a ${label} requirement without writing`, { skip: !DB }, async () => {
+  test(`waiver creation refuses a ${label} requirement without writing`, async () => {
     const { org, otherOrg, partyId, ...ids } = await fixture();
     try {
       const response = await post({ partyId, requirementId: ids[key], ...VALID });
@@ -114,7 +112,7 @@ for (const [label, key] of [["inactive", "inactiveId"], ["wrong-class", "wrongCl
   });
 }
 
-test("waiver creation still files against an applicable requirement", { skip: !DB }, async () => {
+test("waiver creation still files against an applicable requirement", async () => {
   const { org, otherOrg, partyId, applicableId } = await fixture();
   try {
     const response = await post({ partyId, requirementId: applicableId, ...VALID });

@@ -15,7 +15,6 @@ import {
 } from "@openbooks/engine/src/testing/fixtures.ts";
 import { submitForApproval } from "@openbooks/engine/src/flows/submit.ts";
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
  * Wave-3 privilege boundary battery (least-privileged insider vs mutating
@@ -38,7 +37,6 @@ const authUrl = new URL("../../lib/auth.ts", import.meta.url).href;
 const authzUrl = new URL("../../lib/authz.ts", import.meta.url).href;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (
       (specifier === "./auth" && context.parentURL === authzUrl) ||
       specifier === authUrl
@@ -105,7 +103,7 @@ async function seedOnePerm(orgId: string): Promise<SessionStub> {
   };
 }
 
-test("least-privileged viewer is refused by every mutating route", { skip: !DB }, async () => {
+test("least-privileged viewer is refused by every mutating route", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId));
@@ -156,7 +154,7 @@ test("least-privileged viewer is refused by every mutating route", { skip: !DB }
   }
 });
 
-test("a single-permission custom role can read but never write outside its grant", { skip: !DB }, async () => {
+test("a single-permission custom role can read but never write outside its grant", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId));

@@ -19,7 +19,6 @@ const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __estimateC4Session: session });
 const root = pathToFileURL(process.cwd() + "/").href;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key, values) => key + (values ? ':' + Object.values(values).join(',') : '')};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__estimateC4Session.user}' };
   const app = resolveAppModule(specifier, context, next, root);
@@ -33,7 +32,6 @@ const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts');
 const { POST } = await import('./route');
 const { NextRequest } = await import('next/server');
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const post = () => new NextRequest('http://audit.local', {
   method: 'POST',
   body: JSON.stringify({}),
@@ -73,7 +71,7 @@ async function quoteCount(orgId: string) {
   return (await db.execute(sql`select id from documents where org_id=${orgId} and kind='quote'`)).rows.length;
 }
 
-test('itemized lines convert with matching counts, amounts and total', { skip: !DB }, async () => {
+test('itemized lines convert with matching counts, amounts and total', async () => {
   const { org, opp } = await fixture(false);
   try {
     const response = await POST(post(), paramsOf(opp));
@@ -92,7 +90,7 @@ test('itemized lines convert with matching counts, amounts and total', { skip: !
   }
 });
 
-test('an itemless line refuses by name with nothing written', { skip: !DB }, async () => {
+test('an itemless line refuses by name with nothing written', async () => {
   const { org, opp } = await fixture(true);
   try {
     const response = await POST(post(), paramsOf(opp));

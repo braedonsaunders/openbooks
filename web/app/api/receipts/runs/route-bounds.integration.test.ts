@@ -17,7 +17,6 @@ Object.assign(globalThis, { __collectionRunBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -41,7 +40,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fx {
   orgId: string;
@@ -133,7 +131,7 @@ async function runCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("collection run refuses a non-calendar scheduled date without writing", { skip: !DB }, async () => {
+test("collection run refuses a non-calendar scheduled date without writing", async () => {
   const fx = await fixture();
   try {
     const response = await post(fx, "2026-09-31");
@@ -146,7 +144,7 @@ test("collection run refuses a non-calendar scheduled date without writing", { s
   }
 });
 
-test("collection run still starts on an ordinary scheduled date", { skip: !DB }, async () => {
+test("collection run still starts on an ordinary scheduled date", async () => {
   const fx = await fixture();
   try {
     const response = await post(fx, fx.date);

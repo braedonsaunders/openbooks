@@ -14,7 +14,6 @@ Object.assign(globalThis, { __crmStageTransitionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier.endsWith('/lib/authz')) return virtual(`
       export async function guardPermission() {
@@ -38,7 +37,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@open
 const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts')
 const { PATCH } = await import('./[id]/route.ts')
 const { POST: postDraft } = await import('./draft/route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 type Fixture = { orgId: string; partyId: string; leadStatusId: string; prospectDefaultId: string; prospectOtherId: string }
 
@@ -113,7 +111,7 @@ async function revisionFor(partyId: string): Promise<string> {
       from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
 }
 
-test('PATCH keeps a stage-only drawer save: stale lead status falls back to the prospect default', { skip: !DB }, async () => {
+test('PATCH keeps a stage-only drawer save: stale lead status falls back to the prospect default', async () => {
   const f = await fixture()
   try {
     // Byte-shape of the AccountDrawer save when only the stage dropdown moved.
@@ -133,7 +131,7 @@ test('PATCH keeps a stage-only drawer save: stale lead status falls back to the 
   }
 })
 
-test('PATCH honors an explicit new-stage status on promotion', { skip: !DB }, async () => {
+test('PATCH honors an explicit new-stage status on promotion', async () => {
   const f = await fixture()
   try {
     const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: f.prospectOtherId, expectedUpdatedAt: await revisionFor(f.partyId) })
@@ -146,7 +144,7 @@ test('PATCH honors an explicit new-stage status on promotion', { skip: !DB }, as
   }
 })
 
-test('PATCH with a cleared status on promotion keeps the promoted default instead of nulling it', { skip: !DB }, async () => {
+test('PATCH with a cleared status on promotion keeps the promoted default instead of nulling it', async () => {
   const f = await fixture()
   try {
     const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: null, expectedUpdatedAt: await revisionFor(f.partyId) })
@@ -157,7 +155,7 @@ test('PATCH with a cleared status on promotion keeps the promoted default instea
   }
 })
 
-test('PATCH with an unknown status id still fails closed on a stage change', { skip: !DB }, async () => {
+test('PATCH with an unknown status id still fails closed on a stage change', async () => {
   const f = await fixture()
   try {
     const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: randomUUID(), expectedUpdatedAt: await revisionFor(f.partyId) })
@@ -168,7 +166,7 @@ test('PATCH with an unknown status id still fails closed on a stage change', { s
   }
 })
 
-test('PATCH without a stage change still rejects a status from another stage', { skip: !DB }, async () => {
+test('PATCH without a stage change still rejects a status from another stage', async () => {
   const f = await fixture()
   try {
     const result = await patch(f.partyId, { statusId: f.prospectDefaultId, expectedUpdatedAt: await revisionFor(f.partyId) })
@@ -179,7 +177,7 @@ test('PATCH without a stage change still rejects a status from another stage', {
   }
 })
 
-test('draft with a prospect stage creates a prospect with the prospect default status', { skip: !DB }, async () => {
+test('draft with a prospect stage creates a prospect with the prospect default status', async () => {
   const f = await fixture()
   try {
     const result = await draft({ lifecycleStage: 'prospect' })
@@ -192,7 +190,7 @@ test('draft with a prospect stage creates a prospect with the prospect default s
   }
 })
 
-test('draft without a stage still creates a lead', { skip: !DB }, async () => {
+test('draft without a stage still creates a lead', async () => {
   const f = await fixture()
   try {
     const result = await draft({})
@@ -203,7 +201,7 @@ test('draft without a stage still creates a lead', { skip: !DB }, async () => {
   }
 })
 
-test('draft refuses an uncreatable stage instead of silently creating a lead', { skip: !DB }, async () => {
+test('draft refuses an uncreatable stage instead of silently creating a lead', async () => {
   const f = await fixture()
   try {
     for (const lifecycleStage of ['customer', ' closed ', 42, null]) {
@@ -228,7 +226,7 @@ async function inCustomerPicker(orgId: string, partyId: string): Promise<boolean
      where p.org_id = ${orgId} and p.id = ${partyId}`))).rows.length > 0
 }
 
-test('PATCH demotion back to prospect deactivates the customer role in the same transaction', { skip: !DB }, async () => {
+test('PATCH demotion back to prospect deactivates the customer role in the same transaction', async () => {
   const f = await fixture()
   try {
     const promoted = await patch(f.partyId, { lifecycleStage: 'customer', expectedUpdatedAt: await revisionFor(f.partyId) })
@@ -250,7 +248,7 @@ test('PATCH demotion back to prospect deactivates the customer role in the same 
   }
 })
 
-test('PATCH demotion of a customer with an in-flight order is refused by name', { skip: !DB }, async () => {
+test('PATCH demotion of a customer with an in-flight order is refused by name', async () => {
   const f = await fixture()
   try {
     const promoted = await patch(f.partyId, { lifecycleStage: 'customer', expectedUpdatedAt: await revisionFor(f.partyId) })

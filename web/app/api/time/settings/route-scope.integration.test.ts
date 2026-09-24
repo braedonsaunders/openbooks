@@ -23,7 +23,6 @@ const virtual = (source: string) => ({
 });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation")
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
@@ -53,7 +52,6 @@ const { createScratchOrg, dropScratchOrg } = await import(
 );
 const { GET, PUT } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const RULES = {
   roundingIncrement: 15,
@@ -91,7 +89,7 @@ async function storedRules(orgId: string): Promise<unknown> {
   return row?.settings ?? null;
 }
 
-test("a restricted caller cannot rewrite org-wide field-time rules", { skip: !DB }, async () => {
+test("a restricted caller cannot rewrite org-wide field-time rules", async () => {
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -105,7 +103,7 @@ test("a restricted caller cannot rewrite org-wide field-time rules", { skip: !DB
   }
 });
 
-test("an unrestricted caller writes them; restricted callers still read them", { skip: !DB }, async () => {
+test("an unrestricted caller writes them; restricted callers still read them", async () => {
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = null;

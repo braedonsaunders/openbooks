@@ -32,9 +32,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -62,7 +59,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts",
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const PATCH = makePATCH({ kind: "quote", readPerm: "ar.read", createPerm: "ar.create" });
 
 interface Fixture {
@@ -111,7 +107,6 @@ async function patchRequest(fixture: Fixture, body: Record<string, unknown>): Pr
 
 test(
   "order PATCH refuses an impossible documentDate with a domain error",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuote("Q-DATE-1");
     try {
@@ -132,7 +127,6 @@ test(
 
 test(
   "order PATCH refuses an impossible dueDate with a domain error",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuote("Q-DATE-2");
     try {
@@ -153,7 +147,6 @@ test(
 
 test(
   "order PATCH still saves a valid calendar date",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuote("Q-DATE-3");
     try {
@@ -203,7 +196,6 @@ async function orderState(fixture: Fixture) {
 
 test(
   "order PATCH refuses a non-array lines payload without touching the order",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuoteWithLine("Q-SHAPE-1");
     const before = await orderState(fixture);
@@ -223,7 +215,6 @@ test(
 
 test(
   "order PATCH refuses a null line entry without touching the order",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuoteWithLine("Q-SHAPE-2");
     const before = await orderState(fixture);
@@ -242,7 +233,6 @@ test(
 
 test(
   "order PATCH refuses a malformed party reference without touching the order",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuoteWithLine("Q-SHAPE-3");
     const before = await orderState(fixture);
@@ -261,7 +251,6 @@ test(
 
 test(
   "order PATCH refuses another organization's party with a domain error",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuoteWithLine("Q-ALIEN-1");
     const foreign = await withBypassContext(() => createScratchOrg());
@@ -285,7 +274,6 @@ test(
 
 test(
   "order PATCH refuses another organization's account on a line with a domain error",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuote("Q-ALIEN-2");
     const foreign = await withBypassContext(() => createScratchOrg());

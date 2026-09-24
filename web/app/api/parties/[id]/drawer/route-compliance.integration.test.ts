@@ -18,7 +18,6 @@ Object.assign(globalThis, { __drawerComplianceState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -37,7 +36,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { GET } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(featureOn: boolean): Promise<{ orgId: string; partyId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -65,7 +63,7 @@ const get = (partyId: string, role?: string) =>
     ),
   );
 
-test("the overlay drawer payload carries the Compliance tab inputs (F-t04-003)", { skip: !DB }, async () => {
+test("the overlay drawer payload carries the Compliance tab inputs (F-t04-003)", async () => {
   const { orgId, partyId } = await fixture(true);
   try {
     const res = await get(partyId, "vendor");
@@ -85,7 +83,7 @@ test("the overlay drawer payload carries the Compliance tab inputs (F-t04-003)",
   }
 });
 
-test("the overlay drawer payload omits compliance when the feature is off (F-t04-003)", { skip: !DB }, async () => {
+test("the overlay drawer payload omits compliance when the feature is off (F-t04-003)", async () => {
   const { orgId, partyId } = await fixture(false);
   try {
     const res = await get(partyId, "vendor");

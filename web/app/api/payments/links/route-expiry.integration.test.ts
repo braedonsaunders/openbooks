@@ -25,9 +25,6 @@ const mockAuthz = `
 const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Bare @openbooks/engine/* resolves cross-checkout (worktree node_modules
     // symlinks it to main), which would exercise main's payment-acceptance
     // instead of the worktree copy under test. Pin the engine graph to the
@@ -61,7 +58,6 @@ const { postDocument } = await import("@openbooks/engine/src/ledger/posting-docu
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   return withBypassContext(async () => {
@@ -124,7 +120,7 @@ async function linkCount(orgId: string): Promise<number> {
   return rows[0]!.count;
 }
 
-test("POST refuses an impossible expiresOn without writing a link", { skip: !DB }, async () => {
+test("POST refuses an impossible expiresOn without writing a link", async () => {
   const { org, invoiceId } = await fixture();
   try {
     const result = await post(org.orgId, { provider: "stripe", documentId: invoiceId, expiresOn: "2024-02-30" });
@@ -139,7 +135,7 @@ test("POST refuses an impossible expiresOn without writing a link", { skip: !DB 
   }
 });
 
-test("POST still creates a link with a real expiresOn", { skip: !DB }, async () => {
+test("POST still creates a link with a real expiresOn", async () => {
   const { org, invoiceId } = await fixture();
   try {
     const result = await post(org.orgId, { provider: "stripe", documentId: invoiceId, expiresOn: "2024-02-29" });

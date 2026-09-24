@@ -23,7 +23,6 @@ const virtual = (source: string) => ({
 })
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') {
       return virtual('export async function getTranslations(){ const t=(k)=>k; t.has=()=>false; return t }; export async function getLocale(){ return "en" }')
     }
@@ -54,7 +53,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { ensureFiling } = await import('@openbooks/engine/src/compliance/information-returns.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 const json = (body: unknown) =>
   new Request('http://openbooks.test/api/compliance/information-returns/x', {
@@ -71,7 +69,7 @@ async function restrict(orgId: string, ids: string[] | null) {
   )
 }
 
-test('information-return by-id routes fail closed on another entity\'s filing', { skip: !DB }, async () => {
+test('information-return by-id routes fail closed on another entity\'s filing', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'IR reviewer', 'ir_scope_reviewer'))

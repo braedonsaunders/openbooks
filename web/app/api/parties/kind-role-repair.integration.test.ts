@@ -15,7 +15,6 @@ const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __partyKindRoleRepairSession: session })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return {
         shortCircuit: true,

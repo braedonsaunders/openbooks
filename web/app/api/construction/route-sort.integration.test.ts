@@ -18,7 +18,6 @@ Object.assign(globalThis, { __sovSortState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -38,7 +37,6 @@ const { sql } = await import("drizzle-orm");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -72,7 +70,7 @@ async function lineCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("addSov refuses an out-of-int32 sort order without writing", { skip: !DB }, async () => {
+test("addSov refuses an out-of-int32 sort order without writing", async () => {
   const { org, projectId } = await fixture();
   try {
     const response = await post({
@@ -88,7 +86,7 @@ test("addSov refuses an out-of-int32 sort order without writing", { skip: !DB },
   }
 });
 
-test("addSov still files an ordinarily sorted line", { skip: !DB }, async () => {
+test("addSov still files an ordinarily sorted line", async () => {
   const { org, projectId } = await fixture();
   try {
     const response = await post({

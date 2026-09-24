@@ -15,7 +15,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningValidationUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/dunning/")) {
       return {
         shortCircuit: true,
@@ -66,7 +65,7 @@ async function stageCount(orgId: string, id: string): Promise<number> {
   return r.rows[0]!.n;
 }
 
-test("dunning writes reject an invalid grace period or an empty name", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("dunning writes reject an invalid grace period or an empty name", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
@@ -108,7 +107,7 @@ test("dunning writes reject an invalid grace period or an empty name", { skip: !
   }
 });
 
-test("dunning writes refuse blank stage templates with the fix named", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("dunning writes refuse blank stage templates with the fix named", async () => {
   // A-S20: a blank template renders an empty letter. The boundary refuses
   // it with a named remedy instead of the generic shape error, and stores
   // nothing; non-blank templates still store on both paths.
@@ -145,7 +144,7 @@ test("dunning writes refuse blank stage templates with the fix named", { skip: !
   }
 });
 
-test("dunning writes reject an invalid reply-to and store a valid one", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("dunning writes reject an invalid reply-to and store a valid one", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

@@ -124,7 +124,6 @@ async function insertSchedule(
 
 test(
   "migration DDL refuses before touching storage when the runtime marker is wrong",
-  { skip: !DB },
   async () => {
     const saved = process.env.OPENBOOKS_TEST_DB_MARKER;
     // Canonical shape but not this database's marker: the catalog check
@@ -150,7 +149,6 @@ test(
 
 test(
   "0242 applies cleanly, installs both composite FKs, and reapplies",
-  { skip: !DB },
   async () => {
     await applyMigration();
     const names = await constraintNames();
@@ -172,7 +170,6 @@ test(
 
 test(
   "raw SQL cannot save a schedule naming a foreign or missing server",
-  { skip: !DB },
   async () => {
     await applyMigration();
     const fixture = await seed();
@@ -217,7 +214,6 @@ test(
 
 test(
   "raw SQL cannot save a schedule naming a foreign or missing account",
-  { skip: !DB },
   async () => {
     await applyMigration();
     const fixture = await seed();
@@ -291,7 +287,6 @@ function assertPreflightRefusal(
 
 test(
   "0242 preflight refuses each legacy orphan path with row evidence and preserves rows",
-  { skip: !DB },
   async () => {
     await requireEphemeralTarget();
     const fixture = await seed();
@@ -425,7 +420,6 @@ test(
 
 test(
   "a referenced server cannot delete (no orphan); unreferenced deletes work",
-  { skip: !DB },
   async () => {
     await applyMigration();
     const fixture = await seed();

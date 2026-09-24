@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { env } from '@openbooks/engine/src/platform/db.ts'
 
 /**
  * Live-Postgres coverage for grant isolation and audit atomicity.  The route
@@ -9,7 +8,7 @@ import { env } from '@openbooks/engine/src/platform/db.ts'
  * checked, and the shared grant verbs must roll their writes back when the
  * required activity row cannot be appended.
  */
-test('grant changes are resource-scoped and audit-atomic', { skip: !env.OPENBOOKS_DB_URL }, () => {
+test('grant changes are resource-scoped and audit-atomic', () => {
   const source = `
     import assert from 'node:assert/strict';
     import { randomUUID } from 'node:crypto';
@@ -22,7 +21,6 @@ test('grant changes are resource-scoped and audit-atomic', { skip: !env.OPENBOOK
 
     const hooks = registerHooks({
       resolve(specifier, context, nextResolve) {
-        if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' };
         if (specifier === '../../../lib/authz') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export const can=()=>true; export const getAuthz=async()=>null; export const subsidiaryScopeAllows=()=>true;' };
         return nextResolve(specifier, context);
       },
@@ -114,7 +112,7 @@ test('grant changes are resource-scoped and audit-atomic', { skip: !env.OPENBOOK
  * every grant endpoint must 404 before any grant row or share audit event is
  * written.
  */
-test('grants and tiers refuse absent resources instead of using the baseline', { skip: !env.OPENBOOKS_DB_URL }, () => {
+test('grants and tiers refuse absent resources instead of using the baseline', () => {
   const source = `
     import assert from 'node:assert/strict';
     import { randomUUID } from 'node:crypto';
@@ -126,7 +124,6 @@ test('grants and tiers refuse absent resources instead of using the baseline', {
 
     const hooks = registerHooks({
       resolve(specifier, context, nextResolve) {
-        if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' };
         if (specifier === '../../../lib/authz') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export const can=()=>true; export const getAuthz=async()=>null; export const subsidiaryScopeAllows=()=>true;' };
         return nextResolve(specifier, context);
       },

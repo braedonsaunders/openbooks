@@ -9,7 +9,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __projectCustomPreservationSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__projectCustomPreservationSession.user}' }
   if (specifier === '../../../../lib/projects-gate') return { shortCircuit: true, url: 'data:text/javascript,export async function guardProjectsFeature(){return null}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -24,7 +23,7 @@ const { PATCH } = await import('./route')
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const patchRequest = (id: string, body: unknown) => new Request(`http://audit.local/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 
-test('project PATCH preserves omitted required custom fields on a partial edit', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('project PATCH preserves omitted required custom fields on a partial edit', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Project custom fields', 'reviewer')
@@ -51,7 +50,7 @@ test('project PATCH preserves omitted required custom fields on a partial edit',
   }
 })
 
-test('project PATCH refuses a foreign reference custom value instead of storing it', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('project PATCH refuses a foreign reference custom value instead of storing it', async () => {
   const org = await createScratchOrg()
   const foreign = await createScratchOrg()
   try {

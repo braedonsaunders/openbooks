@@ -20,7 +20,6 @@ Object.assign(globalThis, { __subscriptionRaceState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -49,7 +48,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, createScratchUser } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { runDueSubscriptions } = await import("@openbooks/engine/src/billing/subscription-billing.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(): Promise<{ orgId: string; subscriptionId: string; subsidiaryId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -115,7 +113,7 @@ async function invoiceCount(orgId: string): Promise<number> {
      where org_id = ${orgId} and kind = 'customer_invoice' and status <> 'voided'`))).rows[0]!.n;
 }
 
-test("an edit after the bill validates against fresh billed state, or refuses it", { skip: !DB }, async () => {
+test("an edit after the bill validates against fresh billed state, or refuses it", async () => {
   const { orgId, subscriptionId } = await fixture();
   try {
     const billed = await runDueSubscriptions();
@@ -147,7 +145,7 @@ test("an edit after the bill validates against fresh billed state, or refuses it
   }
 });
 
-test("add subscription rechecks customer scope after a concurrent rehome", { skip: !DB }, async () => {
+test("add subscription rechecks customer scope after a concurrent rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Add race tester", "admin"));
   state.orgId = org.orgId;
@@ -196,7 +194,7 @@ test("add subscription rechecks customer scope after a concurrent rehome", { ski
   }
 });
 
-test("an edit racing a concurrent bill validates under the row lock", { skip: !DB }, async () => {
+test("an edit racing a concurrent bill validates under the row lock", async () => {
   const { orgId, subscriptionId } = await fixture();
   const holder = await pool.connect();
   const writer = await pool.connect();
@@ -274,7 +272,7 @@ test("an edit racing a concurrent bill validates under the row lock", { skip: !D
   }
 });
 
-test("a bill-vs-edit race never double-bills: the edit loses against fresh state", { skip: !DB }, async () => {
+test("a bill-vs-edit race never double-bills: the edit loses against fresh state", async () => {
   const { orgId, subscriptionId } = await fixture();
   try {
     // The editor's Sep 15 move is valid against the pre-bill cursor only as
@@ -300,7 +298,7 @@ test("a bill-vs-edit race never double-bills: the edit loses against fresh state
   }
 });
 
-test("change and bill-now refuse after a customer rehome while waiting on its row lock", { skip: !DB }, async () => {
+test("change and bill-now refuse after a customer rehome while waiting on its row lock", async () => {
   for (const action of ["changeSubscription", "billNow"] as const) {
     const { orgId, subscriptionId, subsidiaryId } = await fixture();
     const holder = await pool.connect();

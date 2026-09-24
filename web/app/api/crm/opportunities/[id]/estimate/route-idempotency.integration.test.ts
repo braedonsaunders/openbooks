@@ -16,7 +16,6 @@ const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __estimateC5Session: session });
 const root = pathToFileURL(process.cwd() + "/").href;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key, values) => key + (values ? ':' + Object.values(values).join(',') : '')};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__estimateC5Session.user}' };
   const app = resolveAppModule(specifier, context, next, root);
@@ -30,7 +29,6 @@ const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts');
 const { POST } = await import('./route');
 const { NextRequest } = await import('next/server');
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const post = (id: string, key?: string) => new NextRequest('http://audit.local', {
   method: 'POST',
   body: JSON.stringify({}),
@@ -67,7 +65,7 @@ async function quoteIds(orgId: string) {
   return (await db.execute<{ id: string }>(sql`select id from documents where org_id=${orgId} and kind='quote' order by document_number`)).rows.map((r) => r.id);
 }
 
-test('two identical retries yield one quote, replaying the first', { skip: !DB }, async () => {
+test('two identical retries yield one quote, replaying the first', async () => {
   const { org, opp } = await fixture();
   try {
     const key = randomUUID();
@@ -84,7 +82,7 @@ test('two identical retries yield one quote, replaying the first', { skip: !DB }
   }
 });
 
-test('a reused key over an edited opportunity conflicts', { skip: !DB }, async () => {
+test('a reused key over an edited opportunity conflicts', async () => {
   const { org, opp } = await fixture();
   try {
     const key = randomUUID();
@@ -103,7 +101,7 @@ test('a reused key over an edited opportunity conflicts', { skip: !DB }, async (
   }
 });
 
-test('a fresh key deliberately starts a second quote', { skip: !DB }, async () => {
+test('a fresh key deliberately starts a second quote', async () => {
   const { org, opp } = await fixture();
   try {
     const first = await POST(post(opp, randomUUID()), paramsOf(opp));
@@ -117,7 +115,7 @@ test('a fresh key deliberately starts a second quote', { skip: !DB }, async () =
   }
 });
 
-test('a missing key is refused before anything is written', { skip: !DB }, async () => {
+test('a missing key is refused before anything is written', async () => {
   const { org, opp } = await fixture();
   try {
     const response = await POST(post(opp), paramsOf(opp));

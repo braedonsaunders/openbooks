@@ -19,7 +19,6 @@ Object.assign(globalThis, { __expenseActionsRecallState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__expenseActionsRecallState;
@@ -52,7 +51,6 @@ const { POST } = await import('./route.ts')
 // withOrgTransaction) and are unaffected.
 const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
 installTrustedTestDatabaseBypass()
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function post(body: unknown): Promise<{ status: number; json: Record<string, unknown> | null }> {
   const response = await withOrgContext(state.orgId, () => POST(
@@ -102,7 +100,7 @@ async function submittedReport(orgId: string, submitterId: string, scratch: { da
   const gateId = randomUUID()
   const flowId = randomUUID()
   await db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, enabled, graph, created_by)
+    insert into flows (id, org_id, name, subject_kind, graph, created_by)
     values (${flowId}, ${orgId}, 'Expense approval', 'expense_report', true, '{"nodes":[],"edges":[]}'::jsonb, ${submitterId})`)
   await db.execute(sql`
     insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, context, created_by)
@@ -132,7 +130,7 @@ async function fixture(): Promise<{ orgId: string; submitterId: string; scratch:
   return { orgId: org.orgId, submitterId, scratch, cleanup }
 }
 
-test('recall returns a pending report to draft and cancels its open gate and run', { skip: !DB }, async () => {
+test('recall returns a pending report to draft and cancels its open gate and run', async () => {
   const { orgId, submitterId, scratch, cleanup } = await fixture()
   try {
     as(submitterId, [{ key: 'accountant', name: 'accountant' }])
@@ -153,7 +151,7 @@ test('recall returns a pending report to draft and cancels its open gate and run
   }
 })
 
-test('recall refuses a stranger but allows an admin', { skip: !DB }, async () => {
+test('recall refuses a stranger but allows an admin', async () => {
   const { orgId, submitterId, scratch, cleanup } = await fixture()
   try {
     as(submitterId, [{ key: 'accountant', name: 'accountant' }])
@@ -198,7 +196,7 @@ test('recall refuses the creator when someone else submitted', async () => {
   }
 })
 
-test('recall keeps decided gates as history when reopening an approved report', { skip: !DB }, async () => {
+test('recall keeps decided gates as history when reopening an approved report', async () => {
   const { orgId, submitterId, scratch, cleanup } = await fixture()
   try {
     as(submitterId, [{ key: 'accountant', name: 'accountant' }])
@@ -217,7 +215,7 @@ test('recall keeps decided gates as history when reopening an approved report', 
   }
 })
 
-test('recall fails closed on wrong state and stale revisions', { skip: !DB }, async () => {
+test('recall fails closed on wrong state and stale revisions', async () => {
   const { orgId, submitterId, scratch, cleanup } = await fixture()
   try {
     as(submitterId, [{ key: 'accountant', name: 'accountant' }])

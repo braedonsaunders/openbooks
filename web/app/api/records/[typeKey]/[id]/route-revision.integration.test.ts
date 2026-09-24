@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:custom-record-revision-authz', shortCircuit: true }
     }
@@ -46,7 +43,7 @@ const routeUrl = './route.ts?custom-record-revision-test'
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts',
 )
@@ -59,7 +56,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
  */
 test(
   'a stale custom-record revision refuses instead of overwriting a newer save',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const typeKey = `rev-${randomUUID().replaceAll('-', '').slice(0, 10)}`
     const { org, actorId, recordId } = await withBypass(async () => {

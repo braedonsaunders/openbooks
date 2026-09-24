@@ -34,9 +34,6 @@ routeState.NextResponse = (await import("next/server")).NextResponse;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
       return { url: "mock:options-authz", shortCircuit: true };
     }
@@ -60,9 +57,8 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 import { sql } from "drizzle-orm";
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("options returns every picker list; subsidiaries follow scope", { skip: !DB }, async () => {
+test("options returns every picker list; subsidiaries follow scope", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;

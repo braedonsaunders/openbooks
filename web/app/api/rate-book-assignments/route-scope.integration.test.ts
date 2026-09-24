@@ -31,7 +31,6 @@ const virtual = (source: string) => ({
 });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation")
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
@@ -61,7 +60,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 const { GET, POST, PATCH, DELETE } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -142,7 +140,7 @@ async function assignmentCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("GET hides another subsidiary's customer and project assignments", { skip: !DB }, async () => {
+test("GET hides another subsidiary's customer and project assignments", async () => {
   const { org, custA, custB, projB } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -161,7 +159,7 @@ test("GET hides another subsidiary's customer and project assignments", { skip: 
   }
 });
 
-test("POST cannot price another subsidiary's project or customer", { skip: !DB }, async () => {
+test("POST cannot price another subsidiary's project or customer", async () => {
   const { org, custB, projB, bookId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -187,7 +185,7 @@ test("POST cannot price another subsidiary's project or customer", { skip: !DB }
   }
 });
 
-test("PATCH and DELETE cannot touch another subsidiary's assignments", { skip: !DB }, async () => {
+test("PATCH and DELETE cannot touch another subsidiary's assignments", async () => {
   const { org, assignCustomerB, assignProjectB, bookId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -206,7 +204,7 @@ test("PATCH and DELETE cannot touch another subsidiary's assignments", { skip: !
   }
 });
 
-test("an unrestricted caller keeps the full surface", { skip: !DB }, async () => {
+test("an unrestricted caller keeps the full surface", async () => {
   const { org, projB, bookId, assignProjectB } = await fixture();
   try {
     state.allowedSubsidiaryIds = null;

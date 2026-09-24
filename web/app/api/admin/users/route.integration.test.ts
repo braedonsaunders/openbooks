@@ -14,7 +14,6 @@ const state: { authz: {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.user-control-integration")] = state;
 const hooks = registerHooks({ resolve(specifier, context, next) {
   const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
-  if (specifier === "server-only") return virtual("export {}");
   if (specifier.endsWith("/lib/authz") && /\/api\/admin\/(users|roles)\/route.ts/.test(context.parentURL ?? "")) {
     const realAuthzUrl = next(specifier, context).url;
     return virtual(`export { subsidiaryScopeAllows } from '${realAuthzUrl}'; export async function guardPermission(){return globalThis[Symbol.for('openbooks.user-control-integration')].authz}`);
@@ -24,8 +23,6 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
 const { POST } = await import("./route");
 const { DELETE } = await import("../roles/route");
 hooks.deregister();
-const skip = !process.env.OPENBOOKS_DB_URL;
-
 const request = (method: string, body: object) => new Request("http://localhost/api/admin/users", {
   method, headers: { "content-type": "application/json" }, body: JSON.stringify(body),
 });
@@ -69,7 +66,7 @@ async function waitForBlocked(pid: number, minimum = 1) {
   assert.fail("requests did not reach the controlled concurrency barrier");
 }
 
-test("UUID case cannot bypass self-grant or self-deactivation, and unassignment removes the equivalent role", { skip }, async () => {
+test("UUID case cannot bypass self-grant or self-deactivation, and unassignment removes the equivalent role", async () => {
   const f = await seed();
   try {
     const before = await assignments(f, f.actorId);
@@ -91,7 +88,7 @@ test("UUID case cannot bypass self-grant or self-deactivation, and unassignment 
 });
 
 for (const change of ["widen", "delete"] as const) {
-  test(`role assignment rechecks a concurrently ${change === "widen" ? "widened" : "deleted"} role`, { skip }, async () => {
+  test(`role assignment rechecks a concurrently ${change === "widen" ? "widened" : "deleted"} role`, async () => {
     const f = await seed();
     const writer = await pool.connect();
     let pending: Promise<Response> | undefined;
@@ -119,7 +116,7 @@ for (const change of ["widen", "delete"] as const) {
 }
 
 for (const repeatableRead of [false, true]) {
-test(`concurrent role deletion and unassignment preserve the last role (${repeatableRead ? "repeatable read" : "read committed"})`, { skip }, async () => {
+test(`concurrent role deletion and unassignment preserve the last role (${repeatableRead ? "repeatable read" : "read committed"})`, async () => {
   const f = await seed();
   const writer = await pool.connect();
   const trigger = `zz_last_role_${randomUUID().replaceAll("-", "")}`;
@@ -181,7 +178,7 @@ test(`concurrent role deletion and unassignment preserve the last role (${repeat
 }
 
 for (const action of ["assign", "unassign", "set-active"] as const) {
-  test(`${action} audit failure rolls back its evidence and preserves ambient caller work`, { skip }, async () => {
+  test(`${action} audit failure rolls back its evidence and preserves ambient caller work`, async () => {
     const f = await seed();
     const trigger = `user_audit_${randomUUID().replaceAll("-", "")}`;
     let installed = false;

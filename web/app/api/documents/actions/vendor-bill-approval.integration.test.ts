@@ -19,7 +19,6 @@ Object.assign(globalThis, { __vendorBillApprovalUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__vendorBillApprovalUser.user}')
@@ -86,7 +85,7 @@ async function auditTrail(orgId: string, id: string) {
   )
 }
 
-test('vendor-bill submit with the requirement OFF auto-releases and evidences why', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('vendor-bill submit with the requirement OFF auto-releases and evidences why', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await setRequirement(org.orgId, false)
@@ -108,7 +107,7 @@ test('vendor-bill submit with the requirement OFF auto-releases and evidences wh
   }
 })
 
-test('vendor-bill submit with the requirement ON and no flow is refused by name', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('vendor-bill submit with the requirement ON and no flow is refused by name', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await setRequirement(org.orgId, true)
@@ -135,7 +134,7 @@ test('vendor-bill submit with the requirement ON and no flow is refused by name'
   }
 })
 
-test('vendor-bill submit with the requirement ON and a matching flow gates normally', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('vendor-bill submit with the requirement ON and a matching flow gates normally', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await setRequirement(org.orgId, true)
@@ -159,7 +158,7 @@ test('vendor-bill submit with the requirement ON and a matching flow gates norma
   }
 })
 
-test('vendor-bill direct post with the requirement ON and no flow refuses before posting', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('vendor-bill direct post with the requirement ON and no flow refuses before posting', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await setRequirement(org.orgId, true)
@@ -179,7 +178,7 @@ test('vendor-bill direct post with the requirement ON and no flow refuses before
   }
 })
 
-test('turning the requirement ON leaves already-released bills untouched', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('turning the requirement ON leaves already-released bills untouched', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await setRequirement(org.orgId, false)

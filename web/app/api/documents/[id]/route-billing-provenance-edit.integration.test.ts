@@ -16,7 +16,6 @@ Object.assign(globalThis, { __billingProvenanceEditState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__billingProvenanceEditState;
@@ -35,7 +34,6 @@ const { documentRevisionCounterSql } = await import("../../../../../engine/src/r
 const { createBillingRequest } = await import('../../../../lib/billing-requests.ts')
 const { generateInvoiceFromBillingRequest } = await import('../../../../lib/billing.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function revision(orgId: string, id: string): Promise<string> {
   return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`)).rows[0]!.revision
@@ -76,7 +74,7 @@ async function billedTimeInvoice(org: FixtureOrg, actor: string, entryCount = 1)
   return { project, entry: entries[0]!, entries, invoiceId: invoice.id }
 }
 
-test('a billing-request invoice draft saves after its lines are priced', { skip: !DB }, async () => {
+test('a billing-request invoice draft saves after its lines are priced', async () => {
   await withBypassContext(async () => {
   const org = await createScratchOrg()
   try {
@@ -122,7 +120,7 @@ test('a billing-request invoice draft saves after its lines are priced', { skip:
   })
 })
 
-test('removing a billed-time line from the draft frees its entry', { skip: !DB }, async () => {
+test('removing a billed-time line from the draft frees its entry', async () => {
   await withBypassContext(async () => {
   const org = await createScratchOrg()
   try {

@@ -11,7 +11,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __utilEntriesFx: state, React });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__utilEntriesFx.user}' };
   const app = resolveAppModule(specifier, context, next, root)
   if (app) return app
@@ -38,7 +37,7 @@ async function setup() {
   return { org, actor };
 }
 
-test('utilization entries drill translates labour cost to presentation', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('utilization entries drill translates labour cost to presentation', async () => {
   const { org } = await setup();
   try {
     const employee = randomUUID();
@@ -64,7 +63,7 @@ test('utilization entries drill translates labour cost to presentation', { skip:
   }
 });
 
-test('utilization entries drill refuses by name on missing FX coverage', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('utilization entries drill refuses by name on missing FX coverage', async () => {
   const { org } = await setup();
   try {
     const employee = randomUUID();

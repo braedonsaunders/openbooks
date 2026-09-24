@@ -7,7 +7,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __projectHeaderDateSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__projectHeaderDateSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
   return next(specifier, context)
@@ -27,7 +26,7 @@ const patch = (orgId: string, id: string, body: Record<string, unknown>) =>
  * before any write — not reach the DATE columns and surface as a 500 from
  * PostgreSQL.
  */
-test('project header PATCH refuses impossible start and end dates', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('project header PATCH refuses impossible start and end dates', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Project editor', 'reviewer')

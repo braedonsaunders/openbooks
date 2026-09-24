@@ -19,7 +19,6 @@ Object.assign(globalThis, { __budgetRoundtripState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier.endsWith('/lib/feature-gates')) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetRoundtripState;
@@ -43,7 +42,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET: exportGet } = await import('./export/route.ts')
 const { POST: importPost } = await import('./import/route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function parseCsv(text: string): Record<string, string>[] {
   const rows: string[][] = []
@@ -80,7 +78,7 @@ function parseCsv(text: string): Record<string, string>[] {
   return body.filter((r) => r.length > 1 || r[0] !== '').map((r) => Object.fromEntries(header!.map((h, j) => [h, r[j] ?? ''])))
 }
 
-test('export then import round-trips null account numbers and null dimension codes exactly', { skip: !DB }, async () => {
+test('export then import round-trips null account numbers and null dimension codes exactly', async () => {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   state.actorId = randomUUID()

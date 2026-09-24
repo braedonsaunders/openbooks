@@ -16,7 +16,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningActiveFlagUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/dunning/")) {
       return {
         shortCircuit: true,
@@ -67,7 +66,7 @@ const ladderStage = () => ({
   bodyTemplate: "b",
 });
 
-test("dunning writes refuse a non-boolean isActive without writing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("dunning writes refuse a non-boolean isActive without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

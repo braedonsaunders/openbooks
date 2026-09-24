@@ -9,7 +9,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __captureReviewControls: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__captureReviewControls.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -80,7 +79,7 @@ async function fixture() {
   return { org, capture, normalized, patch, snapshot, close }
 }
 
-test('capture review preserves an omitted document kind and validates supplied kinds', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('capture review preserves an omitted document kind and validates supplied kinds', async () => {
   const f = await fixture()
   try {
     const result = await f.patch({})
@@ -94,7 +93,7 @@ test('capture review preserves an omitted document kind and validates supplied k
   } finally { await f.close() }
 })
 
-test('manual capture corrections refuse malformed financial values without changing evidence', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('manual capture corrections refuse malformed financial values without changing evidence', async () => {
   const f = await fixture()
   try {
     const before = await f.snapshot()

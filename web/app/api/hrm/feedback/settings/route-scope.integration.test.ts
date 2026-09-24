@@ -16,7 +16,6 @@ const virtual = (source: string) => ({
 const authzUrl = pathToFileURL(process.cwd() + "/web/lib/authz.ts").href;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers") return virtual("export function cookies() { throw new Error('no cookies in route test') }");
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/hrm/feedback/settings/")) {
@@ -40,9 +39,8 @@ const { db, withBypassContext } = await import("@openbooks/engine/src/platform/d
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { GET, POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", { skip: !DB }, async () => {
+test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   state.orgId = org.orgId;

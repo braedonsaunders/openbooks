@@ -53,9 +53,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // '@/lib/api/json' is not mocked: never double the validation boundary.
     if (specifier === '@openbooks/engine/src/payroll/remittance.ts') {
       return { url: 'mock:payroll-remittance', shortCircuit: true }

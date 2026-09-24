@@ -17,7 +17,6 @@ Object.assign(globalThis, { __subscriptionPriceState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -40,7 +39,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { createPlanVersion } = await import("@openbooks/engine/src/billing/advanced-subscriptions.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -82,7 +80,7 @@ async function storedComponent(orgId: string): Promise<{ quantity: string; unitP
 }
 
 for (const unitPrice of [undefined, null, ""]) {
-  test(`createVersion refuses an omitted unit price (${JSON.stringify(unitPrice)}) with 422 and no draft`, { skip: !DB }, async () => {
+  test(`createVersion refuses an omitted unit price (${JSON.stringify(unitPrice)}) with 422 and no draft`, async () => {
     const { org, planId } = await fixture();
     try {
       const component: Record<string, unknown> = { componentKey: "fee", name: "Fee", quantity: "1" };
@@ -98,7 +96,7 @@ for (const unitPrice of [undefined, null, ""]) {
   });
 }
 
-test("createVersion refuses a non-canonical unit price with 422 and no draft", { skip: !DB }, async () => {
+test("createVersion refuses a non-canonical unit price with 422 and no draft", async () => {
   const { org, planId } = await fixture();
   try {
     const response = await post({
@@ -114,7 +112,7 @@ test("createVersion refuses a non-canonical unit price with 422 and no draft", {
   }
 });
 
-test('an explicit "0" unit price is accepted as a free component', { skip: !DB }, async () => {
+test('an explicit "0" unit price is accepted as a free component', async () => {
   const { org, planId } = await fixture();
   try {
     const response = await post({
@@ -128,7 +126,7 @@ test('an explicit "0" unit price is accepted as a free component', { skip: !DB }
   }
 });
 
-test("an omitted quantity still defaults to one", { skip: !DB }, async () => {
+test("an omitted quantity still defaults to one", async () => {
   const { org, planId } = await fixture();
   try {
     const response = await post({
@@ -142,7 +140,7 @@ test("an omitted quantity still defaults to one", { skip: !DB }, async () => {
   }
 });
 
-test("createPlanVersion refuses an omitted unit price without writing", { skip: !DB }, async () => {
+test("createPlanVersion refuses an omitted unit price without writing", async () => {
   const { org, planId } = await fixture();
   try {
     await assert.rejects(

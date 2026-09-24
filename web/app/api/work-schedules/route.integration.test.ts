@@ -14,7 +14,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __workScheduleRouteState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (
       specifier.endsWith("/lib/feature-gates") &&
       context.parentURL?.includes("/api/work-schedules/")
@@ -71,7 +70,7 @@ async function dayCount(orgId: string, scheduleId: string): Promise<number> {
   return r.rows[0]!.n;
 }
 
-test("a day entry outside the cycle is refused, never silently dropped", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a day entry outside the cycle is refused, never silently dropped", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
@@ -91,7 +90,7 @@ test("a day entry outside the cycle is refused, never silently dropped", { skip:
   }
 });
 
-test("a well-formed week still saves every working day", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a well-formed week still saves every working day", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

@@ -31,9 +31,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -61,7 +58,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const PATCH = makePATCH({ kind: "quote", readPerm: "ar.read", createPerm: "ar.create" });
 
 interface Fixture {
@@ -132,7 +128,7 @@ async function patchError(
   return { status: response.status, error: ((await response.json()) as { error?: string }).error ?? "" };
 }
 
-test("order PATCH names a non-string subsidiary as a shape error", { skip: !DB }, async () => {
+test("order PATCH names a non-string subsidiary as a shape error", async () => {
   const fixture = await seedDraftQuote("Q-SUB-1");
   try {
     const { status, error } = await patchError(fixture, { subsidiaryId: 12345 }, null);
@@ -145,7 +141,7 @@ test("order PATCH names a non-string subsidiary as a shape error", { skip: !DB }
   }
 });
 
-test("order PATCH names a subsidiary outside the caller's scope", { skip: !DB }, async () => {
+test("order PATCH names a subsidiary outside the caller's scope", async () => {
   const fixture = await seedDraftQuote("Q-SUB-2");
   try {
     const { status, error } = await patchError(
@@ -161,7 +157,7 @@ test("order PATCH names a subsidiary outside the caller's scope", { skip: !DB },
   }
 });
 
-test("order PATCH names a subsidiary id that matches no row", { skip: !DB }, async () => {
+test("order PATCH names a subsidiary id that matches no row", async () => {
   const fixture = await seedDraftQuote("Q-SUB-3");
   try {
     const missing = randomUUID();
@@ -174,7 +170,7 @@ test("order PATCH names a subsidiary id that matches no row", { skip: !DB }, asy
   }
 });
 
-test("order PATCH names an inactive and an elimination subsidiary", { skip: !DB }, async () => {
+test("order PATCH names an inactive and an elimination subsidiary", async () => {
   const fixture = await seedDraftQuote("Q-SUB-4");
   try {
     await withBypassContext(async () => {
@@ -195,7 +191,7 @@ test("order PATCH names an inactive and an elimination subsidiary", { skip: !DB 
   }
 });
 
-test("order PATCH names clearing the subsidiary under restricted scope", { skip: !DB }, async () => {
+test("order PATCH names clearing the subsidiary under restricted scope", async () => {
   const fixture = await seedDraftQuote("Q-SUB-5");
   try {
     const { status, error } = await patchError(

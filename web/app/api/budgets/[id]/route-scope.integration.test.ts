@@ -15,7 +15,6 @@ Object.assign(globalThis, { __budgetScopeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetScopeState;
@@ -30,7 +29,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function secondBook(orgId: string): Promise<string> {
   const id = randomUUID()
@@ -40,7 +38,7 @@ async function secondBook(orgId: string): Promise<string> {
   return id
 }
 
-test('PATCH refuses a book change once the budget has lines', { skip: !DB }, async () => {
+test('PATCH refuses a book change once the budget has lines', async () => {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   state.actorId = randomUUID()
@@ -76,7 +74,7 @@ test('PATCH refuses a book change once the budget has lines', { skip: !DB }, asy
   }
 })
 
-test('PATCH still allows a book change before any line exists', { skip: !DB }, async () => {
+test('PATCH still allows a book change before any line exists', async () => {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   state.actorId = randomUUID()
@@ -100,7 +98,7 @@ test('PATCH still allows a book change before any line exists', { skip: !DB }, a
   }
 })
 
-test('the scenario trigger refuses a book change under lines for direct writers', { skip: !DB }, async () => {
+test('the scenario trigger refuses a book change under lines for direct writers', async () => {
   const org = await createScratchOrg()
   try {
     const otherBook = await secondBook(org.orgId)

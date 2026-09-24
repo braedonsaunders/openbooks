@@ -16,7 +16,6 @@ const state = { user: { orgId: "", id: "" }, allowed: new Set<string>() };
 Object.assign(globalThis, { __pspSettlementScopeState: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/api/json") {
       return next(root + "web/lib/api/json.ts", context);
     }
@@ -73,7 +72,7 @@ const json = (body: unknown) =>
     body: JSON.stringify(body),
   });
 
-test("post rechecks the locked batch after a concurrent subsidiary rehome", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("post rechecks the locked batch after a concurrent subsidiary rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
   try {
@@ -125,7 +124,7 @@ test("post rechecks the locked batch after a concurrent subsidiary rehome", { sk
   }
 });
 
-test("reverse rechecks the locked batch after a concurrent subsidiary rehome", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("reverse rechecks the locked batch after a concurrent subsidiary rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const holder = await new Pool({ connectionString: process.env.OPENBOOKS_DB_URL }).connect();
   try {
@@ -179,7 +178,7 @@ test("reverse rechecks the locked batch after a concurrent subsidiary rehome", {
   }
 });
 
-test("post/reverse answer a malformed batch id with 404, never a 500", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("post/reverse answer a malformed batch id with 404, never a 500", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
@@ -209,7 +208,7 @@ test("post/reverse answer a malformed batch id with 404, never a 500", { skip: !
   }
 });
 
-test("import reports the persisted posted batch when the provider changes evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("import reports the persisted posted batch when the provider changes evidence", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;

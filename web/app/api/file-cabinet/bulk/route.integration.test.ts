@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { env, db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
 const stateKey = Symbol.for('openbooks.file-bulk-route-test')
@@ -29,7 +29,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '../../../lib/authz') {
       return { shortCircuit: true, url: 'mock:file-bulk-authz' }
     }
@@ -72,7 +71,7 @@ async function isInactive(orgId: string, id: string): Promise<boolean | null> {
  * id — not just counts — so the client can report a partial bulk as partial
  * and keep exactly the refused rows selected.
  */
-test('bulk delete reports per-row verdicts with counts that add up', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('bulk delete reports per-row verdicts with counts that add up', async () => {
   const org = await createScratchOrg()
   const actorId = randomUUID()
   const folder = randomUUID()

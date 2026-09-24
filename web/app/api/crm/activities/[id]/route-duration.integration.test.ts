@@ -15,7 +15,6 @@ Object.assign(globalThis, { __activityDurationState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -38,7 +37,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
 const { loadActivity } = await import('../../../../../lib/crm')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -89,7 +87,7 @@ async function token(activityId: string): Promise<string> {
   })
 }
 
-test('PATCH refuses an out-of-int32 duration without writing', { skip: !DB }, async () => {
+test('PATCH refuses an out-of-int32 duration without writing', async () => {
   const { org, activityId } = await fixture()
   try {
     const result = await patch(activityId, { durationMinutes: '99999999999999999999', expectedUpdatedAt: await token(activityId) })
@@ -100,7 +98,7 @@ test('PATCH refuses an out-of-int32 duration without writing', { skip: !DB }, as
   }
 })
 
-test('PATCH still saves an ordinary duration', { skip: !DB }, async () => {
+test('PATCH still saves an ordinary duration', async () => {
   const { org, activityId } = await fixture()
   try {
     const result = await patch(activityId, { durationMinutes: 45, expectedUpdatedAt: await token(activityId) })

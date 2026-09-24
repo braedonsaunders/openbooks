@@ -30,9 +30,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -61,7 +58,6 @@ const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await impo
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -119,7 +115,6 @@ const deleteCall = (assetId: string) =>
 
 test(
   "asset DELETE refuses an out-of-scope draft and deletes an in-scope one",
-  { skip: !DB },
   async () => {
     const fixture = await seedScopedAssets();
     try {
@@ -139,7 +134,6 @@ test(
 
 test(
   "asset DELETE waits on an asset rehome in flight instead of racing it",
-  { skip: !DB },
   async () => {
     const fixture = await seedScopedAssets();
     const writer = await pool.connect();

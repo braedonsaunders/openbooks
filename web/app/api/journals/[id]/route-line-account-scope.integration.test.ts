@@ -38,9 +38,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -68,7 +65,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function patchRequest(id: string, body: unknown): { req: Request; ctx: { params: Promise<{ id: string }> } } {
   return {
@@ -91,7 +87,6 @@ async function revisionToken(orgId: string, documentId: string): Promise<string>
 
 test(
   "journals PATCH refuses a foreign-org line account with a domain error",
-  { skip: !DB },
   async () => {
     const orgA = await withBypassContext(() => createScratchOrg());
     const orgB = await withBypassContext(() => createScratchOrg());

@@ -21,9 +21,6 @@ const module_ = (source: string): { shortCircuit: true; format: 'module'; url: s
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // Re-export the REAL authz module and override only the session gate, so
     // the scope the draft route resolves is the production resolution.
     // The draft routes gate through guardFeaturePermission, which calls the
@@ -53,7 +50,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 )
 const { POST } = await import('./route.ts')
 hooks.deregister()
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function setup() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -79,7 +75,7 @@ async function draftProjects(orgId: string) {
   `)).rows
 }
 
-test('a restricted project draft lands in their own subsidiary', { skip: !DB }, async () => {
+test('a restricted project draft lands in their own subsidiary', async () => {
   const { org, gate } = await setup()
   try {
     gate(new Set([org.subsidiaryId]))
@@ -96,7 +92,7 @@ test('a restricted project draft lands in their own subsidiary', { skip: !DB }, 
   }
 })
 
-test('a project draft with no assignable subsidiary refuses by name and stores nothing', { skip: !DB }, async () => {
+test('a project draft with no assignable subsidiary refuses by name and stores nothing', async () => {
   const { org, other, gate } = await setup()
   try {
     gate(new Set([org.subsidiaryId, other]))

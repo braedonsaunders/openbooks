@@ -114,9 +114,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/")) {
       return {
         url: new URL(`${specifier.slice(2)}.ts`, new URL("../../../../../", import.meta.url)).href,

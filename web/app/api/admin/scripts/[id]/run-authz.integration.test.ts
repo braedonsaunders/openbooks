@@ -10,7 +10,6 @@ const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __scriptAdminRunHunt: session });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "./auth" && (context.parentURL ?? "").endsWith("/lib/authz.ts")) {
       return {
         shortCircuit: true,
@@ -29,7 +28,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 const { POST } = await import("./run/route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function caller(orgId: string, userId: string): SessionUser {
   return {
@@ -93,7 +91,7 @@ function runReq(id: string, body?: unknown): Request {
   });
 }
 
-test("an unauthenticated caller cannot Run now", { skip: !DB }, async () => {
+test("an unauthenticated caller cannot Run now", async () => {
   const org = await createScratchOrg();
   try {
     await enableScripts(org.orgId);
@@ -108,7 +106,7 @@ test("an unauthenticated caller cannot Run now", { skip: !DB }, async () => {
   }
 });
 
-test("scripts.execute without scripts.manage cannot Run now", { skip: !DB }, async () => {
+test("scripts.execute without scripts.manage cannot Run now", async () => {
   const org = await createScratchOrg();
   try {
     await enableScripts(org.orgId);
@@ -126,7 +124,7 @@ test("scripts.execute without scripts.manage cannot Run now", { skip: !DB }, asy
   }
 });
 
-test("Run now cannot execute another organization's script by id", { skip: !DB }, async () => {
+test("Run now cannot execute another organization's script by id", async () => {
   const home = await createScratchOrg();
   const other = await createScratchOrg();
   try {
@@ -148,7 +146,7 @@ test("Run now cannot execute another organization's script by id", { skip: !DB }
   }
 });
 
-test("bulk Run now refuses requests without a stable client idempotency key", { skip: !DB }, async () => {
+test("bulk Run now refuses requests without a stable client idempotency key", async () => {
   const org = await createScratchOrg();
   try {
     await enableScripts(org.orgId);

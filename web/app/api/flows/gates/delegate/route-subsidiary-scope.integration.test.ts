@@ -6,9 +6,7 @@ import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 import { filterFlowRunSubjectsToScope, loadFlowSubjectSubsidiary, loadGateHeader } from "../../_lib.ts";
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-
-test("allocation flow scope includes every subsidiary touched by the run", { skip: !DB }, async () => {
+test("allocation flow scope includes every subsidiary touched by the run", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const subB = randomUUID();

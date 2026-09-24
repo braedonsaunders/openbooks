@@ -27,9 +27,6 @@ const module_ = (source: string): { shortCircuit: true; format: "module"; url: s
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Re-export the REAL authz module and override only the session gate, so
     // the account-subsidiary guards the route calls are the production
     // functions. Gates without an explicit scope default to unrestricted.
@@ -115,7 +112,6 @@ async function waitForAdvisoryWaiter(): Promise<void> {
 
 test(
   "account-group pins are unique in storage and concurrent route moves leave one deterministic winner",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await seed();
     try {
@@ -178,7 +174,6 @@ test(
 
 test(
   "account-group pins refuse out-of-scope and shared-chart accounts to restricted callers",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const org = await withBypassContext(() => (createScratchOrg()));
     const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;

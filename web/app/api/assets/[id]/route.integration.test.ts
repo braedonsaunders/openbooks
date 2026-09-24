@@ -32,9 +32,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -65,7 +62,6 @@ const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await impo
   "@openbooks/engine/src/testing/fixtures.ts",
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -156,7 +152,6 @@ async function waitForAssetLock(settled: () => boolean): Promise<void> {
 
 test(
   "asset basis PATCH rechecks posted depreciation after waiting for the asset lock",
-  { skip: !DB },
   async () => {
     const fixture = await seedAsset();
     let holder: Client | null = null;
@@ -212,7 +207,6 @@ test(
 
 test(
   "asset basis PATCH still commits and audits before depreciation posts",
-  { skip: !DB },
   async () => {
     const fixture = await seedAsset();
     try {
@@ -238,7 +232,6 @@ test(
 
 test(
   "asset PATCH preserves omitted required custom fields on a partial edit",
-  { skip: !DB },
   async () => {
     const fixture = await seedAsset();
     try {
@@ -310,7 +303,6 @@ function deleteRequest(fixture: LifecycleFixture): Request {
 
 test(
   "asset DELETE refuses an impaired asset and keeps its posted journals",
-  { skip: !DB },
   async () => {
     const fixture = await seedAssetWithGainLossCategory("IMPAIRED-ASSET");
     try {
@@ -360,7 +352,6 @@ test(
 
 test(
   "asset DELETE refuses a disposed asset and keeps its disposal evidence",
-  { skip: !DB },
   async () => {
     const fixture = await seedAssetWithGainLossCategory("DISPOSED-ASSET");
     try {
@@ -396,7 +387,6 @@ test(
 
 test(
   "asset PATCH refuses a foreign reference custom value instead of storing it",
-  { skip: !DB },
   async () => {
     const fixture = await seedAsset();
     const foreign = await createScratchOrg();

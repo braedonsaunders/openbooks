@@ -34,9 +34,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -64,7 +61,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts",
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const PATCH = makePATCH({ kind: "quote", readPerm: "ar.read", createPerm: "ar.create" });
 
 interface Fixture {
@@ -120,7 +116,6 @@ async function patchLines(
 
 test(
   "order PATCH round-trips a stored 8dp unit price",
-  { skip: !DB },
   async () => {
     const fixture = await seedDraftQuote("Q-SCALE-1");
     try {

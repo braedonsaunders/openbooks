@@ -32,9 +32,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -93,7 +90,6 @@ async function defaultNames(orgId: string): Promise<string[]> {
 
 test(
   "POST refuses a non-boolean isDefault with a 400 and does not steal the org default",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const prior = await POST(
@@ -124,7 +120,6 @@ test(
 
 test(
   "POST still accepts an omitted or real-boolean isDefault",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const implicit = await POST(

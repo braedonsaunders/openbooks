@@ -15,7 +15,6 @@ Object.assign(globalThis, { __expenseActionsResubmitState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__expenseActionsResubmitState;
@@ -39,7 +38,6 @@ const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function post(body: unknown): Promise<{ status: number; json: unknown }> {
   const response = await withOrgContext(state.orgId, () => POST(
@@ -52,7 +50,7 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
   return { status: response.status, json: await response.json().catch(() => null) }
 }
 
-test('resubmitting an expense report fails closed with a 422, not a 500', { skip: !DB }, async () => {
+test('resubmitting an expense report fails closed with a 422, not a 500', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   state.orgId = org.orgId
   const actorId = randomUUID()

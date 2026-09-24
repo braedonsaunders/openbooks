@@ -15,7 +15,6 @@ Object.assign(globalThis, { __orderConvertMalformedSession: session })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual(`export async function currentUser(){return globalThis.__orderConvertMalformedSession.user}`)
     }
@@ -29,7 +28,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { POST: postPurchase } = await import('./route')
 const { POST: postSales } = await import('../../../sales-orders/[id]/convert/route')
 const { POST: postEstimate } = await import('../../../estimates/[id]/convert/route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function postConvert(
   post: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>,
@@ -58,7 +56,7 @@ for (const [kind, post] of [
   ['sales_order', postSales],
   ['estimate', postEstimate],
 ] as const) {
-  test(`convert ${kind} with a malformed id is 404, never a uuid cast failure`, { skip: !DB }, async () => {
+  test(`convert ${kind} with a malformed id is 404, never a uuid cast failure`, async () => {
     const org = await withBypassContext(() => createScratchOrg())
     try {
       const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Order converter', 'reviewer'))

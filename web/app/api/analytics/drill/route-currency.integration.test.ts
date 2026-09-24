@@ -11,7 +11,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __analyticsDrillCurrency: state, React });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__analyticsDrillCurrency.user}' };
   const app = resolveAppModule(specifier, context, next, root)
   if (app) return app
@@ -76,7 +75,7 @@ async function postDoc(org: ScratchOrg, party: string, sub: string, number: stri
  * CAD 100 plus USD 100 is CAD 235 at the worked-date spot — never "CAD 200"
  * with a "CAD 100" average.
  */
-test('analytics party drill translates mixed currencies to presentation', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('analytics party drill translates mixed currencies to presentation', async () => {
   const { org } = await setup();
   try {
     await withBypassContext(() => db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
@@ -104,7 +103,7 @@ test('analytics party drill translates mixed currencies to presentation', { skip
   }
 });
 
-test('analytics account drill translates multi-functional legs', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('analytics account drill translates multi-functional legs', async () => {
   const { org, usSub } = await setup();
   try {
     await withBypassContext(() => db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
@@ -128,7 +127,7 @@ test('analytics account drill translates multi-functional legs', { skip: !proces
   }
 });
 
-test('analytics party drill refuses by name on missing FX coverage', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('analytics party drill refuses by name on missing FX coverage', async () => {
   const { org, usSub } = await setup();
   try {
     // A USD-subsidiary invoice with no USD→CAD coverage: the second

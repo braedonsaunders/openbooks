@@ -13,7 +13,6 @@ Object.assign(globalThis, { __settlementRatesDateState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__settlementRatesDateState;
@@ -27,7 +26,6 @@ registerHooks({
 const { withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -47,7 +45,7 @@ async function get(query: string): Promise<{ status: number; json: unknown }> {
   }
 }
 
-test('settlement-rates rejects an impossible date instead of throwing', { skip: !DB }, async () => {
+test('settlement-rates rejects an impossible date instead of throwing', async () => {
   const org = await fixture()
   try {
     const result = await get('?side=ap&from=CAD&to=USD&date=2026-02-30')
@@ -57,7 +55,7 @@ test('settlement-rates rejects an impossible date instead of throwing', { skip: 
   }
 })
 
-test('settlement-rates still serves a valid date', { skip: !DB }, async () => {
+test('settlement-rates still serves a valid date', async () => {
   const org = await fixture()
   try {
     const result = await get('?side=ap&from=CAD&to=USD&date=2026-03-01')

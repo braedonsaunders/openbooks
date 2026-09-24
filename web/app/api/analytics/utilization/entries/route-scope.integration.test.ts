@@ -11,7 +11,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __utilEntriesScope: state, React });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__utilEntriesScope.user}' };
   const app = resolveAppModule(specifier, context, next, root)
   if (app) return app
@@ -37,7 +36,7 @@ async function drill(employee: string): Promise<{ status: number; body: DrillBod
 }
 
 for (const mode of ['all', 'restricted', 'empty'] as const) {
-  test(`utilization entries drill subsidiary scope: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  test(`utilization entries drill subsidiary scope: ${mode}`, async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {
       const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Time reviewer', 'time_reviewer'));

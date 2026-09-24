@@ -25,7 +25,6 @@ const virtual = (source: string) => ({
 const authzUrl = pathToFileURL(process.cwd() + "/web/lib/authz.ts").href;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation")
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
@@ -58,7 +57,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 const { GET, PUT } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -93,7 +91,7 @@ async function storedCompensation(orgId: string): Promise<Record<string, unknown
   return row?.settings ?? null;
 }
 
-test("a restricted caller cannot rewrite org-wide compensation policy", { skip: !DB }, async () => {
+test("a restricted caller cannot rewrite org-wide compensation policy", async () => {
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -107,7 +105,7 @@ test("a restricted caller cannot rewrite org-wide compensation policy", { skip: 
   }
 });
 
-test("an unrestricted caller writes it; restricted callers still read it", { skip: !DB }, async () => {
+test("an unrestricted caller writes it; restricted callers still read it", async () => {
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = null;

@@ -14,7 +14,6 @@ const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __crossOrgSession: session });
 const root = pathToFileURL(process.cwd() + "/").href;
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__crossOrgSession.user}' };
   const app = resolveAppModule(specifier, context, next, root);
@@ -28,7 +27,6 @@ const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts');
 const { POST } = await import('./route');
 const { NextRequest } = await import('next/server');
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 const period = { periodStart: '2026-07-01', periodEnd: '2026-07-31' };
 const request = (body: Record<string, unknown>) => new NextRequest('http://audit.local', { method: 'POST', body: JSON.stringify({ ...period, ...body }) });
 async function snapshotCount(orgId: string) {
@@ -53,7 +51,7 @@ async function fixture() {
   return { orgA, orgB, actorB, teamB };
 }
 
-test("another org's user cannot be snapshotted into this org", { skip: !DB }, async () => {
+test("another org's user cannot be snapshotted into this org", async () => {
   const { orgA, orgB, actorB } = await fixture();
   try {
     const response = await POST(request({ ownerUserId: actorB }));
@@ -68,7 +66,7 @@ test("another org's user cannot be snapshotted into this org", { skip: !DB }, as
   }
 });
 
-test("another org's team cannot be snapshotted into this org", { skip: !DB }, async () => {
+test("another org's team cannot be snapshotted into this org", async () => {
   const { orgA, orgB, teamB } = await fixture();
   try {
     const response = await POST(request({ ownerUserId: null, salesTeamId: teamB }));
@@ -83,7 +81,7 @@ test("another org's team cannot be snapshotted into this org", { skip: !DB }, as
   }
 });
 
-test("this org's own user still snapshots", { skip: !DB }, async () => {
+test("this org's own user still snapshots", async () => {
   const { orgA, orgB } = await fixture();
   try {
     const response = await POST(request({}));

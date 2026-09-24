@@ -19,7 +19,6 @@ Object.assign(globalThis, { __bankScopeUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__bankScopeUser.user}')
     }
@@ -76,7 +75,7 @@ async function accountCount(orgId: string, partyId: string): Promise<number> {
   )).rows[0]!.count)
 }
 
-test('bank-account create refuses an out-of-scope party and writes nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('bank-account create refuses an out-of-scope party and writes nothing', async () => {
   const { org, visible, concealed } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {
@@ -93,7 +92,7 @@ test('bank-account create refuses an out-of-scope party and writes nothing', { s
   }
 })
 
-test('bank-account writes wait on a party rehome before acting or disclosing account revisions', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('bank-account writes wait on a party rehome before acting or disclosing account revisions', async () => {
   const { org, actor, hidden } = await fixture()
   const writer = await pool.connect()
   let pending: Promise<Response> | undefined

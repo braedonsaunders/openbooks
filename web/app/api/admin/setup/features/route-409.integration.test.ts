@@ -26,7 +26,6 @@ const hooks = registerHooks({
       shortCircuit: true,
       url: "data:text/javascript," + encodeURIComponent(source),
     });
-    if (specifier === "server-only") return virtual("export {}");
     const parent = String(context.parentURL ?? "");
     if (
       specifier === "../../../../../lib/authz"
@@ -45,8 +44,6 @@ const hooks = registerHooks({
 });
 const { PUT } = await import("./route");
 hooks.deregister();
-const skip = !process.env.OPENBOOKS_DB_URL;
-
 async function seed() {
   const seeded = await withBypassContext(async () => {
     const org = await createScratchOrg();
@@ -77,7 +74,7 @@ async function flags(orgId: string): Promise<Record<string, boolean>> {
   ).rows[0]!.features ?? {});
 }
 
-test("disabling REST API with MCP access on is refused with the typed dependents body", { skip }, async () => {
+test("disabling REST API with MCP access on is refused with the typed dependents body", async () => {
   const f = await seed();
   try {
     const baseline = await flags(f.org.orgId);
@@ -102,7 +99,7 @@ test("disabling REST API with MCP access on is refused with the typed dependents
   }
 });
 
-test("enabling MCP access with REST API off is refused with the typed dependency body", { skip }, async () => {
+test("enabling MCP access with REST API off is refused with the typed dependency body", async () => {
   const f = await seed();
   try {
     const baseline = await flags(f.org.orgId);

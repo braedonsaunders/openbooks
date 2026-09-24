@@ -14,7 +14,6 @@ Object.assign(globalThis, { __fairValueDateState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__fairValueDateState;
@@ -32,7 +31,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -61,7 +59,7 @@ async function post(id: string, body: unknown): Promise<{ status: number; json: 
   }
 }
 
-test('POST refuses malformed policy values without writing', { skip: !DB }, async () => {
+test('POST refuses malformed policy values without writing', async () => {
   const { org, itemId } = await fixture()
   try {
     const invalidDate = await post(itemId, { currency: 'CAD', unitPrice: '10', effectiveFrom: '2024-02-30' })
@@ -74,7 +72,7 @@ test('POST refuses malformed policy values without writing', { skip: !DB }, asyn
   }
 })
 
-test('POST still saves a real effective date', { skip: !DB }, async () => {
+test('POST still saves a real effective date', async () => {
   const { org, itemId } = await fixture()
   try {
     const result = await post(itemId, { currency: 'CAD', unitPrice: '10', effectiveFrom: '2024-02-29' })

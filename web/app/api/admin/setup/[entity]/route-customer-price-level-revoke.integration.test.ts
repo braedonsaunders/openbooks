@@ -30,9 +30,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
@@ -60,7 +57,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await i
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function authenticate(f: { orgId: string; actorId: string }) {
   routeState.authz = {
@@ -79,7 +75,7 @@ function patchRequest(entity: string, body: unknown): Request {
 
 const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
-test("revoking a same-day assignment through setup PATCH keeps the row with its revoke instant", { skip: !DB }, async () => {
+test("revoking a same-day assignment through setup PATCH keeps the row with its revoke instant", async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Pricing Setup Admin", "admin");
@@ -133,7 +129,7 @@ test("revoking a same-day assignment through setup PATCH keeps the row with its 
   });
 });
 
-test("revoking a future-effective assignment through setup PATCH succeeds and is audited as a delete", { skip: !DB }, async () => {
+test("revoking a future-effective assignment through setup PATCH succeeds and is audited as a delete", async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Pricing Setup Admin", "admin");

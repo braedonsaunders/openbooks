@@ -13,7 +13,6 @@ Object.assign(globalThis, { __bankRulesPatchIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__bankRulesPatchIdState;
@@ -27,7 +26,6 @@ registerHooks({
 const { withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -57,7 +55,7 @@ async function patch(body: unknown): Promise<{ status: number; json: unknown }> 
   }
 }
 
-test('PATCH returns 404 for a malformed rule id', { skip: !DB }, async () => {
+test('PATCH returns 404 for a malformed rule id', async () => {
   const org = await fixture()
   try {
     const result = await patch({ id: 'not-a-uuid', ...RULE_BODY })
@@ -67,7 +65,7 @@ test('PATCH returns 404 for a malformed rule id', { skip: !DB }, async () => {
   }
 })
 
-test('PATCH still returns 404 for an unknown rule id', { skip: !DB }, async () => {
+test('PATCH still returns 404 for an unknown rule id', async () => {
   const org = await fixture()
   try {
     const result = await patch({ id: randomUUID(), ...RULE_BODY })

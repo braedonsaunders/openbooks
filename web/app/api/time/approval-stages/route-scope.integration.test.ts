@@ -23,7 +23,6 @@ const virtual = (source: string) => ({
 });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation")
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
@@ -56,7 +55,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 );
 const { GET, PUT } = await import("./route.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const CHAIN = [{ order: 1, approverKind: "supervisor" }];
 
@@ -97,7 +95,7 @@ async function chainCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("a restricted caller cannot declare the chain", { skip: !DB }, async () => {
+test("a restricted caller cannot declare the chain", async () => {
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -111,7 +109,7 @@ test("a restricted caller cannot declare the chain", { skip: !DB }, async () => 
   }
 });
 
-test("an unrestricted caller declares it; restricted callers still read it", { skip: !DB }, async () => {
+test("an unrestricted caller declares it; restricted callers still read it", async () => {
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = null;

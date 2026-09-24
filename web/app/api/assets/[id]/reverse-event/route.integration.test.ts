@@ -27,9 +27,6 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/") && context.parentURL) {
       // Anchor at the web/ root instead of assuming the importer's depth: this
       // route sits one level deeper than the [id] routes the pattern was copied from.
@@ -70,7 +67,6 @@ const {
   seedApprovalFlow,
 } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -137,7 +133,7 @@ async function assetStatus(orgId: string, assetId: string): Promise<string> {
   return (await db.execute<{ status: string }>(sql`select status from fixed_assets where org_id=${orgId} and id=${assetId}`)).rows[0]!.status;
 }
 
-test("reverse-event GET names a posted disposal as the reversible candidate", { skip: !DB }, async () => {
+test("reverse-event GET names a posted disposal as the reversible candidate", async () => {
   const fixture = await seedAsset("REVERSE-GET");
   try {
     authed(fixture);
@@ -164,7 +160,7 @@ test("reverse-event GET names a posted disposal as the reversible candidate", { 
   }
 });
 
-test("reverse-event POST restores a disposed asset and replays exactly once", { skip: !DB }, async () => {
+test("reverse-event POST restores a disposed asset and replays exactly once", async () => {
   const fixture = await seedAsset("REVERSE-POST");
   try {
     authed(fixture);
@@ -201,7 +197,7 @@ test("reverse-event POST restores a disposed asset and replays exactly once", { 
   }
 });
 
-test("reverse-event POST reverses an impairment through the record boundary", { skip: !DB }, async () => {
+test("reverse-event POST reverses an impairment through the record boundary", async () => {
   const fixture = await seedAsset("REVERSE-IMPAIR");
   try {
     authed(fixture);
@@ -225,7 +221,7 @@ test("reverse-event POST reverses an impairment through the record boundary", { 
   }
 });
 
-test("reverse-event POST refuses short reasons, bad dates, and malformed bodies without writing", { skip: !DB }, async () => {
+test("reverse-event POST refuses short reasons, bad dates, and malformed bodies without writing", async () => {
   const fixture = await seedAsset("REVERSE-REFUSE");
   try {
     authed(fixture);
@@ -263,7 +259,7 @@ test("reverse-event POST refuses short reasons, bad dates, and malformed bodies 
   }
 });
 
-test("reverse-event POST refuses a foreign asset event and an out-of-scope subsidiary", { skip: !DB }, async () => {
+test("reverse-event POST refuses a foreign asset event and an out-of-scope subsidiary", async () => {
   const fixture = await seedAsset("REVERSE-FOREIGN");
   const other = await seedAsset("REVERSE-FOREIGN-OTHER");
   try {
@@ -310,7 +306,7 @@ test("reverse-event POST refuses a foreign asset event and an out-of-scope subsi
   }
 });
 
-test("reverse-event keeps approved multi-book change events on Accounting events", { skip: !DB }, async () => {
+test("reverse-event keeps approved multi-book change events on Accounting events", async () => {
   const fixture = await seedAsset("REVERSE-CHANGE");
   try {
     const flowActors = await seedFlowActors(fixture.orgId);

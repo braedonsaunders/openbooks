@@ -56,9 +56,6 @@ const mockUrls = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier.startsWith('@/')) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}`, import.meta.url).href, context)
     }
@@ -73,12 +70,11 @@ registerHooks({
   },
 })
 
-const { db, withBypass, withOrgContext, env } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
 
-const DB = !!env.OPENBOOKS_DB_URL
 const { POST } = await import('./route.ts')
 
 type Fixture = {
@@ -151,7 +147,6 @@ async function journalCount(orgId: string): Promise<number> {
 
 test(
   'commit refuses balanced lines wider than numeric(19,4) without writing',
-  { skip: !DB },
   async () => {
     const fx = await makeFixture()
     try {
@@ -170,7 +165,6 @@ test(
 
 test(
   'commit still drafts ordinary balanced lines',
-  { skip: !DB },
   async () => {
     const fx = await makeFixture()
     try {
@@ -187,7 +181,6 @@ test(
 
 test(
   'a failed line insert leaves no journal and the confirmation can be retried',
-  { skip: !DB },
   async () => {
     const fx = await makeFixture()
     try {
@@ -210,7 +203,6 @@ test(
 
 test(
   'a retried confirmation replays the same draft instead of double-posting',
-  { skip: !DB },
   async () => {
     const fx = await makeFixture()
     try {

@@ -16,7 +16,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __lienWaiverRouteUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/compliance/lien-waivers/")) {
       return {
         shortCircuit: true,
@@ -57,7 +56,7 @@ async function waiverCount(orgId: string): Promise<number> {
   return r.rows[0]!.n;
 }
 
-test("lien-waiver creation rejects an unrecognised direction", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("lien-waiver creation rejects an unrecognised direction", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

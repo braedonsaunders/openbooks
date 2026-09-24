@@ -42,9 +42,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
     }
@@ -71,7 +68,7 @@ const routeUrl = "./route.ts?project-charge-post-permission-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -136,7 +133,7 @@ async function chargeStatus(orgId: string, id: string): Promise<string | null> {
   return rows[0]?.status ?? null;
 }
 
-test("POST with projects.manage but no gl.post saves a draft and names gl.post", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST with projects.manage but no gl.post saves a draft and names gl.post", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await postAs(fixture, ["projects.manage", "projects.read"]);
@@ -149,7 +146,7 @@ test("POST with projects.manage but no gl.post saves a draft and names gl.post",
   }
 });
 
-test("POST with gl.post flows through submission as before", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST with gl.post flows through submission as before", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await postAs(fixture, ["projects.manage", "projects.read", "gl.post"]);

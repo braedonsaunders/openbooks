@@ -18,7 +18,6 @@ Object.assign(globalThis, { __budgetAmbiguityState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetAmbiguityState;
@@ -40,7 +39,6 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function csv(rows: string[][]) {
   return rows.map((cells) => cells.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')
@@ -93,7 +91,7 @@ async function fixture() {
   return { org, subB: sub.id, accountNumber, scenarioId, otherPeriod }
 }
 
-test('import refuses ambiguous names naming the candidates', { skip: !DB }, async () => {
+test('import refuses ambiguous names naming the candidates', async () => {
   const f = await fixture()
   try {
     const text = csv([
@@ -125,7 +123,7 @@ test('import refuses ambiguous names naming the candidates', { skip: !DB }, asyn
   }
 })
 
-test('import resolves a repeated period name within the default calendar', { skip: !DB }, async () => {
+test('import resolves a repeated period name within the default calendar', async () => {
   const f = await fixture()
   try {
     const text = csv([
@@ -147,7 +145,7 @@ test('import resolves a repeated period name within the default calendar', { ski
   }
 })
 
-test('a scoped import resolves dimension names only among visible subsidiaries', { skip: !DB }, async () => {
+test('a scoped import resolves dimension names only among visible subsidiaries', async () => {
   const f = await fixture()
   try {
     state.allowed = new Set([f.org.subsidiaryId])

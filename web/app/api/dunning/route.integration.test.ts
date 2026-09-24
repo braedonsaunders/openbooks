@@ -15,7 +15,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningRouteUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/dunning/")) {
       return {
         shortCircuit: true,
@@ -55,7 +54,7 @@ const ladderStage = () => ({
   bodyTemplate: "b",
 });
 
-test("dunning [id] routes return 404 for a malformed policy id", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("dunning [id] routes return 404 for a malformed policy id", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
@@ -76,7 +75,7 @@ test("dunning [id] routes return 404 for a malformed policy id", { skip: !proces
   }
 });
 
-test("dunning policies only apply to dunnable receivable kinds", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("dunning policies only apply to dunnable receivable kinds", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

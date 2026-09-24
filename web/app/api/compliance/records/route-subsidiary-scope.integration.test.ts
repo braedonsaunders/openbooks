@@ -16,7 +16,6 @@ Object.assign(globalThis, { __complianceRecordScopeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -43,7 +42,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -98,7 +96,7 @@ const bodyFor = (partyId: string, projectId: string, requirementId: string) => (
   partyId, projectId, requirementId, effectiveFrom: "2026-07-20", expiresOn: "2026-10-15",
 });
 
-test("record creation cannot file evidence for a hidden vendor", { skip: !DB }, async () => {
+test("record creation cannot file evidence for a hidden vendor", async () => {
   const { org, hiddenPartyId, visibleProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -111,7 +109,7 @@ test("record creation cannot file evidence for a hidden vendor", { skip: !DB }, 
   }
 });
 
-test("record creation cannot file evidence under a hidden project", { skip: !DB }, async () => {
+test("record creation cannot file evidence under a hidden project", async () => {
   const { org, visiblePartyId, hiddenProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -124,7 +122,7 @@ test("record creation cannot file evidence under a hidden project", { skip: !DB 
   }
 });
 
-test("record creation still files in-scope evidence", { skip: !DB }, async () => {
+test("record creation still files in-scope evidence", async () => {
   const { org, visiblePartyId, visibleProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);

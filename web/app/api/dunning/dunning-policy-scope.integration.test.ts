@@ -8,7 +8,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __dunningScopeSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__dunningScopeSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
   return next(specifier, context)
@@ -20,7 +19,6 @@ const { randomUUID } = await import('node:crypto')
 const collection = await import('./route.ts')
 const member = await import('./[id]/route.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 // H-DUNNINGPOLICY: the dunning policy and its stages carry no subsidiary
 // lineage yet apply to every entity's open items (and templates can hold
@@ -78,7 +76,7 @@ async function fixture() {
   return { org, ownerUser, scopedUser, get, post, patch, remove, policyCount, close }
 }
 
-test('a subsidiary-restricted caller reads no dunning policy', { skip: !DB }, async () => {
+test('a subsidiary-restricted caller reads no dunning policy', async () => {
   const f = await fixture()
   try {
     session.user = f.ownerUser
@@ -101,7 +99,7 @@ test('a subsidiary-restricted caller reads no dunning policy', { skip: !DB }, as
   }
 })
 
-test('a subsidiary-restricted caller cannot create a dunning policy', { skip: !DB }, async () => {
+test('a subsidiary-restricted caller cannot create a dunning policy', async () => {
   const f = await fixture()
   try {
     session.user = f.scopedUser
@@ -115,7 +113,7 @@ test('a subsidiary-restricted caller cannot create a dunning policy', { skip: !D
   }
 })
 
-test('a subsidiary-restricted caller cannot change or delete the policy', { skip: !DB }, async () => {
+test('a subsidiary-restricted caller cannot change or delete the policy', async () => {
   const f = await fixture()
   try {
     session.user = f.ownerUser

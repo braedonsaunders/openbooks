@@ -15,7 +15,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __closeFlagsUser: state });
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/close/")) {
       return {
         shortCircuit: true,
@@ -52,7 +51,7 @@ async function setup() {
   return { org, actorId };
 }
 
-test("close saves refuse a non-boolean isActive without writing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("close saves refuse a non-boolean isActive without writing", async () => {
   const { org } = await setup();
   try {
     const cases = [
@@ -102,7 +101,7 @@ test("close saves refuse a non-boolean isActive without writing", { skip: !proce
   }
 });
 
-test("close saves still accept real booleans for isActive", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("close saves still accept real booleans for isActive", async () => {
   const { org } = await setup();
   try {
     const off = await withOrgContext(org.orgId, () => POST(request({

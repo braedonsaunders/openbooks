@@ -12,7 +12,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06Briefing: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__b06Briefing.user}' };
   if (specifier.startsWith('@/')) {
@@ -44,7 +43,7 @@ const post = (action: unknown) =>
     body: JSON.stringify({ action }),
   });
 
-test('briefing cache is per-day-per-user; generation needs AI', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('briefing cache is per-day-per-user; generation needs AI', async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await asUser(org.orgId, 'Reader', 'b06_brief_reader', READER);

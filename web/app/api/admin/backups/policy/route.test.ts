@@ -51,7 +51,6 @@ const jsonUrl = new URL("../../../../../lib/api/json.ts", import.meta.url).href;
 const backupUrl = new URL("../../../../../../engine/src/backup/backup.ts", import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/api/json") return nextResolve(jsonUrl, context);
     if (specifier === "@openbooks/engine/src/backup/backup.ts") return nextResolve(backupUrl, context);
     if (specifier === "@openbooks/engine/src/platform/db.ts" || specifier.endsWith("/platform/db.ts")) {

@@ -17,7 +17,6 @@ Object.assign(globalThis, { __vendorBooleanState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -39,7 +38,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -75,7 +73,7 @@ async function flags(partyId: string): Promise<{ backup: boolean; reportable: bo
   return { backup: rows[0]!.backup_withholding, reportable: rows[0]!.is_t4a };
 }
 
-test("vendor PATCH refuses a non-boolean toggle without writing", { skip: !DB }, async () => {
+test("vendor PATCH refuses a non-boolean toggle without writing", async () => {
   const { org, partyId } = await fixture();
   try {
     const response = await patch(partyId, { backupWithholding: "maybe" });
@@ -88,7 +86,7 @@ test("vendor PATCH refuses a non-boolean toggle without writing", { skip: !DB },
   }
 });
 
-test("vendor PATCH still flips a real boolean toggle", { skip: !DB }, async () => {
+test("vendor PATCH still flips a real boolean toggle", async () => {
   const { org, partyId } = await fixture();
   try {
     const response = await patch(partyId, { backupWithholding: true, reportable: true });

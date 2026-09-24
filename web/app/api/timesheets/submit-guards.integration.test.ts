@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/platform/db.ts";
 
 // The submit guards live in the week's server helper (route/route.ts pins the
 // wiring statically, as the neighbouring submit-atomicity test does); the
@@ -13,13 +12,6 @@ const serverOnlyLoader = `data:text/javascript,${encodeURIComponent(`
   import { registerHooks } from "node:module";
   registerHooks({
     resolve(specifier, context, nextResolve) {
-      if (specifier === "server-only") {
-        return {
-          url: "data:text/javascript,export {}",
-          format: "module",
-          shortCircuit: true,
-        };
-      }
       return nextResolve(specifier, context);
     },
   });
@@ -85,7 +77,7 @@ const SEED = `
     const flowId = randomUUID();
     const runId = randomUUID();
     await db.execute(sql\`
-      insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      insert into flows (id, org_id, name, subject_kind, graph)
       values (\${flowId}, \${fixture.org.orgId}, 'Timesheet approvals',
               'timesheet_week', true, '{}'::jsonb)
     \`);
@@ -116,7 +108,6 @@ const SEED = `
 
 test(
   "resubmitting a week owned by pending gates is refused",
-  { skip: !env.OPENBOOKS_DB_URL },
   () => {
     runIntegrationSource(`
       ${SEED}
@@ -138,7 +129,6 @@ test(
 
 test(
   "submitting a week with no draft or rejected entries is refused",
-  { skip: !env.OPENBOOKS_DB_URL },
   () => {
     runIntegrationSource(`
       ${SEED}
@@ -159,7 +149,6 @@ test(
 
 test(
   "a first submission with movable entries and no open gates passes",
-  { skip: !env.OPENBOOKS_DB_URL },
   () => {
     runIntegrationSource(`
       ${SEED}

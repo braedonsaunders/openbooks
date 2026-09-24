@@ -14,7 +14,6 @@ Object.assign(globalThis, { __crmQuotaMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
@@ -30,7 +29,6 @@ const { withBypassContext, db, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -71,7 +69,7 @@ async function quotaCount(): Promise<number> {
   return rows[0]!.n
 }
 
-test('POST refuses a quota amount wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('POST refuses a quota amount wider than numeric(19,4) without writing', async () => {
   const { org } = await fixture()
   try {
     const result = await post(quotaAction('99999999999999999999'))
@@ -82,7 +80,7 @@ test('POST refuses a quota amount wider than numeric(19,4) without writing', { s
   }
 })
 
-test('POST still saves a column-maximum quota amount with identical read-back', { skip: !DB }, async () => {
+test('POST still saves a column-maximum quota amount with identical read-back', async () => {
   const { org } = await fixture()
   try {
     const result = await post(quotaAction('999999999999999.9999'))

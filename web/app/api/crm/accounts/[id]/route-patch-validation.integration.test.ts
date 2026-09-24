@@ -15,7 +15,6 @@ Object.assign(globalThis, { __crmAccountPatchValidationState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -38,7 +37,6 @@ const { sql } = await import('drizzle-orm')
 const { randomUUID } = await import('node:crypto')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -89,7 +87,7 @@ async function revisionFor(partyId: string): Promise<string> {
 }
 
 for (const malformed of ['true', 1, null]) {
-  test(`PATCH refuses isActive=${JSON.stringify(malformed)} without deactivating`, { skip: !DB }, async () => {
+  test(`PATCH refuses isActive=${JSON.stringify(malformed)} without deactivating`, async () => {
     const { org, partyId, profileId } = await fixture()
     try {
       const result = await patch(partyId, { isActive: malformed, expectedUpdatedAt: await revisionFor(partyId) })
@@ -102,7 +100,7 @@ for (const malformed of ['true', 1, null]) {
   })
 }
 
-test('PATCH still deactivates on a real boolean false', { skip: !DB }, async () => {
+test('PATCH still deactivates on a real boolean false', async () => {
   const { org, partyId, profileId } = await fixture()
   try {
     const result = await patch(partyId, { isActive: false, expectedUpdatedAt: await revisionFor(partyId) })
@@ -113,7 +111,7 @@ test('PATCH still deactivates on a real boolean false', { skip: !DB }, async () 
   }
 })
 
-test('PATCH refuses a boolean qualification score without writing', { skip: !DB }, async () => {
+test('PATCH refuses a boolean qualification score without writing', async () => {
   const { org, partyId, profileId } = await fixture()
   try {
     const result = await patch(partyId, { qualificationScore: true, expectedUpdatedAt: await revisionFor(partyId) })
@@ -125,7 +123,7 @@ test('PATCH refuses a boolean qualification score without writing', { skip: !DB 
   }
 })
 
-test('PATCH refuses a non-string industry without clearing it', { skip: !DB }, async () => {
+test('PATCH refuses a non-string industry without clearing it', async () => {
   const { org, partyId, profileId } = await fixture()
   try {
     const result = await patch(partyId, { industry: 123, expectedUpdatedAt: await revisionFor(partyId) })
@@ -137,7 +135,7 @@ test('PATCH refuses a non-string industry without clearing it', { skip: !DB }, a
   }
 })
 
-test('PATCH audits the actual before/after row, not the request', { skip: !DB }, async () => {
+test('PATCH audits the actual before/after row, not the request', async () => {
   const { org, partyId, profileId } = await fixture()
   try {
     const result = await patch(partyId, { isActive: false, industry: 'Hardware', expectedUpdatedAt: await revisionFor(partyId) })

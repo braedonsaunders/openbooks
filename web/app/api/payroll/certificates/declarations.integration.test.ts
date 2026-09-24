@@ -10,7 +10,6 @@ Object.assign(globalThis, { __payrollCertificateState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__payrollCertificateState;
@@ -29,7 +28,6 @@ const { withBypassContext, withOrgContext } = await import('@openbooks/engine/sr
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET, POST } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 /**
  * The pack-declared certificate entry surface: every row-backed withholding
@@ -74,7 +72,7 @@ const post = (body: unknown) =>
 const get = (employee: string) =>
   withOrgContext(state.orgId, () => GET(new Request(`http://payroll.test?employee=${employee}`)))
 
-test('certificates GET serves every pack\'s row-backed forms and no column-backed ones', { skip: !DB }, async () => {
+test('certificates GET serves every pack\'s row-backed forms and no column-backed ones', async () => {
   const { org, employeeId } = await fixture()
   try {
     const response = await get(employeeId)
@@ -102,7 +100,7 @@ test('certificates GET serves every pack\'s row-backed forms and no column-backe
   }
 })
 
-test('certificates POST stores NL answers and a second save supersedes the first', { skip: !DB }, async () => {
+test('certificates POST stores NL answers and a second save supersedes the first', async () => {
   const { org, employeeId } = await fixture()
   try {
     const base = { employeePartyId: employeeId, country: 'NL', effectiveFrom: '2026-01-01' }
@@ -137,7 +135,7 @@ test('certificates POST stores NL answers and a second save supersedes the first
   }
 })
 
-test('certificates POST refuses what the pack does not declare', { skip: !DB }, async () => {
+test('certificates POST refuses what the pack does not declare', async () => {
   const { org, employeeId } = await fixture()
   try {
     const base = { employeePartyId: employeeId, country: 'NL', certificateKey: 'nl_premies', effectiveFrom: '2026-01-01' }

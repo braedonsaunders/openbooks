@@ -18,7 +18,6 @@ const state: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<st
 Object.assign(globalThis, { __inventoryApiAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__inventoryApiAudit.user,allowedSubsidiaryIds:globalThis.__inventoryApiAudit.allowedSubsidiaryIds}}",
@@ -44,7 +43,7 @@ async function reverse(body: Record<string, unknown>): Promise<{ status: number;
   return { status: response.status, json: (await response.json()) as Record<string, unknown> };
 }
 
-test("API reverse of an assembly build restores stock, replays retries, and conflicts on key reuse", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("API reverse of an assembly build restores stock, replays retries, and conflicts on key reuse", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;

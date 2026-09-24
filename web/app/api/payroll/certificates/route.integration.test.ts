@@ -10,7 +10,6 @@ Object.assign(globalThis, { __payrollCertificatesState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__payrollCertificatesState;
@@ -28,7 +27,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { GET: profilesGet } = await import('../profiles/route')
 const { POST } = await import('./route')
 const { POST: postRetro } = await import('../retro/route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   return withBypassContext(async () => {
@@ -77,7 +75,7 @@ async function setup() {
   return { org, scheduleId }
 }
 
-test('certificate rows validate purely from the pack declaration', { skip: !DB }, async () => {
+test('certificate rows validate purely from the pack declaration', async () => {
   // Every refusal names the pack's own declaration — no country, form or
   // field is hardcoded in the route, so these messages are the pack speaking.
   const { org, scheduleId } = await setup()
@@ -150,7 +148,7 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
   }
 })
 
-test('concurrent first filings serialize on the employee payroll profile', { skip: !DB }, async () => {
+test('concurrent first filings serialize on the employee payroll profile', async () => {
   const { org, scheduleId } = await setup()
   try {
     const hire = await employee(org.orgId, scheduleId, 'Concurrent GB Hire', 'GB', 'ENG')
@@ -187,7 +185,7 @@ test('concurrent first filings serialize on the employee payroll profile', { ski
   }
 })
 
-test('count and amount answers hold their declared bands and scale', { skip: !DB }, async () => {
+test('count and amount answers hold their declared bands and scale', async () => {
   const { org, scheduleId } = await setup()
   try {
     const hire = await employee(org.orgId, scheduleId, 'CA Hire', 'US', 'CA')
@@ -217,7 +215,7 @@ test('count and amount answers hold their declared bands and scale', { skip: !DB
   }
 })
 
-test('region scope is the declared scope, never the key name', { skip: !DB }, async () => {
+test('region scope is the declared scope, never the key name', async () => {
   // A California employee files the DE 4; the New York IT-2104 refuses by
   // name even though the employee asked for it explicitly.
   const { org, scheduleId } = await setup()
@@ -245,7 +243,7 @@ test('region scope is the declared scope, never the key name', { skip: !DB }, as
   }
 })
 
-test('column-stored certificates cannot be filed as rows', { skip: !DB }, async () => {
+test('column-stored certificates cannot be filed as rows', async () => {
   // The W-4 and the TD1 family predate row storage and are still read from
   // the profile: a row filing would shadow the column the engine reads, so
   // it is refused by name. Canada's column path is unchanged — this is the
@@ -270,7 +268,7 @@ test('column-stored certificates cannot be filed as rows', { skip: !DB }, async 
   }
 })
 
-test('a re-filing supersedes rather than overwrites, and prior dates resolve old', { skip: !DB }, async () => {
+test('a re-filing supersedes rather than overwrites, and prior dates resolve old', async () => {
   // The single most important invariant: history is never rewritten. The old
   // row stays with its superseded_on, and the engine's own resolver reads the
   // older certificate for the older pay date.
@@ -320,7 +318,7 @@ test('a re-filing supersedes rather than overwrites, and prior dates resolve old
   }
 })
 
-test('profiles GET serves every declared certificate plus stored rows for prefill', { skip: !DB }, async () => {
+test('profiles GET serves every declared certificate plus stored rows for prefill', async () => {
   const { org, scheduleId } = await setup()
   try {
     const hire = await employee(org.orgId, scheduleId, 'GB Prefill', 'GB', 'ENG')
@@ -360,7 +358,7 @@ test('profiles GET serves every declared certificate plus stored rows for prefil
   }
 })
 
-test('filing for a missing employee names the employee id', { skip: !DB }, async () => {
+test('filing for a missing employee names the employee id', async () => {
   // The refusal was 'employee is not available' — no id, no remedy. It must
   // name the employee it was given and what to do instead.
   const { org } = await setup()
@@ -380,7 +378,7 @@ test('filing for a missing employee names the employee id', { skip: !DB }, async
   }
 })
 
-test('retro pay refuses impossible calendar pay dates at the route boundary', { skip: !DB }, async () => {
+test('retro pay refuses impossible calendar pay dates at the route boundary', async () => {
   const { org, scheduleId } = await setup()
   try {
     const response = await withOrgContext(org.orgId, () => postRetro(new Request('http://payroll.test', { method: 'POST', body: JSON.stringify({ payScheduleId: scheduleId, payDate: '2026-02-31' }) })))

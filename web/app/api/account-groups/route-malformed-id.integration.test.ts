@@ -14,7 +14,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __accountGroupRouteUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/account-groups/")) {
       return {
         shortCircuit: true,
@@ -50,7 +49,7 @@ const pinJson = (body: unknown) =>
   });
 const unpinUrl = (accountId: string) => new Request(`http://audit.local/api/account-groups/x/pins?accountId=${accountId}`, { method: "DELETE" });
 
-test("account-group routes reject malformed ids as client errors", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("account-group routes reject malformed ids as client errors", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };

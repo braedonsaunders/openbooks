@@ -11,7 +11,6 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __analyticsDrillScope: state, React });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__analyticsDrillScope.user}' };
   const app = resolveAppModule(specifier, context, next, root)
   if (app) return app
@@ -59,7 +58,7 @@ async function setup(mode: 'all' | 'restricted') {
   return { org, visibleVendor, hiddenVendor };
 }
 
-test('analytics account drill applies the caller subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('analytics account drill applies the caller subsidiary scope', async () => {
   for (const mode of ['all', 'restricted'] as const) {
     const { org } = await setup(mode);
     try {
@@ -95,7 +94,7 @@ test('analytics account drill applies the caller subsidiary scope', { skip: !pro
   }
 });
 
-test('analytics party drill applies the caller subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('analytics party drill applies the caller subsidiary scope', async () => {
   for (const mode of ['all', 'restricted'] as const) {
     const { org, hiddenVendor } = await setup(mode);
     try {

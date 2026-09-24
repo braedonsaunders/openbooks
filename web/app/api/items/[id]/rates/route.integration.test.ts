@@ -31,11 +31,7 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as the labor-rate-cards test).
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // Forward Next.js-style aliases to the real modules they point at. The
     // route lives one level deeper than the labor-rate-cards exemplar, so
     // the alias climbs five directories to the web root.
@@ -178,7 +174,6 @@ async function assertFirstVersionLanded(fixture: Fixture): Promise<void> {
 
 test(
   "first version creation waits on the Setup rate-book fence, so a racing currency PATCH cannot pass the history check",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await seed();
     const patch = await openSetupShapedPatch(fixture, true);
@@ -226,7 +221,6 @@ test(
 
 test(
   "the save holds the advisory fence before it reads the rate book",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await seed();
     const holder = await openSetupShapedPatch(fixture, false);

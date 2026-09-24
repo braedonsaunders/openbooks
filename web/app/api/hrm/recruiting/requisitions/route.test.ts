@@ -130,9 +130,6 @@ const mockUrls = new Map<string, string>([
 
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
-      if (specifier === "server-only") {
-        return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-      }
       const mocked = mockUrls.get(specifier);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);

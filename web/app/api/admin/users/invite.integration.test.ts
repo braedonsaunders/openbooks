@@ -29,7 +29,6 @@ const hooks = registerHooks({
       shortCircuit: true,
       url: "data:text/javascript," + encodeURIComponent(source),
     });
-    if (specifier === "server-only") return virtual("export {}");
     const parent = String(context.parentURL ?? "");
     if (
       specifier === "../../../../lib/authz"
@@ -87,8 +86,6 @@ const { POST } = await import("./route");
 const { loadAdminUsers } = await import("../../../(app)/admin/users/view");
 const { completePasswordReset } = await import("../../../../lib/auth-reset");
 hooks.deregister();
-const skip = !process.env.OPENBOOKS_DB_URL;
-
 const NEW_EMAIL = "new.member@scratch.test";
 
 async function seed(rolePermissions: string[] = []) {
@@ -140,7 +137,7 @@ async function userRow(f: Fixture, email: string = NEW_EMAIL) {
   ).rows[0];
 }
 
-test("invite creates the user, assigns the role, and issues a working set-password link", { skip }, async () => {
+test("invite creates the user, assigns the role, and issues a working set-password link", async () => {
   const f = await seed();
   try {
     const response = await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId });
@@ -218,7 +215,7 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
   }
 });
 
-test("invite rejects a malformed address, an unknown role, and a grant above the inviter's ceiling", { skip }, async () => {
+test("invite rejects a malformed address, an unknown role, and a grant above the inviter's ceiling", async () => {
   const f = await seed(["gl.post"]);
   try {
     assert.equal((await invite({ action: "invite", email: "not-an-address", roleId: f.roleId })).status, 400);
@@ -242,7 +239,7 @@ test("invite rejects a malformed address, an unknown role, and a grant above the
   }
 });
 
-test("a second invite for the same pending address re-issues instead of conflicting", { skip }, async () => {
+test("a second invite for the same pending address re-issues instead of conflicting", async () => {
   const f = await seed();
   try {
     const first = await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId });
@@ -266,7 +263,7 @@ test("a second invite for the same pending address re-issues instead of conflict
   }
 });
 
-test("a retry for an address owned by a real account still conflicts", { skip }, async () => {
+test("a retry for an address owned by a real account still conflicts", async () => {
   const f = await seed();
   try {
     const first = (await (
@@ -283,7 +280,7 @@ test("a retry for an address owned by a real account still conflicts", { skip },
   }
 });
 
-test("concurrent invites for one address create a single user", { skip }, async () => {
+test("concurrent invites for one address create a single user", async () => {
   const f = await seed();
   try {
     const [first, second] = await Promise.all([
@@ -304,7 +301,7 @@ test("concurrent invites for one address create a single user", { skip }, async 
   }
 });
 
-test("an invite retry past the per-user cap reports 429, never 409", { skip }, async () => {
+test("an invite retry past the per-user cap reports 429, never 409", async () => {
   const f = await seed();
   try {
     const first = (await (

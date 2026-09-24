@@ -20,7 +20,6 @@ Object.assign(globalThis, { __overheadPublishState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__overheadPublishState;
@@ -47,7 +46,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface Fixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>
@@ -86,7 +84,7 @@ async function publishedRates(orgId: string) {
     select department_id from overhead_rates where org_id = ${orgId}`)).rows)
 }
 
-test('publish rejects an impossible effectiveFrom instead of throwing', { skip: !DB }, async () => {
+test('publish rejects an impossible effectiveFrom instead of throwing', async () => {
   const { org, departmentId } = await fixture()
   try {
     const result = await post({
@@ -101,7 +99,7 @@ test('publish rejects an impossible effectiveFrom instead of throwing', { skip: 
   }
 })
 
-test('publish rejects a malformed department id instead of throwing', { skip: !DB }, async () => {
+test('publish rejects a malformed department id instead of throwing', async () => {
   const { org } = await fixture()
   try {
     const result = await post({
@@ -116,7 +114,7 @@ test('publish rejects a malformed department id instead of throwing', { skip: !D
   }
 })
 
-test('publish rejects a missing department id before any write', { skip: !DB }, async () => {
+test('publish rejects a missing department id before any write', async () => {
   const { org } = await fixture()
   try {
     const result = await post({
@@ -131,7 +129,7 @@ test('publish rejects a missing department id before any write', { skip: !DB }, 
   }
 })
 
-test('publish rejects an unknown department instead of throwing', { skip: !DB }, async () => {
+test('publish rejects an unknown department instead of throwing', async () => {
   const { org } = await fixture()
   try {
     const result = await post({
@@ -146,7 +144,7 @@ test('publish rejects an unknown department instead of throwing', { skip: !DB },
   }
 })
 
-test('publish still stores rates for a known department', { skip: !DB }, async () => {
+test('publish still stores rates for a known department', async () => {
   const { org, departmentId } = await fixture()
   try {
     const result = await post({
@@ -164,7 +162,7 @@ test('publish still stores rates for a known department', { skip: !DB }, async (
 // H-OVERHEAD: publish-all without rates replaces every department's
 // effective-dated rates, so a subsidiary-restricted admin is refused with the
 // named org-wide-policy refusal before the live engine runs.
-test('restricted publish-all without rates is refused with no rate rows', { skip: !DB }, async () => {
+test('restricted publish-all without rates is refused with no rate rows', async () => {
   const { org } = await fixture()
   state.allowedSubsidiaryIds = new Set([org.subsidiaryId])
   try {
@@ -201,7 +199,7 @@ async function scopedFixture(): Promise<{
 // H-OVERHEAD: an explicit out-of-scope department answers exactly like an
 // unknown one, so a restricted caller cannot probe other subsidiaries'
 // departments by id; either way no rate row is stored.
-test('restricted publish of another subsidiary department answers like unknown', { skip: !DB }, async () => {
+test('restricted publish of another subsidiary department answers like unknown', async () => {
   const { org, otherDepartmentId } = await scopedFixture()
   state.allowedSubsidiaryIds = new Set([org.subsidiaryId])
   try {

@@ -19,7 +19,6 @@ Object.assign(globalThis, { __expenseCorrectState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__expenseCorrectState;
@@ -47,7 +46,6 @@ const { POST } = await import('./route.ts')
 // AFTER the web imports; the route scopes itself explicitly.
 const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
 installTrustedTestDatabaseBypass()
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function as(actorId: string, permissions: string[] = ['expenses.create', 'ap.post']) {
   state.actorId = actorId
@@ -133,7 +131,7 @@ async function postedFixture(): Promise<PostedFixture> {
 
 const REASON = 'correct the travel total after the final receipts arrived'
 
-test('correct creates the correcting revision and voids the posted source', { skip: !DB }, async () => {
+test('correct creates the correcting revision and voids the posted source', async () => {
   const { actorId, cogs, id, cleanup } = await postedFixture()
   try {
     as(actorId)
@@ -174,7 +172,7 @@ test('correct creates the correcting revision and voids the posted source', { sk
   }
 })
 
-test('correct fails closed on reason, state, revision, and repeat calls', { skip: !DB }, async () => {
+test('correct fails closed on reason, state, revision, and repeat calls', async () => {
   const { actorId, id, cleanup } = await postedFixture()
   try {
     as(actorId)
@@ -196,7 +194,7 @@ test('correct fails closed on reason, state, revision, and repeat calls', { skip
   }
 })
 
-test('a standing correction edge conflicts with a second correction', { skip: !DB }, async () => {
+test('a standing correction edge conflicts with a second correction', async () => {
   const { orgId, actorId, id, cleanup } = await postedFixture()
   try {
     as(actorId)
@@ -220,7 +218,7 @@ test('a standing correction edge conflicts with a second correction', { skip: !D
   }
 })
 
-test('correct refuses non-posted reports and under-permissioned callers', { skip: !DB }, async () => {
+test('correct refuses non-posted reports and under-permissioned callers', async () => {
   const { actorId, id, cleanup } = await postedFixture()
   try {
     as(actorId, ['expenses.create'])

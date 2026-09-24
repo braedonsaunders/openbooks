@@ -19,7 +19,6 @@ Object.assign(globalThis, { __overheadBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -45,7 +44,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(): Promise<{ orgId: string; departmentId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -83,7 +81,7 @@ async function rateCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("overhead publish refuses a rate wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("overhead publish refuses a rate wider than numeric(19,4) without writing", async () => {
   const { orgId, departmentId } = await fixture();
   try {
     const response = await post("99999999999999999999.99", departmentId);
@@ -96,7 +94,7 @@ test("overhead publish refuses a rate wider than numeric(19,4) without writing",
   }
 });
 
-test("overhead publish still publishes an ordinary rate", { skip: !DB }, async () => {
+test("overhead publish still publishes an ordinary rate", async () => {
   const { orgId, departmentId } = await fixture();
   try {
     const response = await post("85.50", departmentId);

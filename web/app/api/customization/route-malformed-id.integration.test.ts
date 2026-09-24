@@ -13,7 +13,6 @@ Object.assign(globalThis, { __customPrefsIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__customPrefsIdState;
@@ -32,7 +31,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PUT: putForm } = await import('./form-preferences/route.ts')
 const { PUT: putList } = await import('./list-preferences/route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -65,7 +63,7 @@ async function put(
   }
 }
 
-test('form-preferences rejects a malformed layoutId instead of throwing', { skip: !DB }, async () => {
+test('form-preferences rejects a malformed layoutId instead of throwing', async () => {
   const org = await fixture()
   try {
     const result = await put(putForm, { recordType: 'vendor_bill', layoutId: 'not-a-uuid' })
@@ -75,7 +73,7 @@ test('form-preferences rejects a malformed layoutId instead of throwing', { skip
   }
 })
 
-test('list-preferences rejects a malformed viewId instead of throwing', { skip: !DB }, async () => {
+test('list-preferences rejects a malformed viewId instead of throwing', async () => {
   const org = await fixture()
   try {
     const result = await put(putList, { recordType: 'vendor_bill', viewId: 'not-a-uuid' })
@@ -85,7 +83,7 @@ test('list-preferences rejects a malformed viewId instead of throwing', { skip: 
   }
 })
 
-test('unknown ids still return the not-found contract', { skip: !DB }, async () => {
+test('unknown ids still return the not-found contract', async () => {
   const org = await fixture()
   try {
     const form = await put(putForm, { recordType: 'vendor_bill', layoutId: randomUUID() })
@@ -97,7 +95,7 @@ test('unknown ids still return the not-found contract', { skip: !DB }, async () 
   }
 })
 
-test('null ids still clear the preference', { skip: !DB }, async () => {
+test('null ids still clear the preference', async () => {
   const org = await fixture()
   try {
     const form = await put(putForm, { recordType: 'vendor_bill', layoutId: null })

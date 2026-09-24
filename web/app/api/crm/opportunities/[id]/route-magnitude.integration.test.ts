@@ -14,7 +14,6 @@ Object.assign(globalThis, { __opportunityPatchMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -36,7 +35,6 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -103,7 +101,7 @@ function base(statusId: string, extra: Record<string, unknown> = {}) {
   return { statusId, ...extra }
 }
 
-test('PATCH refuses a line quantity wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('PATCH refuses a line quantity wider than numeric(19,4) without writing', async () => {
   const { org, statusId, itemId, oppId } = await fixture()
   try {
     const result = await patch(oppId, base(statusId, {
@@ -116,7 +114,7 @@ test('PATCH refuses a line quantity wider than numeric(19,4) without writing', {
   }
 })
 
-test('PATCH refuses a line unit price wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('PATCH refuses a line unit price wider than numeric(19,4) without writing', async () => {
   const { org, statusId, itemId, oppId } = await fixture()
   try {
     const result = await patch(oppId, base(statusId, {
@@ -129,7 +127,7 @@ test('PATCH refuses a line unit price wider than numeric(19,4) without writing',
   }
 })
 
-test('PATCH refuses a range bound wider than numeric(19,4) without writing', { skip: !DB }, async () => {
+test('PATCH refuses a range bound wider than numeric(19,4) without writing', async () => {
   const { org, statusId, oppId } = await fixture()
   try {
     const result = await patch(oppId, base(statusId, { rangeLow: '99999999999999999999' }))
@@ -139,7 +137,7 @@ test('PATCH refuses a range bound wider than numeric(19,4) without writing', { s
   }
 })
 
-test('PATCH still saves a column-maximum line with identical read-back', { skip: !DB }, async () => {
+test('PATCH still saves a column-maximum line with identical read-back', async () => {
   const { org, statusId, itemId, oppId } = await fixture()
   try {
     const result = await patch(oppId, base(statusId, {

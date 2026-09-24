@@ -13,7 +13,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __defaultGuardUser: state });
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/close/")) {
       return {
         shortCircuit: true,

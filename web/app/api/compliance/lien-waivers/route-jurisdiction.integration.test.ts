@@ -16,7 +16,6 @@ Object.assign(globalThis, { __lienWaiverJurisdictionState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -36,7 +35,6 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -87,7 +85,7 @@ async function waiverJurisdiction(waiverId: string): Promise<string | null> {
   return rows[0]!.jurisdiction;
 }
 
-test("waiver creation refuses an unknown jurisdiction without writing", { skip: !DB }, async () => {
+test("waiver creation refuses an unknown jurisdiction without writing", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const response = await post({ ...base(partyId, projectId), jurisdiction: "Atlantis" });
@@ -103,7 +101,7 @@ test("waiver creation refuses an unknown jurisdiction without writing", { skip: 
   }
 });
 
-test("waiver creation canonicalises a known jurisdiction and stores it", { skip: !DB }, async () => {
+test("waiver creation canonicalises a known jurisdiction and stores it", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const response = await post({ ...base(partyId, projectId), jurisdiction: "us-ca" });
@@ -115,7 +113,7 @@ test("waiver creation canonicalises a known jurisdiction and stores it", { skip:
   }
 });
 
-test("waiver update refuses an unknown jurisdiction and canonicalises a known one", { skip: !DB }, async () => {
+test("waiver update refuses an unknown jurisdiction and canonicalises a known one", async () => {
   const { org, partyId, projectId } = await fixture();
   try {
     const created = (await (await post(base(partyId, projectId))).json()) as { id: string };

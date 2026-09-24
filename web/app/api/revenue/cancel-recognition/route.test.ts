@@ -123,9 +123,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     // The real business-date service owns calendar validation and reads its
     // timezone through the same DB seam as the route.
     if (specifier === './db.ts' && _context.parentURL?.endsWith('/platform/business-date.ts')) {

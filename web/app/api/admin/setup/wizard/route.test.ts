@@ -96,9 +96,6 @@ let authzRealUrl = ''
 let dbRealUrl = ''
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('setup/wizard/route')) {
       authzRealUrl = nextResolve(specifier, context).url
       return { url: 'mock:setup-wizard-authz', shortCircuit: true }

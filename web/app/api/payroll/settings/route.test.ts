@@ -43,13 +43,6 @@ const mockPayrollOutputs = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "../../../../lib/authz" &&
       context.parentURL?.includes("payroll/settings")

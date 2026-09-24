@@ -46,9 +46,6 @@ const mockCompliance = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@/lib/authz") return { url: "mock:compliance-scope-authz", shortCircuit: true };
     if (specifier === "@/lib/compliance") return { url: "mock:compliance-scope-gate", shortCircuit: true };
     if (specifier.startsWith("@openbooks/engine/")) {
@@ -88,7 +85,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 hooks.deregister();
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
@@ -159,7 +155,6 @@ async function tinState(fixture: Fixture): Promise<{ last4: string | null; type:
 
 test(
   "a subsidiary-restricted compliance save cannot touch a hidden-entity vendor TIN",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -190,7 +185,6 @@ test(
 
 test(
   "a vendor TIN save audits secret-free before/after snapshots under the same lock",
-  { skip: !DB },
   async () => {
     // Replacement cover for the deleted source pin on the audit envelope:
     // the route locks vendor_roles, snapshots tin_present/tin_last4 without

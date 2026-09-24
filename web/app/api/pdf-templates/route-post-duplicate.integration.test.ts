@@ -34,9 +34,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     // tsx does not apply web/tsconfig.json paths when run from the repo
     // root; map @/ to web/ explicitly (extension probing included).
     if (specifier.startsWith("@/")) {
@@ -94,7 +91,6 @@ function postRequest(body: unknown): Request {
 
 test(
   "POST a taken template name answers 409, never a 500 with SQL",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     // Middleware establishes the tenant scope in production; mirror it here.
@@ -110,7 +106,6 @@ test(
 
 test(
   "POST a fresh template name still creates",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
     const res = await withOrgContext(f.orgId, () =>

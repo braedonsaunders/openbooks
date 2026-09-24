@@ -17,7 +17,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __captureReprocessConfirm: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/api/ap-capture/')) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return {user:globalThis.__captureReprocessConfirm.user,permissions:new Set(["ap.create"]),allowedSubsidiaryIds:null}};export function guardSubsidiaryScope(){return null}' }
   }
@@ -69,7 +68,7 @@ async function fixture() {
   return { org, capture, correct, reprocess, state, close: async () => { session.user = null; await dropScratchOrg(org.orgId) } }
 }
 
-test('reprocessing a corrected capture requires confirmation naming the loss', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('reprocessing a corrected capture requires confirmation naming the loss', async () => {
   const f = await fixture()
   try {
     assert.equal((await f.correct('105.0000')).status, 200)
@@ -93,7 +92,7 @@ test('reprocessing a corrected capture requires confirmation naming the loss', {
   } finally { await f.close() }
 })
 
-test('reprocessing an uncorrected capture needs no confirmation', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('reprocessing an uncorrected capture needs no confirmation', async () => {
   const f = await fixture()
   try {
     const queued = await f.reprocess()

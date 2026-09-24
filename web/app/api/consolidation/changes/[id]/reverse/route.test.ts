@@ -18,8 +18,6 @@ const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))
       return next(specifier, { ...context, parentURL: import.meta.url });
-    if (specifier === "server-only")
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:control-loss-reversal-gate" };
     if (specifier === "@/app/api/accounting/changes/_authorization")

@@ -86,13 +86,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     // The real context builder reaches authz through a sibling-relative
     // specifier; keep it on the same mock as the route's own import.
     if (

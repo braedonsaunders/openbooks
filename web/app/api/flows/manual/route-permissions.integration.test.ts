@@ -23,7 +23,6 @@ Object.assign(globalThis, { __manualFlowPermissionsUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return virtual('export async function currentUser(){return globalThis.__manualFlowPermissionsUser.user}')
     }
@@ -36,7 +35,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedDraftDocument } =
   await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET, POST } = await import('./route')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 function sessionUser(id: string, orgId: string): SessionUser {
   return {
@@ -77,7 +75,7 @@ async function seedTagManualFlow(orgId: string): Promise<void> {
   }
   await withBypassContext(() =>
     db.execute(sql`
-      insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      insert into flows (id, org_id, name, subject_kind, graph)
       values (${randomUUID()}, ${orgId}, 'Manual tag flow', 'vendor_bill', true,
               ${JSON.stringify(graph)}::jsonb)`),
   )
@@ -104,7 +102,7 @@ async function billMemo(orgId: string, id: string): Promise<string | null> {
   return rows.rows[0]?.memo ?? null
 }
 
-test('a read-only role is refused a field-writing manual trigger', { skip: !DB }, async () => {
+test('a read-only role is refused a field-writing manual trigger', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableFlows(org.orgId)
@@ -146,7 +144,7 @@ test('a read-only role is refused a field-writing manual trigger', { skip: !DB }
   }
 })
 
-test('an edit grant runs the same trigger and writes the field', { skip: !DB }, async () => {
+test('an edit grant runs the same trigger and writes the field', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableFlows(org.orgId)
@@ -182,7 +180,7 @@ test('an edit grant runs the same trigger and writes the field', { skip: !DB }, 
   }
 })
 
-test('an edit grant outside the record subsidiary still cannot run it', { skip: !DB }, async () => {
+test('an edit grant outside the record subsidiary still cannot run it', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableFlows(org.orgId)

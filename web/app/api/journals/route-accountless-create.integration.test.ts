@@ -37,9 +37,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../lib/authz") {
       return { url: "mock:create-authz", shortCircuit: true };
     }
@@ -66,11 +63,9 @@ hooks.deregister();
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test(
   "journals POST refuses an account-less contentful leg with its line number and writes nothing",
-  { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
     try {

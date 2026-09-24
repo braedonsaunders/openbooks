@@ -65,9 +65,8 @@ const { DELETE } = await import(routeUrl) as typeof import("./route.ts");
 const { backupObjectKey } = await import("@openbooks/engine/src/backup/backup.ts");
 hooks.deregister();
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-test("manual deletion purges the stored object and retains actor-attributed ledger evidence", { skip: !DB }, async () => {
+test("manual deletion purges the stored object and retains actor-attributed ledger evidence", async () => {
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "Backup Administrator", "admin");
   storageState.actor = { id: actorId, orgId: org.orgId };

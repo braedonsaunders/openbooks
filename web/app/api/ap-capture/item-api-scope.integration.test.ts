@@ -9,7 +9,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __captureItemScope: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__captureItemScope.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -111,9 +110,7 @@ async function fixture() {
   return { org, hiddenCapture, visibleCapture, hiddenVendor, hiddenPo, normalized, asJson, getItem, getFile, patch, materialize, actions, associations, revision, close }
 }
 
-const skip = !process.env.OPENBOOKS_DB_URL
-
-test('a restricted caller cannot reach another entity’s capture by id', { skip }, async () => {
+test('a restricted caller cannot reach another entity’s capture by id', async () => {
   const f = await fixture()
   try {
     const missing = randomUUID()
@@ -156,7 +153,7 @@ test('a restricted caller cannot reach another entity’s capture by id', { skip
   }
 })
 
-test('bulk actions refuse a 36-hyphen id as HTTP 404 not_found', { skip }, async () => {
+test('bulk actions refuse a 36-hyphen id as HTTP 404 not_found', async () => {
   const f = await fixture()
   try {
     const res = await f.asJson(await f.actions({ action: 'reject', ids: ['-'.repeat(36)] }))
@@ -168,7 +165,7 @@ test('bulk actions refuse a 36-hyphen id as HTTP 404 not_found', { skip }, async
   }
 })
 
-test('PATCH that auto-resolves an out-of-scope vendor or PO returns 404 and does not persist those ids', { skip }, async () => {
+test('PATCH that auto-resolves an out-of-scope vendor or PO returns 404 and does not persist those ids', async () => {
   const f = await fixture()
   try {
     const before = await f.associations(f.visibleCapture)

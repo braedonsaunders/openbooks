@@ -17,7 +17,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __agentScopeSession: state })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__agentScopeSession.user}' }
   if (specifier.startsWith('@/')) {
@@ -35,7 +34,6 @@ const { GET: getItem, PATCH: patchItem } = await import('../continuous-close/ite
 const { PUT: putFeedback } = await import('../continuous-close/items/[id]/feedback/route.ts')
 const { GET: getReportPdf } = await import('../continuous-close/reports/[runId]/pdf/route.ts')
 
-const DB = !!process.env.OPENBOOKS_DB_URL
 const SCOPED_PERMS = ['assistant.use', 'assistant.write', 'gl.read']
 
 async function seedFinding(orgId: string, subjectType: string | null, subjectId: string | null): Promise<string> {
@@ -90,7 +88,7 @@ async function fixture() {
   return { org, itemA, itemB, itemN, itemX, asOwner, asScoped, itemParams, close }
 }
 
-test('a restricted caller lists only their entity’s findings', { skip: !DB }, async () => {
+test('a restricted caller lists only their entity’s findings', async () => {
   const f = await fixture()
   try {
     await withOrgContext(f.org.orgId, async () => {
@@ -109,7 +107,7 @@ test('a restricted caller lists only their entity’s findings', { skip: !DB }, 
   }
 })
 
-test('a restricted caller reads only their entity’s finding detail', { skip: !DB }, async () => {
+test('a restricted caller reads only their entity’s finding detail', async () => {
   const f = await fixture()
   try {
     await withOrgContext(f.org.orgId, async () => {
@@ -126,7 +124,7 @@ test('a restricted caller reads only their entity’s finding detail', { skip: !
   }
 })
 
-test('a restricted caller cannot move another entity’s finding lifecycle', { skip: !DB }, async () => {
+test('a restricted caller cannot move another entity’s finding lifecycle', async () => {
   const f = await fixture()
   try {
     await withOrgContext(f.org.orgId, async () => {
@@ -149,7 +147,7 @@ test('a restricted caller cannot move another entity’s finding lifecycle', { s
   }
 })
 
-test('a restricted caller cannot rate another entity’s finding', { skip: !DB }, async () => {
+test('a restricted caller cannot rate another entity’s finding', async () => {
   const f = await fixture()
   try {
     await withOrgContext(f.org.orgId, async () => {
@@ -167,7 +165,7 @@ test('a restricted caller cannot rate another entity’s finding', { skip: !DB }
   }
 })
 
-test('the narrative PDF needs unrestricted scope', { skip: !DB }, async () => {
+test('the narrative PDF needs unrestricted scope', async () => {
   const f = await fixture()
   try {
     await withOrgContext(f.org.orgId, async () => {

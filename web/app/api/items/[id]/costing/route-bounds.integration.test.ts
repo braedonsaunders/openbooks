@@ -17,7 +17,6 @@ Object.assign(globalThis, { __itemCostingBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
@@ -34,7 +33,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { GET, PUT } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fx {
   orgId: string;
@@ -97,7 +95,7 @@ const putBody = (fx: Fx, token: string, standardCost: string) => ({
   expectedUpdatedAt: token,
 });
 
-test("costing refuses a standard cost wider than numeric(19,4) without writing", { skip: !DB }, async () => {
+test("costing refuses a standard cost wider than numeric(19,4) without writing", async () => {
   const fx = await fixture();
   try {
     const before = await profile(fx);
@@ -113,7 +111,7 @@ test("costing refuses a standard cost wider than numeric(19,4) without writing",
   }
 });
 
-test("costing still saves an ordinary standard cost", { skip: !DB }, async () => {
+test("costing still saves an ordinary standard cost", async () => {
   const fx = await fixture();
   try {
     const before = await profile(fx);

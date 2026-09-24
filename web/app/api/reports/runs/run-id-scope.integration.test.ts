@@ -10,7 +10,6 @@ import test from "node:test";
  */
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/runs/")) {
       return {
         shortCircuit: true,
@@ -34,7 +33,7 @@ const { GET: artifact } = await import("./[id]/artifact/route.ts");
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
-test("run CSV and artifact downloads answer a malformed id with 404", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("run CSV and artifact downloads answer a malformed id with 404", async () => {
   for (const id of ["not-a-uuid", "new"]) {
     // NOTE: no fixture row is needed — the uuid cast fails before any row
     // could resolve, which is exactly the defect.

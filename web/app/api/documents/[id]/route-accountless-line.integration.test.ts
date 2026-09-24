@@ -15,7 +15,6 @@ Object.assign(globalThis, { __documentAccountlessLineState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__documentAccountlessLineState;
@@ -34,7 +33,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function makeDraftInvoice(org: { orgId: string; subsidiaryId: string; date: string }): Promise<string> {
   const id = randomUUID()
@@ -69,7 +67,7 @@ async function storedTotals(orgId: string, id: string): Promise<{ total: string;
   return { total: doc.total, subtotal: doc.subtotal, lines: { n: lines.length, amounts: lines.map((l) => l.amount) } }
 }
 
-test('documents PATCH refuses an account-less contentful line with its line number and writes nothing', { skip: !DB }, async () => {
+test('documents PATCH refuses an account-less contentful line with its line number and writes nothing', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId

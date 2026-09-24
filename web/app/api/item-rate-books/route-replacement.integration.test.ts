@@ -14,7 +14,6 @@ const routeState: {
 const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier.endsWith('/lib/feature-gates')) return { shortCircuit: true, url: 'mock:rate-books-feature-gates' }
     if (specifier.endsWith('/lib/features')) return { shortCircuit: true, url: 'mock:rate-books-features' }
     if (specifier.startsWith('@/')) return nextResolve(`${webRoot}${specifier.slice(2)}.ts`, context)
@@ -42,7 +41,6 @@ const { withBypassContext, withOrgContext, db } = await import('@openbooks/engin
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 hooks.deregister()
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 function bookPost(body: Record<string, unknown>) {
   return POST(new Request('http://openbooks.test/api/item-rate-books', {
@@ -92,7 +90,7 @@ async function lineCount(orgId: string, versionId: string) {
  * an explicit confirmation. Every refusal runs before the transaction, so
  * the current active version stays intact.
  */
-test('a partly filled row refuses by index and leaves the version intact', { skip: !DB }, async () => {
+test('a partly filled row refuses by index and leaves the version intact', async () => {
   const { org, book } = await fixture()
   try {
     const first = await bookPost({ id: book, code: 'REPLACE', name: 'Replacement book', replaceRates: true, effectiveFrom: '2026-01-01', lines: tiers(org.items.service) })
@@ -116,7 +114,7 @@ test('a partly filled row refuses by index and leaves the version intact', { ski
   }
 })
 
-test('an empty replacement refuses without the flag and clears with it', { skip: !DB }, async () => {
+test('an empty replacement refuses without the flag and clears with it', async () => {
   const { org, book } = await fixture()
   try {
     const first = await bookPost({ id: book, code: 'REPLACE', name: 'Replacement book', replaceRates: true, effectiveFrom: '2026-01-01', lines: tiers(org.items.service) })
@@ -161,7 +159,7 @@ test('an empty replacement refuses without the flag and clears with it', { skip:
  * validator, so an unknown time type or an invalid premium value refuses by
  * row and key with the prior version intact.
  */
-test('unknown time types and premium values refuse with the version intact', { skip: !DB }, async () => {
+test('unknown time types and premium values refuse with the version intact', async () => {
   const { org, book } = await fixture()
   try {
     const timeType = randomUUID()

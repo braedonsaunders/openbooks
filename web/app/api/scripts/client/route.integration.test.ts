@@ -26,9 +26,6 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "@/lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -56,7 +53,6 @@ const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = (await import(
   "../../../../../engine/src/testing/fixtures.ts"
 )) as typeof import("../../../../../engine/src/testing/fixtures.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("scripts delivery refuses an unauthenticated caller", async () => {
   routeState.authz = null;
@@ -65,7 +61,7 @@ test("scripts delivery refuses an unauthenticated caller", async () => {
   assert.deepEqual(await res.json(), { error: "unauthorized" });
 });
 
-test("scripts delivery answers the empty set with the feature off", { skip: !DB }, async () => {
+test("scripts delivery answers the empty set with the feature off", async () => {
   const org = await createScratchOrg();
   try {
     routeState.authz = { user: { orgId: org.orgId, id: "00000000-0000-4000-8000-000000000001" } };
@@ -80,7 +76,7 @@ test("scripts delivery answers the empty set with the feature off", { skip: !DB 
   }
 });
 
-test("scripts delivery never returns another organization's client source", { skip: !DB }, async () => {
+test("scripts delivery never returns another organization's client source", async () => {
   const home = await createScratchOrg();
   const other = await createScratchOrg();
   try {

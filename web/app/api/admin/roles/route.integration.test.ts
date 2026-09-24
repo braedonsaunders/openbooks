@@ -43,9 +43,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier.startsWith("@/")) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, import.meta.url).href, context);
     }
@@ -62,8 +59,6 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?admin-roles-integration";
 const { POST, PATCH, DELETE, GET } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
-
-const skip = !process.env.OPENBOOKS_DB_URL;
 
 function call(method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>): Promise<Response> {
   const handler = method === "POST" ? POST : method === "PATCH" ? PATCH : DELETE;
@@ -121,7 +116,7 @@ async function seed(actorPermissions: string[]): Promise<Fixture> {
   return { orgId: org.orgId, actorId, actorRoleId };
 }
 
-test("ID2: an administrator holding only admin.roles.manage cannot widen their own role to the catalogue", { skip }, async () => {
+test("ID2: an administrator holding only admin.roles.manage cannot widen their own role to the catalogue", async () => {
   const f = await seed(["admin.roles.manage"]);
   try {
     const response = await call("PATCH", { id: f.actorRoleId, permissions: [...PERMISSION_CATALOGUE] });
@@ -136,7 +131,7 @@ test("ID2: an administrator holding only admin.roles.manage cannot widen their o
   }
 });
 
-test("ID2: a role may only be created, or grow, inside the actor's own permissions", { skip }, async () => {
+test("ID2: a role may only be created, or grow, inside the actor's own permissions", async () => {
   const f = await seed(["admin.roles.manage", "gl.read", "ap.*"]);
   try {
     const refused = await call("POST", { name: "Escalated", permissions: ["gl.read", "gl.post"] });
@@ -167,7 +162,7 @@ test("ID2: a role may only be created, or grow, inside the actor's own permissio
   }
 });
 
-test("ID3: deleting a role refuses to strand an active user, reassigns on request, and audits every assignment", { skip }, async () => {
+test("ID3: deleting a role refuses to strand an active user, reassigns on request, and audits every assignment", async () => {
   const f = await seed(["admin.roles.manage", "gl.read", "ap.read"]);
   try {
     // U holds only `doomed`; V holds `doomed` plus another role; W is inactive with only `doomed`.
@@ -225,7 +220,7 @@ test("ID3: deleting a role refuses to strand an active user, reassigns on reques
   }
 });
 
-test("ID3: a role nobody depends on still deletes cleanly and audits each removed assignment", { skip }, async () => {
+test("ID3: a role nobody depends on still deletes cleanly and audits each removed assignment", async () => {
   const f = await seed(["admin.roles.manage"]);
   try {
     const holder = await createScratchUser(f.orgId, "Holder", "keeper");
@@ -247,7 +242,7 @@ test("ID3: a role nobody depends on still deletes cleanly and audits each remove
 
 for (const method of ["POST", "PATCH", "DELETE"] as const) {
   for (const ambient of [false, true]) {
-    test(`role ${method} audit failure rolls back role and dashboard writes (${ambient ? "ambient" : "standalone"})`, { skip }, async () => {
+    test(`role ${method} audit failure rolls back role and dashboard writes (${ambient ? "ambient" : "standalone"})`, async () => {
       const f = await seed(["admin.roles.manage"]);
       const trigger = `role_audit_${randomUUID().replaceAll("-", "")}`;
       let installed = false;
@@ -308,7 +303,7 @@ for (const method of ["POST", "PATCH", "DELETE"] as const) {
 }
 
 for (const method of ["PATCH", "DELETE"] as const) {
-  test(`role ${method} checks its permission ceiling after a concurrent role change`, { skip }, async () => {
+  test(`role ${method} checks its permission ceiling after a concurrent role change`, async () => {
     const f = await seed(["admin.roles.manage"]);
     const writer = await pool.connect();
     let pending: Promise<Response> | undefined;
@@ -368,7 +363,7 @@ for (const method of ["PATCH", "DELETE"] as const) {
   });
 }
 
-test("role text fields reject malformed input without changing role state", { skip }, async () => {
+test("role text fields reject malformed input without changing role state", async () => {
   const f = await seed(["admin.roles.manage"]);
   try {
     const snapshot = async () => (await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`)).rows;
@@ -390,7 +385,7 @@ test("role text fields reject malformed input without changing role state", { sk
 });
 
 for (const mode of ["subtree", "list"] as const) {
-  test(`role ${mode} restriction canonicalizes UUID case and preserves tenant boundaries`, { skip }, async () => {
+  test(`role ${mode} restriction canonicalizes UUID case and preserves tenant boundaries`, async () => {
     const f = await seed(["admin.roles.manage"]);
     const other = await createScratchOrg();
     try {
@@ -415,7 +410,7 @@ for (const mode of ["subtree", "list"] as const) {
 }
 
 
-test("module permission declarations are tenant-scoped, explicitly grantable inside the ceiling, and withdrawn without erasing stored grants", { skip }, async () => {
+test("module permission declarations are tenant-scoped, explicitly grantable inside the ceiling, and withdrawn without erasing stored grants", async () => {
   const f = await seed(["*"]);
   const other = await createScratchOrg();
   const { installTestExtension, disableTestExtension } = await import("@openbooks/engine/src/testing/extension-packages.ts");

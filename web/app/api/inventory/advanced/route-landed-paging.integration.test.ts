@@ -13,7 +13,6 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __landedPagingAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__landedPagingAudit.user,allowedSubsidiaryIds:null}}",
@@ -43,7 +42,7 @@ async function getJson(url: string): Promise<{ status: number; body: { vouchers:
  * no status filter or cursor. The list is now server-filtered by status,
  * server-searched, and cursor-paged with a total.
  */
-test("an older posted voucher behind 50 reversed ones stays pickable", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("an older posted voucher behind 50 reversed ones stays pickable", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;

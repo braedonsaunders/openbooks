@@ -19,9 +19,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
     if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:record-type-count-scope-authz', shortCircuit: true }
     }
@@ -46,14 +43,13 @@ const routeUrl = './route.ts?record-type-count-scope-test'
 const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts',
 )
 
 test(
   'record-type record_count hides rows whose JSON subsidiary_id is outside the caller fence',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const scopedKey = `typecount-${randomUUID().replaceAll('-', '').slice(0, 12)}`
     const plainKey = `typeplain-${randomUUID().replaceAll('-', '').slice(0, 12)}`
@@ -152,7 +148,6 @@ test(
 
 test(
   'record-type record_count still hides JSON subsidiary_id rows after the type drops the field',
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const droppedKey = `typedrop-${randomUUID().replaceAll('-', '').slice(0, 10)}`
     const { org, actorId } = await withBypass(async () => {

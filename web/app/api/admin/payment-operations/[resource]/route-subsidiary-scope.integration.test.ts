@@ -6,7 +6,6 @@ import test from 'node:test'
 const state: { gate: { user: { id: string; orgId: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { gate: null }
 Object.assign(globalThis, { __paymentMandateReadScope: state })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier.endsWith('/lib/authz') && (context.parentURL ?? '').includes('/api/admin/payment-operations/')) {
     return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
       export async function guardPermission() { return globalThis.__paymentMandateReadScope.gate }
@@ -20,7 +19,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET } = await import('./route.ts')
 
-test('payment mandate list hides mandates for parties outside the caller scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('payment mandate list hides mandates for parties outside the caller scope', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId

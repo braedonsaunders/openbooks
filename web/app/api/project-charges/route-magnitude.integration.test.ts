@@ -40,9 +40,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
     }
@@ -69,7 +66,7 @@ const routeUrl = "./route.ts?project-charge-magnitude-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -128,7 +125,7 @@ async function chargeCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
-test("POST refuses a bill rate wider than numeric(19,4) without writing", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST refuses a bill rate wider than numeric(19,4) without writing", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, { billRate: "99999999999999999999" });
@@ -139,7 +136,7 @@ test("POST refuses a bill rate wider than numeric(19,4) without writing", { skip
   }
 });
 
-test("POST refuses a quantity wider than numeric(19,4) without writing", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST refuses a quantity wider than numeric(19,4) without writing", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, { quantity: "99999999999999999999" });
@@ -150,7 +147,7 @@ test("POST refuses a quantity wider than numeric(19,4) without writing", { skip:
   }
 });
 
-test("POST still saves column-maximum rate and quantity with identical read-back", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST still saves column-maximum rate and quantity with identical read-back", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, {

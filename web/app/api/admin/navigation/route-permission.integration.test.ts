@@ -35,9 +35,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("admin/navigation")) {
       return { url: "mock:nav-permission-authz", shortCircuit: true };
     }
@@ -99,7 +96,7 @@ function asUser(orgId: string, userId: string, permissions: string[]): void {
   permState.authz = { user: { orgId, id: userId }, permissions: new Set(permissions), allowedSubsidiaryIds: null };
 }
 
-test("a holder of admin.nav.manage can save the nav config", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a holder of admin.nav.manage can save the nav config", async () => {
   const { orgId, userId } = await freshOrgWithUser();
   try {
     asUser(orgId, userId, ["admin.nav.manage"]);
@@ -115,7 +112,7 @@ test("a holder of admin.nav.manage can save the nav config", { skip: !process.en
   }
 });
 
-test("a holder of admin.customization.manage keeps save access", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a holder of admin.customization.manage keeps save access", async () => {
   const { orgId, userId } = await freshOrgWithUser();
   try {
     asUser(orgId, userId, ["admin.customization.manage"]);
@@ -127,7 +124,7 @@ test("a holder of admin.customization.manage keeps save access", { skip: !proces
   }
 });
 
-test("a user with neither admin key is refused without persisting anything", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a user with neither admin key is refused without persisting anything", async () => {
   const { orgId, userId } = await freshOrgWithUser();
   try {
     asUser(orgId, userId, ["reports.read"]);
@@ -142,7 +139,7 @@ test("a user with neither admin key is refused without persisting anything", { s
   }
 });
 
-test("an unauthenticated save is refused", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("an unauthenticated save is refused", async () => {
   const { orgId } = await freshOrgWithUser();
   try {
     permState.authz = null;

@@ -14,7 +14,6 @@ Object.assign(globalThis, { __activityRevisionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return virtual('export {}')
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
@@ -37,7 +36,6 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadActivity } = await import('../../../../../lib/crm')
 const { PATCH } = await import('./route.ts')
-const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
   const org = await withBypassContext(() => (createScratchOrg()))
@@ -94,7 +92,7 @@ async function subject(activityId: string): Promise<string | null> {
   })
 }
 
-test('PATCH without a revision token is refused with 409 and writes nothing', { skip: !DB }, async () => {
+test('PATCH without a revision token is refused with 409 and writes nothing', async () => {
   const { org, activityId } = await fixture()
   try {
     const result = await patch(activityId, { subject: 'Silent overwrite' })
@@ -106,7 +104,7 @@ test('PATCH without a revision token is refused with 409 and writes nothing', { 
   }
 })
 
-test('PATCH with a stale revision token is refused after a concurrent save', { skip: !DB }, async () => {
+test('PATCH with a stale revision token is refused after a concurrent save', async () => {
   const { org, activityId } = await fixture()
   try {
     const token = await revisionToken(activityId)
@@ -121,7 +119,7 @@ test('PATCH with a stale revision token is refused after a concurrent save', { s
   }
 })
 
-test('PATCH with the fresh revision token saves and rotates the token', { skip: !DB }, async () => {
+test('PATCH with the fresh revision token saves and rotates the token', async () => {
   const { org, activityId } = await fixture()
   try {
     const token = await revisionToken(activityId)

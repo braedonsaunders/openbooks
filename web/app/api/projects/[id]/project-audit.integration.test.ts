@@ -7,7 +7,6 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __projectAuditSession: session })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__projectAuditSession.user}' }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
@@ -24,7 +23,7 @@ const projectRoute = await import('./route')
  * legal-entity scope — the same material surface every other project write
  * audits. The autosave PATCH must leave a before/after audit row.
  */
-test('project header edits write an audit row with before and after', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('project header edits write an audit row with before and after', async () => {
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Project editor', 'reviewer')

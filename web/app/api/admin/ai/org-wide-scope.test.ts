@@ -19,7 +19,6 @@ const virtual = (source: string) => ({
 const realAuthz = pathToFileURL(`${process.cwd()}/web/lib/authz.ts`).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier.endsWith("/lib/authz")) {
       return virtual(`
         export { guardUnrestrictedScope } from ${JSON.stringify(realAuthz)};

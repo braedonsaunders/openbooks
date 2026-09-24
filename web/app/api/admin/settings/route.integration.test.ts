@@ -49,13 +49,6 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        format: "module",
-        url: "data:text/javascript,export {}",
-      };
-    }
     if (
       specifier === "../../../../lib/authz" &&
       context.parentURL?.includes("admin/settings")
@@ -93,7 +86,6 @@ const { db, withBypass, withBypassContext, withOrgContext } =
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Drizzle wraps driver errors, so PostgreSQL messages live on `cause`. */
 function postgresCauseMessage(error: unknown): string {
@@ -267,7 +259,6 @@ async function waitForSettingsWriters(): Promise<void> {
 
 test(
   "users-manage authority cannot write accounting policy; setup authority can",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -349,7 +340,6 @@ test(
 
 test(
   "audit insertion failure rolls back org, fiscal calendar, periods, and evidence",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     let removeFailure: (() => Promise<void>) | undefined;
@@ -374,7 +364,6 @@ test(
 
 test(
   "concurrent locale and accounting-policy writes preserve both disjoint changes",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     const holder = new Client({
@@ -423,7 +412,6 @@ test(
 
 test(
   "base currency changes before ledger evidence and locks after the first journal line",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -470,7 +458,6 @@ test(
 
 test(
   "posted and closed accounting history refuses fiscal relabelling without mutation",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -528,7 +515,6 @@ test(
 
 test(
   "a fresh organization can configure its fiscal-year start month",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {
@@ -557,7 +543,6 @@ test(
 
 test(
   "control mappings reject inactive, summary, and wrong-type accounts and accept valid roles",
-  { skip: !DB },
   async () => {
     const fixture = await seed();
     try {

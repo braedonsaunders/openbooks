@@ -17,7 +17,6 @@ Object.assign(globalThis, { __compliancePatchScopeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
@@ -45,7 +44,6 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { PATCH } = await import("./route.ts");
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -111,7 +109,7 @@ async function coverageOf(recordId: string): Promise<string> {
 
 const UPDATE = { action: "update", revision: 1, coverageAmount: "2000000.00" };
 
-test("certificate PATCH cannot edit another entity's certificate", { skip: !DB }, async () => {
+test("certificate PATCH cannot edit another entity's certificate", async () => {
   const { org, hiddenRecordId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -124,7 +122,7 @@ test("certificate PATCH cannot edit another entity's certificate", { skip: !DB }
   }
 });
 
-test("certificate PATCH cannot edit a certificate under a hidden project", { skip: !DB }, async () => {
+test("certificate PATCH cannot edit a certificate under a hidden project", async () => {
   const { org, hiddenProjectRecordId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
@@ -137,7 +135,7 @@ test("certificate PATCH cannot edit a certificate under a hidden project", { ski
   }
 });
 
-test("certificate PATCH still edits in-scope certificates", { skip: !DB }, async () => {
+test("certificate PATCH still edits in-scope certificates", async () => {
   const { org, visibleRecordId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
