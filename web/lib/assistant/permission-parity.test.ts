@@ -147,7 +147,7 @@ const UNION_ROWS: Row[] = [
     tools: ["list_reporting_packages"], file: "./tools-reports.ts",
     gate: ["close.read"],
     routes: [
-      ["../../app/api/close/runs/[id]/binder/route.ts", "guardPermission(\"close.read\")"],
+      ["../../app/api/close/runs/[id]/binder/route.ts", "guardFeaturePermission(\"close.read\""],
       ["../../app/(app)/close/view.ts", "requirePermission('close.read')"],
     ],
     note: "close package reads",
@@ -379,7 +379,7 @@ const SERVICE_ROWS: {
     visibleTo: 'hasPermission("close.run")',
     serviceFile: "../application/close.ts",
     serviceAssert: 'assertApplicationPermission(context, "close.run")',
-    routes: [["../../app/api/close/runs/route.ts", 'guardPermission("close.run")']],
+    routes: [["../../app/api/close/runs/route.ts", 'guardFeaturePermission("close.run"']],
     note: "close lifecycle doorway (attest/close escalate to close.approve inside, as on the [id] route)",
   },
   {
@@ -387,7 +387,7 @@ const SERVICE_ROWS: {
     visibleTo: 'hasPermission("close.reopen")',
     serviceFile: "../application/close.ts",
     serviceAssert: 'assertApplicationPermission(context, "close.reopen")',
-    routes: [["../../app/api/close/runs/route.ts", 'guardPermission("close.run")']],
+    routes: [["../../app/api/close/runs/route.ts", 'guardFeaturePermission("close.run"']],
     note: "reopen doorway close.reopen; route file cited for the runs surface",
   },
   {
