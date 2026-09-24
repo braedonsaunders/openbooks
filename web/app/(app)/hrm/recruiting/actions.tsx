@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
+import { civilDateTimeToInstant } from '@openbooks/engine/src/platform/time-zone.ts'
 
 /**
  * Recruiting action islands: small client forms posting through the same
@@ -797,16 +798,17 @@ export function ScorecardFormIsland({
 export function SlotProposeIsland({
   interviewId,
   pools,
+  timeZone,
   labels,
 }: {
   interviewId: string
   pools: { id: string; name: string; windowCount: number }[]
-  labels: { submit: string; failed: string; proposeFromPool: string; starts: string; ends: string; timezone: string; bookingLink: string }
+  timeZone: string
+  labels: { submit: string; failed: string; invalidTime: string; proposeFromPool: string; starts: string; ends: string; timezone: string; bookingLink: string }
 }) {
   const refresh = useRefresh()
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
-  const [timezone, setTimezone] = useState('America/Toronto')
   const [poolId, setPoolId] = useState('')
   const [link, setLink] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -835,11 +837,20 @@ export function SlotProposeIsland({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    let startsInstant: Date
+    let endsInstant: Date
+    try {
+      startsInstant = civilDateTimeToInstant(startsAt, timeZone)
+      endsInstant = civilDateTimeToInstant(endsAt, timeZone)
+    } catch {
+      setError(labels.invalidTime)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/slots`, 'POST', {
-        windows: [{ startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(), timezone }],
+        windows: [{ startsAt: startsInstant.toISOString(), endsAt: endsInstant.toISOString(), timezone: timeZone }],
       })
       if (!res.ok) {
         setError(await readApiErrorMessage(res, labels.failed))
@@ -876,7 +887,7 @@ export function SlotProposeIsland({
       <div className="flex flex-wrap gap-2">
         <Input aria-label={labels.starts} type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
         <Input aria-label={labels.ends} type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
-        <Input aria-label={labels.timezone} value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+        <span className="self-center text-sm text-slate-500">{labels.timezone}: {timeZone}</span>
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

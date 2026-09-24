@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+// Keep datetime-local regression tests independent of the workstation zone.
+process.env.TZ = 'UTC'
+
 /**
  * F7: the offer Draft form never sent employerSubsidiaryId, so every UI
  * submission failed with "expected string, received undefined". The draft
@@ -69,7 +72,7 @@ function provider(children: React.ReactNode): React.ReactNode {
 }
 // Dynamic: the islands resolve next/navigation through the stub above,
 // so the module must load after the hook registers.
-const { buildOfferDraftBody, OfferCreateIsland, OfferActionsIsland, ScorecardFormIsland } = await import('./actions')
+const { buildOfferDraftBody, OfferCreateIsland, OfferActionsIsland, ScorecardFormIsland, SlotProposeIsland } = await import('./actions')
 
 const EMPLOYER_ID = 'd726d187-0000-0000-0000-000000000001'
 const OTHER_ID = 'd726d187-0000-0000-0000-000000000002'
@@ -116,6 +119,55 @@ test('scorecard choices and field names are translated labels, not enum keys or 
   assert.doesNotMatch(markup, />strong_yes</)
   assert.match(markup, /aria-label="Ratings"/)
   assert.match(markup, />Shared notes</)
+})
+
+test('slot proposals interpret datetime-local in the loader-provided organization time zone', async (t) => {
+  const posts: Array<{ url: string; body: Record<string, unknown> }> = []
+  const priorFetch = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    posts.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> })
+    return Response.json({ bookingUrlPath: '/book/token' }, { status: 201 })
+  }) as typeof fetch
+  t.after(() => { globalThis.fetch = priorFetch })
+
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  await act(async () => {
+    root.render(provider(<SlotProposeIsland
+      interviewId="interview-1"
+      pools={[]}
+      timeZone="America/Toronto"
+      labels={{ submit: 'Propose slots', failed: 'Save failed', invalidTime: 'Choose a valid local time', proposeFromPool: 'Propose from pool', starts: 'Starts', ends: 'Ends', timezone: 'Time zone', bookingLink: 'Booking link' }}
+    />))
+  })
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+
+  const setInput = (el: HTMLInputElement, value: string): void => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    setter.call(el, value)
+    el.dispatchEvent(new window.Event('input', { bubbles: true }))
+  }
+  await act(async () => {
+    const starts = document.querySelector<HTMLInputElement>('input[aria-label="Starts"]')!
+    const ends = document.querySelector<HTMLInputElement>('input[aria-label="Ends"]')!
+    setInput(starts, '2026-07-01T09:30')
+    setInput(ends, '2026-07-01T10:00')
+  })
+  const submit = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Propose slots')!
+  await act(async () => {
+    submit.click()
+    await tick()
+  })
+
+  assert.equal(posts.length, 1)
+  assert.equal(posts[0]?.url, '/api/hrm/recruiting/interviews/interview-1/slots')
+  assert.deepEqual(posts[0]?.body, {
+    windows: [{ startsAt: '2026-07-01T13:30:00.000Z', endsAt: '2026-07-01T14:00:00.000Z', timezone: 'America/Toronto' }],
+  })
 })
 
 test('the draft POST carries the requisition employer', () => {

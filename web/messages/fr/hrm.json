@@ -797,6 +797,7 @@
       "starts": "Début",
       "ends": "Fin",
       "timezone": "Fuseau horaire",
+      "invalidTime": "Saisissez une heure locale valide dans le fuseau horaire de l’organisation. Les heures sautées ou répétées lors du changement d’heure ne peuvent pas être réservées.",
       "bookingLink": "Lien de réservation",
       "email": "E-mail",
       "name": "Nom",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canonicalTimeZone,
+  civilDateTimeToInstant,
   isKnownTimeZone,
   listCanonicalTimeZones,
 } from "./time-zone.ts";
@@ -54,4 +55,15 @@ test("the picker list offers UTC first, then sorted canonical names", () => {
   assert.ok(zones.length > 0);
   assert.equal(zones[0], "UTC");
   assert.deepEqual(zones.slice(1), [...zones.slice(1)].sort());
+});
+
+test("civil date-times resolve in their named zone without interpreting local input as UTC", () => {
+  assert.equal(civilDateTimeToInstant("2026-07-01T09:30", "America/Toronto").toISOString(), "2026-07-01T13:30:00.000Z");
+  assert.equal(civilDateTimeToInstant("2026-07-01T09:30", "UTC").toISOString(), "2026-07-01T09:30:00.000Z");
+});
+
+test("civil date-time conversion refuses nonexistent and repeated daylight-saving times", () => {
+  assert.throws(() => civilDateTimeToInstant("2026-03-08T02:30", "America/Toronto"), /does not exist/);
+  assert.throws(() => civilDateTimeToInstant("2026-11-01T01:30", "America/Toronto"), /occurs twice/);
+  assert.throws(() => civilDateTimeToInstant("2026-02-31T09:30", "America/Toronto"), /valid local date/);
 });

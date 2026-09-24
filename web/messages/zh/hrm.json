@@ -797,6 +797,7 @@
       "starts": "开始",
       "ends": "结束",
       "timezone": "时区",
+      "invalidTime": "请输入组织时区中的有效本地时间。时钟变更导致不存在或重复的时间无法预约。",
       "bookingLink": "预约链接",
       "email": "电子邮件",
       "name": "姓名",

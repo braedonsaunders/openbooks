@@ -797,6 +797,7 @@
       "starts": "Beginn",
       "ends": "Ende",
       "timezone": "Zeitzone",
+      "invalidTime": "Geben Sie eine gültige Ortszeit in der Zeitzone der Organisation ein. Bei einer Zeitumstellung übersprungene oder wiederholte Zeiten können nicht gebucht werden.",
       "bookingLink": "Buchungslink",
       "email": "E-Mail",
       "name": "Personenname",
