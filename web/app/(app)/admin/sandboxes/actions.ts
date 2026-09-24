@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -30,21 +31,48 @@ async function requireManager() {
   return authz;
 }
 
+/**
+ * Caller-supplied idempotency key for one sandbox operation intent. The UI
+ * mints one per form/confirm instance and rotates it after success, so a
+ * double-click or retried submit reuses the key and dedupes in BullMQ while
+ * a later intentional operation mints a new one. Every enqueue below derives
+ * its deterministic jobId from (operation, entity, parameters, key) — never
+ * from the clock — so the same intent enqueues exactly one job.
+ */
+function assertClientOpKey(value: unknown): string {
+  if (typeof value !== "string" || !isUuid(value)) throw new Error("invalid idempotency key");
+  return value;
+}
+
+function sandboxOpJobId(op: string, parts: string, clientOpKey: string): string {
+  const digest = createHash("sha256").update(op).update("\0").update(parts).update("\0").update(clientOpKey).digest("hex").slice(0, 24);
+  return `sbx|${op}|${digest}`;
+}
+
 export async function createSandboxAction(input: {
   name: string;
   tier: "dev" | "masked" | "full" | "as_of";
   asOfPeriodId?: string | null;
+  clientOpKey: string;
 }): Promise<void> {
   const authz = await requireManager();
-  await enqueueSandboxOp({
-    op: "create",
-    productionOrgId: authz.user.productionOrgId,
-    name: input.name.trim() || "Sandbox",
-    tier: input.tier,
-    masked: input.tier === "masked",
-    asOfPeriodId: input.asOfPeriodId ?? null,
-    createdBy: authz.user.id,
-  });
+  const clientOpKey = assertClientOpKey(input.clientOpKey);
+  if (input.asOfPeriodId != null) assertUuid(input.asOfPeriodId, "As-of period");
+  const name = input.name.trim() || "Sandbox";
+  const tier = input.tier;
+  const asOfPeriodId = input.asOfPeriodId ?? null;
+  await enqueueSandboxOp(
+    {
+      op: "create",
+      productionOrgId: authz.user.productionOrgId,
+      name,
+      tier,
+      masked: tier === "masked",
+      asOfPeriodId,
+      createdBy: authz.user.id,
+    },
+    { jobId: sandboxOpJobId("create", `${authz.user.productionOrgId}|${name}|${tier}|${asOfPeriodId ?? ""}`, clientOpKey) },
+  );
   revalidatePath("/admin/sandboxes");
 }
 
@@ -55,27 +83,36 @@ async function ownedSandbox(sandboxId: string, productionOrgId: string): Promise
   return r.rows[0]!.orgId;
 }
 
-export async function refreshSandboxAction(sandboxId: string, keepCustomizations: boolean): Promise<void> {
+export async function refreshSandboxAction(sandboxId: string, keepCustomizations: boolean, clientOpKey: string): Promise<void> {
   const authz = await requireManager();
   assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
-  await enqueueSandboxOp({ op: "refresh", sandboxId, keepCustomizations });
+  await enqueueSandboxOp(
+    { op: "refresh", sandboxId, keepCustomizations },
+    { jobId: sandboxOpJobId("refresh", `${sandboxId}|${keepCustomizations}`, assertClientOpKey(clientOpKey)) },
+  );
   revalidatePath("/admin/sandboxes");
 }
 
-export async function resetSandboxAction(sandboxId: string): Promise<void> {
+export async function resetSandboxAction(sandboxId: string, clientOpKey: string): Promise<void> {
   const authz = await requireManager();
   assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
-  await enqueueSandboxOp({ op: "reset", sandboxId });
+  await enqueueSandboxOp(
+    { op: "reset", sandboxId },
+    { jobId: sandboxOpJobId("reset", sandboxId, assertClientOpKey(clientOpKey)) },
+  );
   revalidatePath("/admin/sandboxes");
 }
 
-export async function deleteSandboxAction(sandboxId: string): Promise<void> {
+export async function deleteSandboxAction(sandboxId: string, clientOpKey: string): Promise<void> {
   const authz = await requireManager();
   assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
-  await enqueueSandboxOp({ op: "delete", sandboxId });
+  await enqueueSandboxOp(
+    { op: "delete", sandboxId },
+    { jobId: sandboxOpJobId("delete", sandboxId, assertClientOpKey(clientOpKey)) },
+  );
   revalidatePath("/admin/sandboxes");
 }
 

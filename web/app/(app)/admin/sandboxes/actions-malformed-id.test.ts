@@ -8,10 +8,15 @@ import test from "node:test";
 // domain error. Auth is stubbed to a sandbox manager; the guards must fire
 // before any database round-trip, so these run without a database.
 const stateKey = Symbol.for("openbooks.sandbox-actions-id-test");
+interface EnqueueCall {
+  data: unknown;
+  options: unknown;
+}
 interface State {
   authz: unknown;
+  enqueues: EnqueueCall[];
 }
-const state: State = { authz: null };
+const state: State = { authz: null, enqueues: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mocks = new Map<string, string>([
@@ -27,6 +32,16 @@ const mocks = new Map<string, string>([
     "mock:cache",
     `export function revalidatePath() {}`,
   ],
+  [
+    "mock:jobs",
+    `
+      const state = globalThis[Symbol.for('openbooks.sandbox-actions-id-test')]
+      export async function enqueueSandboxOp(data, options) {
+        state.enqueues.push({ data, options });
+        return { id: options?.jobId ?? 'mock-job' };
+      }
+    `,
+  ],
 ]);
 
 registerHooks({
@@ -39,6 +54,9 @@ registerHooks({
     }
     if (specifier === "next/cache") {
       return { url: "mock:cache", shortCircuit: true };
+    }
+    if (specifier === "@openbooks/jobs") {
+      return { url: "mock:jobs", shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
@@ -65,14 +83,48 @@ function managerAuthz(): void {
   };
 }
 
+const OP_KEY = "00000000-0000-4000-8000-00000000b001";
+const OTHER_OP_KEY = "00000000-0000-4000-8000-00000000b002";
+
 test("sandbox actions fail closed on malformed ids before any database write", async () => {
   managerAuthz();
-  await assert.rejects(actions.refreshSandboxAction("not-a-uuid", false), /invalid/i);
-  await assert.rejects(actions.resetSandboxAction("not-a-uuid"), /invalid/i);
-  await assert.rejects(actions.deleteSandboxAction("not-a-uuid"), /invalid/i);
+  await assert.rejects(actions.refreshSandboxAction("not-a-uuid", false, OP_KEY), /invalid/i);
+  await assert.rejects(actions.resetSandboxAction("not-a-uuid", OP_KEY), /invalid/i);
+  await assert.rejects(actions.deleteSandboxAction("not-a-uuid", OP_KEY), /invalid/i);
   await assert.rejects(actions.setScheduleAction("not-a-uuid", "daily"), /invalid/i);
   await assert.rejects(actions.promoteSandboxAction("not-a-uuid", "x"), /invalid/i);
   await assert.rejects(actions.reviewChangeSetAction("not-a-uuid"), /invalid/i);
   await assert.rejects(actions.approveChangeSetAction("not-a-uuid"), /invalid/i);
   await assert.rejects(actions.applyChangeSetAction("not-a-uuid"), /invalid/i);
+});
+
+test("the same operation intent enqueues the same deterministic job id", async () => {
+  managerAuthz();
+  state.enqueues = [];
+  const input = { name: "QA", tier: "masked" as const, clientOpKey: OP_KEY };
+  await actions.createSandboxAction(input);
+  await actions.createSandboxAction(input);
+  assert.equal(state.enqueues.length, 2);
+  const first = (state.enqueues[0]!.options as { jobId?: unknown }).jobId;
+  const second = (state.enqueues[1]!.options as { jobId?: unknown }).jobId;
+  assert.ok(typeof first === "string" && first.length > 0, "every enqueue carries a job id");
+  assert.equal(second, first, "a double-click with the same intent key must dedupe in BullMQ");
+});
+
+test("a new intent key mints a new job id so later operations are never swallowed", async () => {
+  managerAuthz();
+  state.enqueues = [];
+  await actions.createSandboxAction({ name: "QA", tier: "masked", clientOpKey: OP_KEY });
+  await actions.createSandboxAction({ name: "QA", tier: "masked", clientOpKey: OTHER_OP_KEY });
+  const ids = state.enqueues.map((call) => (call.options as { jobId?: unknown }).jobId);
+  assert.ok(ids.every((id) => typeof id === "string" && id.length > 0));
+  assert.notEqual(ids[1], ids[0]);
+});
+
+test("sandbox enqueues refuse a malformed intent key", async () => {
+  managerAuthz();
+  await assert.rejects(
+    actions.createSandboxAction({ name: "QA", tier: "masked", clientOpKey: "not-a-key" }),
+    /invalid/i,
+  );
 });

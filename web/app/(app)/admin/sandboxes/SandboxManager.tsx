@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { promptDialog } from "../../../../lib/prompt";
@@ -56,6 +56,22 @@ export function SandboxManager({
   const [tier, setTier] = useState("masked");
   const [asOfPeriodId, setAsOfPeriodId] = useState("");
   const [pending, start] = useTransition();
+  // One idempotency key per create-form instance, rotated after success: a
+  // double-click or retried submit reuses the key and dedupes in BullMQ,
+  // while the next intentional create mints a new one.
+  const createKey = useRef(crypto.randomUUID());
+  // Same per sandbox row for refresh/reset/delete.
+  const opKeys = useRef<Record<string, string>>({});
+  const opKeyFor = (sandboxId: string): string => {
+    const existing = opKeys.current[sandboxId];
+    if (existing) return existing;
+    const minted = crypto.randomUUID();
+    opKeys.current[sandboxId] = minted;
+    return minted;
+  };
+  const rotateOpKey = (sandboxId: string): void => {
+    opKeys.current[sandboxId] = crypto.randomUUID();
+  };
   // An as-of clone needs a period cutoff; block create until one is chosen.
   const needsPeriod = tier === "as_of" && !asOfPeriodId;
 
@@ -111,9 +127,11 @@ export function SandboxManager({
                   name,
                   tier: tier as unknown as "masked" | "as_of" | "dev" | "full",
                   asOfPeriodId: tier === "as_of" ? asOfPeriodId : null,
+                  clientOpKey: createKey.current,
                 });
                 setName("");
                 setAsOfPeriodId("");
+                createKey.current = crypto.randomUUID();
               })
             }
           >
@@ -165,7 +183,12 @@ export function SandboxManager({
                   variant="outline"
                   size="sm"
                   disabled={pending || s.status !== "ready"}
-                  onClick={() => start(async () => void (await refreshSandboxAction(s.id, true)))}
+                  onClick={() =>
+                    start(async () => {
+                      await refreshSandboxAction(s.id, true, opKeyFor(s.id));
+                      rotateOpKey(s.id);
+                    })
+                  }
                   title="Re-pull production data, keep your customizations"
                 >
                   Refresh
@@ -176,8 +199,10 @@ export function SandboxManager({
                   disabled={pending || s.status !== "ready"}
                   onClick={() =>
                     start(async () => {
-                      if (await confirmDialog("Full reset discards sandbox customizations. Continue?"))
-                        await resetSandboxAction(s.id);
+                      if (await confirmDialog("Full reset discards sandbox customizations. Continue?")) {
+                        await resetSandboxAction(s.id, opKeyFor(s.id));
+                        rotateOpKey(s.id);
+                      }
                     })
                   }
                 >
@@ -201,7 +226,10 @@ export function SandboxManager({
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
-                      if (await confirmDialog(`Delete "${s.name}" permanently?`)) await deleteSandboxAction(s.id);
+                      if (await confirmDialog(`Delete "${s.name}" permanently?`)) {
+                        await deleteSandboxAction(s.id, opKeyFor(s.id));
+                        rotateOpKey(s.id);
+                      }
                     })
                   }
                 >
