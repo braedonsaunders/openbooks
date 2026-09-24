@@ -31,7 +31,7 @@ const sources = {
   '../platform/db.ts': 'export const db = { execute: async () => ({ rows: [] }) }; export const withOrgContext = (_org, action) => action();',
   '../organization/sandbox-guard.ts': 'export const isSandboxOrg = async () => false;',
   '../delivery/email-config.ts': `
-    export const resolveOrgEmailTransport = async () => ({ provider: 'test' });
+    export const resolveOrgEmailTransportDetailed = async () => ({ state: 'ready', transport: { provider: 'test' } });
     export const claimEmailDeliveryLog = async () => ({ id: 'log', attempts: [] });
     export const appendEmailAttemptEvent = async () => [];
     export const confirmEmailSentGuarded = async () => true;

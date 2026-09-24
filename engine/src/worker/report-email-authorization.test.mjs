@@ -18,7 +18,7 @@ const sources = {
     export const withOrgContext = (_org, action) => action();`,
   '../organization/sandbox-guard.ts': 'export const isSandboxOrg = async () => false;',
   '../delivery/email-config.ts': `
-    export const resolveOrgEmailTransport = async () => ({ provider: 'test' });
+    export const resolveOrgEmailTransportDetailed = async () => ({ state: 'ready', transport: { provider: 'test' } });
     export const claimEmailDeliveryLog = async () => ({id:'log',attempts:[]});
     export const appendEmailAttemptEvent = async (_org, _id, event) => globalThis.__reportEmailTest.events.push(event);
     ${['confirmEmailSentGuarded', 'markDunningClaimFailed', 'markDunningClaimSent', 'markEmailFailed', 'markEmailSent', 'markEmailSuppressed', 'markEmailUncertain', 'markPaymentRemittanceAttempt', 'markPaymentRemittanceFailed', 'markPaymentRemittanceSent'].map((name) => `export const ${name} = async () => {};`).join('\n')}
