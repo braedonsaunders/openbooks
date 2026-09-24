@@ -89,7 +89,8 @@
     "setDefaultFailed": "Standardansicht konnte nicht gespeichert werden",
     "useSystemDefault": "Org-Standard verwenden",
     "manage": "Ansichten verwalten",
-    "newView": "Neue Ansicht…"
+    "newView": "Neue Ansicht…",
+    "renderFailed": "Diese Ansicht konnte nicht gerendert werden."
   },
   "designer": {
     "title": "Formulare & Ansichten",

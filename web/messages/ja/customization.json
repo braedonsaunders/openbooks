@@ -89,7 +89,8 @@
     "setDefaultFailed": "既定ビューを保存できませんでした",
     "useSystemDefault": "組織の既定を使用",
     "manage": "ビューを管理",
-    "newView": "新規ビュー…"
+    "newView": "新規ビュー…",
+    "renderFailed": "このビューを表示できませんでした。"
   },
   "designer": {
     "title": "フォームとビュー",

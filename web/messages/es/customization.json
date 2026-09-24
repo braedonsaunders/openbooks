@@ -89,7 +89,8 @@
     "setDefaultFailed": "No se pudo guardar la vista predeterminada",
     "useSystemDefault": "Usar la vista de la organización",
     "manage": "Gestionar vistas",
-    "newView": "Nueva vista…"
+    "newView": "Nueva vista…",
+    "renderFailed": "No se pudo representar esta vista."
   },
   "designer": {
     "title": "Formularios y vistas",
