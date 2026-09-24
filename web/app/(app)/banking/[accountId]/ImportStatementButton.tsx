@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { FileUp, Upload } from 'lucide-react'
@@ -128,6 +128,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
+  const fieldId = useId()
   const fileReadVersion = useRef(0)
   const sourceRevision = useRef(0)
   const [open, setOpen] = useState(false)
@@ -340,11 +341,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const mappingSelect = (key: keyof Mapping, label: string, required: boolean) =>
     header ? (
       <div className={field}>
-        <Label>
+        <Label htmlFor={`${fieldId}-${key}`}>
           {label}
           {required ? <span className="text-red-500"> *</span> : null}
         </Label>
         <Select
+          id={`${fieldId}-${key}`}
           disabled={busy}
           value={mapping[key]}
           onChange={(e) => {
@@ -408,8 +410,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}>
-              <Label>{t('format')}</Label>
+              <Label htmlFor={`${fieldId}-format`}>{t('format')}</Label>
               <Select
+                id={`${fieldId}-format`}
                 disabled={busy}
                 value={source}
                 onChange={(e) => {
@@ -429,9 +432,10 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               </Select>
             </div>
             <div className={field}>
-              <Label>{t('file')}</Label>
+              <Label htmlFor={`${fieldId}-file`}>{t('file')}</Label>
               <div className="flex items-center gap-2">
                 <input
+                  id={`${fieldId}-file`}
                   ref={fileRef}
                   type="file"
                   accept=".ofx,.qfx,.csv,.xml,.bai,.bai2,.sta,.mt940,.txt"
@@ -454,8 +458,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           </div>
 
           <div className={field}>
-            <Label>{t('statementText')}</Label>
+            <Label htmlFor={`${fieldId}-text`}>{t('statementText')}</Label>
             <Textarea
+              id={`${fieldId}-text`}
               disabled={busy}
               value={text}
               onChange={(e) => onTextChanged(e.target.value)}
@@ -469,7 +474,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           {source === 'csv' ? (
             header ? (
               <div className="space-y-3">
-                <Label>{t('columnMapping')}</Label>
+                <h3 className="text-sm font-medium">{t('columnMapping')}</h3>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {mappingSelect('date', tCommon('labels.date'), true)}
                   {mappingSelect('amount', tCommon('labels.amount'), true)}
@@ -491,8 +496,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className={field}>
-                  <Label>{tBanking('labels.statementDate')}</Label>
+                  <Label htmlFor={`${fieldId}-statement-date`}>{tBanking('labels.statementDate')}</Label>
                   <Input
+                    id={`${fieldId}-statement-date`}
                     disabled={busy}
                     type="date"
                     value={statementDate}
@@ -500,8 +506,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   />
                 </div>
                 <div className={field}>
-                  <Label>{tBanking('labels.openingBalance')}</Label>
+                  <Label htmlFor={`${fieldId}-opening-balance`}>{tBanking('labels.openingBalance')}</Label>
                   <Input
+                    id={`${fieldId}-opening-balance`}
                     disabled={busy}
                     inputMode="decimal"
                     value={openingBalance}
@@ -511,8 +518,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   />
                 </div>
                 <div className={field}>
-                  <Label>{tBanking('labels.closingBalance')}</Label>
+                  <Label htmlFor={`${fieldId}-closing-balance`}>{tBanking('labels.closingBalance')}</Label>
                   <Input
+                    id={`${fieldId}-closing-balance`}
                     disabled={busy}
                     inputMode="decimal"
                     value={closingBalance}
