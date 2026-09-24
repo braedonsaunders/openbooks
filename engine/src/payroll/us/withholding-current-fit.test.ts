@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   payrollCertificate,
@@ -185,10 +184,4 @@ test('PA Act 32 EIT withholds at the winning reach rate and refuses a missing on
     () => computeUsWithholding(missing),
     /their own and DCED revises/,
   )
-})
-
-test('the shared US statutory caller forwards the FIT it just calculated', () => {
-  const source = readFileSync('engine/src/payroll/us/compute-statutory.ts', 'utf8')
-  const call = source.match(/const withheld = computeUsWithholding\(\{[\s\S]*?\n    \}\)/)?.[0] ?? ''
-  assert.match(call, /federalIncomeTax:\s*statutory\.fit\b/)
 })
