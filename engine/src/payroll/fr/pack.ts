@@ -359,11 +359,12 @@ export const FR_PAYROLL_PACK = {
     citation: "INSEE: the NIR is 13 digits plus a 2-digit control key; birthplace 2A Corse-du-Sud / 2B Haute-Corse (COG)",
     numericEntry: false,
   },
-  // installable flips to true once packAccounts.FR.slots.* statutory-account
-  // labels land in web/messages (labels shard owns all seven locales) — the
-  // messages-catalog gate fires on those four keys until then, so the flip
-  // waits for labels rather than shipping red. The 2026 payslip itself
-  // (PAS + URSSAF + AGIRC-ARRCO) is proven by the parity harnesses below.
+  // installable is true: the 2026 payslip (PAS + URSSAF + AGIRC-ARRCO) is
+  // proven by the parity harnesses below, and the packAccounts.FR.slots.*
+  // statutory-account labels (pas, salariales, retraite_comp, patronales)
+  // have shipped in web/messages in all seven locales — the messages-catalog
+  // gate fires on those four keys, so a future slot arriving without labels
+  // goes red before this does.
   installable: true,
   statutorySlots: FR_SLOTS,
   statutoryCurrency: "EUR",

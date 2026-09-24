@@ -11,9 +11,11 @@ import type { PayrollTaxYearSupport } from "../tax-years.ts";
  * URSSAF taux-secteur-privé and plafonds pages (both verified 200; the
  * server HTML is a JS shell — "reachable, JS-rendered", not "connection
  * reset"). PAS, the URSSAF cotisations and AGIRC-ARRCO (T1/T2, CEG,
- * CET) compute, proven by the parity harnesses. `installable` stays
- * false only for the packAccounts.FR.slots.* labels (labels shard) —
- * the messages-catalog gate fires on those four keys. Tenant-declared
+ * CET) compute, proven by the parity harnesses. `installable` is true:
+ * the 2026 payslip computes and the packAccounts.FR.slots.* labels (pas,
+ * salariales, retraite_comp, patronales) have shipped in web/messages in
+ * all seven locales — the messages-catalog gate fires on those four keys.
+ * Tenant-declared
  * AT/MP / versement mobilité rates have no engine channel and APEC is
  * refused by name — narrow, named, and stated
  * (see FR_COTISATION_REFUSALS_2026).

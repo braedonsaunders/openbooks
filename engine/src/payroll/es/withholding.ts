@@ -5,16 +5,18 @@
  * granularity the AEAT withholding algorithm works at, and the granularity at
  * which the foral regimes diverge.
  *
- * NOTHING is implemented: the 2026 AEAT retention algorithm
- * (https://www3.agenciatributaria.gob.es/static_files/Sede/Programas_ayuda/Retenciones/2026/ALGORITMO_2026.pdf,
- * portal https://sede.agenciatributaria.gob.es/Sede/Retenciones.shtml) is not
- * transcribed, so every region below is `implemented: false` with the reason
- * naming what is missing. The foral territories — Navarra (Hacienda Foral de
- * Navarra) and the three Basque Historical Territories, Álava/Araba, Gipuzkoa
- * and Bizkaia (Haciendas Forales) — publish their OWN retention tables (e.g.
- * Bizkaia's 2026 table:
+ * The AEAT procedimiento general IS implemented: the 2026 AEAT retention
+ * algorithm (https://www3.agenciatributaria.gob.es/static_files/Sede/Programas_ayuda/Retenciones/2026/ALGORITMO_2026.pdf,
+ * portal https://sede.agenciatributaria.gob.es/Sede/Retenciones.shtml) is
+ * transcribed in ./irpf-2026.ts, so every AEAT-territory region below is
+ * `implemented: true` with no `unimplementedReason`. The foral territories —
+ * Navarra (Hacienda Foral de Navarra) and the three Basque Historical
+ * Territories, Álava/Araba, Gipuzkoa and Bizkaia (Haciendas Forales) —
+ * publish their OWN retention tables (e.g. Bizkaia's 2026 table:
  * https://www.bizkaia.eus/documents/26740887/26976067/tabla-de-retenciones-2026-01.pdf),
- * so they are refused by name rather than covered by any AEAT transcription.
+ * which are NOT transcribed, so they are `implemented: false` with the
+ * reason naming the gap (the FORAL_REASONS keys below) rather than covered
+ * by any AEAT transcription.
  *
  * Non-residents are outside IRPF entirely: they fall under the Impuesto sobre
  * la Renta de No Residentes (LIRNR, RD Legislativo 5/2004), which no pack
@@ -52,10 +54,6 @@ const ES_REGION_NAMES: Readonly<Record<string, string>> = {
   ML: "Melilla",
 };
 
-const AEAT_UNIMPLEMENTED =
-  "IRPF withholding is not implemented by the ES payroll pack — the AEAT retention algorithm "
-  + "for the year (ALGORITMO, Sede/Retenciones) is not transcribed into engine/src/payroll/es/rates.ts";
-
 const FORAL_REASONS: Readonly<Record<string, string>> = {
   NC: "Navarra applies the foral IRPF regime: foral retention tables for Navarra "
     + "(Hacienda Foral de Navarra) aren't in this pack — AEAT tables never cover Navarra. "
@@ -71,7 +69,7 @@ const ES_REGIONS: readonly PayrollRegionWithholding[] = ES_REGION_CODES.map(
     region,
     label: `IRPF (${ES_REGION_NAMES[region]})`,
     implemented: FORAL_REASONS[region] === undefined,
-    unimplementedReason: FORAL_REASONS[region] ?? AEAT_UNIMPLEMENTED,
+    unimplementedReason: FORAL_REASONS[region],
     // Rendimientos del trabajo de no residentes tributan por el IRNR
     // (RD Legislativo 5/2004), no por el IRPF.
     taxesNonresidentWages: false,
