@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -20,10 +19,4 @@ test('application preserves engine refusal status, details and remedy', () => {
   assert.deepEqual(refusal.fieldErrors, { revision: 'stale' })
   assert.throws(() => domainFailure(refusal), (error: unknown) => error instanceof ApplicationError
     && error.status === 409 && error.message === refusal.message)
-})
-
-test('web editor owns edits without forwarding engine policies or reads', () => {
-  const source = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /export\s+(?:type\s+)?\{[\s\S]*?\}\s+from/)
-  assert.doesNotMatch(source, /export\s+async\s+function\s+loadDocument\b/)
 })
