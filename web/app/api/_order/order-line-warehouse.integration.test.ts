@@ -10,12 +10,37 @@ import test from "node:test";
 // assign-warehouse writer sets the single column through the established
 // reopen-restore pattern. A scratch org ships two active warehouses, so a
 // NULL-warehouse line is the legacy trap exactly. Needs a fixture database.
-registerHooks({
+const routeGate = { authz: null as null | { user: { id: string; orgId: string }; allowedSubsidiaryIds: null } };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.order-line-warehouse-route-gate")] = routeGate;
+
+const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
+    if (specifier.startsWith("@/") && context.parentURL) {
+      return nextResolve(new URL(`../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
+    }
+    if (specifier === "../../../lib/feature-gates" && context.parentURL?.includes("/api/_order/handlers")) {
+      return { url: "mock:order-line-warehouse-feature-gates", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
+  },
+  load(url, context, nextLoad) {
+    if (url === "mock:order-line-warehouse-feature-gates") {
+      return {
+        format: "module",
+        source: `
+          const state = globalThis[Symbol.for('openbooks.order-line-warehouse-route-gate')]
+          export async function guardFeaturePermission() {
+            if (!state.authz) return new Response(null, { status: 403 })
+            return state.authz
+          }
+        `,
+        shortCircuit: true,
+      };
+    }
+    return nextLoad(url, context);
   },
 });
 
@@ -37,6 +62,10 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 
 installTrustedTestDatabaseBypass();
+
+const { POST: assignSalesWarehouse } = await import("../sales-orders/[id]/assign-warehouse/route.ts");
+const { POST: assignPurchaseWarehouse } = await import("../purchase-orders/[id]/assign-warehouse/route.ts");
+hooks.deregister();
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -296,5 +325,45 @@ test("receipt names the warehouseless purchase-order line", { skip: !DB }, async
     );
   } finally {
     await drop(f);
+  }
+});
+
+test("both sales and purchase order routes assign the requested line warehouse", { skip: !DB }, async () => {
+  for (const [kind, post] of [
+    ["sales_order", assignSalesWarehouse],
+    ["purchase_order", assignPurchaseWarehouse],
+  ] as const) {
+    const f = await approvedOrder(kind, (org) => org.items.fifo, null);
+    try {
+      routeGate.authz = {
+        user: { id: f.userId, orgId: f.org.orgId },
+        allowedSubsidiaryIds: null,
+      };
+      const expectedUpdatedAt = await revisionOf(f.org.orgId, f.orderId);
+      const response = await post(
+        new Request(`http://openbooks.test/api/${kind === "sales_order" ? "sales" : "purchase"}-orders/${f.orderId}/assign-warehouse`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ lineId: f.lineId, stockLocationId: f.org.stockLocationId2, expectedUpdatedAt }),
+        }),
+        { params: Promise.resolve({ id: f.orderId }) },
+      );
+      assert.equal(response.status, 200, `${kind} route should assign its order line`);
+      const row = (await db.execute<{ kind: string; stock_location_id: string | null }>(sql`
+        select d.kind, l.stock_location_id
+          from documents d join document_lines l on l.document_id = d.id and l.org_id = d.org_id
+         where d.org_id = ${f.org.orgId} and d.id = ${f.orderId} and l.id = ${f.lineId}`)).rows[0]!;
+      assert.equal(row.kind, kind);
+      assert.equal(row.stock_location_id, f.org.stockLocationId2);
+      const order = await response.json() as {
+        doc?: { kind?: string };
+        lines?: Array<{ id?: string; stock_location_id?: string | null }>;
+      };
+      assert.equal(order.doc?.kind, kind);
+      assert.equal(order.lines?.find((line) => line.id === f.lineId)?.stock_location_id, f.org.stockLocationId2);
+    } finally {
+      routeGate.authz = null;
+      await drop(f);
+    }
   }
 });
