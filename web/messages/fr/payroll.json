@@ -307,7 +307,10 @@
       "printCheques": "Imprimer {count, plural, one {# chèque} other {# chèques}}",
       "partialTitle": "{count, plural, one {Paie partielle — # employé exclu par décision} other {Paie partielle — # employés exclus par décision}}",
       "partialRecorded": "Validé le {date}. Cette décision est enregistrée dans la paie.",
-      "partialRecovery": "Pour payer les employés exclus : fournissez les données manquantes dès que leur écran de saisie est disponible, puis payez-les dans une paie hors cycle. Une paie reportée n'est jamais modifiée après coup."
+      "partialRecovery": "Pour payer les employés exclus : fournissez les données manquantes dès que leur écran de saisie est disponible, puis payez-les dans une paie hors cycle. Une paie reportée n'est jamais modifiée après coup.",
+      "attributeEntity": "Attribuer l'entité",
+      "entityAttributed": "Entité juridique enregistrée. La paie peut désormais être reversée.",
+      "entityTarget": "Entité juridique"
     },
     "adjust": {
       "title": "Ajustements",

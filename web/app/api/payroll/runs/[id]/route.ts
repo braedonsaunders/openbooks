@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { acknowledgePayRunRefusals, commitPayRun, previewPayRunGl } from "@openbooks/engine/src/payroll/run-commit.ts";
 import { calculatePayRun } from "@openbooks/engine/src/payroll/run-calculation.ts";
-import { discardPayRun } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
+import { attributePayRunEntity, discardPayRun } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll/payment.ts'
 import { assertPayRunNotStale } from '@openbooks/engine/src/payroll/readiness.ts'
@@ -573,6 +573,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json({ ok: true, acknowledgement })
+    }
+    // Attribute a committed run that was committed with no subsidiary
+    // (legacy): the boundary lives in the engine (`attributePayRunEntity`) —
+    // the header aligns null → target, posted books are never rewritten
+    // (anything naming another entity refuses), with an audited trail.
+    // Scoped roles cannot see an unattributed run at all, so attribution
+    // stays an org-wide act: the guard below 404s them exactly like a
+    // missing run, and the engine re-checks target scope.
+    if (body.action === 'attribute-entity') {
+      if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) {
+        return NextResponse.json({ error: 'choose a subsidiary to attribute this run to' }, { status: 422 })
+      }
+      const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+        select d.subsidiary_id as "subsidiaryId"
+          from pay_runs r
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
+         where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+      if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
+      if (denied) return denied
+      const result = await attributePayRunEntity({
+        orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+        subsidiaryId: body.subsidiaryId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+      return NextResponse.json({ ok: true, ...result })
     }
     if (body.action === 'commit') {
       // Money must not move before approval: commit materializes the GL

@@ -307,7 +307,10 @@
       "printCheques": "Print {count, plural, one {# cheque} other {# cheques}}",
       "partialTitle": "{count, plural, one {Partial run — # employee left out by decision} other {Partial run — # employees left out by decision}}",
       "partialRecorded": "Acknowledged on {date}. This decision is recorded on the run.",
-      "partialRecovery": "To pay the employees left out: supply the missing input once its entry screen is available, then pay them on an off-cycle run. A posted run is never edited in place."
+      "partialRecovery": "To pay the employees left out: supply the missing input once its entry screen is available, then pay them on an off-cycle run. A posted run is never edited in place.",
+      "attributeEntity": "Attribute entity",
+      "entityAttributed": "Legal entity recorded. The run can now be remitted.",
+      "entityTarget": "Legal entity"
     },
     "adjust": {
       "title": "Adjustments",

@@ -1962,8 +1962,11 @@ const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
   'payroll.tabs.runs': '5892ac63aab0c1d77c2110f4a1dfee29589c407a6b6dfed4b95025bbc050b8e7',
   'payroll.title': '53fe8dfb6d9e1b03219adddcc3ffb741557dd579dc653d026097c463def4a8fe',
   'payroll.wizard.finish.amount': '49e96d7cdf58069cc793555324e2226642f2f7f8bfff4cebe0c11a61eecef60a',
+  'payroll.wizard.finish.attributeEntity': '61ba19dc66f2916d013edab533d74fc72d60ab6dba0a90c5cad70642f0ec7cf8',
   'payroll.wizard.finish.bankAccount': '1b4271352e4485ef6d0069087a0ae8a54e1b44bec22842f7fc6099dfdf677257',
   'payroll.wizard.finish.emailStubs': '02844d5b3414d36ef7ef68ff215c26a7ce07f8d72ea50aee6faf5d6d58216938',
+  'payroll.wizard.finish.entityAttributed': '13ec9de553bc2a9784fc09aa4ff2fa81bf7982165ed3bf3b283f7de7f5e8c412',
+  'payroll.wizard.finish.entityTarget': '93e7491e75a6ced7dd559be0e1c8a5d86aa8c7a00871f7d48812f3750087c0df',
   'payroll.wizard.finish.netPay': '393e8a24f9d51fec40d56c0cb6d39ff847e20927df2961e7cef48d2b14f928a6',
   'payroll.wizard.finish.nextPay': '09f40b28ecc014524beb70575a581bfc4362fb2ec986c713e84d77d5079176a1',
   'payroll.wizard.finish.nextRemit': '93c73642ab30ac3a4cdded16882ba431ce3a62748457fc2a899c788ed6cc8e82',
@@ -3740,7 +3743,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   // which landed together. Four shards each re-pinned this number against
   // their own base, so the merge saw four competing values — re-pin to the
   // measured count rather than to any one shard's arithmetic.
-  assert.equal(I7_WANTED.length, 1221, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(I7_WANTED.length, 1224, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of I7_WANTED) {
     const english = I7_SOURCE.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3856,7 +3859,7 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   // for reviewed cognates, pinned to the exact term.
   const I6_source = flattenCatalog('en')
   const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
-  assert.equal(I6_wanted.length, 1221, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+  assert.equal(I6_wanted.length, 1224, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
   const I6_tokens = (I6_value: string): Set<string> =>
     new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []

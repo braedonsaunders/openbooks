@@ -307,7 +307,10 @@
       "printCheques": "{count, plural, one {# Scheck} other {# Schecks}} drucken",
       "partialTitle": "{count, plural, one {Teillauf — # Mitarbeiter per Entscheidung ausgenommen} other {Teillauf — # Mitarbeiter per Entscheidung ausgenommen}}",
       "partialRecorded": "Bestätigt am {date}. Diese Entscheidung ist im Lauf aufgezeichnet.",
-      "partialRecovery": "Um die ausgenommenen Mitarbeiter zu bezahlen: Liefern Sie die fehlenden Eingaben nach, sobald deren Erfassungsmaske verfügbar ist, und zahlen Sie sie dann in einem Sonderlauf. Ein gebuchter Lauf wird niemals nachträglich geändert."
+      "partialRecovery": "Um die ausgenommenen Mitarbeiter zu bezahlen: Liefern Sie die fehlenden Eingaben nach, sobald deren Erfassungsmaske verfügbar ist, und zahlen Sie sie dann in einem Sonderlauf. Ein gebuchter Lauf wird niemals nachträglich geändert.",
+      "attributeEntity": "Entität zuordnen",
+      "entityAttributed": "Rechtsträger erfasst. Der Lohnlauf kann nun abgeführt werden.",
+      "entityTarget": "Rechtsträger"
     },
     "adjust": {
       "title": "Anpassungen",

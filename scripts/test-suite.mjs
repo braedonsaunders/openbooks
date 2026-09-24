@@ -90,6 +90,7 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'web/app/api/items/[id]/fair-values/route.test.ts',
   'web/app/api/payments/webhooks/[provider]/route.test.ts',
   'web/app/api/payroll/runs/subsidiary-scope.test.ts',
+  'web/app/api/payroll/runs/[id]/route-attribute-entity.test.ts',
   'web/app/api/payroll/settings/route.test.ts',
   'web/lib/analytics/vendor-data.test.ts',
   'web/lib/api-auth.test.ts',
