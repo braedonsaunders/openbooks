@@ -866,7 +866,10 @@ test("a restricted HR reads only the competency profiles they cover", { skip: !D
       select id from hrm_review_template_sections
        where org_id = ${h.org.orgId} and template_id = ${templateId}`)).rows[0]!.id;
     const framework = await createFramework({
-      orgId: h.org.orgId, actorId: h.hrFull, name: "Engineering",
+      orgId: h.org.orgId,
+      actorId: h.hrFull,
+      name: "Engineering",
+      appliesTo: { employer_subsidiary_id: h.subB, department_id: null },
     });
     const competency = await createCompetency({
       orgId: h.org.orgId, actorId: h.hrFull, frameworkId: framework.id,
@@ -914,23 +917,27 @@ test("a restricted HR reads only the competency profiles they cover", { skip: !D
         return true;
       },
     );
-    // Inside their own scope the same call lands with the assessed rating.
+    // The framework is scoped to B, so A's otherwise readable assessment
+    // does not expose an inapplicable competency.
     const profileA = await competencyProfileForEmployment({
       orgId: h.org.orgId, actorId: h.hrA, employmentId: h.a.employmentId,
     });
-    assert.equal(profileA.length, 1);
-    assert.equal(profileA[0]!.sectionTitle, "Impact");
-    assert.equal(profileA[0]!.assessedRating, "3.0000");
-    assert.equal(profileA[0]!.levels.length, 1);
-    // The subject and their line manager read their own slice without the grant.
+    assert.deepEqual(profileA, []);
+    const profileB = await competencyProfileForEmployment({
+      orgId: h.org.orgId, actorId: h.hrB, employmentId: h.b.employmentId,
+    });
+    assert.equal(profileB.length, 1);
+    assert.equal(profileB[0]!.assessedRating, "3.0000");
+    // The subject and their line manager read their own slice; the scoped
+    // B framework remains absent from A's profile.
     const own = await competencyProfileForEmployment({
       orgId: h.org.orgId, actorId: h.a.userId, employmentId: h.a.employmentId,
     });
-    assert.equal(own.length, 1);
+    assert.deepEqual(own, []);
     const managed = await competencyProfileForEmployment({
       orgId: h.org.orgId, actorId: h.a.managerUserId, employmentId: h.a.employmentId,
     });
-    assert.equal(managed.length, 1);
+    assert.deepEqual(managed, []);
     // A stranger without the grant keeps the grant refusal.
     await assert.rejects(
       competencyProfileForEmployment({ orgId: h.org.orgId, actorId: h.b.userId, employmentId: h.a.employmentId }),
