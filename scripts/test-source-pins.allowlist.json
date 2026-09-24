@@ -203,7 +203,6 @@
     "web/lib/budget-export-calendar.test.ts": 1,
     "web/lib/cash/cash-open-items-precision.test.ts": 1,
     "web/lib/cash/core.test.ts": 6,
-    "web/lib/cash/net-convention.test.ts": 1,
     "web/lib/cash/open-items-current-projection.test.ts": 2,
     "web/lib/confirm.test.tsx": 2,
     "web/lib/continuous-close-report-calendar.test.ts": 1,
