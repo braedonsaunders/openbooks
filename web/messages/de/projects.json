@@ -20,6 +20,7 @@
     "customerPo": "Kunden-Bestell-Nr.",
     "startDate": "Startdatum",
     "endDate": "Enddatum",
+    "siteJurisdiction": "Gerichtsstand des Standorts",
     "task": "Aufgabe",
     "estHours": "Gesch. Stunden",
     "estCost": "Gesch. Kosten",

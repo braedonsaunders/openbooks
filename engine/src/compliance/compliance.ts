@@ -479,6 +479,8 @@ export type LienWaiverEvidence = {
   throughDate: string;
   amount: string;
   currency: string;
+  /** ISO 3166-2 subdivision the release is effective under; null when unrecorded. */
+  jurisdiction: string | null;
   billDocumentId: string | null;
 };
 
@@ -494,7 +496,7 @@ export interface LienWaiverCoverage {
   coveredThrough: string | null;
   /** Amount still unreleased when a waiver is short. */
   shortfall: string | null;
-  reason: "not_required" | "covered" | "no_signed_waiver" | "through_date_short" | "amount_short" | "currency_mismatch" | null;
+  reason: "not_required" | "covered" | "no_signed_waiver" | "unevaluable" | "jurisdiction_mismatch" | "through_date_short" | "amount_short" | "currency_mismatch" | null;
   blocksPayment: boolean;
 }
 
@@ -506,11 +508,17 @@ export interface LienWaiverCoverage {
  * releases) count, provided one reaches the bill's date and its amount at
  * least matches the bill. A waiver linked to a DIFFERENT bill is that bill's
  * release and never covers this one. Currencies must agree: a release stated
- * in another currency is not a release this control can measure.
+ * in another currency is not a release this control can measure. And the
+ * waiver's jurisdiction must equal the project's site jurisdiction: a
+ * release is effective under the law of the project's site, so a
+ * wrong-state waiver never releases payment, and an unrecorded site fails
+ * closed as unevaluable.
  */
 export function evaluateLienWaiverCoverage(args: {
   enforcement: LienWaiverEnforcement;
   projectId: string | null;
+  /** ISO 3166-2 subdivision where the project's improved property sits; null when unrecorded. */
+  projectSiteJurisdiction: string | null;
   billDocumentId: string;
   billDate: string;
   billAmount: string;
@@ -535,8 +543,8 @@ export function evaluateLienWaiverCoverage(args: {
     (w) => w.direction === "received" && w.status === "signed" && w.projectId === args.projectId,
   );
   const linked = signed.filter((w) => w.billDocumentId === args.billDocumentId);
-  const pool = linked.length > 0 ? linked : signed.filter((w) => w.billDocumentId === null);
-  const coveredThrough = pool.reduce<string | null>(
+  const unscoped = linked.length > 0 ? linked : signed.filter((w) => w.billDocumentId === null);
+  const coveredThrough = unscoped.reduce<string | null>(
     (max, w) => (max === null || w.throughDate > max ? w.throughDate : max),
     null,
   );
@@ -551,7 +559,15 @@ export function evaluateLienWaiverCoverage(args: {
     blocksPayment: args.enforcement === "block",
   });
 
-  if (pool.length === 0) return fail("no_signed_waiver");
+  if (unscoped.length === 0) return fail("no_signed_waiver");
+
+  // A release is effective under the law of the project's site, so only a
+  // waiver signed for that subdivision can release this bill. A project
+  // whose site was never recorded cannot be matched against anything: it
+  // fails closed as unevaluable rather than releasing on a guess.
+  if (args.projectSiteJurisdiction == null) return fail("unevaluable");
+  const pool = unscoped.filter((w) => w.jurisdiction === args.projectSiteJurisdiction);
+  if (pool.length === 0) return fail("jurisdiction_mismatch");
 
   const reaching = pool.filter((w) => w.throughDate >= args.billDate);
   if (reaching.length === 0) return fail("through_date_short");
@@ -707,7 +723,7 @@ export async function loadVendorComplianceInputs(
   const lienWaivers = await runner.execute<LienWaiverEvidence>(sql`
       select id, waiver_number as "waiverNumber", status, direction,
              project_id as "projectId", through_date as "throughDate",
-             amount, currency, bill_document_id as "billDocumentId"
+             amount, currency, jurisdiction, bill_document_id as "billDocumentId"
         from lien_waivers
        where org_id = ${orgId} and party_id = ${partyId} and direction = 'received'
          and status = 'signed'`);
@@ -791,6 +807,10 @@ function describeLienWaiver(c: LienWaiverCoverage): string {
   switch (c.reason) {
     case "no_signed_waiver":
       return "lien waiver: none signed for this project";
+    case "unevaluable":
+      return "lien waiver: the project's site jurisdiction is not recorded, so no waiver can be matched";
+    case "jurisdiction_mismatch":
+      return "lien waiver: signed for a different jurisdiction than the project's site";
     case "through_date_short":
       return `lien waiver: signed only through ${c.coveredThrough ?? "an earlier date"}`;
     case "amount_short":
@@ -813,6 +833,8 @@ export function evaluateBillRelease(args: {
   policies: readonly RequirementPolicy[];
   inputs: VendorComplianceInputs;
   asOf: string;
+  /** ISO 3166-2 subdivision of the bill's project site; null when unrecorded. */
+  projectSiteJurisdiction?: string | null;
 }): BillReleaseDecision {
   const compliance = evaluateVendorCompliance({
     partyId: args.bill.partyId,
@@ -826,6 +848,7 @@ export function evaluateBillRelease(args: {
   const lienWaiver = evaluateLienWaiverCoverage({
     enforcement: compliance.tracked ? args.inputs.lienWaiverEnforcement : "none",
     projectId: args.bill.projectId,
+    projectSiteJurisdiction: args.projectSiteJurisdiction ?? null,
     billDocumentId: args.bill.documentId,
     billDate: args.bill.documentDate,
     billAmount: args.bill.amount,
@@ -913,8 +936,28 @@ export async function evaluateBillsForRelease(args: {
   for (const partyId of partyIds) {
     inputs.set(partyId, await loadVendorComplianceInputs(args.orgId, partyId, runner));
   }
+  // Project sites load once for the whole set: the waiver's jurisdiction
+  // must equal the site's, and an unrecorded site fails closed downstream.
+  // Uuid-array literal, the house form for `= any(...::uuid[])`.
+  const projectIds = [...new Set(args.bills.map((b) => b.projectId).filter((id) => id !== null))];
+  const sites =
+    projectIds.length === 0
+      ? new Map<string, string | null>()
+      : new Map<string, string | null>(
+          (
+            await runner.execute<{ id: string; siteJurisdiction: string | null }>(sql`
+              select id, site_jurisdiction as "siteJurisdiction" from projects
+               where org_id = ${args.orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`)
+          ).rows.map((row) => [row.id, row.siteJurisdiction]),
+        );
   return args.bills.map((bill) =>
-    evaluateBillRelease({ bill, policies, inputs: inputs.get(bill.partyId)!, asOf }),
+    evaluateBillRelease({
+      bill,
+      policies,
+      inputs: inputs.get(bill.partyId)!,
+      asOf,
+      projectSiteJurisdiction: bill.projectId === null ? null : (sites.get(bill.projectId) ?? null),
+    }),
   );
 }
 

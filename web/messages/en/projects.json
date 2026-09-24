@@ -20,6 +20,7 @@
     "customerPo": "Customer PO #",
     "startDate": "Start date",
     "endDate": "End date",
+    "siteJurisdiction": "Site jurisdiction",
     "task": "Task",
     "estHours": "Est. hours",
     "estCost": "Est. cost",

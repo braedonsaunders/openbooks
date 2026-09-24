@@ -20,6 +20,7 @@
     "customerPo": "Nº do pedido do cliente",
     "startDate": "Data de início",
     "endDate": "Data de término",
+    "siteJurisdiction": "Jurisdição do local",
     "task": "Tarefa",
     "estHours": "Horas est.",
     "estCost": "Custo est.",

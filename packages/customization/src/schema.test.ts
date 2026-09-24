@@ -27,6 +27,7 @@ test('the default project form composes complete four-column rows', () => {
     'manager_id',
     'starts_on',
     'ends_on',
+    'site_jurisdiction',
     'subsidiary_id',
     'notes',
   ])
@@ -47,7 +48,7 @@ test('the default project form composes complete four-column rows', () => {
   }
   if (currentWidth > 0) rowWidths.push(currentWidth)
 
-  assert.deepEqual(rowWidths, [4, 4, 4, 4, 4, 4, 4])
+  assert.deepEqual(rowWidths, [4, 4, 4, 4, 4, 4, 4, 4])
   assert.deepEqual(lintFormLayout(layout), [])
 })
 

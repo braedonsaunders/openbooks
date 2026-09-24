@@ -20,6 +20,7 @@
     "customerPo": "N° de BC du client",
     "startDate": "Date de début",
     "endDate": "Date de fin",
+    "siteJurisdiction": "Juridiction du site",
     "task": "Tâche",
     "estHours": "Heures est.",
     "estCost": "Coût est.",

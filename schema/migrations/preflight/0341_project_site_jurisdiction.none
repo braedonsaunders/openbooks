@@ -1,0 +1,5 @@
+Adding a nullable text column with no default rewrites no rows and
+backfills nothing: existing projects keep a null site jurisdiction (which
+lien-waiver coverage treats as unevaluable, never as a match) and new
+projects stamp theirs at save. The only lock is the brief catalog lock for
+ADD COLUMN, which needs no operator remedy, so no preflight is needed.

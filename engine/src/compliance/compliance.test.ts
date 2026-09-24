@@ -405,6 +405,7 @@ function lien(over: Partial<LienWaiverEvidence> = {}): LienWaiverEvidence {
     throughDate: "2026-06-30",
     amount: "50000.0000",
     currency: "USD",
+    jurisdiction: "US-CA",
     billDocumentId: null,
     ...over,
   };
@@ -414,6 +415,7 @@ const coverage = (over: Partial<Parameters<typeof evaluateLienWaiverCoverage>[0]
   evaluateLienWaiverCoverage({
     enforcement: "block",
     projectId: "proj-a",
+    projectSiteJurisdiction: "US-CA",
     billDocumentId: "bill-1",
     billDate: "2026-06-30",
     billAmount: "50000.0000",
@@ -525,6 +527,29 @@ test("a waiver for another project does not release this one", () => {
   assert.equal(c.reason, "no_signed_waiver");
 });
 
+test("a waiver signed for another subdivision never releases the bill", () => {
+  // A sufficient, in-date, same-currency waiver from the wrong state used to
+  // release payment. Jurisdiction must equal the project's site.
+  const c = coverage({ waivers: [lien({ jurisdiction: "US-NY", amount: "900000.0000" })] });
+  assert.equal(c.covered, false);
+  assert.equal(c.reason, "jurisdiction_mismatch");
+  assert.equal(c.blocksPayment, true);
+});
+
+test("a waiver with no recorded jurisdiction cannot release the bill", () => {
+  const c = coverage({ waivers: [lien({ jurisdiction: null, amount: "900000.0000" })] });
+  assert.equal(c.covered, false);
+  assert.equal(c.reason, "jurisdiction_mismatch");
+  assert.equal(c.blocksPayment, true);
+});
+
+test("a project with no recorded site fails closed as unevaluable", () => {
+  const c = coverage({ projectSiteJurisdiction: null });
+  assert.equal(c.covered, false);
+  assert.equal(c.reason, "unevaluable");
+  assert.equal(c.blocksPayment, true);
+});
+
 // --- bill release decision ----------------------------------------------
 
 test("bill release combines insurance and lien-waiver control", () => {
@@ -549,6 +574,7 @@ test("bill release combines insurance and lien-waiver control", () => {
       lienWaivers: [lien()],
     },
     asOf: ASOF,
+    projectSiteJurisdiction: "US-CA",
   });
   assert.equal(clear.decision, "cleared");
   assert.deepEqual(clear.reasons, []);
@@ -561,6 +587,16 @@ test("bill release combines insurance and lien-waiver control", () => {
   });
   assert.equal(noWaiver.decision, "blocked");
   assert.ok(noWaiver.reasons.some((r) => r.startsWith("lien waiver")));
+
+  const wrongState = evaluateBillRelease({
+    bill,
+    policies: [policy()],
+    inputs: { classId: "class-trade", lienWaiverEnforcement: "block", records: [evidence()], waivers: [], lienWaivers: [lien({ jurisdiction: "US-NY" })] },
+    asOf: ASOF,
+    projectSiteJurisdiction: "US-CA",
+  });
+  assert.equal(wrongState.decision, "blocked");
+  assert.ok(wrongState.reasons.some((r) => r.includes("different jurisdiction")));
 
   const lapsed = evaluateBillRelease({
     bill,

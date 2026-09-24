@@ -12,6 +12,7 @@ import {
 import type { LienWaiverExecutedSnapshot } from '@/lib/lien-waiver-form'
 import { isUuid } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 
@@ -189,11 +190,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           return NextResponse.json({ error: moneyRefusal('Amount', body.amount) }, { status: 422 })
         }
         const amount = amountRaw === null ? null : normalizeMoney(amountRaw)
+        // The jurisdiction is an ISO 3166-2 subdivision code, validated like
+        // the create verb: an unknown code refuses instead of storing text
+        // the evaluator can never match against a project site.
+        let jurisdiction: string | null | undefined
+        if (body.jurisdiction != null && body.jurisdiction !== '') {
+          const canonical = normalizeSubdivisionCode(body.jurisdiction)
+          if (!canonical) {
+            return NextResponse.json(
+              { error: `unknown jurisdiction ${JSON.stringify(body.jurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)` },
+              { status: 422 },
+            )
+          }
+          jurisdiction = canonical
+        }
         await db.execute(sql`
           update lien_waivers
              set through_date = coalesce(${body.throughDate ?? null}::date, through_date),
                  amount = ${amount === null ? sql`amount` : sql`${amount}`},
-                 jurisdiction = coalesce(${body.jurisdiction ?? null}, jurisdiction),
+                 jurisdiction = coalesce(${jurisdiction ?? null}, jurisdiction),
                  notes = coalesce(${body.notes ?? null}, notes),
                  updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and id = ${id}`)

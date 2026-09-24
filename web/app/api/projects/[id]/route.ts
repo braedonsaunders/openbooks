@@ -11,6 +11,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
 
@@ -68,6 +69,7 @@ interface PatchBody {
   startsOn?: string | null
   endsOn?: string | null
   notes?: string | null
+  siteJurisdiction?: string | null
   contractValue?: string | null
   custom?: Record<string, unknown>
   subsidiaryId?: string | null
@@ -233,6 +235,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const contractValue = body.contractValue === undefined ? undefined : moneyOrNull(body.contractValue)
   if (contractValue === 'invalid') return bad(moneyRefusal('Contract value', body.contractValue))
 
+  // Where the improved property sits, as an ISO 3166-2 subdivision code:
+  // lien waivers release payment only when their jurisdiction matches it.
+  let siteJurisdiction: string | null | undefined
+  if (body.siteJurisdiction !== undefined) {
+    if (body.siteJurisdiction === null || body.siteJurisdiction === '') {
+      siteJurisdiction = null
+    } else {
+      const canonical = normalizeSubdivisionCode(body.siteJurisdiction)
+      if (!canonical) {
+        return bad(`unknown site jurisdiction ${JSON.stringify(body.siteJurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)`)
+      }
+      siteJurisdiction = canonical
+    }
+  }
+
   // Project type governs the billing classifier (its own billing_method column);
   // the project only stores the type reference.
   let projectTypeId: string | null | undefined
@@ -262,13 +279,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       manager_id: string | null; subsidiary_id: string | null; subsidiary_include_children: boolean | null;
       status: string; customer_po_number: string | null; contract_value: string | null;
       starts_on: string | null; ends_on: string | null; notes: string | null; is_active: boolean;
+      site_jurisdiction: string | null;
       project_type_id: string | null; invoicing_preference: unknown; custom: unknown;
     }>(sql`
       select name, code, customer_id, foreman_id, manager_id, subsidiary_id,
              subsidiary_include_children, status, customer_po_number,
              contract_value::text as contract_value,
              starts_on::text as starts_on, ends_on::text as ends_on,
-             notes, is_active, project_type_id, invoicing_preference, custom
+             notes, site_jurisdiction, is_active, project_type_id, invoicing_preference, custom
         from projects
        where id = ${id} and org_id = ${user.orgId}
        for update
@@ -340,6 +358,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       starts_on = ${startsOn !== undefined ? startsOn : sql`starts_on`},
       ends_on = ${endsOn !== undefined ? endsOn : sql`ends_on`},
       notes = ${body.notes !== undefined ? strOrNull(body.notes) : sql`notes`},
+      site_jurisdiction = ${siteJurisdiction !== undefined ? siteJurisdiction : sql`site_jurisdiction`},
       is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
       custom = ${mergedCustom !== undefined ? sql`${JSON.stringify(mergedCustom)}::jsonb` : sql`custom`},
       updated_at = now(), updated_by = ${user.id}
@@ -363,6 +382,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (startsOn !== undefined) changedFields.push(['starts_on', before.starts_on, startsOn])
     if (endsOn !== undefined) changedFields.push(['ends_on', before.ends_on, endsOn])
     if (body.notes !== undefined) changedFields.push(['notes', before.notes, strOrNull(body.notes)])
+    if (siteJurisdiction !== undefined) changedFields.push(['site_jurisdiction', before.site_jurisdiction, siteJurisdiction])
     if (body.isActive !== undefined) changedFields.push(['is_active', before.is_active, body.isActive])
     if (mergedCustom !== undefined) changedFields.push(['custom', before.custom, mergedCustom])
     if (changedFields.length > 0) {

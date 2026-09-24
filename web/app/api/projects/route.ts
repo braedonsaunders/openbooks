@@ -11,6 +11,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { guardProjectsFeature } from '../../../lib/projects-gate'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../lib/features'
 
@@ -191,6 +192,18 @@ export async function POST(request: Request) {
   const contractValue = body.contractValue === undefined ? null : moneyOrNull(body.contractValue)
   if (contractValue === 'invalid') return bad(moneyRefusal('Contract value', body.contractValue), 'contractValue')
 
+  // Where the improved property sits, as an ISO 3166-2 subdivision code:
+  // lien waivers release payment only when their jurisdiction matches it,
+  // so an unknown code refuses here instead of storing unusable text.
+  let siteJurisdiction: string | null = null
+  if (body.siteJurisdiction !== undefined && body.siteJurisdiction !== null && body.siteJurisdiction !== '') {
+    const canonical = normalizeSubdivisionCode(body.siteJurisdiction)
+    if (!canonical) {
+      return bad(`unknown site jurisdiction ${JSON.stringify(body.siteJurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)`, 'siteJurisdiction')
+    }
+    siteJurisdiction = canonical
+  }
+
   // Project type governs the billing classifier (its own billing_method column);
   // the project only stores the type reference.
   let projectTypeId: string | null = null
@@ -222,6 +235,7 @@ export async function POST(request: Request) {
     starts_on: startsOn,
     ends_on: endsOn,
     notes: strOrNull(body.notes),
+    site_jurisdiction: siteJurisdiction,
     is_active: isActive,
     custom,
   }
@@ -248,14 +262,14 @@ export async function POST(request: Request) {
         (id, org_id, name, code, customer_id, foreman_id, manager_id,
          subsidiary_id, subsidiary_include_children, status, project_type_id,
          invoicing_preference, customer_po_number, contract_value,
-         starts_on, ends_on, notes, is_active, custom, created_by, updated_by)
+         starts_on, ends_on, notes, site_jurisdiction, is_active, custom, created_by, updated_by)
       values
         (${requestId}, ${user.orgId}, ${name}, ${strOrNull(body.code)},
          ${customerId}, ${foremanId}, ${managerId},
          ${subsidiaryId}, ${subsidiaryIncludeChildren}, ${status}, ${projectTypeId},
          ${invoicingPreference === null ? sql`null` : sql`${JSON.stringify(invoicingPreference)}::jsonb`},
          ${strOrNull(body.customerPoNumber)}, ${contractValue},
-         ${startsOn}, ${endsOn}, ${strOrNull(body.notes)}, ${isActive},
+         ${startsOn}, ${endsOn}, ${strOrNull(body.notes)}, ${siteJurisdiction}, ${isActive},
          ${JSON.stringify(custom)}::jsonb, ${user.id}, ${user.id})
       on conflict (id) do nothing
       returning id
