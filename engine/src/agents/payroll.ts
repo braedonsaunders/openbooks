@@ -96,15 +96,21 @@ export async function payrollFindings(
         bills: { documentNumber: string; status: string; total: string }[];
       }
     >();
+    const unevaluable: { from: string; to: string; reason: string }[] = [];
     for (const month of months) {
       let groups: Awaited<ReturnType<typeof payrollRemittanceSummary>>;
       try {
         groups = await payrollRemittanceSummary(orgId, { from: month.from, to: month.to });
       } catch (error) {
-        // Unknown filing or liability accounts fail the summary closed for
-        // the month that holds them — the unknown-accounts detector below
-        // reports that root cause; other months still scan.
+        // A month the summary cannot evaluate is a gap in this detector's
+        // own coverage, not someone else's report: the unknown-accounts
+        // detector below names unknown-account root causes per run, but it
+        // says nothing about other refusal causes (missing FX rates,
+        // dateless stubs) — and nothing at all when it is disabled. Record
+        // the month and reason here; the explicit gap finding below keeps
+        // the missing remittance visible either way. Other months still scan.
         if (!(error instanceof PayrollError)) throw error;
+        unevaluable.push({ from: month.from, to: month.to, reason: error.message });
         continue;
       }
       for (const group of groups) {
@@ -161,6 +167,33 @@ export async function payrollFindings(
           });
         }
       }
+    }
+    for (const gap of unevaluable) {
+      findings.push({
+        agentKey: "payroll",
+        findingType: "payroll_remittance_gap",
+        fingerprint: `payroll-remittance-gap:${gap.from}:${gap.to}`,
+        severity: "warning",
+        confidence: "1.0000",
+        materiality: "0.0000",
+        subjectType: "remittance_period",
+        summary: {
+          from: gap.from,
+          to: gap.to,
+          reason: `could not evaluate: ${gap.reason}`,
+          review:
+            "Resolve the named cause, then rescan — this month's remittances are unknown until the summary runs.",
+          href: REMITTANCE_HREF,
+        },
+        evidence: [
+          {
+            kind: "remittance_gap",
+            sourceType: null,
+            sourceId: null,
+            data: { from: gap.from, to: gap.to, reason: gap.reason },
+          },
+        ],
+      });
     }
     for (const slot of merged.values()) {
       const uncovered = add(slot.total, neg(slot.billed));
