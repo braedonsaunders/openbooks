@@ -7,8 +7,14 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 
 // F-t11-008: a/d open the finding drawer to complete apply/dismiss (there is
-// no instant write path) — the legend must say so, not promise that the keys
-// apply/dismiss directly.
+// no instant write path) — the legend must say so in EVERY locale, not promise
+// that the keys apply/dismiss directly. The drawer word differs per locale
+// ((drawer), (tiroir), (panel), (Seitenbereich), (painel), （ドロワー）, （抽屉）),
+// so the rule is structural, not a word pin: the hint splits into one segment
+// per key, and both the a-action segment and the d-action segment carry a
+// parenthetical qualifier (half- or full-width parens).
+const LOCALES = ["en", "fr", "es", "de", "ja", "pt-BR", "zh"] as const;
+
 const hint = (locale: string): string => {
   const catalog = JSON.parse(
     readFileSync(join(root, "web", "messages", locale, "agents.json"), "utf8"),
@@ -18,11 +24,24 @@ const hint = (locale: string): string => {
   return hint as string;
 };
 
-test("F-t11-008: shortcut legend qualifies a/d as drawer flows", () => {
-  assert.match(hint("en"), /a applies \(drawer\)/, "en must qualify apply");
-  assert.match(hint("en"), /d dismisses \(drawer\)/, "en must qualify dismiss");
-  assert.match(hint("fr"), /a appliquer \(tiroir\)/, "fr must qualify apply");
-  assert.match(hint("fr"), /d rejeter \(tiroir\)/, "fr must qualify dismiss");
-  assert.match(hint("es"), /a aplicar \(panel\)/, "es must qualify apply");
-  assert.match(hint("es"), /d descartar \(panel\)/, "es must qualify dismiss");
-});
+for (const locale of LOCALES) {
+  test(`F-t11-008: shortcut legend qualifies a/d as drawer flows in ${locale}`, () => {
+    const segments = hint(locale)
+      .split("·")
+      .map((part) => part.trim());
+    const apply = segments.find((part) => part.startsWith("a "));
+    const dismiss = segments.find((part) => part.startsWith("d "));
+    assert.ok(apply, `${locale} legend must have an a-action segment`);
+    assert.ok(dismiss, `${locale} legend must have a d-action segment`);
+    assert.match(
+      apply,
+      /[\(（][^\)）]+[\)）]/,
+      `${locale} must qualify the a action as a drawer flow, not a direct apply`,
+    );
+    assert.match(
+      dismiss,
+      /[\(（][^\)）]+[\)）]/,
+      `${locale} must qualify the d action as a drawer flow, not a direct dismiss`,
+    );
+  });
+}
