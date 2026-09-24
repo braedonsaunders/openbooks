@@ -137,6 +137,50 @@ async function loadLines(orgId: string, accountId: string, status: 'unmatched' |
   return res.rows
 }
 
+type RuleApplyOutcome = 'excluded' | 'categorized' | 'suggested' | null
+
+/**
+ * Re-read and lock the rule at the moment a bulk scan is about to use it.
+ * Rule edits/deactivation take the same row lock, so an apply either finishes
+ * against the current active rule before the edit commits, or observes the
+ * edited/inactive row and does not use the earlier scan snapshot.
+ */
+async function applyRuleIfStillCurrent(
+  orgId: string,
+  userId: string,
+  accountId: string,
+  line: BankLine,
+  scannedRule: RuleRow,
+  ctx: { orgId: string; userId: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
+  ensureReconciliation: () => Promise<string>,
+): Promise<RuleApplyOutcome> {
+  return withOrgTransaction(orgId, async () => {
+    const current = (await db.execute<RuleRow>(sql`
+      select id, name, criteria, outcome, priority, is_active
+        from bank_match_rules
+       where id = ${scannedRule.id} and org_id = ${orgId}
+       for update
+    `)).rows[0]
+    if (!current?.is_active) return null
+    if (!ruleAppliesToAccount(current.criteria, accountId) || !lineMatchesRule(line, current.criteria)) return null
+
+    if (current.outcome.action === 'exclude') {
+      await excludeStatementLine(
+        line.id,
+        `Excluded automatically by bank rule "${current.name}" (${current.id})`,
+        ctx,
+      )
+      return 'excluded'
+    }
+    if (isCategorizeOutcome(current.outcome) && current.outcome.mode === 'suggest') {
+      return 'suggested'
+    }
+    const recId = await ensureReconciliation()
+    await postCategorizeForLine(orgId, userId, ctx, recId, accountId, line, current)
+    return 'categorized'
+  })
+}
+
 /**
  * Apply active rules to every unmatched line on an account. `exclude` and
  * auto-mode `categorize` rules act on the ledger; suggest-mode categorize rules
@@ -168,26 +212,15 @@ export async function applyRulesToAccount(
   for (const line of lines) {
     const rule = firstMatchingRule(line, accountId, rules)
     if (!rule) continue
-    const outcome = rule.outcome
-    if (outcome.action === 'exclude') {
-      await excludeStatementLine(
-        line.id,
-        `Excluded automatically by bank rule "${rule.name}" (${rule.id})`,
-        ctx,
-      )
-      result.excluded++
-      continue
+    const applied = await applyRuleIfStillCurrent(
+      orgId, userId, accountId, line, rule, ctx, ensureReconciliation,
+    )
+    if (applied === 'excluded') result.excluded++
+    if (applied === 'categorized') {
+      result.categorized++
+      result.matched++
     }
-    // categorize
-    if (isCategorizeOutcome(outcome) && outcome.mode === 'suggest') {
-      // Left for the user to confirm in Match Bank Data.
-      result.suggested++
-      continue
-    }
-    const recId = await ensureReconciliation()
-    await postCategorizeForLine(orgId, userId, ctx, recId, accountId, line, rule)
-    result.categorized++
-    result.matched++
+    if (applied === 'suggested') result.suggested++
   }
 
   return result
