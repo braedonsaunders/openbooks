@@ -404,7 +404,7 @@
       "costPlan": "Cost plan {amount} {currency}",
       "unfunded": "No funding recorded",
       "holder": "Current holder",
-      "holderEmployment": "Employment {id}",
+      "holderEmployment": "Employment {name}",
       "noHolder": "No holder as of {date}",
       "warnings": "Warnings",
       "refusal": "Needs attention",

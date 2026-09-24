@@ -180,6 +180,7 @@ type HolderVersionRow = {
   employment_id: string;
   employer_subsidiary_id: string;
   worker_party_id: string;
+  worker_name: string;
   version_no: number;
   job_title: string | null;
   department_id: string | null;
@@ -206,6 +207,7 @@ async function loadHolderVersions(
            av.employment_id::text as employment_id,
            e.employer_subsidiary_id::text as employer_subsidiary_id,
            e.worker_party_id::text as worker_party_id,
+           coalesce(p.display_name, '—') as worker_name,
            av.version_no, av.job_title,
            av.department_id::text as department_id,
            av.location_id::text as location_id,
@@ -217,6 +219,7 @@ async function loadHolderVersions(
       from employment_assignment_versions av
       join employment_assignments a on a.id = av.assignment_id and a.org_id = av.org_id
       join worker_employments e on e.id = av.employment_id and e.org_id = av.org_id
+      left join parties p on p.id = e.worker_party_id and p.org_id = e.org_id
      where av.org_id = ${orgId}::uuid and av.position_id in (${sql.join(ids, sql`, `)})
      order by av.position_id, av.assignment_id, av.version_no`)).rows;
   for (const row of rows) {
@@ -230,6 +233,7 @@ async function loadHolderVersions(
 export interface PositionHolderDTO {
   readonly employmentId: string;
   readonly workerPartyId: string;
+  readonly workerName: string;
   readonly assignmentKey: string;
   readonly jobTitle: string | null;
   readonly fte: string;
@@ -321,6 +325,7 @@ function resolveHolderChains(
       dto: {
         employmentId: row.employment_id,
         workerPartyId: row.worker_party_id,
+        workerName: row.worker_name,
         assignmentKey: row.assignment_key,
         jobTitle: row.job_title,
         fte: row.fte,

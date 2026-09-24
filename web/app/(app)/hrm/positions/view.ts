@@ -367,7 +367,7 @@ export async function loadPositionsPage(
         holderTitle: t('positions.drawer.holder'),
         holder: resolved.holders.length === 0
           ? null
-          : resolved.holders.map((holder) => t('positions.drawer.holderEmployment', { id: holder.employmentId })).join(', '),
+          : resolved.holders.map((holder) => t('positions.drawer.holderEmployment', { name: holder.workerName })).join(', '),
         noHolder: t('positions.drawer.noHolder', { date: effectiveDate }),
         warningsTitle: t('positions.drawer.warnings'),
         warnings: [...resolved.disagreementWarnings],
