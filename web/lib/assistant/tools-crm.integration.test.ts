@@ -5,6 +5,7 @@ import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../auth';
+import type { ApplicationContext } from '../application/context';
 
 const root = pathToFileURL(process.cwd() + '/').href;
 registerHooks({ resolve(specifier, context, nextResolve) {
@@ -23,6 +24,7 @@ const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
+const applicationCrm = await import('../application/crm-read');
 
 function userFor(orgId: string, name: string): SessionUser {
   const userId = randomUUID();
@@ -175,6 +177,43 @@ test('CRM assistant reads: happy path, aggregates, and subsidiary scoping', { sk
         periodEnd: '2026-10-01',
       });
       assert.deepEqual(badPeriod, { ok: false, error: 'invalid_forecast_period' });
+
+      await withBypassContext(() => db.execute(sql`
+        update crm_opportunities
+           set projected_amount='999999999999999.9999', weighted_amount='999999999999998.9999'
+         where id=${seed.openOpp} and org_id=${org.orgId}
+      `));
+      const appContext = {
+        authz: restricted,
+        source: 'api',
+        requestId: randomUUID(),
+        apiKeyId: null,
+      } as ApplicationContext;
+      const applicationList = await applicationCrm.listApplicationOpportunities(appContext, {});
+      assert.equal(applicationList.total, 1);
+      assert.deepEqual(
+        [applicationList.opportunities[0]!.projectedAmount, applicationList.opportunities[0]!.weightedAmount],
+        ['999999999999999.9999', '999999999999998.9999'],
+      );
+      assert.deepEqual(applicationList.totalsByCurrency, [{
+        currency: 'CAD', count: 1,
+        projectedAmount: '999999999999999.9999', weightedAmount: '999999999999998.9999',
+      }]);
+
+      const applicationOpportunity = await applicationCrm.getApplicationOpportunity(appContext, seed.openOpp);
+      assert.deepEqual(
+        [applicationOpportunity.opportunity.projectedAmount, applicationOpportunity.opportunity.weightedAmount],
+        ['999999999999999.9999', '999999999999998.9999'],
+      );
+      const applicationAccounts = await applicationCrm.listApplicationCrmAccounts(appContext, { stage: 'prospect' });
+      assert.equal(applicationAccounts.total, 1);
+      assert.equal(applicationAccounts.accounts[0]!.partyId, org.customerId);
+      const applicationAccount = await applicationCrm.getApplicationCrmAccount(appContext, org.customerId);
+      assert.equal(applicationAccount.profile.lifecycleStage, 'prospect');
+      assert.deepEqual(
+        [applicationAccount.opportunities[0]!.projectedAmount, applicationAccount.opportunities[0]!.weightedAmount],
+        ['999999999999999.9999', '999999999999998.9999'],
+      );
     });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -206,6 +245,13 @@ test('CRM assistant reads isolate orgs and honor the feature flag', { skip: !pro
     await withOrgContext(orgA.orgId, async () => {
       const off = await executeAssistantTool(authzA, 'search_opportunities', {});
       assert.deepEqual(off, { ok: false, error: 'crm_feature_disabled' });
+      await assert.rejects(
+        applicationCrm.listApplicationOpportunities({
+          authz: authzA, source: 'api', requestId: randomUUID(), apiKeyId: null,
+        } as ApplicationContext, {}),
+        (error: unknown) => (error as { status?: number }).status === 404
+          && (error as Error).message === 'crm is off; enable it from GET /api/v1/settings/features',
+      );
     });
   } finally {
     await dropScratchOrg(orgA.orgId);
