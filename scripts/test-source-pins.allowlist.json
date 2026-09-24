@@ -19,7 +19,6 @@
     "engine/src/payments/operations.test.ts": 4,
     "engine/src/payments/remittance-queue.test.ts": 2,
     "engine/src/payroll/entitlements.test.ts": 1,
-    "engine/src/payroll/filing.test.ts": 1,
     "engine/src/payroll/parallel-run.test.ts": 1,
     "engine/src/payroll/rl1.test.ts": 1,
     "engine/src/payroll/tax-year-scaffold.test.ts": 3,
