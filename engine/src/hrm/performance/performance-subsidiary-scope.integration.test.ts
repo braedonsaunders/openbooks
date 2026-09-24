@@ -12,7 +12,7 @@ import {
 import { HrmAuthorizationError } from "../authorization.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
-import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
+import { acknowledgeReview, calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
 import {
   addCompetencyLevel,
   competencyProfileForEmployment,
@@ -483,6 +483,30 @@ test("subject-facing reads strip the calibration justification; HR and reviewer 
     assert.equal(hrCycle.reviews.find((r) => r.id === reviewId)?.calibrationReason, "private HR justification");
     const reviewerMine = await listMyReviews({ orgId: h.org.orgId, actorId: h.a.managerUserId });
     assert.equal(reviewerMine.asReviewer.find((r) => r.id === reviewId)?.calibrationReason, "private HR justification");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("share and acknowledge responses apply the caller's review privacy projection", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const cycleId = await openScopedCycle(h);
+    const reviewId = await submitManagerReview(h, cycleId, h.a);
+    await calibrateReview({
+      orgId: h.org.orgId, actorId: h.hrFull, reviewId, calibratedRating: "4", reason: "private HR justification",
+    });
+    // This caller can manage the transition but lacks the read grant. Its
+    // PATCH response must apply the same private-field projection as GET.
+    await db.execute(sql`
+      update app_roles set permissions = '["hrm.performance.manage"]'::jsonb
+       where org_id = ${h.org.orgId} and key = 'hr_full'`);
+    const shared = await shareReview({ orgId: h.org.orgId, actorId: h.hrFull, reviewId });
+    assert.equal(shared.calibrationReason, null);
+
+    const acknowledged = await acknowledgeReview({ orgId: h.org.orgId, actorId: h.a.userId, reviewId });
+    assert.equal(acknowledged.status, "acknowledged");
+    assert.equal(acknowledged.calibrationReason, null);
   } finally {
     await dropScratchOrg(h.org.orgId);
   }

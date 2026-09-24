@@ -5,6 +5,7 @@ import {
   HrmAuthorizationError,
   loadApprovalPerson,
   requireAggregatePerformanceManage,
+  requireAggregatePerformanceRead,
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
@@ -69,6 +70,35 @@ export interface ReviewDTO {
   readonly submittedAt: string | null;
   readonly sharedAt: string | null;
   readonly acknowledgedAt: string | null;
+}
+
+/** One privacy projection shared by read and mutation responses. */
+export function projectReviewForReader(
+  review: ReviewDTO,
+  args: { granted: boolean; actorPartyId: string | null },
+): ReviewDTO {
+  if (args.granted) return review;
+  if (args.actorPartyId !== null && args.actorPartyId === review.reviewerPartyId) return review;
+  if (review.calibrationReason === null) return review;
+  return { ...review, calibrationReason: null };
+}
+
+async function projectReviewForActor(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  actorPartyId: string | null,
+  review: ReviewDTO,
+): Promise<ReviewDTO> {
+  let granted = false;
+  try {
+    await requireAggregatePerformanceRead(exec, orgId, actorId);
+    granted = true;
+  } catch {
+    // The caller may have a valid mutation grant without the broader read
+    // grant; that must not widen the mutation response's private fields.
+  }
+  return projectReviewForReader(review, { granted, actorPartyId });
 }
 
 // Standalone type alias (not an interface): drizzle's execute row generic
@@ -452,7 +482,7 @@ export async function shareReview(args: {
       insert into hrm_review_events (org_id, review_id, kind, actor_user_id, reason)
       values (${orgId}, ${reviewId}, 'shared', ${actorId}, 'shared with the subject')
     `);
-    return toReviewDTO(await loadReview(db, orgId, reviewId));
+    return projectReviewForActor(db, orgId, actorId, partyId, toReviewDTO(await loadReview(db, orgId, reviewId)));
   });
 }
 
@@ -500,7 +530,7 @@ export async function acknowledgeReview(args: {
       insert into hrm_review_events (org_id, review_id, kind, actor_user_id, reason)
       values (${orgId}, ${reviewId}, 'acknowledged', ${actorId}, 'subject acknowledged')
     `);
-    return toReviewDTO(await loadReview(db, orgId, reviewId));
+    return projectReviewForActor(db, orgId, actorId, partyId, toReviewDTO(await loadReview(db, orgId, reviewId)));
   });
 }
 
