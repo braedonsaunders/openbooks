@@ -9,6 +9,7 @@ import { CreditApplicationConflictError, PaymentError } from "./payment-errors.t
 import { paymentBookId } from "./payment-accounts.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { type CreditAllocationInput, type OpenItemSide } from "./payment-contracts.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 
 /**
  * Standalone credit settlement: applying a posted credit memo to a posted
@@ -68,7 +69,9 @@ export interface CreditSettlementState {
 export async function creditSettlementState(
   orgId: string,
   documentId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<CreditSettlementState | null> {
+  return withOrgTransaction(orgId, async () => {
   const line = (await db.execute<{
     id: string; amount: string; currency: string; applied: string;
   }>(sql`
@@ -76,12 +79,14 @@ export async function creditSettlementState(
            coalesce(ap.applied, 0)::numeric(19,4)::text as applied
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+      join documents source_document on source_document.id = je.source_document_id and source_document.org_id = je.org_id
       left join lateral (
         select sum(a.source_amount) as applied
           from applications a
          where a.from_line_id = jl.id and a.org_id = jl.org_id and a.unapplied_at is null
       ) ap on true
      where jl.org_id = ${orgId} and je.source_document_id = ${documentId} and jl.is_open_item
+       ${subsidiaryVisibleFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      limit 1
   `)).rows[0];
   if (!line) return null;
@@ -100,6 +105,7 @@ export async function creditSettlementState(
       left join documents settled
         on settled.id = target_entry.source_document_id and settled.org_id = a.org_id
      where a.org_id = ${orgId} and a.from_line_id = ${line.id} and a.unapplied_at is null
+       ${subsidiaryVisibleFilter(sql`settled.subsidiary_id`, allowedSubsidiaryIds)}
      order by a.applied_on desc, a.created_at desc
   `)).rows;
   return {
@@ -118,6 +124,7 @@ export async function creditSettlementState(
       appliedOn: row.applied_on,
     })),
   };
+  });
 }
 
 export interface CreditSettlementResult {
@@ -132,6 +139,7 @@ interface EndpointRow extends Record<string, unknown> {
   account_id: string;
   subsidiary_id: string;
   book_id: string;
+  document_subsidiary_id: string | null;
 }
 
 /**
@@ -152,6 +160,7 @@ export async function applyStandaloneCredits(
     /** The caller's Idempotency-Key: one key, one settlement. */
     idempotencyKey: string;
   },
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<CreditSettlementResult> {
   if (input.credits.length === 0) {
     throw new PaymentError(
@@ -171,6 +180,25 @@ export async function applyStandaloneCredits(
         hashtextextended(${`credit-application:${orgId}:${input.idempotencyKey}`}, 0)
       )
     `);
+    const endpointIds = [...new Set(input.credits.flatMap((credit) => [credit.fromLineId, credit.toLineId]))];
+    const endpoints = (await db.execute<EndpointRow>(sql`
+      select jl.id, jl.account_id, jl.subsidiary_id, je.book_id,
+             endpoint_document.subsidiary_id as document_subsidiary_id
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+        left join documents endpoint_document on endpoint_document.id = je.source_document_id and endpoint_document.org_id = je.org_id
+       where jl.org_id = ${orgId} and jl.id in ${endpointIds}
+       order by jl.id
+       for update of jl
+    `)).rows;
+    if (endpoints.length !== endpointIds.length) {
+      throw new PaymentError("a credit or open item in this settlement no longer exists; reload the credits and reselect");
+    }
+    if (endpoints.some((row) =>
+      !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)
+      || (row.document_subsidiary_id !== null && !subsidiaryScopeAllows(allowedSubsidiaryIds, row.document_subsidiary_id)))) {
+      throw new ScopeNotFoundError();
+    }
     // The request-controlled image a retry must equal under canonical JSON.
     // Results are excluded: a genuine retry replays them, never compares.
     // This follows web/lib/api/idempotency.ts's claimSetupCreate contract —
@@ -234,20 +262,6 @@ export async function applyStandaloneCredits(
     // the cash path; defaulting here would refuse it as "wrong control
     // account". validateCreditAllocations then holds every endpoint to the
     // account derived here, so deriving it cannot widen the check.
-    const endpointIds = [
-      ...new Set(input.credits.flatMap((credit) => [credit.fromLineId, credit.toLineId])),
-    ];
-    const endpoints = (await db.execute<EndpointRow>(sql`
-      select jl.id, jl.account_id, jl.subsidiary_id, je.book_id
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where jl.org_id = ${orgId} and jl.id in ${endpointIds}
-    `)).rows;
-    if (endpoints.length !== endpointIds.length) {
-      throw new PaymentError(
-        "a credit or open item in this settlement no longer exists; reload the credits and reselect",
-      );
-    }
     const accounts = new Set(endpoints.map((row) => row.account_id));
     if (accounts.size !== 1) {
       throw new PaymentError(
@@ -388,6 +402,8 @@ interface LiveApplicationRow extends Record<string, unknown> {
   to_entry_number: string;
   subsidiary_id: string;
   book_id: string;
+  from_document_subsidiary_id: string | null;
+  to_document_subsidiary_id: string | null;
 }
 
 /**
@@ -406,6 +422,7 @@ export async function unapplyCreditSettlement(
   orgId: string,
   userId: string | null,
   applicationId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ amount: string }> {
   return withOrgTransaction(orgId, async () => {
     const application = (await db.execute<LiveApplicationRow>(sql`
@@ -415,7 +432,9 @@ export async function unapplyCreditSettlement(
              from_document.document_number as from_document_number,
              to_document.document_number as to_document_number,
              to_entry.entry_number as to_entry_number,
-             from_line.subsidiary_id, from_entry.book_id
+             from_line.subsidiary_id, from_entry.book_id,
+             from_document.subsidiary_id as from_document_subsidiary_id,
+             to_document.subsidiary_id as to_document_subsidiary_id
         from applications a
         join journal_lines from_line
           on from_line.id = a.from_line_id and from_line.org_id = a.org_id
@@ -430,12 +449,16 @@ export async function unapplyCreditSettlement(
         left join documents to_document
           on to_document.id = to_entry.source_document_id and to_document.org_id = a.org_id
        where a.org_id = ${orgId} and a.id = ${applicationId} and a.unapplied_at is null
-       for update of a
+       for update of a, from_line, to_line
     `)).rows[0];
     if (!application) {
       throw new PaymentError(
         "this settlement is not live; it was already released or never existed",
       );
+    }
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, application.from_document_subsidiary_id ?? application.subsidiary_id)
+        || !subsidiaryScopeAllows(allowedSubsidiaryIds, application.to_document_subsidiary_id ?? application.subsidiary_id)) {
+      throw new ScopeNotFoundError();
     }
     if (
       application.from_document_kind !== "customer_credit" &&

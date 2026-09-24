@@ -12,6 +12,7 @@ import { exactMoney, isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 export const runtime = 'nodejs'
 
@@ -79,17 +80,24 @@ export async function GET(req: Request) {
   if (gate instanceof NextResponse) return gate
   // Bind the document to the side it claims before reading its settlements:
   // an AR reader must not learn what a vendor credit paid.
-  const doc = (await db.execute<{ partyId: string | null }>(sql`
-    select party_id as "partyId" from documents
+  const doc = (await db.execute<{ partyId: string | null; subsidiaryId: string | null }>(sql`
+    select party_id as "partyId", subsidiary_id as "subsidiaryId" from documents
      where id = ${documentId} and org_id = ${gate.user.orgId}
        and kind = ${side === 'ap' ? 'vendor_credit' : 'customer_credit'}
   `))
   if (!doc.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const documentDenied = guardSubsidiaryScope(gate, doc.rows[0].subsidiaryId)
+  if (documentDenied) return documentDenied
   if (doc.rows[0].partyId) {
     const denied = await guardParty(gate, doc.rows[0].partyId)
     if (denied) return denied
   }
-  return NextResponse.json({ state: await creditSettlementState(gate.user.orgId, documentId) })
+  try {
+    return NextResponse.json({ state: await creditSettlementState(gate.user.orgId, documentId, gate.allowedSubsidiaryIds) })
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    throw error
+  }
 }
 
 export async function POST(req: Request) {
@@ -118,9 +126,10 @@ export async function POST(req: Request) {
       appliedOn,
       credits,
       idempotencyKey,
-    })
+    }, gate.allowedSubsidiaryIds)
     return NextResponse.json(result)
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // A reused key that cannot replay is a conflict with a named remedy, not
     // a validation failure: the operator must reload and review what settled.
     if (e instanceof CreditApplicationConflictError) {
@@ -169,9 +178,11 @@ export async function DELETE(req: Request) {
       gate.user.orgId,
       gate.user.id,
       applicationId,
+      gate.allowedSubsidiaryIds,
     )
     return NextResponse.json(result)
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return paymentErrorResponse(e)
   }
 }

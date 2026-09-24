@@ -5,15 +5,25 @@ import { sql } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
-  applyStandaloneCredits,
-  creditSettlementState,
-  unapplyCreditSettlement,
+  applyStandaloneCredits as applyStandaloneCreditsScoped,
+  creditSettlementState as creditSettlementStateScoped,
+  unapplyCreditSettlement as unapplyCreditSettlementScoped,
 } from "./credit-settlement.ts";
 import { paymentBookId } from "./payment-accounts.ts";
 import { CreditApplicationConflictError, PaymentError } from "./payment-errors.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+// Existing accounting behaviour tests intentionally run as the explicit
+// unrestricted fixture actor; scope-specific cases pass a restricted set.
+const applyStandaloneCredits = (orgId: string, userId: string | null, input: Parameters<typeof applyStandaloneCreditsScoped>[2]) =>
+  applyStandaloneCreditsScoped(orgId, userId, input, null);
+const creditSettlementState = (orgId: string, documentId: string) =>
+  creditSettlementStateScoped(orgId, documentId, null);
+const unapplyCreditSettlement = (orgId: string, userId: string | null, applicationId: string) =>
+  unapplyCreditSettlementScoped(orgId, userId, applicationId, null);
 
 /**
  * Live-Postgres: applying a posted credit memo to a posted invoice when NO cash
@@ -115,6 +125,15 @@ test("a full credit settles an invoice with no cash and posts no journal entry",
     const invoiceLine = await openLineId(org.orgId, invoiceId);
     const creditLine = await openLineId(org.orgId, creditId);
     assert.equal(await openBalance(org.orgId, invoiceLine), "210.0000");
+
+    await assert.rejects(
+      () => withBypass(() => applyStandaloneCreditsScoped(org.orgId, userId, {
+        idempotencyKey: randomUUID(), partyId: org.customerId, side: "ar", appliedOn: org.date,
+        credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "210", sourceDocumentId: creditId }],
+      }, new Set())),
+      ScopeNotFoundError,
+    );
+    assert.equal(await openBalance(org.orgId, invoiceLine), "210.0000", "out-of-scope apply records no settlement");
 
     const entriesBefore = await entryCount(org.orgId);
     const result = await withBypass(() =>
@@ -284,6 +303,12 @@ test("releasing a credit settlement reopens both balances exactly once", { skip:
       }),
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
+
+    await assert.rejects(
+      () => withBypass(() => unapplyCreditSettlementScoped(org.orgId, userId, applied.applicationIds[0]!, new Set())),
+      ScopeNotFoundError,
+    );
+    assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000", "out-of-scope release leaves the live settlement intact");
 
     const released = await withBypass(() =>
       unapplyCreditSettlement(org.orgId, userId, applied.applicationIds[0]!),
