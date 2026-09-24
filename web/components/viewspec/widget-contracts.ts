@@ -138,6 +138,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'document-row-actions': { props: ['basePath', 'canPost', 'canPostAp', 'canPostAr', 'canPostGl', 'id', 'kind', 'status'] },
   'documents-actions': { props: ['newFolderParentId', 'trashHref', 'trashLabel'] },
   'documents-breadcrumb': { props: ['crumbs', 'homeHref', 'homeLabel'] },
+  'documents-link-notice': { props: ['message'] },
   'email-evidence-cell': { props: ['error', 'summary'] },
   'email-settings-form': { props: ['initial'] },
   'email-subject-cell': { props: ['category', 'subject'] },

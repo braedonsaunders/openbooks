@@ -13,7 +13,7 @@ import { FileDrawer } from '../../app/(app)/documents/FileDrawer'
 import { FolderDrawer } from '../../app/(app)/documents/FolderDrawer'
 import { UploadButton } from '../../app/(app)/documents/UploadButton'
 import { NewFolderButton } from '../../app/(app)/documents/NewFolderButton'
-import { DocumentsActions, DocumentsBreadcrumb } from '../../app/(app)/documents/sections'
+import { DocumentsActions, DocumentsBreadcrumb, DocumentsLinkNotice } from '../../app/(app)/documents/sections'
 import { WeeklyGrid } from '../../app/(app)/timesheets/WeeklyGrid'
 import { CrmNewButton } from '../../app/(app)/crm/CrmNewButton'
 import { OpportunityDrawer } from '../../app/(app)/crm/OpportunityDrawer'
@@ -83,6 +83,11 @@ export const RECORDS_WIDGETS = {
       homeLabel={str(props, 'homeLabel') ?? ''}
       crumbs={(props.crumbs as ComponentProps<typeof DocumentsBreadcrumb>['crumbs']) ?? []}
     />
+  ),
+  /** Stale ?file= / ?folder= deep link: the loader resolved nothing, so the
+   *  page names the dead link instead of rendering the plain list. */
+  'documents-link-notice': (props) => (
+    <DocumentsLinkNotice message={str(props, 'message') ?? ''} />
   ),
   'folder-tree': (props) => (
     <FolderTree
