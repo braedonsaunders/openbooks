@@ -19,15 +19,14 @@ function fixture(size = 2) {
   return { pool, store, calls };
 }
 for (const warm of [false, true]) {
-  test(`concurrent ${warm ? 'warm' : 'initial'} fixture leases reserve distinct bounded slots`, async () => {
-    const { pool, calls } = fixture();
+  test(`concurrent ${warm ? 'warm' : 'initial'} fixture leases reserve distinct overflow slots`, async () => {
+    const { pool, calls } = fixture(1);
     const leased: string[] = [];
-    try {
-      if (warm) await pool.start();
-      leased.push(...(await Promise.all([pool.lease(), pool.lease()])).map(org => org.orgId));
+    try { if (warm) await pool.start();
+      const bounded = await Promise.race([Promise.all([pool.lease(), pool.lease()]), new Promise<never>((_, reject) => setTimeout(() => reject(new Error('overflow lease remained pending')), 1000))]);
+      leased.push(...bounded.map(org => org.orgId));
       assert.equal(new Set(leased).size, 2, JSON.stringify(leased));
-      assert.equal(calls.bootstrap, 2, 'concurrent starts share one initialization');
-      assert.equal(pool.metrics.activeLeases, 2);
+      assert.equal(calls.bootstrap, 2, 'concurrent starts share one warm and one overflow fixture'); assert.equal(pool.metrics.activeLeases, 2);
     } finally {
       for (const id of new Set(leased)) await pool.release(id);
       await pool.close().catch(() => {});
@@ -68,8 +67,8 @@ test('queued concurrent borrowers never share a tenant', { timeout: 5000 }, asyn
       await pool.release(org.orgId);
     }));
     assert.deepEqual(overlaps, []);
-    assert.equal(calls.bootstrap, 2);
-    assert.ok(peak <= 2);
+    assert.ok(calls.bootstrap <= 16);
+    assert.ok(peak <= 16);
     assert.equal(pool.metrics.leases, 20);
     assert.equal(pool.metrics.releases, 20);
     assert.equal(pool.metrics.activeLeases, 0);

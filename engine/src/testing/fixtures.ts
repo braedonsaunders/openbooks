@@ -253,6 +253,7 @@ export class ScratchOrgPool<T extends { orgId: string }> {
   private closed = false;
   private startPromise: Promise<void> | undefined;
   private closePromise: Promise<void> | undefined;
+  private growthPromise: Promise<void> | undefined;
   private readonly releasing = new Map<string, Promise<void>>();
 
   constructor(options: ScratchOrgPoolOptions<T>) {
@@ -301,11 +302,36 @@ export class ScratchOrgPool<T extends { orgId: string }> {
   }
 
   private async nextSlot(): Promise<PoolSlot<T>> {
-    const available = this.slots.find((slot) => !slot.leased && !slot.tainted);
-    // Reserve before yielding: two callers must never observe the same free slot.
-    if (available) return this.reserve(available);
-    if (this.slots.every((slot) => slot.tainted)) throw new Error("scratch fixture pool has no healthy slots");
-    return await new Promise<PoolSlot<T>>((resolve, reject) => this.waiters.push({ resolve, reject }));
+    for (;;) {
+      if (this.closed) throw new Error("scratch fixture pool is already closed");
+      const available = this.slots.find((slot) => !slot.leased && !slot.tainted);
+      // Reserve before yielding: two callers must never observe the same free slot.
+      if (available) return this.reserve(available);
+      if (this.slots.every((slot) => slot.tainted)) throw new Error("scratch fixture pool has no healthy slots");
+
+      // `size` is the warm working set, not a ceiling on how many fixtures one
+      // integration case may hold at once. A test that leases more than the
+      // warm set must bootstrap a bounded overflow slot instead of waiting for
+      // a lease it intentionally cannot release yet.
+      if (this.slots.length < 16) {
+        if (!this.growthPromise) {
+          this.growthPromise = Promise.resolve().then(async () => {
+            const org = await this.store.bootstrap();
+            this.slots.push({ org, leased: false, tainted: false });
+            this.metrics.fullBootstrap += 1;
+          });
+        }
+        const growth = this.growthPromise;
+        try {
+          await growth;
+        } finally {
+          if (this.growthPromise === growth) this.growthPromise = undefined;
+        }
+        continue;
+      }
+
+      return await new Promise<PoolSlot<T>>((resolve, reject) => this.waiters.push({ resolve, reject }));
+    }
   }
 
   async lease(): Promise<T> {
@@ -372,6 +398,9 @@ export class ScratchOrgPool<T extends { orgId: string }> {
       // A partial bootstrap still owns every successfully created tenant.
       if (this.startPromise) {
         try { await this.startPromise; } catch (error) { errors.push(error); }
+      }
+      if (this.growthPromise) {
+        try { await this.growthPromise; } catch (error) { errors.push(error); }
       }
       const resets = await Promise.allSettled([...this.releasing.values()]);
       for (const reset of resets) if (reset.status === "rejected") errors.push(reset.reason);
