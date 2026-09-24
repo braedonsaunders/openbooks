@@ -58,7 +58,6 @@
     "web/app/(app)/tax/provisions/view.test.ts": 1,
     "web/app/(app)/tax/tax-filing-notice.test.ts": 1,
     "web/app/(app)/timesheets/view-subsidiary-scope.test.ts": 2,
-    "web/app/api/hrm/options/route.test.ts": 1,
     "web/app/api/insights/_lib.test.ts": 2,
     "web/app/api/internal/overhead/publish/route.test.ts": 1,
     "web/app/api/journals/actions/route.test.ts": 1,
