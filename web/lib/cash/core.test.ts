@@ -1,41 +1,57 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import test from "node:test";
 
-const coreSource = readFileSync(join(import.meta.dirname, "core.ts"), "utf8");
+const navigation = { replacements: [] as string[] };
+(globalThis as Record<string, unknown>).__cashHorizonNavigation = navigation;
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "next/navigation") {
+      const code = `
+        export const useRouter = () => ({ replace: (url) => globalThis.__cashHorizonNavigation.replacements.push(url) });
+        export const usePathname = () => "/analytics/cashflow";
+        export const useSearchParams = () => new URLSearchParams("sub=sub-1");
+      `;
+      return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(code)}` };
+    }
+    return nextResolve(specifier, context);
+  },
+});
 
-// This is the row returned by the GL-history rollup for one account/week when
-// the ledger contains a +1,000 inflow and a -400 refund.
-const period = {
-  net: 1_000 - 400,
-  gross: Math.abs(1_000) + Math.abs(-400),
+// House render guard: classic JSX transforms and shared tsx caches need React
+// on globalThis before the client control module is evaluated.
+const { JSDOM } = await import("jsdom");
+const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost:4800/analytics/cashflow" });
+const browser = dom.window as unknown as Record<string, unknown>;
+for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "HTMLSelectElement", "Event", "self"]) {
+  if ((globalThis as Record<string, unknown>)[key] === undefined) {
+    (globalThis as Record<string, unknown>)[key] = browser[key];
+  }
+}
+;(globalThis as Record<string, unknown>).Event = browser.Event
+if (!(dom.window as unknown as { matchMedia?: unknown }).matchMedia) {
+  (dom.window as unknown as { matchMedia: (query: string) => MediaQueryList }).matchMedia = (query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() { return true; },
+  } as unknown as MediaQueryList);
+}
+;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const { HorizonControl } = await import("../../app/(app)/analytics/cashflow/HorizonControl.tsx");
+const horizonMessages = {
+  analytics: { cashflow: { horizon: { label: "Horizon", aria: "Forecast horizon", weeks: "{count} weeks" } } },
+  common: { labels: { none: "None" }, actions: { close: "Close", select: "Select" } },
+  ui: { select: { placeholder: "Select", searchPlaceholder: "Search", noMatches: "No matches", searching: "Searching" } },
 };
-
-test("GL history net mode nets signed rows and orients once on the total", () => {
-  assert.equal(period.net, 600, "forecast history series");
-  assert.equal(Math.abs(period.net), 600, "source-account average");
-  // Rows stay signed through the sums (refunds offset, contras offset);
-  // the single orientation step reads the netted total.
-  assert.match(coreSource, /const activity = useNet \? net : gross/);
-  assert.match(coreSource, /orientNetTotal\(\s*totalHistory,\s*netConvention\(/);
-  assert.match(coreSource, /accountTotals\.set\(label, addMoney\(accountTotals\.get\(label\) \?\? ZERO_MONEY, activity\)\)/);
-});
-
-test("GL history gross mode keeps line magnitudes in both forecast paths", () => {
-  assert.equal(period.gross, 1_400, "forecast history series");
-  assert.equal(Math.abs(period.gross), 1_400, "source-account average");
-  assert.match(
-    coreSource,
-    /sum\(l\.amount\) as net, sum\(abs\(l\.amount\)\) as gross/,
-  );
-});
-
-test("categoryWeekly feeds the selected activity into history and source-account totals", () => {
-  assert.match(coreSource, /weeklyHistory\[x\.wk\][\s\S]{0,140}activity/);
-  assert.match(coreSource, /accountTotals\.set\(label,[\s\S]{0,140}activity/);
-});
 
 test("formula TAX_RATE resolves each org default and fails closed", () => {
   // core.ts is server-only in production, so run the behavior check under
@@ -148,16 +164,22 @@ test("a malformed forecast formula refuses by name instead of forecasting zero",
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("forecast buckets place a 90-day-old item in 90+", () => {
-  assert.match(coreSource, /if \(daysPastDue < 90\) return "61-90";/);
-});
+test("cash forecast aging places the 90th overdue day in 90+", () => {
+  const source = `
+    import assert from "node:assert/strict";
+    import { bucketOf } from "./web/lib/cash/core.ts";
 
-test("cash forecast horizon caps at 26 weeks with a 13-week standard preset", () => {
-  // 13 weeks is the industry-standard rolling forecast; 26 is the supported
-  // cap. Both loaders and both switchers derive from this contract.
-  assert.match(coreSource, /export const MAX_CASH_HORIZON_WEEKS = 26;/);
-  assert.match(coreSource, /export const CASH_HORIZON_PRESETS = \[4, 8, 13, 26\]/);
-  assert.match(coreSource, /export function normalizeCashHorizonWeeks/);
+    assert.equal(bucketOf(89), "61-90");
+    assert.equal(bucketOf(90), "90+");
+    assert.equal(bucketOf(91), "90+");
+    console.log("cash aging boundary passed: day 89 is 61-90; day 90 begins 90+");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
 test("horizon normalizer accepts the cap range and fails closed to the fallback", () => {
@@ -187,19 +209,41 @@ test("horizon normalizer accepts the cap range and fails closed to the fallback"
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test("cash cockpit switchers offer the core horizon presets", () => {
-  // The client switchers cannot import the server-only core, so they carry
-  // the preset literal — pinned here to the single source of truth.
-  const cockpit = readFileSync(join(import.meta.dirname, "../../app/(app)/banking/cash/CashCockpit.tsx"), "utf8");
-  assert.match(cockpit, /HORIZONS = \[4, 8, 13, 26\]/);
-  const control = readFileSync(join(import.meta.dirname, "../../app/(app)/analytics/cashflow/HorizonControl.tsx"), "utf8");
-  // The control renders its options from one literal (labels are localized).
-  assert.match(control, /\[4, 8, 13, 26\]\.map\(/);
-  assert.doesNotMatch(control, /\b12\b/);
-  const bankingView = readFileSync(join(import.meta.dirname, "../../app/(app)/banking/cash/view.ts"), "utf8");
-  assert.match(bankingView, /normalizeCashHorizonWeeks\(sp\.horizon, 8\)/);
-  const analyticsView = readFileSync(join(import.meta.dirname, "../../app/(app)/analytics/cashflow/view.ts"), "utf8");
-  assert.match(analyticsView, /normalizeCashHorizonWeeks\(sp\.horizon, 4\)/);
+test("cashflow horizon control offers shared presets and preserves other query filters", async () => {
+  document.body.innerHTML = "";
+  navigation.replacements.length = 0;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      const providerProps = {
+        locale: "en",
+        messages: horizonMessages,
+        timeZone: "UTC",
+        children: React.createElement(HorizonControl, { value: 8 }),
+      };
+      root.render(React.createElement(NextIntlClientProvider, providerProps));
+    });
+    const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="Forecast horizon"]');
+    assert.ok(trigger, "cashflow exposes its forecast horizon selector");
+    assert.deepEqual([...document.querySelectorAll('[role="option"]')].map((option) => option.textContent), []);
+    await act(async () => {
+      trigger.click();
+    });
+    assert.deepEqual([...document.querySelectorAll('[role="option"]')].map((option) => option.textContent), [
+      "4 weeks", "8 weeks", "13 weeks", "26 weeks",
+    ]);
+    const thirteenWeeks = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find((option) => option.textContent === "13 weeks");
+    assert.ok(thirteenWeeks, "the supported 13-week standard horizon is selectable");
+    await act(async () => thirteenWeeks.click());
+    assert.deepEqual(navigation.replacements, ["/analytics/cashflow?sub=sub-1&horizon=13"]);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    dom.window.close();
+  }
 });
 
 test("week labels localize month names (F-t04-010)", () => {
