@@ -312,7 +312,7 @@ const nachaInputs = (): PayRunBankFileInputs => ({
   credits: [
     {
       stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIRED", amount: "2500.0000",
-      employeeNumber: "EMP-0001", routing: { aba: "011401533" }, accountNumber: "000123456789",
+      employeeNumber: "EMP-0001", routing: { aba: "011401533", accountType: "checking" }, accountNumber: "000123456789",
     },
     {
       stubId: "s2", employeePartyId: "p2", employeeName: "BO SAVER", amount: "1821.5000",
@@ -452,6 +452,33 @@ test("NACHA record layout — every field at its published offset", () => {
   assert.equal(fileControl.slice(31, 43), "0".repeat(12));
   assert.equal(fileControl.slice(43, 55), "000000432150");
   assert.equal(fileControl.slice(55, 94), " ".repeat(39), "reserved");
+});
+
+test("NACHA refuses an account type outside checking/savings instead of defaulting", () => {
+  // A blank, a missing key, a typo, or another rail's vocabulary used to
+  // render as a checking (22) credit — paying a savings account as checking,
+  // which the bank may reject or misroute. The file refuses by name instead,
+  // the way the Zengin path refuses its deposit type.
+  for (const [label, routing] of [
+    ["missing", { aba: "011401533" }],
+    ["blank", { aba: "011401533", accountType: "" }],
+    ["typo", { aba: "011401533", accountType: "checkin" }],
+    ["other rail", { aba: "011401533", accountType: "1" }],
+  ] as const) {
+    const inputs = nachaInputs();
+    inputs.credits[0]!.routing = { ...routing };
+    assert.throws(
+      () => renderNacha(inputs),
+      (error: unknown) => {
+        const message = (error as Error).message;
+        assert.match(message, /ADA WIRED/);
+        assert.match(message, /"checking" or "savings"/);
+        assert.doesNotMatch(message, /22/);
+        return true;
+      },
+      label,
+    );
+  }
 });
 
 test("the record terminator is tenant configuration, and never part of a record", () => {
@@ -737,7 +764,7 @@ async function payrollOrg(
 async function employee(fx: Fixture, name: string, opts: {
   partyMethod?: string | null;
   profileMethod?: string | null;
-  /** NACHA: { aba }. CPA-005: { institution, transit }. */
+  /** NACHA: { aba, accountType: "checking" | "savings" }. CPA-005: { institution, transit }. */
   bank?: Record<string, string> | null;
   employeeNumber?: string;
 } = {}): Promise<string> {
@@ -791,11 +818,11 @@ const hours = async (fx: Fixture, employeeId: string, workedOn: string, qty: str
  */
 async function mixedRun(fx: Fixture) {
   const wired = await employee(fx, "Ada Wired", {
-    partyMethod: "eft", bank: { aba: "011401533" }, employeeNumber: "EMP-0001",
+    partyMethod: "eft", bank: { aba: "011401533", accountType: "checking" }, employeeNumber: "EMP-0001",
   });
   const paper = await employee(fx, "Bo Paper", { employeeNumber: "EMP-0002" });
   const overridden = await employee(fx, "Cy Override", {
-    partyMethod: "eft", profileMethod: "cheque", bank: { aba: "121000248" }, employeeNumber: "EMP-0003",
+    partyMethod: "eft", profileMethod: "cheque", bank: { aba: "121000248", accountType: "checking" }, employeeNumber: "EMP-0003",
   });
   for (const id of [wired, paper, overridden]) {
     for (const day of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {

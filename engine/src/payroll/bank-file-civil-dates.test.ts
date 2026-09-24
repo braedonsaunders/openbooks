@@ -112,7 +112,7 @@ const CASES: RailCase[] = [
   },
   {
     format: "nacha",
-    inputs: withCreditRouting("nacha", { aba: "011401533" }),
+    inputs: withCreditRouting("nacha", { aba: "011401533", accountType: "checking" }),
     build: {
       fileIdModifier: "A",
       nacha: {

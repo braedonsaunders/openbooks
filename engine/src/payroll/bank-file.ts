@@ -2169,6 +2169,29 @@ function buildCnab240Payroll(
   });
 }
 
+/**
+ * The NACHA transaction code for one payroll credit, from the bank row's
+ * closed account-type vocabulary: 22 = demand (checking) credit,
+ * 32 = savings credit (Nacha ACH Guide for Developers, entry-detail
+ * transaction codes). A blank, a typo, or another rail's vocabulary refuses
+ * by name with the employee and the remedy — defaulting to 22 would pay a
+ * savings account as checking, which the bank may reject or misroute. The
+ * Zengin path refuses its deposit type the same way (resolveZenginCreditor).
+ */
+function nachaTransactionCode(
+  employeeName: string,
+  routing: Record<string, string>,
+): "22" | "32" {
+  const accountType = (routing.accountType ?? "").trim();
+  if (accountType === "checking") return "22";
+  if (accountType === "savings") return "32";
+  throw new PayrollError(
+    `${employeeName}: NACHA needs an account type of "checking" or "savings" on the `
+    + `employee's approved bank account (got ${JSON.stringify(accountType)}) — correct it `
+    + `on the employee's approved bank account or pay this employee by cheque`,
+  );
+}
+
 function buildNachaPayroll(
   input: PayRunBankFileBuildInput,
   credits: PayRunBankFileCredit[],
@@ -2179,8 +2202,7 @@ function buildNachaPayroll(
     throw new PayrollError("NACHA requires an allocated file ID modifier");
   }
   const entries: NachaEntry[] = credits.map((credit) => ({
-    // 22 = demand (checking) credit, 32 = savings credit.
-    transactionCode: credit.routing.accountType === "savings" ? "32" : "22",
+    transactionCode: nachaTransactionCode(credit.employeeName, credit.routing),
     routingNumber: credit.routing.aba ?? credit.routing.routingNumber ?? credit.routing.routing!,
     accountNumber: credit.accountNumber,
     amountCents: toUnits(credit.amount) / 100n,

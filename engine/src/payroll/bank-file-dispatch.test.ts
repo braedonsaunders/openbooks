@@ -169,7 +169,7 @@ test("cpa005 renders 1464-character CPA records through the CPA builder", () => 
 
 test("nacha renders 94-character ACH records through the NACHA builder", () => {
   const result = renderPayRunBankFile(
-    withCreditRouting(SINGLE, "nacha", { aba: "011401533" }),
+    withCreditRouting(SINGLE, "nacha", { aba: "011401533", accountType: "checking" }),
     {
       orgId: "org", documentId: "doc", format: "nacha",
       originator: originatorFor("nacha", { nacha: NACHA_SETTINGS }),
@@ -432,7 +432,7 @@ test("render refuses an unknown format by its own name, never as NACHA", () => {
 
 test("the trailer reader refuses an unknown format by name, even fed well-formed NACHA bytes", () => {
   const nacha = renderPayRunBankFile(
-    withCreditRouting(SINGLE, "nacha", { aba: "011401533" }),
+    withCreditRouting(SINGLE, "nacha", { aba: "011401533", accountType: "checking" }),
     {
       orgId: "org", documentId: "doc", format: "nacha",
       originator: originatorFor("nacha", { nacha: NACHA_SETTINGS }),
