@@ -405,10 +405,15 @@ export async function payrollSetupState(
     }
   }
 
-  // A run needs a pay calendar to exist at all.
+  // A run needs a pay calendar to exist at all — one the caller can use.
+  // Schedules are subsidiary-scoped like the population, slots and rates on
+  // this surface, so the existence read carries the same scope predicate: a
+  // caller restricted to A with the only active schedule under B has no
+  // usable schedule, and a null subsidiary belongs to no restricted caller.
   const schedules = (await db.execute<{ ok: boolean }>(sql`
     select exists (
-      select 1 from pay_schedules where org_id = ${orgId} and is_active) as ok
+      select 1 from pay_schedules where org_id = ${orgId} and is_active
+        ${payrollSubsidiaryScopeFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}) as ok
   `));
   checks.push({
     severity: "blocker", code: "setup.schedule",
