@@ -597,7 +597,11 @@ test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB },
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "X", kind: "adjustment",
       effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix",
-      guideline: { rows: ["meets"], cols: ["q1"], cells: { meets: { q1: { min: 0, max: 10 } } }, unratedRow: "meets" },
+      guideline: {
+        rows: ["meets"], cols: ["q1", "q2", "q3", "q4"],
+        cells: { meets: { q1: { min: 3, max: 5 }, q2: { min: 2, max: 4 }, q3: { min: 1, max: 3 }, q4: { min: 0, max: 2 } } },
+        unratedRow: "meets",
+      },
     });
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
@@ -813,7 +817,11 @@ test("HR-12 compensation events are append-only and RLS-isolated", { skip: !DB }
     const cycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "E", kind: "cola",
       effectiveOn: "2025-01-01", currency: "CAD", guidelineKind: "matrix",
-      guideline: { rows: ["meets"], cols: ["q1"], cells: { meets: { q1: { min: 0, max: 10 } } }, unratedRow: "meets" },
+      guideline: {
+        rows: ["meets"], cols: ["q1", "q2", "q3", "q4"],
+        cells: { meets: { q1: { min: 3, max: 5 }, q2: { min: 2, max: 4 }, q3: { min: 1, max: 3 }, q4: { min: 0, max: 2 } } },
+        unratedRow: "meets",
+      },
     });
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     await assert.rejects(
