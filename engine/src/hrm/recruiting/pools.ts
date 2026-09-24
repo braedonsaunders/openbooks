@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
-import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import {
   requireHrmRecruitingManage,
   requireHrmRecruitingManageOrg,
@@ -11,7 +10,7 @@ import {
 import { RecruitingError } from "./errors.ts";
 import { isUniqueViolation, requireActorId, requireId, requireOrgId } from "./input.ts";
 import { pgTextArray, requireDepthFeature } from "./depth.ts";
-import { requireCandidateOwnedInScope } from "./candidate-scope.ts";
+import { candidateInScopePredicate, requireCandidateOwnedInScope } from "./candidate-scope.ts";
 
 /**
  * Canonical talent-pool service (HR-18, 0229): named pools of past
@@ -258,13 +257,7 @@ export async function listPoolMembers(query: {
     // requisition: the pool shares names with its readers, but a scoped
     // reader must not enumerate another entity's benched candidates.
     const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
-    const ownedExpression =
-      allowed === null
-        ? sql`true`
-        : sql`exists (select 1 from hrm_applications a
-                        join hrm_requisitions r on r.org_id = a.org_id and r.id = a.requisition_id
-                       where a.org_id = ${orgId} and a.candidate_id = c.id
-                         ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)})`;
+    const ownedExpression = candidateInScopePredicate(orgId, "c.id", allowed);
     const rows = (await db.execute<PoolMemberDTO>(sql`
       select m.candidate_id as "candidateId", c.display_name as "displayName",
              c.tags as tags, m.added_at as "addedAt", m.note as note
@@ -352,6 +345,8 @@ export async function rediscoverForRequisition(query: {
         "rediscovery matches on declared tags — tag the opening before matching the pool against it",
       );
     }
+    const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    const ownedExpression = candidateInScopePredicate(orgId, "c.id", allowed);
     const pool = (await db.execute<{ one: number }>(sql`
       select 1 as one from hrm_talent_pools where org_id = ${orgId} and id = ${poolId}
     `)).rows[0];
@@ -366,7 +361,7 @@ export async function rediscoverForRequisition(query: {
              c.tags as tags, m.note as note
         from hrm_talent_pool_members m
         join hrm_candidates c on c.org_id = m.org_id and c.id = m.candidate_id
-       where m.org_id = ${orgId} and m.pool_id = ${poolId}
+       where m.org_id = ${orgId} and m.pool_id = ${poolId} and (${ownedExpression})
     `)).rows;
     const wantedSet = new Set(wanted.map((tag) => tag.toLowerCase()));
     return members

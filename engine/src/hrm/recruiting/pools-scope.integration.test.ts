@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { RecruitingError } from "./errors.ts";
 import { createCandidate } from "./candidates.ts";
 import { createApplication } from "./applications.ts";
-import { addPoolMember, createTalentPool, listPoolMembers, removePoolMember, tagCandidate } from "./pools.ts";
+import { addPoolMember, createTalentPool, listPoolMembers, rediscoverForRequisition, removePoolMember, tagCandidate } from "./pools.ts";
 import {
   openScopedReq,
   setupScopeHarness,
@@ -35,7 +35,7 @@ async function seedAB(h: Awaited<ReturnType<typeof setupScopeHarness>>) {
   const pool = await createTalentPool({ orgId, actorId: h.adminId, name: "bench" });
   await addPoolMember({ orgId, actorId: h.adminId, poolId: pool.id, candidateId: candA.id, note: "strong" });
   await addPoolMember({ orgId, actorId: h.adminId, poolId: pool.id, candidateId: candB.id, note: "backup" });
-  return { orgId, pool, candA, candB };
+  return { orgId, pool, candA, candB, reqA };
 }
 
 test("H-RECRUIT-POOLS: member lists show only owned candidates", { skip: !DB }, async () => {
@@ -50,6 +50,26 @@ test("H-RECRUIT-POOLS: member lists show only owned candidates", { skip: !DB }, 
     );
     const all = await listPoolMembers({ orgId, actorId: h.adminId, poolId: pool.id });
     assert.equal(all.length, 2, "unrestricted readers still list the whole pool");
+  } finally {
+    await teardownScopeHarness(h);
+  }
+});
+
+test("H-RECRUIT-POOLS: rediscovery hides out-of-scope pool members", { skip: !DB }, async () => {
+  const h = await setupScopeHarness(["hrmRecruiting", "hrmTalentPool"]);
+  try {
+    const { orgId, pool, candA, candB, reqA } = await seedAB(h);
+    await tagCandidate({ orgId, actorId: h.adminId, candidateId: candA.id, tags: ["rust"] });
+    await tagCandidate({ orgId, actorId: h.adminId, candidateId: candB.id, tags: ["rust"] });
+    const matches = await rediscoverForRequisition({
+      orgId,
+      actorId: h.scopedId,
+      poolId: pool.id,
+      requisitionId: reqA.id,
+      requisitionTags: ["RUST"],
+    });
+    assert.deepEqual(matches.map((match) => match.candidateId), [candA.id]);
+    assert.deepEqual(matches.map((match) => match.displayName), ["Ann A"]);
   } finally {
     await teardownScopeHarness(h);
   }
