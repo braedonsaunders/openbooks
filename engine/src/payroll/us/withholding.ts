@@ -313,6 +313,10 @@ export interface UsWithholdingInput {
   periodsPerYear: number;
   /** Periodic state-taxable wages. */
   wages: string;
+  /** Federal W-4 Step 1(c) status for state methods that use the federal form. */
+  federalFilingStatus?: "single" | "married_joint" | "head_household";
+  /** Federal W-4 exempt claim, used by state rules that inherit it. */
+  federalTaxExempt?: boolean;
   /** Supplemental wages this period. */
   supplemental?: string;
   /** Whether supplemental wages were paid with regular wages or separately. */
@@ -547,6 +551,9 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodEnd: input.periodEnd,
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
+      federalFilingStatus: input.federalFilingStatus,
+      federalTaxExempt: input.federalTaxExempt,
+      stateCertificateOnFile: certificate.onFile,
       supplemental: input.supplemental,
       supplementalPaymentTiming: input.supplementalPaymentTiming,
       federalIncomeTax: input.federalIncomeTax,
@@ -625,6 +632,9 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodEnd: input.periodEnd,
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
+      federalFilingStatus: input.federalFilingStatus,
+      federalTaxExempt: input.federalTaxExempt,
+      stateCertificateOnFile: certificate.onFile,
       supplemental: input.supplemental,
       federalIncomeTax: input.federalIncomeTax,
       federalWithholdingExempt: input.federalWithholdingExempt,

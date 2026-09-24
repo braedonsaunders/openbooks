@@ -2,17 +2,20 @@
  * Colorado income tax withholding — DR 1098, the prescribed employer worksheet.
  *
  * Source (fetched from tax.colorado.gov, not memory):
- *   DR 1098, Colorado Income Tax Withholding Worksheet for Employers
- *     (rev. 10/21/25), https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf
+ *   DR 1098, Colorado Withholding Worksheet for Employers (rev. 10/21/25),
+ *     2026 tables, https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf
+ *     and the current form listing at https://tax.colorado.gov/DR1098 /
+ *     https://tax.colorado.gov/withholding-forms ("Only the most recent version
+ *     of each form is published on this page").
  *   Form DR 0004, Colorado Employee Withholding Certificate — optional; when
  *     absent, DR 1098 line 2a falls back to the employee's federal W-4
  *     Step 1(c) filing status.
  *   Wage Withholding FAQs, tax.colorado.gov/withholding-FAQ — tables are no
  *     longer published; this worksheet is the only lawful method.
  *
- * The 10/21/25 worksheet prescribes the 2026 method: 4.40%, $11,000 MFJ /
- * qualifying surviving spouse, and $5,500 otherwise. These values are effective
- * for 2026 pay dates only; earlier editions remain separate tax-year editions.
+ * The 2026 worksheet is the Department's current posted method. Its printed
+ * defaults are 4.40%, $11,000 MFJ / qualifying surviving spouse, and $5,500
+ * otherwise. A later revision must replace this edition.
  *
  * Worksheet order, verbatim:
  *   1c  annualize wages (period wages × pay periods in the year)
@@ -31,12 +34,13 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  certificateAmount, certificateChoice, type PayrollCertificate,
+  certificateAmount, type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
@@ -55,8 +59,7 @@ export interface CoYearRates {
 }
 
 /**
- * The Department's 2026 worksheet (rev. 10/21/25), effective for 2026 pay dates.
- * Official source: https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf
+ * The current DR 1098 edition for 2026 pay dates (revision 10/21/25).
  */
 export const CO_RATES_2026: CoYearRates = {
   year: 2026,
@@ -75,9 +78,8 @@ export const CO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   label: "DR 1098 (10/21/25)",
   effectiveFrom: "2026-01-01",
   citation:
-    "Colorado Department of Revenue, DR 1098 Colorado Income Tax Withholding Worksheet "
-    + "for Employers (rev. 10/21/25), lines 1c–2f; Form DR 0004; "
-    + "https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf",
+    "Colorado Department of Revenue, 2026 DR 1098 Colorado Withholding Worksheet for Employers "
+    + "(rev. 10/21/25), lines 1c–2f; Form DR 0004",
   status: "published",
   region: "CO",
 }];
@@ -93,6 +95,18 @@ export function coRatesForPayDate(payDate: string): CoYearRates {
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = coRatesForPayDate(input.payDate);
+  // DR 1098 says to skip its calculation and withhold zero when the employee
+  // filed only an exempt W-4. With a separate DR 0004 on file, use that state
+  // certificate's instructions instead of treating the W-4 as the only form.
+  if (input.federalTaxExempt && !input.stateCertificateOnFile) {
+    return {
+      state: "CO",
+      year: rates.year,
+      tax: D(0n),
+      taxSupplemental: D(0n),
+      factors: {},
+    };
+  }
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
     throw new PayrollError(`invalid pay periods per year for Colorado withholding: ${P}`);
@@ -100,15 +114,19 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.basis === "nonresident") {
+    const allocation = requireUsWageAllocation(input.wageAllocations, "CO", null);
+    wages = mulRateCents(wages, allocation.workShare);
+    trace("CO_NONRESIDENT_WAGES", wages);
+  }
   const annualWages = mulInt(wages, P);
   trace("CO_ANNUAL_WAGES", annualWages);
 
   const enteredAllowance = certificateAmount(input.certificate, "annual_allowance");
-  const status = certificateChoice(input.certificate, "filing_status") ?? "other";
   const annualAllowance = enteredAllowance != null
     ? U(enteredAllowance)
-    : U(status === "married_joint" || status === "surviving_spouse"
+    : U(input.federalFilingStatus === "married_joint"
       ? rates.jointAllowance
       : rates.otherAllowance);
   trace("CO_ANNUAL_ALLOWANCE", annualAllowance);
@@ -138,6 +156,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * keys above. Terms are the DR 1098 worksheet's own — see the module header.
  */
 export const CO_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  CO_NONRESIDENT_WAGES: "Colorado apportioned nonresident wages",
   CO_ANNUAL_WAGES: "Colorado annualized wages",
   CO_ANNUAL_ALLOWANCE: "Colorado annual allowance",
   CO_ANNUAL_TAXABLE: "Colorado taxable income (annual)",
@@ -167,11 +186,11 @@ export const CO_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "CO" },
   purpose: "withholding",
   citation:
-    "Colorado Form DR 0004; DR 1098 (rev. 10/21/25) lines 2a and 2e; "
+    "Colorado Form DR 0004; 2026 DR 1098 (rev. 10/21/25) lines 2a and 2e; "
     + "tax.colorado.gov/withholding-FAQ",
   summary:
-    "Optional Colorado certificate. When it is not on file, DR 1098 calculates from the "
-    + "employee's federal W-4 Step 1(c) filing status and withholds no extra amount.",
+    "Optional Colorado certificate. When line 2 is blank or no DR 0004 is on file, DR 1098 "
+    + "uses the employee's federal W-4 Step 1(c) filing status and withholds no extra amount.",
   storage: "certificate_rows",
   fields: [
     {
@@ -182,22 +201,8 @@ export const CO_CERTIFICATE: PayrollCertificate = {
       min: "0",
       help:
         "If filled, this is DR 1098 line 2a in full. If blank — or no DR 0004 is on file — "
-        + "line 2a is $10,000 for married filing jointly or qualifying surviving spouse, "
-        + "and $5,500 otherwise, exactly as the 10/21/25 worksheet prints for 2026.",
-    },
-    {
-      key: "filing_status",
-      label: "Federal W-4 Step 1(c) filing status (used when line 2 is blank)",
-      kind: "choice",
-      default: "other",
-      choices: [
-        { value: "married_joint", label: "Married filing jointly" },
-        { value: "surviving_spouse", label: "Qualifying surviving spouse" },
-        { value: "other", label: "Single, married filing separately, or head of household" },
-      ],
-      help:
-        "DR 1098 line 2a reads the federal W-4 when DR 0004 line 2 is blank. The 2026 default "
-        + "is the $5,500 'otherwise' bucket, as prescribed by the 10/21/25 worksheet.",
+        + "line 2a is $11,000 for married filing jointly or qualifying surviving spouse, "
+        + "and $5,500 otherwise, exactly as the 2026 worksheet prints.",
     },
     {
       key: "additional_per_period",
@@ -226,5 +231,5 @@ export const CO_REGION: PayrollRegionWithholding = {
   certificateKey: "us_co_dr0004",
   subRegions: [],
   subRegionConflictRule: "both",
-  citation: "DR 1098 (rev. 10/21/25); Colorado withholding tax filing requirements",
+  citation: "2026 DR 1098 (rev. 10/21/25); Colorado withholding tax filing requirements",
 };

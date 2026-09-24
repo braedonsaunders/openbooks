@@ -1,10 +1,14 @@
 /**
  * Colorado DR 1098 goldens.
  *
- * Source: Colorado Department of Revenue, DR 1098 (rev. 10/21/25),
+ * Every expected figure is the worksheet's own arithmetic on the digits the
+ * Department's current 2026 DR 1098 prints (4.40%, $11,000 / $5,500):
  * https://tax.colorado.gov/sites/tax/files/documents/DR_1098_Colorado_Withholding_Worksheet_for_Employees.pdf
- * It prescribes the 2026 allowance amounts and 4.40% rate but gives no worked
- * dollar example, so expected values below are independent worksheet arithmetic.
+ * The 2026 W-4-only exemption instruction is in the worksheet and Colorado
+ * Wage Withholding Tax Guide (Jan. 2026):
+ * https://tax.colorado.gov/sites/tax/files/documents/Wage_Withholding_Tax_Guide_Jan_2026.pdf
+ * DR 1098 publishes no worked dollar example, so these are labelled substitutes — the same honesty
+ * conformance-tranche2.test.ts uses for Ohio and Michigan.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -15,14 +19,15 @@ import { money, resolvedCertificate } from "./conformance-support.ts";
 const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
   resolvedCertificate(CO_CERTIFICATE, answers);
 
-test("CO DR 1098 — 2026 weekly $1,000, otherwise status, no DR 0004 allowance: $39.35", () => {
-  // Official 2026 DR 1098: $52,000 − $5,500 = $46,500 × 4.40% = $2,046 ÷ 52 = $39.346… → $39.35.
+test("CO DR 1098 — 2026 weekly $1,000, W-4 single status, no DR 0004 allowance: $39.35", () => {
+  // 1c $52,000 − 2a $5,500 = $46,500 × 4.40% = $2,046.00 ÷ 52 = $39.3461… → $39.35
   const result = CO_WITHHOLDING.compute({
     payDate: "2026-03-06",
     periodsPerYear: 52,
     wages: "1000.00",
     basis: "resident",
-    certificate: cert({ filing_status: "other" }),
+    certificate: cert(),
+    federalFilingStatus: "single",
   });
   assert.equal(result.tax, money("39.35"));
   assert.equal(result.factors.CO_ANNUAL_ALLOWANCE, money("5500"));
@@ -30,13 +35,14 @@ test("CO DR 1098 — 2026 weekly $1,000, otherwise status, no DR 0004 allowance:
 });
 
 test("CO DR 1098 — 2026 weekly $1,000, married filing jointly default: $34.69", () => {
-  // Official 2026 DR 1098: $52,000 − $11,000 = $41,000 × 4.40% = $1,804 ÷ 52 = $34.692… → $34.69.
+  // 1c $52,000 − 2a $11,000 = $41,000 × 4.40% = $1,804.00 ÷ 52 = $34.6923… → $34.69
   const result = CO_WITHHOLDING.compute({
     payDate: "2026-03-06",
     periodsPerYear: 52,
     wages: "1000.00",
     basis: "resident",
-    certificate: cert({ filing_status: "married_joint" }),
+    certificate: cert(),
+    federalFilingStatus: "married_joint",
   });
   assert.equal(result.tax, money("34.69"));
   assert.equal(result.factors.CO_ANNUAL_ALLOWANCE, money("11000"));
@@ -48,9 +54,10 @@ test("CO DR 1098 — DR 0004 line 2 overrides the W-4 default", () => {
     periodsPerYear: 52,
     wages: "1000.00",
     basis: "resident",
-    certificate: cert({ filing_status: "married_joint", annual_allowance: "0" }),
+    certificate: cert({ annual_allowance: "0" }),
+    federalFilingStatus: "married_joint",
   });
-  // $52,000 × 4.40% = $2,288.00 ÷ 52 = $44.00
+  // $52,000 × 4.40% = $2,288.00 ÷ 52 = $44.00; line 2 overrides the default.
   assert.equal(result.tax, money("44.00"));
   assert.equal(result.factors.CO_ANNUAL_ALLOWANCE, money("0"));
 });
@@ -61,9 +68,67 @@ test("CO DR 1098 — extra withholding is added after the rate", () => {
     periodsPerYear: 52,
     wages: "1000.00",
     basis: "resident",
-    certificate: cert({ filing_status: "other", additional_per_period: "25" }),
+    certificate: cert({ additional_per_period: "25" }),
+    federalFilingStatus: "single",
   });
   assert.equal(result.tax, money("64.35"));
+});
+
+test("CO W-4-only exempt claim withholds zero; a filed DR 0004 resumes its worksheet", () => {
+  const w4Only = CO_WITHHOLDING.compute({
+    payDate: "2026-03-06",
+    periodsPerYear: 52,
+    wages: "1000.00",
+    basis: "resident",
+    certificate: cert(),
+    federalTaxExempt: true,
+    stateCertificateOnFile: false,
+  });
+  assert.equal(w4Only.tax, money("0.00"));
+
+  const withDr0004 = CO_WITHHOLDING.compute({
+    payDate: "2026-03-06",
+    periodsPerYear: 52,
+    wages: "1000.00",
+    basis: "resident",
+    certificate: cert({ annual_allowance: "0" }),
+    federalTaxExempt: true,
+    stateCertificateOnFile: true,
+  });
+  assert.equal(withDr0004.tax, money("44.00"));
+});
+
+test("CO apportions nonresident wages by the verified service-day share", () => {
+  // Colorado Wage Withholding Tax Guide (Jan. 2026), Nonresident Employees:
+  // Colorado-source wages are the share of pay-period service days worked in CO.
+  // https://tax.colorado.gov/sites/tax/files/documents/Wage_Withholding_Tax_Guide_Jan_2026.pdf
+  const result = CO_WITHHOLDING.compute({
+    payDate: "2026-03-06",
+    periodsPerYear: 52,
+    wages: "1000.00",
+    basis: "nonresident",
+    certificate: cert(),
+    federalFilingStatus: "single",
+    wageAllocations: [{
+      region: "CO", subRegion: null, workShare: "0.5", source: "verified Colorado service-day records",
+    }],
+  });
+  // Apportion wages first: $500 × 52 − $5,500 = $20,500; × 4.40% ÷ 52 = $17.35.
+  assert.equal(result.factors.CO_NONRESIDENT_WAGES, money("500"));
+  assert.equal(result.tax, money("17.35"));
+});
+
+test("CO refuses nonresident wages when the service-day allocation is absent", () => {
+  assert.throws(
+    () => CO_WITHHOLDING.compute({
+      payDate: "2026-03-06",
+      periodsPerYear: 52,
+      wages: "1000.00",
+      basis: "nonresident",
+      certificate: cert(),
+    }),
+    /CO\/null needs exactly one current-period work allocation.*Record the work share.*refused by name/,
+  );
 });
 
 test("CO refuses a year the posted worksheet has not been loaded for", () => {

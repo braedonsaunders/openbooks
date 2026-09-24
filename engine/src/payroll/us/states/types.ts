@@ -66,7 +66,7 @@ export interface UsResidentWithholdingFacts {
 export function requireUsWageAllocation(
   allocations: readonly UsWageAllocation[] | undefined,
   region: string,
-  subRegion: string,
+  subRegion: string | null,
 ): UsWageAllocation {
   const matches = (allocations ?? []).filter((item) =>
     item.region === region && item.subRegion === subRegion,
@@ -297,6 +297,12 @@ export interface UsStateWithholdingInput {
   periodsPerYear: number;
   /** Gross state-taxable periodic wages (excludes supplemental). */
   wages: string;
+  /** Federal W-4 Step 1(c) status, used by state worksheets that refer to it. */
+  federalFilingStatus?: "single" | "married_joint" | "head_household";
+  /** Federal W-4 exempt claim; some state worksheets inherit its withholding result. */
+  federalTaxExempt?: boolean;
+  /** Whether the state withholding certificate itself is filed and effective. */
+  stateCertificateOnFile?: boolean;
   /** Supplemental wages this period (bonus, commission, severance). */
   supplemental?: string;
   /** Required by the pack dispatcher whenever supplemental wages are present. */
