@@ -414,12 +414,20 @@ export async function confirmEmailSentGuarded(orgId: string, id: string, provide
 
 /** Record the terminal suppression reason on an open row without touching final states. */
 export async function markEmailSuppressed(orgId: string, id: string, reason: string): Promise<void> {
-  const updated = await db.execute<{ id: string }>(sql`
-    update email_log set status = 'suppressed', error_message = ${reason.slice(0, 500)}, updated_at = now()
-     where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed', 'uncertain')
-    returning id
+  const outcome = await db.execute<{ status: string | null; written: number }>(sql`
+    with updated as (
+      update email_log set status = 'suppressed', error_message = ${reason.slice(0, 500)}, updated_at = now()
+       where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed', 'uncertain')
+      returning id
+    ), target as (
+      select status from email_log where id = ${id} and org_id = ${orgId}
+    )
+    select (select status from target) as status,
+           (select count(*) from updated)::int as written
   `);
-  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "suppressed");
+  const row = outcome.rows?.[0];
+  if ((row?.written ?? 0) > 0 || row?.status === "suppressed") return;
+  refuseUnwrittenEmailLog(0, id, "suppressed");
 }
 
 /** Record one queued payment-remittance attempt without claiming delivery. */

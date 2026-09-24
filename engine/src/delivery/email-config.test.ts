@@ -21,12 +21,13 @@ import {
 const SEALED = { keyCiphertext: "c2VhbGVkLWNpcGhlcnRleHQ", keyNonce: "c2VhbGVkLW5vbmNl" };
 
 const writeEffectHarness = {
-  responses: [] as Array<{ rows: unknown[] }>,
+  responses: [] as Array<{ rows: unknown[] } | ((queryText: string) => { rows: unknown[] })>,
   queries: [] as Array<{ text: string }>,
   execute(query: { text?: string }) {
     const text = String(query.text ?? "");
     this.queries.push({ text });
-    return this.responses.shift() ?? { rows: [] };
+    const response = this.responses.shift();
+    return typeof response === "function" ? response(text) : response ?? { rows: [] };
   },
   reset() {
     this.responses.length = 0;
@@ -230,15 +231,12 @@ test("markEmailSuppressed refuses when the suppression update writes zero rows a
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
 });
 
-test("markEmailSuppressed refuses when the suppression update writes zero rows even if a follow-up read would see suppressed", async () => {
+test("markEmailSuppressed treats an already suppressed row as idempotent success", async () => {
   writeEffectHarness.reset();
-  writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "suppressed" }] });
-  await assert.rejects(
-    () => markEmailSuppressedUnderTest("org-1", "log-suppressed", "sandbox environment — email egress blocked"),
-    /email_log log-suppressed was not marked suppressed[\s\S]*matched no row/u,
-  );
+  writeEffectHarness.responses.push((text) => text.includes("with updated") ? { rows: [{ status: "suppressed", written: 0 }] } : { rows: [] });
+  await markEmailSuppressedUnderTest("org-1", "log-suppressed", "sandbox environment — email egress blocked");
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
-  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
+  assert.equal(writeEffectHarness.queries.length, 1, "the guarded transition reports existing suppression in one statement");
 });
 
 test("appendEmailAttemptEvent refuses when the lineage update writes zero rows", async () => {
