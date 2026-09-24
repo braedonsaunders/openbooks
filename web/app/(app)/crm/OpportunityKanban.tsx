@@ -104,7 +104,7 @@ function formatMoney(amount: string, currency: string, locale: string): string {
   const key = `${locale}|${currency}`
   let format = moneyFormatters.get(key)
   if (!format) {
-    format = (value: string) => createMoneyFormatter(locale, currency).money(value, { maximumFractionDigits: 0 })
+    format = (value: string) => createMoneyFormatter(locale, currency).money(value)
     moneyFormatters.set(key, format)
   }
   return format(amount)
