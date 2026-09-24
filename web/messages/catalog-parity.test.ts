@@ -3071,6 +3071,22 @@ const COGNATES = new Set<string>([
   'ja:ui.attachments.types.pdf|PDF',
   'pt-BR:ui.attachments.types.pdf|PDF',
   'zh:ui.attachments.types.pdf|PDF',
+  // Field labels added on main after the parity cut-over, reviewed on pick: Description is the French noun
+  // itself, and v{version} is a version notation identical in every locale.
+  'fr:assets.leases.fieldDescription|Description',
+  'fr:revenue.modify.fieldDescription|Description',
+  'fr:tax.provisions.versionLabel|v{version}',
+  'es:tax.provisions.versionLabel|v{version}',
+  'de:tax.provisions.versionLabel|v{version}',
+  'pt-BR:tax.provisions.versionLabel|v{version}',
+  'zh:tax.provisions.versionLabel|v{version}',
+  'ja:tax.provisions.versionLabel|v{version}',
+  // German lease columns: Revision is the German noun and Status the reviewed loanword used across de;
+  // pt-BR Status follows the same reviewed loanword.
+  'de:assets.leases.revision|Revision',
+  'de:assets.leases.colRevision|Revision',
+  'de:assets.leases.colStatus|Status',
+  'pt-BR:assets.leases.colStatus|Status',
 ])
 
 function cognateScope(entry: string): string {
