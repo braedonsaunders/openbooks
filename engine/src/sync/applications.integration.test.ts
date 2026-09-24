@@ -1657,3 +1657,77 @@ test(
     }
   },
 );
+
+test(
+  "application reconciliation settles the correction replacement, not the dead original",
+  { skip: !DB },
+  async () => {
+    // A controller-authorized source correction supersedes the invoice's
+    // original `document` entry with a replacement posted under a
+    // non-document origin, and repoints posted_entry_id. The mirror must
+    // settle the payment against the replacement's lines: an origin filter
+    // on the endpoint query would see no compatible invoice line and leave
+    // the 50 open as skippedNoLine.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      const payment = await postFixtureDoc(org, "PAY-CORR", "pay-corr", [
+        { accountId: org.accounts.ar, amount: "50", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-50", partyId: null, open: false },
+      ], "customer_payment");
+      const invoice = await postFixtureDoc(org, "INV-CORR", "inv-corr", [
+        { accountId: org.accounts.ar, amount: "-50", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "50", partyId: null, open: false },
+      ]);
+      // Endpoint state a source correction produces: posted_entry_id points
+      // at a non-document-origin replacement. (The original's own reversal
+      // is immaterial to this query — it filters on posted_entry_id, never
+      // on the original's status — and reversal mechanics are proven by the
+      // void and source-correction suites.)
+      const replacementId = randomUUID();
+      const replacementAr = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${replacementId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-CORR-REPL', ${org.date}, ${org.periodId}, 'Correction replacement',
+           'draft', ${invoice.documentId}, 'migration')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${replacementAr}, ${org.orgId}, ${replacementId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, -50, 'CAD', -50, 1, ${customer}, true),
+          (${randomUUID()}, ${org.orgId}, ${replacementId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, 50, 'CAD', 50, 1, null, false)`);
+      await db.execute(sql`
+        update journal_entries set status = 'posted', posted_at = now()
+         where id = ${replacementId}`);
+      await db.execute(sql`
+        update documents set posted_entry_id = ${replacementId}
+         where id = ${invoice.documentId}`);
+
+      const result = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-corr", appliedRef: "inv-corr", amount: "50", currency: "CAD" },
+      ]);
+      assert.equal(result.pairs, 1);
+      assert.equal(result.skippedNoLine, 0);
+      assert.equal(result.unallocated, "0.0000");
+      const settled = await db.execute<{ fromLineId: string; toLineId: string }>(sql`
+        select from_line_id as "fromLineId", to_line_id as "toLineId"
+          from applications where org_id = ${org.orgId}`);
+      assert.deepEqual(settled.rows, [
+        { fromLineId: payment.lineIds[0], toLineId: replacementAr },
+      ]);
+      assert.ok(
+        !settled.rows.some((row) => row.toLineId === invoice.lineIds[0]),
+        "the reversed original line settles nothing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -38,14 +37,6 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../te
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const openingBalancesSource = readFileSync(new URL("./opening-balances.ts", import.meta.url), "utf8");
-
-test("opening-balance component upserts pin the known tenant on the opening_balance_id/component_id conflict write", () => {
-  assert.match(
-    openingBalancesSource,
-    /insert into payroll_opening_balance_components[\s\S]*?on conflict \(opening_balance_id, component_id\) do update[\s\S]*?where payroll_opening_balance_components\.org_id = \$\{input\.orgId\}/,
-  );
-});
 
 /* ------------------------------------------------------------------ */
 /* Validation (no database)                                            */
@@ -1375,3 +1366,46 @@ test("the pack-declared second-order fields are wired to every consumer", () => 
   assert.equal(byKey.get("ehtRemunerationYtd")?.column, "eht_remuneration_ytd");
   assert.deepEqual(byKey.get("ehtRemunerationYtd")?.packs, ["CA"]);
 });
+
+test(
+  "component carry-ins stay in their tenant across re-saves",
+  { skip: !DB },
+  async () => {
+    // The component upsert keys on (opening_balance_id, component_id) and
+    // pins the tenant on the conflict write: a bare org_id there is
+    // ambiguous (42702) and every re-save fails. Two orgs carry the same
+    // component code; re-saving one org's year-to-date through the
+    // conflict branch must leave the other's untouched.
+    const fxA = await seedAdoption();
+    const fxB = await seedAdoption();
+    try {
+      const componentA = await seedCappedComponent(fxA);
+      const componentB = await seedCappedComponent(fxB);
+      for (const [fx, amount] of [[fxA, "1000"], [fxB, "2000"]] as const) {
+        const saved = await saveOpeningBalances({
+          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+          rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: amount } }],
+        });
+        assert.deepEqual(saved.errors, []);
+      }
+      // Same employee, same year: the component row already exists, so this
+      // save takes the ON CONFLICT DO UPDATE branch.
+      const resaved = await saveOpeningBalances({
+        orgId: fxA.orgId, actorId: fxA.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fxA.employeeId, amounts: {}, components: { RRSP: "3000" } }],
+      });
+      assert.deepEqual(resaved.errors, []);
+      assert.equal(
+        await componentYearToDate(db, { orgId: fxA.orgId, employeePartyId: fxA.employeeId, taxYear: 2026, componentId: componentA }),
+        "3000.0000",
+      );
+      assert.equal(
+        await componentYearToDate(db, { orgId: fxB.orgId, employeePartyId: fxB.employeeId, taxYear: 2026, componentId: componentB }),
+        "2000.0000",
+      );
+    } finally {
+      await dropScratchOrgReporting(fxA.orgId);
+      await dropScratchOrgReporting(fxB.orgId);
+    }
+  },
+);

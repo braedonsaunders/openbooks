@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { db, withBypass, withOrg } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { loadEntities } from "./migrate.ts";
 import type { EntityStream, MigrationSource, SourceEntity } from "./source.ts";
@@ -112,6 +112,61 @@ test(
       );
     } finally {
       await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "the same connector pull in two orgs lands separate parties and roles",
+  { skip: !DB, timeout: 180_000 },
+  async () => {
+    // Tenant isolation of the whole upsert path: the same sourceRef pulled
+    // into two orgs must create one party and one role row per org. An
+    // org-unscoped party lookup would make the second org adopt the first
+    // org's party (no new rows, and the conflict guard would then refuse
+    // the role write), while an org-unscoped role write would overwrite the
+    // first org's credit limit with the second's.
+    const orgA = await createScratchOrg();
+    const orgB = await createScratchOrg();
+    try {
+      const first = await withOrg(orgA.orgId, () =>
+        loadEntities(stubSource(), orgA.orgId, null, undefined, undefined, STREAMS("1738300.0000")),
+      );
+      assert.deepEqual(first.parties?.errors ?? [], []);
+      assert.equal(first.parties?.failed ?? -1, 0);
+      // Under bypass there is no ambient RLS: only the loaders' own tenant
+      // scoping stands between org B's pull and org A's rows.
+      const second = await withBypass(() =>
+        loadEntities(stubSource(), orgB.orgId, null, undefined, undefined, STREAMS("999.0000")),
+      );
+      assert.deepEqual(second.parties?.errors ?? [], []);
+      assert.equal(second.parties?.failed ?? -1, 0);
+
+      const rolesA = await roleRows(orgA.orgId);
+      const rolesB = await roleRows(orgB.orgId);
+      assert.equal(rolesA.length, 3);
+      assert.equal(rolesB.length, 3);
+      assert.equal(
+        rolesA.find((r) => r.table === "customer")?.credit,
+        "1738300.0000",
+      );
+      assert.equal(
+        rolesB.find((r) => r.table === "customer")?.credit,
+        "999.0000",
+      );
+
+      // The shared sourceRef resolves to one party per org, never a shared row.
+      const parties = await db.execute<{ orgId: string; partyId: string }>(sql`
+        select org_id as "orgId", id as "partyId" from parties
+         where custom->>'roleUpsertTest' = 'C-2427'
+           and org_id in (${orgA.orgId}, ${orgB.orgId})`);
+      const byOrg = new Map(parties.rows.map((r) => [r.orgId, r.partyId]));
+      assert.equal(byOrg.size, 2);
+      assert.ok(byOrg.has(orgA.orgId) && byOrg.has(orgB.orgId));
+      assert.notEqual(byOrg.get(orgA.orgId), byOrg.get(orgB.orgId));
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
     }
   },
 );

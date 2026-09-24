@@ -14,13 +14,6 @@ import {
 
 const crmSource = readFileSync(new URL("./crm.ts", import.meta.url), "utf8");
 
-test("customer-role upserts pin the known tenant on the party_id conflict write", () => {
-  assert.match(
-    crmSource,
-    /on conflict \(party_id\) do update set[\s\S]*?where customer_roles\.org_id = \$\{input\.orgId\}/,
-  );
-});
-
 test("lifecycle promotion is forward-only", () => {
   assert.equal(shouldPromoteLifecycle("lead", "prospect"), true);
   assert.equal(shouldPromoteLifecycle("lead", "customer"), true);

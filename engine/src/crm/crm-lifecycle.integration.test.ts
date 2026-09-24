@@ -113,3 +113,60 @@ test("promotion still writes profile, role and stage event with CRM on", { skip:
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("reactivating a customer role touches only its own tenant row", { skip: !DB }, async () => {
+  // ensureActiveCustomerRole keys on party_id and pins the tenant on the
+  // conflict write: a bare org_id there is ambiguous (42702) and every
+  // lifecycle transition fails. Deactivating one org's role and
+  // transitioning again must reactivate through the conflict branch while
+  // the other org's role row is untouched.
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorA = await withBypassContext(() => createScratchUser(orgA.orgId, "CRM Admin A", "admin"));
+    const actorB = await withBypassContext(() => createScratchUser(orgB.orgId, "CRM Admin B", "admin"));
+    const partyA = await seedParty(orgA.orgId, "Tenant A Customer");
+    const partyB = await seedParty(orgB.orgId, "Tenant B Customer");
+    for (const [org, actor, party] of [
+      [orgA, actorA, partyA],
+      [orgB, actorB, partyB],
+    ] as const) {
+      await withBypassContext(() =>
+        transitionCrmAccountStage(db, {
+          orgId: org.orgId, partyId: party, actorId: actor,
+          toStage: "customer", sourceKind: "sales_order",
+        }),
+      );
+    }
+    await withBypassContext(() => db.execute(sql`
+      update customer_roles set is_active = false
+       where org_id = ${orgA.orgId} and party_id = ${partyA}`));
+    assert.equal(await activeRole(orgA.orgId, partyA), false);
+
+    await withBypassContext(() =>
+      transitionCrmAccountStage(db, {
+        orgId: orgA.orgId, partyId: partyA, actorId: actorA,
+        toStage: "customer", sourceKind: "sales_order",
+      }),
+    );
+
+    assert.equal(await activeRole(orgA.orgId, partyA), true);
+    assert.equal(await activeRole(orgB.orgId, partyB), true);
+    const counts = await withBypassContext(() =>
+      db.execute<{ orgId: string; n: number }>(sql`
+        select org_id as "orgId", count(*)::int as n from customer_roles
+         where (org_id, party_id) in ((${orgA.orgId}, ${partyA}), (${orgB.orgId}, ${partyB}))
+         group by org_id`),
+    );
+    assert.deepEqual(
+      counts.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
+      [
+        { orgId: orgA.orgId, n: 1 },
+        { orgId: orgB.orgId, n: 1 },
+      ].sort((a, b) => a.orgId.localeCompare(b.orgId)),
+    );
+  } finally {
+    await withBypassContext(() => dropScratchOrg(orgB.orgId));
+    await withBypassContext(() => dropScratchOrg(orgA.orgId));
+  }
+});

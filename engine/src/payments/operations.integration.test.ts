@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
-import { recordPaymentSettlement } from "./operations.ts";
+import { ensureBuiltInPaymentFormats, recordPaymentSettlement } from "./operations.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
@@ -227,6 +227,102 @@ test(
       `));
       await withBypass(() => dropScratchOrg(foreignOrg.orgId));
       await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "re-settling an instruction updates its own tenant row and no other",
+  { skip: !DB },
+  async () => {
+    // The settlement upsert keys on payment_instruction_id and pins the
+    // tenant on the conflict write: a bare org_id there is ambiguous
+    // (42702) and every re-settlement fails. Settling twice in one org
+    // must update the single row through the conflict branch, while the
+    // other org's settlement row keeps its own bank reference.
+    const orgA = await withBypass(() => createScratchOrg());
+    const orgB = await withBypass(() => createScratchOrg());
+    const runA = randomUUID();
+    const instructionA = randomUUID();
+    const runB = randomUUID();
+    const instructionB = randomUUID();
+    try {
+      const actorA = await withBypass(() => createScratchUser(orgA.orgId, "Settlement operator A", "admin"));
+      const actorB = await withBypass(() => createScratchUser(orgB.orgId, "Settlement operator B", "admin"));
+      for (const [org, actor, runId, instructionId] of [
+        [orgA, actorA, runA, instructionA],
+        [orgB, actorB, runB, instructionB],
+      ] as const) {
+        await withOrgContext(org.orgId, async () => {
+          await db.execute(sql`
+            insert into payment_runs
+              (id, org_id, run_number, bank_account_id, subsidiary_id, method,
+               direction, purpose, currency, status, payment_count, total_amount,
+               created_by, updated_by)
+            values (${runId}, ${org.orgId}, ${`RESETTLE-${runId}`},
+                    ${org.accounts.bank}, ${org.subsidiaryId}, 'wire', 'outbound',
+                    'vendor_payments', 'CAD', 'confirmed', 1, '25', ${actor}, ${actor})`);
+          await db.execute(sql`
+            insert into payment_instructions
+              (id, org_id, payment_run_id, payee_party_id, amount, currency, status,
+               created_by, updated_by)
+            values (${instructionId}, ${org.orgId}, ${runId}, ${org.vendorId},
+                    '25', 'CAD', 'sent', ${actor}, ${actor})`);
+        });
+      }
+
+      const settle = (org: typeof orgA, actor: string, instructionId: string, ref: string) =>
+        recordPaymentSettlement({
+          instructionId, orgId: org.orgId, userId: actor,
+          status: "settled", effectiveOn: org.date, bankReference: ref,
+        });
+      await settle(orgA, actorA, instructionA, "ref-A1");
+      await settle(orgA, actorA, instructionA, "ref-A2");
+      await settle(orgB, actorB, instructionB, "ref-B");
+
+      const rows = await withBypass(async () =>
+        (await db.execute<{ orgId: string; reference: string | null; count: number }>(sql`
+          select org_id as "orgId", bank_reference as "reference", count(*)::int as "count"
+            from payment_settlements
+           where payment_instruction_id in (${instructionA}, ${instructionB})
+           group by org_id, bank_reference`)).rows,
+      );
+      assert.deepEqual(rows, [
+        { orgId: orgA.orgId, reference: "ref-A2", count: 1 },
+        { orgId: orgB.orgId, reference: "ref-B", count: 1 },
+      ]);
+    } finally {
+      await withBypass(() => db.execute(sql`
+        delete from payment_settlements where payment_instruction_id in (${instructionA}, ${instructionB})`));
+      await withBypass(() => dropScratchOrg(orgB.orgId));
+      await withBypass(() => dropScratchOrg(orgA.orgId));
+    }
+  },
+);
+
+test(
+  "built-in payment formats ensure per tenant without duplicating on re-ensure",
+  { skip: !DB },
+  async () => {
+    // The format upsert keys on (org_id, code) and pins the tenant on the
+    // conflict write. Ensuring twice in one org must refresh the same rows
+    // through the conflict branch, while the other org keeps its own set.
+    const orgA = await withBypass(() => createScratchOrg());
+    const orgB = await withBypass(() => createScratchOrg());
+    try {
+      await ensureBuiltInPaymentFormats(orgA.orgId, null);
+      await ensureBuiltInPaymentFormats(orgB.orgId, null);
+      const count = async (orgId: string) =>
+        (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from payment_formats where org_id = ${orgId}`)).rows[0]!.n;
+      const first = await count(orgA.orgId);
+      assert.ok(first > 0, "built-ins land on first ensure");
+      await ensureBuiltInPaymentFormats(orgA.orgId, null);
+      assert.equal(await count(orgA.orgId), first, "re-ensure refreshes instead of duplicating");
+      assert.equal(await count(orgB.orgId), first, "both tenants hold the full built-in set");
+    } finally {
+      await withBypass(() => dropScratchOrg(orgB.orgId));
+      await withBypass(() => dropScratchOrg(orgA.orgId));
     }
   },
 );
