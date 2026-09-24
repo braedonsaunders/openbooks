@@ -160,7 +160,7 @@ export const OPERATIONS_WIDGETS = {
     <SingleBookLabel label={str(props, 'label') ?? ''} name={str(props, 'name') ?? ''} />
   ),
   'close-readiness-cell': (props) => (
-    <CloseReadinessCell readiness={Number(props.readiness ?? 0)} />
+    <CloseReadinessCell readiness={num(props, 'readiness') ?? 0} />
   ),
   /** The run badge stacked over the lock-detail line (null when unlocked). */
   'close-status-cell': (props) => (
@@ -266,7 +266,7 @@ export const OPERATIONS_WIDGETS = {
   'new-filing': (props) => (
     <NewFilingButton
       formTypes={(props.formTypes as ComponentProps<typeof NewFilingButton>['formTypes']) ?? []}
-      defaultYear={Number(props.defaultYear ?? 0)}
+      defaultYear={num(props, 'defaultYear') ?? 0}
     />
   ),
   'lien-waiver-toolbar': (props) => (

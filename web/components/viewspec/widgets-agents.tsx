@@ -15,7 +15,7 @@ import { TabNav, Metric, ReportsCardHeading, NarrativeEntry, FindingCell } from 
 import { WorkItemDrawer } from '../../app/(app)/continuous-close/WorkItemDrawer'
 import { NarrativeDrawer } from '../../app/(app)/continuous-close/NarrativeDrawer'
 import { Badge } from '@openbooks/ui'
-import { str, type WidgetRenderer } from './widget-props'
+import { num, str, type WidgetRenderer } from './widget-props'
 
 /** Agentic operations adapters: workbench, assistant handoff and continuous close. Compose native components without changing their props or boundaries. */
 export const AGENTS_WIDGETS = {
@@ -207,7 +207,7 @@ export const AGENTS_WIDGETS = {
   'metric-tile': (props) => (
     <Metric
       label={str(props, 'label') ?? ''}
-      value={Number(props.value ?? 0)}
+      value={num(props, 'value') ?? 0}
       locale={str(props, 'locale') ?? 'en'}
       tone={str(props, 'tone')}
     />

@@ -23,7 +23,7 @@ import { StartReconciliationButton } from '../../app/(app)/banking/[accountId]/S
 import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
-import { str, type WidgetRenderer } from './widget-props'
+import { num, str, type WidgetRenderer } from './widget-props'
 
 /** Banking adapters. Compose native components without changing their props or boundaries. */
 export const BANKING_WIDGETS = {
@@ -35,8 +35,8 @@ export const BANKING_WIDGETS = {
   'banking-roster': (props) => (
     <AccountsRosterPanel
       accounts={props.accounts as ComponentProps<typeof AccountsRosterPanel>['accounts']}
-      totalCash={Number(props.totalCash ?? 0)}
-      totalCards={Number(props.totalCards ?? 0)}
+      totalCash={num(props, 'totalCash') ?? 0}
+      totalCards={num(props, 'totalCards') ?? 0}
       layoutPrefs={props.layoutPrefs as ComponentProps<typeof AccountsRosterPanel>['layoutPrefs']}
     />
   ),
@@ -121,13 +121,13 @@ export const BANKING_WIDGETS = {
       difference={str(props, 'difference') ?? '0'}
       canReconcile={props.canReconcile === true}
       stmtRows={(props.stmtRows as ComponentProps<typeof ReconcileWorkspace>['stmtRows']) ?? []}
-      stmtTotal={Number(props.stmtTotal ?? 0)}
+      stmtTotal={num(props, 'stmtTotal') ?? 0}
       stmtParams={props.stmtParams as ComponentProps<typeof ReconcileWorkspace>['stmtParams']}
       glRows={(props.glRows as ComponentProps<typeof ReconcileWorkspace>['glRows']) ?? []}
-      glTotal={Number(props.glTotal ?? 0)}
+      glTotal={num(props, 'glTotal') ?? 0}
       glParams={props.glParams as ComponentProps<typeof ReconcileWorkspace>['glParams']}
       matchedRows={(props.matchedRows as ComponentProps<typeof ReconcileWorkspace>['matchedRows']) ?? []}
-      matchedTotal={Number(props.matchedTotal ?? 0)}
+      matchedTotal={num(props, 'matchedTotal') ?? 0}
       mParams={props.mParams as ComponentProps<typeof ReconcileWorkspace>['mParams']}
     />
   ),

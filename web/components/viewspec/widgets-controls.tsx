@@ -11,7 +11,7 @@ import { SearchInput } from '../search-input'
 import { ShowInactivesToggle } from '../show-inactives-toggle'
 import { Badge, Button } from '@openbooks/ui'
 import Link from 'next/link'
-import { str, type WidgetRenderer } from './widget-props'
+import { num, str, type WidgetRenderer } from './widget-props'
 
 /** Shared spec controls adapters: links, filters, badges and headings. Compose native components without changing their props or boundaries. */
 export const CONTROLS_WIDGETS = {
@@ -39,9 +39,9 @@ export const CONTROLS_WIDGETS = {
   ),
   'row-counts-cell': (props) => (
     <RowCountsCell
-      created={Number(props.created ?? 0)}
-      updated={Number(props.updated ?? 0)}
-      failed={Number(props.failed ?? 0)}
+      created={num(props, 'created') ?? 0}
+      updated={num(props, 'updated') ?? 0}
+      failed={num(props, 'failed') ?? 0}
     />
   ),
   /* --- admin lists -------------------------------------------------------- */
