@@ -25,9 +25,20 @@ const PCT_MESSAGE = "proposedPct must be a non-negative percent";
 const RATE_MESSAGE = "proposedRate must be a positive amount with at most 4 decimals";
 
 const cycleLineBody = z.object({
+  // F3-33: the client sends the canonical decimal string the exact
+  // parser produced (never a Number()-coerced float); direct callers
+  // may still send JSON numbers. One refine keeps the single named
+  // refusal (a union would report a bare invalid_union instead).
   proposedPct: z
-    .number({ error: PCT_MESSAGE })
-    .refine((v) => Number.isFinite(v) && v >= 0, PCT_MESSAGE)
+    .unknown()
+    .refine(
+      (v) =>
+        v === null ||
+        v === undefined ||
+        (typeof v === "number" && Number.isFinite(v) && v >= 0) ||
+        (typeof v === "string" && /^\d+(\.\d{1,6})?$/.test(v) && Number.isFinite(Number(v))),
+      PCT_MESSAGE,
+    )
     .nullish(),
   proposedRate: z
     .string({ error: RATE_MESSAGE })
@@ -59,7 +70,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
-    const proposedPct = body.proposedPct ?? null;
+    const proposedPct = body.proposedPct == null ? null : Number(body.proposedPct);
     const proposedRate = body.proposedRate ?? null;
     try {
       const line = await proposeLine({

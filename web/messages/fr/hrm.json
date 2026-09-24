@@ -1640,6 +1640,7 @@
       "pctLabel": "Hausse %",
       "rateLabel": "Nouveau taux",
       "reasonLabel": "Motif",
+      "pctInvalid": "L’augmentation doit être un nombre simple non négatif avec 6 décimales au maximum (par exemple 3.5) — les signes de pourcentage, les virgules et les lettres sont refusés",
       "decideReasonLabel": "Motif de la décision",
       "cancelReasonLabel": "Motif d'annulation",
       "cancelReasonRequired": "L'annulation exige un motif — indiquez pourquoi le cycle est annulé.",

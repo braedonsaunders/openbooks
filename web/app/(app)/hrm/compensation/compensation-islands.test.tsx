@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+// F3-33 needs a DOM: the propose form is submitted, not just rendered.
+const { JSDOM } = await import("jsdom");
+const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
+  url: "http://localhost:4800/hrm/compensation/cycles/cycle-1",
+});
+const globals = globalThis as Record<string, unknown>;
+const domWindow = dom.window as unknown as Record<string, unknown>;
+for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+  if (globals[key] === undefined) globals[key] = domWindow[key];
+}
+if (typeof window.matchMedia !== "function") {
+  window.matchMedia = (() => ({
+    matches: true,
+    media: "",
+    addEventListener() {},
+    removeEventListener() {},
+  })) as typeof window.matchMedia;
+}
+globals.IS_REACT_ACT_ENVIRONMENT = true;
+
 const { registerHooks } = await import("node:module");
 registerHooks({
   resolve(specifier, context, next) {
@@ -23,7 +43,11 @@ const { NextIntlClientProvider } = await import("next-intl");
 // next-intl, so the islands render inside the same provider the app
 // always supplies — backed by the real en catalogs, never stubbed.
 const messages = (await import("../../../../messages/en")).default;
-const { LineDecideButtons, CycleMoveButtons, CompensationSettingsForm } = await import("./islands.tsx");
+const { LineDecideButtons, CycleMoveButtons, CompensationSettingsForm, LineProposeForm } = await import("./islands.tsx");
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 function renderWithIntl(node: React.ReactElement): string {
   return renderToString(
@@ -106,4 +130,88 @@ test("the FTE-rounding select shows translated labels, never raw codes", () => {
   assert.ok(!html.includes(">up_to_whole<"), "no raw snake_case code renders as an option");
   assert.ok(!html.includes(">nearest_tenth<"), "no raw snake_case code renders as an option");
   assert.ok(!html.includes(">nearest_hundredth<"), "no raw snake_case code renders as an option");
+});
+
+// F3-33: Number('abc') is NaN, which JSON serializes as null — the old
+// submit posted an empty proposal the server could only refuse blindly.
+// The form now parses through the exact decimal grammar, refuses
+// garbage and negatives by name without posting, and sends the
+// canonical decimal string.
+const PROPOSE_LABELS = {
+  ...LABELS,
+  pctInvalid: "The raise must be a plain non-negative number",
+};
+const posted: { url: string; body: string }[] = [];
+
+function stubFetch(): void {
+  posted.length = 0;
+  (globalThis as Record<string, unknown>).fetch = (async (input: unknown, init?: { body?: unknown }) => {
+    posted.push({ url: String(input), body: String(init?.body ?? "") });
+    return Response.json({ id: "line-1" });
+  }) as typeof fetch;
+}
+
+async function submitPct(pctValue: string): Promise<{ postedCount: number; body: string; text: string }> {
+  stubFetch();
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <LineProposeForm
+          cycleId="cycle-1"
+          lineId="line-1"
+          labels={LABELS}
+          pctLabel="Raise %"
+          rateLabel="New rate"
+          reasonLabel="Reason"
+          pctInvalidLabel={PROPOSE_LABELS.pctInvalid}
+          closeHref="/hrm/compensation/cycles/cycle-1"
+        />
+      </NextIntlClientProvider>,
+    );
+  });
+  const input = host.querySelector("#comp-line-pct") as HTMLInputElement;
+  assert.ok(input, "the pct field renders");
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  assert.ok(setter, "the DOM value setter exists");
+  await act(async () => {
+    setter!.call(input, pctValue);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  const form = host.querySelector("form");
+  assert.ok(form, "the propose form renders");
+  await act(async () => {
+    form!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    await tick();
+    await tick();
+    await tick();
+  });
+  const result = { postedCount: posted.length, body: posted[0]?.body ?? "", text: host.textContent ?? "" };
+  await act(async () => {
+    root.unmount();
+  });
+  host.remove();
+  return result;
+}
+
+test("an unparseable percent is refused by name and never posted", async () => {
+  const refused = await submitPct("abc");
+  assert.equal(refused.postedCount, 0, "garbage never reaches the route as a null proposal");
+  assert.ok(refused.text.includes(PROPOSE_LABELS.pctInvalid), "the named refusal renders beside the form");
+});
+
+test("a negative percent is refused by name and never posted", async () => {
+  const refused = await submitPct("-2");
+  assert.equal(refused.postedCount, 0, "a negative raise never reaches the route");
+  assert.ok(refused.text.includes(PROPOSE_LABELS.pctInvalid), "the named refusal renders beside the form");
+});
+
+test("a valid percent posts the canonical decimal string", async () => {
+  const sent = await submitPct("3.50");
+  assert.equal(sent.postedCount, 1, "one proposal posts");
+  const body = JSON.parse(sent.body) as { proposedPct: unknown };
+  assert.equal(body.proposedPct, "3.5", "the wire carries the canonical decimal string, never a float");
+  assert.ok(!sent.text.includes(PROPOSE_LABELS.pctInvalid), "no refusal renders for valid input");
 });

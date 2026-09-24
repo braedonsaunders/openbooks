@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { useAppAction } from '@/lib/use-app-action'
 
 /**
@@ -127,6 +128,7 @@ export function LineProposeForm({
   pctLabel,
   rateLabel,
   reasonLabel,
+  pctInvalidLabel,
   closeHref,
 }: {
   cycleId: string
@@ -135,6 +137,8 @@ export function LineProposeForm({
   pctLabel: string
   rateLabel: string
   reasonLabel: string
+  /** Named refusal when the typed percent is not an exact decimal. */
+  pctInvalidLabel: string
   closeHref: string
 }) {
   const router = useRouter()
@@ -149,13 +153,28 @@ export function LineProposeForm({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    // F3-33: the percent rides the exact decimal parser — Number('abc')
+    // is NaN, which JSON serializes as null, so an unvalidated typo
+    // arrives as an empty proposal. Refuse it here by name and send the
+    // canonical decimal string; the route refuses the rest.
+    const proposedPct =
+      mode === 'pct' && pct.trim() !== ''
+        ? (() => {
+            const canon = canonicalDecimal(pct.trim(), 6)
+            return canon === null || canon.startsWith('-') ? null : canon
+          })()
+        : null
+    if (mode === 'pct' && pct.trim() !== '' && proposedPct === null) {
+      setError(pctInvalidLabel)
+      return
+    }
     await execute(
       () =>
         fetchAction(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=propose`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            proposedPct: mode === 'pct' && pct !== '' ? Number(pct) : null,
+            proposedPct,
             proposedRate: mode === 'rate' && rate !== '' ? rate.trim() : null,
             reason: reason.trim() || null,
           }),

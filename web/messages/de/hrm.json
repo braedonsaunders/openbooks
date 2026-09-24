@@ -1640,6 +1640,7 @@
       "pctLabel": "Erhöhung %",
       "rateLabel": "Neuer Satz",
       "reasonLabel": "Begründung",
+      "pctInvalid": "Die Erhöhung muss eine einfache nicht negative Zahl mit höchstens 6 Dezimalstellen sein (zum Beispiel 3.5) — Prozentzeichen, Kommas und Buchstaben werden abgelehnt",
       "decideReasonLabel": "Entscheidungsgrund",
       "cancelReasonLabel": "Grund für den Abbruch",
       "cancelReasonRequired": "Zum Abbrechen ist eine Begründung erforderlich — halten Sie fest, warum die Runde abgebrochen wird.",
