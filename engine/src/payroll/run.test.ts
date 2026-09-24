@@ -568,6 +568,49 @@ test('acknowledged refusals commit and the acknowledgement is recorded', { skip:
   }
 })
 
+test('an adjustment clears the stored errors and acknowledgement together with the stubs', { skip: !DB }, async () => {
+  // The stale-snapshot defect: adding an adjustment to a calculated run with
+  // acknowledged refusals deleted the stubs and reset the run to draft but
+  // left calculation_errors and refusal_acknowledgement in place, so the run
+  // page showed exceptions (and an acknowledgement) for stubs that no longer
+  // existed. All three are one derived snapshot and invalidate together.
+  const f = await partialRefusalFixture('Invalidated')
+  try {
+    await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    await acknowledgePayRunRefusals({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    const before = await storedRunColumns(f.orgId, f.documentId)
+    assert.equal((parsePayRunCalculationErrors(before.calculation_errors) ?? []).length, 2)
+    assert.ok(parsePayRunRefusalAcknowledgement(before.refusal_acknowledgement))
+
+    const bonus = (await db.execute<{ id: string }>(sql`
+      select id from pay_components where org_id = ${f.orgId} and code = 'BONUS'`)).rows[0]!
+    await mutatePayRunAdjustment({
+      orgId: f.orgId, documentId: f.documentId, actorId: f.actorId,
+      mutation: {
+        action: 'add', employeePartyId: f.paidId, componentId: bonus.id,
+        amount: '125.00', note: 'Approved one-off',
+      },
+    })
+    const after = await storedRunColumns(f.orgId, f.documentId)
+    assert.equal(after.run_status, 'draft')
+    assert.deepEqual(parsePayRunCalculationErrors(after.calculation_errors), [])
+    assert.equal(after.refusal_acknowledgement, null)
+
+    // A recalculation re-derives all three from scratch — nothing cleared is lost.
+    const recalculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    assert.deepEqual(recalculated.errors.map((entry) => entry.employee), ['Invalidated NoRate', 'Invalidated Salary'])
+    const restored = await storedRunColumns(f.orgId, f.documentId)
+    assert.deepEqual(
+      (parsePayRunCalculationErrors(restored.calculation_errors) ?? []).map((entry) => entry.employee),
+      ['Invalidated NoRate', 'Invalidated Salary'],
+    )
+    assert.equal(restored.refusal_acknowledgement, null, 'the old acknowledgement must not survive invalidation')
+    assert.equal(recalculated.refusalsAcknowledged, false)
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
+
 test('an acknowledgement does not authorise a different refusal set', { skip: !DB }, async () => {
   // Guardrail: acknowledging "NoRate and Salary are out" and then fixing
   // NoRate must not wave Salary's replacement set through — the old

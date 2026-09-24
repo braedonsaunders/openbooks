@@ -4,6 +4,7 @@ import { db } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
+import { invalidateCalculatedRun } from "./run-lifecycle.ts";
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 
 /**
@@ -345,18 +346,10 @@ export async function mutatePayRunAdjustment(input: {
     }
 
     if (changed) {
-      // Calculated stubs are a derived snapshot. Remove them and reset the
-      // lifecycle in the same transaction as the input change.
-      await tx.execute(sql`
-        delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
-      `);
-      await tx.execute(sql`
-        update pay_runs
-           set run_status = 'draft', gross_total = 0, net_total = 0,
-               employer_cost_total = 0, employee_count = 0, calculated_at = null,
-               updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and document_id = ${documentId}
-      `);
+      // Calculated stubs are a derived snapshot. Invalidate them through the
+      // one shared helper — stubs, errors and acknowledgement together — in
+      // the same transaction as the input change.
+      await invalidateCalculatedRun(tx, { orgId, actorId, documentId });
     }
     return { changed, replayed: false };
   });
