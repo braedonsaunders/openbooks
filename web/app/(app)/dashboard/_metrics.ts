@@ -341,6 +341,8 @@ export async function loadDashboardMetrics(
   const totalsGlScope = subsidiaryVisibleFilter(sql`g.subsidiary_id`, authz.allowedSubsidiaryIds)
   const totalsAccountScope = subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })
   const totalsEntryScope = subsidiaryVisibleFilter(sql`e.subsidiary_id`, authz.allowedSubsidiaryIds)
+  const recentEntryScope = subsidiaryVisibleFilter(sql`e.subsidiary_id`, authz.allowedSubsidiaryIds)
+  const draftDocumentScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)
   const wantTotals = need('journalLineCount', 'accountCount', 'entriesToday', 'ledgerSum')
   const wantCash = need('cashBalance')
   const wantMoney = need('baseCurrency')
@@ -460,8 +462,8 @@ export async function loadDashboardMetrics(
              lt.line_count, lt.total_debits
         from (
           select id, entry_number, posting_date, memo, status, created_at
-            from journal_entries
-           where org_id = ${orgId} and status in ('posted', 'reversed')
+            from journal_entries e
+           where e.org_id = ${orgId} and e.status in ('posted', 'reversed') ${recentEntryScope}
            order by created_at desc, entry_number desc
            limit 5
         ) e
@@ -476,8 +478,8 @@ export async function loadDashboardMetrics(
     need('draftDocuments')
       ? db.execute<DraftDocumentRow>(sql`
       select id, kind, document_number, document_date, total, status
-        from documents
-       where org_id = ${orgId} and status = 'draft' and created_by = ${userId}
+        from documents d
+       where d.org_id = ${orgId} and d.status = 'draft' and d.created_by = ${userId} ${draftDocumentScope}
        order by updated_at desc
        limit 5
     `)

@@ -102,3 +102,69 @@ test('dashboard GL counts and balances honor subsidiary scope', { skip: !env.OPE
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
 })
+
+test('recent journal and personal draft lists omit records from hidden subsidiaries', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const actor = await withBypass(() => createScratchUser(scratch.orgId, 'List Scope Reader', 'admin'))
+    const hiddenSubsidiary = randomUUID()
+    const hiddenBank = randomUUID()
+    const hiddenOffset = randomUUID()
+    const visibleEntry = randomUUID()
+    const hiddenEntry = randomUUID()
+    const visibleDraft = randomUUID()
+    const hiddenDraft = randomUUID()
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden dashboard list entity', 'CAD', 'CA')
+      `)
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
+        values (${hiddenBank}, ${scratch.orgId}, '1085', 'Hidden list cash', 'asset_bank', ${hiddenSubsidiary}, false, true),
+               (${hiddenOffset}, ${scratch.orgId}, '4085', 'Hidden list offset', 'income', ${hiddenSubsidiary}, false, true)
+      `)
+      for (const item of [
+        { id: visibleEntry, subsidiaryId: scratch.subsidiaryId, bank: scratch.accounts.bank, offset: scratch.accounts.adjustment, memo: 'Visible list journal' },
+        { id: hiddenEntry, subsidiaryId: hiddenSubsidiary, bank: hiddenBank, offset: hiddenOffset, memo: 'CONFIDENTIAL hidden list journal' },
+      ]) {
+        await db.execute(sql`
+          insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, memo)
+          values
+            (${item.id}, ${scratch.orgId}, ${scratch.bookId}, ${item.subsidiaryId},
+             ${`DASH-LIST-${item.id.slice(0, 8)}`}, ${TODAY}, ${scratch.periodId}, 'draft', 'manual', ${item.memo})
+        `)
+        await db.execute(sql`
+          insert into journal_lines
+            (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+          values
+            (${scratch.orgId}, ${item.id}, 1, ${item.bank}, ${item.subsidiaryId}, '125.0000', 'CAD', '125.0000', 1),
+            (${scratch.orgId}, ${item.id}, 2, ${item.offset}, ${item.subsidiaryId}, '-125.0000', 'CAD', '-125.0000', 1)
+        `)
+        await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${item.id} and org_id = ${scratch.orgId}`)
+      }
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, subsidiary_id, document_date, currency, status, total, created_by)
+        values (${visibleDraft}, ${scratch.orgId}, 'bill', 'DASH-LIST-VISIBLE', ${scratch.subsidiaryId}, ${TODAY}, 'CAD', 'draft', '25.0000', ${actor}),
+               (${hiddenDraft}, ${scratch.orgId}, 'bill', 'DASH-LIST-HIDDEN', ${hiddenSubsidiary}, ${TODAY}, 'CAD', 'draft', '75.0000', ${actor})
+      `)
+    })
+
+    const widgets = ['list-recent-entries', 'personal-in-progress']
+    const all = await withOrgContext(scratch.orgId, () => loadDashboardMetrics(authzFor(scratch.orgId, actor, null), widgets))
+    const scoped = await withOrgContext(scratch.orgId, () =>
+      loadDashboardMetrics(authzFor(scratch.orgId, actor, new Set([scratch.subsidiaryId])), widgets),
+    )
+
+    const hiddenRecent = all.recentEntries.find((entry) => entry.id === hiddenEntry)
+    assert.ok(hiddenRecent, 'the unrestricted reader sees the seeded record')
+    assert.equal(hiddenRecent.memo, 'CONFIDENTIAL hidden list journal')
+    assert.equal(hiddenRecent.lineCount, 2)
+    assert.ok(!scoped.recentEntries.some((entry) => entry.id === hiddenEntry))
+    assert.deepEqual(all.draftDocuments.map((document) => document.id).sort(), [hiddenDraft, visibleDraft].sort())
+    assert.deepEqual(scoped.draftDocuments.map((document) => document.id), [visibleDraft])
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
