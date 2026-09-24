@@ -7,6 +7,7 @@ import {
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/period-policy.ts";
+import { lockApplicationEvidence } from "../records/application-lock.ts";
 
 export type SourceDeletionAction = "retain" | "void";
 
@@ -64,6 +65,108 @@ async function lockImportedSourceDocument(
   return documentResult.rows[0] ?? null;
 }
 
+async function findImportedSourceDocument(
+  tx: SqlExecutor,
+  input: {
+    orgId: string;
+    connectionId: string;
+    refKey: string;
+    sourceRef: string;
+  },
+): Promise<ImportedSourceDocument | null> {
+  const documentResult = await tx.execute<ImportedSourceDocument>(sql`
+    select id, kind, status, posted_entry_id
+      from documents
+     where org_id = ${input.orgId}
+       and custom->>${input.refKey} = ${input.sourceRef}
+       and custom->>'connectionId' = ${input.connectionId}
+     limit 2`);
+  if (documentResult.rows.length > 1) {
+    throw new SourceDeletionResolutionError(
+      "multiple documents imported by this connection share the source reference",
+    );
+  }
+  return documentResult.rows[0] ?? null;
+}
+
+async function sourceApplicationLineIds(
+  tx: SqlExecutor,
+  orgId: string,
+  entryId: string,
+): Promise<string[]> {
+  const endpoints = await tx.execute<{ id: string }>(sql`
+    select endpoint.id
+      from journal_lines endpoint
+     where endpoint.org_id = ${orgId}
+       and (
+         endpoint.entry_id = ${entryId}
+         or endpoint.id in (
+           select application.from_line_id
+             from applications application
+            where application.org_id = ${orgId}
+              and application.unapplied_at is null
+              and application.to_line_id in (
+                select id from journal_lines where org_id = ${orgId} and entry_id = ${entryId}
+              )
+           union
+           select application.to_line_id
+             from applications application
+            where application.org_id = ${orgId}
+              and application.unapplied_at is null
+              and application.from_line_id in (
+                select id from journal_lines where org_id = ${orgId} and entry_id = ${entryId}
+              )
+         )
+       )`);
+  return endpoints.rows.map((row) => row.id);
+}
+
+/** Lock the complete application graph before the source document is changed.
+ * The shared order is documents, journal entries, then lines, each by id.
+ * Loading ids is only discovery; all lifecycle/application decisions happen
+ * after the returned rows are held by this transaction. */
+async function lockImportedSourceApplicationEvidence(
+  tx: SqlExecutor,
+  input: {
+    orgId: string;
+    connectionId: string;
+    refKey: string;
+    sourceRef: string;
+  },
+): Promise<ImportedSourceDocument | null> {
+  const candidate = await findImportedSourceDocument(tx, input);
+  if (!candidate) return null;
+
+  const lineIds: string[] = [];
+  if (candidate.posted_entry_id) {
+    lineIds.push(...await sourceApplicationLineIds(tx, input.orgId, candidate.posted_entry_id));
+  }
+  const locks = await lockApplicationEvidence(
+    tx,
+    input.orgId,
+    lineIds,
+    [candidate.id],
+    candidate.posted_entry_id ? [candidate.posted_entry_id] : [],
+  );
+
+  if (candidate.posted_entry_id) {
+    const currentLineIds = await sourceApplicationLineIds(tx, input.orgId, candidate.posted_entry_id);
+    if (currentLineIds.some((id) => !locks.lineIds.includes(id))) {
+      throw new SourceDeletionResolutionError(
+        "application endpoints changed while preparing the correction; retry the source deletion",
+      );
+    }
+  }
+
+  const locked = await lockImportedSourceDocument(tx, input);
+  if (!locked || locked.id !== candidate.id || locked.posted_entry_id !== candidate.posted_entry_id) {
+    throw new SourceDeletionResolutionError(
+      "the imported document's application endpoints changed while preparing the correction; retry",
+    );
+  }
+  return locked;
+}
+
 /**
  * Mirror a source deletion automatically. The source is the system of
  * record, but OpenBooks retains institutional-grade evidence: touching
@@ -86,7 +189,7 @@ export async function mirrorSourceDeletion(input: {
         `source deletion mirroring is unsupported for ${input.source}`,
       );
     return db.transaction(async (tx) => {
-      const document = await lockImportedSourceDocument(tx, {
+      const document = await lockImportedSourceApplicationEvidence(tx, {
         orgId: input.orgId,
         connectionId: input.connectionId,
         refKey,
@@ -273,7 +376,7 @@ export async function resolveSourceDeletion(input: {
         `source deletion resolution is unsupported for ${source}`,
       );
 
-    const document = await lockImportedSourceDocument(tx, {
+    const document = await lockImportedSourceApplicationEvidence(tx, {
       orgId: input.orgId,
       connectionId: input.connectionId,
       refKey,

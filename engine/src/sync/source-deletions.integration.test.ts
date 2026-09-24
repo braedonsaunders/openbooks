@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, pool } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,
@@ -188,6 +188,79 @@ test(
       `));
       assert.equal(reversalCount.rows[0]?.count, 1);
     } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "source deletion waits for application endpoint locks before reversing the source entry",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const blocker = await pool.connect();
+    let mirror: Promise<{ documentId: string | null; deleted: boolean }> | null = null;
+    try {
+      const connectionId = randomUUID();
+      const documentId = randomUUID();
+      const sourceRef = `endpoint-lock-${randomUUID()}`;
+      await db.execute(sql`
+        insert into connections (id, org_id, source, display_name, status)
+        values (${connectionId}, ${org.orgId}, 'netsuite', 'Endpoint-lock test', 'active')
+      `);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, currency, fx_rate, subtotal, tax_total, total, custom)
+        values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', ${documentId},
+          ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+          10, 0, 10, ${JSON.stringify({ nsId: sourceRef, connectionId })}::jsonb)
+      `);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price,
+           amount, tax_amount, tax_input_amount)
+        values (${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, 1, 10, 10, 0, 0)
+      `);
+      await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+      const entryId = await postDocument(documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+
+      await blocker.query("begin");
+      await blocker.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+        [org.orgId],
+      );
+      await blocker.query("select id from journal_lines where org_id = $1 and entry_id = $2 order by id for update", [org.orgId, entryId]);
+      const blockerPid = (await blocker.query("select pg_backend_pid() as pid")).rows[0]!.pid as number;
+      mirror = mirrorSourceDeletion({ orgId: org.orgId, source: "netsuite", sourceRef, connectionId });
+
+      let contended = false;
+      for (let attempt = 0; attempt < 150 && !contended; attempt += 1) {
+        const waiting = await db.execute(sql`
+          select pid from pg_stat_activity
+           where datname = current_database()
+             and ${blockerPid} = any(pg_blocking_pids(pid))
+        `);
+        contended = waiting.rows.length > 0;
+        if (!contended) await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.ok(contended, "source reversal must wait for an in-flight endpoint lock");
+
+      await blocker.query("commit");
+      assert.deepEqual(await mirror, { documentId, deleted: true });
+      const state = (await db.execute<{ status: string; entryStatus: string }>(sql`
+        select document.status, entry.status as "entryStatus"
+          from documents document
+          join journal_entries entry on entry.id = document.posted_entry_id and entry.org_id = document.org_id
+         where document.org_id = ${org.orgId} and document.id = ${documentId}
+      `)).rows[0];
+      assert.deepEqual(state, { status: "voided", entryStatus: "reversed" });
+    } finally {
+      if (mirror) await mirror.catch(() => undefined);
+      await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
       await dropScratchOrg(org.orgId);
     }
   },
