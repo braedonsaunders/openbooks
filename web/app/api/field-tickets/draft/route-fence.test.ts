@@ -55,6 +55,8 @@ const mockSources = new Map<string, string>([
         if (text.includes('from field_ticket_policies')) return { rows: [] }
         if (text.includes('select base_currency from orgs')) return { rows: [{ base_currency: 'CAD' }] }
         if (text.includes('from users where')) return { rows: [{ party_id: null }] }
+        // First allocation floors past already-issued numbers; none exist yet.
+        if (text.includes(' as mx') && text.includes('from documents')) return { rows: [{ mx: 0 }] }
         if (text.includes('insert into number_sequences')) return { rows: [{ prefix: 'FT-', next_number: 1, padding: 5 }] }
         if (text.includes('insert into documents')) return { rows: [{ id: 'doc-1', document_number: 'FT-00001' }] }
         if (text.includes('insert into field_tickets')) return { rows: [] }
