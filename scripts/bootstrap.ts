@@ -2720,6 +2720,23 @@ async function verifyRuntimeDatabaseRole(
         const context = await client.query<{ org: string }>("select public.openbooks_query_org_id() as org");
         if (context.rows[0]?.org !== orgId) throw new Error("governed query context did not resolve its organization");
         await client.query("select id from openbooks_query.accounting_books limit 1");
+        // Every governed relation must be readable by the query role: a view
+        // created after a grant loop (0338's payment_pending_clawbacks) left the
+        // console silently short one relation while every other probe passed.
+        const unreadable = await client.query<{ relname: string }>(
+          `select c.relname
+             from pg_class c
+             join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'openbooks_query'
+              and c.relkind in ('r', 'v', 'm', 'p', 'f')
+              and not has_table_privilege('openbooks_read', c.oid, 'SELECT')
+            order by c.relname`,
+        );
+        if (unreadable.rows.length > 0) {
+          throw new Error(
+            `governed query relations not readable by openbooks_read: ${unreadable.rows.map((row) => row.relname).join(", ")}`,
+          );
+        }
       } catch (error) {
         throw new Error("[bootstrap] runtime governed-query verification failed; verify the read-role SET grant and migration-owner inheritance of the runtime role in docs/operations/communal-postgres.md", { cause: error });
       } finally {
