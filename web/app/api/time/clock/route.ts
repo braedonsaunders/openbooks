@@ -116,7 +116,7 @@ function toInput(
       throw new FieldTimeError('invalid_ref', `The clock event's ${key} is not a valid id — pick it from the picker and retry`)
     }
   }
-  if (!isUuid(event.clientEventId) && !/^[0-9a-f-]{36}$/i.test(event.clientEventId)) {
+  if (!isUuid(event.clientEventId)) {
     throw new FieldTimeError('invalid_client_event', 'The clock event carries no offline id — retry with a client-generated UUID so replay stays idempotent')
   }
   return {

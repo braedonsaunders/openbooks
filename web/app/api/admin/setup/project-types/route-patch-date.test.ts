@@ -86,7 +86,7 @@ const mockSources = new Map<string, string>([
   ["mock:date", "export async function businessToday() { return '2026-08-31' }"],
   ["mock:gate", "export async function guardProjectsFeature() { return null }"],
   ["mock:features", "export async function isFeatureEnabled() { return true }"],
-  ["mock:params", "export function isUuid(v) { return /^[0-9a-f-]{36}$/.test(String(v)) }"],
+  ["mock:params", "export function isUuid(v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v)) }"],
 ]);
 
 // '@/lib/api/json' is not mocked here: never double the validation boundary.

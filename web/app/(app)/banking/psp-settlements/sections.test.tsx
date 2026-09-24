@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { isUuid } from "@/lib/list-params";
 
 // jsdom first: the workspace reads browser globals at render.
 const { JSDOM } = await import("jsdom");
@@ -208,7 +209,7 @@ test("settlement accounts render as labelled pickers with posting hints", async 
     "the picker must name the operating cash account",
   );
   assert.ok(
-    options.every((candidate) => !/^[0-9a-f-]{36}$/i.test(candidate.textContent?.trim() ?? "")),
+    options.every((candidate) => !isUuid(candidate.textContent?.trim() ?? "")),
     "no option may render a bare UUID",
   );
 });

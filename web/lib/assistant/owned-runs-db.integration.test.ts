@@ -19,6 +19,7 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 const { createConversation, deleteConversation } = await import("../ai-conversations.ts");
 const { createDbOwnedRunStore } = await import("./owned-runs-db.ts");
 import type { Authz } from "../authz.ts";
+import { isUuid } from "@/lib/list-params";
 
 const DB = !!env.OPENBOOKS_DB_URL;
 void db;
@@ -66,7 +67,7 @@ test(
       const conversationId = await createConversation(authz, "assistant", "owned run probe");
 
       const { runId } = await store.startRun(conversationId, "probe prompt");
-      assert.match(runId, /^[0-9a-f-]{36}$/i);
+      assert.ok(isUuid(runId), "expected a real UUID run id");
 
       assert.equal(await store.writeProgress(runId, [{ type: "text", text: "half" }], 1), true);
       const mid = await store.readRun(runId);

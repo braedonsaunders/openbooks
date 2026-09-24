@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   const id = new URL(req.url).searchParams.get('id') ?? ''
   // `id` is a uuid column. A 36-character hex/dash string is not enough —
   // PostgreSQL still raises `invalid input syntax for type uuid` for values
-  // the old `/^[0-9a-f-]{36}$/i` accepted (36 hex digits, 36 dashes). Shape
+  // a bare 36-char shape check accepted (36 hex digits, 36 dashes). Shape
   // refusals stay 422 and never bind the parameter.
   if (!isUuid(id)) {
     const error = id.trim() === ''

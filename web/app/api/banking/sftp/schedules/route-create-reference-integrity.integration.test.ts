@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { isUuid } from "@/lib/list-params";
 import { NextResponse } from "next/server";
 
 /**
@@ -362,7 +363,7 @@ test(
       });
       assert.equal(outcome.status, 200);
       const createdId = (outcome.body as { id?: unknown }).id;
-      assert.match(String(createdId), /^[0-9a-f-]{36}$/);
+      assert.ok(isUuid(String(createdId)), "expected a real UUID schedule id");
       const listing = (await listSchedules(fixture)) as {
         schedules: Array<{
           id: string;

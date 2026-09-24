@@ -18,26 +18,20 @@ const BULK_ACTIONS = ["reprocess", "reject", "materialize"];
 
 /**
  * Pure parse of a bulk-action body: action allow-list, id collection and
- * dedupe, the per-request ceiling, then uuid shape — in that order, so a
- * bad action reads invalid_action even with bad ids.
+ * dedupe, then uuid shape, then the per-request ceiling — in that order, so
+ * a bad action reads invalid_action even with bad ids.
  */
 export function parseBulkActionIds(body: unknown): BulkActionParse {
   const data = (body ?? {}) as { action?: unknown; ids?: unknown };
   const action = typeof data.action === "string" ? data.action : "";
   if (!BULK_ACTIONS.includes(action))
     return { ok: false, error: 'invalid_action' };
-  // Keep the historical 36-character hex/dash collector so a dash-only
-  // string is still a named id (not dropped into invalid_action), then
-  // refuse it with the same not_found the item routes compute — never bind
-  // it into a uuid column.
+  // Collect every supplied string id first, then refuse the non-uuid ones
+  // with the same not_found the item routes compute: a dash-only string is
+  // still a named id (it 404s instead of collapsing into invalid_action),
+  // and it never reaches a uuid column because the parse returns ok: false.
   const ids = Array.isArray(data.ids)
-    ? [
-        ...new Set(
-          data.ids.filter(
-            (id) => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id),
-          ),
-        ),
-      ]
+    ? [...new Set(data.ids.filter((id) => typeof id === "string"))]
     : [];
   if (!ids.length) return { ok: false, error: 'invalid_action' };
   if (!ids.every(isUuid)) return { ok: false, error: 'not_found' };

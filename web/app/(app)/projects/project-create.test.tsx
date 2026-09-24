@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { isUuid } from "@/lib/list-params";
 
 declare global {
   var __projectCreateToasts: { kind: string; message: string }[] | undefined;
@@ -246,7 +247,7 @@ test("save posts once with a stable idempotency key, then opens the record", asy
   assert.equal(posts.length, 1, "explicit Save is exactly one POST — never a draft plus an update");
   assert.equal(posts[0]!.init?.method, "POST");
   const key = (posts[0]!.init?.headers as Record<string, string>)["Idempotency-Key"];
-  assert.match(key ?? "", /^[0-9a-f-]{36}$/i, "the POST carries a UUID idempotency key");
+  assert.ok(isUuid(key ?? ""), "the POST carries a UUID idempotency key");
   const body = JSON.parse(String(posts[0]!.init?.body)) as Record<string, unknown>;
   assert.equal(body.name, "Harbourview Tower");
   assert.equal(body.isActive, true, "creates default to active");

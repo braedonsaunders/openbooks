@@ -45,7 +45,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.v1-journals-route-test')]
       export function parseJournalCreateBody(body) { return body }
       export function requireUuidIdempotencyKey(key) {
-        if (!/^[0-9a-f-]{36}$/i.test(key)) throw new Error("Idempotency-Key must be a UUID — it becomes the journal id")
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) throw new Error("Idempotency-Key must be a UUID — it becomes the journal id")
         return key
       }
       export async function createApplicationJournal(_context, input) {

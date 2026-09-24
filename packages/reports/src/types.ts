@@ -274,7 +274,9 @@ export function formatLabel(s: string): string {
   return (s ?? '').replace(/_/g, ' ')
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export function pickUuid(v: unknown): string | null {
   if (typeof v !== 'string') return null
-  return /^[0-9a-f-]{36}$/i.test(v) ? v : null
+  return UUID_RE.test(v) ? v : null
 }

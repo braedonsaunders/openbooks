@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { PayRunAdjustmentIdempotencyConflict, mutatePayRunAdjustment, payRunBulkAdjustmentId } from "./run-adjustments.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
@@ -132,7 +133,7 @@ test("a replayed bulk batch writes each row once", { skip: !DB }, async () => {
   try {
     const batchKey = randomUUID();
     const rowId = payRunBulkAdjustmentId(batchKey, fx.employeeId);
-    assert.match(rowId, /^[0-9a-f-]{36}$/i);
+    assert.ok(isUuid(rowId), "expected a real UUID row id");
     const apply = () => mutatePayRunAdjustment({
       orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId,
       mutation: {

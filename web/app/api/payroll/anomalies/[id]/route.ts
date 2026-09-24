@@ -4,6 +4,7 @@ import { z } from "zod";
 import { resolveFlag } from "@openbooks/engine/src/hrm/ai/anomalies.ts";
 import { aiRailsErrorResponse, requireAnyPerm } from "../../../../../lib/ai-rails";
 import { isFeatureEnabled } from "../../../../../lib/features";
+import { isUuid } from "../../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -28,7 +29,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const { id } = await params;
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+  if (!isUuid(id)) {
     return NextResponse.json({ error: "flag id must be a uuid" }, { status: 400 });
   }
   const parsedBody = await parseJsonBody(req, transitionBody);

@@ -18,6 +18,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "../../platform/db.ts";
 import { businessTimeZone } from "../../platform/business-date.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, isForeignKeyViolation, refuse } from "./errors.ts";
 import {
@@ -418,7 +419,7 @@ async function autoCloseStale(
 
 export async function recordClockEvent(input: RecordClockInput): Promise<ClockRecordResult> {
   await requireFieldTime(input.orgId);
-  if (!input.clientEventId || !/^[0-9a-f-]{36}$/i.test(input.clientEventId)) {
+  if (!isUuid(input.clientEventId)) {
     refuse("invalid_client_event", "The clock event carries no offline id — retry with a client-generated UUID so replay stays idempotent");
   }
   const occurredMs = Date.parse(input.occurredAt);

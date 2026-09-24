@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { FinancialProfile } from "@openbooks/schema";
 import { db, type SqlExecutor } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 
@@ -308,7 +309,7 @@ export async function correctProjectFinancialProfile(
 ): Promise<{ id: string; effectiveFrom: string; effectiveTo: string | null }> {
   const reason = input.reason.trim();
   if (reason.length < 8) throw new Error("a meaningful correction reason is required");
-  if (!/^[0-9a-f-]{36}$/i.test(input.actorId)) {
+  if (!isUuid(input.actorId)) {
     throw new Error("an attributable correction actor is required");
   }
   assertValidProjectFinancialProfile(input.expectedFinancialProfile);

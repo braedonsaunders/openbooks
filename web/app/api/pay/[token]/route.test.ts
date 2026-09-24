@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { isUuid } from "@/lib/list-params";
 
 /**
  * Anonymous /api/pay failures must never leak engine internals. The checkout
@@ -66,7 +67,7 @@ test("anonymous checkout 500s hide engine internals behind a request id", async 
     assert.equal(res.status, 500);
     const body = (await res.json()) as { error?: string; requestId?: string };
     assert.equal(body.error, "failed to create checkout session");
-    assert.match(body.requestId ?? "", /^[0-9a-f-]{36}$/, "a request id to quote back");
+    assert.ok(isUuid(body.requestId ?? ""), "a request id to quote back");
     assert.ok(!JSON.stringify(body).includes("db://internal"), "no internals in the body");
     const detail = logged.find((args) => typeof args[0] === "string" && args[0].includes(body.requestId!));
     assert.ok(detail, "the detail is logged against the request id");

@@ -16,6 +16,7 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FIELD_TIME_CREW_ENTRY_FEATURE } from "../../hrm/field-time/settings.ts";
 import { actorPartyId, toWorklistScope } from "../guard.ts";
 import { db, type SqlExecutor } from "../../platform/db.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -105,8 +106,8 @@ export const crewTimeBatchAdapter: InboxAdapter = {
         return;
       }
       if (actionKey === "delegate") {
-        const match = /^user:([0-9a-f-]{36})\s*:?\s*(.*)$/i.exec(reason ?? "");
-        if (!match) {
+        const match = /^user:(\S+)\s*:?\s*(.*)$/i.exec(reason ?? "");
+        if (!match || !isUuid(match[1])) {
           throw new Error(
             "delegation needs a recipient — give the reason as the colleague taking over, then the handover note",
           );

@@ -16,6 +16,7 @@ import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
 import { listChangeRequests, submitChangeRequest } from "../../hrm/change-requests.ts";
 import { db } from "../../platform/db.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import { hrmOn, toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
@@ -81,8 +82,8 @@ export const hrmChangeRequestAdapter: InboxAdapter = {
         return;
       }
       if (actionKey === "delegate") {
-        const match = /^user:([0-9a-f-]{36})\s*:?\s*(.*)$/i.exec(reason ?? "");
-        if (!match) {
+        const match = /^user:(\S+)\s*:?\s*(.*)$/i.exec(reason ?? "");
+        if (!match || !isUuid(match[1])) {
           throw new Error(
             "delegation needs a recipient — give the reason as the colleague taking over, then the handover note",
           );

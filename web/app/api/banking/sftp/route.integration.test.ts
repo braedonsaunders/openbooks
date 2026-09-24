@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { isUuid } from "@/lib/list-params";
 import { NextResponse } from "next/server";
 import ssh2 from "ssh2";
 
@@ -487,7 +488,7 @@ test(
       assert.equal(daemonAudits.length, 1);
       assert.equal(daemonAudits[0]!.actor_id, fixture.actorId);
       assert.equal(daemonAudits[0]!.org_id, fixture.orgId);
-      assert.match(daemonAudits[0]!.row_id, /^[0-9a-f-]{36}$/);
+      assert.ok(isUuid(daemonAudits[0]!.row_id), "expected a real UUID audit row id");
       assert.deepEqual(daemonAudits[0]!.changes, {
         before: { enabled: false, port: 2222, advertised_host: null },
         after: {

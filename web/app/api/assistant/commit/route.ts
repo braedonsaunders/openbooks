@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { isUuid } from "@/lib/list-params";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -121,7 +122,7 @@ export async function POST(req: Request) {
     if (!found) throw new Error("org has no active root subsidiary");
     subsidiary = found;
   } else {
-    const ids = [...scope].filter((id) => /^[0-9a-f-]{36}$/.test(id));
+    const ids = [...scope].filter((id) => typeof id === "string" && isUuid(id));
     const allowed = ids.length === 0 ? [] : (await db.execute<{ id: string; base_currency: string }>(sql`
       select id, base_currency
         from subsidiaries

@@ -18,6 +18,7 @@ test('grant changes are resource-scoped and audit-atomic', { skip: !env.OPENBOOK
     import { db } from './engine/src/platform/db.ts';
     import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
     import { createScratchOrg, dropScratchOrg } from './engine/src/testing/fixtures.ts';
+    import { isUuid } from './web/lib/list-params.ts';
 
     const hooks = registerHooks({
       resolve(specifier, context, nextResolve) {
@@ -59,7 +60,7 @@ test('grant changes are resource-scoped and audit-atomic', { skip: !env.OPENBOOK
       assert.equal(denied.status, 404);
       assert.equal((await db.execute(sql\`select count(*)::int as n from resource_grants where id = \${grantId}\`)).rows[0].n, 1);
 
-      assert.match(org.orgId, /^[0-9a-f-]{36}$/i);
+      assert.ok(isUuid(org.orgId), 'expected a real UUID org id');
       await db.execute(sql.raw(\`
         create function openbooks_test_block_grant_audit() returns trigger
         language plpgsql as $fn$ begin raise exception 'forced grant audit failure'; end $fn$
