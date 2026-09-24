@@ -165,3 +165,59 @@ test("a known validation refusal raised inside a stage is still reported by stag
     },
   );
 });
+
+// OM-13c: a deterministic guard refusal (Postgres P0001) already names its
+// remedy — retrying cannot help, so the stage's "you can retry" text must
+// not replace it. The stable per-stage code stays, and the full cause stays
+// server-side.
+test("a deterministic guard refusal keeps the guard message, never the retry text", async () => {
+  const guardError = Object.assign(
+    new Error(
+      "HRM change request must be inserted as draft, then submitted — insert with status applied is refused.",
+    ),
+    { code: "P0001" },
+  );
+  await assert.rejects(
+    runProvisioningStage("clone", async () => {
+      throw guardError;
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof SampleCompanyProvisioningError);
+      assert.equal(
+        (error as SampleCompanyProvisioningError).code,
+        "sample-company-clone-failed",
+      );
+      assert.match(
+        (error as Error).message,
+        /must be inserted as draft, then submitted/,
+      );
+      assert.doesNotMatch((error as Error).message, /you can retry/);
+      assert.equal((error as { cause?: unknown }).cause, guardError);
+      return true;
+    },
+  );
+});
+
+test("a driver-wrapped guard refusal is still recognized as deterministic", async () => {
+  const wrapped = new Error("db execute failed") as Error & {
+    cause?: { code?: string; message?: string };
+  };
+  wrapped.cause = {
+    code: "P0001",
+    message: "financial changes must start as draft",
+  };
+  await assert.rejects(
+    runProvisioningStage("clone", async () => {
+      throw wrapped;
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof SampleCompanyProvisioningError);
+      assert.match(
+        (error as Error).message,
+        /financial changes must start as draft/,
+      );
+      assert.doesNotMatch((error as Error).message, /you can retry/);
+      return true;
+    },
+  );
+});

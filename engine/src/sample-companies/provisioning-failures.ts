@@ -6,7 +6,10 @@
  * template's posted history, finalization, or document-numbering
  * reconciliation — with a stable machine-readable code and an
  * operator-facing message. The message is a fixed per-stage string: it never
- * carries SQL text, constraint names, or other internal detail. The full
+ * carries SQL text, constraint names, or other internal detail — except a
+ * deterministic guard refusal (Postgres P0001), whose guard-authored message
+ * already names its remedy and replaces the stage's retry text, because
+ * retrying a deterministic refusal cannot help (OM-13c). The full
  * cause is logged server-side (the house console.error shape) and kept on
  * `cause` for operators with log access, but it is never serialized to the
  * API response.
@@ -85,11 +88,44 @@ export class SampleCompanyProvisioningError extends SampleCompanyError {
   readonly stage: SampleCompanyProvisioningStage;
   readonly code: string;
 
-  constructor(stage: SampleCompanyProvisioningStage, options?: { cause?: unknown }) {
-    super(sampleCompanyStageMessage(stage), options);
+  constructor(
+    stage: SampleCompanyProvisioningStage,
+    options?: { cause?: unknown; message?: string },
+  ) {
+    super(options?.message ?? sampleCompanyStageMessage(stage), options);
     this.stage = stage;
     this.code = SAMPLE_COMPANY_STAGE_CODES[stage];
   }
+}
+
+/**
+ * A deterministic database refusal: Postgres raise_exception (code P0001),
+ * the channel every trigger guard uses to refuse with a message that names
+ * its remedy. Retrying cannot help against a deterministic guard, so the
+ * refusal must carry the guard's own message — never the stage's "you can
+ * retry" text. Only the guard-authored first line passes through (driver
+ * DETAIL/HINT fields stay server-side); anything without a P0001 code keeps
+ * the fixed per-stage message with no internal detail.
+ */
+export function guardRefusalMessage(error: unknown): string | undefined {
+  const probe = error as {
+    code?: unknown;
+    message?: unknown;
+    cause?: { code?: unknown; message?: unknown } | null;
+  } | null;
+  // The message must come from the level that carries the P0001 code: a
+  // driver wrapper's own message ("db execute failed") is internal detail,
+  // not the guard's refusal.
+  const level =
+    probe?.code === "P0001"
+      ? probe
+      : probe?.cause?.code === "P0001"
+        ? probe.cause
+        : undefined;
+  if (!level) return undefined;
+  const raw = typeof level.message === "string" ? level.message : undefined;
+  const firstLine = raw?.split("\n", 1)[0]?.trim();
+  return firstLine ? firstLine : undefined;
 }
 
 /**
@@ -120,7 +156,15 @@ export async function runProvisioningStage<T>(
   } catch (error) {
     if (error instanceof SampleCompanyProvisioningError) throw error;
     if (error instanceof SampleCompanyPreconditionError) throw error;
+    // OM-13c: a deterministic guard refusal already names its remedy, and
+    // retrying it cannot help — surface the guard's message instead of the
+    // stage's "you can retry" text. The code stays the stable per-stage
+    // code and the full cause stays server-side on `cause`.
+    const refusal = guardRefusalMessage(error);
     console.error(`[sample-company] ${stage} stage failed`, error);
-    throw new SampleCompanyProvisioningError(stage, { cause: error });
+    throw new SampleCompanyProvisioningError(stage, {
+      cause: error,
+      ...(refusal !== undefined ? { message: refusal } : {}),
+    });
   }
 }
