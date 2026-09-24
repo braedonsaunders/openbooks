@@ -1,8 +1,6 @@
 {
   "$comment": "Burn-down of tests that assert on repository source text (change detectors). Entries may only be lowered or removed. See scripts/check-test-source-pins.mjs.",
   "files": {
-    "engine/src/close/fx-revaluation.test.ts": 3,
-    "engine/src/close/posting-module-fence.integration.test.ts": 1,
     "engine/src/compliance/information-returns.test.ts": 2,
     "engine/src/connectors/connection-posted-change-policy.test.ts": 1,
     "engine/src/connectors/netsuite-bridge.test.ts": 1,

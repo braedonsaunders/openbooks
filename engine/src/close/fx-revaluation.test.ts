@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   computeRevaluation,
@@ -153,52 +152,3 @@ test("a refused revaluation names the missing reversal period and the remedy", (
   assert.match(reason, /generate periods and re-run/);
 });
 
-test("the advisory lock precedes recomputing the current correction and inserting it", () => {
-  const source = readFileSync(new URL("./fx-revaluation.ts", import.meta.url), "utf8");
-  const fn = source.indexOf("async function postRevaluationEntry");
-  const tx = source.indexOf("db.transaction", fn);
-  const lock = source.indexOf("pg_advisory_xact_lock", tx);
-  const check = source.indexOf("await loadExposures", tx);
-  const effective = source.indexOf("await loadEffectiveAdjustments", check);
-  const difference = source.indexOf("requiredAdjustments(positions, effective)", effective);
-  const insert = source.indexOf("insert into journal_entries", tx);
-  assert.ok(tx > fn, "posting happens inside one transaction");
-  assert.ok(lock > tx, "the advisory lock is taken inside that transaction");
-  assert.ok(check > lock, "the current source population is read under the lock");
-  assert.ok(effective > check && difference > effective, "the residual subtracts current effective adjustments");
-  assert.ok(insert > difference, "the insert follows the recomputed correction");
-});
-
-test("direct quotes outrank inverted ones when both quote the same date", () => {
-  // The rate union must be deterministic: with USD→EUR and EUR→USD rows on the
-  // same as_of, the winner can never be planner-arbitrary.
-  const source = readFileSync(new URL("./fx-revaluation.ts", import.meta.url), "utf8");
-  const lookup = source.slice(source.indexOf("async function periodEndRate"));
-  assert.match(lookup, /select rate, as_of, 0 as priority from fx_rates/, "direct pair is priority 0");
-  assert.match(lookup, /1 as priority from fx_rates/, "inverted pair is priority 1");
-  assert.match(lookup, /order by as_of desc, priority asc limit 1/);
-  // One conversion rule across the engine: labor costing resolves the same
-  // pair/date newest-first with the direct leg winning same-date ties. Its
-  // canonical quote spells the tiebreak as a boolean `inverse` (false sorts
-  // before true), not a numeric priority — same rule, same winner. The
-  // behavior itself is proved against a real database by
-  // engine/src/projects/labor-fx-quote.integration.test.ts ("direct wins ties").
-  const labor = readFileSync(new URL("../projects/labor-costing.ts", import.meta.url), "utf8");
-  const quote = labor.slice(labor.indexOf("export async function laborFxQuote"));
-  assert.match(quote, /false as inverse from fx_rates/, "direct leg is inverse false");
-  assert.match(quote, /true as inverse from fx_rates/, "inverted leg is inverse true");
-  assert.match(quote, /order by as_of desc, inverse asc limit 1/, "direct wins same-date ties");
-});
-
-test("a missing reversal period is reported before any posting is attempted", () => {
-  const source = readFileSync(new URL("./fx-revaluation.ts", import.meta.url), "utf8");
-  const post = source.indexOf("async function postRevaluationEntry");
-  const guard = source.indexOf("throw new RevaluationError(missingReversalPeriodReason())", post);
-  const insert = source.indexOf("insert into journal_entries", post);
-  assert.ok(guard > post && insert > guard, "the mandatory period is checked before creating a journal");
-  // The old silent skip is gone: the posting boundary itself refuses rather
-  // than post an unreversed revaluation.
-  assert.ok(!source.includes("if (nextPeriodId && nextStartsOn) {"), "the reversal is never silently skipped");
-  const throwGuard = source.indexOf("throw new RevaluationError(missingReversalPeriodReason())");
-  assert.ok(throwGuard > source.indexOf("async function postRevaluationEntry"), "posting throws without a reversal period");
-});
