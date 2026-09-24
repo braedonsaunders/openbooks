@@ -16,8 +16,10 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * and the W-2 into 1/2/3/5; the RL-1 used to read committed stubs only, so
  * the same employee's RL-1 understated boxes A/B.A/B.B/C/H/G against their
  * own T4 and against the prior provider's YTD report. These tests pin the
- * carry-in (and its deliberate exclusions: boxes E/F/I have no opening
- * source, exactly as the T4 refuses 44/56) through `rl1Slips` itself.
+ * carry-in (and its deliberate exclusions: boxes E/F have no opening source,
+ * exactly as the T4 refuses 44) through `rl1Slips` itself. Box I reads the
+ * QPIP program's OWN base — the stub's IE_QPIP factor, never the EI leg —
+ * plus the program carry-in, capped at the QPIP maximum (C-12/C-13).
  */
 
 type QcFixture = {
@@ -85,13 +87,16 @@ async function seedQcYear(): Promise<QcFixture> {
             2026, 'committed', now(), ${actorId}, ${actorId})`);
 
   const stubId = randomUUID();
+  // The stub's QPIP program base DIVERGES from its EI base on purpose:
+  // 30,000 EI-insurable but only 22,000 QPIP-insurable (benefits the QPIP
+  // program excludes). Box I must follow the program factor, never EI.
   await db.execute(sql`
     insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
                            periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
                            pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
     values (${stubId}, ${org.orgId}, ${documentId}, ${qcStubEmployee}, 'QC', 26, '2026-07-21',
             2026, 'CAD', '30000.0000', '24000.0000', '30000.0000', '30000.0000',
-            ${JSON.stringify({ C: "1500.00", EI: "390.00", QPIP: "129.00" })}::jsonb,
+            ${JSON.stringify({ C: "1500.00", EI: "390.00", QPIP: "129.00", IE_QPIP: "22000.00" })}::jsonb,
             ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
@@ -118,6 +123,15 @@ async function seedQcYear(): Promise<QcFixture> {
               '100.0000', '40.0000', ${taxable}, '1500.0000', ${actorId}, ${actorId})`);
   }
 
+  // Pre-adoption QPIP-insurable earnings for the two Québec employees: the
+  // stub employee's 8,000 joins the stub's 22,000 program base, while the
+  // opening-only employee's 4,000 is box I's entire content (C-13).
+  await db.execute(sql`
+    insert into payroll_opening_program_bases (org_id, employee_party_id, tax_year, program_key,
+                                               insurable_ytd, created_by, updated_by)
+    values (${org.orgId}, ${qcStubEmployee}, 2026, 'qpip', '8000.0000', ${actorId}, ${actorId}),
+           (${org.orgId}, ${qcOpeningOnlyEmployee}, 2026, 'qpip', '4000.0000', ${actorId}, ${actorId})`);
+
   return { orgId: org.orgId, actorId, qcStubEmployee, qcOpeningOnlyEmployee, onOpeningOnlyEmployee };
 }
 
@@ -136,7 +150,7 @@ test(
       assert.equal(stub.boxC, "490.0000", "390 EI + 100 opening");
       assert.equal(stub.boxH, "169.0000", "129 QPIP + 40 opening");
       assert.equal(stub.boxG, "40000.0000", "30000 + 10000 pensionable, under the YMPE");
-      assert.equal(stub.boxI, "30000.0000", "stub insurable only: no QPIP-salary opening source");
+      assert.equal(stub.boxI, "30000.0000", "22000 program base + 8000 carried, never the 30000 EI leg");
       assert.equal(stub.boxE, "2000.0000", "stub QC tax only: tax_ytd is federal money");
       assert.equal(stub.boxF, "300.0000", "stub dues only: no union-dues YTD column");
     } finally {
@@ -161,7 +175,7 @@ test(
       assert.equal(seeded.boxC, "100.0000");
       assert.equal(seeded.boxH, "40.0000");
       assert.equal(seeded.boxG, "5000.0000");
-      assert.equal(seeded.boxI, "0");
+      assert.equal(seeded.boxI, "4000.0000", "the carried program base alone: no stubs, no EI backfill");
       assert.ok(
         !slips.some((slip) => slip.employeePartyId === fx.onOpeningOnlyEmployee),
         "an opening-only ON employee gets no RL-1 slip",

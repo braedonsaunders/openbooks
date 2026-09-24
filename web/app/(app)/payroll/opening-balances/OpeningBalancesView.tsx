@@ -21,6 +21,13 @@ interface FieldDescriptor {
   packs: string[]
 }
 
+interface ProgramDescriptor {
+  key: string
+  label: string
+  help: string
+  packs: string[]
+}
+
 interface ComponentDescriptor {
   componentId: string
   code: string
@@ -59,6 +66,7 @@ export function OpeningBalancesView({
   currentYear,
   initial,
   fields,
+  programs,
   components,
   canManage,
 }: {
@@ -67,6 +75,8 @@ export function OpeningBalancesView({
   currentYear: number
   initial: OpeningBalanceYear
   fields: FieldDescriptor[]
+  /** One carry-in column per pack-declared contribution program. */
+  programs: ProgramDescriptor[]
   components: ComponentDescriptor[]
   canManage: boolean
 }) {
@@ -80,6 +90,9 @@ export function OpeningBalancesView({
   // statutory one: they are written to a different table, and one map keyed by
   // two unrelated key spaces is how a component id starts being read as a field.
   const [componentDraft, setComponentDraft] = useState<Record<string, Record<string, string>>>({})
+  // Program carry-ins get the same treatment: a third table, a third key
+  // space (pack-declared program keys), a third draft.
+  const [programDraft, setProgramDraft] = useState<Record<string, Record<string, string>>>({})
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<SaveError[]>([])
   const [skipped, setSkipped] = useState<SaveError[]>([])
@@ -112,6 +125,12 @@ export function OpeningBalancesView({
   const visibleFields = useMemo(
     () => fields.filter((f) => f.packs.some((pack) => packs.has(pack))),
     [fields, packs],
+  )
+  // Program columns follow the same pack rule: a program only its declaring
+  // pack reads stays hidden everywhere else, like the statutory columns.
+  const visiblePrograms = useMemo(
+    () => programs.filter((p) => p.packs.some((pack) => packs.has(pack))),
+    [programs, packs],
   )
 
   const valueOf = (row: OpeningBalanceRow, key: string): string => {
@@ -152,7 +171,24 @@ export function OpeningBalancesView({
     }))
   }
 
-  const dirtyIds = [...new Set([...Object.keys(draft), ...Object.keys(componentDraft)])]
+  const programValueOf = (row: OpeningBalanceRow, key: string): string => {
+    const edited = programDraft[row.employeePartyId]?.[key]
+    if (edited !== undefined) return edited
+    const stored = row.programAmounts?.[key]
+    if (stored === undefined) return ''
+    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+      ? ''
+      : trimZeros(stored)
+  }
+
+  const setProgramValue = (employeePartyId: string, key: string, value: string) => {
+    setProgramDraft((current) => ({
+      ...current,
+      [employeePartyId]: { ...(current[employeePartyId] ?? {}), [key]: value },
+    }))
+  }
+
+  const dirtyIds = [...new Set([...Object.keys(draft), ...Object.keys(componentDraft), ...Object.keys(programDraft)])]
   const rows = onlyMissing
     ? initial.rows.filter((r) => r.amounts === null && !r.locked)
     : initial.rows
@@ -187,7 +223,21 @@ export function OpeningBalancesView({
             ? edited.trim()
             : (row?.componentAmounts?.[component.componentId] ?? '0')
         }
-        return { employeePartyId, amounts, components: componentAmounts }
+        // Only VISIBLE programs are sent, edited or not (same replace-the-set
+        // rule as components). A program hidden by the pack filter is omitted
+        // entirely so the service keeps what is stored: sending it would
+        // clear a carry-in the operator cannot see.
+        let programAmounts: Record<string, string> | undefined
+        if (visiblePrograms.length > 0) {
+          programAmounts = {}
+          for (const program of visiblePrograms) {
+            const edited = programDraft[employeePartyId]?.[program.key]
+            programAmounts[program.key] = edited !== undefined
+              ? edited.trim()
+              : (row?.programAmounts?.[program.key] ?? '0')
+          }
+        }
+        return { employeePartyId, amounts, components: componentAmounts, programs: programAmounts }
       })
       // Client-side decimal gate: every EDITED non-blank value is classified
       // through the shared decimal helper before anything is posted, so an
@@ -210,6 +260,14 @@ export function OpeningBalancesView({
           const edited = componentDraft[employeePartyId]?.[component.componentId]
           if (edited === undefined || edited.trim() === '') continue
           const refusal = moneyFieldError(component.name, 'a money amount', edited, 4)
+          if (refusal !== null) {
+            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+          }
+        }
+        for (const program of visiblePrograms) {
+          const edited = programDraft[employeePartyId]?.[program.key]
+          if (edited === undefined || edited.trim() === '') continue
+          const refusal = moneyFieldError(program.label, 'a money amount', edited, 4)
           if (refusal !== null) {
             clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
           }
@@ -264,6 +322,7 @@ export function OpeningBalancesView({
       }
       setDraft({})
       setComponentDraft({})
+      setProgramDraft({})
       // A non-strict bulk load leaves locked employees untouched: their
       // carry-in is already inside a committed run. The save still succeeds
       // for everyone else, so the skipped rows are listed by name rather than
@@ -402,6 +461,17 @@ export function OpeningBalancesView({
                   </span>
                 </th>
               ))}
+              {visiblePrograms.map((program) => (
+                <th
+                  key={program.key}
+                  className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {program.label}
+                    <FieldHelp help={program.help} />
+                  </span>
+                </th>
+              ))}
               {components.map((component, index) => (
                 <th
                   key={component.componentId}
@@ -434,7 +504,7 @@ export function OpeningBalancesView({
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={visibleFields.length + components.length + 1}
+                  colSpan={visibleFields.length + visiblePrograms.length + components.length + 1}
                   className="px-3 py-8 text-center text-slate-400 dark:text-slate-500"
                 >
                   {text('empty', 'No employees have an active payroll profile yet.')}
@@ -490,6 +560,33 @@ export function OpeningBalancesView({
                             setValue(row.employeePartyId, field.key, value)
                           }
                           field={field.label}
+                          noun="a money amount"
+                          maxScale={4}
+                          placeholder="0.00"
+                          disabled={row.locked || !canManage}
+                          className="w-32 text-right tabular-nums"
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
+                      )}
+                    </td>
+                  )
+                })}
+                {visiblePrograms.map((program) => {
+                  // Same pack rule as the statutory columns (see above): an
+                  // orphan row keeps every program's column rather than
+                  // defaulting to any country's.
+                  const applies = row.country == null || program.packs.includes(row.country)
+                  return (
+                    <td key={program.key} className="px-2 py-1.5 text-right">
+                      {applies ? (
+                        <MoneyInput
+                          ariaLabel={`${row.employeeName} — ${program.label}`}
+                          value={programValueOf(row, program.key)}
+                          onChange={(value) =>
+                            setProgramValue(row.employeePartyId, program.key, value)
+                          }
+                          field={program.label}
                           noun="a money amount"
                           maxScale={4}
                           placeholder="0.00"

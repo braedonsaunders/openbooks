@@ -1,6 +1,7 @@
 import { assertPayrollCountryKnown } from "./country.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { openingProgramBasesByEmployee } from "./opening-balances.ts";
 import { add, cmp, mulRate, neg, normalizeMoney } from "../money/money.ts";
 import { ratesForPayDate } from "./us/rates.ts";
 import {
@@ -166,6 +167,13 @@ export interface OpeningYearEndYtd {
   taxYtd: string;
   /** fica_withheld_ytd — combined SS/Medicare tax withheld before adoption (W-2 boxes 4/6). */
   ficaWithheldYtd: string;
+  /**
+   * Per-program insurable-earnings carry-in, keyed by pack-declared program
+   * key (C-13). The T4 folds the QPIP program's base into box 56 and the
+   * RL-1 into box I; each is capped at its own program maximum with the
+   * committed stubs, never at another program's.
+   */
+  programBasesYtd: Record<string, string>;
 }
 
 /**
@@ -223,10 +231,12 @@ export function carryOpeningYearEndYtd<S extends { employeePartyId: string }>(
 }
 
 /**
- * T4 boxes a carry-in lands in: 14, 16, 16A, 18, 22, 24 and 26. Box 56 is
- * deliberately absent: `insurable_ytd` is the EI base and the model has no
- * distinct QPIP-insurable earnings source, so inventing one would misstate a
- * Quebec return.
+ * T4 boxes a carry-in lands in: 14, 16, 16A, 18, 22, 24, 26, 55 and 56.
+ * Box 56 is the QPIP program's OWN insurable base — never the EI base
+ * (`insurable_ytd`): a mid-year adopter's pre-adoption QPIP-insurable
+ * earnings arrive in `programBasesYtd` under the pack-declared program key
+ * and are capped at the QPIP maximum with the stubs below, like every other
+ * carry-in. Absent key means no pre-adoption QPIP base, never a guess.
  */
 export function openingYtdIntoT4Slip(slip: T4Slip, opening: OpeningYearEndYtd): T4Slip {
   return {
@@ -239,6 +249,7 @@ export function openingYtdIntoT4Slip(slip: T4Slip, opening: OpeningYearEndYtd): 
     box24EiInsurable: add(slip.box24EiInsurable, opening.insurableYtd),
     box26CppPensionable: add(slip.box26CppPensionable, opening.pensionableYtd),
     box55Qpip: add(slip.box55Qpip, opening.qpipYtd),
+    box56QpipInsurable: add(slip.box56QpipInsurable, opening.programBasesYtd["qpip"] ?? "0"),
   };
 }
 
@@ -276,8 +287,16 @@ async function openingYearEndYtdByEmployee(
          or coalesce(b.ei_ytd, 0) <> 0 or coalesce(b.qpip_ytd, 0) <> 0
          or coalesce(b.taxable_ytd, 0) <> 0 or coalesce(b.tax_ytd, 0) <> 0
          or coalesce(b.fica_withheld_ytd, 0) <> 0
+         -- A program-only carry-in still seeds slips: its base feeds the
+         -- program's slip box (T4 56) with no statutory column alongside.
+         or exists (
+           select 1 from payroll_opening_program_bases pb
+            where pb.org_id = b.org_id and pb.employee_party_id = b.employee_party_id
+              and pb.tax_year = b.tax_year and coalesce(pb.insurable_ytd, 0) <> 0
+         )
        )
   `));
+  const programs = await openingProgramBasesByEmployee(orgId, taxYear);
   return new Map(rows.rows.map((row) => [row.employee_party_id, {
     pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
     insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
@@ -288,6 +307,7 @@ async function openingYearEndYtdByEmployee(
     taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
     taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
     ficaWithheldYtd: normalizeMoney(String(row.fica_withheld_ytd ?? "0")),
+    programBasesYtd: programs.get(row.employee_party_id) ?? {},
   }]));
 }
 

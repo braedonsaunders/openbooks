@@ -163,6 +163,80 @@ const FIELD_BY_KEY = new Map(OPENING_BALANCE_FIELDS.map((f) => [f.key, f]));
 /** Amounts of one opening balance, keyed like OPENING_BALANCE_FIELDS. */
 export type OpeningBalanceAmounts = Record<string, string>;
 
+/** Per-program insurable-earnings carry-in, keyed by pack-declared program key. */
+export type OpeningProgramAmounts = Record<string, string>;
+
+/** One contribution program any pack declares a carry-in for, for validation and the UI. */
+export interface DeclaredProgramBaseField {
+  country: string;
+  programKey: string;
+  label: string;
+  help: string;
+}
+
+/**
+ * Every contribution program any pack declares — the country-agnostic list
+ * the carry-in validation, UI and importer offer. A third pack's program
+ * arrives with the pack; nothing here names a country.
+ *
+ * Resolved lazily: this module sits below the pack registry in the import
+ * graph, so a static import would join the cycle the opening-ytd registry
+ * exists to avoid (see `declaredEmployerLevyFields` below).
+ */
+export async function declaredProgramBaseFields(): Promise<DeclaredProgramBaseField[]> {
+  const { PAYROLL_COUNTRY_PACKS } = await import("./packs.ts");
+  const fields: DeclaredProgramBaseField[] = [];
+  for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
+    for (const program of pack.contributionPrograms ?? []) {
+      fields.push({ country, programKey: program.key, label: program.label, help: program.help });
+    }
+  }
+  return fields.sort((a, b) =>
+    a.country.localeCompare(b.country) || a.programKey.localeCompare(b.programKey));
+}
+
+/**
+ * Canonicalize one employee's per-program insurable-earnings carry-in.
+ *
+ * Every key must be DECLARED by a pack — a stored-never-read carry-in is a
+ * write whose effect no read can observe, so a typo'd program key is refused
+ * by name (with the declared keys listed) rather than stored silently. The
+ * employer-levy save refuses undeclared levy keys for the same reason.
+ * Amounts are exact money, never negative, like every other carry-in.
+ */
+export function normalizeOpeningProgramBases(
+  input: Record<string, unknown>,
+  declared: readonly DeclaredProgramBaseField[],
+): OpeningProgramAmounts {
+  const keys = new Set(declared.map((d) => d.programKey));
+  const amounts: OpeningProgramAmounts = {};
+  for (const [rawKey, raw] of Object.entries(input)) {
+    const key = String(rawKey).trim();
+    if (!keys.has(key)) {
+      const known = [...keys].sort().join(", ") || "none";
+      throw new PayrollError(
+        `"${key}" is not a declared contribution program (declared: ${known}) — a carry-in for it would never be read`,
+      );
+    }
+    if (raw === undefined || raw === null || String(raw).trim() === "") continue;
+    // Same no-strip rule as normalizeOpeningBalance: feed the raw trimmed
+    // text to canonicalDecimal so a decimal comma is refused, not re-valued.
+    const exact = canonicalDecimal(String(raw).trim(), 4);
+    if (exact === null) {
+      throw new PayrollError(decimalNullRefusal(key, "an amount", raw, 4));
+    }
+    let value: string;
+    try {
+      value = normalizeMoney(exact);
+    } catch {
+      throw new PayrollError(`program carry-in for "${key}" is not an amount: "${String(raw)}"`);
+    }
+    if (cmp(value, "0") < 0) throw new PayrollError(`program carry-in for "${key}" cannot be negative`);
+    amounts[key] = value;
+  }
+  return amounts;
+}
+
 /**
  * A component whose annual basis cap makes an opening year-to-date meaningful.
  *
@@ -206,6 +280,8 @@ export interface OpeningBalanceRow {
   amounts: OpeningBalanceAmounts | null;
   /** componentId → opening year-to-date; empty when none were entered. */
   componentAmounts: OpeningComponentAmounts;
+  /** programKey → insurable-earnings carry-in; empty when none was entered. */
+  programAmounts: OpeningProgramAmounts;
   /**
    * A run has committed for this employee in this tax year, so the carry-in is
    * already inside withholding that has been paid out. Read-only from here.
@@ -383,8 +459,10 @@ export function normalizeOpeningComponents(
 export function isEmptyOpeningBalance(
   amounts: OpeningBalanceAmounts,
   components: OpeningComponentAmounts = {},
+  programs: OpeningProgramAmounts = {},
 ): boolean {
   if (Object.values(components).some((amount) => cmp(amount ?? "0", "0") !== 0)) return false;
+  if (Object.values(programs).some((amount) => cmp(amount ?? "0", "0") !== 0)) return false;
   return OPENING_BALANCE_FIELDS.every((f) => cmp(amounts[f.key] ?? "0", "0") === 0);
 }
 
@@ -468,6 +546,32 @@ export async function openingBalanceLocks(
 }
 
 /**
+ * Per-program insurable-earnings carry-ins for one org-year, keyed by
+ * employee, for the year-end slip readers (T4 box 56, RL-1 box I). The
+ * readers already restrict to the filing's country through the payroll
+ * profile join, so this stays country-agnostic: every stored program key
+ * was pack-declared at save time.
+ */
+export async function openingProgramBasesByEmployee(
+  orgId: string,
+  taxYear: number,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<Map<string, OpeningProgramAmounts>> {
+  const rows = (await runner.execute<{ employee_party_id: string; program_key: string; insurable_ytd: string }>(sql`
+    select employee_party_id, program_key, insurable_ytd
+      from payroll_opening_program_bases
+     where org_id = ${orgId} and tax_year = ${taxYear}
+  `));
+  const byEmployee = new Map<string, OpeningProgramAmounts>();
+  for (const row of rows.rows) {
+    const amounts = byEmployee.get(row.employee_party_id) ?? {};
+    amounts[row.program_key] = normalizeMoney(String(row.insurable_ytd));
+    byEmployee.set(row.employee_party_id, amounts);
+  }
+  return byEmployee;
+}
+
+/**
  * The whole active payroll population for one tax year, with their carry-in
  * where one exists. Adoption is a whole-workforce exercise, so employees
  * WITHOUT a row are returned too — an empty grid that has to be discovered
@@ -544,6 +648,22 @@ export async function openingBalancesForYear(
     componentsByRow.set(row.opening_balance_id, amounts);
   }
 
+  // Program carry-ins share the parent's natural key (org, employee, year):
+  // one query for the year, keyed by employee like the slip readers below.
+  const programRows = (await db.execute<{ employee_party_id: string; program_key: string; insurable_ytd: string }>(sql`
+    select pb.employee_party_id, pb.program_key, pb.insurable_ytd
+      from payroll_opening_program_bases pb
+      left join parties p on p.id = pb.employee_party_id and p.org_id = pb.org_id
+     where pb.org_id = ${orgId} and pb.tax_year = ${year}
+       ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+  `));
+  const programsByEmployee = new Map<string, OpeningProgramAmounts>();
+  for (const row of programRows.rows) {
+    const amounts = programsByEmployee.get(row.employee_party_id) ?? {};
+    amounts[row.program_key] = normalizeMoney(String(row.insurable_ytd));
+    programsByEmployee.set(row.employee_party_id, amounts);
+  }
+
   const locks = await openingBalanceLocks(orgId, year, db, allowedSubsidiaryIds);
   const toRow = (raw: Record<string, unknown>): OpeningBalanceRow => {
     const employeePartyId = String(raw.employee_party_id);
@@ -557,6 +677,7 @@ export async function openingBalancesForYear(
     return {
       employeePartyId,
       componentAmounts: (rowId && componentsByRow.get(rowId)) || {},
+      programAmounts: programsByEmployee.get(employeePartyId) ?? {},
       employeeName: String(raw.employee_name ?? ""),
       employeeNumber: raw.employee_number == null ? null : String(raw.employee_number),
       country: raw.country == null ? null : String(raw.country),
@@ -590,6 +711,12 @@ export interface OpeningBalanceWrite {
    * is what the grid and the importer both send.
    */
   components?: Record<string, unknown>;
+  /**
+   * Per-program insurable-earnings carry-in, keyed by pack-declared program
+   * key. Same `undefined`-keeps-stored / `{}`-clears contract as components:
+   * silence is not an instruction to delete an employee's QPIP base.
+   */
+  programs?: Record<string, unknown>;
 }
 
 export interface OpeningBalanceSaveResult {
@@ -686,11 +813,28 @@ export async function saveOpeningBalances(input: {
       storedByEmployee.set(row.employee_party_id, amounts);
     }
 
+    // Declared program keys bound the carry-in vocabulary: a key no pack
+    // declares would be stored but never read. Stored program bases ride the
+    // same keep-on-silence contract as stored components.
+    const declaredPrograms = await declaredProgramBaseFields();
+    const storedPrograms = (await tx.execute<{ employee_party_id: string; program_key: string; insurable_ytd: string }>(sql`
+      select employee_party_id, program_key, insurable_ytd
+        from payroll_opening_program_bases
+       where org_id = ${input.orgId} and tax_year = ${year}
+    `));
+    const storedProgramsByEmployee = new Map<string, OpeningProgramAmounts>();
+    for (const row of storedPrograms.rows) {
+      const amounts = storedProgramsByEmployee.get(row.employee_party_id) ?? {};
+      amounts[row.program_key] = normalizeMoney(String(row.insurable_ytd));
+      storedProgramsByEmployee.set(row.employee_party_id, amounts);
+    }
+
     const seen = new Set<string>();
     const planned: {
       employeePartyId: string;
       amounts: OpeningBalanceAmounts | null;
       components: OpeningComponentAmounts;
+      programs: OpeningProgramAmounts;
     }[] = [];
     for (const row of input.rows) {
       const employeeName = nameById.get(row.employeePartyId);
@@ -745,10 +889,15 @@ export async function saveOpeningBalances(input: {
             ...inertOpenings(stored, componentFields),
             ...normalizeOpeningComponents(row.components, componentFields),
           };
+        const storedPrograms = storedProgramsByEmployee.get(row.employeePartyId) ?? {};
+        const programs = row.programs === undefined
+          ? storedPrograms
+          : normalizeOpeningProgramBases(row.programs, declaredPrograms);
         planned.push({
           employeePartyId: row.employeePartyId,
-          amounts: isEmptyOpeningBalance(amounts, components) ? null : amounts,
+          amounts: isEmptyOpeningBalance(amounts, components, programs) ? null : amounts,
           components,
+          programs,
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "invalid amounts");
@@ -774,13 +923,15 @@ export async function saveOpeningBalances(input: {
           result.deleted++;
           // The children cascade with the parent. Naming what they held is the
           // audit evidence: a component year-to-date that vanishes without a
-          // record of its value cannot be reconstructed from the trail.
+          // record of its value cannot be reconstructed from the trail — and
+          // the same holds for a program base.
           await auditOpeningBalance(tx, {
             orgId: input.orgId, actorId: input.actorId, rowId: deleted.rows[0]!.id,
             action: "delete",
             changes: {
               employeePartyId: row.employeePartyId, taxYear: year,
               beforeComponents: storedByEmployee.get(row.employeePartyId) ?? {},
+              beforePrograms: storedProgramsByEmployee.get(row.employeePartyId) ?? {},
             },
           });
         }
@@ -835,6 +986,35 @@ export async function saveOpeningBalances(input: {
         }
       }
 
+      // Program bases are REPLACED as a set, like the components above: a
+      // re-load of the provider's report is the whole truth about that
+      // employee's year.
+      const keepPrograms = Object.keys(row.programs);
+      if (keepPrograms.length === 0) {
+        await tx.execute(sql`
+          delete from payroll_opening_program_bases
+           where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
+             and tax_year = ${year}`);
+      } else {
+        await tx.execute(sql`
+          delete from payroll_opening_program_bases
+           where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
+             and tax_year = ${year}
+             and program_key <> all(${`{${keepPrograms.join(",")}}`}::text[])`);
+        for (const [programKey, amount] of Object.entries(row.programs)) {
+          await tx.execute(sql`
+            insert into payroll_opening_program_bases
+              (org_id, employee_party_id, tax_year, program_key, insurable_ytd, created_by, updated_by)
+            values (${input.orgId}, ${row.employeePartyId}, ${year}, ${programKey}, ${amount},
+                    ${input.actorId}, ${input.actorId})
+            on conflict (org_id, employee_party_id, tax_year, program_key) do update
+               set insurable_ytd = excluded.insurable_ytd,
+                   updated_by = ${input.actorId},
+                   updated_at = now()
+             where payroll_opening_program_bases.org_id = ${input.orgId}`);
+        }
+      }
+
       const wasThere = hasRow.has(row.employeePartyId);
       if (wasThere) result.updated++;
       else result.created++;
@@ -844,6 +1024,7 @@ export async function saveOpeningBalances(input: {
         changes: {
           employeePartyId: row.employeePartyId, taxYear: year,
           after: row.amounts, afterComponents: row.components,
+          afterPrograms: row.programs,
         },
       });
     }

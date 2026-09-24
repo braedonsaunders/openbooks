@@ -27,7 +27,8 @@ import type { OpeningYearEndYtd, T4Slip, W2Slip } from "./yearend.ts";
 
 const opening = (overrides: Partial<OpeningYearEndYtd> = {}): OpeningYearEndYtd => ({
   pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
-  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ficaWithheldYtd: "0", ...overrides,
+  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ficaWithheldYtd: "0",
+  programBasesYtd: {}, ...overrides,
 });
 
 const t4 = (employeePartyId: string, overrides: Partial<T4Slip> = {}): T4Slip => ({
@@ -71,7 +72,7 @@ test("every statutory opening amount is additive with committed stubs", () => {
   assert.equal(slip!.box24EiInsurable, "61000.2500");
   assert.equal(slip!.box26CppPensionable, "62000.5000");
   assert.equal(slip!.box55Qpip, "33.2500");
-  assert.equal(slip!.box56QpipInsurable, "0", "no QPIP-insurable opening source exists");
+  assert.equal(slip!.box56QpipInsurable, "0.0000", "no program base carried: box 56 keeps the stubs alone");
 });
 
 test("a multi-slip employee's carry-in lands on exactly one slip", () => {
@@ -114,21 +115,47 @@ test("employees without a carry-in are untouched", () => {
   assert.notEqual(carried[1], slips[1]);
 });
 
-test("T4 carry-in leaves box 56 alone because QPIP-insurable YTD is not collected", () => {
-  const before = t4("e1");
-  const after = openingYtdIntoT4Slip(before, opening({
+test("T4 carry-in folds the program's own base into box 56, never the EI base (C-13)", () => {
+  // No program base carried: box 56 is untouched, not backfilled from the EI
+  // carry-in folded into box 24 above.
+  const untouched = openingYtdIntoT4Slip(t4("e1"), opening({
     taxableYtd: "100.00", taxYtd: "20.00", pensionableYtd: "100.00", insurableYtd: "80.00",
     cppYtd: "5.00", cpp2Ytd: "2.00", eiYtd: "3.00", qpipYtd: "1.00",
   }));
-  assert.equal(after.box14EmploymentIncome, "50100.0000");
-  assert.equal(after.box16Cpp, "3005.0000");
-  assert.equal(after.box16aCpp2, "2.0000");
-  assert.equal(after.box18Ei, "803.0000");
-  assert.equal(after.box22IncomeTax, "9020.0000");
-  assert.equal(after.box24EiInsurable, "50080.0000");
-  assert.equal(after.box26CppPensionable, "50100.0000");
-  assert.equal(after.box55Qpip, "1.0000");
-  assert.equal(after.box56QpipInsurable, before.box56QpipInsurable);
+  assert.equal(untouched.box14EmploymentIncome, "50100.0000");
+  assert.equal(untouched.box24EiInsurable, "50080.0000");
+  assert.equal(untouched.box55Qpip, "1.0000");
+  assert.equal(untouched.box56QpipInsurable, "0.0000");
+  // A pre-adoption QPIP base lands in box 56 ADDITIVELY with the stubs, while
+  // box 24 keeps the EI carry-in alone: the two bases differ by construction
+  // (CRA T4 guide: box 56 is QPIP-insurable earnings, box 24 EI-insurable).
+  const carried = openingYtdIntoT4Slip(
+    t4("e1", { box56QpipInsurable: "20000.0000" }),
+    opening({ insurableYtd: "80.00", programBasesYtd: { qpip: "12000.00" } }),
+  );
+  assert.equal(carried.box56QpipInsurable, "32000.0000");
+  assert.equal(carried.box24EiInsurable, "50080.0000");
+});
+
+test("a mid-year adopter's box 56 is capped at the QPIP maximum with the stubs (C-13)", () => {
+  // Stubs hold 90,000 of QPIP base; the carry-in adds 20,000 more. The QPIP
+  // maximum (103,000) binds the program base while the EI maximum (68,900)
+  // binds the EI base alone — neither program consumes the other's room.
+  const carried = openingYtdIntoT4Slip(
+    t4("qc", { box24EiInsurable: "60000.0000", box56QpipInsurable: "90000.0000" }),
+    opening({ insurableYtd: "20000.00", programBasesYtd: { qpip: "20000.00" } }),
+  );
+  const [capped] = capAnnualEarnings(
+    [{
+      employeePartyId: "qc",
+      insurable: carried.box24EiInsurable,
+      pensionable: carried.box26CppPensionable,
+      qpipInsurable: carried.box56QpipInsurable,
+    }],
+    { mie: "68900", yampe: "85000", qpipMie: "103000" },
+  );
+  assert.equal(capped!.box56QpipInsurable, "103000");
+  assert.equal(capped!.box24EiInsurable, "68900");
 });
 
 test("an opening with no committed stub still produces a slip", () => {

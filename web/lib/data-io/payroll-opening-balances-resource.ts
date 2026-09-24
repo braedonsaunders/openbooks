@@ -5,13 +5,16 @@ import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { parseEntitlementCarryInAmount } from '@openbooks/engine/src/payroll/entitlements-openings-save.ts'
 import {
   assertTaxYear,
+  declaredProgramBaseFields,
   isEmptyOpeningBalance,
   normalizeOpeningBalance,
   normalizeOpeningComponents,
+  normalizeOpeningProgramBases,
   openingBalanceLocks,
   openingComponentFields,
   OPENING_BALANCE_FIELDS,
   saveOpeningBalances,
+  type DeclaredProgramBaseField,
   type OpeningComponentField,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
 import {
@@ -73,6 +76,16 @@ export const PAYROLL_OPENING_BALANCES_DESCRIPTOR: ResourceDescriptor = {
 const COMPONENT_PREFIX = 'component:'
 
 /**
+ * Per-program insurable-earnings carry-ins become one column per declared
+ * contribution program, named `program:<KEY>` — the program key, because
+ * that is what the pack declares and what survives being exported from one
+ * environment and imported into another. Labels come from the pack
+ * declaration (English fallback, like the declaration itself): no catalog
+ * key is minted per program.
+ */
+const PROGRAM_PREFIX = 'program:'
+
+/**
  * Advisory for a row that carries no amounts where no carry-in is stored.
  * The commit genuinely writes nothing (the engine deletes nothing and counts
  * nothing), so both preview and commit report the row as a warning rather
@@ -83,6 +96,31 @@ const NOTHING_TO_WRITE = 'row carries no amounts and no carry-in is stored — n
 
 function componentColumnKey(component: OpeningComponentField): string {
   return `${COMPONENT_PREFIX}${component.code}`
+}
+
+function programColumnKey(programKey: string): string {
+  return `${PROGRAM_PREFIX}${programKey}`
+}
+
+/**
+ * The `program:` cells of one file row, keyed by program key.
+ *
+ * `undefined` when the row carries no program column at all — a file
+ * exported before these existed, or one an operator trimmed. Silence is not
+ * an instruction to delete an employee's program base, and the engine treats
+ * `undefined` as "keep what is stored".
+ */
+function programAmountsFrom(
+  src: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const amounts: Record<string, unknown> = {}
+  let present = false
+  for (const [key, value] of Object.entries(src)) {
+    if (!key.startsWith(PROGRAM_PREFIX)) continue
+    present = true
+    amounts[key.slice(PROGRAM_PREFIX.length)] = value
+  }
+  return present ? amounts : undefined
 }
 
 /**
@@ -106,7 +144,10 @@ function componentAmountsFrom(
   return present ? amounts : undefined
 }
 
-function fields(components: readonly OpeningComponentField[]): ResourceField[] {
+function fields(
+  components: readonly OpeningComponentField[],
+  programs: readonly DeclaredProgramBaseField[],
+): ResourceField[] {
   return [
     {
       key: 'employee',
@@ -120,6 +161,11 @@ function fields(components: readonly OpeningComponentField[]): ResourceField[] {
     ...OPENING_BALANCE_FIELDS.map((field) => ({
       key: field.key,
       label: field.label,
+      kind: 'currency' as const,
+    })),
+    ...programs.map((program) => ({
+      key: programColumnKey(program.programKey),
+      label: `${program.label} carry-in`,
       kind: 'currency' as const,
     })),
     ...components.map((component) => ({
@@ -186,24 +232,34 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
     componentsPromise ??= openingComponentFields(orgId, null)
     return componentsPromise
   }
+  // Pack-declared contribution programs are code, not org configuration, but
+  // loading them once per instance keeps fields(), columns(), read() and
+  // write() on the same vocabulary for the file.
+  let programsPromise: Promise<DeclaredProgramBaseField[]> | null = null
+  const loadPrograms = () => {
+    programsPromise ??= declaredProgramBaseFields()
+    return programsPromise
+  }
 
   return {
     descriptor: PAYROLL_OPENING_BALANCES_DESCRIPTOR,
     async fields() {
-      return fields(await loadComponents())
+      return fields(await loadComponents(), await loadPrograms())
     },
     async columns() {
       return (await this.fields()).map((f) => ({ key: f.key, label: f.label }))
     },
     async read(readCtx?: ReadCtx) {
       const components = await loadComponents()
-      const resourceFields = fields(components)
+      const programs = await loadPrograms()
+      const resourceFields = fields(components, programs)
       const columns = resourceFields.map((f) => ({ key: f.key, label: f.label }))
       // Employee visibility is decided by the PARTY's subsidiary, in SQL —
       // never by matching the exported employee label afterwards, which a
       // same-named employee in another legal entity would also match.
       const result = (await db.execute(sql`
         select b.id as "__rowId",
+               b.employee_party_id as "__employeeId",
                coalesce(er.employee_number, p.short_code, p.display_name) as "employee",
                p.display_name as "employeeName",
                b.tax_year as "taxYear",
@@ -232,13 +288,32 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
         amounts[`${COMPONENT_PREFIX}${row.code}`] = row.amount
         byRow.set(row.opening_balance_id, amounts)
       }
+      // Program bases pivot onto their parent row by (employee, year): the
+      // export stays one row per carry-in, like the components above.
+      const programRows = (await db.execute(sql`
+        select employee_party_id, tax_year, program_key, insurable_ytd::text as amount
+          from payroll_opening_program_bases
+         where org_id = ${orgId}`)) as {
+        rows: { employee_party_id: string; tax_year: number; program_key: string; amount: string }[]
+      }
+      const programsByEmployeeYear = new Map<string, Record<string, string>>()
+      for (const row of programRows.rows) {
+        const key = `${row.employee_party_id} ${row.tax_year}`
+        const amounts = programsByEmployeeYear.get(key) ?? {}
+        amounts[`${PROGRAM_PREFIX}${row.program_key}`] = row.amount
+        programsByEmployeeYear.set(key, amounts)
+      }
       const rows = result.rows.map((row) => {
         const rowId = String(row.__rowId ?? '')
         const rest = { ...row }
         delete rest.__rowId
+        const employeeYear = `${String(rest.__employeeId ?? '')} ${String(rest.taxYear ?? '')}`
+        delete rest.__employeeId
         const out: Record<string, CellValue> = { ...rest }
         for (const component of components) out[componentColumnKey(component)] = null
         for (const [key, value] of Object.entries(byRow.get(rowId) ?? {})) out[key] = value
+        for (const program of programs) out[programColumnKey(program.programKey)] = null
+        for (const [key, value] of Object.entries(programsByEmployeeYear.get(employeeYear) ?? {})) out[key] = value
         return out
       })
       return { fields: resourceFields, columns, rows }
@@ -360,8 +435,12 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           const normalizedComponents = components === undefined
             ? {}
             : normalizeOpeningComponents(components, await loadComponents())
+          const programs = programAmountsFrom(src)
+          const normalizedPrograms = programs === undefined
+            ? {}
+            : normalizeOpeningProgramBases(programs, await loadPrograms())
           const existed = existingCache.get(taxYear)!.has(employeeId)
-          const empty = isEmptyOpeningBalance(amounts, normalizedComponents)
+          const empty = isEmptyOpeningBalance(amounts, normalizedComponents, normalizedPrograms)
           if (ctx.dryRun) {
             if (empty && !existed) {
               // A blank row with nothing stored writes nothing on commit
@@ -385,7 +464,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
             orgId: ctx.orgId,
             actorId: ctx.actorId,
             taxYear,
-            rows: [{ employeePartyId: employeeId, amounts: src, components }],
+            rows: [{ employeePartyId: employeeId, amounts: src, components, programs }],
             allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? undefined,
           })
           outcome.created += result.created

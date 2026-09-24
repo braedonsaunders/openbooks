@@ -120,6 +120,13 @@ export const payComponents = pgTable(
     taxable: boolean("taxable").notNull().default(true),
     pensionable: boolean("pensionable").notNull().default(true),
     insurable: boolean("insurable").notNull().default(true),
+    /**
+     * Contribution program keys this component's earnings do NOT feed
+     * (0342, C-13). Empty contributes to every declared program, matching
+     * the sibling flags' default-true; a key no pack declares is inert on
+     * runs, like an undeclared tax treatment.
+     */
+    programExclusions: text("program_exclusions").array().notNull().default([]),
     /** Earnings: counts toward vacationable earnings. */
     vacationable: boolean("vacationable").notNull().default(true),
     /** Earnings: taxed with the T4127 bonus (non-periodic) method. */
@@ -895,6 +902,50 @@ export const payrollOpeningBalanceComponents = pgTable(
     // A year-to-date is money already withheld or contributed. Negative is a
     // sign-flipped export, or a refund somebody meant to record as a pay run.
     check("payroll_opening_balance_components_nonnegative", sql`${t.ytdAmount} >= 0`),
+  ],
+);
+
+/**
+ * Per-program insurable-earnings carry-in (0342, C-13): the third dimension
+ * of a mid-year adoption, beside the statutory columns and the component
+ * year-to-dates above.
+ *
+ * A sidecar keyed by the pack-declared program key — never a column per
+ * program on the shared table, which would bake one country's programs into
+ * every country's carry-in. The foreign key to the parent carry-in keeps
+ * "one carry-in per employee per year" singular: the committed-run lock,
+ * the audit trail and the all-zero-is-a-delete rule all stay on the parent,
+ * and the rows cascade with it. A program key no pack declares is stored
+ * but never read (the inert-key rule, as for component tax treatments).
+ */
+export const payrollOpeningProgramBases = pgTable(
+  "payroll_opening_program_bases",
+  {
+    id: id(),
+    orgId: orgRef(),
+    employeePartyId: uuid("employee_party_id").notNull(),
+    taxYear: integer("tax_year").notNull(),
+    programKey: text("program_key").notNull(),
+    /** Pre-adoption earnings insurable under this program. */
+    insurableYtd: money("insurable_ytd").notNull().default("0"),
+    ...auditColumns,
+  },
+  (t) => [
+    foreignKey({
+      name: "payroll_opening_program_bases_parent_fkey",
+      columns: [t.orgId, t.employeePartyId, t.taxYear],
+      foreignColumns: [payrollOpeningBalances.orgId, payrollOpeningBalances.employeePartyId, payrollOpeningBalances.taxYear],
+    }),
+    uniqueIndex("payroll_opening_program_bases_employee_year_program").on(
+      t.orgId, t.employeePartyId, t.taxYear, t.programKey,
+    ),
+    index("payroll_opening_program_bases_year_lookup").on(
+      t.orgId, t.taxYear, t.employeePartyId,
+    ),
+    check("payroll_opening_program_bases_program_key", sql`${t.programKey} <> ''`),
+    // A year-to-date is money already paid. Negative is a sign-flipped
+    // export, or a refund somebody meant to record as a pay run.
+    check("payroll_opening_program_bases_nonnegative", sql`${t.insurableYtd} >= 0`),
   ],
 );
 

@@ -134,6 +134,7 @@ test("an opening carry-in lands in the federal boxes and never invents state lin
   const after = openingYtdIntoW2Slip(before, {
     pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
     eiYtd: "0", qpipYtd: "0", taxableYtd: "12000.5000", taxYtd: "1500.2500", ficaWithheldYtd: "0",
+    programBasesYtd: {},
   });
   assert.equal(after.box1Wages, "60000.5000");
   assert.deepEqual(after.stateLines, before.stateLines);

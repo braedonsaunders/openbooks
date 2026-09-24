@@ -10,14 +10,18 @@ import { usEmployeeYtd } from "./us/compute-statutory.ts";
 import { applyBasisCaps } from "./limits.ts";
 import {
   componentYearToDate,
+  declaredProgramBaseFields,
   isEmptyOpeningBalance,
   normalizeOpeningBalance,
   normalizeOpeningComponents,
+  normalizeOpeningProgramBases,
   openingBalancesForYear,
   openingComponentFields,
+  openingProgramBasesByEmployee,
   OPENING_BALANCE_FIELDS,
   OpeningBalanceSaveError,
   saveOpeningBalances,
+  type DeclaredProgramBaseField,
   type OpeningComponentField,
 } from "./opening-balances.ts";
 import { payRunReadiness, payRunStaleness } from "./readiness.ts";
@@ -1406,6 +1410,131 @@ test(
     } finally {
       await dropScratchOrgReporting(fxA.orgId);
       await dropScratchOrgReporting(fxB.orgId);
+    }
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Per-program insurable-earnings carry-in (0342, C-13)                 */
+/* ------------------------------------------------------------------ */
+
+const QPIP_PROGRAM: DeclaredProgramBaseField = {
+  country: "CA",
+  programKey: "qpip",
+  label: "QPIP insurable earnings",
+  help: "QPIP-eligible salary paid this year before adoption.",
+};
+
+test("program carry-ins are exact money, and an undeclared program key is refused by name", () => {
+  assert.deepEqual(
+    normalizeOpeningProgramBases({ qpip: "12000.00" }, [QPIP_PROGRAM]),
+    { qpip: "12000.0000" },
+  );
+  // Blank is omitted, not zero-stored: the saver replaces the set, so an
+  // explicit zero and an absence must stay distinguishable upstream.
+  assert.deepEqual(normalizeOpeningProgramBases({ qpip: "" }, [QPIP_PROGRAM]), {});
+  assert.deepEqual(normalizeOpeningProgramBases({}, [QPIP_PROGRAM]), {});
+  // A stored-never-read carry-in is a write no read can observe: refuse it
+  // with the declared keys listed, the way undeclared levy keys are refused.
+  assert.throws(
+    () => normalizeOpeningProgramBases({ qpiq: "100" }, [QPIP_PROGRAM]),
+    /"qpiq" is not a declared contribution program \(declared: qpip\)/,
+  );
+  assert.throws(
+    () => normalizeOpeningProgramBases({ qpip: "-1" }, [QPIP_PROGRAM]),
+    /cannot be negative/,
+  );
+  assert.throws(
+    () => normalizeOpeningProgramBases({ qpip: "12,34" }, [QPIP_PROGRAM]),
+    /must use "\." as the decimal point/,
+  );
+});
+
+test("the CA pack declares the qpip program carry-in, country-agnostically", async () => {
+  const declared = await declaredProgramBaseFields();
+  const qpip = declared.find((d) => d.programKey === "qpip");
+  assert.ok(qpip, "the CA pack declares a qpip program base");
+  assert.equal(qpip.country, "CA");
+  // No pack hardcodes another's program: every declared key arrives with its
+  // own country, and the generic layer never names one.
+  for (const field of declared) {
+    assert.ok(field.country && field.programKey && field.label && field.help);
+  }
+});
+
+test(
+  "a program-only carry-in survives, is read back, keeps on silence, and clears with the row",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: {}, programs: { qpip: "12000" } }],
+      });
+      const stored = await openingBalancesForYear(fx.orgId, 2026);
+      assert.equal(stored.entered, 1, "a program-only row is a carry-in, not an empty row");
+      assert.deepEqual(stored.rows[0]!.programAmounts, { qpip: "12000.0000" });
+      const byEmployee = await openingProgramBasesByEmployee(fx.orgId, 2026);
+      assert.deepEqual(byEmployee.get(fx.employeeId), { qpip: "12000.0000" });
+
+      // Silence keeps the stored base: the grid omits programs for hidden
+      // packs, and omission must not clear a carry-in the operator cannot see.
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50" } }],
+      });
+      const kept = await openingBalancesForYear(fx.orgId, 2026);
+      assert.deepEqual(kept.rows[0]!.programAmounts, { qpip: "12000.0000" });
+
+      // Replacing the set and clearing everything behave like the components:
+      // {} clears the base but keeps a row other amounts still need...
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{
+          employeePartyId: fx.employeeId,
+          amounts: { pensionableYtd: "50" }, programs: {},
+        }],
+      });
+      const clearedBase = await openingBalancesForYear(fx.orgId, 2026);
+      assert.deepEqual(clearedBase.rows[0]!.programAmounts, {});
+      assert.equal(clearedBase.entered, 1, "the statutory row survives its program base being cleared");
+
+      // ...while clearing everything deletes the row and cascades the sidecar.
+      const cleared = await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: {}, programs: {} }],
+      });
+      assert.equal(cleared.deleted, 1);
+      const after = await openingBalancesForYear(fx.orgId, 2026);
+      assert.equal(after.entered, 0);
+      const orphans = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from payroll_opening_program_bases
+         where org_id = ${fx.orgId}`));
+      assert.equal(orphans.rows[0]!.n, 0, "the sidecar rows must cascade with their parent");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "a program carry-in for an undeclared key is refused with nothing written",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      await assert.rejects(
+        saveOpeningBalances({
+          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+          rows: [{ employeePartyId: fx.employeeId, amounts: {}, programs: { qpiq: "100" } }],
+        }),
+        /"qpiq" is not a declared contribution program/,
+      );
+      const after = await openingBalancesForYear(fx.orgId, 2026);
+      assert.equal(after.entered, 0, "the rejected load writes nothing");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
     }
   },
 );
