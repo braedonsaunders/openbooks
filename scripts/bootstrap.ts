@@ -1612,6 +1612,40 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "behind. Reapply, not restamp: the revision changes enforced trigger "
       + "behavior the old state lacks.",
   },
+  {
+    filename: "generated/0327_item_price_level_activation_history.sql",
+    from: "26606980c32021dae07ba3942fbe0bf955c6c10dae5e5f5985f84b19ce4049b2",
+    to: "696333297953bfffdf39879cd5618a585a10c5b85a8fa8ffb6e81bb0c7372091",
+    strategy: "reapply",
+    reason:
+      "corrective revision PRC15d: revoking a future-effective assignment "
+      + "before it starts kept its open window (the trigger only handled "
+      + "effective_from <= today) while the resolver matches windows ignoring "
+      + "the flag, so a dead future window would price when its dates arrive; "
+      + "and an inactive row with a still-open window was honoured at all. "
+      + "The trigger now removes any revocation before the row ever starts "
+      + "(today or later), the backfill deletes matching pre-upgrade rows, "
+      + "and the resolver honours an inactive row only for its closed "
+      + "history. Same idempotence story as the PRC15c entry: IF NOT EXISTS "
+      + "DDL, CREATE OR REPLACE FUNCTION, conditional triggers, gap-only "
+      + "backfills. Reapply, not restamp: enforced trigger behavior changes. "
+      + "For databases still at the original digest; databases already at the "
+      + "PRC15c digest use the next entry.",
+  },
+  {
+    filename: "generated/0327_item_price_level_activation_history.sql",
+    from: "74408c2026f5e84d304f1a1586dca7e7967222efd6cdb388f02ffd128f9552be",
+    to: "696333297953bfffdf39879cd5618a585a10c5b85a8fa8ffb6e81bb0c7372091",
+    strategy: "reapply",
+    reason:
+      "same PRC15d revision as the entry above, for databases that already "
+      + "reapplied the PRC15c revision: the only delta from that state is the "
+      + "future-start removal in the trigger and backfill, the resolver "
+      + "backstop for inactive open windows (a query, not stored state), and "
+      + "comments. Re-running converges future-start half-revocations the "
+      + "PRC15c revision left behind and redefines the trigger idempotently. "
+      + "Reapply, not restamp.",
+  },
 ];
 
 async function executeTrackedMigration(

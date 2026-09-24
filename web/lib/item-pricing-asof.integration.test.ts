@@ -346,6 +346,120 @@ test('revoking an older assignment end-dates it and preserves its history', enab
 })
 
 /**
+ * PRC15d: revoking a future-effective assignment before it starts removes
+ * the never-effective row, so neither today nor the dates it would have
+ * covered price off it.
+ */
+test('revoking a future assignment removes it and nothing prices off it', enabled, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      const customerId = randomUUID()
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${customerId}, ${org.orgId}, 'customer', 'Gold Customer', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into customer_roles (org_id, party_id, is_active)
+        values (${org.orgId}, ${customerId}, true)`)
+      const goldId = randomUUID()
+      await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
+        values (${goldId}, ${org.orgId}, 'GOLD7', 'Gold price', 'explicit', false, true)`)
+      const baseId = (await db.execute<{ id: string }>(sql`
+        select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+      const today = new Date().toISOString().slice(0, 10)
+      const starts = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10)
+      const inside = new Date(Date.parse(`${today}T00:00:00Z`) + 40 * 86400000).toISOString().slice(0, 10)
+      await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
+        values (${org.orgId}, ${customerId}, ${goldId}, ${starts}, true)`)
+      const goldSchedule = randomUUID()
+      const baseSchedule = randomUUID()
+      await db.execute(sql`insert into item_price_schedules
+          (id, org_id, item_id, price_level_id, currency, quantity_basis, effective_from, effective_to, is_active)
+        values (${goldSchedule}, ${org.orgId}, ${org.items.service}, ${goldId}, 'CAD', 'line_quantity', '2026-01-01', null, true),
+               (${baseSchedule}, ${org.orgId}, ${org.items.service}, ${baseId}, 'CAD', 'line_quantity', '2026-01-01', null, true)`)
+      for (const [schedule, price] of [[goldSchedule, '100'], [baseSchedule, '80']] as const) {
+        await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
+          values (${org.orgId}, ${schedule}, '1', ${price})`)
+      }
+
+      const input = {
+        orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
+      } as const
+      // Revoked before it ever started: no error, no row left behind.
+      await db.execute(sql`update customer_price_level_assignments set is_active = false
+       where org_id = ${org.orgId} and customer_id = ${customerId}`)
+      const remaining = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from customer_price_level_assignments
+         where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!.n
+      assert.equal(remaining, 0)
+
+      const now = await resolveItemPrice({ ...input, onDate: today })
+      assert.equal(now?.unitPrice, '80.0000')
+      assert.equal(now?.source, 'base_level')
+
+      const later = await resolveItemPrice({ ...input, onDate: inside })
+      assert.equal(later?.unitPrice, '80.0000')
+      assert.equal(later?.source, 'base_level')
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  })
+})
+
+/**
+ * PRC15d backstop: an inactive row with a still-open window is a revocation
+ * (or a draft that was never offered) and the resolver must not honour it —
+ * while activating that same row restores Gold, and a closed window still
+ * reads as history.
+ */
+test('an inactive open window never prices, but activation restores it', enabled, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      const customerId = randomUUID()
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${customerId}, ${org.orgId}, 'customer', 'Gold Customer', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into customer_roles (org_id, party_id, is_active)
+        values (${org.orgId}, ${customerId}, true)`)
+      const goldId = randomUUID()
+      await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
+        values (${goldId}, ${org.orgId}, 'GOLD8', 'Gold price', 'explicit', false, true)`)
+      const baseId = (await db.execute<{ id: string }>(sql`
+        select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+      // Created inactive: never offered, window open.
+      await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
+        values (${org.orgId}, ${customerId}, ${goldId}, '2026-01-01', false)`)
+      const goldSchedule = randomUUID()
+      const baseSchedule = randomUUID()
+      await db.execute(sql`insert into item_price_schedules
+          (id, org_id, item_id, price_level_id, currency, quantity_basis, effective_from, effective_to, is_active)
+        values (${goldSchedule}, ${org.orgId}, ${org.items.service}, ${goldId}, 'CAD', 'line_quantity', '2026-01-01', null, true),
+               (${baseSchedule}, ${org.orgId}, ${org.items.service}, ${baseId}, 'CAD', 'line_quantity', '2026-01-01', null, true)`)
+      for (const [schedule, price] of [[goldSchedule, '100'], [baseSchedule, '80']] as const) {
+        await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
+          values (${org.orgId}, ${schedule}, '1', ${price})`)
+      }
+
+      const input = {
+        orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
+      } as const
+      const today = new Date().toISOString().slice(0, 10)
+      const dark = await resolveItemPrice({ ...input, onDate: today })
+      assert.equal(dark?.unitPrice, '80.0000')
+      assert.equal(dark?.source, 'base_level')
+
+      // Offering it for real restores Gold: the flag, not the window, was
+      // the block.
+      await db.execute(sql`update customer_price_level_assignments set is_active = true
+       where org_id = ${org.orgId} and customer_id = ${customerId}`)
+      const lit = await resolveItemPrice({ ...input, onDate: today })
+      assert.equal(lit?.unitPrice, '100.0000')
+      assert.equal(lit?.source, 'customer_level')
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  })
+})
+
+/**
  * Level activation is versioned (0327): deactivating the level closes its
  * period, so past dates still read it as offered while today does not — and
  * a level created today never covered last month.

@@ -33,20 +33,19 @@
 --     assignments by window coverage alone — never by current activation.
 --     An explicitly end-dated row is left alone; reactivating an ended row
 --     does not silently reopen its window (the operator extends it
---     explicitly, visibly). A same-day revocation (effective_from = today)
---     never covered any date, so end-dating it to yesterday would violate
---     the dates CHECK and any storable window would still price today: the
---     trigger removes the row instead (PRC15c). Backfill: inactive rows with
---     an open window are end-dated to the day before their last touch (the
---     deactivation is the only write such rows receive), floored at
---     effective_from so the dates CHECK holds — except same-day rows, which
---     are removed to match the trigger. Residual, stated: a row deactivated
---     before a FUTURE window ever opened keeps a single-day window at
---     effective_from.
+--     explicitly, visibly). A revocation before the row ever started
+--     (effective_from = today or later) never covered any date, so
+--     end-dating it to yesterday would violate the dates CHECK (today) or
+--     leave a live future window on a dead row: the trigger removes the row
+--     instead (PRC15c for today, PRC15d for future starts). Backfill:
+--     inactive rows with an open window are end-dated to the day before
+--     their last touch (the deactivation is the only write such rows
+--     receive), floored at effective_from so the dates CHECK holds —
+--     except never-effective rows, which are removed to match the trigger.
 --
 -- Re-runnable: table and trigger are IF NOT EXISTS-guarded; the backfills
--- only fill gaps (no open period / still-open inactive window / same-day
--- half-revocation), so replay changes nothing.
+-- only fill gaps (no open period / still-open inactive window /
+-- never-effective half-revocation), so replay changes nothing.
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -145,17 +144,20 @@ SELECT l.org_id, l.id, '-infinity'::date
 CREATE OR REPLACE FUNCTION public.customer_price_level_end_date_on_deactivate() RETURNS trigger
 LANGUAGE plpgsql AS $func$
 BEGIN
-  IF NEW.effective_from <= current_date
-     AND (NEW.effective_to IS NULL OR NEW.effective_to >= current_date) THEN
-    -- A same-day revocation (effective_from = today) never covered any date:
-    -- end-dating it to yesterday would violate customer_price_level_dates,
-    -- and any storable window would still price today. Remove the row
-    -- instead; no transaction could have priced off it, so no pricing
-    -- history is lost. The delete runs as the deactivating role under the
-    -- same org_isolation predicate that permitted the update, and the caller
+  -- Only a still-open window can be revoked into history or removed; an
+  -- already-closed window stays exactly as the operator left it, so late
+  -- transactions inside it keep pricing off it.
+  IF NEW.effective_to IS NULL OR NEW.effective_to >= current_date THEN
+    -- Revoked before it ever started (today or later): never effective, so
+    -- end-dating would either violate customer_price_level_dates (today) or
+    -- leave a live future window on a dead row. Remove it instead; no
+    -- transaction could have priced off it, so no pricing history is lost.
+    -- The delete runs as the deactivating role under the same
+    -- org_isolation predicate that permitted the update, and the caller
     -- observes zero updated rows and must record the revocation as the
-    -- delete it was (see updateSetupRecord).
-    IF NEW.effective_from = current_date THEN
+    -- delete it was (see updateSetupRecord). (PRC15c for today, PRC15d for
+    -- future starts.)
+    IF NEW.effective_from >= current_date THEN
       DELETE FROM public.customer_price_level_assignments
        WHERE org_id = NEW.org_id AND id = NEW.id;
       RETURN NULL;
@@ -181,13 +183,15 @@ $trigger$;
 -- flipped without end-dating, so it would read as covering today. End-date
 -- it to the day before its last touch (see the stated residuals).
 --
--- Same-day half-revocations converge to the trigger's post-upgrade meaning:
--- an inactive row starting today with an open window never priced anything,
--- and end-dating it would violate customer_price_level_dates, so the upgrade
--- removes it instead of flooring it at a single live day. (PRC15c.)
+-- Never-effective half-revocations converge to the trigger's post-upgrade
+-- meaning: an inactive row starting today or later with an open window never
+-- priced anything, and end-dating it would violate customer_price_level_dates
+-- (today) or leave a live future window on a dead row, so the upgrade
+-- removes it instead of flooring it at a single live day. (PRC15c for today,
+-- PRC15d for future starts.)
 DELETE FROM public.customer_price_level_assignments a
  WHERE NOT a.is_active
-   AND a.effective_from = current_date
+   AND a.effective_from >= current_date
    AND (a.effective_to IS NULL OR a.effective_to >= current_date);
 UPDATE public.customer_price_level_assignments a
    SET effective_to = GREATEST(a.updated_at::date - 1, a.effective_from)
