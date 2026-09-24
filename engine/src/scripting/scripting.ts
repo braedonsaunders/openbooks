@@ -5,7 +5,7 @@ import type { ContributedLine } from "../allocations/types.ts";
 import { db, schema } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
-import { fitsLedgerRange, isZero, normalizeMoney, sum } from "../money/money.ts";
+import { fitsLedgerRange, isZero, ledgerSideTotals, normalizeMoney, sum } from "../money/money.ts";
 // Named export, NOT the default: under ESM/tsx the default import resolves to
 // the module namespace (no .parse), so computeNextRunAt silently returned
 // null and scheduled scripts never ran. CronExpressionParser.parse works
@@ -1972,6 +1972,19 @@ export async function resolveCustomGlLines(
     if (!isZero(total)) {
       throw new CustomGlLinesError(
         `custom_gl_lines script "${scriptName}" lines do not balance${subsidiaryId ? ` for subsidiary ${subsidiaryId}` : " (the document subsidiary)"} (sum=${total})`,
+      );
+    }
+    // In-range lines can still sum past the ledger on either side: refuse
+    // the side totals by name instead of dying in Postgres at posting.
+    const sides = ledgerSideTotals(amounts);
+    if (!fitsLedgerRange(sides.debits)) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" debit total is out of range — at most 15 whole digits fit the ledger`,
+      );
+    }
+    if (!fitsLedgerRange(sides.credits)) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" credit total is out of range — at most 15 whole digits fit the ledger`,
       );
     }
   }

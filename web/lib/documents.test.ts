@@ -207,8 +207,8 @@ test('well-formed quantities survive editor validation untouched', () => {
 test('a line amount wider than its ledger column fails closed with its line number', () => {
   // document_lines.amount is numeric(19,4): fifteen whole digits. A pasted
   // 16-digit amount cleared the format check and died in Postgres with a
-  // storage error (a 500). The column maximum itself must still save, and a
-  // 14-digit line saves here exactly as it posts through the script paths.
+  // storage error (a 500). The column maximum itself must still save — on
+  // both sides, so the pair fits the side totals as well as every line.
   assert.throws(
     () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: '9999999999999999' }]),
     (e: unknown) =>
@@ -219,10 +219,27 @@ test('a line amount wider than its ledger column fails closed with its line numb
   )
   const ok = validateEditableDocumentLines([
     { accountId: 'acc-1', amount: '999999999999999.9999' },
-    { accountId: 'acc-2', amount: '20000000000000' },
+    { accountId: 'acc-2', amount: '-999999999999999.9999' },
   ])
   assert.equal(ok[0]!.amount, '999999999999999.9999')
-  assert.equal(ok[1]!.amount, '20000000000000')
+  assert.equal(ok[1]!.amount, '-999999999999999.9999')
+})
+
+test('draft side totals past the ledger refuse by name even when every line fits', () => {
+  // Fifteen whole digits per line, but the debit side sums to sixteen: the
+  // stored document total is numeric(19,4) too, so the totals refuse with
+  // the shared bound message instead of dying in Postgres.
+  assert.throws(
+    () =>
+      validateEditableDocumentLines([
+        { accountId: 'acc-1', amount: '900000000000000' },
+        { accountId: 'acc-2', amount: '900000000000000' },
+      ]),
+    (e: unknown) =>
+      e instanceof DocumentEditError &&
+      e.status === 422 &&
+      /draft debit total is out of range — at most 15 whole digits fit the ledger/.test(e.message),
+  )
 })
 
 test('a malformed or impossible edit date fails closed before any write', { skip: !env.OPENBOOKS_DB_URL }, async () => {

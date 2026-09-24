@@ -51,16 +51,18 @@ test("leading-dot amounts post like the kernel reads them", () => {
 });
 
 test("ledger-scale amounts share one bound on every path", () => {
-  // numeric(19,4) holds fifteen whole digits: a 14-digit line posts, a
-  // 16-digit line is refused with the same message the UI draft uses.
+  // numeric(19,4) holds fifteen whole digits: the column-maximum line
+  // posts, a 16-digit line is refused with the same message the UI draft
+  // uses.
   const v = validateJournalInput({
     documentDate: "2026-07-16",
     lines: [
-      { accountId: A, amount: "20000000000000" },
-      { accountId: B, amount: "-20000000000000" },
+      { accountId: A, amount: "999999999999999.9999" },
+      { accountId: B, amount: "-999999999999999.9999" },
     ],
   });
-  assert.equal(v.lines[0]!.amount, "20000000000000.0000");
+  assert.equal(v.lines[0]!.amount, "999999999999999.9999");
+  assert.equal(v.totalDebits, "999999999999999.9999");
   assert.throws(
     () =>
       validateJournalInput({
@@ -426,25 +428,24 @@ test("exactly 200 lines validate; 201 do not", () => {
   );
 });
 
-test("the per-line amount ceiling is exact at ten trillion", () => {
-  const at = validateJournalInput({
-    documentDate: "2026-07-16",
-    lines: [
-      { accountId: A, amount: "10000000000000.0000" },
-      { accountId: B, amount: "-10000000000000.0000" },
-    ],
-  });
-  assert.equal(at.totalDebits, "10000000000000.0000");
+test("journal totals past the ledger refuse by name even when every line fits", () => {
+  // Fifteen whole digits per line, but the debit side sums to sixteen: the
+  // stored totalDebits column is numeric(19,4) too, so the totals refuse
+  // instead of dying in Postgres.
   assert.throws(
     () =>
       validateJournalInput({
         documentDate: "2026-07-16",
         lines: [
-          { accountId: A, amount: "10000000000000.0001" },
-          { accountId: B, amount: "-10000000000000.0001" },
+          { accountId: A, amount: "900000000000000" },
+          { accountId: A, amount: "900000000000000" },
+          { accountId: B, amount: "-900000000000000" },
+          { accountId: B, amount: "-900000000000000" },
         ],
       }),
-    /out of range/,
+    (error: unknown) =>
+      error instanceof JournalWriteError &&
+      /journal debit total is out of range — at most 15 whole digits fit the ledger/.test(error.message),
   );
 });
 

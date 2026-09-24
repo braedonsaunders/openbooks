@@ -3,7 +3,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, orgContext, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
-import { cmp, fitsLedgerRange, isZero, normalizeMoney, sum } from "../money/money.ts";
+import { fitsLedgerRange, isZero, ledgerSideTotals, normalizeMoney, sum } from "../money/money.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { postDocument } from "./posting-document.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
@@ -180,7 +180,6 @@ export function validateJournalInput(input: ScriptJournalInput): {
   }
 
   const amounts: string[] = [];
-  const debits: string[] = [];
   const lines = input.lines.map((l, i) => {
     const amount = persistJournalLineAmount(l.amount, i + 1);
     if (isZero(amount)) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
@@ -197,7 +196,6 @@ export function validateJournalInput(input: ScriptJournalInput): {
     if (l.departmentId && !UUID_RE.test(l.departmentId)) throw new JournalWriteError(`line ${i + 1}: invalid departmentId`);
     if (l.projectId && !UUID_RE.test(l.projectId)) throw new JournalWriteError(`line ${i + 1}: invalid projectId`);
     amounts.push(amount);
-    if (cmp(amount, "0") > 0) debits.push(amount);
     return {
       accountId: l.accountId,
       accountCode: l.accountCode ? String(l.accountCode) : undefined,
@@ -212,12 +210,22 @@ export function validateJournalInput(input: ScriptJournalInput): {
   if (!isZero(balance)) {
     throw new JournalWriteError(`journal is not balanced (debits − credits = ${balance})`);
   }
+  // In-range lines can still sum past the stored totalDebits column, which
+  // is numeric(19,4) like every other money column: refuse the side totals
+  // by name instead of dying in Postgres.
+  const { debits: debitTotal, credits: creditTotal } = ledgerSideTotals(amounts);
+  if (!fitsLedgerRange(debitTotal)) {
+    throw new JournalWriteError(`journal debit total is out of range — at most 15 whole digits fit the ledger`);
+  }
+  if (!fitsLedgerRange(creditTotal)) {
+    throw new JournalWriteError(`journal credit total is out of range — at most 15 whole digits fit the ledger`);
+  }
   return {
     documentDate,
     memo: input.memo ? String(input.memo).slice(0, 2000) : null,
     referenceNumber: input.referenceNumber ? String(input.referenceNumber).slice(0, 100) : null,
     lines,
-    totalDebits: sum(debits),
+    totalDebits: debitTotal,
   };
 }
 
