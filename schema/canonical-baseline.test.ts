@@ -697,6 +697,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // key), preserving sent/skipped history exactly with one audit_log row
     // per cleared row.
     "0329_dunning_sent_at_delivery_evidence.sql",
+    // Content-identical ID-less statement lines are possible overlap, not
+    // identity: 0335 adds the nullable self-referencing
+    // bank_statement_lines.possible_duplicate_of flag (tenant-coherent
+    // composite FK, staged NOT VALID, concurrent indexes) so unproven
+    // collisions import flagged for review instead of vanishing.
+    "0335_bank_statement_line_possible_duplicate.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

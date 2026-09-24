@@ -188,6 +188,7 @@ export async function POST(req: Request) {
       sourceEvidenceRef: result.sourceEvidenceRef,
       imported: result.imported,
       duplicates: result.duplicates,
+      possibleDuplicates: result.possibleDuplicates,
       statementDate: meta.statementDate ?? null,
       closingBalance: meta.closingBalance ?? null,
       currency: meta.currency ?? null,

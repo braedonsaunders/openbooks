@@ -336,6 +336,15 @@
     "searchExcluded": "Rechercher des lignes exclues…",
     "noExcluded": "Aucune ligne exclue.",
     "restore": "Restaurer",
+    "possibleDuplicateBadge": "Doublon possible",
+    "possibleDuplicateOf": "du {date} · {amount}",
+    "clearDuplicate": "Marquer comme n'étant pas un doublon",
+    "clearDuplicateConfirm": "Cette ligne est-elle une transaction réelle, et non une répétition de l'import précédent ?",
+    "clearedDuplicateToast": "Marquage de doublon retiré",
+    "excludeFlagged": "{count, plural, one {Exclure # doublon} other {Exclure # doublons}}",
+    "excludeFlaggedConfirm": "{count, plural, one {Exclure # ligne signalée comme doublon de ses imports précédents ?} other {Exclure # lignes signalées comme doublons de leurs imports précédents ?}}",
+    "excludeFlaggedReason": "Doublon d'un import précédent (vérification groupée des doublons)",
+    "excludedFlaggedToast": "{count, plural, one {# doublon exclu} other {# doublons exclus}}",
     "createRule": "Créer une règle depuis cette ligne",
     "postAndMatch": "Comptabiliser et rapprocher",
     "suggestedBy": "Suggestion : {rule}"
@@ -400,8 +409,8 @@
     "preview": "Aperçu",
     "importAction": "Importer",
     "importCount": "Importer {count, plural, one {# ligne} other {# lignes}}",
-    "importedToast": "{imported, plural, one {# ligne importée} other {# lignes importées}}{duplicates, plural, =0 {} one { — # doublon ignoré} other { — # doublons ignorés}}",
-    "previewSummary": "{imported, plural, one {# nouvelle ligne} other {# nouvelles lignes}}{duplicates, plural, =0 {} one { · # doublon ignoré} other { · # doublons ignorés}}",
+    "importedToast": "{imported, plural, one {# ligne importée} other {# lignes importées}}{duplicates, plural, =0 {} one { — # doublon ignoré} other { — # doublons ignorés}}{possibleDuplicates, plural, =0 {} one { — # doublon signalé} other { — # doublons signalés}}",
+    "previewSummary": "{imported, plural, one {# nouvelle ligne} other {# nouvelles lignes}}{duplicates, plural, =0 {} one { · # doublon ignoré} other { · # doublons ignorés}}{possibleDuplicates, plural, =0 {} one { · # doublon signalé} other { · # doublons signalés}}",
     "format": "Format",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -424,7 +433,8 @@
     "optionalPlaceholder": "facultatif",
     "nothingNew": "Chaque ligne analysée existe déjà dans ce compte — rien de nouveau à importer.",
     "moreLines": "…et {count, plural, one {# autre ligne} other {# autres lignes}}",
-    "totalBadge": "{count, number} au total"
+    "totalBadge": "{count, number} au total",
+    "possibleDuplicateBadge": "Doublon possible"
   },
   "start": {
     "resume": "Reprendre le rapprochement",

@@ -153,13 +153,20 @@ export async function loadMatch(
     const exWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId} and l.match_status = 'excluded'
       ${exParams.q ? sql` and (l.description ilike ${'%' + exParams.q + '%'} or l.amount::text ilike ${'%' + exParams.q + '%'})` : sql``}`
 
-    const [stmt, stmtC, gl, glC, review, ex, exC] = (await Promise.all([
+    const [stmt, stmtC, flaggedC, gl, glC, review, ex, exC] = (await Promise.all([
       db.execute<StatementRow>(sql`
-        select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
+        select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref,
+               l.possible_duplicate_of,
+               dup.posted_on as dup_posted_on, dup.amount as dup_amount, dup.description as dup_description
           from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+          left join bank_statement_lines dup on dup.id = l.possible_duplicate_of and dup.org_id = l.org_id
          where ${stmtWhere} order by l.posted_on, l.line_number
          limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}`),
       db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${stmtWhere}`),
+      db.execute<CountRow>(sql`
+        select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+         where s.account_id = ${account.id} and s.org_id = ${orgId}
+           and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.possible_duplicate_of is not null`),
       db.execute<GlRow>(sql`
         select jl.id, je.posting_date, je.entry_number, jl.txn_amount as amount, coalesce(jl.memo, je.memo) as memo, p.display_name as party
           from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
@@ -189,6 +196,7 @@ export async function loadMatch(
 
     data = {
       stmtRows: stmt.rows, stmtTotal: Number(stmtC.rows[0]?.n ?? 0), stmtParams,
+      flaggedTotal: Number(flaggedC.rows[0]?.n ?? 0),
       glRows: gl.rows, glTotal: Number(glC.rows[0]?.n ?? 0), glParams,
       reviewRows: review.rows,
       excludedRows: ex.rows, excludedTotal: Number(exC.rows[0]?.n ?? 0), exParams,

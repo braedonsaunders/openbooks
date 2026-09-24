@@ -100,6 +100,7 @@ const data = {
   stmtRows: [{ id: STMT_ID, posted_on: '2026-06-15', amount: '-25.00', description: 'T05MATCH fee' }],
   stmtTotal: 1,
   stmtParams: { page: 1, perPage: 25 },
+  flaggedTotal: 0,
   glRows: [],
   glTotal: 0,
   glParams: { page: 1, perPage: 25 },
@@ -109,7 +110,7 @@ const data = {
   exParams: { page: 1, perPage: 25 },
 }
 
-async function mountWorkspace(t: TestContext, fetchImpl: typeof fetch): Promise<void> {
+async function mountWorkspace(t: TestContext, fetchImpl: typeof fetch, dataOverride: typeof data = data): Promise<void> {
   const prior = globalThis.fetch
   globalThis.fetch = fetchImpl
   t.after(() => {
@@ -136,7 +137,7 @@ async function mountWorkspace(t: TestContext, fetchImpl: typeof fetch): Promise<
             offsetAccounts={[{ id: OFFSET_ID, label: '6800 Bank & Merchant Fees' }]}
             account={{ id: 'acc-1', label: '1000 Operating Cash' }}
             session={{ id: 'rec-1', throughDate: '2026-09-10', statementBalance: '17070.01', currency: 'CAD' }}
-            data={data}
+            data={dataOverride}
             totals={{ statementBalance: '17070.01', clearedBalance: '17070.01', difference: '0.00' }}
             currentParams={{}}
             tab="match"
@@ -300,4 +301,55 @@ test('a refused add-journal persists the reason inline and releases busy (F-t05-
   const addAfter = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
   assert.ok(addAfter, 'the dialog must still offer Add journal after the refusal')
   assert.equal(addAfter.disabled, false, 'busy must release after the refusal')
+})
+
+test('a flagged line shows its duplicate evidence with a clear action and a bulk exclude', async (t) => {
+  const calls: { url: string; body?: string }[] = []
+  const flaggedData = {
+    ...data,
+    stmtRows: [{
+      id: STMT_ID,
+      posted_on: '2026-09-01',
+      amount: '-5.00',
+      description: 'COFFEE SHOP',
+      possible_duplicate_of: 'stmt-0',
+      dup_posted_on: '2026-09-01',
+      dup_amount: '-5.00',
+      dup_description: 'COFFEE SHOP',
+    }],
+    flaggedTotal: 1,
+  }
+  await mountWorkspace(t, scriptedFetch({
+    '/rules/preview': () => Response.json({ matches: [] }),
+    '/statement-lines/stmt-1': (url, body) => {
+      calls.push({ url, body })
+      return Response.json({ ok: true })
+    },
+  }), flaggedData)
+  assert.ok(
+    [...document.querySelectorAll('*')].some((el) => (el.textContent ?? '').includes('Possible duplicate')),
+    'the flagged row must carry its duplicate badge',
+  )
+  assert.ok(
+    [...document.querySelectorAll('*')].some((el) => (el.textContent ?? '').includes('2026-09-01')),
+    'the badge must name the earlier line it may duplicate',
+  )
+  const clear = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Mark as not a duplicate')
+  assert.ok(clear, 'the flagged row must offer a clear action')
+  const bulk = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Exclude 1 duplicates'))
+  assert.ok(bulk, 'the toolbar must offer the bulk exclude with its count')
+  await act(async () => {
+    ;(clear as HTMLButtonElement).dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+    await tick()
+  })
+  assert.ok(
+    calls.some((c) => c.url.includes('/statement-lines/stmt-1') && (c.body ?? '').includes('clear-duplicate')),
+    `clearing must call the clear action, got ${JSON.stringify(calls)}`,
+  )
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'success'),
+    `clearing must toast success, got ${JSON.stringify(script.toasts)}`,
+  )
 })

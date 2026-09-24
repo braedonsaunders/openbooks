@@ -336,6 +336,15 @@
     "searchExcluded": "Buscar linhas excluídas…",
     "noExcluded": "Nenhuma linha excluída.",
     "restore": "Restaurar",
+    "possibleDuplicateBadge": "Possível duplicata",
+    "possibleDuplicateOf": "de {date} · {amount}",
+    "clearDuplicate": "Marcar como não duplicata",
+    "clearDuplicateConfirm": "Esta linha é uma transação real, e não uma repetição da importação anterior?",
+    "clearedDuplicateToast": "Sinalização de duplicata removida",
+    "excludeFlagged": "{count, plural, one {Excluir # duplicata} other {Excluir # duplicatas}}",
+    "excludeFlaggedConfirm": "{count, plural, one {Excluir # linha sinalizada como duplicata de suas importações anteriores?} other {Excluir # linhas sinalizadas como duplicatas de suas importações anteriores?}}",
+    "excludeFlaggedReason": "Duplicata de uma importação anterior (revisão em massa de duplicatas)",
+    "excludedFlaggedToast": "{count, plural, one {# duplicata excluída} other {# duplicatas excluídas}}",
     "createRule": "Criar regra a partir desta linha",
     "postAndMatch": "Lançar e corresponder",
     "suggestedBy": "Sugestão: {rule}"
@@ -400,8 +409,8 @@
     "preview": "Prévia",
     "importAction": "Importar",
     "importCount": "Importar {count, plural, one {# linha} other {# linhas}}",
-    "importedToast": "{imported, plural, one {# linha importada} other {# linhas importadas}}{duplicates, plural, =0 {} one { — # duplicata ignorada} other { — # duplicatas ignoradas}}",
-    "previewSummary": "{imported, plural, one {# nova linha} other {# novas linhas}}{duplicates, plural, =0 {} one { · # duplicata ignorada} other { · # duplicatas ignoradas}}",
+    "importedToast": "{imported, plural, one {# linha importada} other {# linhas importadas}}{duplicates, plural, =0 {} one { — # duplicata ignorada} other { — # duplicatas ignoradas}}{possibleDuplicates, plural, =0 {} one { — # duplicata sinalizada} other { — # duplicatas sinalizadas}}",
+    "previewSummary": "{imported, plural, one {# nova linha} other {# novas linhas}}{duplicates, plural, =0 {} one { · # duplicata ignorada} other { · # duplicatas ignoradas}}{possibleDuplicates, plural, =0 {} one { · # duplicata sinalizada} other { · # duplicatas sinalizadas}}",
     "format": "Formato",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -424,7 +433,8 @@
     "optionalPlaceholder": "opcional",
     "nothingNew": "Todas as linhas processadas já existem nesta conta — nada novo para importar.",
     "moreLines": "…e mais {count, plural, one {# linha} other {# linhas}}",
-    "totalBadge": "{count, number} no total"
+    "totalBadge": "{count, number} no total",
+    "possibleDuplicateBadge": "Possível duplicata"
   },
   "start": {
     "resume": "Retomar conciliação",

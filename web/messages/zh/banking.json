@@ -336,6 +336,15 @@
     "searchExcluded": "搜索已排除明细…",
     "noExcluded": "无已排除明细。",
     "restore": "还原",
+    "possibleDuplicateBadge": "可能重复",
+    "possibleDuplicateOf": "{date}·{amount}的明细",
+    "clearDuplicate": "标记为非重复",
+    "clearDuplicateConfirm": "该明细是否为真实交易，而非之前导入的重复?",
+    "clearedDuplicateToast": "已清除重复标记",
+    "excludeFlagged": "{count, plural, one {排除 # 条重复} other {排除 # 条重复}}",
+    "excludeFlaggedConfirm": "{count, plural, one {是否将 # 条已标记明细作为之前导入的重复予以排除?} other {是否将 # 条已标记明细作为之前导入的重复予以排除?}}",
+    "excludeFlaggedReason": "之前导入的重复（批量重复复核）",
+    "excludedFlaggedToast": "{count, plural, one {已排除 # 条重复} other {已排除 # 条重复}}",
     "createRule": "从本明细创建规则",
     "postAndMatch": "过账并匹配",
     "suggestedBy": "建议：{rule}"
@@ -400,8 +409,8 @@
     "preview": "预览",
     "importAction": "导入",
     "importCount": "导入 {count, plural, one {# 条明细} other {# 条明细}}",
-    "importedToast": "{imported, plural, one {已导入 # 条明细} other {已导入 # 条明细}}{duplicates, plural, =0 {} one { — 已跳过 # 条重复} other { — 已跳过 # 条重复}}",
-    "previewSummary": "{imported, plural, one {# 条新明细} other {# 条新明细}}{duplicates, plural, =0 {} one { · 已跳过 # 条重复} other { · 已跳过 # 条重复}}",
+    "importedToast": "{imported, plural, one {已导入 # 条明细} other {已导入 # 条明细}}{duplicates, plural, =0 {} one { — 已跳过 # 条重复} other { — 已跳过 # 条重复}}{possibleDuplicates, plural, =0 {} one { — 已标记 # 条待复核} other { — 已标记 # 条待复核}}",
+    "previewSummary": "{imported, plural, one {# 条新明细} other {# 条新明细}}{duplicates, plural, =0 {} one { · 已跳过 # 条重复} other { · 已跳过 # 条重复}}{possibleDuplicates, plural, =0 {} one { · 已标记 # 条待复核} other { · 已标记 # 条待复核}}",
     "format": "格式",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -424,7 +433,8 @@
     "optionalPlaceholder": "可选",
     "nothingNew": "每一条解析出的明细在此账户上均已存在 — 无新内容可导入。",
     "moreLines": "…以及 {count, plural, one {# 条其他明细} other {# 条其他明细}}",
-    "totalBadge": "共 {count, number} 条"
+    "totalBadge": "共 {count, number} 条",
+    "possibleDuplicateBadge": "可能重复"
   },
   "start": {
     "resume": "继续对账",

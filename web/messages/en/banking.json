@@ -345,7 +345,16 @@
     "excludedHint": "Lines you've set aside — they're skipped when reconciling.",
     "searchExcluded": "Search excluded lines…",
     "noExcluded": "No excluded lines.",
-    "restore": "Restore"
+    "restore": "Restore",
+    "possibleDuplicateBadge": "Possible duplicate",
+    "possibleDuplicateOf": "of {date} · {amount}",
+    "clearDuplicate": "Mark as not a duplicate",
+    "clearDuplicateConfirm": "This line is a genuine transaction, not a replay of the earlier import?",
+    "clearedDuplicateToast": "Duplicate flag cleared",
+    "excludeFlagged": "Exclude {count} duplicates",
+    "excludeFlaggedConfirm": "Exclude {count} flagged lines as duplicates of their earlier imports?",
+    "excludeFlaggedReason": "Duplicate of an earlier import (bulk duplicate review)",
+    "excludedFlaggedToast": "Excluded {count} duplicates"
   },
   "transactionsSearch": "Search card charges, checks, transfers…",
   "transactionsEmptyTitle": "No banking transactions yet",
@@ -407,8 +416,8 @@
     "preview": "Preview",
     "importAction": "Import",
     "importCount": "Import {count, plural, one {# line} other {# lines}}",
-    "importedToast": "{imported, plural, one {Imported # line} other {Imported # lines}}{duplicates, plural, =0 {} one { — # duplicate skipped} other { — # duplicates skipped}}",
-    "previewSummary": "{imported, plural, one {# new line} other {# new lines}}{duplicates, plural, =0 {} one { · # duplicate skipped} other { · # duplicates skipped}}",
+    "importedToast": "{imported, plural, one {Imported # line} other {Imported # lines}}{duplicates, plural, =0 {} one { — # duplicate skipped} other { — # duplicates skipped}}{possibleDuplicates, plural, =0 {} one { — # flagged for review} other { — # flagged for review}}",
+    "previewSummary": "{imported, plural, one {# new line} other {# new lines}}{duplicates, plural, =0 {} one { · # duplicate skipped} other { · # duplicates skipped}}{possibleDuplicates, plural, =0 {} one { · # flagged for review} other { · # flagged for review}}",
     "format": "Format",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -431,7 +440,8 @@
     "optionalPlaceholder": "optional",
     "nothingNew": "Every parsed line already exists on this account — nothing new to import.",
     "moreLines": "…and {count, plural, one {# more line} other {# more lines}}",
-    "totalBadge": "{count, number} total"
+    "totalBadge": "{count, number} total",
+    "possibleDuplicateBadge": "Possible duplicate"
   },
   "start": {
     "resume": "Resume reconciliation",

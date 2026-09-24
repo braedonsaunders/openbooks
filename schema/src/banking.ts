@@ -75,6 +75,14 @@ export const bankStatementLines = pgTable(
     counterpartyRef: text("counterparty_ref"),
     /** Source-provided dedupe key; null when the source supplies no sound transaction identity. */
     bankTransactionId: text("bank_transaction_id"),
+    /**
+     * Possible-duplicate flag for ID-less lines whose content collides with
+     * an earlier line without proven replay evidence (0335). Null means
+     * unflagged; otherwise the earlier line it may duplicate. Flagged lines
+     * keep match_status 'unmatched' and are refused by auto/manual matching
+     * until the reviewer clears the flag or excludes the line.
+     */
+    possibleDuplicateOf: uuid("possible_duplicate_of"),
     matchStatus: text("match_status", { enum: ["unmatched", "matched", "excluded"] })
       .notNull()
       .default("unmatched"),
@@ -89,6 +97,18 @@ export const bankStatementLines = pgTable(
     uniqueIndex("stmt_lines_account_bank_transaction")
       .on(t.orgId, t.accountId, t.bankTransactionId)
       .where(sql`${t.bankTransactionId} is not null`),
+    // Exact organization and id key backing the tenant-coherent
+    // possible-duplicate self-reference (0335).
+    uniqueIndex("bank_statement_lines_org_id_id_unique").on(t.orgId, t.id),
+    // Sparse pointer: NULL-heavy tenants skip indexing their NULLs entirely.
+    index("bsl_org_possible_duplicate")
+      .on(t.orgId, t.possibleDuplicateOf)
+      .where(sql`${t.possibleDuplicateOf} is not null`),
+    foreignKey({
+      name: "bank_statement_lines_possible_duplicate_of_fkey",
+      columns: [t.orgId, t.possibleDuplicateOf],
+      foreignColumns: [t.orgId, t.id],
+    }),
     check(
       "bank_statement_lines_exclusion_evidence",
       sql`(

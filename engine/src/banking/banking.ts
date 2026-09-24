@@ -39,11 +39,7 @@ export interface ParsedStatementLine {
   amount: string;
   description: string | null;
   counterpartyRef?: string | null;
-  /**
-   * Dedupe key: source-provided (OFX FITID) when the bank supplies one, else
-   * a deterministic fingerprint synthesized at import
-   * (`synth-v1:…`, see synthesizeStatementLineId). Never null after import.
-   */
+  /** Source-provided dedupe key (OFX FITID); null when the source supplies no sound transaction identity. */
   bankTransactionId?: string | null;
 }
 
@@ -1025,76 +1021,45 @@ async function loadReconcilableAccount(orgId: string, accountId: string): Promis
   return account;
 }
 
-/**
- * Deterministic dedupe identity for a line the bank gave no ID. The
- * fingerprint covers the validated posting date, the canonical amount, and
- * the normalized description, plus the line's occurrence ordinal among
- * content-identical tuples in the same statement: two genuine $5 coffees on
- * the same day import as two distinct IDs, while a re-exported file resolves
- * to the same IDs in any row order. Case and surrounding/inner spacing in the
- * description are not identity — re-exports routinely reflow them.
- *
- * The `synth-v1:` prefix namespaces synthesized keys away from
- * source-provided FITIDs and versions the normalization, so a future
- * semantics change mints disjoint IDs instead of colliding with this scheme.
- * Callers must synthesize (assignStatementLineIds) before consulting stored
- * IDs: an ID-less line from a different source then dedupes against the
- * already-imported one instead of importing — and reconciling — twice.
- */
-export function synthesizeStatementLineId(
-  line: Pick<ParsedStatementLine, "postedOn" | "amount" | "description">,
-  occurrence: number,
-): string {
-  if (!Number.isSafeInteger(occurrence) || occurrence < 1) {
-    throw new BankingError("Statement line occurrence must be a positive integer");
-  }
-  const fingerprint = createHash("sha256")
-    .update("openbooks.bank-statement-line.v1", "utf8")
-    .update("\0", "utf8")
-    .update(line.postedOn, "utf8")
-    .update("\0", "utf8")
-    .update(line.amount, "utf8")
-    .update("\0", "utf8")
-    .update(normalizeFingerprintText(line.description), "utf8")
-    .update("\0", "utf8")
-    .update(String(occurrence), "utf8")
-    .digest("hex");
-  return `synth-v1:${fingerprint}`;
-}
-
-/** Description normalization for the dedupe fingerprint (see above). */
+/** Description normalization for content-overlap comparison (see above). */
 export function normalizeFingerprintText(value: string | null | undefined): string {
   return (value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
 }
 
-export type IdentifiedStatementLine = ParsedStatementLine & { bankTransactionId: string };
-
 /**
- * Fill every ID-less validated line with its deterministic fingerprint,
- * counting occurrences among content-identical tuples within this batch.
- * Source-provided IDs pass through untouched. The result carries no nulls,
- * so the account-scoped unique index and filterDuplicateStatementLines see
- * one uniform identity for both kinds of lines.
+ * Proven-replay predicate for ID-less lines. A content tuple (date, amount,
+ * normalized description) is evidence of POSSIBLE overlap, not identity, so
+ * it proves a replay only inside a stored statement whose line window
+ * overlaps the incoming window AND whose opening or closing balance matches
+ * the incoming one. Amounts compare as exact units; balances must both be
+ * present — a file without balance evidence can never prove a replay.
  */
-export function assignStatementLineIds(
-  lines: readonly ParsedStatementLine[],
-): IdentifiedStatementLine[] {
-  const occurrences = new Map<string, number>();
-  return lines.map((line) => {
-    if (line.bankTransactionId) return { ...line, bankTransactionId: line.bankTransactionId };
-    const tuple = `${line.postedOn}\0${line.amount}\0${normalizeFingerprintText(line.description)}`;
-    const occurrence = (occurrences.get(tuple) ?? 0) + 1;
-    occurrences.set(tuple, occurrence);
-    return { ...line, bankTransactionId: synthesizeStatementLineId(line, occurrence) };
-  });
+export function isProvenReplay(
+  incoming: { fromDate: string; toDate: string; openingBalance: string | null; closingBalance: string | null },
+  stored: { fromDate: string; toDate: string; openingBalance: string | null; closingBalance: string | null },
+): boolean {
+  if (stored.toDate < incoming.fromDate || stored.fromDate > incoming.toDate) return false;
+  const openingProven =
+    incoming.openingBalance !== null &&
+    stored.openingBalance !== null &&
+    toUnits(incoming.openingBalance) === toUnits(stored.openingBalance);
+  const closingProven =
+    incoming.closingBalance !== null &&
+    stored.closingBalance !== null &&
+    toUnits(incoming.closingBalance) === toUnits(stored.closingBalance);
+  return openingProven || closingProven;
 }
 
+/** An imported (or previewed) line with its possible-duplicate flag state. */
+export type FlaggedStatementLine = ParsedStatementLine & { possibleDuplicateOf: string | null };
+
 /**
- * Apply the safe automatic statement dedupe rules. An exact retry of source
- * bytes is the same import. Every other line carries a transaction ID —
- * source-provided (OFX FITID) or synthesized at import for ID-less lines
- * (see synthesizeStatementLineId) — and an ID already on the account, or
- * already seen in this batch, marks the line a duplicate.
+ * Apply the safe automatic statement dedupe rules to source-identified
+ * lines. An exact retry of source bytes is the same import, and a
+ * source-provided ID (OFX FITID) already on the account — or already seen in
+ * this batch — marks the line a duplicate. ID-less lines bypass this
+ * filter: without proven replay scope a content tuple is possible overlap,
+ * not identity (see importStatement), so they are partitioned there.
  */
 export function filterDuplicateStatementLines(
   lines: ParsedStatementLine[],
@@ -1117,6 +1082,135 @@ export function filterDuplicateStatementLines(
   return { lines: fresh, duplicates };
 }
 
+type StoredContentCandidate = { id: string; statementId: string; amountUnits: bigint };
+
+/**
+ * Partition validated lines into fresh imports. Source-identified lines go
+ * through the ID filter; ID-less lines match stored content on this account:
+ * a tuple consumed inside proven replay scope skips as a replayed line,
+ * while a tuple colliding outside that scope imports flagged with the
+ * earliest stored line as its possible-duplicate evidence. Batch order is
+ * preserved so the dry-run preview reads file order.
+ */
+async function partitionIdlessLines(
+  tx: SqlExecutor,
+  orgId: string,
+  accountId: string,
+  lines: (ParsedStatementLine & { bankTransactionId: string | null })[],
+  existingIds: ReadonlySet<string>,
+  exactSourceRetry: boolean,
+  incoming: { fromDate: string; toDate: string; openingBalance: string | null; closingBalance: string | null },
+): Promise<{ lines: FlaggedStatementLine[]; duplicates: number; possibleDuplicates: number }> {
+  const identified = filterDuplicateStatementLines(lines, existingIds, exactSourceRetry);
+  if (exactSourceRetry) {
+    return {
+      lines: identified.lines.map((line) => ({ ...line, possibleDuplicateOf: null })),
+      duplicates: identified.duplicates,
+      possibleDuplicates: 0,
+    };
+  }
+  // Proven replay scope: stored statements overlapping the incoming window
+  // with a matching opening or closing balance.
+  const proven = new Set<string>();
+  const statements = (await tx.execute<{
+    id: string; from_date: string; to_date: string;
+    opening_balance: string | null; closing_balance: string | null;
+  }>(sql`
+    select s.id,
+           min(l.posted_on)::text as from_date,
+           max(l.posted_on)::text as to_date,
+           s.opening_balance::text as opening_balance,
+           s.closing_balance::text as closing_balance
+      from bank_statements s
+      join bank_statement_lines l
+        on l.statement_id = s.id and l.org_id = s.org_id
+     where s.org_id = ${orgId} and s.account_id = ${accountId}
+     group by s.id
+  `));
+  for (const st of statements.rows) {
+    if (
+      isProvenReplay(incoming, {
+        fromDate: st.from_date,
+        toDate: st.to_date,
+        openingBalance: st.opening_balance,
+        closingBalance: st.closing_balance,
+      })
+    ) {
+      proven.add(st.id);
+    }
+  }
+  // Stored content candidates for the incoming lines' tuples, earliest
+  // first: uuid v7 orders chronologically, so the first row per tuple is
+  // the earlier import a flag points at.
+  const storedByTuple = new Map<string, StoredContentCandidate[]>();
+  const idlessDates = [
+    ...new Set(
+      identified.lines.flatMap((line) => (line.bankTransactionId ? [] : [line.postedOn])),
+    ),
+  ];
+  if (idlessDates.length > 0) {
+    const stored = (await tx.execute<{
+      id: string; statement_id: string; posted_on: string; amount: string; description: string | null;
+    }>(sql`
+      select l.id, l.statement_id, l.posted_on::text as posted_on, l.amount::text as amount, l.description
+        from bank_statement_lines l
+       where l.org_id = ${orgId} and l.account_id = ${accountId}
+         and l.posted_on in (${sql.join(idlessDates.map((d) => sql`${d}`), sql`, `)})
+       order by l.id
+    `));
+    for (const row of stored.rows) {
+      const key = `${row.posted_on}\0${normalizeFingerprintText(row.description)}`;
+      const list = storedByTuple.get(key) ?? [];
+      list.push({
+        id: row.id,
+        statementId: row.statement_id,
+        amountUnits: toUnits(row.amount),
+      });
+      storedByTuple.set(key, list);
+    }
+  }
+  // Remaining proven-scope matches per tuple: a re-exported file resolves
+  // to the same multiset in any row order; excess over the stored count is
+  // unproven-new and flags.
+  const scopeRemainder = new Map<string, number>();
+  const scopeKey = (tupleKey: string, amountUnits: bigint) => `${tupleKey}\0${amountUnits.toString()}`;
+  for (const [tupleKey, candidates] of storedByTuple) {
+    for (const candidate of candidates) {
+      if (!proven.has(candidate.statementId)) continue;
+      const key = scopeKey(tupleKey, candidate.amountUnits);
+      scopeRemainder.set(key, (scopeRemainder.get(key) ?? 0) + 1);
+    }
+  }
+  const fresh: FlaggedStatementLine[] = [];
+  let duplicates = identified.duplicates;
+  let possibleDuplicates = 0;
+  for (const line of identified.lines) {
+    if (line.bankTransactionId) {
+      fresh.push({ ...line, possibleDuplicateOf: null });
+      continue;
+    }
+    const tupleKey = `${line.postedOn}\0${normalizeFingerprintText(line.description)}`;
+    const amountUnits = toUnits(line.amount);
+    const key = scopeKey(tupleKey, amountUnits);
+    const remaining = scopeRemainder.get(key) ?? 0;
+    if (remaining > 0) {
+      scopeRemainder.set(key, remaining - 1);
+      duplicates += 1;
+      continue;
+    }
+    const colliding = (storedByTuple.get(tupleKey) ?? []).filter(
+      (candidate) => candidate.amountUnits === amountUnits,
+    );
+    if (colliding.length > 0) {
+      possibleDuplicates += 1;
+      fresh.push({ ...line, possibleDuplicateOf: colliding[0]!.id });
+      continue;
+    }
+    fresh.push({ ...line, possibleDuplicateOf: null });
+  }
+  return { lines: fresh, duplicates, possibleDuplicates };
+}
+
 export interface ImportResult {
   /** Null when every line was a duplicate (nothing was written). */
   statementId: string | null;
@@ -1124,8 +1218,14 @@ export interface ImportResult {
   sourceEvidenceRef: string | null;
   imported: number;
   duplicates: number;
-  /** The deduped lines (dry-run preview shows exactly what import would write). */
-  lines: ParsedStatementLine[];
+  /**
+   * ID-less lines imported on unproven content overlap, flagged as possible
+   * duplicates of an earlier line for review. The reviewer clears the flag
+   * or excludes the line; matching refuses flagged lines until then.
+   */
+  possibleDuplicates: number;
+  /** The deduped lines (dry-run preview shows exactly what import would write, flags included). */
+  lines: FlaggedStatementLine[];
 }
 
 const MAX_STATEMENT_EVIDENCE_BYTES = 25 * 1024 * 1024;
@@ -1242,10 +1342,13 @@ function sourceEvidence(
 
 /**
  * Import normalized statement lines for a reconcilable account. Lines whose
- * transaction ID — source-provided `bankTransactionId`, or the deterministic
- * fingerprint synthesized for ID-less lines — already exists on the account
- * are skipped and reported as duplicates. An exact retry of source bytes for
- * the same account is skipped as one import. With `dryRun` nothing is
+ * source-provided `bankTransactionId` already exists on the account are
+ * skipped, as is an exact retry of source bytes for the same account.
+ * ID-less lines skip only inside proven replay scope (an overlapping
+ * statement window with a matching opening/closing balance); a content
+ * tuple colliding outside that scope imports flagged as a possible
+ * duplicate of the earlier line for review, since the tuple alone cannot
+ * tell a re-export from a genuine twin. With `dryRun` nothing is
  * written — used for preview.
  * Committed imports retain their exact source bytes in the append-only audit
  * log and point `rawFileRef` to that evidence. Engine callers without an
@@ -1297,11 +1400,10 @@ export async function importStatement(
       bankTransactionId,
     };
   });
-  // Every line leaves here with an ID: source-provided when the bank gave
-  // one, else the deterministic fingerprint. The stored-ID lookup and the
-  // account-scoped unique index below then dedupe re-exported ID-less files
-  // line by line instead of importing — and reconciling — them twice.
-  const identified = assignStatementLineIds(validated);
+  // ID-less lines keep a null bankTransactionId: without proven replay
+  // scope their content is possible overlap, not identity, so no synthetic
+  // ID may stand in for a bank key. The account-scoped unique index still
+  // guards source-provided IDs.
   const openingBalance = opts.openingBalance
     ? normalizeAmount(opts.openingBalance, "Opening balance")
     : null;
@@ -1335,7 +1437,7 @@ export async function importStatement(
       ? []
       : [
           ...new Set(
-            identified.flatMap((line) =>
+            validated.flatMap((line) =>
               line.bankTransactionId ? [line.bankTransactionId] : [],
             ),
           ),
@@ -1351,11 +1453,18 @@ export async function importStatement(
       `));
       for (const row of existing.rows) existingIds.add(row.id);
     }
-    const { lines: fresh, duplicates } = filterDuplicateStatementLines(
-      identified,
-      existingIds,
-      sourceAlreadyImported,
-    );
+    // ID-less lines partition by content against stored lines on this
+    // account. A tuple matching inside proven replay scope is a replayed
+    // line and skips; a tuple matching outside that scope is possible
+    // overlap — both lines import, the new one flagged with the earlier
+    // line as its evidence for review. Genuinely new content imports clean.
+    const { lines: fresh, duplicates, possibleDuplicates } =
+      await partitionIdlessLines(tx, ctx.orgId, account.id, validated, existingIds, sourceAlreadyImported, {
+        fromDate: validated.reduce((a, b) => (a.postedOn < b.postedOn ? a : b)).postedOn,
+        toDate: validated.reduce((a, b) => (a.postedOn > b.postedOn ? a : b)).postedOn,
+        openingBalance,
+        closingBalance,
+      });
     // Serialize with sign-off through the shared reconciliation lock. No
     // other path takes the import lock, so acquiring it first here cannot
     // deadlock; holding both through the insert closes the race with a
@@ -1387,6 +1496,7 @@ export async function importStatement(
         sourceEvidenceRef: null,
         imported: opts.dryRun ? fresh.length : 0,
         duplicates,
+        possibleDuplicates,
         lines: fresh,
       };
     }
@@ -1437,6 +1547,7 @@ export async function importStatement(
         description: l.description,
         counterpartyRef: l.counterpartyRef ?? null,
         bankTransactionId: l.bankTransactionId ?? null,
+        possibleDuplicateOf: l.possibleDuplicateOf ?? null,
         matchStatus: "unmatched" as const,
         createdBy: ctx.userId,
       })),
@@ -1453,6 +1564,7 @@ export async function importStatement(
       sourceEvidenceRef: evidence.ref,
       imported: fresh.length,
       duplicates,
+      possibleDuplicates,
       lines: fresh,
     };
   });
@@ -1837,7 +1949,9 @@ export interface AutoMatchResult {
  * Auto-match unmatched statement lines to unreconciled, unclaimed posted
  * journal lines on the session's account: exact signed amount + posting date
  * within 3 days ⇒ confidence 0.9; within 14 days ⇒ 0.7. Each journal line is
- * used at most once; the closest date wins.
+ * used at most once; the closest date wins. Lines flagged as possible
+ * duplicates are never auto-matched — the reviewer clears the flag or
+ * excludes the line first.
  */
 export async function autoMatch(reconciliationId: string, ctx: BankingContext): Promise<AutoMatchResult> {
   return db.transaction(async (tx) => {
@@ -1861,6 +1975,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
        where l.account_id = ${recon.account_id} and l.org_id = ${ctx.orgId}
          and l.currency = ${recon.currency}
          and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}
+         and l.possible_duplicate_of is null
        order by l.posted_on, l.line_number
        for update
     `));
@@ -1971,8 +2086,8 @@ async function createMatchInTransaction(
   if (!recon) throw new BankingError("Reconciliation not found");
   if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
 
-  const stmt = (await tx.execute<{ id: string; amount: string; currency: string }>(sql`
-    select l.id, l.amount, l.currency
+  const stmt = (await tx.execute<{ id: string; amount: string; currency: string; possible_duplicate_of: string | null }>(sql`
+    select l.id, l.amount, l.currency, l.possible_duplicate_of
       from bank_statement_lines l
      where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
        and l.account_id = ${recon.account_id}
@@ -1984,6 +2099,11 @@ async function createMatchInTransaction(
   if (!stmt.rows[0]) {
     throw new BankingError(
       "Statement line is unavailable, outside the reconciliation cutoff, or already matched",
+    );
+  }
+  if (stmt.rows[0].possible_duplicate_of) {
+    throw new BankingError(
+      "Statement line is flagged as a possible duplicate of an earlier import — clear the flag or exclude the line before matching",
     );
   }
 
@@ -2162,6 +2282,104 @@ export async function excludeStatementLine(
          })}::jsonb,
          ${ctx.userId})
     `);
+  });
+}
+
+/**
+ * Clear a possible-duplicate flag after review: the line is a genuine
+ * transaction, not a replay. The line stays unmatched (match_status never
+ * moves here), so sign-off still holds it until it matches, and clearing
+ * needs no reconciliation lock for the same reason. Audited with the
+ * evidence it was cleared against.
+ */
+export async function clearPossibleDuplicateFlag(
+  statementLineId: string,
+  ctx: BankingContext,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    // Read the evidence first: UPDATE ... RETURNING would hand back the NEW
+    // (nulled) flag, not the before-image the audit row must record.
+    const before = (await tx.execute<{ id: string; possible_duplicate_of: string }>(sql`
+      select l.id, l.possible_duplicate_of
+        from bank_statement_lines l
+       where l.id = ${statementLineId}
+         and l.org_id = ${ctx.orgId}
+         and l.match_status = 'unmatched'
+         and l.possible_duplicate_of is not null
+       for update
+    `)).rows[0];
+    if (!before) throw new BankingError("Only flagged unmatched lines can be cleared");
+    await tx.execute(sql`
+      update bank_statement_lines l
+         set possible_duplicate_of = null,
+             updated_at = now(),
+             updated_by = ${ctx.userId}
+       where l.id = ${statementLineId} and l.org_id = ${ctx.orgId}
+    `);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'bank_statement_lines', ${statementLineId}, 'update',
+         ${JSON.stringify({
+           operation: "clear_possible_duplicate",
+           before: { possibleDuplicateOf: before.possible_duplicate_of },
+           after: { possibleDuplicateOf: null },
+         })}::jsonb,
+         ${ctx.userId})
+    `);
+  });
+}
+
+/**
+ * Bulk-exclude every flagged unmatched line on an account as duplicates of
+ * their earlier imports: the reviewer's answer to a re-exported file, so it
+ * is not one click per line. Same eligibility as the single-line exclude,
+ * one audited row per line in a single transaction, and the flag is kept as
+ * the evidence the exclusion was decided against.
+ */
+export async function excludePossibleDuplicates(
+  accountId: string,
+  reasonInput: string,
+  ctx: BankingContext,
+): Promise<{ excluded: number }> {
+  const reason = reasonInput.trim();
+  if (reason.length < 5 || reason.length > 500) {
+    throw new BankingError("Exclusion reason must be between 5 and 500 characters");
+  }
+  return db.transaction(async (tx) => {
+    const rows = (await tx.execute<{ id: string; possible_duplicate_of: string }>(sql`
+      update bank_statement_lines l
+         set match_status = 'excluded',
+             exclusion_reason = ${reason},
+             excluded_at = now(),
+             excluded_by = ${ctx.userId},
+             updated_at = now(),
+             updated_by = ${ctx.userId}
+       where l.account_id = ${accountId}
+         and l.org_id = ${ctx.orgId}
+         and l.match_status = 'unmatched'
+         and l.possible_duplicate_of is not null
+      returning l.id, l.possible_duplicate_of
+    `));
+    for (const row of rows.rows) {
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id)
+        values
+          (${ctx.orgId}, 'bank_statement_lines', ${row.id}, 'update',
+           ${JSON.stringify({
+             operation: "exclude",
+             bulk: true,
+             reason,
+             possibleDuplicateOf: row.possible_duplicate_of,
+             before: { matchStatus: "unmatched" },
+             after: { matchStatus: "excluded" },
+           })}::jsonb,
+           ${ctx.userId})
+      `);
+    }
+    return { excluded: rows.rows.length };
   });
 }
 
