@@ -26,6 +26,7 @@ import {
 } from "@openbooks/ui";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export type CrmSetupTab =
   | "accountStatuses"
@@ -247,7 +248,7 @@ function SetupRows({
             row.name ?? row.target_name ?? t("setup.tabs.quotas"),
           );
           return (
-            <TableRow
+            <InteractiveTableRow
               key={row.id}
               className="cursor-pointer"
               tabIndex={0}
@@ -272,7 +273,7 @@ function SetupRows({
                   )}
                 </TableCell>
               ))}
-            </TableRow>
+            </InteractiveTableRow>
           );
         })}
       </TableBody>

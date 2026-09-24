@@ -35,6 +35,7 @@ import { Empty, PROPERTY_TYPE_OPTIONS, RecordTabs, Status } from "./workspace-ui
 import { CamTable } from "./CamTable";
 import { DepositTable, RentTable } from "./LeaseTables";
 import type { CamPool, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyRow, PropertyWorkspace, SaveAction, UnitRow, WorkspaceOptions } from "./types";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type PropertyCustomization = {
   layout: FormLayoutConfig;
@@ -656,7 +657,7 @@ export function PropertyDetailDrawer({
               </TableHeader>
               <TableBody>
                 {units.map((unit) => (
-                  <TableRow
+                  <InteractiveTableRow
                     key={unit.id}
                     tabIndex={0}
                     role="button"
@@ -685,7 +686,7 @@ export function PropertyDetailDrawer({
                     <TableCell>
                       <Status value={unit.status} />
                     </TableCell>
-                  </TableRow>
+                  </InteractiveTableRow>
                 ))}
               </TableBody>
             </Table>
@@ -725,7 +726,7 @@ export function PropertyDetailDrawer({
               </TableHeader>
               <TableBody>
                 {leases.map((lease) => (
-                  <TableRow
+                  <InteractiveTableRow
                     key={lease.id}
                     tabIndex={0}
                     role="button"
@@ -749,7 +750,7 @@ export function PropertyDetailDrawer({
                     <TableCell>
                       <Status value={lease.status} />
                     </TableCell>
-                  </TableRow>
+                  </InteractiveTableRow>
                 ))}
               </TableBody>
             </Table>

@@ -11,6 +11,7 @@ import {
   type AuditEvent,
 } from '../app/(app)/admin/audit/AuditEventDrawer'
 import { hasInspectableChanges } from '../lib/audit-diff'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type AuditRow = {
   id: string
@@ -133,7 +134,7 @@ export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'par
                 // with who/when/context, but the cell says so honestly.
                 const inspectable = hasInspectableChanges(row.changes)
                 return (
-                  <TableRow
+                  <InteractiveTableRow
                     key={row.id}
                     role="button"
                     tabIndex={0}
@@ -159,7 +160,7 @@ export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'par
                         <ChevronRight size={15} aria-hidden />
                       </span>
                     </TableCell>
-                  </TableRow>
+                  </InteractiveTableRow>
                 )
               })}
             </TableBody>

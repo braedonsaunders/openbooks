@@ -15,6 +15,7 @@ import { mergeHref } from '../../../../../lib/list-params'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/projects/labor-costing.ts'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { LaborCostingWizard } from './LaborCostingWizard'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export interface RateRow {
   id: string
@@ -448,7 +449,7 @@ export function LaborCostingWorkspace(props: {
                   })
                   const status = rateState(row, today)
                   return (
-                    <TableRow
+                    <InteractiveTableRow
                       key={row.id}
                       className="cursor-pointer"
                       tabIndex={0}
@@ -476,7 +477,7 @@ export function LaborCostingWorkspace(props: {
                           {t(status === 'current' ? 'rates.statusCurrent' : status === 'scheduled' ? 'rates.statusScheduled' : 'rates.statusEnded')}
                         </Badge>
                       </TableCell>
-                    </TableRow>
+                    </InteractiveTableRow>
                   )
                 })}
               </TableBody>

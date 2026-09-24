@@ -8,6 +8,7 @@ import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { DivergingBar } from '../../_ui/charts'
 import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type SortKey = 'prior' | 'current' | 'change' | 'changePct' | 'contribution'
 
@@ -59,14 +60,14 @@ export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: st
                 </thead>
                 <tbody>
                   {sorted.map((it) => (
-                    <tr key={it.id} onClick={() => onDrill(it.id, it.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                    <InteractiveTableRow key={it.id} onClick={() => onDrill(it.id, it.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                       <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{it.name}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(it.prior)}</td>
                       <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(it.current)}</td>
                       <td className={cn('px-4 py-2 text-right tabular-nums', it.change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(it.change)}</td>
                       <td className={cn('px-4 py-2 text-right tabular-nums', (it.changePct ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{it.changePct === null ? '—' : fmtPct(it.changePct)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(it.contribution)}</td>
-                    </tr>
+                    </InteractiveTableRow>
                   ))}
                 </tbody>
               </table>

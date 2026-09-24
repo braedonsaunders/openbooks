@@ -41,6 +41,7 @@ import {
   ADJUSTMENT_TARGET_TYPES,
   ADJUSTMENT_TEXT_TARGETS,
 } from "../../../../../lib/rate-adjustment-types";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export interface BillCardRow {
   id: string;
@@ -258,7 +259,7 @@ export function LaborBillRateCards(props: {
                 form: undefined,
               });
               return (
-                <TableRow
+                <InteractiveTableRow
                   key={card.id}
                   className="cursor-pointer"
                   onClick={() => router.push(href)}
@@ -298,7 +299,7 @@ export function LaborBillRateCards(props: {
                       )}
                     </Badge>
                   </TableCell>
-                </TableRow>
+                </InteractiveTableRow>
               );
             })}
           </TableBody>

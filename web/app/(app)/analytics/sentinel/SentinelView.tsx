@@ -19,6 +19,7 @@ import { useSort } from '../_ui/useSort'
 import { TxnLink } from '../../reports/TxnLink'
 import { useAnalyticsMoney } from '../_ui/format'
 import { countLabel, dateLabel } from '@/lib/format'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -369,14 +370,14 @@ function BenfordTab({ data }: { data: SentinelData }) {
               </thead>
               <tbody>
                 {b1.digits.map((d) => (
-                  <tr key={d.digit} onClick={() => setDrill({ digit: d.digit, dim: '1d' })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                  <InteractiveTableRow key={d.digit} onClick={() => setDrill({ digit: d.digit, dim: '1d' })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                     <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{d.digit}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{num(d.count)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(d.amount)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{(d.observed * 100).toFixed(2)}%</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-400">{(d.expected * 100).toFixed(2)}%</td>
                     <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', d.isAnomaly ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400')}>{d.deviationPct > 0 ? '+' : ''}{d.deviationPct.toFixed(1)}%</td>
-                  </tr>
+                  </InteractiveTableRow>
                 ))}
               </tbody>
             </table>
@@ -838,10 +839,10 @@ function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillT
           </thead>
           <tbody>
             {sorted.map((v, i) => (
-              <tr
+              <InteractiveTableRow
                 key={`${v.partyId}-${i}`}
                 onClick={v.partyId ? () => onDrill({ kind: 'party', id: v.partyId!, name: v.partyName, sub: t('vendors.drillSub', { flags: v.flagCount, amount: money0(v.totalAmount) }) }) : undefined}
-                className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', v.partyId && 'cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30')}
+                className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', v.partyId && 'cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30')} noAnimate
               >
                 <td className="max-w-56 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={v.partyName}>{v.partyName}</td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{v.flagCount}</td>
@@ -854,7 +855,7 @@ function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillT
                   </span>
                 </td>
                 <td className="px-4 py-2 text-right"><RiskPill score={v.compositeScore} /></td>
-              </tr>
+              </InteractiveTableRow>
             ))}
           </tbody>
         </table>

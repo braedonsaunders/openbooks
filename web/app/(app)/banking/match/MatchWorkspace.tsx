@@ -18,6 +18,7 @@ import { Pagination } from '../../../../components/pagination'
 import { compareDecimal } from '../../../../lib/exact-decimal'
 import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 type Search = Record<string, string | string[] | undefined>
 type Opt = { id: string; label: string; unmatched?: number };
 interface Account { id: string; label: string }
@@ -409,7 +410,7 @@ export function MatchWorkspace({
                 ) : data.stmtRows.map((l) => {
                   const sel = selectedStmt === l.id
                   return (
-                    <TableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={() => setSelectedStmt(sel ? null : l.id)}>
+                    <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={() => setSelectedStmt(sel ? null : l.id)}>
                       <TableCell className="w-8"><input type="radio" name="stmt" checked={sel} onChange={() => setSelectedStmt(sel ? null : l.id)} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })} /></TableCell>
                       <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
                       <TableCell className="max-w-[14rem]">
@@ -449,7 +450,7 @@ export function MatchWorkspace({
                           <Button variant="ghost" size="sm" disabled={busy} title={t('exclude')} onClick={() => exclude(l.id)}><Ban size={14} /></Button>
                         </div>
                       </TableCell>
-                    </TableRow>
+                    </InteractiveTableRow>
                   )
                 })}
               </TableBody>
@@ -478,13 +479,13 @@ export function MatchWorkspace({
                   const sel = selectedGl.has(l.id)
                   const toggle = () => setSelectedGl((p) => { const n = new Set(p); if (n.has(l.id)) n.delete(l.id); else n.add(l.id); return n })
                   return (
-                    <TableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={toggle}>
+                    <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={toggle}>
                       <TableCell className="w-8"><input type="checkbox" checked={sel} onChange={toggle} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectGlLineAria', { entry: l.entry_number, amount: money(l.amount) })} /></TableCell>
                       <TableCell className="whitespace-nowrap">{l.posting_date}</TableCell>
                       <TableCell className="font-mono text-[13px]">{l.entry_number}</TableCell>
                       <TableCell className="max-w-[12rem] truncate">{l.memo ?? l.party ?? '—'}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
-                    </TableRow>
+                    </InteractiveTableRow>
                   )
                 })}
               </TableBody>

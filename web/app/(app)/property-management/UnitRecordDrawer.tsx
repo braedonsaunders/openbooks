@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { Button, Card, CardContent, Drawer, Input, Popover, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
 import { Empty, Field, Read, RecordTabs, Status } from "./workspace-ui";
 import type { LeaseRow, PropertyRow, SaveAction, UnitRow } from "./types";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export function UnitRecordDrawer({
   unit,
@@ -200,7 +201,7 @@ export function UnitRecordDrawer({
               </TableHeader>
               <TableBody>
                 {leases.map((lease) => (
-                  <TableRow
+                  <InteractiveTableRow
                     key={lease.id}
                     tabIndex={0}
                     role="button"
@@ -217,7 +218,7 @@ export function UnitRecordDrawer({
                     <TableCell>{lease.tenantName}</TableCell>
                     <TableCell>{lease.startsOn} – {lease.endsOn || "Open"}</TableCell>
                     <TableCell><Status value={lease.status} /></TableCell>
-                  </TableRow>
+                  </InteractiveTableRow>
                 ))}
               </TableBody>
             </Table>

@@ -14,6 +14,7 @@ import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney, fmtPct } from '../_ui/format'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors'] as const
 type Tab = (typeof TABS)[number]
@@ -186,14 +187,14 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                    <InteractiveTableRow key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                       <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.paidBills}</td>
                       <td className={cn('px-4 py-2 text-right tabular-nums', (r.avgDaysToPay ?? 0) > 45 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300')}>{r.avgDaysToPay === null ? '—' : t('days', { days: Math.round(r.avgDaysToPay) })}</td>
                       <td className={cn('px-4 py-2 text-right font-medium tabular-nums', (r.onTimePct ?? 0) >= 0.6 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.lateSpend > 0 ? money(r.lateSpend) : '—'}</td>
-                    </tr>
+                    </InteractiveTableRow>
                   ))}
                 </tbody>
               </table>
@@ -242,7 +243,7 @@ function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: Vendor
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                <InteractiveTableRow key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                   <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</td>
                   <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></td>
@@ -251,7 +252,7 @@ function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: Vendor
                   <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</td>
                   <td className="px-4 py-2 text-right font-bold tabular-nums text-slate-800 dark:text-slate-200">{Math.round(r.score)}</td>
                   <td className="px-4 py-2 text-center"><span className={cn('rounded px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.grade])}>{r.grade}</span></td>
-                </tr>
+                </InteractiveTableRow>
               ))}
             </tbody>
           </table>
@@ -358,7 +359,7 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+              <InteractiveTableRow key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                 <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.spend)}</td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(r.sharePct)}</td>
@@ -367,7 +368,7 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
                 <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-700 dark:text-slate-300">{Math.round(r.score)}</td>
                 <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></td>
-              </tr>
+              </InteractiveTableRow>
             ))}
           </tbody>
         </table>
