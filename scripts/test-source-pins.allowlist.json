@@ -368,7 +368,6 @@
     "web/lib/report-registers-book.integration.test.ts": 2,
     "web/lib/report-run.test.ts": 1,
     "web/lib/reports-posted.test.ts": 2,
-    "web/lib/role-display.test.ts": 1,
     "web/lib/security-headers.test.ts": 2,
     "web/lib/setup-route-contract.test.ts": 1,
     "web/lib/setup/agents.test.ts": 1,
