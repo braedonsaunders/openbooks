@@ -347,6 +347,33 @@ test("saveConfig accepts setup authority without reconciliation authority", asyn
   });
 });
 
+test("saveConfig rejects truthy text instead of enabling the provider", async () => {
+  reset(["admin.setup.manage"]);
+
+  const response = await post({
+    action: "saveConfig",
+    provider: "stripe",
+    isEnabled: "false",
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "isEnabled must be a boolean" });
+  assert.deepEqual(routeState.domainCalls, []);
+});
+
+test("saveConfig preserves a JSON false value", async () => {
+  reset(["admin.setup.manage"]);
+
+  const response = await post({
+    action: "saveConfig",
+    provider: "stripe",
+    isEnabled: false,
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((routeState.domainCalls[0]?.input as { isEnabled?: boolean }).isEnabled, false);
+});
+
 test("saveConfig refuses restricted setup authority before saving org-wide provider policy", async () => {
   reset(["admin.setup.manage"]);
   routeState.allowedSubsidiaryIds = new Set(["sub-a"]);

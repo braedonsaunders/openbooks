@@ -113,12 +113,15 @@ export async function POST(req: Request) {
       case "saveConfig": {
         const scopeDenied = guardUnrestrictedScope(authz);
         if (scopeDenied) return scopeDenied;
+        if ("isEnabled" in body && typeof body.isEnabled !== "boolean") {
+          return NextResponse.json({ error: "isEnabled must be a boolean" }, { status: 400 });
+        }
         await savePspProviderConfig(
           orgId,
           {
             provider: body.provider as PspProvider,
             displayName: body.displayName,
-            isEnabled: Boolean(body.isEnabled),
+            isEnabled: body.isEnabled ?? false,
             defaultBankAccountId: body.defaultBankAccountId ?? null,
             defaultFeeAccountId: body.defaultFeeAccountId ?? null,
             defaultDisputeAccountId: body.defaultDisputeAccountId ?? null,
