@@ -499,7 +499,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "attestation required" }, { status: 400 });
       }
       return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-        // Serialize link decisions on the target user row.
+        // Serialize link decisions on the target user row. Self-service
+        // statement readers take FOR SHARE on this row before locking their
+        // employment, so unlink waits for in-flight reads and later readers
+        // observe the committed link state.
         const currentRows = await db.execute<{ id: string; party_id: string | null }>(sql`
           select id, party_id from users where id = ${userId} and org_id = ${actor.orgId} for update`);
         const currentRow = currentRows.rows[0];
