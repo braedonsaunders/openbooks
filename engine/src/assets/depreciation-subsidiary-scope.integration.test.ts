@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { db } from "../platform/db.ts";
 import {
   buildSchedule,
   DepreciationRefusalError,
   recordDepreciationInput,
+  runDepreciation,
 } from "./depreciation.ts";
 import {
   createScratchOrg,
@@ -89,6 +91,78 @@ test(
           /outside your subsidiary scope/.test(error.message),
         "an out-of-scope depreciation input is refused",
       );
+
+      // Make the existing schedule stale by adding the next accounting
+      // period. runDepreciation selects it while the asset is in A; the
+      // interception then models an administrator rehoming it to B before
+      // the extension transaction locks/reloads the asset.
+      await db.execute(sql`
+        insert into accounting_periods
+          (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
+        select ${org.orgId}, fiscal_calendar_id,
+               extract(year from ends_on + 1)::int,
+               extract(month from ends_on + 1)::int,
+               to_char(ends_on + 1, 'YYYY-MM'),
+               (ends_on + 1)::date,
+               ((ends_on + 1) + interval '1 month - 1 day')::date,
+               false
+          from accounting_periods where id = ${org.periodId}
+      `);
+      const beforeLines = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from depreciation_schedule_lines l
+        join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id
+        where s.org_id=${org.orgId} and s.asset_id=${assetId}
+      `)).rows[0]!.n;
+      const originalExecute = db.execute.bind(db);
+      let rehomed = false;
+      Object.defineProperty(db, "execute", {
+        configurable: true,
+        writable: true,
+        value: async (query: SQL) => {
+          const result = await originalExecute(query);
+          const statement = new PgDialect().sqlToQuery(query).sql;
+          if (!rehomed && /from\s+depreciation_schedules/i.test(statement)) {
+            rehomed = true;
+            await db.transaction(async (tx) => {
+              await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+              await tx.execute(sql`
+                update fixed_assets set subsidiary_id=${foreignSubId}
+                 where org_id=${org.orgId} and id=${assetId}
+              `);
+            });
+          }
+          return result;
+        },
+      });
+      let run: Awaited<ReturnType<typeof runDepreciation>>;
+      try {
+        run = await runDepreciation(
+          org.orgId,
+          "2026-01-01",
+          actorId,
+          assetId,
+          [org.subsidiaryId],
+          org.bookId,
+        );
+      } finally {
+        Reflect.deleteProperty(db, "execute");
+      }
+      assert.equal(rehomed, true, "the stale schedule candidate must be selected before the simulated rehome");
+      assert.equal(run.problems.length, 1, "the extension must refuse after the locked scope recheck");
+      assert.match(run.problems[0]!, /outside your subsidiary scope/);
+      const afterLines = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from depreciation_schedule_lines l
+        join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id
+        where s.org_id=${org.orgId} and s.asset_id=${assetId}
+      `)).rows[0]!.n;
+      assert.equal(afterLines, beforeLines, "the stale extension must not rewrite an asset after its rehome");
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+        await tx.execute(sql`
+          update fixed_assets set subsidiary_id=${org.subsidiaryId}
+           where org_id=${org.orgId} and id=${assetId}
+        `);
+      });
     } finally {
       await dropScratchOrg(org.orgId);
     }
