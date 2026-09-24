@@ -131,6 +131,140 @@ function freshGlobals() {
   globalThis.__confirmVerdict = true;
 }
 
+async function mountWarehouseDrawer({ kind = "customer_invoice", stockLocations = [{ id: "loc-1", code: "North" }, { id: "loc-2", code: "South" }], subsidiaries = [], showSubsidiary = false, edit = true }: {
+  kind?: "customer_invoice" | "vendor_bill";
+  stockLocations?: { id: string; code: string }[];
+  subsidiaries?: { id: string; name: string; depth: number }[];
+  showSubsidiary?: boolean;
+  edit?: boolean;
+}) {
+  freshGlobals();
+  const restoreFetch = scriptFetch(() => null);
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const doc = {
+    id: randomUUID(),
+    kind,
+    status: "draft",
+    document_number: "INV-00072",
+    currency: "USD",
+    updated_at: "2026-09-17T12:00:00.000000Z",
+    document_date: "2026-09-17",
+    subsidiary_id: null,
+    subtotal: "12.00",
+    tax_total: "0.00",
+    total: "12.00",
+  };
+  const stockedItemId = "inventory-item";
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <DocumentDrawer
+            payload={{ doc, lines: [
+              { id: randomUUID(), line_number: 1, account_id: randomUUID(), item_id: stockedItemId, description: "Stock item", quantity: "1", unit_price: "10", amount: "10", stock_location_id: "loc-1", custom: {} },
+              { id: randomUUID(), line_number: 2, account_id: randomUUID(), item_id: "service-item", description: "Service", quantity: "1", unit_price: "2", amount: "2", stock_location_id: null, custom: {} },
+            ] }}
+            config={DOC_KINDS[kind]!}
+            basePath={kind === "customer_invoice" ? "/ar/invoices" : "/ap/bills"}
+            recordType={kind}
+            parties={[]}
+            accounts={[]}
+            taxCodes={[]}
+            taxGroups={[]}
+            cards={[]}
+            bankAccounts={[]}
+            departments={[]}
+            projects={[]}
+            locations={[]}
+            classes={[]}
+            items={[{ id: stockedItemId, has_inventory_profile: true }]}
+            stockLocations={stockLocations}
+            subsidiaries={subsidiaries}
+            headerDefs={[]}
+            lineDefs={[]}
+            segments={SEGMENTS}
+            canCreate
+            canPost
+            layout={{ header: { groups: showSubsidiary ? [{ id: "subsidiary", fields: [{ key: "subsidiary_id", visible: true }] }] : [] }, lines: { columns: [] }, actions: [] } as never}
+          />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  if (edit) {
+    await act(async () => {
+      const editButton = buttonsNamed("Edit")[0];
+      assert.ok(editButton, "a draft document must offer Edit");
+      editButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+    });
+  }
+  return {
+    host,
+    async done() {
+      await act(async () => root.unmount());
+      host.remove();
+      restoreFetch();
+    },
+  };
+}
+
+test("warehouse picker appears for stocked invoice lines when operators can choose a location", async (t) => {
+  const { done } = await mountWarehouseDrawer({});
+  t.after(done);
+
+  assert.match(document.body.textContent ?? "", /Warehouse/);
+  const selectedWarehouse = [...document.querySelectorAll("button")].filter((button) => button.textContent?.trim() === "North");
+  assert.equal(selectedWarehouse.length, 1, "only the stocked row exposes its selected warehouse");
+});
+
+test("warehouse picker is absent when one location leaves no operator choice", async (t) => {
+  const { done } = await mountWarehouseDrawer({ stockLocations: [{ id: "loc-1", code: "North" }] });
+  t.after(done);
+
+  assert.doesNotMatch(document.body.textContent ?? "", /Warehouse/);
+});
+
+test("warehouse picker is not shown on non-invoice documents", async (t) => {
+  const { done } = await mountWarehouseDrawer({ kind: "vendor_bill" });
+  t.after(done);
+
+  assert.doesNotMatch(document.body.textContent ?? "", /Warehouse/);
+});
+
+test("an unset subsidiary editor does not display the root as its selection", async (t) => {
+  const { done } = await mountWarehouseDrawer({
+    subsidiaries: [
+      { id: "root-sub", name: "Main Co", depth: 0 },
+      { id: "child-sub", name: "Regional Co", depth: 1 },
+    ],
+    showSubsidiary: true,
+  });
+  t.after(done);
+
+  assert.match(document.body.textContent ?? "", /Subsidiary/);
+  assert.doesNotMatch(document.body.textContent ?? "", /Main Co/, "an unset field must not impersonate the root subsidiary");
+});
+
+test("an unset subsidiary remains visibly unset in view mode", async (t) => {
+  const { done } = await mountWarehouseDrawer({
+    subsidiaries: [
+      { id: "root-sub", name: "Main Co", depth: 0 },
+      { id: "child-sub", name: "Regional Co", depth: 1 },
+    ],
+    showSubsidiary: true,
+    edit: false,
+  });
+  t.after(done);
+
+  assert.match(document.body.textContent ?? "", /Subsidiary/);
+  assert.doesNotMatch(document.body.textContent ?? "", /Main Co/, "an unset field must not be presented as the root");
+});
+
 test("a converted-bill save sends stable line identities and no native evidence", async (t) => {
   freshGlobals();
   const docId = randomUUID();
@@ -255,6 +389,11 @@ test("a converted-bill save sends stable line identities and no native evidence"
   const firstLines = (sentBodies[0]!.lines ?? []) as Record<string, unknown>[];
   assert.equal(firstLines.length, 1);
   assert.equal(firstLines[0]!.lineId, persistedLineId, "the save round-trips the loader line identity");
+  assert.equal(
+    firstLines[0]!.stockLocationId,
+    lines[0]!.stock_location_id,
+    "an existing line keeps its assigned warehouse through an edit save",
+  );
   const firstCustom = (firstLines[0]!.custom ?? {}) as Record<string, unknown>;
   assert.equal(firstCustom.purchaseOrderLineId, undefined, "native evidence is never sent");
   assert.equal(firstCustom.convertedFrom, undefined);
