@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// FeaturesWorkspace F4T-16: disabling a feature with stored records called
-// the native window.confirm. The house confirm dialog gates the toggle
-// instead, so the operator gets the translated impact copy with Confirm /
-// Cancel — and automation can drive it.
 const { JSDOM } = await import('jsdom')
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
   url: 'http://localhost:4800/admin/setup/features',
@@ -30,7 +26,6 @@ if (typeof window.matchMedia !== 'function') {
     removeEventListener() {},
   })) as typeof window.matchMedia
 }
-// The native dialog must never fire: fail loudly if anything calls it.
 window.confirm = (() => {
   throw new Error('native window.confirm must not be used')
 }) as typeof window.confirm
@@ -99,7 +94,9 @@ async function mount() {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <ConfirmRoot />
         <FeaturesWorkspace
-          features={[{ key: 'projects', category: 'operations', enabled: true }]}
+          features={['projects', 'timeTracking', 'fieldTime', 'fieldTimeGeofence'].map(
+            (key, index, keys) => ({ key, category: 'operations', enabled: true, ...(index ? { parentKey: keys[index - 1] } : {}) }),
+          )}
           disableStatus={{ projects: { blocked: false, impacts: [{ labelKey: 'reconciliations', count: 2 }] } }}
         />
       </NextIntlClientProvider>,
@@ -120,6 +117,8 @@ test('disabling a feature with impacts confirms through the house dialog, not wi
   })
   const sw = document.body.querySelector('[role="switch"]') as HTMLElement | null
   assert.ok(sw, 'the feature row offers a switch')
+  const nested = document.querySelector('[aria-label="Clock geofences"]')?.closest('.flex.items-start') as HTMLElement | null
+  assert.equal(nested?.style.paddingLeft, '64px')
   await act(async () => {
     sw.click()
     await tick()
