@@ -55,7 +55,8 @@ export async function loadCollections(): Promise<CollectionsData> {
   const authz = await requirePermission('documents.manage').catch(() => null)
   if (!authz) redirect('/dashboard')
 
-  const subscriptionsEnabled = await isFeatureEnabled(authz.user.orgId, 'subscriptionBilling')
+  const subscriptionsEnabled =
+    can(authz, 'ar.read') && (await isFeatureEnabled(authz.user.orgId, 'subscriptionBilling'))
   const advancedSubscriptionsEnabled =
     subscriptionsEnabled && (await isFeatureEnabled(authz.user.orgId, 'advancedSubscriptions'))
   const [customers, incomeAccounts] = subscriptionsEnabled

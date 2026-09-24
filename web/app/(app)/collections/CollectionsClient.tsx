@@ -104,9 +104,12 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
   // `ar.collections.subscriptions.errors.actionFailed` whenever the API
   // refused without a message body.
   const tErrors = useTranslations("ar.collections.errors");
+  const tCommonActions = useTranslations("common.actions");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [mrr, setMrr] = useState("0.0000");
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [planForm, setPlanForm] = useState({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" });
@@ -116,12 +119,24 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
-  const load = () => {
-    return fetch("/api/subscriptions").then((r) => {
-      if (r.ok) return r.json().then((d) => { setPlans(d.plans ?? []); setSubs(d.subscriptions ?? []); setMrr(d.mrr ?? "0.0000"); });
-    });
-  };
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch("/api/subscriptions");
+      if (!response.ok) {
+        setLoadError(tErrors("actionFailed"));
+        return;
+      }
+      const data = await response.json();
+      setLoadError(null);
+      setPlans(data.plans ?? []);
+      setSubs(data.subscriptions ?? []);
+      setMrr(data.mrr ?? "0.0000");
+      setLoaded(true);
+    } catch {
+      setLoadError(tErrors("actionFailed"));
+    }
+  }, [tErrors]);
+  useEffect(() => { void Promise.resolve().then(load); }, [load]);
 
   const post = async (payload: Record<string, unknown>) => {
     setError(null); setMsg(null);
@@ -134,10 +149,11 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
 
   return (
     <div className="space-y-6">
-      <Card className="flex items-center justify-between p-4">
+      {loadError && <div role="alert" className="flex items-center gap-3 text-sm text-red-600">{loadError}<Button variant="outline" onClick={() => void load()}>{tCommonActions("retry")}</Button></div>}
+      {loaded && <Card className="flex items-center justify-between p-4">
         <div><div className="text-xs text-muted-foreground">{t("mrr")}</div><div className="text-2xl font-semibold">{money(mrr)}</div></div>
         <div className="text-sm text-muted-foreground">{t("summary", { active: subs.filter((s) => s.status === "active").length, plans: plans.length })}</div>
-      </Card>
+      </Card>}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {msg && <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>}
@@ -157,7 +173,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                   <td className="text-right"><Button size="sm" variant="ghost" onClick={() => post({ action: "deletePlan", id: p.id })}>{t("delete")}</Button></td>
                 </tr>
               ))}
-              {plans.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-muted-foreground">{t("noPlans")}</td></tr>}
+              {loaded && plans.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-muted-foreground">{t("noPlans")}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -223,7 +239,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                   </td>
                 </tr>
               ))}
-              {subs.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-muted-foreground">{t("noSubs")}</td></tr>}
+              {loaded && subs.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-muted-foreground">{t("noSubs")}</td></tr>}
             </tbody>
           </table>
         </div>
