@@ -47,6 +47,14 @@ async function policyKind(orgId: string, id: string): Promise<string | undefined
   return r.rows[0]?.kind;
 }
 
+const ladderStage = () => ({
+  sequence: 1,
+  name: "Nudge",
+  offsetDays: 7,
+  subjectTemplate: "s",
+  bodyTemplate: "b",
+});
+
 test("dunning [id] routes return 404 for a malformed policy id", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
@@ -82,7 +90,8 @@ test("dunning policies only apply to dunnable receivable kinds", { skip: !proces
     assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
 
     // Omitted defaults to the receivable kind; explicit receivable kinds pass.
-    const created = await create(json("POST", { name: "Collections", stages: [] }));
+    // (A ladder is supplied: activating a stage-less policy is refused.)
+    const created = await create(json("POST", { name: "Collections", stages: [ladderStage()] }));
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
     const { id } = (await created.json()) as { id: string };
     assert.equal(await policyKind(org.orgId, id), "customer_invoice");

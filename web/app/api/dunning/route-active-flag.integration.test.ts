@@ -50,6 +50,23 @@ async function activeFlag(orgId: string, id: string): Promise<boolean | undefine
   return r.rows[0]?.is_active;
 }
 
+async function stageCount(orgId: string, id: string): Promise<number> {
+  const r = await withBypassContext(() =>
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from dunning_stages where policy_id = ${id} and org_id = ${orgId}`,
+    ),
+  );
+  return r.rows[0]!.n;
+}
+
+const ladderStage = () => ({
+  sequence: 1,
+  name: "Nudge",
+  offsetDays: 7,
+  subjectTemplate: "s",
+  bodyTemplate: "b",
+});
+
 test("dunning writes refuse a non-boolean isActive without writing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
@@ -77,11 +94,33 @@ test("dunning writes refuse a non-boolean isActive without writing", { skip: !pr
     }
     assert.equal(await activeFlag(org.orgId, id), false, "refused PATCH writes nothing");
 
-    // Controls: real booleans still write on both paths, omission stays active.
+    // A-S19: activating a stage-less ladder is refused on both paths — the
+    // runner could never fire it, so storing it live only parks a no-op.
+    // (Contract change per the finding: activation now requires a ladder.)
+    const activateEmpty = await patch(json("PATCH", { isActive: true }), params(id));
+    assert.equal(activateEmpty.status, 422, JSON.stringify(await activateEmpty.clone().json()));
+    assert.deepEqual(await activateEmpty.json(), { error: "cannot activate a policy with no stages — add at least one stage or deactivate it first" });
+    assert.equal(await activeFlag(org.orgId, id), false, "refused activation writes nothing");
+
+    const createEmpty = await create(json("POST", { name: "Default-on", stages: [] }));
+    assert.equal(createEmpty.status, 422, JSON.stringify(await createEmpty.clone().json()));
+    assert.deepEqual(await createEmpty.json(), { error: "cannot activate a policy with no stages — add at least one stage or create it inactive" });
+    const countAfter = await withBypassContext(() =>
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+    );
+    assert.equal(countAfter.rows[0]!.n, 1, "a refused create stores nothing (only the inactive policy exists)");
+
+    // Controls: real booleans still write; omission stays active when a
+    // ladder is supplied; pruning the ladder off a live policy is refused.
+    const staged = await patch(json("PATCH", { stages: [ladderStage()] }), params(id));
+    assert.equal(staged.status, 200, JSON.stringify(await staged.clone().json()));
     const activated = await patch(json("PATCH", { isActive: true }), params(id));
     assert.equal(activated.status, 200, JSON.stringify(await activated.clone().json()));
     assert.equal(await activeFlag(org.orgId, id), true);
-    const omitted = await create(json("POST", { name: "Default-on", stages: [] }));
+    const pruned = await patch(json("PATCH", { stages: [] }), params(id));
+    assert.equal(pruned.status, 422, JSON.stringify(await pruned.clone().json()));
+    assert.equal(await stageCount(org.orgId, id), 1, "refused prune keeps the ladder");
+    const omitted = await create(json("POST", { name: "Default-on", stages: [ladderStage()] }));
     assert.equal(omitted.status, 201, JSON.stringify(await omitted.clone().json()));
     assert.equal(await activeFlag(org.orgId, (await omitted.json()).id as string), true);
   } finally {

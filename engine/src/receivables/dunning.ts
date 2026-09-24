@@ -161,6 +161,14 @@ export interface DunningRunResult {
    * another's collections; each failure is also logged, never silent.
    */
   orgErrors: { orgId: string; error: string }[];
+  /**
+   * Active policies the tick did not run, by name: stage-less ladders that
+   * predate the activation refusal (creating or activating one is refused at
+   * the boundary now). Surfaced here instead of silently skipped so a
+   * collections ladder that can never fire is visible every tick until the
+   * admin adds a stage or deactivates it.
+   */
+  skippedPolicies: { policyId: string; policyName: string; reason: string }[];
 }
 
 /**
@@ -300,7 +308,7 @@ async function runDunningInternal(
   asOf: string | undefined,
   orgRows: ReadonlyArray<{ orgId: string }>,
 ): Promise<DunningRunResult> {
-  const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [], orgErrors: [] };
+  const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [], orgErrors: [], skippedPolicies: [] };
 
   for (const { orgId } of orgRows) {
     try {
@@ -309,6 +317,7 @@ async function runDunningInternal(
       result.sent += one.sent;
       result.failed += one.failed;
       result.notices.push(...one.notices);
+      result.skippedPolicies.push(...one.skippedPolicies);
     } catch (e) {
       // Per-org isolation: one tenant's misconfigured calendar or unreadable
       // policy is recorded by name and the loop continues — orgs later in the
@@ -328,7 +337,7 @@ async function runDunningInternal(
  * entry point lets it propagate so a targeted run still fails loudly.
  */
 async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promise<DunningRunResult> {
-  const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [], orgErrors: [] };
+  const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [], orgErrors: [], skippedPolicies: [] };
   await withOrg(orgId, async () => {
       // Overdue math compares calendar days, so "today" is the org's business
       // day — the scheduler itself runs on the server's UTC day.
@@ -340,12 +349,13 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
 
       const policies = (await db.execute<{
           id: string;
+          name: string;
           appliesToKind: string;
           gracePeriodDays: number;
           minBalance: string;
           replyTo: string | null;
         }>(sql`
-        select id, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
+        select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
                min_balance as "minBalance", reply_to as "replyTo"
           from dunning_policies where org_id = ${orgId} and is_active
       `));
@@ -364,7 +374,21 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
            order by sequence
         `));
         const stages = stageRows.rows;
-        if (!stages.length) continue;
+        if (!stages.length) {
+          // Stage-less active policies predate the activation refusal and
+          // can never fire a rung. Skip loudly — a named entry on the tick
+          // result plus the log line — instead of silently collecting no
+          // documents forever.
+          result.skippedPolicies.push({
+            policyId: policy.id,
+            policyName: policy.name,
+            reason: "policy has no stages — add a collections ladder or deactivate it",
+          });
+          console.warn(
+            `[dunning] policy ${policy.id} (${policy.name}) has no stages — skipped; add a ladder or deactivate it`,
+          );
+          continue;
+        }
 
         // The earliest day any rung can reach, in signed days from the due
         // date: a negative courtesy offset pulls the scan window BEFORE the
