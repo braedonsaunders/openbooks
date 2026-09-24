@@ -11,6 +11,7 @@ import {
   assertIdempotentReplay,
   assertPlanVersionMutable,
   firstLifecycleBillOn,
+  lifecycleAnchorDay,
   lifecycleBillingPeriod,
   renewalAction,
   resolveEffectiveLifecycleState,
@@ -33,6 +34,38 @@ test("arrears bills one interval after service begins, including after a trial",
 test("advance and arrears produce different service periods around the same bill date", () => {
   assert.deepEqual(lifecycleBillingPeriod({ billOn: "2026-02-01", serviceAnchor: "2026-01-01", billingTiming: "arrears", interval: "monthly", intervalCount: 1 }), { periodStartsOn: "2026-01-01", periodEndsOn: "2026-02-01" });
   assert.deepEqual(lifecycleBillingPeriod({ billOn: "2026-02-01", serviceAnchor: "2026-01-01", billingTiming: "advance", interval: "monthly", intervalCount: 1 }), { periodStartsOn: "2026-02-01", periodEndsOn: "2026-03-01" });
+});
+
+test("month-end anchors re-pin every step instead of drifting from the clamped date", async () => {
+  const { advanceLifecycleDate } = await import("./advanced-subscriptions.ts");
+  // A Jan 31 lifecycle clamps to Feb 28 once; the next step must read day 31
+  // again (Mar 31), not day 28 (Mar 28) — the drift that lost Mar 29-31.
+  assert.equal(advanceLifecycleDate("2026-01-31", "monthly", 1, 31), "2026-02-28");
+  assert.equal(advanceLifecycleDate("2026-02-28", "monthly", 1, 31), "2026-03-31");
+  assert.equal(advanceLifecycleDate("2026-03-31", "monthly", 1, 31), "2026-04-30");
+  assert.equal(advanceLifecycleDate("2024-02-29", "monthly", 1, 29), "2024-03-29");
+  assert.equal(advanceLifecycleDate("2027-02-28", "annually", 1, 29), "2028-02-29");
+  assert.equal(advanceLifecycleDate("2025-11-30", "quarterly", 1, 31), "2026-02-28");
+});
+
+test("anchored advance windows are contiguous with no gaps or overlaps", () => {
+  const advance = (billOn: string) =>
+    lifecycleBillingPeriod({ billOn, serviceAnchor: billOn, billingTiming: "advance", interval: "monthly", intervalCount: 1, anchorDay: 31 });
+  const first = advance("2026-01-31");
+  const second = advance(first.periodEndsOn);
+  const third = advance(second.periodEndsOn);
+  assert.deepEqual(first, { periodStartsOn: "2026-01-31", periodEndsOn: "2026-02-28" });
+  assert.deepEqual(second, { periodStartsOn: "2026-02-28", periodEndsOn: "2026-03-31" });
+  assert.deepEqual(third, { periodStartsOn: "2026-03-31", periodEndsOn: "2026-04-30" });
+  assert.equal(second.periodStartsOn, first.periodEndsOn);
+  assert.equal(third.periodStartsOn, second.periodEndsOn);
+});
+
+test("the lifecycle anchor is the day service first billed from", () => {
+  assert.equal(lifecycleAnchorDay({ termStartsOn: "2026-01-31", trialEndsOn: null, fallback: "2026-01-31" }), 31);
+  assert.equal(lifecycleAnchorDay({ termStartsOn: "2026-01-15", trialEndsOn: "2026-01-31", fallback: "2026-01-15" }), 31);
+  assert.equal(lifecycleAnchorDay({ termStartsOn: "2026-01-15", trialEndsOn: "2026-01-10", fallback: "2026-01-15" }), 15);
+  assert.equal(lifecycleAnchorDay({ termStartsOn: null, trialEndsOn: null, fallback: "2026-03-10" }), 10);
 });
 
 test("published catalog terms are immutable", () => {
