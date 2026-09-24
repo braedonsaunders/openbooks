@@ -8,6 +8,7 @@ import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } f
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid, pickString } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { isIso4217CurrencyCode } from '@openbooks/engine/src/fx/currencies.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
@@ -196,6 +197,16 @@ export async function POST(req: Request) {
   }
   if (amount === null) return NextResponse.json({ error: 'amount is required' }, { status: 400 })
   amount = normalizeMoney(amount)
+  // A waiver denominated in an unknown code would settle against money it
+  // cannot name: refuse through the shared ISO 4217 gate (the same registry
+  // the payables capture and ledger posting boundaries refuse through) with
+  // a named 422, instead of storing free text the payment control would read
+  // back. There is no FK or CHECK on lien_waivers.currency, so this route is
+  // the enforcement point — for an explicitly supplied code and for the
+  // bill/org fallbacks alike.
+  if (!isIso4217CurrencyCode(currency)) {
+    return NextResponse.json({ error: `unknown currency ${JSON.stringify(currency)} — use a 3-letter ISO 4217 code in uppercase (e.g. USD)` }, { status: 422 })
+  }
 
   try {
     return NextResponse.json(
