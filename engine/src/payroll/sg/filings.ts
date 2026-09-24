@@ -48,10 +48,11 @@
  * withholding (IRAS, Reporting Employee Earnings; Tax Clearance (IR21)),
  * so an IR8A reports remuneration and CPF, never a year's withholding.
  *
- * HONEST YEARS. Only 2026: the one year with transcribed CPF tables
- * (`sgRatesForTaxYear` refuses every other year by name, and without those
- * tables the compulsory-CPF deduction box cannot be priced). Prior years
- * are the pack's one remaining transcription and stay refused.
+ * HONEST YEARS. The transcribed years in SG_TRANSCRIBED_YEARS (./rates.ts:
+ * 2024, 2025, 2026): the compulsory-CPF deduction box prices from those
+ * tables, and `sgRatesForTaxYear` refuses every other year by name. Years
+ * before 2024 stay refused — they are the pack's one remaining
+ * transcription.
  */
 import { sql } from "drizzle-orm";
 import { add } from "../../money/money.ts";

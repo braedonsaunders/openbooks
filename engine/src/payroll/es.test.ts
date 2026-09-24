@@ -113,6 +113,9 @@ test("ES regions list all 19 communities and support the 17 AEAT ones", () => {
   const withholding = new Map(ES_WITHHOLDING.regions.map((region) => [region.region, region]));
   for (const code of [...regions.supported]) {
     assert.equal(withholding.get(code)?.implemented, true, code);
+    // An implemented region carries no refusal text: the AEAT procedimiento
+    // general is transcribed, so there is no "not implemented" reason to give.
+    assert.equal(withholding.get(code)?.unimplementedReason, undefined, code);
   }
 });
 
