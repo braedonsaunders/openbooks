@@ -227,6 +227,18 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Meinen Standort verwenden",
     "locationDenied": "Standort nicht verfügbar — Koordinaten von Hand eingeben.",
-    "saveGeofence": "Geofence speichern"
+    "saveGeofence": "Geofence speichern",
+    "subjects": {
+      "timesheetWeek": "Abrechnungswoche",
+      "crewTimeBatch": "Zeiterfassungsteam"
+    },
+    "approvers": {
+      "supervisor": "Vorgesetzte Person",
+      "projectManager": "Projektleitung",
+      "payroll": "Lohnabrechnung",
+      "role": "Rolle",
+      "namedRole": "Rolle: {role}"
+    },
+    "unknownApprovalTarget": "Unbekanntes Genehmigungsziel"
   }
 }

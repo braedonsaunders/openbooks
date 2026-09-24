@@ -65,15 +65,13 @@ Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
-const messages = (await import("../../messages/en")).default as {
-  timesheets: { field: Record<string, string> };
-};
+const messages = (await import("../../messages/en")).default;
 const { FieldTimeSetup } = await import("./FieldTimeSetup");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const fieldMessages = messages.timesheets.field;
 function msg(key: string): string {
-  const value = fieldMessages[key];
+  const value = fieldMessages[key as keyof typeof fieldMessages];
   assert.ok(typeof value === "string", `message catalog must carry timesheets.field.${key}`);
   return value;
 }
@@ -107,7 +105,7 @@ test("filling every visible rule sends the complete rule set", async () => {
               photoRequired: false,
             }}
             kiosks={[]}
-            chains={[]}
+            chains={[{ subject: "timesheet_week", stages: [{ order: 1, approverKind: "supervisor" }, { order: 2, approverKind: "role", roleKey: "field_manager" }] }, { subject: "future_subject", stages: [{ order: 1, approverKind: "future_approver" }] }]}
             kioskLinkBase="/kiosk"
           />
         </NextIntlClientProvider>,
@@ -132,10 +130,7 @@ test("filling every visible rule sends the complete rule set", async () => {
       option.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
     });
-    assert.ok(
-      buttons().some((b) => b.textContent?.includes(msg("rounding15"))),
-      "the picked rounding must reach the trigger display",
-    );
+    assert.ok(buttons().some((b) => b.textContent?.includes(msg("rounding15"))) && host.textContent?.includes("Timesheet week") && host.textContent.includes("Supervisor") && host.textContent.includes("Role: field_manager") && host.textContent.includes("Unknown approval target"), "the picked rule and localized approval target labels must render");
 
     // Break, auto-close, tolerance: type into the inputs behind their
     // ghost placeholders.

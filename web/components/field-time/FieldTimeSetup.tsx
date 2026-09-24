@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Select } from '@openbooks/ui'
 import { Field } from '@/components/field'
+import { enumLabel } from '@/lib/enum-label'
 
 export interface FieldTimeRuleSettings {
   roundingIncrement: number | null
@@ -31,6 +32,9 @@ export interface StageChain {
   stages: Array<{ order: number; approverKind: string; roleKey?: string | null }> | null
 }
 
+type ApprovalSubject = 'timesheet_week' | 'crew_time_batch'
+type ApprovalKind = 'supervisor' | 'project_manager' | 'payroll' | 'role'
+
 /**
  * The field-time setup surface: declared rounding/break/auto-close/
  * signature/tolerance/photo rules, kiosk devices with token issue and
@@ -49,6 +53,16 @@ export function FieldTimeSetup({
   kioskLinkBase: string
 }) {
   const t = useTranslations('timesheets')
+  const approvalSubjects = {
+    timesheet_week: t('field.subjects.timesheetWeek'),
+    crew_time_batch: t('field.subjects.crewTimeBatch'),
+  } satisfies Record<ApprovalSubject, string>
+  const approverKinds = {
+    supervisor: t('field.approvers.supervisor'),
+    project_manager: t('field.approvers.projectManager'),
+    payroll: t('field.approvers.payroll'),
+    role: t('field.approvers.role'),
+  } satisfies Record<ApprovalKind, string>
   const [settings, setSettings] = useState<FieldTimeRuleSettings>(initialSettings)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -231,10 +245,10 @@ export function FieldTimeSetup({
         <h2 className="text-base font-semibold">{t('field.stagesTitle')}</h2>
         {chains.map((chain) => (
           <div key={chain.subject} className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-            <p className="font-medium">{chain.subject}</p>
+            <p className="font-medium">{enumLabel(chain.subject, approvalSubjects, t('field.unknownApprovalTarget'))}</p>
             <p className="text-sm text-slate-500">
               {chain.stages && chain.stages.length > 0
-                ? chain.stages.map((stage) => `${stage.order}. ${stage.approverKind}${stage.roleKey ? ` (${stage.roleKey})` : ''}`).join(' → ')
+                ? chain.stages.map((stage) => `${stage.order}. ${enumLabel(stage.approverKind, approverKinds, t('field.unknownApprovalTarget'))}${stage.roleKey ? ` (${t('field.approvers.namedRole', { role: stage.roleKey })})` : ''}`).join(' → ')
                 : t('field.singleApproval')}
             </p>
           </div>

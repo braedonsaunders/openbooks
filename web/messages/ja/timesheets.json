@@ -227,6 +227,18 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "現在地を使う",
     "locationDenied": "位置を取得できません — 座標を手入力してください。",
-    "saveGeofence": "ジオフェンスを保存"
+    "saveGeofence": "ジオフェンスを保存",
+    "subjects": {
+      "timesheetWeek": "タイムシート週",
+      "crewTimeBatch": "チーム時間記録"
+    },
+    "approvers": {
+      "supervisor": "上司",
+      "projectManager": "プロジェクトマネージャー",
+      "payroll": "給与",
+      "role": "ロール",
+      "namedRole": "役割: {role}"
+    },
+    "unknownApprovalTarget": "不明な承認対象"
   }
 }

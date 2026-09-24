@@ -227,6 +227,18 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "使用我的位置",
     "locationDenied": "无法获取位置 — 请手动输入坐标。",
-    "saveGeofence": "保存围栏"
+    "saveGeofence": "保存围栏",
+    "subjects": {
+      "timesheetWeek": "工时表周",
+      "crewTimeBatch": "团队工时批次"
+    },
+    "approvers": {
+      "supervisor": "主管",
+      "projectManager": "项目经理",
+      "payroll": "薪资",
+      "role": "角色",
+      "namedRole": "角色：{role}"
+    },
+    "unknownApprovalTarget": "未知审批对象"
   }
 }

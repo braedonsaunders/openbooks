@@ -227,6 +227,18 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Usar minha posição",
     "locationDenied": "Posição indisponível — digite as coordenadas à mão.",
-    "saveGeofence": "Salvar cerca"
+    "saveGeofence": "Salvar cerca",
+    "subjects": {
+      "timesheetWeek": "Semana de folha de ponto",
+      "crewTimeBatch": "Registro de horas da equipe"
+    },
+    "approvers": {
+      "supervisor": "Pessoa supervisora",
+      "projectManager": "Gerente de projeto",
+      "payroll": "Folha de pagamento",
+      "role": "Função",
+      "namedRole": "Função: {role}"
+    },
+    "unknownApprovalTarget": "Destino de aprovação desconhecido"
   }
 }
