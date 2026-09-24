@@ -80,7 +80,7 @@ test("agent findings tile counts the inbox scope, not the org", { skip: !DB }, a
     const reader = await withBypassContext(() => createScratchUser(org.orgId, "Watcher", "b06_tile_watcher"));
     const authz = authzFor(org.orgId, reader as unknown as string, ["assistant.use", "gl.read", "dashboard.read"]);
     assert.equal(canSeeWidget(authz, "kpi-agent-findings"), true);
-    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authz));
+    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authz, ["kpi-agent-findings"]));
     assert.equal(metrics.agentFindingsOpen, 2);
     assert.equal(metrics.agentFindingsProposals, 1);
     assert.equal(metrics.agentFindingsLastRun, new Date(fresh).toISOString());
@@ -92,7 +92,7 @@ test("agent findings tile counts the inbox scope, not the org", { skip: !DB }, a
     // No assistant.use: the tile hides and the counts stay zero.
     const blind = authzFor(org.orgId, reader as unknown as string, ["gl.read", "dashboard.read"]);
     assert.equal(canSeeWidget(blind, "kpi-agent-findings"), false);
-    const blindMetrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(blind));
+    const blindMetrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(blind, ["kpi-agent-findings"]));
     assert.equal(blindMetrics.agentFindingsOpen, 0);
     assert.equal(blindMetrics.agentFindingsProposals, 0);
     assert.equal(blindMetrics.agentFindingsLastRun, null);
