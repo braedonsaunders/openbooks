@@ -446,6 +446,37 @@ test('route rejects an unknown importMode instead of coercing it to upsert', asy
   assert.equal(importState.historyInsertCalls, 0)
 })
 
+test('route refuses mapping targets and sources absent from the enabled resource and imported rows', async () => {
+  resetImportState()
+  const targetResponse = await preview(
+    [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000', memo: 'Memo' }],
+    { documentDate: 'documentDate', account: 'account', amount: 'amount', memo: 'descripton' },
+  )
+  assert.equal(targetResponse.status, 400)
+  assert.match((await targetResponse.json()).error, /target field "descripton" is not available/)
+  assert.equal(importState.resourceWriteCalls, 0)
+
+  resetImportState()
+  const sourceResponse = await preview(
+    [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000' }],
+    { documentDate: 'documentDate', account: 'account', amount: 'amount', missingColumn: 'memo' },
+  )
+  assert.equal(sourceResponse.status, 400)
+  assert.match((await sourceResponse.json()).error, /source column "missingColumn" is not present/)
+  assert.equal(importState.resourceWriteCalls, 0)
+})
+
+test('route refuses a subsidiary target hidden by the current feature set', async () => {
+  resetImportState()
+  const response = await preview(
+    [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000', subsidiary: 'Root' }],
+    { documentDate: 'documentDate', account: 'account', amount: 'amount', subsidiary: 'subsidiary' },
+  )
+  assert.equal(response.status, 400)
+  assert.match((await response.json()).error, /target field "subsidiary" is not available/)
+  assert.equal(importState.resourceWriteCalls, 0)
+})
+
 test('route rejects a non-boolean posting flag instead of treating it as true', async () => {
   resetImportState()
 
