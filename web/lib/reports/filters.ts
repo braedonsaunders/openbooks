@@ -59,6 +59,16 @@ export function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
  */
 export type DimensionScope = readonly string[] | ReadonlySet<string> | null | undefined;
 
+/** Keep report filter option queries scoped even when consolidated-rate resolution refuses. */
+export function dimensionOptionsScope(
+  resolvedReportScope: readonly string[] | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): DimensionScope {
+  if (resolvedReportScope !== undefined) return resolvedReportScope
+  if (allowedSubsidiaryIds === null) return undefined
+  return allowedSubsidiaryIds ?? []
+}
+
 function dimensionSubsidiaryFilter(column: SQL, scope: DimensionScope): SQL {
   if (scope === null || scope === undefined) return sql``;
   const ids = [...scope];
