@@ -131,12 +131,11 @@ test("any Additional Wages are refused — the AW ceiling is year-dependent", ()
   );
 });
 
-test("foreigners, graduated SPR years and other age bands are refused by name", () => {
+test("foreigners are outside CPF; graduated SPR years and other age bands are refused by name", () => {
   const tables2026 = sgTablesForTaxYear(2026);
-  assert.throws(
-    () => assertSgCovered("foreigner", "le55", tables2026),
-    /no CPF for a foreign employee.*levy instead/,
-  );
+  // CPF Board exempts foreigners from CPF contributions:
+  // https://www.cpf.gov.sg/member/growing-your-savings/cpf-contributions/saving-as-an-employee
+  assert.doesNotThrow(() => assertSgCovered("foreigner", "le55", tables2026));
   assert.throws(
     () => assertSgCovered("spr_1st_year", "le55", tables2026),
     /graduated rates by name/,
@@ -149,10 +148,14 @@ test("foreigners, graduated SPR years and other age bands are refused by name", 
     assert.throws(() => assertSgCovered("citizen", band, tables2026), /refuses the ".*" age band by name/, band);
   }
   assert.throws(() => assertSgCovered("citizen" as never, "xx" as never, tables2026), /age band/);
-  assert.throws(
-    () => calculateSgStatutory({ taxYear: 2026, cpfStatus: "foreigner", ageBand: "le55", ordinaryWages: "4500.00" }),
-    /no CPF for a foreign employee/,
-  );
+  const foreigner = calculateSgStatutory({
+    taxYear: 2026, cpfStatus: "foreigner", ageBand: "le55", ordinaryWages: "2000.00",
+  });
+  assert.equal(foreigner.cpfApplicable, false);
+  assert.equal(foreigner.owSubjectCents, 0n);
+  assert.equal(foreigner.employeeCents, 0n);
+  assert.equal(foreigner.employerCents, 0n);
+  assert.equal(foreigner.sdlCents, 500n);
 });
 
 test("the over-55 refusal names the calling year's own maxima (2024 vs 2026)", () => {
