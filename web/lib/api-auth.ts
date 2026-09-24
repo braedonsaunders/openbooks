@@ -219,7 +219,17 @@ export async function resolveApiKeyAuth(
   const stamped = await db.execute(sql`
     update api_keys
        set last_used_at = now()
-     where id = ${keyRow.id} and org_id = ${keyRow.org_id}
+     where id = ${keyRow.id}
+       and org_id = ${keyRow.org_id}
+       and key_hash = ${keyHash}
+       and is_active
+       and (expires_at is null or expires_at > now())
+       and exists (
+         select 1 from users u
+          where u.id = api_keys.user_id
+            and u.org_id = api_keys.org_id
+            and u.is_active
+       )
      returning id`);
   if (!stamped.rows[0]) return null;
 

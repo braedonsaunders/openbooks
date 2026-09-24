@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, env, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, env, pool, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { resolveKeyScopeAuthority } from "@openbooks/engine/src/organization/permissions.ts";
 import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
@@ -83,6 +83,8 @@ const routeUrl = "../app/api/admin/api-keys/route.ts?api-key-scopes-test";
 const { PATCH, POST } = (await import(routeUrl)) as typeof import("../app/api/admin/api-keys/route.ts");
 // api-auth.ts is server-only too; it loads under the same stubbed boundary.
 const { canApi, generateApiKey, guardApiKey, resolveApiKeyAuth } = await import("./api-auth");
+const { validateSessionToken } = await import("./auth");
+const { sessionSigningInput } = await import("./auth-token-format.ts");
 hooks.deregister();
 
 function jsonRequest(body: unknown, method: "POST" | "PATCH" = "POST"): Request {
@@ -199,6 +201,87 @@ async function insertKey(
     returning id`))).rows[0]!.id as string;
   return { id, plaintext: gen.plaintext };
 }
+
+async function waitUntilBlocked(blockerPid: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const blocked = (await pool.query<{ blocked: boolean }>(
+      "select exists(select 1 from pg_stat_activity where $1::int = any(pg_blocking_pids(pid))) as blocked",
+      [blockerPid],
+    )).rows[0]?.blocked;
+    if (blocked) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`credential use did not wait on blocker backend ${blockerPid}`);
+}
+
+test("API key use is refused when revocation commits before its final credential stamp", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const blocker = await pool.connect();
+  let held = false;
+  let pending: Promise<Awaited<ReturnType<typeof resolveApiKeyAuth>>> | undefined;
+  try {
+    const ownerId = await seedOwner(org.orgId, ["*"]);
+    const key = await insertKey(org.orgId, ownerId, "racing revoke", '["gl.read"]');
+    await blocker.query("begin");
+    held = true;
+    await blocker.query("select set_config('app.bypass_rls','on',true)");
+    await blocker.query("update api_keys set is_active=false, key_hash=$2 where id=$1", [key.id, randomBytes(32).toString("hex")]);
+    const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+
+    pending = withOrgContext(org.orgId, () => resolveApiKeyAuth(bearer(key.plaintext)));
+    await waitUntilBlocked(pid);
+    await blocker.query("commit");
+    held = false;
+    assert.equal(await pending, null, "the request must not authenticate after revoke has committed");
+  } finally {
+    if (held) await blocker.query("rollback").catch(() => undefined);
+    blocker.release();
+    if (pending) await pending.catch(() => undefined);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("session validation is refused when revocation commits before its final liveness stamp", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const blocker = await pool.connect();
+  const priorSecret = process.env.SESSION_SECRET;
+  const secret = randomBytes(32).toString("hex");
+  process.env.SESSION_SECRET = secret;
+  let held = false;
+  let pending: Promise<Awaited<ReturnType<typeof validateSessionToken>>> | undefined;
+  try {
+    const ownerId = await seedOwner(org.orgId, ["*"]);
+    const sessionId = randomUUID();
+    const expiresAt = new Date(Date.now() + 86_400_000);
+    const expiresEpoch = Math.floor(expiresAt.getTime() / 1000);
+    const payload = `v2.${sessionId}.${ownerId}.${expiresEpoch}`;
+    const token = `${payload}.${createHmac("sha256", secret).update(sessionSigningInput(payload)).digest("base64url")}`;
+    const hash = createHash("sha256").update(token).digest("hex");
+    await withBypassContext(() => db.execute(sql`
+      insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at,last_seen_at)
+      values (${sessionId},${ownerId},${hash},'password',${expiresAt},now() - interval '10 minutes')`));
+
+    await blocker.query("begin");
+    held = true;
+    await blocker.query("select set_config('app.bypass_rls','on',true)");
+    await blocker.query("update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=$1", [sessionId]);
+    const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+
+    pending = validateSessionToken(token);
+    await waitUntilBlocked(pid);
+    await blocker.query("commit");
+    held = false;
+    assert.equal(await pending, null, "a revoked session must not validate after the revocation commits");
+  } finally {
+    if (held) await blocker.query("rollback").catch(() => undefined);
+    blocker.release();
+    if (pending) await pending.catch(() => undefined);
+    if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = priorSecret;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "an explicitly narrow key grants exactly its selection against a powerful owner",

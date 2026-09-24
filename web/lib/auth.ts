@@ -213,10 +213,24 @@ export async function validateSessionToken(token: string | undefined): Promise<V
     `));
     const row = result.rows[0];
     if (!row) return null;
-    await db.execute(sql`
-      update auth_sessions set last_seen_at = now()
-       where id = ${row.sessionId} and last_seen_at < now() - interval '5 minutes'
+    const stamped = await db.execute(sql`
+      update auth_sessions s
+         set last_seen_at = case
+           when s.last_seen_at < now() - interval '5 minutes' then now()
+           else s.last_seen_at
+         end
+       where s.id = ${row.sessionId}
+         and s.user_id = ${row.userId}
+         and s.token_hash = ${hash}
+         and s.revoked_at is null
+         and s.expires_at > now()
+         and exists (
+           select 1 from users u
+            where u.id = s.user_id and u.is_active
+         )
+       returning s.id
     `);
+    if (!stamped.rows[0]) return null;
     return row;
   });
 }
