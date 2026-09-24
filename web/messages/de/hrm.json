@@ -857,6 +857,7 @@
     "addGoal": "Ziel hinzufügen",
     "goalProgress": "Fortschritt",
     "saveProgress": "Fortschritt speichern",
+    "goalProgressInvalid": "Der Fortschritt muss eine ganze Zahl zwischen 0 und 100 sein.",
     "submitReview": "Beurteilung einreichen",
     "shareReview": "Mit der Person teilen",
     "acknowledgeReview": "Bestätigen",

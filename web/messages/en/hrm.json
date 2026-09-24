@@ -1039,7 +1039,8 @@
         "praiseAction": "Give praise",
         "respondLabel": "Respond"
       }
-    }
+    },
+    "goalProgressInvalid": "Progress must be a whole number from 0 to 100."
   },
   "retention": {
     "title": "Retention",

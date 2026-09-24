@@ -857,6 +857,7 @@
     "addGoal": "Añadir objetivo",
     "goalProgress": "Progreso",
     "saveProgress": "Guardar progreso",
+    "goalProgressInvalid": "El progreso debe ser un número entero entre 0 y 100.",
     "submitReview": "Enviar evaluación",
     "shareReview": "Compartir con la persona",
     "acknowledgeReview": "Confirmar",
