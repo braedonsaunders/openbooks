@@ -3,7 +3,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { startCloseRun } from "@openbooks/engine/src/close/run-start.ts";
 import { CloseError } from "@openbooks/engine/src/close/period-policy.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -79,7 +79,7 @@ function parseCloseRunSubsidiaryIds(
 }
 
 export async function POST(req: Request) {
-  const gate = await guardPermission("close.run");
+  const gate = await guardFeaturePermission("close.run", "continuousClose");
   if (gate instanceof NextResponse) return gate;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

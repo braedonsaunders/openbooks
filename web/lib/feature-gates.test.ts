@@ -82,7 +82,10 @@ function routeGateState(href: string): 'gated' | 'ungated' | null {
  */
 const FEATURE_API_DIRS: Record<string, string[]> = {
   apps: ['app/api/apps'],
-  continuousClose: ['app/api/continuous-close'],
+  // app/api/close/run-revaluation is deliberately absent: it already consults
+  // the multiCurrency gate (listed there), and the per-file scan below would
+  // flag it for not naming continuousClose.
+  continuousClose: ['app/api/continuous-close', 'app/api/close/runs', 'app/api/close/posting-periods'],
   equipment: ['app/api/equipment'],
   expenses: ['app/api/expenses'],
   budgets: ['app/api/budgets'],
@@ -192,6 +195,7 @@ test('the surfaces this test was written for are covered', () => {
   assert.equal(routeGateState('/admin/apps'), 'gated')
   assert.equal(routeGateState('/apps'), 'gated')
   assert.equal(routeGateState('/continuous-close'), 'gated')
+  assert.equal(routeGateState('/close/posting-periods'), 'gated')
   assert.equal(routeGateState('/expenses/reports'), 'gated')
   for (const file of routeFilesUnder('app/api/apps')) {
     assert.match(read(file), GATE, `${file} lost its feature gate`)

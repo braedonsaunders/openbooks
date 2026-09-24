@@ -23,7 +23,7 @@ const routeState: RouteState = { authz: null };
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.close-run-date-test')]
-  export async function guardPermission(_permission) {
+  export async function guardFeaturePermission(_permission, _feature) {
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
@@ -47,7 +47,7 @@ const hooks = registerHooks({
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
     if (
-      specifier === "../../../../lib/authz" &&
+      specifier === "../../../../lib/feature-gates" &&
       context.parentURL?.includes("/api/close/runs/")
     ) {
       return { url: "mock:close-run-date-authz", shortCircuit: true };

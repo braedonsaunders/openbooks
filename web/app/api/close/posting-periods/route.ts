@@ -6,12 +6,12 @@ import {
   previewPostingPeriodAssignment,
 } from "@openbooks/engine/src/close/posting-periods.ts";
 import { CloseError } from "@openbooks/engine/src/close/period-policy.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
-type Gate = Exclude<Awaited<ReturnType<typeof guardPermission>>, NextResponse>;
+type Gate = Exclude<Awaited<ReturnType<typeof guardFeaturePermission>>, NextResponse>;
 
 /** The caller's subsidiary visibility as an engine scope filter. */
 function subsidiaryScope(gate: Gate): string[] | null | NextResponse {
@@ -39,7 +39,7 @@ function parseIdList(value: string | null): string[] | undefined | NextResponse 
 
 /** Preview the posting-period assignment for approved documents lacking one. */
 export async function GET(req: Request) {
-  const gate = await guardPermission("close.run");
+  const gate = await guardFeaturePermission("close.run", "continuousClose");
   if (gate instanceof NextResponse) return gate;
   const url = new URL(req.url);
   const bookId = url.searchParams.get("bookId") ?? "";
@@ -67,7 +67,7 @@ export async function GET(req: Request) {
 
 /** Commit the assignment (preview first: only previewed rows are committed). */
 export async function POST(req: Request) {
-  const gate = await guardPermission("close.run");
+  const gate = await guardFeaturePermission("close.run", "continuousClose");
   if (gate instanceof NextResponse) return gate;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
