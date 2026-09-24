@@ -18,7 +18,6 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -26,6 +25,7 @@ const { receiveInventory } = await import("@openbooks/engine/src/inventory/movem
 const { writeDownInventoryToNrv } = await import("@openbooks/engine/src/inventory/nrv.ts");
 const { postLandedCostVoucher } = await import("@openbooks/engine/src/inventory/landed-cost.ts");
 const { listApplicationInventoryLevels } = await import("./inventory-read.ts");
+const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -80,12 +80,29 @@ test("levels value follows layers through a writedown and a landed-cost adjustme
        where org_id = ${org.orgId} and account_id = ${org.accounts.invAsset}`)).rows[0]!;
     const reported = await listApplicationInventoryLevels(context, {});
     assert.equal(reported.levels.length, 1);
-    assert.equal(toUnits(String(reported.levels[0]?.quantity)), toUnits("10"));
+    assert.equal(reported.levels[0]?.quantity, "10.0000");
     // A movement sum would still read 50.0000 here.
     assert.equal(reported.levels[0]?.value, "46.0000");
     assert.equal(reported.sumValue, "46.0000");
     assert.equal(layers.value, "46.0000");
     assert.equal(gl.balance, "46.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("inventory levels refuse while the inventory feature is off with the Features-page remedy", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      update orgs set settings = settings || '{"features":{"inventory":false}}'::jsonb where id = ${org.orgId}`);
+    await assert.rejects(
+      listApplicationInventoryLevels(ctxFor(org.orgId), {}),
+      (error: unknown) => error instanceof ApplicationError
+        && error.code === "not_found"
+        && error.status === 404
+        && error.message === "inventory is off; enable it from GET /api/v1/settings/features",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
