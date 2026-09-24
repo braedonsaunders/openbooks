@@ -2222,19 +2222,21 @@ async function capturePurgeEvidence(
  * link/version/blob/file rows are durably gone — so an audit failure leaves
  * both metadata and external blobs untouched and retryable.
  */
+export type PurgeFileOutcome = 'purged' | 'not_found' | 'forbidden' | 'retained'
+
 export async function purgeFile(
   orgId: string,
   id: string,
   audit?: FileMutationAudit,
-): Promise<boolean> {
+): Promise<PurgeFileOutcome> {
   const deleted = await inDbTransaction(async (tx) => {
     const owned = (await tx.execute<{ id: string }>(sql`
       select id from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
       for update
     `))
-    if (owned.rows.length === 0) return null
-    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return null
+    if (owned.rows.length === 0) return { outcome: 'not_found' as const }
+    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return { outcome: 'forbidden' as const }
     const material = (await tx.execute(sql`
       select fa.id
         from file_attachments fa
@@ -2242,7 +2244,7 @@ export async function purgeFile(
          and ${RETAINED_ATTACHMENT}
        limit 1
     `))
-    if (material.rows.length > 0) return null
+    if (material.rows.length > 0) return { outcome: 'retained' as const }
     const s3Versions = (await tx.execute<{ id: string }>(sql`
       select fv.id from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
@@ -2275,11 +2277,11 @@ export async function purgeFile(
         executor: tx,
       })
     }
-    return s3Versions.rows.map((v) => v.id)
+    return { outcome: 'purged' as const, s3VersionIds: s3Versions.rows.map((v) => v.id) }
   })
-  if (deleted === null) return false
-  await deleteS3Blobs(deleted)
-  return true
+  if (deleted.outcome !== 'purged') return deleted.outcome
+  await deleteS3Blobs(deleted.s3VersionIds)
+  return 'purged'
 }
 
 /** Fetch bytes for download (current version). Org-scoped. Reads dispatch on

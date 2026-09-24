@@ -436,7 +436,7 @@ test(
         const linkTarget = randomUUID();
         ${PURGE_FIXTURE}
 
-        assert.equal(await purgeFile(orgId, fileId, { actorId: actor }), true);
+        assert.equal(await purgeFile(orgId, fileId, { actorId: actor }), 'purged');
 
         // Committed state after the successful purge: all rows gone.
         ${COUNTS_QUERY}
@@ -532,7 +532,7 @@ test(
         // THE DEFECT: pre-fix this returned true with every row destroyed.
         // The guard must refuse BEFORE any delete runs — through the same
         // audited verb the ?purge=1 route exposes.
-        assert.equal(await purgeFile(orgId, fileId, { actorId: actor }), false);
+        assert.equal(await purgeFile(orgId, fileId, { actorId: actor }), 'retained');
 
         // Committed state after the refused purge: file, versions, blobs, and
         // the attachment link all survive intact.
@@ -576,7 +576,7 @@ test(
 
         // Control: with no attachment links at all the guard does not fire and
         // the disposable file purges cleanly.
-        assert.equal(await purgeFile(orgId, fileId), true);
+        assert.equal(await purgeFile(orgId, fileId), 'purged');
 
         ${COUNTS_QUERY}
         assert.equal(counts.files, 0, "the unbound file is gone");
