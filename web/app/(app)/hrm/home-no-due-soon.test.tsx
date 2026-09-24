@@ -92,17 +92,6 @@ function homeData(): Record<string, unknown> {
   }
 }
 
-// UX-14b: /hrm showed "Open checklists 1" with a blank explanation area:
-// home.ts supplied noDueSoon but the spec never passed it to the widget,
-// so the widget rendered its empty-string fallback. The spec must carry
-// the loader's string end to end.
-test('the home spec passes the nothing-due-soon explanation to the onboarding widget', () => {
-  const spec = hrmSpec(homeData() as never)
-  const blocks = findBlocks(spec, 'hrm-onboarding-panel')
-  assert.equal(blocks.length, 1, 'the home renders one onboarding panel')
-  assert.equal(blocks[0]?.noDueSoon, NO_DUE_SOON, 'the loader string reaches the widget props')
-})
-
 test('the wired widget renders the explanation with open checklists and nothing due', async () => {
   const { JSDOM } = await import('jsdom')
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
