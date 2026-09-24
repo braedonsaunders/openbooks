@@ -67,7 +67,7 @@ const { MASTER_BY_KEY, masterResource } = (await import(
 )) as typeof import('../../../../lib/data-io/master-data-resources.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
@@ -75,8 +75,8 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 async function org(): Promise<{ orgId: string; actorId: string }> {
-  const o = await createScratchOrg()
-  const { adminId } = await seedFlowActors(o.orgId)
+  const o = await withBypassContext(() => (createScratchOrg()))
+  const { adminId } = await withBypassContext(() => (seedFlowActors(o.orgId)))
   harnessState.authz = { user: { orgId: o.orgId, id: adminId } }
   return { orgId: o.orgId, actorId: adminId }
 }

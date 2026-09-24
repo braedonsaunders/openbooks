@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { withBypassContext, db  } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
 import { importStatement, startReconciliation } from '@openbooks/engine/src/banking/banking.ts'
 import type { Authz } from '../../../lib/authz'
@@ -80,16 +80,16 @@ interface Fixture {
 }
 
 async function fixture(): Promise<Fixture> {
-  const org = await createScratchOrg()
-  const actor = (await seedFlowActors(org.orgId)).adminId
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-    coalesce(settings->'features','{}'::jsonb)||'{"bankFeeds":true}'::jsonb) where id=${org.orgId}`)
+  const org = await withBypassContext(() => (createScratchOrg()))
+  const actor = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId
+  await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"bankFeeds":true}'::jsonb) where id=${org.orgId}`)))
   const subB = randomUUID()
-  await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', 'CAD', 'CA')`)
+  await withBypassContext(() => (db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', 'CAD', 'CA')`)))
   const bankB = randomUUID()
   const bankShared = randomUUID()
-  await db.execute(sql`insert into accounts
+  await withBypassContext(() => (db.execute(sql`insert into accounts
     (id, org_id, number, name, type, is_summary, is_active, eliminate,
      reconcilable, required_dimensions, custom, subsidiary_include_children,
      subsidiary_id, currency_restriction)
@@ -97,9 +97,9 @@ async function fixture(): Promise<Fixture> {
       (${bankB}, ${org.orgId}, '1011', 'Second entity bank', 'asset_bank',
        false, true, false, true, '[]'::jsonb, '{}'::jsonb, true, ${subB}, 'CAD'),
       (${bankShared}, ${org.orgId}, '1012', 'Shared bank', 'asset_bank',
-       false, true, false, true, '[]'::jsonb, '{}'::jsonb, true, null, 'CAD')`)
-  await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD',
-    subsidiary_id = ${org.subsidiaryId} where id = ${org.accounts.bank} and org_id = ${org.orgId}`)
+       false, true, false, true, '[]'::jsonb, '{}'::jsonb, true, null, 'CAD')`)))
+  await withBypassContext(() => (db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD',
+    subsidiary_id = ${org.subsidiaryId} where id = ${org.accounts.bank} and org_id = ${org.orgId}`)))
   const bankA = org.accounts.bank
   const nonce = randomUUID().slice(0, 8)
   for (const [account, tag] of [[bankA, 'route-a'], [bankB, 'route-b'], [bankShared, 'route-s']] as const) {
@@ -129,20 +129,20 @@ async function fixture(): Promise<Fixture> {
   const sessionB = (await startReconciliation({ accountId: bankB, throughDate: org.date, statementBalance: '5' }, ctx)).id
   const sessionShared = (await startReconciliation({ accountId: bankShared, throughDate: org.date, statementBalance: '5' }, ctx)).id
   const feedB = randomUUID()
-  await db.execute(sql`insert into bank_feed_connections
+  await withBypassContext(() => (db.execute(sql`insert into bank_feed_connections
     (id, org_id, name, provider, account_id, status, sync_cadence, created_by, updated_by)
-    values (${feedB}, ${org.orgId}, 'B feed', 'manual', ${bankB}, 'connected', 'manual', ${actor}, ${actor})`)
+    values (${feedB}, ${org.orgId}, 'B feed', 'manual', ${bankB}, 'connected', 'manual', ${actor}, ${actor})`)))
   const server = randomUUID()
-  await db.execute(sql`insert into sftp_servers
+  await withBypassContext(() => (db.execute(sql`insert into sftp_servers
     (id, org_id, name, username, backend, root_prefix, created_by, updated_by)
     values (${server}, ${org.orgId}, 'Scope bank host', ${`scope-${nonce}`},
-      'local', ${`sftp/${org.orgId}/scope-${nonce}`}, ${actor}, ${actor})`)
+      'local', ${`sftp/${org.orgId}/scope-${nonce}`}, ${actor}, ${actor})`)))
   const scheduleA = randomUUID()
   const scheduleB = randomUUID()
-  await db.execute(sql`insert into sftp_import_schedules
+  await withBypassContext(() => (db.execute(sql`insert into sftp_import_schedules
     (id, org_id, sftp_server_id, account_id, created_by)
     values (${scheduleA}, ${org.orgId}, ${server}, ${bankA}, ${actor}),
-           (${scheduleB}, ${org.orgId}, ${server}, ${bankB}, ${actor})`)
+           (${scheduleB}, ${org.orgId}, ${server}, ${bankB}, ${actor})`)))
   return {
     orgId: org.orgId, actor, date: org.date, subA: org.subsidiaryId, subB,
     bankA, bankB, bankShared, sessionA, sessionB, sessionShared,
@@ -296,10 +296,10 @@ test('rule data verbs refuse out-of-scope accounts', { skip: !enabled }, async (
   const fx = await fixture()
   try {
     const ruleId = randomUUID()
-    await db.execute(sql`insert into bank_match_rules (id, org_id, name, criteria, outcome, priority, is_active, created_by)
+    await withBypassContext(() => (db.execute(sql`insert into bank_match_rules (id, org_id, name, criteria, outcome, priority, is_active, created_by)
       values (${ruleId}, ${fx.orgId}, 'Scope excluder',
         '{"version":2,"match":{"combinator":"and","rules":[{"field":"description","op":"contains","value":"probe"}]}}'::jsonb,
-        '{"action":"exclude"}'::jsonb, 100, true, ${fx.actor})`)
+        '{"action":"exclude"}'::jsonb, 100, true, ${fx.actor})`)))
     authorize(fx, 'A')
     const preview = await errorOf(await rulesPreview.POST(postJson(
       'https://openbooks.test/api/banking/rules/preview', { accountId: fx.bankB },

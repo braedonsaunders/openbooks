@@ -40,7 +40,7 @@ const { PATCH } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   state.orgId = org.orgId
   state.actorId = randomUUID()
   const activityId = await withBypassContext(async () => {

@@ -55,7 +55,7 @@ interface Fixture {
 }
 
 async function fixture(): Promise<Fixture> {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   state.orgId = org.orgId
   state.actorId = randomUUID()
   const departmentId = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`

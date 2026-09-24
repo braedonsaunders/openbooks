@@ -47,7 +47,7 @@ const hooks = registerHooks({
   },
 })
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
@@ -56,18 +56,18 @@ hooks.deregister()
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function setup() {
-  const org = await createScratchOrg()
-  const actor = await createScratchUser(org.orgId, 'Ticket drafter', 'reviewer')
-  await db.execute(sql`
+  const org = await withBypassContext(() => (createScratchOrg()))
+  const actor = await withBypassContext(() => (createScratchUser(org.orgId, 'Ticket drafter', 'reviewer')))
+  await withBypassContext(() => (db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features', '{}'::jsonb) || '{"fieldTickets":true}'::jsonb)
      where id = ${org.orgId}
-  `)
+  `)))
   const other = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${other}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')
-  `)
+  `)))
   const gate = (scope: Set<string> | null) => {
     routeState.gate = {
       user: { orgId: org.orgId, id: actor },

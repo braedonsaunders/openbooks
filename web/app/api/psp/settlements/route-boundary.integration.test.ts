@@ -107,7 +107,7 @@ test("post rechecks the locked batch after a concurrent subsidiary rehome", { sk
       where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
         and query ilike '%psp_settlement_batches%for update%'`)).rows[0].n as number;
     assert.ok(waiting > 0, "POST reached the locked batch row");
-    await holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [subsidiaryB, imported.batchId]);
+    await withBypassContext(() => (holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [subsidiaryB, imported.batchId])));
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404);
@@ -161,7 +161,7 @@ test("reverse rechecks the locked batch after a concurrent subsidiary rehome", {
       where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
         and query ilike '%psp_settlement_batches%for update%'`)).rows[0].n as number;
     assert.ok(waiting > 0, "POST reached the locked batch row");
-    await holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [subsidiaryB, imported.batchId]);
+    await withBypassContext(() => (holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [subsidiaryB, imported.batchId])));
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404);

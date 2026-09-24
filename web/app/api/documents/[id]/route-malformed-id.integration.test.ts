@@ -27,13 +27,13 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET, PATCH, DELETE } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   state.orgId = org.orgId
   state.actorId = randomUUID()
   return org

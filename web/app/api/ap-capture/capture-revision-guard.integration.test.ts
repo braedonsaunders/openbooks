@@ -28,7 +28,7 @@ const { PATCH } = await import('./[id]/route')
  * and prebill-line edits.
  */
 test('a stale capture revision refuses instead of reverting a newer correction', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   try {
     // createScratchUser seeds app_roles outside any bypass of its own; scope
     // the call (and every seed write below) explicitly now that importing the

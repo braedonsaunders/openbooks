@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { PoolClient } from 'pg'
 import { sql } from 'drizzle-orm'
-import { db, pool, withOrg } from '@openbooks/engine/src/platform/db.ts'
+import { withBypassContext, db, pool, withOrg  } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
 registerHooks({
@@ -34,7 +34,7 @@ async function waitForRehomeWaiter(): Promise<boolean> {
 }
 
 test('payroll filing employee authorization holds the party scope against concurrent rehome', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   let releaseGuard: (() => void) | undefined
   let writer: PoolClient | undefined
   let announceGuard!: () => void
@@ -42,10 +42,10 @@ test('payroll filing employee authorization holds the party scope against concur
   const guardHeld = new Promise<void>((resolve) => { releaseGuard = resolve })
   let authorization: Promise<void> | undefined
   try {
-    const assigned = await db.execute(sql`
+    const assigned = await withBypassContext(() => (db.execute(sql`
       update parties set subsidiary_id = ${org.subsidiaryId}
        where org_id = ${org.orgId} and id = ${org.customerId}
-    `)
+    `)))
     assert.equal(assigned.rowCount, 1)
 
     authorization = withOrg(org.orgId, async () => {
@@ -67,10 +67,10 @@ test('payroll filing employee authorization holds the party scope against concur
       "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
       [org.orgId],
     )
-    const update = writer.query(
+    const update = withBypassContext(() => (writer!.query(
       'update parties set subsidiary_id = null where org_id = $1 and id = $2',
       [org.orgId, org.customerId],
-    )
+    )))
     const blocked = await waitForRehomeWaiter()
 
     releaseGuard?.()

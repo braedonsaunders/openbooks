@@ -80,7 +80,7 @@ const routeUrl = "./route.ts?timesheets-reject";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedActiveEmployment } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -101,29 +101,29 @@ function postRequest(body: unknown): Request {
 
 async function seedEmployee(orgId: string, subsidiaryId: string, actorId: string): Promise<string> {
   const employeeId = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into parties
       (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values
       (${employeeId}, ${orgId}, 'employee', 'Reject Worker',
        ${subsidiaryId}, true, '{}'::jsonb)
-  `);
+  `)));
   await seedActiveEmployment(orgId, employeeId);
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into timesheet_weeks
       (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
     values
       (${randomUUID()}, ${orgId}, ${employeeId}, ${WEEK},
        'submitted', ${actorId}, ${actorId})
-  `);
+  `)));
   return employeeId;
 }
 
 async function seedSubmittedEntry(orgId: string, employeeId: string): Promise<void> {
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into time_entries
       (org_id, employee_party_id, worked_on, hours, status)
-    values (${orgId}, ${employeeId}, '2026-07-14', 8, 'submitted')`);
+    values (${orgId}, ${employeeId}, '2026-07-14', 8, 'submitted')`)));
 }
 
 async function weekStatus(orgId: string, employeeId: string): Promise<string | null> {
@@ -145,12 +145,12 @@ async function auditEvents(orgId: string): Promise<number> {
 }
 
 test("an employee outside the caller scope is unreachable, with nothing read or written", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const hiddenId = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => (db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-      values (${hiddenId}, ${org.orgId}, ${org.subsidiaryId}, 'West Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+      values (${hiddenId}, ${org.orgId}, ${org.subsidiaryId}, 'West Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`)));
     const actorId = randomUUID();
     const hiddenEmployee = await seedEmployee(org.orgId, hiddenId, actorId);
     gate(org.orgId, new Set([org.subsidiaryId]));
@@ -170,7 +170,7 @@ test("an employee outside the caller scope is unreachable, with nothing read or 
 });
 
 test("a rejection flips the header, its entries, and the audit together", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
     const employeeId = await seedEmployee(org.orgId, org.subsidiaryId, actorId);
@@ -204,7 +204,7 @@ test("a rejection flips the header, its entries, and the audit together", { skip
 });
 
 test("an empty rejection rolls the header stamp back instead of recording a reason", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
     const employeeId = await seedEmployee(org.orgId, org.subsidiaryId, actorId);

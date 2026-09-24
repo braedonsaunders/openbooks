@@ -48,7 +48,7 @@ registerHooks({
 
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -59,21 +59,21 @@ test(
   "account create and PATCH refuse foreign reference custom values",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const foreign = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
+    const foreign = await withBypassContext(() => (createScratchOrg()));
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into custom_field_defs
           (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
         values
           (${randomUUID()}, ${org.orgId}, 'accounts', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${adminId}, ${adminId})
-      `);
+      `)));
       const post = (key: string, body: unknown) =>
         withOrgContext(org.orgId, () =>
           POST(

@@ -76,7 +76,7 @@ const routeUrl = "./route.ts?info-returns-scope";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -113,11 +113,11 @@ async function filingCount(orgId: string): Promise<number> {
 }
 
 async function enableCompliance(orgId: string): Promise<void> {
-  await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true') where id = ${orgId}`);
+  await withBypassContext(() => (db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true') where id = ${orgId}`)));
 }
 
 test("a malformed subsidiary id is a 400, never an org-wide filing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableCompliance(org.orgId);
     gate(org.orgId, null);
@@ -134,7 +134,7 @@ test("a malformed subsidiary id is a 400, never an org-wide filing", { skip: !DB
 });
 
 test("an out-of-scope subsidiary reads as missing with nothing filed", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableCompliance(org.orgId);
     gate(org.orgId, new Set([org.subsidiaryId]));
@@ -151,7 +151,7 @@ test("an out-of-scope subsidiary reads as missing with nothing filed", { skip: !
 });
 
 test("a well-formed id outside the org is a 404, not an org-wide filing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await enableCompliance(org.orgId);
     gate(org.orgId, null);
