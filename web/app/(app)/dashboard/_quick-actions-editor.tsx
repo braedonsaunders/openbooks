@@ -251,6 +251,7 @@ function ListView({
   onMove: (id: string, dir: -1 | 1) => void
 }) {
   const t = useTranslations('dashboard')
+  const tCommon = useTranslations('common')
   const atMax = storedCount >= MAX_QUICK_ACTIONS
   return (
     <div className="space-y-3">
@@ -266,7 +267,7 @@ function ListView({
               <div className="flex flex-col">
                 <button
                   type="button"
-                  aria-label="Move up"
+                  aria-label={tCommon('actions.previous')}
                   disabled={i === 0}
                   onClick={() => onMove(a.id, -1)}
                   className="rounded p-0.5 text-slate-400 transition hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200"
@@ -275,7 +276,7 @@ function ListView({
                 </button>
                 <button
                   type="button"
-                  aria-label="Move down"
+                  aria-label={tCommon('actions.next')}
                   disabled={i === items.length - 1}
                   onClick={() => onMove(a.id, 1)}
                   className="rounded p-0.5 text-slate-400 transition hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200"
@@ -303,7 +304,7 @@ function ListView({
               <span className={`h-3 w-3 shrink-0 rounded-full ${tc.swatch}`} aria-hidden />
               <button
                 type="button"
-                aria-label="Remove"
+                aria-label={tCommon('actions.remove')}
                 onClick={() => onRemove(a.id)}
                 className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
               >
