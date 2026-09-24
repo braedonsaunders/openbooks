@@ -14,6 +14,7 @@ import {
 import { EmploymentReadError, likeEscape } from "./employment-read.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { LeaveError } from "./leave-errors.ts";
 import {
   accrualEarnedAcrossSegments,
@@ -429,6 +430,10 @@ export async function loadLeaveFilingEmploymentOptions(
     employerName: string;
     jobTitle: string | null;
   };
+  // The legal-entity scope is a SQL predicate, never a post-page JS
+  // filter: filtering AFTER the LIMIT lets out-of-scope rows displace
+  // fileable in-scope ones and returns an empty page with results pending.
+  const scopePredicate = subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed);
   const page = (await exec.execute<FilingOptionRow>(sql`
     select e.id::text as "employmentId",
            e.employer_subsidiary_id::text as "employerSubsidiaryId",
@@ -451,10 +456,9 @@ export async function loadLeaveFilingEmploymentOptions(
      where e.org_id = ${orgId}::uuid
        and e.employer_subsidiary_id is not null
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
+       ${scopePredicate}
      order by p.display_name, e.id
-     limit ${limit}`)).rows.filter(
-    (row) => allowed === null || allowed.has(row.employerSubsidiaryId),
-  );
+     limit ${limit}`)).rows;
   // The pinned draft value is read by id, never by page position: it leads
   // even when it falls outside the bounded page. An unknown or out-of-scope
   // id stays absent rather than leaking existence.
@@ -480,9 +484,8 @@ export async function loadLeaveFilingEmploymentOptions(
         ) jt on true
        where e.org_id = ${orgId}::uuid
          and e.id = ${includeId}::uuid
-         and e.employer_subsidiary_id is not null`)).rows.filter(
-        (row) => allowed === null || allowed.has(row.employerSubsidiaryId),
-      )[0] ?? null
+         and e.employer_subsidiary_id is not null
+         ${scopePredicate}`)).rows[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.employmentId !== pinned.employmentId)] : page;
 
