@@ -269,7 +269,7 @@ function slip(name: string, sin: string, filingAccountId: string | null): T4Slip
 
 const summary = (income: string): T4SummaryTotals => ({
   slips: 1, employmentIncome: income, employeeCpp: "3000", employeeCpp2: "0",
-  employerCpp: "3000", employeeEi: "800", employerEi: "1120", incomeTax: "9000",
+  employerCpp: "3000", employerCpp2: "0", employeeEi: "800", employerEi: "1120", incomeTax: "9000",
   remitted: "0",
 });
 

@@ -399,7 +399,7 @@ export function renderT4Xml(input: {
       `   <TOT_EMPT_INC_AMT>${amt(ret.summary.employmentIncome)}</TOT_EMPT_INC_AMT>\n` +
       `   <TOT_EMPE_CPP_AMT>${amt(ret.summary.employeeCpp)}</TOT_EMPE_CPP_AMT>\n` +
       `   <TOT_EMPE_CPP2_AMT>${amt(ret.summary.employeeCpp2)}</TOT_EMPE_CPP2_AMT>\n` +
-      `   <TOT_EMPR_CPP_AMT>${amt(ret.summary.employerCpp)}</TOT_EMPR_CPP_AMT>\n` +
+      `   <TOT_EMPR_CPP_AMT>${amt(ret.summary.employerCpp)}</TOT_EMPR_CPP_AMT><tot_empr_cppe_amt>${amt(ret.summary.employerCpp2)}</tot_empr_cppe_amt>\n` +
       `   <TOT_EMPE_EIP_AMT>${amt(ret.summary.employeeEi)}</TOT_EMPE_EIP_AMT>\n` +
       `   <TOT_EMPR_EIP_AMT>${amt(ret.summary.employerEi)}</TOT_EMPR_EIP_AMT>\n` +
       `   <TOT_ITX_DDCT_AMT>${amt(ret.summary.incomeTax)}</TOT_ITX_DDCT_AMT>\n` +

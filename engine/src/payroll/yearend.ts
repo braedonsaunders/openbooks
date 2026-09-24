@@ -342,6 +342,7 @@ export interface T4SummaryTotals {
   employeeCpp: string;
   employeeCpp2: string;
   employerCpp: string;
+  employerCpp2: string;
   employeeEi: string;
   employerEi: string;
   incomeTax: string;
@@ -520,9 +521,10 @@ export async function t4Summary(
   const billAccountFilter = scoped
     ? sql`and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${account}`
     : sql``;
-  const employer = (await db.execute<{ employer_cpp: string | null; employer_ei: string | null }>(sql`
+  const employer = (await db.execute<{ employer_cpp: string | null; employer_cpp2: string | null; employer_ei: string | null }>(sql`
     select
-      sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_cpp,
+      sum(case when pc.system_key = 'cpp' then l.amount else 0 end) as employer_cpp,
+      sum(case when pc.system_key = 'cpp2' then l.amount else 0 end) as employer_cpp2,
       sum(case when pc.system_key = 'ei' then l.amount else 0 end) as employer_ei
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -558,6 +560,7 @@ export async function t4Summary(
     employeeCpp: total((s) => s.box16Cpp),
     employeeCpp2: total((s) => s.box16aCpp2),
     employerCpp: num(employer.rows[0]?.employer_cpp),
+    employerCpp2: num(employer.rows[0]?.employer_cpp2),
     employeeEi: total((s) => s.box18Ei),
     employerEi: num(employer.rows[0]?.employer_ei),
     incomeTax: total((s) => s.box22IncomeTax),
