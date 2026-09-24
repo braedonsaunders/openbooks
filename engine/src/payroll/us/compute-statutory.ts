@@ -20,6 +20,7 @@ import {
 } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
 import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
+import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 
 export type UsYtdRow = {
   fica: string;
@@ -300,10 +301,12 @@ export async function computeUsStatutory(
       supplementalPaymentTiming,
       wageAllocations: ctx.workAllocations,
       residentWithholdingFacts: levy.basis === "resident_out_of_region"
-        ? {
-          outOfRegionWages: sum([income, nonPeriodic]),
-          workRegionTaxes: [...workRegionTaxes],
-        }
+        ? resolveUsResidentWithholdingFacts(
+          sum([income, nonPeriodic]),
+          ctx.workAllocations,
+          workRegionTaxes,
+          residenceRegion,
+        )
         : undefined,
       federalIncomeTax: statutory.fit,
       taxQualifiedDeductions,

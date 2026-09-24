@@ -10,7 +10,11 @@ import { computeUsWithholding, US_SEPARATE_SUPPLEMENTAL_METHODS } from './withho
 import { US_STATES } from './rates.ts'
 import { AL_WITHHOLDING } from './states/al.ts'
 import { OR_WITHHOLDING } from './states/or.ts'
-import { requireUsResidentWithholdingFacts, requireUsWageAllocation } from './states/types.ts'
+import {
+  requireUsResidentWithholdingFacts,
+  requireUsWageAllocation,
+  resolveUsResidentWithholdingFacts,
+} from './states/types.ts'
 import type { ResolvedWithholdingLevy } from '../withholding-resolution.ts'
 
 const PAY_DATE = '2026-07-21'
@@ -296,6 +300,30 @@ test('US regional and subregional methods receive exact, sourced allocation fact
   assert.throws(
     () => requireUsWageAllocation([{ ...allocation, workShare: '1.000001' }], 'MI', 'DETROIT'),
     /work allocation is outside 0–1.*refused by name/,
+  )
+})
+
+test('US resident credits price only sourced out-of-region wages and require each work-region tax', () => {
+  const allocations = [
+    { region: 'NY', subRegion: null, workShare: '0.25', source: 'verified time records' },
+    { region: 'NJ', subRegion: null, workShare: '0.75', source: 'verified time records' },
+    { region: 'NJ', subRegion: 'NEWARK', workShare: '0.5', source: 'local worksite certificate' },
+  ]
+  assert.deepEqual(
+    resolveUsResidentWithholdingFacts(
+      '2000.0000', allocations, [{ region: 'NJ', amount: '42.00' }], 'NY',
+    ),
+    { outOfRegionWages: '1500.0000', workRegionTaxes: [{ region: 'NJ', amount: '42.00' }] },
+  )
+  assert.throws(
+    () => resolveUsResidentWithholdingFacts('2000.0000', allocations, [], 'NY'),
+    /same-period computed work-region tax for NJ.*refused by name/,
+  )
+  assert.throws(
+    () => resolveUsResidentWithholdingFacts(
+      '2000.0000', [allocations[0]!], [{ region: 'NJ', amount: '42.00' }], 'NY',
+    ),
+    /region shares must total exactly 1.*refused by name/,
   )
 })
 

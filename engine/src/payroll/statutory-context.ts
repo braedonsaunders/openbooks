@@ -95,7 +95,8 @@ export interface PayrollEmployerLevyContext {
 /** Verified share of current-period wages sourced to one subregion. */
 export interface PayrollWorkAllocation {
   region: string;
-  subRegion: string;
+  /** Null is the region-wide share; a code scopes a city/local allocation. */
+  subRegion: string | null;
   /** Exact decimal share from 0 through 1; no floating-point percentage. */
   workShare: string;
   /** Certificate or work-record provenance retained for the statutory trace. */
