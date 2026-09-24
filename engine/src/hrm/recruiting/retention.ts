@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmRecruitingManageOrg } from "../authorization.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { assertUnrestrictedScope, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import { requireHrmRecruitingManageOrg, requireHrmRecruitingReadOrg } from "../authorization.ts";
+import { requireCandidateOwnedInScope } from "./candidate-scope.ts";
 import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
 import {
@@ -116,7 +119,8 @@ export async function listRetentionRules(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    // Rules are shared configuration: any recruiting reader lists them.
+    await requireHrmRecruitingReadOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     const rows = (await db.execute<RuleRow>(sql`
       select id, name, region_scope as "regionScope", basis,
@@ -167,7 +171,10 @@ export async function createRetentionRule(query: {
     throw new RecruitingError("INVALID_INPUT", "region_scope is an object ({applies_to, countries}) — declare where the rule applies");
   }
   return withOrgTransaction(orgId, async () => {
+    // Org-wide shared configuration: the manage grant, then the canonical
+    // unrestricted-scope assertion.
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     try {
       const row = (await db.execute<RuleRow>(sql`
@@ -235,12 +242,10 @@ export async function recordConsent(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmCandidateRetention");
-    const candidate = (await db.execute<{ one: number }>(sql`
-      select 1 as one from hrm_candidates where org_id = ${orgId} and id = ${candidateId}
-    `)).rows[0];
-    if (!candidate) {
-      throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
-    }
+    // Consent is a candidate-wide grant with legal effect: recording it for
+    // a stranger manufactures permission over their data. Ownership first —
+    // unknown and out-of-scope refuse identically.
+    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
     const row = (await db.execute<ConsentDTO>(sql`
       insert into hrm_candidate_consents (org_id, candidate_id, purpose, expires_at, source, created_by, updated_by)
       values (${orgId}, ${candidateId}, ${query.purpose}, ${expiresAt}, ${source}, ${actorId}, ${actorId})
@@ -270,6 +275,9 @@ export async function withdrawConsent(query: {
   await withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmCandidateRetention");
+    // Withdrawing a stranger's consent answers whether the row exists and
+    // rewrites their privacy posture: ownership first, uniform denial.
+    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
     const updated = (await db.execute<{ one: number }>(sql`
       update hrm_candidate_consents
          set withdrawn_at = now(), updated_by = ${actorId}, updated_at = now()
@@ -307,19 +315,36 @@ type CandidateScanRow = {
   consentWithdrawnAt: string | null;
   extensionRequestedAt: string | null;
   hasOpenApplication: boolean;
+  hasInScopeApplication: boolean;
   resumeFileId: string | null;
 };
+
+/**
+ * Who a retention run executes as. A user run carries the runner's manage
+ * grant plus their employer scope (a scoped runner's run touches only
+ * candidates owned through in-scope requisitions — see candidate-scope.ts).
+ * The scheduled system tick runs as system: org-wide with no actor grant.
+ * There is no implicit null: callers say which one explicitly.
+ */
+export type RetentionRunner = { readonly kind: "user" } | { readonly kind: "system" };
 
 export interface EvaluateRuleOptions {
   readonly enqueueEmail?: RecruitingEmailEnqueuer;
   readonly removeFile?: RetentionFileRemover;
   /** Override for tests; defaults to now. */
   readonly now?: Date;
+  /**
+   * Defaults to { kind: "user" }. The scheduled system job passes
+   * { kind: "system" } for org-wide coverage; a rule that spans the org
+   * otherwise needs an unrestricted human runner for full coverage.
+   */
+  readonly runner?: RetentionRunner;
 }
 
 /**
  * Evaluate one active rule. One transaction: select, act, stamp, append
- * the run row. Candidates with open applications are never touched.
+ * the run row. Candidates with open applications are never touched, and a
+ * scoped run never touches candidates owned outside the runner's scope.
  */
 export async function evaluateRetentionRule(
   query: { orgId: string; actorId: string; ruleId: string },
@@ -333,6 +358,18 @@ export async function evaluateRetentionRule(
   const removeFile = options.removeFile ?? deleteCabinetFile;
   return withOrgTransaction(orgId, async () => {
     await requireDepthFeature(db, orgId, "hrmCandidateRetention");
+    // Authority first: a user run needs the manage grant plus the runner's
+    // employer scope (null = unrestricted). The system tick runs as system
+    // instead — a manual run by a scoped runner is a scoped run, never an
+    // org-wide one.
+    const runner = options.runner ?? { kind: "user" as const };
+    let allowed: Set<string> | null;
+    if (runner.kind === "system") {
+      allowed = null;
+    } else {
+      await requireHrmRecruitingManageOrg(db, orgId, actorId);
+      allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    }
     const rule = (await db.execute<RuleRow>(sql`
       select id, name, region_scope as "regionScope", basis,
              retain_months as "retainMonths", action,
@@ -344,6 +381,16 @@ export async function evaluateRetentionRule(
     if (!rule.isActive) {
       throw new RecruitingError("REFUSED", `rule ${rule.name} is retired — reactivate it before running it`);
     }
+    // Unrestricted runners own every candidate (including prospects with no
+    // applications yet); scoped runners own only candidates with an
+    // application on an in-scope requisition (canonical visibility filter).
+    const inScopeExpression =
+      allowed === null
+        ? sql`true`
+        : sql`exists (select 1 from hrm_applications a
+                        join hrm_requisitions r on r.org_id = a.org_id and r.id = a.requisition_id
+                       where a.org_id = ${orgId} and a.candidate_id = c.id
+                         ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)})`;
     const candidates = (await db.execute<CandidateScanRow>(sql`
       select c.id, c.party_id as "partyId",
              (select max(e.recorded_at) from hrm_application_events e
@@ -357,6 +404,7 @@ export async function evaluateRetentionRule(
                where k.org_id = ${orgId} and k.candidate_id = c.id) as "extensionRequestedAt",
              exists (select 1 from hrm_applications a
                       where a.org_id = ${orgId} and a.candidate_id = c.id and a.status = 'active') as "hasOpenApplication",
+             (${inScopeExpression}) as "hasInScopeApplication",
              c.resume_attachment_id as "resumeFileId"
         from hrm_candidates c
        where c.org_id = ${orgId}
@@ -375,9 +423,13 @@ export async function evaluateRetentionRule(
       // THE OPEN-APPLICATION RULE: a candidate with an open application is
       // never touched, whatever the rule says. A hired candidate (party
       // linked — an employee) is never touched either: retention owns
-      // prospects, never the workforce.
+      // prospects, never the workforce. And a scoped run never touches a
+      // candidate owned outside the runner's scope: without an application
+      // on an in-scope requisition the runner cannot see them, so the run
+      // must not anonymize or delete them.
       if (candidate.hasOpenApplication) continue;
       if (candidate.partyId) continue;
+      if (!candidate.hasInScopeApplication) continue;
       // Region scope gates before the basis clock (an empty scope matches all).
       if (!retentionScopeMatches(rule.regionScope ?? {}, [])) continue;
       if (rule.basis === "inactivity") {
@@ -542,12 +594,9 @@ export async function listCandidateConsents(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmCandidateRetention");
-    const candidate = (await db.execute<{ one: number }>(sql`
-      select 1 as one from hrm_candidates where org_id = ${orgId} and id = ${candidateId}
-    `)).rows[0];
-    if (!candidate) {
-      throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
-    }
+    // Consent rows are privacy posture: listing a stranger's grants and
+    // expiries is the same leak as recording them. Ownership first.
+    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
     const consents = (await db.execute<ConsentDTO>(sql`
       select id, candidate_id as "candidateId", purpose,
              granted_at as "grantedAt", expires_at as "expiresAt",
@@ -571,7 +620,8 @@ export async function listRetentionRuns(query: {
   const actorId = requireActorId(query.actorId);
   const ruleId = requireId(query.ruleId, "ruleId");
   return withOrgTransaction(orgId, async () => {
-    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    // The run ledger is evidence any recruiting reader may audit.
+    await requireHrmRecruitingReadOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     const rows = (await db.execute<RetentionRunDTO>(sql`
       select id, rule_id as "ruleId", ran_at as "ranAt",

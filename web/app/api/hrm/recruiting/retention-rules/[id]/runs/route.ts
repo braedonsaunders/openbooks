@@ -7,8 +7,10 @@ import { recruitingErrorResponse } from "../../../_lib";
 export const runtime = "nodejs";
 
 /**
- * Retention runs: GET lists the run ledger, POST evaluates the rule once
- * (manage gate in the service — the daily tick calls the same service).
+ * Retention runs: GET lists the run ledger, POST evaluates the rule once.
+ * The service enforces the manage grant plus the runner's employer scope —
+ * a scoped runner's manual run touches only owned candidates; the scheduled
+ * system tick calls the same service as system for org-wide coverage.
  * Every evaluation appends exactly one run row. 404s while hrm,
  * hrmRecruiting, or hrmCandidateRetention is off.
  */
