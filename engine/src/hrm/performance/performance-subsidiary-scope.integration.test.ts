@@ -22,7 +22,7 @@ import {
 } from "./competencies.ts";
 import { createGoal } from "./goals.ts";
 import { fulfillRequest, listFeedback, retractFeedback, writeFeedback } from "./feedback.ts";
-import { getCycleDetail, getRetentionOverview, getReviewDetail, getTurnover, listMyReviews } from "./performance-read.ts";
+import { getCycleDetail, getRetentionOverview, getReviewDetail, getTurnover, listCycleProgress, listMyReviews } from "./performance-read.ts";
 import { getExitRecord, listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
 
 /**
@@ -333,6 +333,55 @@ test("a restricted HR moves only the cycles they cover", { skip: !DB }, async ()
     );
     const closed = await closeCycle({ orgId: h.org.orgId, actorId: h.hrA, cycleId });
     assert.equal(closed.status, "closed");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("restricted HR cycle lists and details hide other subsidiaries and scope org-wide progress", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const cycleB = await createCycle({
+      orgId: h.org.orgId,
+      actorId: h.hrFull,
+      templateId,
+      name: "FY26 B-scope",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-06-30",
+      appliesTo: { employer_subsidiary_id: h.subB, department_id: null },
+    });
+    await openCycle({ orgId: h.org.orgId, actorId: h.hrFull, cycleId: cycleB.id });
+    const orgCycle = await createCycle({
+      orgId: h.org.orgId,
+      actorId: h.hrFull,
+      templateId,
+      name: "FY26 org-wide",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-06-30",
+    });
+    await openCycle({ orgId: h.org.orgId, actorId: h.hrFull, cycleId: orgCycle.id });
+
+    const listed = await listCycleProgress({ orgId: h.org.orgId, actorId: h.hrA });
+    assert.ok(!listed.some((cycle) => cycle.id === cycleB.id), "B-scoped cycle is not disclosed");
+    const orgProgress = listed.find((cycle) => cycle.id === orgCycle.id);
+    assert.ok(orgProgress, "the org-wide cycle remains visible");
+    assert.equal(orgProgress.totalSelf, 2, "only A's worker and manager self reviews contribute");
+    assert.equal(orgProgress.totalManager, 1, "only A's manager review contributes");
+
+    const orgDetail = await getCycleDetail({ orgId: h.org.orgId, actorId: h.hrA, cycleId: orgCycle.id });
+    assert.deepEqual(
+      new Set(orgDetail.reviews.map((review) => review.employmentId)),
+      new Set([h.a.employmentId, h.a.managerEmploymentId]),
+    );
+    await assert.rejects(
+      getCycleDetail({ orgId: h.org.orgId, actorId: h.hrA, cycleId: cycleB.id }),
+      (error: unknown) => {
+        assert.ok(error instanceof HrmPerformanceError);
+        assert.equal(error.code, "NOT_FOUND");
+        return true;
+      },
+    );
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
