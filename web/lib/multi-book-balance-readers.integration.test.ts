@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/platform/db.ts";
 
-test(
-  "all balance readers stay on the primary accounting book",
-  { skip: !env.OPENBOOKS_DB_URL },
-  () => {
+// Database partition: this drives the real balance readers against
+// PostgreSQL (scratch org, parallel tax book, July fiscal year). The unit
+// partition has no database, so it lives under the .integration suffix
+// with no skip guard.
+test("all balance readers stay on the primary accounting book", () => {
     const source = `
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
