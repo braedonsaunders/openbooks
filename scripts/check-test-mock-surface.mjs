@@ -475,15 +475,6 @@ export const PROTECTED_DOUBLE_ALLOWLIST = new Map(Object.entries({
   "web/app/api/parties/route.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
-  "web/app/api/payroll/runs/route.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
-  "web/app/api/payroll/year-end/amendments/route.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
-  "web/app/api/payroll/year-end/file/route.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
   "web/app/api/project-charges/route.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
