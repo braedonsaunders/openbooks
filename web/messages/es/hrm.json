@@ -344,16 +344,19 @@
     "benefits": {
       "title": "Beneficios",
       "empty": "Aún no hay inscripciones de beneficios ni dependientes.",
+      "loadFailed": "No se pudieron cargar los beneficios.",
       "viewAll": "Beneficios",
       "dependents": "{count, plural, one {# dependiente: {names}} other {# dependientes: {names}}}"
     },
     "qualifications": {
       "title": "Cualificaciones",
       "viewAll": "Ver todas",
-      "empty": "Sin cualificaciones registradas."
+      "empty": "Sin cualificaciones registradas.",
+      "loadFailed": "No se pudieron cargar las cualificaciones."
     },
     "continuous": {
-      "title": "Comentarios y competencias"
+      "title": "Comentarios y competencias",
+      "loadFailed": "No se pudieron cargar los comentarios ni las competencias."
     }
   },
   "directory": {

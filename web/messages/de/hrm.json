@@ -344,16 +344,19 @@
     "benefits": {
       "title": "Leistungen",
       "empty": "Noch keine Leistungsanmeldungen oder Angehörige.",
+      "loadFailed": "Leistungen konnten nicht geladen werden.",
       "viewAll": "Leistungen",
       "dependents": "{count, plural, one {# Angehöriger: {names}} other {# Angehörige: {names}}}"
     },
     "qualifications": {
       "title": "Qualifikationen",
       "viewAll": "Alle ansehen",
-      "empty": "Keine Qualifikationen erfasst."
+      "empty": "Keine Qualifikationen erfasst.",
+      "loadFailed": "Qualifikationen konnten nicht geladen werden."
     },
     "continuous": {
-      "title": "Feedback & Kompetenzen"
+      "title": "Feedback & Kompetenzen",
+      "loadFailed": "Feedback und Kompetenzen konnten nicht geladen werden."
     }
   },
   "directory": {

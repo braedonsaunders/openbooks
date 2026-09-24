@@ -344,16 +344,19 @@
     "benefits": {
       "title": "福利",
       "empty": "暂无福利参保或家属。",
+      "loadFailed": "无法加载福利。",
       "viewAll": "福利",
       "dependents": "家属（{count}人）：{names}"
     },
     "qualifications": {
       "title": "资质",
       "viewAll": "查看全部",
-      "empty": "尚未记录资质。"
+      "empty": "尚未记录资质。",
+      "loadFailed": "无法加载资质。"
     },
     "continuous": {
-      "title": "反馈与能力"
+      "title": "反馈与能力",
+      "loadFailed": "无法加载反馈与能力。"
     }
   },
   "directory": {

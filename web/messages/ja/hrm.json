@@ -344,16 +344,19 @@
     "benefits": {
       "title": "福利厚生",
       "empty": "福利厚生の加入や扶養家族はまだありません。",
+      "loadFailed": "福利厚生を読み込めませんでした。",
       "viewAll": "福利厚生",
       "dependents": "扶養家族（{count}人）: {names}"
     },
     "qualifications": {
       "title": "資格",
       "viewAll": "すべて見る",
-      "empty": "資格が登録されていません。"
+      "empty": "資格が登録されていません。",
+      "loadFailed": "資格を読み込めませんでした。"
     },
     "continuous": {
-      "title": "フィードバックとコンピテンシー"
+      "title": "フィードバックとコンピテンシー",
+      "loadFailed": "フィードバックとコンピテンシーを読み込めませんでした。"
     }
   },
   "directory": {

@@ -344,16 +344,19 @@
     "benefits": {
       "title": "Avantages",
       "empty": "Aucune adhésion ni personne à charge pour l'instant.",
+      "loadFailed": "Les avantages n’ont pas pu être chargés.",
       "viewAll": "Avantages",
       "dependents": "{count, plural, one {# personne à charge : {names}} other {# personnes à charge : {names}}}"
     },
     "qualifications": {
       "title": "Qualifications",
       "viewAll": "Tout voir",
-      "empty": "Aucune qualification enregistrée."
+      "empty": "Aucune qualification enregistrée.",
+      "loadFailed": "Les qualifications n’ont pas pu être chargées."
     },
     "continuous": {
-      "title": "Retours & compétences"
+      "title": "Retours & compétences",
+      "loadFailed": "Les retours et compétences n’ont pas pu être chargés."
     }
   },
   "directory": {

@@ -120,17 +120,37 @@ type RecordState = {
   asOfRefusal: { code: string; message: string } | null
   changeRequests: ChangeRequest[]
   refusalMessage: string | null
-  benefits: 'hidden' | 'loading' | 'ready'
+  benefits: 'hidden' | 'loading' | 'ready' | 'error'
   benefitElections: BenefitElection[]
   benefitDependents: BenefitDependent[]
-  qualifications: 'hidden' | 'loading' | 'ready'
+  benefitsError: string | null
+  qualifications: 'hidden' | 'loading' | 'ready' | 'error'
   employmentQualifications: EmploymentQualification[]
+  qualificationsError: string | null
   // HR-17: visibility-filtered feedback and expected-vs-assessed
   // competencies. A 403/404 hides the section — the record is readable
-  // without continuous-performance access.
-  continuous: 'hidden' | 'loading' | 'ready'
+  // without continuous-performance access. Anything else is an error with
+  // retry, never a silent absence.
+  continuous: 'hidden' | 'loading' | 'ready' | 'error'
   feedback: DrawerFeedback[]
   competencies: DrawerCompetency[]
+  continuousError: string | null
+}
+
+/**
+ * A beside-the-record section that failed to load (a 500, a network drop —
+ * anything but 403/404) says so with a retry, instead of hiding as if the
+ * viewer had no access.
+ */
+function SectionError({ message, onRetry, retryLabel }: { message: string; onRetry: () => void; retryLabel: string }) {
+  return (
+    <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+      {message}{' '}
+      <Button variant="ghost" size="sm" onClick={onRetry}>
+        {retryLabel}
+      </Button>
+    </p>
+  )
 }
 
 export function EmploymentTab({
@@ -150,6 +170,7 @@ export function EmploymentTab({
   departmentOptions?: { value: string; label: string }[]
 }) {
   const t = useTranslations('hrm')
+  const tCommon = useTranslations('common')
   // New dated records default to the org's business day from the server,
   // never the browser's UTC day (tomorrow after 5pm Pacific).
   const [date, setDate] = useState(useBusinessToday())
@@ -158,8 +179,9 @@ export function EmploymentTab({
   const [exit, setExit] = useState<ExitState>({ status: 'hidden', record: null, message: null })
   const [state, setState] = useState<RecordState>({
     status: 'loading', episodes: [], asOf: null, asOfRefusal: null, changeRequests: [], refusalMessage: null,
-    benefits: 'loading', benefitElections: [], benefitDependents: [], qualifications: 'loading', employmentQualifications: [],
-    continuous: 'loading', feedback: [], competencies: [],
+    benefits: 'loading', benefitElections: [], benefitDependents: [], benefitsError: null,
+    qualifications: 'loading', employmentQualifications: [], qualificationsError: null,
+    continuous: 'loading', feedback: [], competencies: [], continuousError: null,
   })
   const requestId = useRef(0)
   const reload = (): void => {
@@ -190,23 +212,27 @@ export function EmploymentTab({
           benefits: 'loading',
           benefitElections: [],
           benefitDependents: [],
+          benefitsError: null,
           qualifications: 'loading',
           employmentQualifications: [],
+          qualificationsError: null,
           continuous: 'loading',
           feedback: [],
           competencies: [],
+          continuousError: null,
         })
         // Qualifications ride the qualifications API beside the record:
         // a 403/404 (no grant, or the feature off) hides the section
         // instead of failing the tab — the employment record is readable
-        // without qualification access.
+        // without qualification access. Anything else is an error with
+        // retry: a 500 must never look like no access.
         try {
           const qualificationsRes = await fetch(`/api/hrm/qualifications?employmentId=${employmentId}`)
           if (cancelled || requestId.current !== current) return
           if (qualificationsRes.status === 403 || qualificationsRes.status === 404) {
-            setState((s) => ({ ...s, qualifications: 'hidden', employmentQualifications: [] }))
+            setState((s) => ({ ...s, qualifications: 'hidden', employmentQualifications: [], qualificationsError: null }))
           } else {
-            if (!qualificationsRes.ok) throw new Error(await readApiErrorMessage(qualificationsRes, 'failed to load qualifications'))
+            if (!qualificationsRes.ok) throw new Error(await readApiErrorMessage(qualificationsRes, t('employment.qualifications.loadFailed')))
             const quals = (await qualificationsRes.json()) as {
               qualifications?: { id: string; type?: { code?: string; name?: string }; status?: string; expiresOn?: string | null }[]
             }
@@ -215,6 +241,7 @@ export function EmploymentTab({
             setState((s) => ({
               ...s,
               qualifications: 'ready',
+              qualificationsError: null,
               employmentQualifications: list.map((q) => ({
                 id: q.id,
                 typeCode: q.type?.code ?? '',
@@ -224,40 +251,55 @@ export function EmploymentTab({
               })),
             }))
           }
-        } catch {
+        } catch (e) {
           if (cancelled || requestId.current !== current) return
-          setState((s) => ({ ...s, qualifications: 'hidden', employmentQualifications: [] }))
+          setState((s) => ({
+            ...s,
+            qualifications: 'error',
+            employmentQualifications: [],
+            qualificationsError: e instanceof Error ? e.message : t('employment.qualifications.loadFailed'),
+          }))
         }
-        // Benefits ride the benefits APIs beside the record: a 403 (no
-        // benefits grant) hides the section instead of failing the tab —
-        // the employment record is readable without benefits access.
+        // Benefits ride the benefits APIs beside the record: a 403/404 (no
+        // benefits grant, or the feature off) hides the section instead of
+        // failing the tab — the employment record is readable without
+        // benefits access. Anything else is an error with retry.
+        const benefitsForbidden = (res: Response): boolean => res.status === 403 || res.status === 404
         try {
           const [enrollmentsRes, dependentsRes] = await Promise.all([
             fetch(`/api/hrm/enrollments?employmentId=${employmentId}`),
             fetch(`/api/hrm/dependents?employmentId=${employmentId}`),
           ])
           if (cancelled || requestId.current !== current) return
-          if (enrollmentsRes.status === 403 || dependentsRes.status === 403) {
-            setState((s) => ({ ...s, benefits: 'hidden' }))
+          if (benefitsForbidden(enrollmentsRes) && benefitsForbidden(dependentsRes)) {
+            setState((s) => ({ ...s, benefits: 'hidden', benefitsError: null }))
             return
           }
-          if (!enrollmentsRes.ok) throw new Error(await readApiErrorMessage(enrollmentsRes, 'failed to load benefits'))
-          if (!dependentsRes.ok) throw new Error(await readApiErrorMessage(dependentsRes, 'failed to load benefits'))
+          if (!enrollmentsRes.ok) throw new Error(await readApiErrorMessage(enrollmentsRes, t('employment.benefits.loadFailed')))
+          if (!dependentsRes.ok) throw new Error(await readApiErrorMessage(dependentsRes, t('employment.benefits.loadFailed')))
           const enrollments = (await enrollmentsRes.json()) as { enrollments?: BenefitElection[] }
           const dependents = (await dependentsRes.json()) as { dependents?: BenefitDependent[] }
           if (cancelled || requestId.current !== current) return
           setState((s) => ({
             ...s,
             benefits: 'ready',
+            benefitsError: null,
             benefitElections: Array.isArray(enrollments.enrollments) ? enrollments.enrollments : [],
             benefitDependents: Array.isArray(dependents.dependents) ? dependents.dependents : [],
           }))
-        } catch {
+        } catch (e) {
           if (cancelled || requestId.current !== current) return
-          setState((s) => ({ ...s, benefits: 'hidden' }))
+          setState((s) => ({
+            ...s,
+            benefits: 'error',
+            benefitsError: e instanceof Error ? e.message : t('employment.benefits.loadFailed'),
+          }))
         }
         // HR-17: feedback (visibility-filtered by the service) and the
-        // competency profile ride beside the record like benefits do.
+        // competency profile ride beside the record like benefits do: both
+        // legs 403/404 hides the section, anything else is an error with
+        // retry.
+        const continuousForbidden = (res: Response): boolean => res.status === 403 || res.status === 404
         try {
           const [feedbackRes, profileRes] = await Promise.all([
             fetch(`/api/hrm/feedback?subjectEmploymentId=${employmentId}`),
@@ -265,8 +307,12 @@ export function EmploymentTab({
           ])
           if (cancelled || requestId.current !== current) return
           if (!feedbackRes.ok || !profileRes.ok) {
-            setState((s) => ({ ...s, continuous: 'hidden' }))
-            return
+            if (continuousForbidden(feedbackRes) && continuousForbidden(profileRes)) {
+              setState((s) => ({ ...s, continuous: 'hidden', continuousError: null }))
+              return
+            }
+            const failing = !feedbackRes.ok ? feedbackRes : profileRes
+            throw new Error(await readApiErrorMessage(failing, t('employment.continuous.loadFailed')))
           }
           const fb = (await feedbackRes.json()) as { feedback?: DrawerFeedback[] }
           const cp = (await profileRes.json()) as { profile?: DrawerCompetency[] }
@@ -274,12 +320,17 @@ export function EmploymentTab({
           setState((s) => ({
             ...s,
             continuous: 'ready',
+            continuousError: null,
             feedback: Array.isArray(fb.feedback) ? fb.feedback : [],
             competencies: Array.isArray(cp.profile) ? cp.profile : [],
           }))
-        } catch {
+        } catch (e) {
           if (cancelled || requestId.current !== current) return
-          setState((s) => ({ ...s, continuous: 'hidden' }))
+          setState((s) => ({
+            ...s,
+            continuous: 'error',
+            continuousError: e instanceof Error ? e.message : t('employment.continuous.loadFailed'),
+          }))
         }
       } catch (e) {
         if (cancelled || requestId.current !== current) return
@@ -291,7 +342,9 @@ export function EmploymentTab({
     return () => {
       cancelled = true
     }
-  }, [employmentId, date, revision])
+  // t rides the deps so a locale switch re-resolves the section errors in
+  // the new language with the same fetch.
+  }, [employmentId, date, revision, t])
 
   // The exit record loads once the as-of version reads terminated: the
   // record describes a termination, and an unterminated employment shows
@@ -550,6 +603,13 @@ export function EmploymentTab({
             {t('employment.qualifications.viewAll')}
           </Link>
         </div>
+        {state.qualifications === 'error' ? (
+          <SectionError
+            message={state.qualificationsError ?? t('employment.qualifications.loadFailed')}
+            onRetry={reload}
+            retryLabel={tCommon('actions.retry')}
+          />
+        ) : null}
         {state.qualifications === 'ready' && state.employmentQualifications.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.qualifications.empty')}</p>
         ) : null}
@@ -572,12 +632,19 @@ export function EmploymentTab({
         ) : null}
       </section>
       ) : null}
-      {state.continuous === 'ready' && (state.feedback.length > 0 || state.competencies.length > 0) ? (
+      {state.continuous !== 'hidden' ? (
       <section aria-label={t('employment.continuous.title')}>
         <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
           {t('employment.continuous.title')}
         </h3>
-        {state.feedback.length > 0 ? (
+        {state.continuous === 'error' ? (
+          <SectionError
+            message={state.continuousError ?? t('employment.continuous.loadFailed')}
+            onRetry={reload}
+            retryLabel={tCommon('actions.retry')}
+          />
+        ) : null}
+        {state.continuous === 'ready' && state.feedback.length > 0 ? (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {state.feedback.map((row) => (
               <li key={row.id} className="py-2">
@@ -589,7 +656,7 @@ export function EmploymentTab({
             ))}
           </ul>
         ) : null}
-        {state.competencies.length > 0 ? (
+        {state.continuous === 'ready' && state.competencies.length > 0 ? (
           <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
             {state.competencies.map((row) => (
               <li key={row.sectionTitle} className="py-2">
@@ -618,6 +685,13 @@ export function EmploymentTab({
             {t('employment.benefits.viewAll')}
           </Link>
         </div>
+        {state.benefits === 'error' ? (
+          <SectionError
+            message={state.benefitsError ?? t('employment.benefits.loadFailed')}
+            onRetry={reload}
+            retryLabel={tCommon('actions.retry')}
+          />
+        ) : null}
         {state.benefits === 'ready' && state.benefitElections.length === 0 && state.benefitDependents.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.benefits.empty')}</p>
         ) : null}
