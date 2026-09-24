@@ -355,3 +355,107 @@ test('an unbound identifying schedule reads paused, bound and CSV routes do not'
     'the badge names the remedy, not a generic error',
   )
 })
+
+// F4T2-12 (the SFTP server and schedule Removes DELETE with no confirm,
+// while the sibling connection Remove got one for F-t05-021): both must
+// confirm first, and a cancelled confirm must not delete.
+async function mountSftpRemoves() {
+  ;(globalThis as Record<string, unknown>).__feedConfirmCalls = []
+  ;(globalThis as Record<string, unknown>).__feedDeletes = []
+  globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
+    if (init?.method === 'DELETE') {
+      ;(globalThis.__feedDeletes ?? []).push(String(url))
+      return Response.json({ ok: true })
+    }
+    throw new Error(`unexpected fetch ${String(url)}`)
+  }) as typeof fetch
+  ;(globalThis as Record<string, unknown>).confirm = (message: unknown) => {
+    ;(globalThis.__feedConfirmCalls ?? []).push(String(message))
+    return globalThis.__feedConfirmAnswer ?? true
+  }
+  return mountSftpSchedules([
+    { id: 'sched-1', format: 'csv', expectedExternalAccountId: null },
+  ])
+}
+
+function serverRemoveButton(host: Element): HTMLButtonElement {
+  const btn = [...host.querySelectorAll('button')].find(
+    (b) => (b.textContent ?? '').trim() === 'Remove' && !b.closest('li'),
+  ) as HTMLButtonElement | undefined
+  assert.ok(btn, 'the server card must offer Remove')
+  return btn
+}
+
+function scheduleRemoveButton(host: Element): HTMLButtonElement {
+  const btn = [...host.querySelectorAll('li button')].find(
+    (b) => (b.textContent ?? '').trim() === 'Remove',
+  ) as HTMLButtonElement | undefined
+  assert.ok(btn, 'the schedule row must offer Remove')
+  return btn
+}
+
+async function clickButton(btn: HTMLButtonElement) {
+  await act(async () => {
+    btn.click()
+    await tick()
+    await tick()
+  })
+}
+
+test('removing an SFTP server confirms first (F4T2-12)', async (t) => {
+  globalThis.__feedConfirmAnswer = true
+  const { host, root } = await mountSftpRemoves()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickButton(serverRemoveButton(host))
+  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'server Remove must confirm before deleting')
+  assert.match(globalThis.__feedConfirmCalls?.[0] ?? '', /Remove this SFTP login/)
+  assert.deepEqual(globalThis.__feedDeletes, ['/api/banking/sftp/srv-1'])
+})
+
+test('cancelling the server confirm leaves the login alone (F4T2-12)', async (t) => {
+  globalThis.__feedConfirmAnswer = false
+  const { host, root } = await mountSftpRemoves()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickButton(serverRemoveButton(host))
+  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'server Remove must confirm before deleting')
+  assert.deepEqual(globalThis.__feedDeletes, [], 'a cancelled confirm must not delete the server')
+})
+
+test('removing a routing schedule confirms first (F4T2-12)', async (t) => {
+  globalThis.__feedConfirmAnswer = true
+  const { host, root } = await mountSftpRemoves()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickButton(scheduleRemoveButton(host))
+  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'schedule Remove must confirm before deleting')
+  assert.match(globalThis.__feedConfirmCalls?.[0] ?? '', /Remove this routing schedule/)
+  assert.deepEqual(globalThis.__feedDeletes, ['/api/banking/sftp/schedules/sched-1'])
+})
+
+test('cancelling the schedule confirm leaves the route alone (F4T2-12)', async (t) => {
+  globalThis.__feedConfirmAnswer = false
+  const { host, root } = await mountSftpRemoves()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickButton(scheduleRemoveButton(host))
+  assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'schedule Remove must confirm before deleting')
+  assert.deepEqual(globalThis.__feedDeletes, [], 'a cancelled confirm must not delete the schedule')
+})

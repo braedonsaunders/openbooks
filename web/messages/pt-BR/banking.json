@@ -797,6 +797,8 @@
         "routing": "Roteamento",
         "done": "Concluído",
         "remove": "Remover",
+        "removeServerConfirm": "Remover este acesso SFTP? Isso não pode ser desfeito.",
+        "removeScheduleConfirm": "Remover esta regra de roteamento? Os arquivos desta pasta deixarão de ser importados.",
         "routingTitle": "Roteamento de importação — qual pasta alimenta qual conta",
         "noRouting": "Sem roteamento ainda — adicione um abaixo.",
         "folderPlaceholder": "pasta",

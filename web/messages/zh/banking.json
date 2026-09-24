@@ -797,6 +797,8 @@
         "routing": "路由",
         "done": "完成",
         "remove": "删除",
+        "removeServerConfirm": "删除此SFTP登录吗？此操作无法撤销。",
+        "removeScheduleConfirm": "删除此路由规则吗？此文件夹中的文件将不再导入。",
         "routingTitle": "导入路由 — 哪个文件夹对应哪个账户",
         "noRouting": "暂无路由 — 请在下方添加。",
         "folderPlaceholder": "文件夹",

@@ -772,6 +772,8 @@
         "routing": "Routing",
         "done": "Done",
         "remove": "Remove",
+        "removeServerConfirm": "Remove this SFTP login? This cannot be undone.",
+        "removeScheduleConfirm": "Remove this routing schedule? Files in this folder stop importing.",
         "routingTitle": "Import routing — which folder feeds which account",
         "noRouting": "No routing yet — add one below.",
         "folderPlaceholder": "folder",
