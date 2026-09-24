@@ -478,7 +478,8 @@
       "cancel": "Cancelar",
       "manageBooks": "Gerenciar livros",
       "managePeriod": "Gerenciar {period}",
-      "addRow": "Adicionar"
+      "addRow": "Adicionar",
+      "removeValue": "Remover {value}"
     },
     "fields": {
       "name": "Nome",

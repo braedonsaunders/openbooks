@@ -222,3 +222,20 @@ test('period drawer surfaces pending reopen requests for its period and book', a
     await unmount()
   }
 })
+
+test('report package remove controls have names that identify each report', async () => {
+  const list = { page: 1, total: 0 }
+  const props = {
+    ...baseProps({ tab: 'packages', package: 'new' }),
+    advancedClose: true,
+    configLists: { calendar: list, blueprint: list, policy: list, automation: list, package: list },
+  }
+  const { unmount } = await mountWorkspace(props)
+  try {
+    const removeControls = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Remove "]')]
+    assert.equal(removeControls.length, 5, 'every default attached report can be identified for removal')
+    assert.ok(removeControls.every((button) => button.getAttribute('aria-label')!.length > 'Remove '.length))
+  } finally {
+    await unmount()
+  }
+})
