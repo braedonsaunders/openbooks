@@ -76,7 +76,8 @@ export async function computeEsStatutory(
   if (region === "NC" || region === "PV") {
     fail(
       `region "${region}" applies the foral IRPF regime (Hacienda Foral de Navarra / `
-      + "Haciendas Forales de Álava, Gipuzkoa y Bizkaia) — AEAT tables never cover it",
+      + "Haciendas Forales de Álava, Gipuzkoa y Bizkaia) — AEAT tables never cover it. Transcribe "
+      + "the foral tables into engine/src/payroll/es/rates.ts before calculating",
     );
   }
   assertRegionSupported(region);

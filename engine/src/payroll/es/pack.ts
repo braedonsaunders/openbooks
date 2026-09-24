@@ -58,14 +58,16 @@ const ES_REGIONS: PayrollRegionCoverage = {
   // computes AEAT-territory IRPF end to end — only the foral NC/PV stay out.
   supported: ES_AEAT_SUPPORTED,
   unsupportedReason:
-    "IRPF withholding for {region} is not implemented by the ES payroll pack — the AEAT "
-    + "retention algorithm for the year is not transcribed into engine/src/payroll/es/rates.ts",
+    "IRPF withholding for {region} is not implemented by the ES payroll pack — the pack computes "
+    + "AEAT-territory IRPF from the year's transcribed ALGORITMO and refuses the foral NC/PV by name, "
+    + "so reaching this message means {region} has no declared rule — refusing, never defaulting",
   unsupportedReasons: {
-    NC: "Navarra applies the foral IRPF regime: Hacienda Foral de Navarra publishes its own "
-      + "retention tables, which are not transcribed — AEAT tables never cover Navarra",
+    NC: "Navarra applies the foral IRPF regime: foral retention tables for Navarra "
+      + "(Hacienda Foral de Navarra) aren't in this pack — AEAT tables never cover Navarra. "
+      + "Transcribe them into engine/src/payroll/es/rates.ts before calculating",
     PV: "the Basque Historical Territories — Álava/Araba, Gipuzkoa and Bizkaia — apply the "
-      + "foral IRPF regime: each Hacienda Foral publishes its own retention tables, which are "
-      + "not transcribed — AEAT tables never cover them",
+      + "foral IRPF regime: foral retention tables for the three Haciendas Forales aren't in this pack — "
+      + "AEAT tables never cover them. Transcribe them into engine/src/payroll/es/rates.ts before calculating",
   },
 };
 
