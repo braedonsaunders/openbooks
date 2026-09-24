@@ -445,6 +445,13 @@ export async function shareReview(args: {
     const partyId = await actorParty(db, orgId, actorId);
     const stored = await loadReview(db, orgId, reviewId);
     const review = toReviewDTO(stored);
+    const cycle = (await db.execute<{ status: string }>(sql`
+      select status from hrm_review_cycles where org_id = ${orgId} and id = ${review.cycleId}
+       for share
+    `)).rows[0];
+    if (!cycle) {
+      throw new HrmPerformanceError("NOT_FOUND", `review cycle for review ${reviewId} is not visible in this organization`);
+    }
     if (review.kind === "self") {
       throw new HrmPerformanceError(
         "REFUSED",
@@ -461,7 +468,7 @@ export async function shareReview(args: {
         `review ${reviewId} is ${review.status} — only a submitted or calibrated review shares`,
       );
     }
-    if (review.cycleStatus === "calibrating") {
+    if (cycle.status === "calibrating") {
       throw new HrmPerformanceError(
         "REFUSED",
         `review ${reviewId} sits in a calibrating cycle — finish calibration (close the cycle) before sharing it with the subject`,
