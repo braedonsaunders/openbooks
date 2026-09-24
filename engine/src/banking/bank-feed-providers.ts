@@ -68,7 +68,48 @@ async function jsonResponse(res: Response): Promise<{ body: unknown; raw: Uint8A
   if (!res.ok) {
     throw new FeedError(`provider responded ${res.status}: ${text.slice(0, 300)}`);
   }
-  return { body: text ? (JSON.parse(text) as unknown) : {}, raw };
+  return { body: text ? (parseProviderJson(text) as unknown) : {}, raw };
+}
+
+/** Keep provider JSON number tokens on amount fields exact before JSON.parse
+ *  rounds them through IEEE-754. Other provider fields retain normal JSON
+ *  types, while every mapped amount still passes the same decimal validator. */
+function parseProviderJson(text: string): unknown {
+  const replacements: Array<{ start: number; end: number; value: string }> = [];
+  const numberPattern = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+  for (let index = 0; index < text.length;) {
+    if (text[index] !== '"') {
+      index += 1;
+      continue;
+    }
+    const start = index;
+    index += 1;
+    while (index < text.length) {
+      if (text[index] === "\\") index += 2;
+      else if (text[index++] === '"') break;
+    }
+    let key: unknown;
+    try {
+      key = JSON.parse(text.slice(start, index));
+    } catch {
+      continue;
+    }
+    if (key !== "amount") continue;
+    let valueStart = index;
+    while (/\s/.test(text[valueStart] ?? "")) valueStart += 1;
+    if (text[valueStart] !== ":") continue;
+    valueStart += 1;
+    while (/\s/.test(text[valueStart] ?? "")) valueStart += 1;
+    numberPattern.lastIndex = valueStart;
+    const match = numberPattern.exec(text);
+    if (!match) continue;
+    replacements.push({ start: valueStart, end: numberPattern.lastIndex, value: JSON.stringify(match[0]) });
+  }
+  let exactText = text;
+  for (const replacement of replacements.reverse()) {
+    exactText = `${exactText.slice(0, replacement.start)}${replacement.value}${exactText.slice(replacement.end)}`;
+  }
+  return JSON.parse(exactText) as unknown;
 }
 
 async function asJson(res: Response): Promise<unknown> {
