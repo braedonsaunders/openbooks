@@ -157,6 +157,13 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "MO", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
+  const reducedWithholding = certificateAmount(input.certificate, "reduced_withholding_per_period");
+  if (reducedWithholding != null) {
+    const tax = U(reducedWithholding);
+    trace("MO_REDUCED_WITHHOLDING", tax);
+    return { state: "MO", year: rates.year, tax: D(tax), taxSupplemental: D(0n), factors };
+  }
+
   // No MO W-4: "withhold at a single tax rate."
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as MoFilingStatus;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -265,6 +272,16 @@ export const MO_CERTIFICATE: PayrollCertificate = {
       help:
         "A written additional amount on Form MO W-4 Line 2. Added AFTER the "
         + "formula is de-annualized and rounded to the nearest whole dollar.",
+    },
+    {
+      key: "reduced_withholding_per_period",
+      label: "Line 3 — Reduced withholding amount per pay period",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      help:
+        "When entered, this is the only Missouri income tax withheld per pay period. "
+        + "It replaces the standard formula and Line 2 additional amount.",
     },
     {
       key: "exempt",

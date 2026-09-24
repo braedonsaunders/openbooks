@@ -43,6 +43,23 @@ test("MO formula example — $35,000 annual, married spouse works: $59 monthly",
   assert.equal(result.tax, money("59"));
 });
 
+test("MO Line 3 reduced withholding replaces the formula and Line 2 extra", () => {
+  // The official MO W-4 Line 3 directs the employer to withhold only the
+  // entered amount instead of the standard calculations.
+  // https://dor.mo.gov/forms/MO%20W-4.pdf
+  const result = MO_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 12, wages: "2916.67",
+    basis: "resident",
+    certificate: cert({
+      filing_status: "married_spouse_works",
+      additional_per_period: "5.00",
+      reduced_withholding_per_period: "20.00",
+    }),
+  });
+  assert.equal(result.tax, money("20.00"));
+  assert.equal(result.factors.MO_REDUCED_WITHHOLDING, money("20.00"));
+});
+
 test("MO no MO W-4 withholds at the single rate", () => {
   const empty = MO_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 12, wages: "2916.67",
