@@ -87,24 +87,21 @@ export const FR_SMIC_2026 = {
 } as const;
 
 /**
- * Allocations familiales reduced-rate ceiling 2026: 3,5 × SMIC annuel.
- *
- * CSS art. L241-6-1 fixes the employer rate at 3,45 % for salaries that do
- * not exceed 3,5 times the SMIC and 5,25 % above it ("n'excède pas 3,5 fois
- * le montant du Smic"); art. D241-3-1 sets the assessment modalities. The
- * engine compares the annualised remuneration (brut × periodicity) against
- * this annual ceiling — at monthly periodicity that is exactly brut ≤ 3,5 ×
- * SMIC mensuel (6 380,605 €).
- *
- * 3,5 × 21 876,36 = 76 567,26 — transcribed, with the relationship asserted
- * in the goldens (the FR_QUATRE_PASS_2026 pattern).
+ * Allocations familiales reduced-rate ceiling for eligible employers in 2026.
+ * URSSAF limits the 3,45 % rate to employers benefiting from specified
+ * exemptions and keys the threshold to 3,5 × the SMIC at 31 December 2023,
+ * not the current-year SMIC. That reference SMIC is €20,966.40 annually;
+ * the 2026 ceiling is €73,382.40. Ordinary employers owe 5,25 % regardless
+ * of wage. Source: URSSAF, updated 10 June 2026.
  */
 export const FR_ALLOC_FAM_SEUIL_2026 = {
   multiple: "3.5",
-  annual: "76567.26",
+  referenceSmicAnnual: "20966.40",
+  annual: "73382.40",
   quote:
-    "CSS art. L241-6-1: taux réduit 3,45 % pour les rémunérations n'excédant "
-    + "pas 3,5 fois le SMIC, taux plein 5,25 % au-delà (modalités: art. D241-3-1)",
+    "URSSAF cotisation allocations familiales (10 June 2026): 5.25% generally; "
+    + "3.45% only for specified exemption/special-regime employers, at or below "
+    + "3.5 × the 31 December 2023 SMIC (annual €20,966.40)",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -302,7 +299,7 @@ export const FR_TENANT_DECLARED_QUOTES_2026 = {
  */
 export const FR_COTISATION_REFUSALS_2026: readonly string[] = [
   "Maladie patronale taux réduit 7 %: the page states no income condition for the réduit/plein split — the engine applies the 13 % plein, never the 7 % réduit",
-  "Allocations familiales taux réduit 3,45 %: COMPUTED — CSS art. L241-6-1 threshold (3,5 × SMIC, FR_ALLOC_FAM_SEUIL_2026 above); the engine selects 3,45 % at or below the ceiling, 5,25 % above",
+  "Allocations familiales reduced rate 3.45%: requires an explicit employer exemption/special-regime eligibility fact and the 31-Dec-2023 SMIC threshold (FR_ALLOC_FAM_SEUIL_2026); ordinary employers owe 5.25%",
   "AGS 0,03 % interim variant: needs an employer-type (entreprise de travail temporaire) channel no pack carries — the engine applies 0,25 %",
   "Alsace-Moselle cotisation salariale maladie supplémentaire 1,30 % (transcribed above): needs a workplace-department channel no pack carries",
   "AT/MP (Taux notifié par la Carsat) and versement mobilité (commune-dependent): tenant-declared by design, never table-supplied",

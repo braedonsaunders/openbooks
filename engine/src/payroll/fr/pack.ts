@@ -4,10 +4,10 @@ import type {
   PayrollPackCertificates,
 } from "../certificates.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
-import type { PayrollPackRates } from "../statutory-rates.ts";
 import { computeFrStatutory, FR_FACTOR_LABELS } from "./compute-statutory.ts";
 import { frPackFilings } from "./filings.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
+import { FR_PACK_RATES } from "./statutory-rates.ts";
 
 /**
  * France payroll pack — `installable: true` for calendar 2026.
@@ -215,65 +215,6 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
 };
 
 // ---------------------------------------------------------------------------
-// Employer-entered rates: the AT/MP rate, notified per establishment.
-// ---------------------------------------------------------------------------
-
-const FR_RATES: PayrollPackRates = {
-  country: "FR",
-  slots: [
-    {
-      key: "fr_atmp",
-      label: "Taux AT/MP",
-      // Per establishment: the rate rides the SIRET filing account, the same
-      // account the DSN is filed under — not one org-wide number.
-      scope: "filing_account",
-      programType: "fr_siret",
-      systemKeys: ["atmp"],
-      regions: ["FR"],
-      // Not yet reviewed: the compute pass pushes no AT/MP line (no context
-      // channel for the tenant-declared rate yet), so the slot keeps today's
-      // behaviour — collected but unread — until explicitly migrated.
-      whenUnconfigured: "legacy",
-      citation: "Code de la sécurité sociale, art. L242-5 (taux notifié par la caisse)",
-      variesBecause:
-        "The caisse notifies each establishment its own AT/MP rate from its activity risk class and sinistrality — a figure no published table can supply.",
-      fields: [
-        {
-          key: "taux", label: "Taux AT/MP (%)", kind: "percent", decimals: 4,
-          min: "0", max: "100", required: true,
-          help: "As a percent, as the caisse notifies it: 1.1 is 1.1%. Enter the rate notified for this establishment.",
-        },
-      ],
-    },
-    {
-      key: "fr_versement_mobilite",
-      label: "Taux versement mobilité",
-      // Per commune/authority zone: the rate depends on where the
-      // establishment sits, so it rides the same SIRET filing account as
-      // the AT/MP rate — never a published table.
-      scope: "filing_account",
-      programType: "fr_siret",
-      systemKeys: ["cdn_er"],
-      regions: ["FR"],
-      // Not yet reviewed: like AT/MP above, the compute pass pushes no
-      // versement-mobilité line yet, so the slot keeps today's behaviour
-      // until explicitly migrated.
-      whenUnconfigured: "legacy",
-      citation: "urssaf.fr, taux et barèmes — Versement mobilité (effectif de 11 salariés et plus)",
-      variesBecause:
-        "The rate is set per autorité organisatrice de la mobilité from the establishment's commune — a figure no published table can supply.",
-      fields: [
-        {
-          key: "taux", label: "Taux versement mobilité (%)", kind: "percent", decimals: 4,
-          min: "0", max: "100", required: true,
-          help: "As a percent, as the URSSAF versement-mobilité lookup returns it for this establishment's commune.",
-        },
-      ],
-    },
-  ],
-};
-
-// ---------------------------------------------------------------------------
 // Filings: the annual récapitulatif of DSN-declared versements (see
 // ./filings.ts for the premise: France issues no employer annual tax
 // certificate, so the declaration is a per-employee per-month reconciliation
@@ -397,7 +338,7 @@ export const FR_PAYROLL_PACK = {
   // the pack declares an empty vocabulary rather than an unhonored one.
   deductionTreatments: [],
   filings: frPackFilings,
-  statutoryRates: FR_RATES,
+  statutoryRates: FR_PACK_RATES,
   taxYears: FR_TAX_YEARS,
   certificates: () => FR_CERTIFICATES,
   withholding: () => FR_WITHHOLDING,

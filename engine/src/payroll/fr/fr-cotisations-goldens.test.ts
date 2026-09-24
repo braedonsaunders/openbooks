@@ -86,10 +86,9 @@ test("hand-worked: 2 000 € brut, monthly, 10 salariés — every line", () => 
   assert.equal(r.vieillesseErPlafonnee, "171.0000");
   assert.equal(r.vieillesseErDeplafonnee, "42.2000");
   assert.equal(r.vieillesseEr, "213.2000");
-  // 2 000 € annualises to 24 000 €, below the 76 567,26 € ceiling
-  // (3,5 × SMIC, CSS art. L241-6-1) → 2 000 × 3,45 % = 69,00.
-  assert.equal(r.allocFamErRate, "0.0345");
-  assert.equal(r.allocFamEr, "69.0000");
+  // Ordinary employers owe 5.25%, irrespective of remuneration.
+  assert.equal(r.allocFamErRate, "0.0525");
+  assert.equal(r.allocFamEr, "105.0000");
   // 2 000 × 4 % = 80,00 chômage; 2 000 × 0,25 % = 5,00 AGS.
   assert.equal(r.chomageEr, "80.0000");
   assert.equal(r.agsEr, "5.0000");
@@ -102,6 +101,21 @@ test("hand-worked: 2 000 € brut, monthly, 10 salariés — every line", () => 
   // Undeclared tenant rates price at zero and are pushed nowhere.
   assert.equal(r.atmpEr, "0.0000");
   assert.equal(r.versementMobiliteEr, "0.0000");
+});
+
+test("ordinary employers retain the 5.25% family rate below the reduced-rate wage ceiling", () => {
+  // URSSAF states 5.25% is the general rate. 3.45% is limited to employers
+  // with specified exemptions or qualifying special regimes. The 2026
+  // eligible-case ceiling uses the 31 Dec 2023 SMIC (annual €20,966.40), not
+  // the 2026 SMIC. Source: https://www.urssaf.fr/accueil/employeur/cotisations/liste-cotisations/cotisation-allocation-familiale.html
+  const result = calculateFrCotisations2026({
+    brut: "3000.00",
+    payDate: "2026-06-15",
+    periodsPerYear: 12,
+    employerEmployeeCount: 10,
+  });
+  assert.equal(result.allocFamErRate, "0.0525");
+  assert.equal(result.allocFamEr, "157.5000");
 });
 
 test("hand-worked: 20 000 € brut, monthly, 60 salariés — capped lines", () => {

@@ -312,9 +312,8 @@ export async function computeFrStatutory(
     transmittedRatePct: transmitted === "" ? null : transmitted,
     domicile: "metropole",
   });
-  // Cotisations price on the brut. AT/MP and versement mobilité have no
-  // context channel for their tenant-declared rates, so those lines are
-  // not pushed.
+  // Cotisations price on the brut. The account's eligibility declaration is
+  // resolved when the complete employer-contribution path is supported.
   const cots = calculateFrCotisations2026({
     brut: base,
     payDate,
