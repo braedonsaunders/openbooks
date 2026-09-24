@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { parseJsonBody } from "../../../../../lib/api/json";
 import { NextResponse } from "next/server";
+import { authRequestContext, networkAddressEvidenceHash } from "../../../../../lib/auth-policy";
 import {
   declineOfferSigning,
   readOfferForSigning,
@@ -38,8 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const body = parsedBody.data;
   // The IP is hashed, never stored: the evidence carries proof of presence
   // without retaining an identifier the product does not need.
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const ipHash = createHash("sha256").update(forwarded).digest("hex").slice(0, 32);
+  const ipHash = networkAddressEvidenceHash(authRequestContext(req));
   try {
     if (body.action === "decline") {
       const declined = await declineOfferSigning({ signingToken: decodeURIComponent(token), reason: body.reason });
