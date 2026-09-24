@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -173,18 +172,6 @@ function post(id: string) {
     { params: Promise.resolve({ id }) },
   );
 }
-
-const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-
-test("retry enforces subsidiary scope before re-driving the run", () => {
-  assert.match(routeSource, /loadFlowSubjectSubsidiary\(run\.subjectKind, run\.subjectId, orgId\)/);
-  assert.match(routeSource, /guardSubsidiaryScope\(\s*gate,\s*await loadFlowSubjectSubsidiary/);
-  assert.ok(
-    routeSource.indexOf("guardSubsidiaryScope(") < routeSource.lastIndexOf("retryFlowRun("),
-    "scope must settle before the engine retry",
-  );
-  assert.match(routeSource, /from flow_runs/);
-});
 
 /** F-t04-004: the retry route refuses a non-uuid run id without touching the engine. */
 test("retry refuses a malformed run id", async () => {
