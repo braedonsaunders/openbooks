@@ -127,9 +127,24 @@ export async function POST(req: Request) {
 
   const rows: OpeningBalanceWrite[] = []
   for (const raw of body.rows) {
-    const row = raw as { employeePartyId?: unknown; amounts?: unknown; components?: unknown; programs?: unknown }
+    const row = raw as {
+      employeePartyId?: unknown
+      amounts?: unknown
+      components?: unknown
+      programs?: unknown
+      updatedAt?: unknown
+    }
     if (typeof row?.employeePartyId !== 'string' || !isUuid(row.employeePartyId)) {
       return NextResponse.json({ error: 'each row needs a valid employeePartyId' }, { status: 422 })
+    }
+    // The row's loader-served version for the lost-update guard. Absent
+    // means the caller does not speak versions (the file importer) and the
+    // row saves unguarded, as before — never a silent default.
+    let updatedAt: string | null | undefined
+    if (row.updatedAt === undefined || row.updatedAt === null) updatedAt = row.updatedAt
+    else if (typeof row.updatedAt === 'string') updatedAt = row.updatedAt
+    else {
+      return NextResponse.json({ error: 'updatedAt must be the row version string or null' }, { status: 422 })
     }
     if (row.amounts != null && (typeof row.amounts !== 'object' || Array.isArray(row.amounts))) {
       return NextResponse.json({ error: 'amounts must be an object' }, { status: 422 })
@@ -167,6 +182,7 @@ export async function POST(req: Request) {
       // Same contract for program carry-ins: absent keeps what is stored,
       // {} clears them.
       programs,
+      updatedAt,
     })
   }
 

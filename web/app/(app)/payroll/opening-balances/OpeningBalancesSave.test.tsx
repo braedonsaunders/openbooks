@@ -113,11 +113,21 @@ const props = {
   canManage: true,
 } as unknown as Parameters<typeof OpeningBalancesView>[0]
 
-async function mount(t: TestContext, responder: () => Response | Promise<Response>): Promise<void> {
+const posted: { url: unknown; init: RequestInit | undefined }[] = []
+
+async function mountWith(
+  t: TestContext,
+  responder: () => Response | Promise<Response>,
+  initial: (typeof props)['initial'],
+): Promise<void> {
   toasts.length = 0
+  posted.length = 0
   ;(globalThis as Record<string, unknown>).__openingsTestToasts = toasts
   const prior = globalThis.fetch
-  globalThis.fetch = (async () => responder()) as typeof fetch
+  globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
+    posted.push({ url, init })
+    return responder()
+  }) as typeof fetch
   t.after(() => {
     globalThis.fetch = prior
   })
@@ -134,12 +144,16 @@ async function mount(t: TestContext, responder: () => Response | Promise<Respons
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <OpeningBalancesView {...props} />
+        <OpeningBalancesView {...props} initial={initial} />
       </NextIntlClientProvider>,
     )
     await tick()
     await tick()
   })
+}
+
+async function mount(t: TestContext, responder: () => Response | Promise<Response>): Promise<void> {
+  await mountWith(t, responder, props.initial)
 }
 
 function findSave(): HTMLButtonElement | undefined {
@@ -244,4 +258,47 @@ test('a thrown fetch toasts instead of escaping as an unhandled rejection', asyn
   assert.equal(rejections, 0, 'no rejection may escape the save handler')
   const again = findSave()
   assert.ok(again && !again.disabled, 'the grid must stay usable after a transport failure')
+})
+
+test('the save carries each row loader-served version so a stale write can be refused', async (t) => {
+  const initial = {
+    ...props.initial,
+    rows: props.initial.rows.map((row) => ({ ...row, updatedAt: '2026-09-01 00:00:00+00' })),
+  }
+  await mountWith(t, () => Response.json({ created: 0, updated: 1, deleted: 0 }), initial)
+  await editCell('100.00')
+  const save = findSave()
+  assert.ok(save, 'Save must render')
+  await click(save)
+  assert.equal(posted.length, 1, 'one save must be posted')
+  const body = JSON.parse(String(posted[0]!.init?.body)) as {
+    rows: { employeePartyId: string; updatedAt: string | null }[]
+  }
+  assert.equal(body.rows[0]!.updatedAt, '2026-09-01 00:00:00+00')
+})
+
+test('a 409 stale-row refusal lands in the error panel by name', async (t) => {
+  await mount(t, () =>
+    Response.json(
+      {
+        error: 'the carry-in for Ada changed since this screen was loaded',
+        errors: [{
+          employeePartyId: 'emp-1',
+          employeeName: 'Ada',
+          message: 'the carry-in for Ada changed since this screen was loaded — reload the page and re-enter your edits',
+        }],
+        created: 0,
+        updated: 0,
+        deleted: 0,
+      },
+      { status: 409 },
+    ),
+  )
+  await editCell('100.00')
+  const save = findSave()
+  assert.ok(save, 'Save must render')
+  await click(save)
+  assert.match(document.body.textContent ?? '', /changed since/)
+  assert.match(document.body.textContent ?? '', /reload/)
+  assert.deepEqual(successToasts(), [], 'a refused save must not toast success')
 })
