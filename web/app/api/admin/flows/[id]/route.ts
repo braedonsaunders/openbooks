@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { automationGraphSchema } from '@openbooks/forms-core'
 import { flowSubjectProfileForOrg, lintFlowGraphForSubject } from '@openbooks/engine/src/flows/index.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { filterFlowRunSubjectsToScope } from '../../../flows/_lib'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -45,7 +46,20 @@ export async function GET(_req: Request, { params }: Params) {
       from flow_runs where flow_id = ${id} and org_id = ${gate.user.orgId}
      order by started_at desc limit 30
   `))
-  return NextResponse.json({ flow, runs: runs.rows })
+  // A subsidiary-restricted flows.manage caller sees only runs whose
+  // subject sits inside their scope — the same subject rule the retry
+  // route enforces per run. Out-of-scope runs (and their subject UUIDs,
+  // errors and timestamps) are dropped, never redacted in place.
+  const visibleRuns = await filterFlowRunSubjectsToScope(
+    gate.user.orgId,
+    gate.allowedSubsidiaryIds,
+    runs.rows.map((row) => ({
+      kind: String(row.subject_kind),
+      id: String(row.subject_id),
+      row,
+    })),
+  )
+  return NextResponse.json({ flow, runs: visibleRuns.map((subject) => subject.row) })
 }
 
 export async function PATCH(req: Request, { params }: Params) {

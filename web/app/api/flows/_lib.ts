@@ -96,6 +96,72 @@ export async function loadFlowSubjectSubsidiary(
 }
 
 /**
+ * Filter flow_runs subjects to the caller's subsidiary scope — the retry
+ * route's subject-scope rule, reused for run listings (a run UUID is not a
+ * grant to every legal entity). Document subjects resolve batched one
+ * query per kind; bank-account and timesheet subjects resolve through
+ * loadFlowSubjectSubsidiary; every other kind resolves through the same
+ * loader, which fails closed (null) for restricted callers. Unrestricted
+ * callers (null scope) keep every subject. Duplicate subjects resolve
+ * once. Returns the in-scope subset, preserving order.
+ */
+export async function filterFlowRunSubjectsToScope<T extends { kind: string; id: string }>(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  subjects: readonly T[],
+): Promise<T[]> {
+  if (allowedSubsidiaryIds === null) return [...subjects]
+  if (subjects.length === 0) return []
+  const subsidiaryBySubject = new Map<string, string | null>()
+  const keyOf = (kind: string, id: string) => `${kind}\0${id}`
+  // Document subjects (every kind the loader resolves through the
+  // documents table) batch one query per kind.
+  const documentKinds = new Map<string, { ids: string[] }>()
+  const individual: { key: string; kind: string; id: string }[] = []
+  for (const subject of subjects) {
+    const key = keyOf(subject.kind, subject.id)
+    if (subsidiaryBySubject.has(key)) continue
+    subsidiaryBySubject.set(key, null)
+    if (
+      subject.kind === 'party_bank_account' ||
+      subject.kind === 'timesheet_week' ||
+      subject.kind === 'budget_scenario' ||
+      subject.kind === 'close_run'
+    ) {
+      individual.push({ key, kind: subject.kind, id: subject.id })
+    } else {
+      const group = documentKinds.get(subject.kind) ?? { ids: [] }
+      group.ids.push(subject.id)
+      documentKinds.set(subject.kind, group)
+    }
+  }
+  await Promise.all([
+    ...[...documentKinds].map(async ([kind, group]) => {
+      const uniqueIds = [...new Set(group.ids)]
+      const r = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+        select id, subsidiary_id as "subsidiaryId" from documents
+         where org_id = ${orgId} and kind = ${kind} and id = any(${`{${uniqueIds.join(',')}}`}::uuid[])
+      `))
+      for (const row of r.rows) subsidiaryBySubject.set(keyOf(kind, row.id), row.subsidiaryId)
+    }),
+    ...individual.map(async (item) => {
+      subsidiaryBySubject.set(
+        item.key,
+        await loadFlowSubjectSubsidiary(item.kind, item.id, orgId),
+      )
+    }),
+  ])
+  // Fail-closed scope predicate, mirroring subsidiaryScopeAllows (kept
+  // inline so this module's import surface — and the neighbouring unit
+  // mock — stays exactly as it was): an unresolved or missing subsidiary
+  // is never in scope for a restricted caller.
+  return subjects.filter((subject) => {
+    const subsidiaryId = subsidiaryBySubject.get(keyOf(subject.kind, subject.id))
+    return subsidiaryId !== null && subsidiaryId !== undefined && allowedSubsidiaryIds.has(subsidiaryId)
+  })
+}
+
+/**
  * Map an engine GateError onto an HTTP status. The engine throws one error
  * class with human-readable messages; the route pre-checks catch the common
  * cases (404 missing, 409 already decided) so this mapping only has to cover
