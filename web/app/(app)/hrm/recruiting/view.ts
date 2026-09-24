@@ -38,6 +38,7 @@ import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '..
 import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from './sections'
+import { drawerTitleKind } from './drawer-title'
 import {
   depthTabOptions,
   loadInterviewDrawer,
@@ -437,6 +438,7 @@ export async function loadRecruitingPage(
           attachPhone: t('recruiting.attach.phone'),
           attachSubmit: t('recruiting.attach.submit'),
           attachFailed: t('recruiting.attach.failed'),
+          attachMergedNote: t('recruiting.attach.mergedNote'),
           moveTitle: t('recruiting.move.title'),
           moveSubmit: t('recruiting.move.submit'),
           moveFailed: t('recruiting.move.failed'),
@@ -713,6 +715,10 @@ export async function loadRecruitingPage(
     pool !== null ||
     missingDetail !== null ||
     create !== null
+  // CK-23b: which record owns the drawer title. Computed once here so the
+  // pure drawerTitleKind branch (unit-tested) decides, while the translated
+  // keys below stay literal for i18n extraction.
+  const titleKind = drawerTitleKind({ hasOffer: offer !== null, hasCandidate: candidate !== null })
   // HR-21: the shared evidence-draft drawer. No host field is editable
   // here, so Insert copies to the clipboard (the drawer's own fallback).
   const drawerBase = requisitionId
@@ -779,12 +785,14 @@ export async function loadRecruitingPage(
     drawer: drawerOpen
       ? {
           closeHref: recruitingHref(preservedParams, { status }),
-          // Record-type-correct drawer titles: an open offer or candidate
-          // drawer is titled for its own record (with the persisted
-          // employer as offer review context), never for the requisition.
-          title: offer
+          // Record-type-correct drawer titles (CK-23b): the winning kind
+          // comes from the pure drawerTitleKind branch so it stays
+          // unit-testable; the translated keys stay literal for i18n
+          // extraction. An open offer or candidate drawer is titled for
+          // its own record, never for the requisition.
+          title: titleKind === 'offer' && offer
             ? t('recruiting.drawer.offerTitle', { employer: offer.employerName })
-            : candidate
+            : titleKind === 'candidate' && candidate
               ? t('recruiting.drawer.candidateTitle', { name: candidate.displayName })
               : t('recruiting.drawer.title', { number: requisition?.requisitionNumber ?? '' }),
           description: null,
