@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { decodeStatementSourceText as engineDecodeStatementSourceText } from '../../engine/src/banking/banking.ts'
 
 interface CapturedImport {
   dryRun?: boolean
@@ -16,7 +15,7 @@ interface UploadBoundaryState {
   decoderInputs: { content: unknown; source: string }[]
   parserInputs: unknown[]
   imports: CapturedImport[]
-  decodeStatementSourceText: typeof engineDecodeStatementSourceText
+  toastErrors: string[]
 }
 
 type HookSlot =
@@ -88,8 +87,12 @@ const uploadState: UploadBoundaryState = {
   decoderInputs: [],
   parserInputs: [],
   imports: [],
-  decodeStatementSourceText: engineDecodeStatementSourceText,
+  toastErrors: [],
 }
+// Absolute file URL of the real banking engine, interpolated into the mock
+// below. The mock module's base is the opaque `mock:` URL, so only an
+// absolute URL reaches the real file without being re-intercepted.
+const engineBankingUrl = new URL('../../engine/src/banking/banking.ts', import.meta.url).href
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = uploadState
 
 const reactHarnessKey = Symbol.for('openbooks.bank-statement-upload-react-harness')
@@ -109,7 +112,6 @@ const reactHarness = createReactHookHarness()
 } as unknown as typeof import('react')
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/banking/banking.ts', 'mock:banking'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
   ['@/components/money-provider', 'mock:money-provider'],
@@ -122,15 +124,6 @@ const mockUrls = new Map<string, string>([
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
@@ -139,48 +132,61 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    // The persistence seam stays stubbed (no database here): importStatement
+    // records exactly what the route passes and answers canned ids. Every
+    // decoder and parser is the real banking engine — the byte assertions
+    // below pin real windows-1252 decoding and real OFX parsing, not a
+    // canned line.
     'mock:banking',
     `
+      import {
+        BANK_STATEMENT_PARSER_VERSION as realVersion,
+        BankingError as RealBankingError,
+        decodeStatementSourceText as realDecode,
+        parseBai2 as realParseBai2,
+        parseCamt053 as realParseCamt053,
+        parseCsv as realParseCsv,
+        parseCsvRows as realParseCsvRows,
+        parseMt940 as realParseMt940,
+        parseOfx as realParseOfx,
+      } from '${engineBankingUrl}'
+      export const BANK_STATEMENT_PARSER_VERSION = realVersion
+      export { RealBankingError as BankingError }
       const state = globalThis[Symbol.for('openbooks.bank-statement-upload-test')]
-      const line = {
-        postedOn: '2026-08-24',
-        amount: '10.0000',
-        description: 'Café – dépôt',
-        bankTransactionId: 'bank-line-1',
-      }
-
-      export const BANK_STATEMENT_PARSER_VERSION = 'test-parser-v1'
-
-      export class BankingError extends Error {
-        constructor(message, status = 422) {
-          super(message)
-          this.status = status
-        }
-      }
 
       export function decodeStatementSourceText(content, source) {
         state.decoderInputs.push({ content, source })
         try {
-          return state.decodeStatementSourceText(content, source)
+          return realDecode(content, source)
         } catch (error) {
-          throw new BankingError(error instanceof Error ? error.message : 'Statement decoding failed')
+          throw new RealBankingError(error instanceof Error ? error.message : 'Statement decoding failed')
         }
-      }
-
-      function parsed(content) {
-        state.parserInputs.push(content)
-        return { lines: [line] }
       }
 
       export function parseCsvRows(content) {
         state.parserInputs.push(content)
-        return [['date', 'amount', 'description']]
+        return realParseCsvRows(content)
       }
-      export function parseCsv(content) { return parsed(content).lines }
-      export function parseOfx(content) { return parsed(content) }
-      export function parseCamt053(content) { return parsed(content) }
-      export function parseBai2(content) { return parsed(content) }
-      export function parseMt940(content) { return parsed(content) }
+      export function parseCsv(content, mapping) {
+        state.parserInputs.push(content)
+        return realParseCsv(content, mapping)
+      }
+      export function parseOfx(content) {
+        state.parserInputs.push(content)
+        return realParseOfx(content)
+      }
+      export function parseCamt053(content) {
+        state.parserInputs.push(content)
+        return realParseCamt053(content)
+      }
+      export function parseBai2(content) {
+        state.parserInputs.push(content)
+        return realParseBai2(content)
+      }
+      export function parseMt940(content) {
+        state.parserInputs.push(content)
+        return realParseMt940(content)
+      }
 
       export async function importStatement(options) {
         state.imports.push(options)
@@ -214,7 +220,7 @@ const mockSources = new Map<string, string>([
   ['mock:next-navigation', `export function useRouter() { return { refresh() {} } }`],
   ['mock:next-intl', `export function useTranslations() { return (key) => key }`],
   ['mock:icons', `export function FileUp() { return null }; export function Upload() { return null }`],
-  ['mock:sonner', `export const toast = { error() {}, success() {} }`],
+  ['mock:sonner', `const state = globalThis[Symbol.for('openbooks.bank-statement-upload-test')]; export const toast = { error(message) { state.toastErrors.push(message) }, success() {} }`],
   [
     'mock:ui',
     `
@@ -231,14 +237,24 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    }
+    const mocked = mockUrls.get(specifier)
+    if (mocked) return { url: mocked, shortCircuit: true }
+    if (specifier.startsWith('@/')) {
+      const path = `../${specifier.slice(2)}`
+      return {
+        shortCircuit: true,
+        url: new URL(path.endsWith('.ts') ? path : `${path}.ts`, import.meta.url).href,
+      }
+    }
     if (context.parentURL?.includes('ImportStatementButton.tsx')) {
       if (specifier === 'react') return { url: 'mock:react', shortCircuit: true }
       if (specifier === 'react/jsx-runtime' || specifier === 'react/jsx-dev-runtime') {
         return { url: 'mock:jsx-runtime', shortCircuit: true }
       }
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
@@ -342,6 +358,7 @@ test('component file input sends exact bytes through preview, import, parser and
   uploadState.decoderInputs.length = 0
   uploadState.parserInputs.length = 0
   uploadState.imports.length = 0
+  uploadState.toastErrors.length = 0
 
   const requestBodies: Record<string, unknown>[] = []
   const originalFetch = globalThis.fetch
@@ -359,8 +376,10 @@ test('component file input sends exact bytes through preview, import, parser and
     return POST(componentRequest)
   }) as typeof fetch
 
+  // A complete dated, amounted transaction: the real OFX parser refuses
+  // blocks without DTPOSTED/TRNAMT, so the memo alone no longer previews.
   const header = Buffer.from(
-    'OFXHEADER:100\r\nDATA:OFXSGML\r\nVERSION:102\r\nSECURITY:NONE\r\nENCODING:USASCII\r\nCHARSET:1252\r\nCOMPRESSION:NONE\r\nOLDFILEUID:NONE\r\nNEWFILEUID:NONE\r\n\r\n<OFX><STMTTRN><MEMO>Caf',
+    'OFXHEADER:100\r\nDATA:OFXSGML\r\nVERSION:102\r\nSECURITY:NONE\r\nENCODING:USASCII\r\nCHARSET:1252\r\nCOMPRESSION:NONE\r\nOLDFILEUID:NONE\r\nNEWFILEUID:NONE\r\n\r\n<OFX><STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20260824<TRNAMT>10.00<FITID>bank-line-1<MEMO>Caf',
     'ascii',
   )
   const trailer = Buffer.from('</MEMO></STMTTRN></OFX>', 'ascii')
@@ -389,10 +408,17 @@ test('component file input sends exact bytes through preview, import, parser and
     'statement file input',
   )
   const fileInputTarget = { files: [file], value: 'selected' }
-  const updatesBeforeRead = reactHarness.updates
 
   requiredHandler(fileInput, 'onChange')({ target: fileInputTarget })
-  await waitFor(() => reactHarness.updates >= updatesBeforeRead + 7)
+  await waitFor(() => {
+    const currentTree = renderImportButton()
+    const textarea = requiredElement(
+      currentTree,
+      (element) => typeof element.type === 'function' && element.type.name === 'Textarea',
+      'statement text area',
+    )
+    return String(textarea.props.value).length > 0 || uploadState.toastErrors.length > 0
+  })
 
   assert.equal(fileInputTarget.value, '')
   assert.equal(file.reads, 1)
