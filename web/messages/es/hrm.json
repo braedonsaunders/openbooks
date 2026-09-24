@@ -658,6 +658,7 @@
       "phone": "Teléfono",
       "submit": "Asignar candidato",
       "failed": "No se pudo asignar el candidato.",
+      "mergedNote": "Candidatura asignada al candidato existente con este correo.",
       "rejectTitle": "Rechazar",
       "rejectReason": "Motivo"
     },

@@ -658,6 +658,7 @@
       "phone": "电话",
       "submit": "关联候选人",
       "failed": "无法关联候选人。",
+      "mergedNote": "已关联到使用此邮箱的现有候选人。",
       "rejectTitle": "拒绝",
       "rejectReason": "原因"
     },

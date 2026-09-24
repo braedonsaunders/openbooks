@@ -97,7 +97,7 @@ test("drawer islands post through the recruiting routes with refusals intact", (
   ]) {
     assert.match(actions, new RegExp(`export function ${island}`), `${island} is a small client island`);
   }
-  assert.match(actions, /(fetch|postJson)\('\/api\/hrm\/recruiting\/applications'/, "funnel acts post through the applications route");
+  assert.match(actions, /(fetch|postJson)\('\/api\/hrm\/recruiting\/attachments'/, "attach posts once through the combined attachments route");
   assert.match(actions, /(fetch|postJson)\('\/api\/hrm\/recruiting\/interviews'/, "interview acts post through the interviews route");
   assert.match(actions, /(fetch|postJson)\(\s*'\/api\/hrm\/recruiting\/offers'/, "offer acts post through the offers route");
   assert.match(actions, /readApiErrorMessage/, "islands render refusals, never swallow them");

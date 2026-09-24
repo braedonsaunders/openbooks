@@ -48,6 +48,7 @@ export interface DrawerLabels {
   attachPhone: string
   attachSubmit: string
   attachFailed: string
+  attachMergedNote: string
   moveTitle: string
   moveSubmit: string
   moveFailed: string
@@ -343,6 +344,7 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
                 phone: labels.attachPhone,
                 submit: labels.attachSubmit,
                 failed: labels.attachFailed,
+                mergedNote: labels.attachMergedNote,
               }}
             />
           </div>
