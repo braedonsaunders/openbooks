@@ -7,6 +7,7 @@ import {
   isTxnCurrencyMeasure,
   MAX_REPORT_ROWS,
   parseDenominationCounts,
+  payrollRestrictedEntity,
   REPORT_ENTITY_MAP,
   resolveDenominations,
   validateCustomQuery,
@@ -85,8 +86,12 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
   } catch (error) {
     throw new DriverAdminError("validation", error instanceof Error ? error.message : String(error));
   }
-  const entity = REPORT_ENTITY_MAP[plan.entity];
-  if (!entity) throw new DriverAdminError("validation", `unknown report entity ${plan.entity}`);
+  const baseEntity = REPORT_ENTITY_MAP[plan.entity];
+  if (!baseEntity) throw new DriverAdminError("validation", `unknown report entity ${plan.entity}`);
+  // The driver measures what the actor may see: a restricted actor's ledger
+  // sources arrive pre-collapsed per (entry, account, currency) before the
+  // driver aggregation, so no allocation base can isolate one employee's pay.
+  const entity = payrollRestrictedEntity(baseEntity, await actorHasPermission(db, orgId, actorId, "payroll.read"));
   if (entity.key.startsWith("custom:")) {
     throw new DriverAdminError("validation", "custom report entities are not supported as driver sources");
   }

@@ -8,7 +8,7 @@
 // SERVER ONLY — imports node-postgres. Never import from a client bundle; the
 // client renderer takes a QueryResult, not the pool.
 
-import { REPORT_ENTITY_MAP, parseDenominationCounts, resolveDenominations } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, parseDenominationCounts, resolveDenominations, type ReportEntity } from '@openbooks/reports'
 import { compileInsightQuery, INSIGHT_MAX_ROWS, type InsightLabelResolver } from './compile'
 import { validateInsightQuery } from './validate'
 import type { InsightDenominationBasis, InsightQuery, QueryResult } from './types'
@@ -104,10 +104,13 @@ export async function runInsightQuery(
    *  single active primary unless the card scopes or partitions by book).
    *  Undefined leaves book-scoped entities unclamped. */
   allowedBookIds?: readonly string[] | null,
+  /** The reader's own report-entity catalog rows (a restricted reader's
+   *  pre-collapsed grain). Defaults to the authored catalog (full detail). */
+  entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
 ): Promise<QueryResult> {
   if (allowedSubsidiaryIds === undefined) throw new Error('Insights requires an explicit subsidiary authorization scope')
   const validatedQuery = validateInsightQuery(query)
-  const compiled = compileInsightQuery(validatedQuery, orgId, labels, asOf, allowedSubsidiaryIds, allowedBookIds)
+  const compiled = compileInsightQuery(validatedQuery, orgId, labels, asOf, allowedSubsidiaryIds, allowedBookIds, entityMap)
   // Fetch one extra row to detect truncation at the cap.
   const capped = Math.min(compiled.limit, INSIGHT_MAX_ROWS)
   const sentinelLimit = capped + 1

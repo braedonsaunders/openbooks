@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { can, guardPermission } from "../../../../lib/authz";
+import { PAYROLL_RESTRICTED_PARTY_LABEL } from "../../../../lib/payroll-confidentiality";
 import { statementBookExpr } from "../../../../lib/gl-summary";
 import { flowRates, presentationCurrency } from "../../../../lib/fx-presentation";
 import { isUuid } from "../../../../lib/list-params";
@@ -86,6 +87,16 @@ export async function GET(req: Request) {
   const gate = await guardPermission("reports.read");
   if (gate instanceof NextResponse) return gate;
   const user = gate.user;
+  // Readers without payroll.read see payroll legs collapsed per
+  // (entry, account) BEFORE any sort or limit below: the collapsed row keeps
+  // the summed amount (totals tie out) but names no employee and shows no
+  // per-employee memo or amount. Every line-grained drill query aliases
+  // journal_entries as `e`, lines as `l`, and source documents as `d`.
+  const canSeePayroll = can(gate, "payroll.read");
+  // TRUE for party-tagged payroll legs (pay-run postings and the direct
+  // payroll settlement); NULL-safe so ordinary legs never fall out of both
+  // arms of the collapse below.
+  const collapseLeg = sql`(coalesce(d.kind, '') = 'pay_run' or coalesce(e.origin, '') = 'payroll') and l.party_id is not null`;
 
   const url = new URL(req.url);
   const account = url.searchParams.get("account");
@@ -125,14 +136,10 @@ export async function GET(req: Request) {
   // the spend-velocity aggregate does — the same never-mix rule as party mode.
   const lineJoins = sql`
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id`;
-  if (account) {
-    const [detail, monthly, byParty, agg] = await Promise.all([
-      (db.execute(sql`
-        select e.posting_date::text as date, e.id as entry_id, l.amount,
-          sub.base_currency as func,
-          d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
-          coalesce(p.display_name, '') as party_name,
-          coalesce(l.memo, e.memo, '') as memo
+  // The account window every account-mode query below reads: same joins,
+  // scope, and posted population, so detail and summaries tie out whether
+  // or not the reader holds payroll.read.
+  const accountWindow = sql`
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
@@ -144,57 +151,60 @@ export async function GET(req: Request) {
           ${entryScope}
           ${docJoinScope}
           ${postedEntry}
-          ${liveDoc}
-        order by e.posting_date desc, abs(l.amount) desc
+          ${liveDoc}`;
+  // Restricted detail collapses payroll legs per (entry, account) in a UNION
+  // arm BEFORE the sort/limit below, so no limit:1 plan or amount ordering
+  // can return a pre-collapse per-employee row. The arm keeps the summed
+  // amount (summaries below aggregate the same legs, so everything ties)
+  // but names no employee and shows no per-employee memo.
+  const detailLegFilter = canSeePayroll ? sql`` : sql` and not (${collapseLeg})`;
+  const detailCollapseArm = canSeePayroll ? sql`` : sql`
+      union all
+      (select max(e.posting_date)::text as date, e.id as entry_id, sum(l.amount) as amount,
+        max(sub.base_currency) as func,
+        max(d.id::text)::uuid as doc_id, max(d.kind) as doc_kind, max(d.document_number) as doc_number,
+        ${PAYROLL_RESTRICTED_PARTY_LABEL} as party_name,
+        coalesce(max(e.memo), '') as memo
+      ${accountWindow}
+        and (${collapseLeg})
+      group by e.id)`;
+  // Restricted party summaries bucket payroll legs under the restricted label
+  // instead of printing employee names; amounts aggregate as usual.
+  const partyName = canSeePayroll
+    ? sql`coalesce(p.display_name, 'No party')`
+    : sql`case when ${collapseLeg} then ${PAYROLL_RESTRICTED_PARTY_LABEL} else coalesce(p.display_name, 'No party') end`;
+  if (account) {
+    const [detail, monthly, byParty, agg] = await Promise.all([
+      (db.execute(sql`
+        select * from (
+          (select e.posting_date::text as date, e.id as entry_id, l.amount,
+            sub.base_currency as func,
+            d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
+            coalesce(p.display_name, '') as party_name,
+            coalesce(l.memo, e.memo, '') as memo
+          ${accountWindow}
+            ${detailLegFilter})
+          ${detailCollapseArm}
+        ) u
+        order by date desc, abs(amount) desc
         limit 1000
       `)),
       (db.execute(sql`
         select to_char(e.posting_date, 'YYYY-MM') as month, sub.base_currency as func,
           sum(l.amount) as amount, max(e.posting_date)::text as late
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
-        ${lineJoins}
-        where l.org_id = ${user.orgId} and l.account_id = ${account}
-          and e.posting_date >= ${from} and e.posting_date <= ${to}
-          ${lineScope}
-          ${entryScope}
-          ${docJoinScope}
-          ${postedEntry}
-          ${liveDoc}
+        ${accountWindow}
         group by 1, 2 order by 1, 2
       `)),
       (db.execute(sql`
-        select coalesce(p.display_name, 'No party') as name, sub.base_currency as func,
+        select ${partyName} as name, sub.base_currency as func,
           sum(l.amount) as amount, count(*) as n, max(e.posting_date)::text as late
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
-        ${lineJoins}
-        left join parties p on p.id = l.party_id and p.org_id = l.org_id
-        where l.org_id = ${user.orgId} and l.account_id = ${account}
-          and e.posting_date >= ${from} and e.posting_date <= ${to}
-          ${lineScope}
-          ${entryScope}
-          ${docJoinScope}
-          ${postedEntry}
-          ${liveDoc}
+        ${accountWindow}
         group by 1, 2 order by 1, 2
       `)),
       (db.execute(sql`
         select sub.base_currency as func, count(*) as n, coalesce(sum(l.amount), 0) as amount,
           max(e.posting_date)::text as late
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
-        ${lineJoins}
-        where l.org_id = ${user.orgId} and l.account_id = ${account}
-          and e.posting_date >= ${from} and e.posting_date <= ${to}
-          ${lineScope}
-          ${entryScope}
-          ${docJoinScope}
-          ${postedEntry}
-          ${liveDoc}
+        ${accountWindow}
         group by 1 order by 1
       `)),
     ]);

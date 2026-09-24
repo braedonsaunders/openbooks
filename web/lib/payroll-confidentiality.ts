@@ -1,6 +1,10 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import type { ReportEntity } from '@openbooks/reports'
+import {
+  PAYROLL_RESTRICTED_PARTY_LABEL as PAYROLL_RESTRICTED_PARTY_LABEL_BASE,
+  payrollRestrictedEntity,
+  type ReportEntity,
+} from '@openbooks/reports'
 // Permission check only — never './authz' here: that module pulls
 // next/navigation, which breaks plain-node consumers of the ledger readers
 // (spawned test children without the react-server condition).
@@ -37,7 +41,7 @@ import { decimalAdd, type ExactDecimal } from './statement-format'
  *   per-employee detail and pass through untouched.
  */
 
-export const PAYROLL_RESTRICTED_PARTY_LABEL = 'Payroll (restricted)'
+export const PAYROLL_RESTRICTED_PARTY_LABEL = PAYROLL_RESTRICTED_PARTY_LABEL_BASE
 
 /** True when this reader may see per-employee payroll detail. */
 export function canSeePayrollDetail(authz: { permissions: Set<string> } | null | undefined): boolean {
@@ -96,27 +100,19 @@ export function applyPayrollConfidentialityToCatalog(
   canSeePayroll: boolean,
 ): Record<string, ReportEntity> {
   if (canSeePayroll) return catalog
-  const ledger = catalog.ledger_lines
-  if (!ledger || ledger.key !== 'ledger_lines') return catalog
-  const from = ledger.from.includes('dsrc')
-    ? ledger.from
-    : `${ledger.from}\n      LEFT JOIN documents dsrc ON dsrc.id = je.source_document_id AND dsrc.org_id = jl.org_id`
-  const payrollParty = `(dsrc.kind = 'pay_run' or je.origin = 'payroll') and jl.party_id is not null`
-  const columns = ledger.columns.map((column) => {
-    if (column.key === 'party_name') {
-      return { ...column, expr: `case when ${payrollParty} then '${PAYROLL_RESTRICTED_PARTY_LABEL}' else ${column.expr} end` }
-    }
-    if (column.key === 'party_id') {
-      return { ...column, expr: `case when ${payrollParty} then null else ${column.expr} end` }
-    }
-    if (column.key === 'memo') {
-      // The entry memo ("Net pay RUN-001") carries no identity; the line memo
-      // can carry a cheque number, so restricted rows fall back to the entry.
-      return { ...column, expr: `case when ${payrollParty} then je.memo else ${column.expr} end` }
-    }
-    return column
-  })
-  return { ...catalog, ledger_lines: { ...ledger, from, columns } }
+  // Pre-collapse at the source (UNION grain in the entity FROM), not just
+  // masked expressions: masking leaves per-leg amounts that a limit:1 plan,
+  // an amount oracle, or a party/entry breakout would isolate before any
+  // post-processing. The UNION folds payroll legs per (entry, account,
+  // currency) before any caller filter, breakout, grouping, sort, or LIMIT.
+  let out = catalog
+  for (const key of ['ledger_lines', 'transaction_lines'] as const) {
+    const entity = out[key]
+    if (!entity || entity.key !== key) continue
+    const restricted = payrollRestrictedEntity(entity, false)
+    if (restricted !== entity) out = { ...out, [key]: restricted }
+  }
+  return out
 }
 
 export function collapseRestrictedPayrollLines<T extends PayrollCollapsibleLine>(

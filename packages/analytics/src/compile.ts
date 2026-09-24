@@ -8,9 +8,9 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_ENTITY_MAP, SqlParams, buildDenominationCensus, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, type ReportBreakout, type ReportCustomQuery, type ReportMeasure, type ReportRule } from '@openbooks/reports'
-import { getSource } from './catalog'
-import { sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
+import { REPORT_ENTITY_MAP, SqlParams, buildDenominationCensus, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportMeasure, type ReportRule } from '@openbooks/reports'
+import { sourceFromEntity } from './catalog'
+import { buildSource, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
   AggFn,
   CompiledQuery,
@@ -118,6 +118,9 @@ function measureType(agg: AggFn, field: AnalyticsField | null): SemanticType {
 
 type Ctx = {
   source: AnalyticsSource
+  /** The report entity backing the source — the reader's own catalog row, so
+   *  a restricted reader's pre-collapsed grain flows into scope helpers. */
+  entity: ReportEntity
   params: unknown[]
   /** Org business day (YYYY-MM-DD). Relative date filters bind this, never current_date. */
   asOf: string
@@ -242,8 +245,7 @@ export function insightQueryReferencesBook(query: InsightQuery): boolean {
 function compileBaseFilter(ctx: Ctx): string | null {
   const baseFilter = ctx.source.baseFilter
   if (!baseFilter) return null
-  const entity = REPORT_ENTITY_MAP[ctx.source.key]
-  if (!entity) return null
+  const entity = ctx.entity
   const params = new SqlParams(ctx.params.length)
   const clause = compileRuleGroup(entity, baseFilter, params)
   ctx.params.push(...params.values)
@@ -294,14 +296,19 @@ export function compileInsightQuery(
    *  book-scoped entities unclamped, an empty array matches nothing.
    *  Book-independent sources ignore it. */
   allowedBookIds: readonly string[] | null | undefined = undefined,
+  /** The reader's own report-entity catalog row (a restricted reader's
+   *  pre-collapsed grain). The insight source derives from it, so payroll
+   *  legs arrive collapsed before any caller filter, dimension, sort, or
+   *  limit. Defaults to the authored catalog (full detail). */
+  entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
 ): CompiledQuery {
-  const source = getSource(query.source)
-  if (!source)
+  const entity = entityMap[query.source]
+  if (!entity || entity.key !== query.source)
     throw new InsightCompileError('unknown_source', `unknown source "${query.source}"`, query.source)
+  const source = buildSource(sourceFromEntity(entity))
   const fieldLabel = (f: AnalyticsField) => labels.field?.(source.key, f) ?? f.label
 
-  const ctx: Ctx = { source, params: [orgId], asOf }
-  const entity = REPORT_ENTITY_MAP[source.key]!
+  const ctx: Ctx = { source, entity, params: [orgId], asOf }
   const wheres: string[] = [`${source.orgColumn} = $1`]
   const subsidiary = compileSubsidiaryScope(entity, allowedSubsidiaryIds, (value) => bind(ctx, value))
   if (subsidiary) wheres.push(subsidiary)
@@ -454,7 +461,13 @@ export function compileInsightQuery(
     orderBy +
     `\nlimit ${limit}`
 
-  return { sql, params: ctx.params, columns, limit, denomination }
+  return {
+    sql,
+    params: ctx.params,
+    columns,
+    limit,
+    denomination,
+  }
 }
 
 function compileOrderBy(
