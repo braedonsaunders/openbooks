@@ -64,6 +64,7 @@ export interface RestoreReport {
     archiveCounts: "passed";
     targetEmpty: "passed" | "test-override";
     schemaFingerprint: "passed" | "legacy-override";
+    orgParentage: "passed";
     databaseConstraints: "passed";
     tenantReferences: "passed";
     mfaCiphertexts: "passed" | "reset";
@@ -275,6 +276,72 @@ async function targetBackupTables(client: pg.PoolClient): Promise<string[]> {
     if (exists.rows[0]?.present) present.add(child);
   }
   return [...present].sort();
+}
+
+/**
+ * Organization-parentage columns archived per table. Every non-null value
+ * must be the archive's own org (C-47): the backup closure already refuses
+ * archives that point outside (orgs_sandbox_of_fkey,
+ * change_sets_sandbox_org_id_fkey — pinned by the closure regression test),
+ * and this pre-insert check turns any such archive — hand-made or predating
+ * the closure — into a named refusal instead of a raw FK violation at
+ * commit. A sandbox archive whose parent is absent cannot restore alone:
+ * restore the production org first, or restore into the original deployment.
+ */
+const ORG_PARENT_COLUMNS: Record<string, readonly string[]> = {
+  orgs: ["id", "sandbox_of"],
+  change_sets: ["org_id", "sandbox_org_id"],
+  sandboxes: ["org_id", "production_org_id"],
+};
+
+export function assertOrgParentageRows(
+  tableName: string,
+  rows: Array<Record<string, unknown>>,
+  orgId: string,
+): void {
+  const columns = ORG_PARENT_COLUMNS[tableName];
+  if (!columns) return;
+  for (const row of rows) {
+    for (const column of columns) {
+      const value = row[column];
+      if (value === null || value === undefined) continue;
+      if (typeof value !== "string" || !UUID_RE.test(value)) {
+        throw new Error(`restore org-parentage validation failed at ${tableName}.${column}: not a uuid`);
+      }
+      if (value !== orgId) {
+        throw new Error(
+          `restore org-parentage validation failed at ${tableName}.${column}: ` +
+            `the archive references organization ${value}, which is not in this backup (org ${orgId}); ` +
+            `restore the parent organization first, or restore into the original deployment`,
+        );
+      }
+    }
+  }
+}
+
+export async function validateOrgParentage(inspection: BackupArchiveInspection, orgId: string): Promise<void> {
+  const archived = new Map(inspection.tables.map((table) => [table.name, table.rows]));
+  for (const tableName of Object.keys(ORG_PARENT_COLUMNS)) {
+    if ((archived.get(tableName) ?? 0) === 0) continue;
+    const lines = createInterface({
+      input: createReadStream(join(inspection.spoolDir, `${tableName}.ndjson`)),
+      crlfDelay: Infinity,
+    });
+    let batch: Array<Record<string, unknown>> = [];
+    const flush = () => {
+      assertOrgParentageRows(tableName, batch, orgId);
+      batch = [];
+    };
+    for await (const line of lines) {
+      const row: unknown = JSON.parse(line);
+      if (!plainObject(row)) {
+        throw new Error(`restore org-parentage validation failed: ${tableName} has a malformed row`);
+      }
+      batch.push(row);
+      if (batch.length >= 250) flush();
+    }
+    flush();
+  }
 }
 
 async function validateDurableAuthOwnership(
@@ -604,6 +671,11 @@ export async function restoreOrgBackup(args: {
       if (inspection.header.version !== 1 && inspection.header.schemaSha256 !== targetSchemaSha256) {
         throw new Error(`backup schema fingerprint ${inspection.header.schemaSha256} does not match target ${targetSchemaSha256}; restore the source version first, then upgrade`);
       }
+      // C-47: every archived org reference must resolve inside the archive
+      // before any row is inserted — a sandbox archive whose parent is
+      // absent (or a hand-made archive pointing outside) is refused by name
+      // here instead of dying on a raw FK violation at commit.
+      await validateOrgParentage(inspection, args.expectedOrgId);
       const order = await insertionOrder(client, targetTables);
       const rowCounts = new Map(inspection.tables.map((table) => [table.name, table.rows]));
       let interruptedBackupRunsClosed = 0;
@@ -730,6 +802,7 @@ export async function restoreOrgBackup(args: {
           archiveCounts: "passed",
           targetEmpty: args.testOnlyAllowNonemptyTarget ? "test-override" : "passed",
           schemaFingerprint: inspection.header.version === 1 ? "legacy-override" : "passed",
+          orgParentage: "passed",
           databaseConstraints: "passed",
           tenantReferences: "passed",
           mfaCiphertexts: args.resetMfaFactors ? "reset" : "passed",
