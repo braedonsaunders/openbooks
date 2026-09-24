@@ -619,7 +619,13 @@ export function PartyDrawer({
           holdReason: customer.isOnHold ? customer.holdReason : null,
         },
         vendor: {
-          enabled: role === 'vendor' ? true : vendor.enabled,
+          // OM-16: choosing Kind Vendor means the vendor role. A role-scoped
+          // drawer forces its own role (first clause); in unsaved-create the
+          // drawer writes kind+role atomically through this same payload —
+          // the server refuses an unbacked role-kind by name — so an explicit
+          // kind choice enables its role instead of stranding Save on a
+          // remedy the overview tab cannot reach.
+          enabled: role === 'vendor' || (createMode && kind === 'vendor') ? true : vendor.enabled,
           paymentMethod: vendor.paymentMethod || null,
           eftNotificationEmail: vendor.eftNotificationEmail || null,
           paymentTermsId: vendor.paymentTermsId || null,
@@ -645,7 +651,7 @@ export function PartyDrawer({
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at, placeholderName, forcesCustomerRole],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at, placeholderName, forcesCustomerRole, createMode],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `skipDirty` is a

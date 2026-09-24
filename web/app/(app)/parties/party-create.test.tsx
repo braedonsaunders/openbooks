@@ -351,3 +351,47 @@ test("the ?party=new deep link swaps to the unsaved drawer with zero writes", as
   assert.deepEqual(globalThis.__partyCreateRouter!.replaces, ["/entities/vendors?partyNew=1&role=vendor"]);
   assert.equal(globalThis.__partyCreateFetches!.length, 0, "the redirect writes nothing — no draft POST");
 });
+
+// OM-16: /parties → New party → Kind Vendor → name → Save was refused with
+// 'kind "vendor" needs the vendor role', and the overview tab offers no role
+// control to satisfy it. An explicit kind choice in createMode now enables
+// its role in the POST body, so the server writes kind+role atomically
+// through its existing role path — one step, no second write path.
+test("choosing kind vendor creates the party with its vendor role in one step", async (t) => {
+  const restoreFetch = resetHarness();
+  t.after(restoreFetch);
+  const { unmount } = await renderDrawer();
+  t.after(unmount);
+  const kind = [...document.querySelectorAll("select")].find((el) =>
+    [...el.options].some((o) => o.value === "vendor"),
+  ) as HTMLSelectElement | undefined;
+  assert.ok(kind, "the identity section must offer a kind select");
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!;
+    setter.call(kind!, "vendor");
+    kind!.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  const field = nameInput();
+  assert.ok(field, "the name input must render");
+  await act(async () => {
+    setInputValue(field!, "PRE3-Vendor Role Probe");
+    await tick();
+  });
+  await tick();
+  const save = buttonsNamed("Save")[0];
+  assert.ok(save, "Save must render");
+  assert.equal(save.disabled, false, "a named vendor-kind party is savable");
+  await click(save);
+  await tick();
+  await tick();
+  const posts = globalThis.__partyCreateFetches!.filter((f) => f.url === "/api/parties");
+  assert.equal(posts.length, 1, "explicit Save is exactly one POST");
+  const body = JSON.parse(String(posts[0]!.init?.body)) as {
+    kind: string;
+    roles: { vendor: { enabled: boolean } };
+  };
+  assert.equal(body.kind, "vendor");
+  assert.equal(body.roles.vendor.enabled, true, "kind vendor must carry its role in the same POST");
+});
