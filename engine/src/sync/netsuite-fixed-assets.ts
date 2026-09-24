@@ -460,6 +460,27 @@ export async function syncNetSuiteFixedAssets(
          where org_id = ${options.orgId} and asset_id = ${assetId} and book_id = ${bookId} limit 1
       `));
       let scheduleId = scheduleResult.rows[0]?.id;
+      // The mirrored schedule claims a convention like any engine-built one,
+      // resolved in the engine's own order (book policy, then asset, then
+      // category default): the post-posting drift gate compares it, and an
+      // unrecorded convention would fail closed on the first engine rebuild.
+      // Synced assets carry 'full_month' at the asset level (see the insert
+      // above), so this resolves to the same basis the engine would use.
+      const syncedConvention = (
+        await db.execute<{ convention: string | null }>(sql`
+          select coalesce(
+            (select p.convention
+               from depreciation_book_policies p
+              where p.org_id = ${options.orgId} and p.book_id = ${bookId} and p.category_id = ${categoryId}),
+            (select a.depreciation_convention
+               from fixed_assets a
+              where a.org_id = ${options.orgId} and a.id = ${assetId}),
+            (select c.default_convention
+               from asset_categories c
+              where c.org_id = ${options.orgId} and c.id = ${categoryId})
+          ) as convention
+        `)
+      ).rows[0]?.convention;
       if (scheduleId) {
         const localPosted = (await db.execute<{ count: number }>(sql`
           select count(*)::int as count from depreciation_schedule_lines
@@ -470,14 +491,15 @@ export async function syncNetSuiteFixedAssets(
         }
         await db.execute(sql`
           update depreciation_schedules
-             set method = ${sourceMethod}, life_months = ${lifeMonths}, updated_at = now(), updated_by = ${options.actorId ?? null}
+             set method = ${sourceMethod}, life_months = ${lifeMonths}, convention = ${syncedConvention},
+                 updated_at = now(), updated_by = ${options.actorId ?? null}
            where id = ${scheduleId} and org_id = ${options.orgId}
         `);
       } else {
         const inserted = (await db.execute<{ id: string }>(sql`
           insert into depreciation_schedules
-            (org_id, asset_id, book_id, method, life_months, created_by, updated_by)
-          values (${options.orgId}, ${assetId}, ${bookId}, ${sourceMethod}, ${lifeMonths}, ${options.actorId ?? null}, ${options.actorId ?? null})
+            (org_id, asset_id, book_id, method, life_months, convention, created_by, updated_by)
+          values (${options.orgId}, ${assetId}, ${bookId}, ${sourceMethod}, ${lifeMonths}, ${syncedConvention}, ${options.actorId ?? null}, ${options.actorId ?? null})
           returning id
         `));
         scheduleId = inserted.rows[0]!.id;

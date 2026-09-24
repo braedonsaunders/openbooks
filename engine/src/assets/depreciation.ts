@@ -446,14 +446,18 @@ async function loadUnremeasuredAssetPlan(
     null) as ScheduleInput["convention"];
   // Older deployments permitted book-default edits after use. Never silently
   // reinterpret retained schedule policy as if a changed default were history.
-  // Convention was not captured on legacy schedule headers, so this comparison
-  // deliberately makes no claim to reconstruct a missing convention snapshot.
+  // Convention is captured on the schedule header (0339 backfilled legacy
+  // headers from the effective policy, provenance-recorded; builders stamp
+  // every new and rebuilt header below), so the comparison holds it like
+  // every other policy field. A header that still records no convention has
+  // no resolvable policy behind it: IS DISTINCT FROM treats that as drift
+  // and fails closed, and the refusal below names the remedy.
   const drift = (
     await runner.execute(sql`
     select 1 from depreciation_schedules schedule
      where schedule.org_id = ${orgId} and schedule.asset_id = ${assetId} and schedule.book_id = ${bookId}
-       and row(schedule.method, schedule.depreciation_method_id, schedule.life_months, schedule.rate_percent, schedule.units_total)
-           is distinct from row(${method}::text, ${depreciationMethodId}::uuid, ${lifeMonths || null}::integer, ${ratePercent}::numeric, ${unitsTotal}::numeric)
+       and row(schedule.method, schedule.depreciation_method_id, schedule.life_months, schedule.rate_percent, schedule.units_total, schedule.convention)
+           is distinct from row(${method}::text, ${depreciationMethodId}::uuid, ${lifeMonths || null}::integer, ${ratePercent}::numeric, ${unitsTotal}::numeric, ${convention}::text)
        and (exists (select 1 from depreciation_schedule_lines line where line.org_id = schedule.org_id
              and line.schedule_id = schedule.id and line.posted_amount is not null)
          or exists (select 1 from asset_events event join journal_entries entry
@@ -565,6 +569,7 @@ async function loadUnremeasuredAssetPlan(
     lifeMonths,
     ratePercent,
     unitsTotal,
+    convention,
     plan,
     opening,
     basisChange,
@@ -743,6 +748,7 @@ export async function buildScheduleWithRunner(
     lifeMonths,
     ratePercent,
     unitsTotal,
+    convention,
     plan,
     opening,
     basisChange,
@@ -799,12 +805,13 @@ export async function buildScheduleWithRunner(
       await tx.execute(sql`
         update depreciation_schedules
            set method = ${method}, depreciation_method_id = ${depreciationMethodId}, life_months = ${lifeMonths || null},
-               rate_percent = ${ratePercent}, units_total = ${unitsTotal}, updated_at = now(), updated_by = ${actorId}
+               rate_percent = ${ratePercent}, units_total = ${unitsTotal}, convention = ${convention},
+               updated_at = now(), updated_by = ${actorId}
          where id = ${scheduleId} and org_id = ${orgId}`);
     } else {
       const ins = await tx.execute<{ id: string }>(sql`
-        insert into depreciation_schedules (org_id, asset_id, book_id, method, depreciation_method_id, life_months, rate_percent, units_total, created_by, updated_by)
-        values (${orgId}, ${assetId}, ${bookId}, ${method}, ${depreciationMethodId}, ${lifeMonths || null}, ${ratePercent}, ${unitsTotal}, ${actorId}, ${actorId})
+        insert into depreciation_schedules (org_id, asset_id, book_id, method, depreciation_method_id, life_months, rate_percent, units_total, convention, created_by, updated_by)
+        values (${orgId}, ${assetId}, ${bookId}, ${method}, ${depreciationMethodId}, ${lifeMonths || null}, ${ratePercent}, ${unitsTotal}, ${convention}, ${actorId}, ${actorId})
         returning id`);
       scheduleId = ins.rows[0]!.id;
     }
