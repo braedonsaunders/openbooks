@@ -215,6 +215,12 @@
     "systemBadge": "Company default"
   },
   "persona": {
+    "reviewDue": "Review due",
+    "attentionHrmItems": "HRM items waiting",
+    "attentionPayrollSetup": "Payroll setup needs control accounts",
+    "attentionBankLines": "Bank lines unmatched",
+    "attentionCloseRuns": "Open close runs",
+    "calendarPayrollRemittance": "Payroll remittance pending",
     "nothingWaiting": "Nothing waits on you.",
     "noBalances": "No computable balances.",
     "nobodyOut": "Nobody out this week.",

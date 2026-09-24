@@ -215,6 +215,12 @@
     "systemBadge": "会社の既定"
   },
   "persona": {
+    "reviewDue": "レビュー期限",
+    "attentionHrmItems": "対応待ちの人事項目",
+    "attentionPayrollSetup": "給与設定に統制勘定が必要",
+    "attentionBankLines": "未照合の銀行明細行",
+    "attentionCloseRuns": "未完了の決算",
+    "calendarPayrollRemittance": "給与納付待ち",
     "nothingWaiting": "待つものはありません。",
     "noBalances": "計算可能な残高がありません。",
     "nobodyOut": "不在者はいません。",

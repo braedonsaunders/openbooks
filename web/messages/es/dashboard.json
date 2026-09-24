@@ -215,6 +215,12 @@
     "systemBadge": "Predeterminado de la empresa"
   },
   "persona": {
+    "reviewDue": "Revisión pendiente",
+    "attentionHrmItems": "Solicitudes de RR. HH. pendientes",
+    "attentionPayrollSetup": "La nómina necesita cuentas de control",
+    "attentionBankLines": "Líneas bancarias sin conciliar",
+    "attentionCloseRuns": "Cierres abiertos",
+    "calendarPayrollRemittance": "Remesa de nómina pendiente",
     "nothingWaiting": "Nada le espera.",
     "noBalances": "Sin saldos computables.",
     "nobodyOut": "Nadie ausente.",

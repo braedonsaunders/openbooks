@@ -282,7 +282,7 @@ export async function loadPersonaMetrics(
       const mine = await listMyReviews({ orgId, actorId: userId }).catch(() => null)
       if (mine) {
         for (const review of [...mine.asReviewer.filter((r) => r.status === 'pending'), ...mine.asSubject.filter((r) => r.status === 'shared')].slice(0, 3)) {
-          upcoming.push({ label: 'Review due', date: today, href: `/hrm/performance?review=${review.id}` })
+          upcoming.push({ label: tp('reviewDue'), date: today, href: `/hrm/performance?review=${review.id}` })
         }
       }
     }
@@ -366,22 +366,22 @@ export async function loadPersonaMetrics(
         kinds: ['hrm_leave_request', 'hrm_change_request', 'hrm_process_step'],
         cache,
       }).catch(() => [] as InboxItem[])
-      if (pending.length > 0) attention.push({ label: 'HRM items waiting', count: pending.length, href: '/inbox?filter=my_tasks' })
+      if (pending.length > 0) attention.push({ label: tp('attentionHrmItems'), count: pending.length, href: '/inbox?filter=my_tasks' })
     }
     if (await isFeatureEnabled(orgId, 'payroll')) {
       const { payrollHome } = await import('@/lib/module-home/payroll')
       const home = await payrollHome(orgId, authz.allowedSubsidiaryIds ?? undefined).catch(() => null)
       const missing = home?.missingSettings.length ?? 0
-      if (missing > 0) attention.push({ label: 'Payroll setup needs control accounts', count: missing, href: '/payroll' })
+      if (missing > 0) attention.push({ label: tp('attentionPayrollSetup'), count: missing, href: '/payroll' })
     }
     const unmatched = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from bank_statement_lines
        where org_id = ${orgId} and match_status = 'unmatched'`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0
-    if (unmatched > 0) attention.push({ label: 'Bank lines unmatched', count: unmatched, href: '/banking/match' })
+    if (unmatched > 0) attention.push({ label: tp('attentionBankLines'), count: unmatched, href: '/banking/match' })
     const openClose = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from close_runs
        where org_id = ${orgId} and status not in ('closed', 'cancelled')`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0]?.n ?? 0
-    if (openClose > 0) attention.push({ label: 'Open close runs', count: openClose, href: '/close' })
+    if (openClose > 0) attention.push({ label: tp('attentionCloseRuns'), count: openClose, href: '/close' })
     out.adminAttention = attention
   }
 
@@ -405,7 +405,7 @@ export async function loadPersonaMetrics(
       select created_at::text as at from payment_remittances
        where org_id = ${orgId} and status = 'pending'
        order by created_at limit 5`).catch(() => ({ rows: [] as { at: string }[] }))).rows
-    for (const remittance of remittances) calendar.push({ label: 'Payroll remittance pending', date: remittance.at.slice(0, 10) })
+    for (const remittance of remittances) calendar.push({ label: tp('calendarPayrollRemittance'), date: remittance.at.slice(0, 10) })
     out.adminCalendar = calendar.slice(0, 6)
   }
 

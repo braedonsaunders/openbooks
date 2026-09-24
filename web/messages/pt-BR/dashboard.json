@@ -215,6 +215,12 @@
     "systemBadge": "Padrão da empresa"
   },
   "persona": {
+    "reviewDue": "Revisão pendente",
+    "attentionHrmItems": "Itens de RH aguardando ação",
+    "attentionPayrollSetup": "A folha precisa de contas de controle",
+    "attentionBankLines": "Linhas bancárias sem conciliação",
+    "attentionCloseRuns": "Fechamentos em aberto",
+    "calendarPayrollRemittance": "Remessa de folha pendente",
     "nothingWaiting": "Nada aguarda você.",
     "noBalances": "Sem saldos computáveis.",
     "nobodyOut": "Ninguém ausente.",
