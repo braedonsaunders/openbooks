@@ -467,7 +467,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
     id: c.id,
     name: c.name,
     period: `${c.periodStartOn} → ${c.periodEndOn}`,
-    template: c.templateName,
+    template: c.templateName ?? '—',
     selfProgress: `${c.submittedSelf}/${c.totalSelf}`,
     managerProgress: `${c.submittedManager}/${c.totalManager}`,
     status: c.status,
@@ -508,7 +508,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
         cycleId: full.id,
         cycleName: full.name,
         cycleStatus: full.status,
-        templateName: full.templateName,
+        templateName: full.templateName ?? '—',
         period: `${full.periodStartOn} → ${full.periodEndOn}`,
         reviews: full.reviews.map((r) => ({
           id: r.id,
@@ -536,7 +536,9 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
           forceReasonLabel: t('performance.forceReason'),
           forceReasonPlaceholder: t('performance.forceReasonPlaceholder'),
           closeLabel: t('performance.closeCycle'),
-          gapNote: full.managerGapCount > 0 ? t('performance.gapNote', { count: full.managerGapCount }) : null,
+          gapNote: full.managerGapCount !== null && full.managerGapCount > 0
+            ? t('performance.gapNote', { count: full.managerGapCount })
+            : null,
           failed: t('performance.actionFailed'),
         },
         closeHref: performanceHref(preservedParams, { status: rawStatus }),
