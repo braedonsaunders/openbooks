@@ -171,11 +171,17 @@ test("heatmap suppresses below min_group_size and comments hide", { skip: !DB },
       });
     }
     const results = await getSurveyResults({ orgId: h.org.orgId, actorId: h.hrId, surveyId: survey.id });
-    // No department segments resolve (no employments), so the heatmap has
-    // no segments — but the suppression unit is covered in results.test;
-    // here the survey-level gate hides the comments instead.
+    assert.equal(results.suppressed, true);
+    assert.equal(results.invitations, 0);
+    assert.equal(results.responded, 0);
+    assert.equal(results.participationPct, null);
+    assert.equal(results.enps, null);
+    assert.ok(results.questions.every((question) =>
+      question.aggregate.responses === 0 && question.aggregate.mean === null && question.aggregate.distribution.length === 0,
+    ));
+    assert.deepEqual(results.drivers, []);
+    assert.deepEqual(results.heat, { drivers: [], segments: [], cells: {} });
     assert.equal(results.comments.length, 0);
-    assert.equal(results.responded, 2);
   });
 });
 

@@ -471,6 +471,8 @@ export interface SurveyResults {
   surveyId: string;
   anonymity: string;
   status: string;
+  /** True when the response slice is below the configured disclosure floor. */
+  suppressed: boolean;
   invitations: number;
   responded: number;
   participationPct: number | null;
@@ -586,6 +588,7 @@ export async function getSurveyResults(query: {
       allowed,
     ),
   );
+  const suppressed = responses.length < survey.min_group_size;
   const byQuestion = new Map(questions.map((q) => [q.id, q]));
   const flat: ResultAnswer[] = [];
   for (const response of responses) {
@@ -605,7 +608,7 @@ export async function getSurveyResults(query: {
     }
   }
   const enpsQuestion = questions.find((q) => q.kind === "enps");
-  const enps = enpsQuestion
+  const enps = enpsQuestion && !suppressed
     ? computeEnps(flat.filter((a) => a.questionId === enpsQuestion.id && a.value !== null).map((a) => a.value!))
     : null;
   // Comments surface only when the reader's scoped slice clears the
@@ -615,7 +618,7 @@ export async function getSurveyResults(query: {
   // named/confidential comments show as unattributed text — the reader
   // grants no path back to a respondent.
   const comments =
-    responses.length >= survey.min_group_size
+    !suppressed
       ? questions
           .filter((q) => q.kind === "text")
           .map((q) => ({
@@ -680,7 +683,7 @@ export async function getSurveyResults(query: {
       surveyId: sibling.id,
       name: sibling.name,
       submittedAt: null,
-      enps: enpsQ ? computeEnps(values).score : null,
+      enps: enpsQ && values.length >= survey.min_group_size ? computeEnps(values).score : null,
     });
   }
   const responded = respondedCount;
@@ -688,23 +691,22 @@ export async function getSurveyResults(query: {
     surveyId: survey.id,
     anonymity: survey.anonymity,
     status: survey.status,
-    invitations,
-    responded,
-    participationPct: invitations > 0 ? Math.round((responded / invitations) * 1000) / 10 : null,
+    suppressed,
+    invitations: suppressed ? 0 : invitations,
+    responded: suppressed ? 0 : responded,
+    participationPct: suppressed || invitations === 0 ? null : Math.round((responded / invitations) * 1000) / 10,
     questions: questions.map((q) => ({
       id: q.id,
       kind: q.kind,
       prompt: q.prompt,
       driverKey: q.driver_key,
-      aggregate: aggregateQuestion(
-        q.id,
-        q.kind,
-        flat.filter((a) => a.questionId === q.id),
-      ),
+      aggregate: suppressed
+        ? { questionId: q.id, kind: q.kind, responses: 0, mean: null, distribution: [] }
+        : aggregateQuestion(q.id, q.kind, flat.filter((a) => a.questionId === q.id)),
     })),
     enps,
-    drivers: driverScores(flat),
-    heat: heatmap(flat, survey.min_group_size),
+    drivers: suppressed ? [] : driverScores(flat),
+    heat: suppressed ? { drivers: [], segments: [], cells: {} } : heatmap(flat, survey.min_group_size),
     trend,
     comments,
   };
