@@ -24,6 +24,7 @@ import { Button, cn } from '@openbooks/ui'
 import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { PageLayoutPrefs } from '@openbooks/schema'
 import type { CashPosition } from '../../../../lib/cash/cash-position'
+import { CASH_HORIZON_PRESETS } from '../../../../lib/cash/horizon'
 import { LayoutMenu } from '../../../../components/page-layout/LayoutMenu'
 import { LayoutSaveStatus } from '../../../../components/page-layout/LayoutSaveStatus'
 import { usePageLayout } from '../../../../components/page-layout/use-page-layout'
@@ -34,12 +35,7 @@ import { formatExactRatio } from '../../analytics/_ui/format'
 import { Vital } from '../../analytics/_ui/Vital'
 import { CashForecastConfigDrawer } from './CashForecastConfigDrawer'
 
-/**
- * Preset switcher values. Mirrors CASH_HORIZON_PRESETS in lib/cash/core.ts
- * (the client bundle cannot import that server-only module) — pinned by
- * lib/cash/core.test.ts, which fails if the two drift apart.
- */
-const HORIZONS = [4, 8, 13, 26] as const
+const HORIZONS = CASH_HORIZON_PRESETS
 
 /** Orderable panels; the FIRST visible one renders as the hero (⅔ width). */
 const PANEL_KEYS = ['timeline', 'forecast', 'bridge', 'health', 'accounts'] as const

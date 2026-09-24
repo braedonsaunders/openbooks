@@ -37,7 +37,6 @@
     "web/components/client-hook-boundary.test.ts": 1,
     "web/components/document-drawer-stock-location.test.ts": 3,
     "web/components/document-drawer-subsidiary-save.test.ts": 3,
-    "web/lib/cash/core.test.ts": 6,
     "web/lib/cash/open-items-current-projection.test.ts": 2,
     "web/lib/customization/list-view-default-refusal.test.tsx": 2
   }

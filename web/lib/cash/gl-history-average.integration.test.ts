@@ -152,6 +152,39 @@ test("gl history net mode nets refunds before orienting", { skip: !process.env.O
   }
 });
 
+/** Gross mode forecasts line activity; net mode offsets the refund first. */
+test("gl history gross and net modes report different refund-adjusted run rates", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    await withBypass(async () => {
+      const june = await seedPeriod(org, 2026, 6);
+      await seedLegs(org, "2026-06-22", june, [[org.accounts.ap, "-100"], [org.accounts.bank, "100"]]);
+      await seedLegs(org, "2026-06-29", june, [[org.accounts.ap, "40"], [org.accounts.bank, "-40"]]);
+    });
+    await withOrgContext(org.orgId, async () => {
+      const base = {
+        id: randomUUID(),
+        name: "Payables",
+        direction: "outflow" as const,
+        method: "gl_history_average" as const,
+        accountIds: [org.accounts.ap],
+        historyWeeks: 4,
+      };
+      const gross = await categoryWeekly(org.orgId, base, "2026-07-20", WEEKS, { ...CONTEXT });
+      const net = await categoryWeekly(org.orgId, { ...base, useNetAmt: true }, "2026-07-20", WEEKS, { ...CONTEXT });
+
+      assert.equal(gross.meta.sourceTotal, "140.0000", "gross mode retains the $100 payment and $40 refund line magnitudes");
+      assert.equal(net.meta.sourceTotal, "60.0000", "net mode offsets the $40 refund against $100 of spend");
+      assert.deepEqual(gross.weekly, Array(8).fill("35.0000"), "$140 across four history weeks forecasts $35 per week");
+      assert.deepEqual(net.weekly, Array(8).fill("15.0000"), "$60 net activity across four weeks forecasts $15 per week");
+      assert.deepEqual(gross.breakdown.filter((row) => row.type === "Source Data").map((row) => row.amount), ["140.0000"]);
+      assert.deepEqual(net.breakdown.filter((row) => row.type === "Source Data").map((row) => row.amount), ["-60.0000"]);
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 /**
  * Contra accounts offset their primaries in the signed sum: a +200 expense
  * and a -80 contra net to a 120 total, oriented once by the gross-majority
