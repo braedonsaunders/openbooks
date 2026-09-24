@@ -21,6 +21,7 @@ import { reversePaymentForReturn } from "./payment-return.ts";
 import { computeNextRunAt, runScript } from "../scripting/scripting.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { createPaymentRun } from "./run-creation.ts";
+export { PAYMENT_FILE_STATUSES } from "./file-statuses.ts";
 
 export type BuiltInPaymentRail =
   | "cpa005_credit"
@@ -1102,26 +1103,6 @@ export async function recordPaymentFileDownload(fileId: string, orgId: string, u
 
 /** How long one publish attempt owns its file before the lease is reclaimable. */
 export const DELIVERY_CLAIM_TTL_SECONDS = 300;
-
-/**
- * Every payment_files.status the engine can write: the seven drizzle-level
- * states plus the two delivery-claim states (migration 0290). The claim
- * transitions below use these literals; the RunDrawer fileStatus catalog
- * must label every member in every locale (covered by a derived test that
- * imports this list, never a hand copy). Extend this list — never shrink
- * it — when a new file state is introduced.
- */
-export const PAYMENT_FILE_STATUSES = [
-  "generated",
-  "pending_approval",
-  "approved",
-  "rejected",
-  "delivered",
-  "superseded",
-  "voided",
-  "delivering",
-  "delivery_uncertain",
-] as const;
 
 export interface DeliveryClaim {
   token: string;
