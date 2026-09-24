@@ -69,7 +69,7 @@ test('missing consolidated rates become a banner while figures fail closed', asy
     deriveHref: '/close',
   })
   assert.equal(data.activeCustomersValue, '0')
-  assert.equal(data.arOutstanding, '0')
+  assert.equal(data.arOutstanding, '0.0000')
   assert.equal(state.customerHomeCalls, 0, 'blocked consolidation must not load unscoped figures')
 
   const notice = customersSpec(data).body.find((block) => block.kind === 'widget' && block.widget === 'empty-state')
