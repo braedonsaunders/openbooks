@@ -67,3 +67,32 @@ test('quick action reorder and remove buttons use translated names', async (t) =
   assert.ok(document.querySelector('button[aria-label="Next"]'), 'move down uses the translated next name')
   assert.ok(document.querySelector('button[aria-label="Remove"]'), 'remove uses the translated remove name')
 })
+
+test('quick action icon and color choices expose human-readable names', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <QuickActionsEditor
+          open
+          value={[{ id: 'invoices', label: 'Invoices', href: '/ar/invoices', iconKey: 'file', tone: 'sky' }]}
+          onClose={() => {}}
+          onSaved={() => {}}
+        />
+      </NextIntlClientProvider>,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 30))
+  })
+  const edit = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Invoices'))
+  assert.ok(edit, 'quick action can be edited')
+  await act(async () => edit.click())
+  assert.ok(document.querySelector('button[aria-label="Icon: Shield Alert"]'), 'icon name describes the selected glyph')
+  assert.ok(document.querySelector('button[aria-label="Color: Rose"]'), 'color name describes the selected swatch')
+  assert.equal(document.querySelector('button[aria-label="shield-alert"]'), null, 'raw icon ids are not exposed')
+})
