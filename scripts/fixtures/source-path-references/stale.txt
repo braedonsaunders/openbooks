@@ -1,0 +1,6 @@
+const a = readFileSync(join(here, "..", "..", "engine", "src", "gone.ts"), "utf8");
+const b = join(
+  import.meta.dirname, "..", "..", "engine", "src", "vanished.ts",
+);
+const c = readFileSync(new URL("../../engine/src/coins.ts", import.meta.url), "utf8");
+assert.match(a, /from "@openbooks\/engine\/src\/coins\.ts"/);

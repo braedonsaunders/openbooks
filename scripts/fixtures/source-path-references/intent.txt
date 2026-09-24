@@ -1,0 +1,4 @@
+assert.match(out, /created  engine\/src\/payroll\/rates-2099\.ts/); // source-path: synthetic
+assert.equal(existsSync(new URL("./Gone.tsx", import.meta.url)), false);
+// const old = readFileSync(join(here, "engine", "src", "gone.ts"));
+/* new URL("../engine/src/coins.ts", import.meta.url) used to be the way */

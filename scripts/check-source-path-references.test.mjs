@@ -4,7 +4,17 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { analyze, segmentReferences, stripComments } from "./check-source-path-references.mjs";
+
+// Fixture file bodies live in fixtures/source-path-references/*.txt, not as
+// string literals here: they contain readFileSync/new-URL/regex shapes as
+// TEST DATA for analyze(), and inline literals would misread as assertions
+// on repository source. The temp repo below is still assembled with real .ts
+// names, so every shape resolves exactly as the literals did.
+function fixture(name) {
+  return readFileSync(new URL(`./fixtures/source-path-references/${name}.txt`, import.meta.url), "utf8");
+}
 
 // The check lists files through git, so the fixture is a real repository.
 function repo(files) {
@@ -23,21 +33,8 @@ const ENGINE = { "engine/src/crm/crm.ts": "export const x = 1;\n", "engine/src/c
 test("segment-assembled, new URL and escaped regex references that resolve pass; each stale shape is named with its line", () => {
   const root = repo({
     ...ENGINE,
-    "web/lib/ok.test.ts": [
-      'const a = readFileSync(join(here, "..", "..", "engine", "src", "crm", "crm.ts"), "utf8");',
-      'const b = readFileSync(new URL("../../engine/src/coins/coins.ts", import.meta.url), "utf8");', // source-path: synthetic
-      "assert.match(a, /engine\\/src\\/crm\\/crm\\.ts/);",
-      "",
-    ].join("\n"),
-    "web/lib/stale.test.ts": [
-      'const a = readFileSync(join(here, "..", "..", "engine", "src", "gone.ts"), "utf8");', // source-path: synthetic
-      "const b = join(",
-      '  import.meta.dirname, "..", "..", "engine", "src", "vanished.ts",', // source-path: synthetic
-      ");",
-      'const c = readFileSync(new URL("../../engine/src/coins.ts", import.meta.url), "utf8");', // source-path: synthetic
-      "assert.match(a, /from \"@openbooks\\/engine\\/src\\/coins\\.ts\"/);",
-      "",
-    ].join("\n"),
+    "web/lib/ok.test.ts": fixture("ok"),
+    "web/lib/stale.test.ts": fixture("stale"),
   });
   try {
     const { problems, checked } = analyze(root);
@@ -60,13 +57,7 @@ test("segment-assembled, new URL and escaped regex references that resolve pass;
 test("a synthetic path is opted out on its line; an absence assertion and a commented example are never stale", () => {
   const root = repo({
     ...ENGINE,
-    "web/lib/intent.test.ts": [
-      "assert.match(out, /created  engine\\/src\\/payroll\\/rates-2099\\.ts/); // source-path: synthetic",
-      'assert.equal(existsSync(new URL("./Gone.tsx", import.meta.url)), false);',
-      '// const old = readFileSync(join(here, "engine", "src", "gone.ts"));', // source-path: synthetic
-      "/* new URL(\"../engine/src/coins.ts\", import.meta.url) used to be the way */",
-      "",
-    ].join("\n"),
+    "web/lib/intent.test.ts": fixture("intent"),
   });
   try {
     const { problems, checked } = analyze(root);
