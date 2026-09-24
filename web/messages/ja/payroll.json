@@ -305,6 +305,7 @@
       "stubsEmailed": "{sent, plural, one {# 件の明細をメール送信しました。} other {# 件の明細をメール送信しました。}}",
       "stubsEmailedPartial": "{sent}件送信済み。スキップ（メールアドレスなし／失敗）:{skipped}",
       "printCheques": "{count, plural, one {# 枚の小切手を印刷} other {# 枚の小切手を印刷}}",
+      "chequesFailed": "小切手PDFを準備できませんでした。",
       "partialTitle": "{count, plural, one {部分的な支給 — 判断により # 名が除外されました} other {部分的な支給 — 判断により # 名が除外されました}}",
       "partialRecorded": "{date}に承認済み。この判断はこの計算に記録されています。",
       "partialRecovery": "除外された従業員に支払うには、入力画面が利用可能になり次第、不足している入力を登録し、臨時計算で支払ってください。転記済みの計算を後から変更することはありません。",

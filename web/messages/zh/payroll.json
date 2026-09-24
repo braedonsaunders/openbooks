@@ -305,6 +305,7 @@
       "stubsEmailed": "{sent, plural, one {已通过邮件发送 # 份工资单。} other {已通过邮件发送 # 份工资单。}}",
       "stubsEmailedPartial": "已发送 {sent}；已跳过（无邮箱或失败）：{skipped}",
       "printCheques": "{count, plural, one {打印 # 张支票} other {打印 # 张支票}}",
+      "chequesFailed": "无法生成支票 PDF。",
       "partialTitle": "{count, plural, one {部分核算 — 经决定排除 # 名员工} other {部分核算 — 经决定排除 # 名员工}}",
       "partialRecorded": "确认日期：{date}。该决定已记录在本次核算中。",
       "partialRecovery": "若要向被排除的员工支付：在其录入界面可用后补足缺失的输入，然后通过核算外单支付。已过账的核算绝不在事后修改。",

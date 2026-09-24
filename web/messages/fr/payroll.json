@@ -305,6 +305,7 @@
       "stubsEmailed": "{sent, plural, one {# bulletin} other {# bulletins}} envoyés.",
       "stubsEmailedPartial": "{sent} envoyés ; ignorés (sans courriel ou échec) : {skipped}",
       "printCheques": "Imprimer {count, plural, one {# chèque} other {# chèques}}",
+      "chequesFailed": "Impossible de préparer le PDF des chèques.",
       "partialTitle": "{count, plural, one {Paie partielle — # employé exclu par décision} other {Paie partielle — # employés exclus par décision}}",
       "partialRecorded": "Validé le {date}. Cette décision est enregistrée dans la paie.",
       "partialRecovery": "Pour payer les employés exclus : fournissez les données manquantes dès que leur écran de saisie est disponible, puis payez-les dans une paie hors cycle. Une paie reportée n'est jamais modifiée après coup.",

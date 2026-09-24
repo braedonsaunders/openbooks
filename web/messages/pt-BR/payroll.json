@@ -305,6 +305,7 @@
       "stubsEmailed": "{sent, plural, one {# contracheque} other {# contracheques}} enviados por e-mail.",
       "stubsEmailedPartial": "{sent} enviados; ignorados (sem e-mail ou falha): {skipped}",
       "printCheques": "Imprimir {count, plural, one {# cheque salarial} other {# cheques salariais}}",
+      "chequesFailed": "Não foi possível preparar o PDF dos cheques.",
       "partialTitle": "{count, plural, one {Folha parcial — # funcionário excluído por decisão} other {Folha parcial — # funcionários excluídos por decisão}}",
       "partialRecorded": "Confirmado em {date}. Esta decisão fica registrada na folha.",
       "partialRecovery": "Para pagar os funcionários excluídos: informe os dados faltantes assim que sua tela de entrada estiver disponível e pague-os em uma folha extra. Uma folha contabilizada nunca é alterada depois.",
