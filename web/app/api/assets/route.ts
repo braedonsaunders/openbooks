@@ -215,11 +215,11 @@ export async function POST(request: Request) {
     checkOpeningPair(openingAccumulated, openingAsOf);
     checkOpeningBasis(openingAccumulated, cost, salvage);
     checkOpeningMonth(openingAccumulated, openingAsOf, inServiceOn);
-    assetAccountId = (await parseAccountOverride(db, user.orgId, body.assetAccountId, "invalid_asset_account")) ?? null;
+    assetAccountId = (await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.assetAccountId, "invalid_asset_account")) ?? null;
     accumAccountId =
-      (await parseAccountOverride(db, user.orgId, body.accumulatedDepreciationAccountId, "invalid_accumulated_account")) ?? null;
+      (await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.accumulatedDepreciationAccountId, "invalid_accumulated_account")) ?? null;
     expenseAccountId =
-      (await parseAccountOverride(db, user.orgId, body.depreciationExpenseAccountId, "invalid_expense_account")) ?? null;
+      (await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.depreciationExpenseAccountId, "invalid_expense_account")) ?? null;
     customBag = await parseCustomBag(user.orgId, body.custom);
     const taxClean = await parseTaxDepreciation(db, user.orgId, body.taxDepreciation);
     if (taxClean !== undefined) customBag.taxDepreciation = taxClean;

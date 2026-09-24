@@ -18,6 +18,7 @@ import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { loadAsset, type AssetCategoryRow as ApiAssetCategoryRow, type AssetPayload } from '../../api/assets/_lib'
+import { assetAccountScopeSql } from '../../api/assets/_fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
@@ -178,7 +179,7 @@ export async function loadAssets(
     const [createPickers, createFieldDefs] = await Promise.all([
       Promise.all([
         db.execute<ApiAssetCategoryRow>(sql`select id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id, default_method, default_depreciation_method_id, default_life_months, default_convention, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`),
-        db.execute<AssetAccountRow>(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`),
+        db.execute<AssetAccountRow>(sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null)} order by a.number nulls last`),
         db.execute<AssetTaxRegimeRow>(sql`
           select r.code, r.name, r.class_attribute,
                  coalesce(jsonb_agg(jsonb_build_object('code', c.class_code, 'name', c.name) order by c.class_code)
@@ -279,7 +280,7 @@ export async function loadAssets(
       }),
       Promise.all([
         db.execute<AssetCategoryRow>(sql`select id, name from asset_categories where org_id = ${orgId} and is_active order by name`),
-        db.execute<AssetAccountRow>(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`),
+        db.execute<AssetAccountRow>(sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null)} order by a.number nulls last`),
         db.execute<AssetTaxRegimeRow>(sql`
           select r.code, r.name, r.class_attribute,
                  coalesce(jsonb_agg(jsonb_build_object('code', c.class_code, 'name', c.name) order by c.class_code)
