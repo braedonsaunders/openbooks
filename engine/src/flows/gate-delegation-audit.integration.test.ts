@@ -90,3 +90,33 @@ test("a refused delegation leaves no audit evidence behind", { skip: !DB }, asyn
     assert.equal(rows.length, 0, "the refused delegation must not leave evidence");
   });
 });
+
+test("a delegation handover note reaches the audit row and the delegate notice (B-INB-1/B3-INB-01)", { skip: !DB }, async () => {
+  await withPendingGate(async (org, actors, gateId) => {
+    const note = "Covering my on-call week — the vendor bill is already matched";
+    await delegateGate(gateId, actors.approver1Id, actors.approver2Id, undefined, note);
+    const rows = await delegationAudit(org.orgId, gateId);
+    assert.equal(rows.length, 1);
+    const changes = rows[0]!.changes as { after: { handoverNote: string | null } };
+    assert.equal(changes.after.handoverNote, note);
+    const notices = (
+      await db.execute<{ body: string | null }>(sql`
+        select body from notifications
+         where org_id = ${org.orgId} and user_id = ${actors.approver2Id}
+         order by created_at desc limit 1
+      `)
+    ).rows;
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0]!.body, note);
+  });
+});
+
+test("a delegation without a note records a null handover, not an empty string", { skip: !DB }, async () => {
+  await withPendingGate(async (org, actors, gateId) => {
+    await delegateGate(gateId, actors.approver1Id, actors.approver2Id, undefined, "");
+    const rows = await delegationAudit(org.orgId, gateId);
+    assert.equal(rows.length, 1);
+    const changes = rows[0]!.changes as { after: { handoverNote: string | null } };
+    assert.equal(changes.after.handoverNote, null);
+  });
+});

@@ -20,7 +20,7 @@ import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
 import { actorPartyId } from "../guard.ts";
 import { db } from "../../platform/db.ts";
-import { isUuid } from "../../platform/uuid.ts";
+import { parseDelegationReason } from "../delegation.ts";
 import { toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
@@ -107,13 +107,8 @@ export const timesheetWeekAdapter: InboxAdapter = {
         return;
       }
       if (actionKey === "delegate") {
-        const match = /^user:(\S+)\s*:?\s*(.*)$/i.exec(reason ?? "");
-        if (!match || !isUuid(match[1])) {
-          throw new Error(
-            "delegation needs a recipient — give the reason as the colleague taking over, then the handover note",
-          );
-        }
-        await delegateGate(gateId, ctx.actorId, match[1]!, allowedSubsidiaryIds);
+        const delegation = parseDelegationReason(reason);
+        await delegateGate(gateId, ctx.actorId, delegation.toUserId, allowedSubsidiaryIds, delegation.note);
         return;
       }
     }
