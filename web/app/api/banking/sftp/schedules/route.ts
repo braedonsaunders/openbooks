@@ -38,6 +38,13 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { sftpServerId?: string; accountId?: string; format?: string; folder?: string; csvMapping?: unknown; expectedExternalAccountId?: unknown }
+  let expectedExternalAccountInput: string | null = null
+  if ('expectedExternalAccountId' in body) {
+    if (typeof body.expectedExternalAccountId !== 'string' && body.expectedExternalAccountId !== null) {
+      return NextResponse.json({ error: 'expectedExternalAccountId must be a string or null' }, { status: 400 })
+    }
+    expectedExternalAccountInput = body.expectedExternalAccountId
+  }
   if (!body.sftpServerId || !isUuid(body.sftpServerId) || !body.accountId || !isUuid(body.accountId)) {
     return NextResponse.json({ error: 'sftpServerId and accountId are required' }, { status: 400 })
   }
@@ -78,9 +85,7 @@ export async function POST(req: Request) {
   // canonical (whitespace-blind, case-blind) so the import comparison
   // cannot be smuggled past spacing or case; absent stays null (an
   // identified file then refuses until the schedule names its account).
-  const expectedExternalAccountId = normalizeExternalAccountId(
-    typeof body.expectedExternalAccountId === 'string' ? body.expectedExternalAccountId : null,
-  )
+  const expectedExternalAccountId = normalizeExternalAccountId(expectedExternalAccountInput)
   try {
     const r = (await db.execute<{ id: string }>(sql`
       insert into sftp_import_schedules (org_id, sftp_server_id, account_id, format, folder, csv_mapping, expected_external_account_id, created_by)

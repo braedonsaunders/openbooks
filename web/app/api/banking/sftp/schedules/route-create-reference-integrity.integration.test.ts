@@ -463,3 +463,29 @@ test(
     }
   },
 );
+
+test(
+  "schedule POST refuses a malformed supplied external-account binding before saving",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const serverId = await createServer(fixture);
+      await makeReconcilable(fixture, fixture.bankAccountId);
+      const outcome = await postStatus(fixture, {
+        sftpServerId: serverId,
+        accountId: fixture.bankAccountId,
+        format: "ofx",
+        expectedExternalAccountId: {},
+      });
+      assert.equal(outcome.status, 400);
+      assert.deepEqual(outcome.body, {
+        error: "expectedExternalAccountId must be a string or null",
+      });
+      assert.equal(await scheduleCount(fixture), 0);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
