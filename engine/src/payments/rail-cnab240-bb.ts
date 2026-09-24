@@ -162,8 +162,11 @@ export function validateCnab240BbSettings(raw: Partial<Cnab240BbSettings> | null
   if (!missing.includes("nomeEmpresa") && s.nomeEmpresa!.trim().length > 30) {
     missing.push("nomeEmpresa (max 30 characters, shown on the file)");
   }
-  if (!missing.includes("versaoLayoutArquivo") && !/^\d{3}$/.test(s.versaoLayoutArquivo!.trim())) {
-    missing.push("versaoLayoutArquivo (3-digit arquivo layout version from your convênio documentation; must pair with lote 045 per Banco do Brasil's version table)");
+  // FEBRABAN CNAB 240 V08.7 pairs payment lote 045 with arquivo 087.
+  // This writer emits lote 045, so accepting another three-digit version
+  // would produce a syntactically valid but internally mismatched file.
+  if (!missing.includes("versaoLayoutArquivo") && s.versaoLayoutArquivo!.trim() !== "087") {
+    missing.push("versaoLayoutArquivo (087 is the FEBRABAN arquivo version paired with lote 045 for the supported BB payment layout)");
   }
   if (missing.length) return { ok: false, missing: [...new Set(missing)] };
   return {

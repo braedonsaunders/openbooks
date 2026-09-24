@@ -251,7 +251,7 @@ const CASES: RailCase[] = [
         conta: "123456",
         contaDv: "1",
         nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-        versaoLayoutArquivo: "084",
+        versaoLayoutArquivo: "087",
       },
     },
     // Header data de geração DDMMYYYY + hora HHMMSS.
