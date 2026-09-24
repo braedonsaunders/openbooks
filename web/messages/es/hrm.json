@@ -451,6 +451,7 @@
     "cancelProcess": "Cancelar lista",
     "attachmentLabel": "Archivo de evidencia",
     "attachmentUnset": "Escriba para buscar",
+    "fileSearchFailed": "No se pudieron cargar las sugerencias de archivos. Pruebe otra búsqueda.",
     "skipReasonLabel": "Motivo de omisión",
     "skipReasonPlaceholder": "¿Por qué se omite este paso?",
     "cancelReasonLabel": "Motivo de cancelación",

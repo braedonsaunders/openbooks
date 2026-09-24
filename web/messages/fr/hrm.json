@@ -451,6 +451,7 @@
     "cancelProcess": "Annuler la liste",
     "attachmentLabel": "Fichier de preuve",
     "attachmentUnset": "Taper pour rechercher",
+    "fileSearchFailed": "Impossible de charger les suggestions de fichiers. Essayez une autre recherche.",
     "skipReasonLabel": "Motif",
     "skipReasonPlaceholder": "Pourquoi cette étape est-elle ignorée ?",
     "cancelReasonLabel": "Motif d'annulation",

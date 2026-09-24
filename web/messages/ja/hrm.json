@@ -451,6 +451,7 @@
     "cancelProcess": "チェックリストをキャンセル",
     "attachmentLabel": "証跡ファイル",
     "attachmentUnset": "検索語を入力",
+    "fileSearchFailed": "ファイル候補を読み込めませんでした。別の検索語をお試しください。",
     "skipReasonLabel": "スキップ理由",
     "skipReasonPlaceholder": "この手順をスキップする理由",
     "cancelReasonLabel": "キャンセル理由",

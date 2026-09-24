@@ -451,6 +451,7 @@
     "cancelProcess": "Cancel checklist",
     "attachmentLabel": "Evidence file",
     "attachmentUnset": "Type to search files",
+    "fileSearchFailed": "File suggestions could not be loaded. Try another search.",
     "skipReasonLabel": "Skip reason",
     "skipReasonPlaceholder": "Why is this step skipped?",
     "cancelReasonLabel": "Cancellation reason",

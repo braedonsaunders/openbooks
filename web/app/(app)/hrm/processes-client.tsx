@@ -35,28 +35,41 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
   const [reason, setReason] = useState('')
   const [reasonFor, setReasonFor] = useState<{ action: 'skip' | 'cancel'; stepId?: string } | null>(null)
   const [attachmentId, setAttachmentId] = useState('')
-  const [fileOptions, setFileOptions] = useState<FileOption[]>([])
+  const [fileOptions, setFileOptions] = useState<{ query: string; options: FileOption[] } | null>(null)
+  const [fileLoadError, setFileLoadError] = useState<{ query: string; message: string } | null>(null)
   const [fileQuery, setFileQuery] = useState('')
 
-  // Options are only meaningful for a query of two or more characters; the
-  // render derives that instead of an effect clearing state synchronously.
-  const visibleFileOptions = fileQuery.length < 2 ? [] : fileOptions
+  const normalizedFileQuery = fileQuery.trim()
+  // Results and failures belong to the query that produced them. This also
+  // hides stale options on the render before the next effect runs.
+  const visibleFileOptions =
+    normalizedFileQuery.length < 2 || fileOptions?.query !== normalizedFileQuery ? [] : fileOptions.options
+  const visibleFileLoadError = fileLoadError?.query === normalizedFileQuery ? fileLoadError.message : null
   useEffect(() => {
-    if (fileQuery.length < 2) return
+    if (normalizedFileQuery.length < 2) return
     let cancelled = false
     const timer = setTimeout(async () => {
-      const res = await fetch(`/api/file-cabinet/files?q=${encodeURIComponent(fileQuery)}&perPage=20`)
-      if (!res.ok || cancelled) return
-      const data = (await res.json().catch(() => ({}))) as { files?: { id: string; name?: string }[] }
-      if (!cancelled && Array.isArray(data.files)) {
-        setFileOptions(data.files.map((file) => ({ value: file.id, label: file.name ?? file.id })))
+      try {
+        const res = await fetch(`/api/file-cabinet/files?q=${encodeURIComponent(normalizedFileQuery)}&perPage=20`)
+        if (!res.ok) throw new Error('file search failed')
+        const data = (await res.json()) as { files?: { id: string; name?: string }[] }
+        if (!Array.isArray(data.files)) throw new Error('file search returned invalid data')
+        if (!cancelled) {
+          setFileOptions({
+            query: normalizedFileQuery,
+            options: data.files.map((file) => ({ value: file.id, label: file.name ?? file.id })),
+          })
+          setFileLoadError(null)
+        }
+      } catch {
+        if (!cancelled) setFileLoadError({ query: normalizedFileQuery, message: t('processes.fileSearchFailed') })
       }
     }, 250)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [fileQuery])
+  }, [normalizedFileQuery, t])
 
   async function mutate(url: string, body: unknown): Promise<boolean> {
     setError(null)
@@ -85,6 +98,9 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
   return (
     <div className="space-y-4">
       {error !== null ? <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {visibleFileLoadError !== null ? (
+        <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{visibleFileLoadError}</p>
+      ) : null}
       <p className="text-sm text-slate-500 dark:text-slate-400">
         {t('processes.progressLine', {
           done: detail.progress.doneRequired,

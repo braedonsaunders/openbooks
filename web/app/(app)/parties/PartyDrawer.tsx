@@ -2529,8 +2529,10 @@ export function ActivitySublist({ partyId, canManage }: { partyId: string; canMa
   const [kind, setKind] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
-  const [data, setData] = useState<ActivityResponse | null>(null)
+  const [data, setData] = useState<{ key: string; value: ActivityResponse } | null>(null)
   const [loading, setLoading] = useState(true)
+  const requestKey = JSON.stringify([partyId, q.trim(), kind, status, page])
+  const visibleData = data?.key === requestKey ? data.value : null
 
   useEffect(() => {
     const controller = new AbortController()
@@ -2543,21 +2545,22 @@ export function ActivitySublist({ partyId, canManage }: { partyId: string; canMa
       fetch(`/api/parties/${partyId}/activities?${params}`, { signal: controller.signal })
         .then(async (response) => {
           if (!response.ok) throw new Error(await readApiErrorMessage(response, tc('feedback.loadFailed')))
-          setData((await response.json()) as ActivityResponse)
+          const payload = (await response.json()) as ActivityResponse
+          if (!controller.signal.aborted) setData({ key: requestKey, value: payload })
         })
         .catch((error) => {
           if (error instanceof DOMException && error.name === 'AbortError') return
           toast.error(error instanceof Error ? error.message : tc('feedback.loadFailed'))
         })
-        .finally(() => setLoading(false))
+        .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     }, q ? 200 : 0)
     return () => {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [kind, page, partyId, q, status, tc])
+  }, [kind, page, partyId, q, requestKey, status, tc])
 
-  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.perPage ?? 15)))
+  const pages = Math.max(1, Math.ceil((visibleData?.total ?? 0) / (visibleData?.perPage ?? 15)))
   // Activities are full CRM records with their own editor, so Add mints the
   // draft already linked to this account and hands off to that editor —
   // carrying `drawerReturn` so Close lands back on this flyout rather than
@@ -2601,16 +2604,16 @@ export function ActivitySublist({ partyId, canManage }: { partyId: string; canMa
         </div>
         <Select value={kind} onChange={(event) => { setKind(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tcrm('fields.activityType')}>
           <option value="">{t('allTypes')}</option>
-          {(data?.kinds ?? []).map((value) => <option key={value} value={value}>{tcrm(`activityKinds.${value}`)}</option>)}
+          {(visibleData?.kinds ?? []).map((value) => <option key={value} value={value}>{tcrm(`activityKinds.${value}`)}</option>)}
         </Select>
         <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tcrm('fields.status')}>
           <option value="">{t('allStatuses')}</option>
-          {(data?.statuses ?? []).map((value) => <option key={value} value={value}>{tcrm(`activityStatuses.${value}`)}</option>)}
+          {(visibleData?.statuses ?? []).map((value) => <option key={value} value={value}>{tcrm(`activityStatuses.${value}`)}</option>)}
         </Select>
       </div>
-      {loading && !data ? (
+      {loading && !visibleData ? (
         <div className="h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
-      ) : !data?.rows.length ? (
+      ) : !visibleData?.rows.length ? (
         <SublistEmpty icon={<CalendarDays size={22} />} text={tcrm('activities.emptyDescription')} />
       ) : (
         <>
@@ -2620,7 +2623,7 @@ export function ActivitySublist({ partyId, canManage }: { partyId: string; canMa
               <TableHead>{tcrm('fields.status')}</TableHead><TableHead>{tcrm('fields.date')}</TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {data.rows.map((row) => (
+              {visibleData.rows.map((row) => (
                 <TableRow key={row.id} className={loading ? 'opacity-60' : undefined}>
                   <TableCell><Link href={activityHref(row.id)} className="font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.subject}</Link></TableCell>
                   <TableCell>{tcrm(`activityKinds.${row.kind}`)}</TableCell>
@@ -2631,7 +2634,7 @@ export function ActivitySublist({ partyId, canManage }: { partyId: string; canMa
             </TableBody>
           </Table>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-slate-500 dark:text-slate-400">{t('activityCount', { count: data.total })}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('activityCount', { count: visibleData.total })}</span>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>{tc('actions.previous')}</Button>
               <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
@@ -2698,8 +2701,10 @@ export function TransactionSublist({ partyId, role }: { partyId: string; role?: 
   const [kind, setKind] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
-  const [data, setData] = useState<TransactionResponse | null>(null)
+  const [data, setData] = useState<{ key: string; value: TransactionResponse } | null>(null)
   const [loading, setLoading] = useState(true)
+  const requestKey = JSON.stringify([partyId, q.trim(), kind, status, page])
+  const visibleData = data?.key === requestKey ? data.value : null
 
   useEffect(() => {
     const controller = new AbortController()
@@ -2712,21 +2717,22 @@ export function TransactionSublist({ partyId, role }: { partyId: string; role?: 
       fetch(`/api/parties/${partyId}/transactions?${params}`, { signal: controller.signal })
         .then(async (response) => {
           if (!response.ok) throw new Error(await readApiErrorMessage(response, tc('feedback.loadFailed')))
-          setData((await response.json()) as TransactionResponse)
+          const payload = (await response.json()) as TransactionResponse
+          if (!controller.signal.aborted) setData({ key: requestKey, value: payload })
         })
         .catch((error) => {
           if (error instanceof DOMException && error.name === 'AbortError') return
           toast.error(error instanceof Error ? error.message : tc('feedback.loadFailed'))
         })
-        .finally(() => setLoading(false))
+        .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     }, q ? 200 : 0)
     return () => {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [kind, page, partyId, q, status, tc])
+  }, [kind, page, partyId, q, requestKey, status, tc])
 
-  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.perPage ?? 15)))
+  const pages = Math.max(1, Math.ceil((visibleData?.total ?? 0) / (visibleData?.perPage ?? 15)))
   const statusLabel = (value: string) => {
     const key = STATUS_KEYS[value]
     return key ? tc(`status.${key}` as never) : value.replace(/_/g, ' ')
@@ -2776,19 +2782,19 @@ export function TransactionSublist({ partyId, role }: { partyId: string; role?: 
         </div>
         <Select value={kind} onChange={(event) => { setKind(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tc('labels.type')}>
           <option value="">{t('allTypes')}</option>
-          {(data?.kinds ?? []).map((value) => {
+          {(visibleData?.kinds ?? []).map((value) => {
             const meta = docTypeMeta(value)
             return <option key={value} value={value}>{tc(`transactionTypes.${meta.labelKey}` as never)}</option>
           })}
         </Select>
         <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-auto min-w-40" aria-label={tc('labels.status')}>
           <option value="">{t('allStatuses')}</option>
-          {(data?.statuses ?? []).map((value) => <option key={value} value={value}>{statusLabel(value)}</option>)}
+          {(visibleData?.statuses ?? []).map((value) => <option key={value} value={value}>{statusLabel(value)}</option>)}
         </Select>
       </div>
-      {loading && !data ? (
+      {loading && !visibleData ? (
         <div className="h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
-      ) : !data?.rows.length ? (
+      ) : !visibleData?.rows.length ? (
         <SublistEmpty icon={<FileText size={22} />} text={t('noTransactions')} />
       ) : (
         <>
@@ -2799,7 +2805,7 @@ export function TransactionSublist({ partyId, role }: { partyId: string; role?: 
               <TableHead className="text-right">{tc('labels.total')}</TableHead><TableHead className="text-right">{tc('labels.openBalance')}</TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {data.rows.map((row) => (
+              {visibleData.rows.map((row) => (
                 <TableRow key={row.id} className={loading ? 'opacity-60' : undefined}>
                   <TableCell><div className="flex items-center gap-2"><DocTypeBadge kind={row.kind} /><Link href={transactionHref(row) as never} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.document_number}</Link></div></TableCell>
                   <TableCell>{date(new Date(`${row.document_date}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })}</TableCell>
@@ -2812,7 +2818,7 @@ export function TransactionSublist({ partyId, role }: { partyId: string; role?: 
             </TableBody>
           </Table>
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-slate-500 dark:text-slate-400">{t('transactionCount', { count: data.total })}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('transactionCount', { count: visibleData.total })}</span>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>{tc('actions.previous')}</Button>
               <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
