@@ -191,7 +191,7 @@ async function loadOverdueCustomers(orgId: string, today: string): Promise<Overd
            max(x.applied_on - jl.due_date)::int as worst_days
       from applications x
       join journal_lines jl on jl.org_id = x.org_id
-        and (jl.id = x.from_line_id or jl.id = x.to_line_id)
+        and jl.id = x.to_line_id
       join accounts a on a.id = jl.account_id and a.org_id = jl.org_id and a.type = 'asset_receivable'
      where x.org_id = ${orgId}
        and jl.party_id is not null
