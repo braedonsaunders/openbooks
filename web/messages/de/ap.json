@@ -91,7 +91,7 @@
     "createDraft": "Entwurf erstellen",
     "createDrafts": "Entwürfe erstellen",
     "bulkComplete": "Massenaktion abgeschlossen: {succeeded} erfolgreich, {failed} fehlgeschlagen.",
-    "notProcessed": "In diesem Durchgang nicht verarbeitet — bleibt ausgewählt.", "bulkPartial": "Massenaktion teilweise abgeschlossen: {succeeded} erfolgreich, {failed} fehlgeschlagen. Die fehlgeschlagenen Dokumente bleiben mit ihren Gründen unten ausgewählt.",
+    "notProcessed": "In diesem Durchgang nicht verarbeitet — bleibt ausgewählt.", "bulkUnknown": "Ergebnis unbekannt: {reason}. Bleibt ausgewählt — vor erneutem Versuch prüfen.", "bulkPartial": "Massenaktion teilweise abgeschlossen: {succeeded} erfolgreich, {failed} fehlgeschlagen. Die fehlgeschlagenen Dokumente bleiben mit ihren Gründen unten ausgewählt.",
     "actionFailed": "Die Erfassungsaktion ist fehlgeschlagen.",
     "rejected": "Dokument abgelehnt.",
     "reprocessQueued": "Dokument zur erneuten Verarbeitung eingereiht.",

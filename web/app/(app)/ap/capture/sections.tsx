@@ -76,23 +76,37 @@ export function CaptureList({ rows, currentParams, canCreate, uploadDisabled, so
     try {
       const ids = [...selected]
       const aggregated: Array<{ id: string; ok: boolean; error?: string }> = []
+      // A failed or lost chunk must not discard the confirmed verdicts of
+      // completed chunks: this chunk's ids are marked unknown (kept
+      // selected, with the named outcome) instead of replaying blindly.
+      const unknownReasons = new Map<string, string>()
       for (const chunk of chunkArray(ids, BULK_BATCH_SIZE)) {
-        const response = await fetch('/api/ap-capture/actions', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action, ids: chunk }),
-        })
-        // The status is checked before the body parses: a non-JSON 502 page
-        // must toast the translated fallback, never a SyntaxError.
-        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
-        const body = (await response.json()) as { results?: Array<{ id: string; ok: boolean; error?: string }> }
-        aggregated.push(...(body.results ?? []))
+        try {
+          const response = await fetch('/api/ap-capture/actions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action, ids: chunk }),
+          })
+          // The status is checked before the body parses: a non-JSON 502
+          // page must name the translated fallback, never a SyntaxError.
+          if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
+          const body = (await response.json()) as { results?: Array<{ id: string; ok: boolean; error?: string }> }
+          aggregated.push(...(body.results ?? []))
+        } catch (e) {
+          const reason = e instanceof Error ? e.message : t('actionFailed')
+          for (const id of chunk) unknownReasons.set(id, reason)
+        }
       }
       // Every requested id gets exactly one verdict: a partial bulk result
-      // names its reasons per item instead of collapsing them to counts,
-      // and an id the server never answered stays selected flagged "not
-      // processed" instead of vanishing as a phantom success.
-      const failed = reconcileBulkResults(ids, aggregated, t('notProcessed'))
+      // names its reasons per item instead of collapsing them to counts;
+      // an id the server never answered stays selected flagged "not
+      // processed"; an id from a failed or lost chunk stays selected
+      // flagged "unknown" — never a phantom success, never a blind replay.
+      const knownIds = ids.filter((id) => !unknownReasons.has(id))
+      const failed = reconcileBulkResults(knownIds, aggregated, t('notProcessed'))
+      for (const [id, reason] of unknownReasons) {
+        failed.push({ id, error: t('bulkUnknown', { reason }) })
+      }
       const succeeded = ids.length - failed.length
       if (failed.length > 0) {
         setBulkResult({
