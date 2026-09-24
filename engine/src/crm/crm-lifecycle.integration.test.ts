@@ -8,6 +8,7 @@ import {
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 import {
+  ensureCrmDefaults,
   promoteCrmAccount,
   transitionCrmAccountStage,
 } from "./crm.ts";
@@ -19,6 +20,29 @@ async function setCrmFeature(orgId: string, enabled: boolean): Promise<void> {
     db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ features: { crm: enabled } })}::jsonb where id = ${orgId}`),
   );
 }
+
+test("new organizations require a loss reason only for the default Closed lost stage", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await setCrmFeature(org.orgId, true);
+    await withBypassContext(() => ensureCrmDefaults(org.orgId));
+
+    const rows = await withBypassContext(() =>
+      db.execute<{ key: string; requiresWinLossReason: boolean }>(sql`
+        select key, requires_win_loss_reason as "requiresWinLossReason"
+          from crm_opportunity_statuses
+         where org_id = ${org.orgId}`),
+    );
+    const policy = new Map(rows.rows.map((row) => [row.key, row.requiresWinLossReason]));
+
+    assert.equal(policy.get("closed_lost"), true);
+    assert.equal(policy.get("proposal"), false);
+    assert.equal(policy.get("closed_won"), false);
+    assert.equal([...policy.values()].filter(Boolean).length, 1);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
 
 async function seedParty(orgId: string, name: string): Promise<string> {
   return (
