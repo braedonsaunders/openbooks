@@ -195,16 +195,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/expenses/ExpenseDrawer.tsx",
-    "fn": "act",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/expenses/ExpenseDrawer.tsx",
-    "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/field-tickets/FieldTicketDrawer.tsx",
     "fn": "FieldTicketDrawer",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
