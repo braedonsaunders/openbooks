@@ -27,11 +27,19 @@ import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
  * carried_from_item_id and marks the original carried — never moved.
  *
  * Authority is structural, never caller-declared: HR
- * (hrm.performance.read/manage) sees everything; otherwise the actor's
- * party must be the manager or the report employment's worker party, or
- * the actor must manage the report through the live line relationship
- * (with hrm.self.read). Private items are readable only by their author —
- * enforced in every read below, never in the UI alone.
+ * (hrm.performance.read/manage) sees pairs whose report sits inside
+ * their allowed subsidiaries (unrestricted HR sees everything);
+ * otherwise the actor's party must be the manager or the report
+ * employment's worker party, or the actor must manage the report
+ * through the live line relationship (with hrm.self.read). Private
+ * items are readable only by their author — enforced in every read
+ * below, never in the UI alone.
+ *
+ * A 1:1 belongs to the report's employer subsidiary: the report is the
+ * review subject the pair serves, so HR scope is always checked against
+ * the report employment. The manager may sit in any subsidiary —
+ * cross-subsidiary management happens, and fencing the manager side
+ * would hide a report's own pair from the HR covering them.
  *
  * Do not touch packages/payroll. Existing refusal classes are untouched.
  */
@@ -78,28 +86,50 @@ export async function assertOneOnOnesFeature(db: SqlExecutor, orgId: string): Pr
   }
 }
 
-async function hasPerformanceRead(db: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
+/**
+ * The actor's HR scope: the allowed employer set (null = unrestricted),
+ * or undefined when the actor holds no HR grant at all. The grant alone
+ * is never the whole answer — every HR path below applies the returned
+ * Set to the report employment.
+ */
+async function performanceReadScope(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null | undefined> {
   try {
-    await requireAggregatePerformanceRead(db, orgId, actorId);
-    return true;
+    return await requireAggregatePerformanceRead(db, orgId, actorId);
   } catch {
-    return false;
+    return undefined;
   }
 }
 
-async function hasPerformanceManage(db: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
+async function performanceManageScope(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null | undefined> {
   try {
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    return true;
+    return await requireAggregatePerformanceManage(db, orgId, actorId);
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+/** The report employment's employer subsidiary (the 1:1's owning scope), if it exists. */
+async function reportEmployer(db: SqlExecutor, orgId: string, reportEmploymentId: string): Promise<string | null> {
+  const rows = (await db.execute<{ employerSubsidiaryId: string | null }>(sql`
+    select employer_subsidiary_id as "employerSubsidiaryId" from worker_employments
+     where org_id = ${orgId} and id = ${reportEmploymentId}
+  `)).rows;
+  return rows[0]?.employerSubsidiaryId ?? null;
 }
 
 type StoredOneOnOne = {
   id: string;
   manager_employment_id: string;
   report_employment_id: string;
+  report_employer_subsidiary_id: string | null;
   manager_party_id: string | null;
   report_party_id: string | null;
   manager_name: string;
@@ -115,6 +145,7 @@ type StoredOneOnOne = {
 async function loadOneOnOne(db: SqlExecutor, orgId: string, id: string): Promise<StoredOneOnOne | null> {
   const rows = (await db.execute<StoredOneOnOne & { recurrence: unknown }>(sql`
     select o.id, o.manager_employment_id, o.report_employment_id,
+           r.employer_subsidiary_id as report_employer_subsidiary_id,
            m.worker_party_id as manager_party_id, r.worker_party_id as report_party_id,
            coalesce(mp.display_name, '—') as manager_name, coalesce(rp.display_name, '—') as report_name,
            o.scheduled_at::text as scheduled_at, o.held_at::text as held_at,
@@ -132,10 +163,12 @@ async function loadOneOnOne(db: SqlExecutor, orgId: string, id: string): Promise
 }
 
 /**
- * Structural 1:1 authority: HR reads/writes everything; otherwise the
- * actor's party must be the manager or the report, or the actor must
- * manage the report through the live line relationship (with
- * hrm.self.read). Returns true when the actor may see shared content.
+ * Structural 1:1 authority: HR reads pairs whose report sits inside
+ * their allowed subsidiaries (unrestricted HR reads everything);
+ * otherwise the actor's party must be the manager or the report, or
+ * the actor must manage the report through the live line relationship
+ * (with hrm.self.read). Returns true when the actor may see shared
+ * content.
  */
 async function canSeeOneOnOne(
   db: SqlExecutor,
@@ -143,7 +176,13 @@ async function canSeeOneOnOne(
   actorId: string,
   one: StoredOneOnOne,
 ): Promise<boolean> {
-  if (await hasPerformanceRead(db, orgId, actorId)) return true;
+  const scope = await performanceReadScope(db, orgId, actorId);
+  if (scope !== undefined) {
+    return (
+      scope === null ||
+      (one.report_employer_subsidiary_id !== null && scope.has(one.report_employer_subsidiary_id))
+    );
+  }
   const person = await loadApprovalPerson(db, orgId, actorId);
   if (!person.partyId) return false;
   if (person.partyId === one.manager_party_id || person.partyId === one.report_party_id) return true;
@@ -161,7 +200,22 @@ async function requireWriteAuthority(
   actorId: string,
   one: StoredOneOnOne,
 ): Promise<void> {
-  if (await hasPerformanceManage(db, orgId, actorId)) return;
+  const manageScope = await performanceManageScope(db, orgId, actorId);
+  if (manageScope !== undefined) {
+    // HR manage writes only pairs whose report sits inside their allowed
+    // subsidiaries — a restricted manage role cannot hold, skip, cancel,
+    // or add items on another subsidiary's pairs.
+    if (
+      manageScope === null ||
+      (one.report_employer_subsidiary_id !== null && manageScope.has(one.report_employer_subsidiary_id))
+    ) {
+      return;
+    }
+    throw new HrmPerformanceError(
+      "FORBIDDEN",
+      "this 1:1 belongs to a report outside your allowed subsidiaries — only the pair, their HR administrator, or the report's line manager may change it",
+    );
+  }
   if (await canSeeOneOnOne(db, orgId, actorId, one)) return;
   throw new HrmPerformanceError(
     "FORBIDDEN",
@@ -296,8 +350,11 @@ export async function scheduleOneOnOne(args: {
       );
     }
     // Either party may propose; a third party must manage the report
-    // through the live line relationship (with hrm.self.read); HR manages.
-    if (!(await hasPerformanceManage(db, orgId, actorId))) {
+    // through the live line relationship (with hrm.self.read); HR
+    // schedules only pairs whose report sits inside their allowed
+    // subsidiaries.
+    const manageScope = await performanceManageScope(db, orgId, actorId);
+    if (manageScope === undefined) {
       const person = await loadApprovalPerson(db, orgId, actorId);
       const isParty = person.partyId === managerParty || person.partyId === reportParty;
       if (!isParty) {
@@ -322,6 +379,14 @@ export async function scheduleOneOnOne(args: {
             "this employment does not report to you in the live line relationship — only the report's line manager may schedule for them",
           );
         }
+      }
+    } else if (manageScope !== null) {
+      const employer = await reportEmployer(db, orgId, reportEmploymentId);
+      if (employer === null || !manageScope.has(employer)) {
+        throw new HrmPerformanceError(
+          "FORBIDDEN",
+          "this report sits outside your allowed subsidiaries — only the pair, their HR administrator, or the report's line manager may schedule this 1:1",
+        );
       }
     }
     try {
@@ -617,12 +682,25 @@ export async function listOneOnOneDirectory(args: {
   const actorId = requireId("actorId", args.actorId);
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
-    if (await hasPerformanceRead(db, orgId, actorId)) {
+    const readScope = await performanceReadScope(db, orgId, actorId);
+    if (readScope !== undefined) {
+      // HR's schedule-form directory covers only their allowed
+      // subsidiaries — never the whole org. An empty scope reads
+      // empty, never all (and never an `in ()` syntax error).
+      if (readScope !== null && readScope.size === 0) return { employments: [] };
+      const scopeFilter =
+        readScope === null
+          ? sql``
+          : sql`and e.employer_subsidiary_id in (${sql.join(
+              [...readScope].map((id) => sql`${id}::uuid`),
+              sql`, `,
+            )})`;
       const rows = (await db.execute<{ id: string; name: string }>(sql`
         select e.id, coalesce(p.display_name, '—') as name
           from worker_employments e
           left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
          where e.org_id = ${orgId}
+         ${scopeFilter}
          order by name
       `)).rows;
       return { employments: rows.map((row) => ({ ...row, mine: false })) };
@@ -678,7 +756,8 @@ export async function listOneOnOnes(args: {
   const actorId = requireId("actorId", args.actorId);
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
-    const privileged = await hasPerformanceRead(db, orgId, actorId);
+    const readScope = await performanceReadScope(db, orgId, actorId);
+    const privileged = readScope !== undefined;
     const person = await loadApprovalPerson(db, orgId, actorId);
     const today = await businessToday(orgId);
     const own = await loadOwnEmploymentIds(db, orgId, actorId);
@@ -687,6 +766,7 @@ export async function listOneOnOnes(args: {
     const employmentFilter = args.employmentId ? sql` and (o.manager_employment_id = ${args.employmentId} or o.report_employment_id = ${args.employmentId})` : sql``;
     const rows = (await db.execute<StoredOneOnOne & { recurrence: unknown }>(sql`
       select o.id, o.manager_employment_id, o.report_employment_id,
+             r.employer_subsidiary_id as report_employer_subsidiary_id,
              m.worker_party_id as manager_party_id, r.worker_party_id as report_party_id,
              coalesce(mp.display_name, '—') as manager_name, coalesce(rp.display_name, '—') as report_name,
              o.scheduled_at::text as scheduled_at, o.held_at::text as held_at,
@@ -702,8 +782,15 @@ export async function listOneOnOnes(args: {
     const out: OneOnOneDTO[] = [];
     for (const raw of rows) {
       const one: StoredOneOnOne = { ...raw, recurrence: (raw.recurrence ?? null) as StoredOneOnOne["recurrence"] };
+      // HR sees only pairs whose report sits inside their allowed
+      // subsidiaries — the privileged flag alone is never enough.
+      const inScope =
+        readScope === null ||
+        (readScope !== undefined &&
+          one.report_employer_subsidiary_id !== null &&
+          readScope.has(one.report_employer_subsidiary_id));
       const visible =
-        privileged ||
+        (privileged && inScope) ||
         (person.partyId !== null &&
           (person.partyId === one.manager_party_id || person.partyId === one.report_party_id)) ||
         (own.includes(one.manager_employment_id) && team.includes(one.report_employment_id));
@@ -729,9 +816,11 @@ export async function listHeldSharedItemsForEmployment(args: {
   const employmentId = requireId("employmentId", args.employmentId);
   return withOrgTransaction(orgId, async () => {
     await assertContinuousFeature(db, orgId);
-    // Evidence serves the manager review: the reader must hold the
-    // performance grant or manage the employment structurally.
-    if (!(await hasPerformanceRead(db, orgId, actorId))) {
+    // Evidence serves the manager review: HR reads only evidence for
+    // employments inside their allowed subsidiaries, otherwise the
+    // reader must manage the employment structurally.
+    const readScope = await performanceReadScope(db, orgId, actorId);
+    if (readScope === undefined) {
       const today = await businessToday(orgId);
       const own = await loadOwnEmploymentIds(db, orgId, actorId);
       const team = await loadManagedEmploymentIds(db, orgId, actorId, today);
@@ -739,6 +828,14 @@ export async function listHeldSharedItemsForEmployment(args: {
         throw new HrmPerformanceError(
           "FORBIDDEN",
           "1:1 evidence serves the manager review — only the report's line manager or HR may read it",
+        );
+      }
+    } else if (readScope !== null) {
+      const employer = await reportEmployer(db, orgId, employmentId);
+      if (employer === null || !readScope.has(employer)) {
+        throw new HrmPerformanceError(
+          "FORBIDDEN",
+          "1:1 evidence serves the manager review — only the report's line manager or the HR covering them may read it",
         );
       }
     }
