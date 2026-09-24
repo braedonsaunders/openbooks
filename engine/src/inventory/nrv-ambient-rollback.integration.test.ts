@@ -26,7 +26,12 @@ for(const scenario of ["missing period","disabled book","reversal book"] as cons
         const operation=scenario === "reversal book"
           ? reverseInventoryWritedown(org.orgId,actorId,{...nrvInput,nrvPerUnit:"5"})
           : writeDownInventoryToNrv(org.orgId,actorId,{...nrvInput,date:scenario === "missing period" ? "2030-01-15" : org.date});
-        await assert.rejects(operation,scenario === "missing period" ? /no accounting period/ : /active posting book/);
+        // The book scenarios refuse through the shared primary-posting-book
+        // rule before any layer is rewritten (previously the journal refused
+        // after the layer writes and the savepoint rolled them back); the
+        // atomicity property below — no partial layer state escapes into the
+        // caller's transaction — holds either way.
+        await assert.rejects(operation,scenario === "missing period" ? /no accounting period/ : /no active primary posting book/);
         assert.deepEqual(await getOnHand(org.orgId,org.items.fifo,org.stockLocationId),before,"a caught refusal cannot reduce inventory value");
       });
       assert.deepEqual(await getOnHand(org.orgId,org.items.fifo,org.stockLocationId),before);

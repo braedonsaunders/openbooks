@@ -743,7 +743,7 @@ async function assertEntriesBalancedPerEntity(orgId: string): Promise<void> {
   assert.equal(r.rows.length, 0, "an entry is unbalanced inside a subsidiary");
 }
 
-test("a mixed-owner NRV write-down revalues each legal entity separately", { skip: !DB }, async () => {
+test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await setFramework(org.orgId, "ifrs");
@@ -760,8 +760,9 @@ test("a mixed-owner NRV write-down revalues each legal entity separately", { ski
       subsidiaryId: subB, offsetAccountId: org.accounts.clearing, date: org.date,
     });
 
-    // NRV 2.00/unit: A (10 @ 3.00) writes down 10.00; B (20 @ 5.00) writes
-    // down 60.00. Each owner gets its own layer writes and its own journal.
+    // NRV 2.00/unit requested by A: only A (10 @ 3.00) writes down 10.00.
+    // B shares the warehouse but was not requested, so its layers, GL, and
+    // evidence are untouched by this call.
     const result = await writeDownInventoryToNrv(org.orgId, null, {
       itemId: org.items.fifo,
       stockLocationId: org.stockLocationId,
@@ -769,37 +770,45 @@ test("a mixed-owner NRV write-down revalues each legal entity separately", { ski
       date: org.date,
       nrvPerUnit: "2",
     });
-    assert.equal(result.amount, "70.0000");
-    assert.equal(result.previousValue, "130.0000");
-    assert.equal(result.newValue, "60.0000");
-    assert.equal(toUnits(result.quantity), toUnits("30"));
-    assert.ok(Array.isArray(result.entities), "result must carry per-entity postings");
-    assert.equal(result.entities.length, 2);
-    const byOwner = new Map(result.entities.map((e) => [e.subsidiaryId, e]));
-    const postingOf = (subsidiaryId: string) => {
-      const p = byOwner.get(subsidiaryId)!;
-      return { previousValue: p.previousValue, newValue: p.newValue, amount: p.amount };
-    };
-    assert.deepEqual(postingOf(subA), {
-      previousValue: "30.0000",
-      newValue: "20.0000",
-      amount: "10.0000",
-    });
-    assert.deepEqual(postingOf(subB), {
-      previousValue: "100.0000",
-      newValue: "40.0000",
-      amount: "60.0000",
-    });
+    assert.equal(result.amount, "10.0000");
+    assert.equal(result.previousValue, "30.0000");
+    assert.equal(result.newValue, "20.0000");
+    assert.equal(toUnits(result.quantity), toUnits("10"));
+    assert.ok(Array.isArray(result.entities), "result must carry the requesting entity's posting");
+    assert.equal(result.entities.length, 1);
+    assert.equal(result.entities[0]!.subsidiaryId, subA);
+    assert.deepEqual(
+      {
+        previousValue: result.entities[0]!.previousValue,
+        newValue: result.entities[0]!.newValue,
+        amount: result.entities[0]!.amount,
+      },
+      { previousValue: "30.0000", newValue: "20.0000", amount: "10.0000" },
+    );
 
-    // Each posting journalized under ITS owner, never the caller's entity.
-    for (const e of result.entities) {
-      const je = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id::text as "subsidiary_id"
-          from journal_entries where id = ${e.entryId} and org_id = ${org.orgId}`));
-      assert.equal(je.rows[0]!.subsidiary_id, e.subsidiaryId);
-    }
+    // The posting journalized under the requesting owner.
+    const je = (await db.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id::text as "subsidiary_id"
+        from journal_entries where id = ${result.entities[0]!.entryId} and org_id = ${org.orgId}`));
+    assert.equal(je.rows[0]!.subsidiary_id, subA);
 
-    // Write-down evidence rows are per owner too.
+    // The unrequested owner's layers and GL are exactly as received.
+    assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB), toUnits("100"));
+    assert.equal(await entityGlBalance(org.orgId, org.accounts.invAsset, subB), toUnits("100"));
+
+    // B's own request then remeasures B alone: 20 @ 5.00 down 60.00.
+    const resultB = await writeDownInventoryToNrv(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: subB,
+      date: org.date,
+      nrvPerUnit: "2",
+    });
+    assert.equal(resultB.amount, "60.0000");
+    assert.equal(resultB.entities.length, 1);
+    assert.equal(resultB.entities[0]!.subsidiaryId, subB);
+
+    // Write-down evidence rows are per requesting owner.
     const evidence = (await db.execute<{ subsidiary_id: string; amount: string; reversed_amount: string }>(sql`
       select subsidiary_id::text as "subsidiary_id", amount::text as amount, reversed_amount::text as "reversed_amount"
         from inventory_writedowns
@@ -963,6 +972,32 @@ test("NRV refuses negative and non-decimal per-unit rates with the domain error"
       `reversal garbage must fail with InventoryNrvError, got ${String(reversalError)}`,
     );
     // Refused inputs write nothing: layers and evidence are untouched.
+    assert.deepEqual(await getOnHand(org.orgId, position.itemId, position.stockLocationId), before);
+    const writedowns = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`));
+    assert.equal(writedowns.rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an NRV write-down for an unknown entity is refused by name", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const position = {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId, date: org.date, nrvPerUnit: "50",
+    };
+    await receiveInventory(org.orgId, null, {
+      ...position, quantity: "2", unitCost: "100", offsetAccountId: org.accounts.ap,
+    });
+    const before = await getOnHand(org.orgId, position.itemId, position.stockLocationId);
+    // A mistyped entity must be named as missing — never silently accepted
+    // and never misreported as "nothing on hand".
+    await assert.rejects(
+      writeDownInventoryToNrv(org.orgId, null, { ...position, subsidiaryId: randomUUID() }),
+      /subsidiary not found/,
+    );
     assert.deepEqual(await getOnHand(org.orgId, position.itemId, position.stockLocationId), before);
     const writedowns = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`));

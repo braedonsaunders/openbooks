@@ -9,9 +9,7 @@ import { reverseInventoryWritedown, writeDownInventoryToNrv } from "./nrv.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 for (const operation of ["write-down", "recovery"] as const) {
-  for (const policy of (operation === "write-down"
-    ? ["account restriction", "inactive owner", "later owner restriction"] as const
-    : ["account restriction", "inactive owner"] as const)) {
+  for (const policy of ["account restriction", "inactive owner"] as const) {
     test(`NRV ${operation} enforces ${policy}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
       const org = await createScratchOrg();
       try {
@@ -30,16 +28,10 @@ for (const operation of ["write-down", "recovery"] as const) {
         const siblingId = randomUUID();
         await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
           values(${siblingId},${org.orgId},${org.subsidiaryId},'Other inventory owner','CAD','CA')`);
-        if (policy === "later owner restriction") await receiveInventory(org.orgId, actorId, {
-          itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: siblingId,
-          quantity: "10", unitCost: "5", offsetAccountId: org.accounts.clearing, date: org.date,
-        });
         const before = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
         const accountId = (await db.execute<{ id: string }>(sql`
           select asset_account_id as id from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.id;
         if (policy === "account restriction") await db.execute(sql`update accounts set subsidiary_id=${siblingId},subsidiary_include_children=false
-          where org_id=${org.orgId} and id=${accountId}`);
-        else if (policy === "later owner restriction") await db.execute(sql`update accounts set subsidiary_id=${ownerId},subsidiary_include_children=false
           where org_id=${org.orgId} and id=${accountId}`);
         else await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${ownerId}`);
         const run = () => operation === "write-down" ? writeDownInventoryToNrv(org.orgId, actorId, input)
@@ -52,7 +44,7 @@ for (const operation of ["write-down", "recovery"] as const) {
           (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
           (select count(*)::int from inventory_writedowns where org_id=${org.orgId}) as writedowns,
           (select coalesce(sum(reversed_amount),0)::text from inventory_writedowns where org_id=${org.orgId}) as reversed`)).rows[0]!;
-        assert.equal(counts.journals, operation === "recovery" || policy === "later owner restriction" ? 2 : 1);
+        assert.equal(counts.journals, operation === "recovery" ? 2 : 1);
         assert.equal(counts.writedowns, operation === "recovery" ? 1 : 0);
         assert.match(counts.reversed, /^0(?:\.0+)?$/);
         await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${accountId}`);
@@ -101,3 +93,56 @@ for (const bookBreak of ["inactive primary book", "non-posting primary book"] as
     }
   });
 }
+
+test("NRV write-down measures only the requesting entity when a sibling shares the position", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await db.execute(sql`update orgs set settings=settings||'{"reportingFramework":"ifrs"}'::jsonb where id=${org.orgId}`);
+    const ownerId = randomUUID();
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values(${ownerId},${org.orgId},${org.subsidiaryId},'Stock owner','CAD','CA')`);
+    const siblingId = randomUUID();
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values(${siblingId},${org.orgId},${org.subsidiaryId},'Other inventory owner','CAD','CA')`);
+    for (const subsidiaryId of [ownerId, siblingId]) {
+      await receiveInventory(org.orgId, actorId, {
+        itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId,
+        quantity: "10", unitCost: "5", offsetAccountId: org.accounts.clearing, date: org.date,
+      });
+    }
+    const accountId = (await db.execute<{ id: string }>(sql`
+      select asset_account_id as id from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.id;
+    await db.execute(sql`update accounts set subsidiary_id=${ownerId},subsidiary_include_children=false
+      where org_id=${org.orgId} and id=${accountId}`);
+    // The owner's request succeeds on its own layers even though a sibling
+    // holds the same item at the same location — the sibling is not measured.
+    const result = await writeDownInventoryToNrv(org.orgId, actorId, {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
+      subsidiaryId: ownerId, date: org.date, nrvPerUnit: "4",
+    });
+    assert.equal(result.entities.length, 1);
+    assert.equal(result.entities[0]!.subsidiaryId, ownerId);
+    assert.equal(result.amount, "10.0000");
+    const siblingLayers = (await db.execute<{ value: string }>(sql`
+      select round(sum(remaining_quantity * unit_cost),4)::text as value from cost_layers
+       where org_id=${org.orgId} and item_id=${org.items.fifo}
+         and stock_location_id=${org.stockLocationId} and subsidiary_id=${siblingId}`));
+    assert.equal(siblingLayers.rows[0]!.value, "50.0000");
+    // The sibling's own request is still refused while the account is
+    // restricted to the owner — scoping never bypasses entity permission.
+    await assert.rejects(writeDownInventoryToNrv(org.orgId, actorId, {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
+      subsidiaryId: siblingId, date: org.date, nrvPerUnit: "4",
+    }), /restricted to another subsidiary/);
+    await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${accountId}`);
+    const siblingResult = await writeDownInventoryToNrv(org.orgId, actorId, {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
+      subsidiaryId: siblingId, date: org.date, nrvPerUnit: "4",
+    });
+    assert.equal(siblingResult.entities[0]!.subsidiaryId, siblingId);
+    assert.equal(siblingResult.amount, "10.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

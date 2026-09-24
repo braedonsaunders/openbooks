@@ -258,8 +258,9 @@ export interface NrvWritedownInput {
   itemId: string;
   stockLocationId: string;
   /**
-   * The requesting entity. Revaluation follows LAYER OWNERSHIP: every legal
-   * entity holding the position is remeasured and journals under itself.
+   * The requesting entity. Only ITS layers are remeasured and its loss
+   * journals under itself — one owner's write-down never touches another
+   * entity sharing the warehouse.
    */
   subsidiaryId: string;
   date: string;
@@ -287,8 +288,8 @@ export interface NrvResult {
   amount: string;
   framework: ReportingFramework;
   /**
-   * One record per owning legal entity remeasured. `writedownId`/`entryId`
-   * above are the FIRST posting's evidence; the array carries every owner's.
+   * The requesting entity's posting. The array shape is retained for
+   * callers; a write-down carries exactly one entry — its own.
    */
   entities: NrvEntityPosting[];
 }
@@ -298,10 +299,9 @@ export interface NrvResult {
  * untouched. Refuses a "write-down" whose target is at or above current cost —
  * that is either a no-op or a reversal, and reversals have their own rules.
  *
- * A shared warehouse can hold the item's layers under several legal entities.
- * Each owner is measured on ITS OWN quantity and carrying amount, only its
- * layers are re-written, and its loss journals under ITSELF — one set of
- * layer writes plus one journal per entity — so per-entity GL always equals
+ * Only the requesting entity is measured and remeasured: its layers alone
+ * are re-written and its loss journals under itself, so other legal entities
+ * sharing the warehouse are untouched and per-entity GL always equals
  * per-entity layers.
  */
 export async function writeDownInventoryToNrv(
@@ -317,9 +317,16 @@ export async function writeDownInventoryToNrv(
     }
     const framework = await orgReportingFramework(orgId);
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
+    // The requested entity must exist: without this, a mistyped id would
+    // fall through to "nothing on hand" and read as success. Scope refusal
+    // itself is enforced per plan by postingContext below.
+    const requested = (await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId}`));
+    if (!requested.rows.length) throw new InventoryNrvError("subsidiary not found");
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     const accounts = await itemAccounts(tx, orgId, input.itemId);
-    const layers = await remainingLayers(tx, orgId, input.itemId, input.stockLocationId);
+    // Only the requesting entity's layers: another owner sharing the
+    // warehouse is never remeasured by this call.
+    const layers = await remainingLayers(tx, orgId, input.itemId, input.stockLocationId, input.subsidiaryId);
     if (layers.length === 0) throw new InventoryNrvError("nothing on hand to write down");
 
     // Group the locked layers by owning legal entity, first-seen order.
@@ -335,8 +342,9 @@ export async function writeDownInventoryToNrv(
       group.push(layer);
     }
 
-    // Measure each owner separately: an entity is written down only when ITS
-    // carrying amount exceeds ITS quantity × NRV.
+    // Measure the requested owner on its own quantity and carrying amount:
+    // it is written down only when ITS carrying amount exceeds
+    // ITS quantity × NRV.
     type OwnerPlan = (typeof owners)[number] & {
       quantityUnits: bigint;
       previousUnits: bigint;
