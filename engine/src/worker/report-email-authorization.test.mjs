@@ -64,3 +64,18 @@ test('accepted delivery retries reconcile without authorization or retransmissio
     assert.equal(state.sent, 0)
   } finally { globalThis.fetch = fetchBefore }
 })
+
+test('a revoked schedule carries the re-authorization remedy into the delivery failure record', async () => {
+  state.accepted = false
+  const failuresBefore = state.events.filter((event) => event.failure).length
+  const fetchBefore = globalThis.fetch
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: 'report schedule requires reauthorization' }), { status: 403 })
+  try {
+    await assert.rejects(state.handler(job), /requires reauthorization/)
+    assert.equal(state.sent, 0)
+    const failures = state.events.filter((event) => event.failure)
+    assert.equal(failures.length, failuresBefore + 1)
+    assert.match(String(failures[failures.length - 1].failure[3]), /requires reauthorization/)
+  } finally { globalThis.fetch = fetchBefore }
+})

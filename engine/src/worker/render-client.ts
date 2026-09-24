@@ -37,5 +37,25 @@ export async function authorizeReportRun(orgId: string, definitionId: string, ru
     headers: { 'x-internal-token': process.env.OPENBOOKS_INTERNAL_TOKEN || '' },
     signal: AbortSignal.timeout(60_000),
   });
-  if (!response.ok) throw new Error(`Report delivery authorization failed: HTTP ${response.status}`);
+  if (!response.ok) {
+    // The endpoint answers refusals as JSON { error } — e.g. a schedule whose
+    // principal lost its grants must be re-authorized — and the delivery
+    // failure record is the only place the operator ever sees it. Carry the
+    // named error through instead of a bare status. text() never throws on a
+    // non-JSON body the way json() would, so a proxy page stays evidence
+    // instead of becoming a parse error.
+    const body = await response.text().catch(() => "");
+    let named = body.trim();
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown };
+      if (typeof parsed?.error === "string" && parsed.error.trim()) {
+        named = parsed.error.trim();
+      }
+    } catch {
+      // Keep the raw body: a non-JSON refusal is still the evidence.
+    }
+    throw new Error(
+      `Report delivery authorization failed: HTTP ${response.status}${named ? ` — ${named}` : ""}`.slice(0, 500),
+    );
+  }
 }
