@@ -70,13 +70,30 @@ function qpdfExecutable(): string {
  * missing or qpdf refuses the file — callers handling confidential output must
  * FAIL rather than fall back to sending the document in the clear.
  */
+/**
+ * Control characters (including CR/LF) can never survive the qpdf `@-`
+ * argument file, where one line is one argument: a newline in a password
+ * would split it into extra arguments, so the file would be encrypted with
+ * the truncated first line while the caller believes the whole secret
+ * protects it. Refuse by name before any temp directory is created.
+ */
+function assertNoControlCharacters(password: string, which: string): void {
+  if (/[\u0000-\u001f\u007f]/.test(password)) {
+    throw new PdfEncryptionError(
+      `the ${which} contains a line break or other control character, which would split qpdf's password argument — remove it and try again`,
+    )
+  }
+}
+
 export async function encryptPdf(
   pdf: Buffer | Uint8Array,
   options: PdfEncryptionOptions,
 ): Promise<Buffer> {
   const userPassword = options.userPassword
   if (!userPassword) throw new PdfEncryptionError('an empty password would not protect the document')
+  assertNoControlCharacters(userPassword, 'user password')
   const ownerPassword = options.ownerPassword || userPassword
+  if (options.ownerPassword) assertNoControlCharacters(ownerPassword, 'owner password')
 
   const dir = await mkdtemp(join(tmpdir(), 'openbooks-pdf-'))
   const input = join(dir, 'in.pdf')

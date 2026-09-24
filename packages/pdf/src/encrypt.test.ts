@@ -40,6 +40,33 @@ test('an empty password is refused', async () => {
   await assert.rejects(() => encryptPdf(pdf, { userPassword: '' }), PdfEncryptionError)
 })
 
+test('a password with a line break or control character is refused by name', async () => {
+  // qpdf's @- form reads one argument per line, so a newline would split the
+  // password and encrypt with the truncated first line. The refusal fires
+  // before qpdf is spawned, so it holds with or without the binary.
+  const pdf = await samplePdf()
+  for (const userPassword of ['secret\npassword', 'secret\r\npassword', 'sec\tret', 'sec\x7fret']) {
+    await assert.rejects(
+      () => encryptPdf(pdf, { userPassword }),
+      (error: unknown) => {
+        assert.ok(error instanceof PdfEncryptionError)
+        assert.match((error as Error).message, /control character/)
+        assert.match((error as Error).message, /user password/)
+        return true
+      },
+      `expected ${JSON.stringify(userPassword)} to be refused`,
+    )
+  }
+  await assert.rejects(
+    () => encryptPdf(pdf, { userPassword: 'clean-password', ownerPassword: 'owner\npassword' }),
+    (error: unknown) => {
+      assert.ok(error instanceof PdfEncryptionError)
+      assert.match((error as Error).message, /owner password/)
+      return true
+    },
+  )
+})
+
 test('a missing qpdf binary throws instead of returning the plaintext', async () => {
   const pdf = await samplePdf()
   const previous = process.env.OPENBOOKS_QPDF_PATH
