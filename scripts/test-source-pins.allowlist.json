@@ -90,7 +90,6 @@
     "web/app/api/compliance/vendors/[partyId]/route.test.ts": 2,
     "web/app/api/consolidation/route.test.ts": 1,
     "web/app/api/data/export/route.test.ts": 2,
-    "web/app/api/file-cabinet/files/[id]/restore/route.test.ts": 1,
     "web/app/api/file-cabinet/folders/route.test.ts": 1,
     "web/app/api/flows/gates/decide/route.test.ts": 1,
     "web/app/api/flows/gates/delegate/route-subsidiary-scope.test.ts": 1,
