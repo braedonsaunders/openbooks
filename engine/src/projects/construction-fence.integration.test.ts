@@ -15,7 +15,7 @@ test("createPayApplication refuses by name while Projects is disabled and writes
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb)
       where id=${org.orgId}`);
     await assert.rejects(
-      createPayApplication(org.orgId, actorId, projectId, "2026-08-31"),
+      createPayApplication(org.orgId, actorId, projectId, "2026-08-31", "10", null),
       (error: unknown) =>
         error instanceof ConstructionBillingError && error.message === "Projects feature is disabled",
     );
@@ -46,7 +46,7 @@ test("createPayApplication blocked on the fence loses to a committed Projects di
       org.orgId,
     ]);
     const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-    pending = createPayApplication(org.orgId, actorId, projectId, "2026-08-31");
+    pending = createPayApplication(org.orgId, actorId, projectId, "2026-08-31", "10", null);
     void pending.catch(() => {});
     let blocked = false;
     const deadline = Date.now() + 10000;

@@ -52,6 +52,8 @@ const mockSources = new Map<string, string>([
           if (text.includes('pg_advisory_xact_lock')) return { rows: [{ locked: true }] }
           // The fenced recheck reads the flag the disable may just have written.
           if (text.includes('for share') && text.includes('from orgs')) return { rows: [{ features: state.txFeatures }] }
+          // The in-transaction subsidiary-scope recheck locks the project row.
+          if (text.includes('for update of p')) return { rows: [{ id: '${PROJECT_ID}', subsidiary_id: null }] }
           if (text.includes('from pay_applications')) return { rows: [] }
           if (text.includes('from change_orders')) return { rows: [] }
           if (text.includes('insert into sov_lines')) return { rows: [{ id: 'sov-1' }] }
@@ -187,11 +189,13 @@ test('addSov rechecks Projects inside the write transaction before inserting', a
   const texts = txTexts()
   const fence = texts.findIndex((t) => t.includes('pg_advisory_xact_lock'))
   const recheck = texts.findIndex((t) => t.includes('for share') && t.includes('from orgs'))
+  const scopeLock = texts.findIndex((t) => t.includes('for update of p'))
   const insert = texts.findIndex((t) => t.includes('insert into sov_lines'))
   assert.ok(fence >= 0, 'the write transaction takes the feature-gate fence')
   assert.ok(recheck >= 0, 'the write transaction rechecks the gate under a shared row lock')
+  assert.ok(scopeLock >= 0, 'the write transaction locks the project and rechecks scope')
   assert.ok(insert >= 0, 'the SOV line inserts')
-  assert.ok(fence < recheck && recheck < insert, 'fence, recheck, then insert — in that order')
+  assert.ok(fence < recheck && recheck < scopeLock && scopeLock < insert, 'fence, recheck, scope lock, then insert — in that order')
 })
 
 test('addSov refused when Projects disables between the entry guard and the insert', async () => {

@@ -104,15 +104,16 @@ export async function runProgressBilling(
 ): Promise<{ invoiceId: string; documentNumber: string; currentDue: string; retainage: string }> {
   const sov = (await db.execute<{ id: string; scheduled_value: string }>(sql`
     select id, scheduled_value from sov_lines where org_id = ${world.orgId} and project_id = ${projectId}`));
-  const app = await createPayApplication(world.orgId, submitterId, projectId, periodEnd);
+  // The simulator runs as the system, outside any subsidiary restriction.
+  const app = await createPayApplication(world.orgId, submitterId, projectId, periodEnd, "10", null);
   const updates: PayApplicationLineUpdate[] = sov.rows.map((l) => ({
     sovLineId: l.id,
     thisPeriodCompleted: mulDecimal(l.scheduled_value, fraction),
     materialsStored: "0",
   }));
-  await submitPayApplication(world.orgId, submitterId, app.id, updates);
-  await approvePayApplication(world.orgId, approverId, app.id);
-  const inv = await generatePayApplicationInvoice(world.orgId, approverId, app.id);
+  await submitPayApplication(world.orgId, submitterId, app.id, updates, null);
+  await approvePayApplication(world.orgId, approverId, app.id, null);
+  const inv = await generatePayApplicationInvoice(world.orgId, approverId, app.id, null);
   await postDraftDocument(world, inv.invoiceId);
   return inv;
 }
@@ -172,7 +173,7 @@ export async function releaseProjectRetainage(
   amount: string,
   actorId: string,
 ): Promise<{ invoiceId: string; documentNumber: string; amount: string }> {
-  const res = await releaseRetainage(world.orgId, actorId, projectId, periodEnd, amount);
+  const res = await releaseRetainage(world.orgId, actorId, projectId, periodEnd, amount, null);
   await postDraftDocument(world, res.invoiceId);
   return res;
 }
