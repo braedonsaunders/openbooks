@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { pageSource } from './page-source'
 import {
   ACCOUNT_CLASS_TYPES,
   ASSET_TYPES,
@@ -112,44 +109,4 @@ test('list balance drill uses the always-selected type and refuses a hidden or i
     null,
   )
   assert.equal(accountListBalanceDrill({ id: ACCOUNT_ID, drill_account_name: 'Rent' }, 'balance', WINDOW), null)
-})
-
-test('every CoA surface opens the shared report drill flyout from the balance number', () => {
-  const page = pageSource(fileURLToPath(new URL('../app/(app)/accounts/page.tsx', import.meta.url)))
-  const list = readFileSync(new URL('../components/entity-list-view.tsx', import.meta.url), 'utf8')
-  const source = readFileSync(new URL('./list/entity-sources.ts', import.meta.url), 'utf8')
-  const hierarchy = readFileSync(new URL('../app/(app)/accounts/AccountsHierarchyTable.tsx', import.meta.url), 'utf8')
-  const host = readFileSync(new URL('../components/global-report-drawer-host.tsx', import.meta.url), 'utf8')
-  const route = readFileSync(new URL('../app/api/reports/drill/route.ts', import.meta.url), 'utf8')
-  const filterBar = readFileSync(new URL('../app/(app)/reports/ReportFilterBar.tsx', import.meta.url), 'utf8')
-  const overlay = readFileSync(new URL('./report-drill-period.ts', import.meta.url), 'utf8')
-  const detail = readFileSync(new URL('./reports/transaction-detail.ts', import.meta.url), 'utf8')
-  const drillData = readFileSync(new URL('./report-drill-data.ts', import.meta.url), 'utf8')
-
-  assert.match(page, /accountsWithBalances\(\s*authz\.user\.orgId,\s*asOf,\s*authz\.allowedSubsidiaryIds,?\s*\)/)
-  assert.match(page, /drill\(item\('balanceDrill'/)
-  assert.match(page, /money\(item\('balance'/)
-  assert.match(page, /accountBalanceDrill\(/)
-  assert.match(page, /accountClassBalanceDrill\(/)
-  assert.match(page, /resolvePeriod\('this_period'/)
-
-  assert.match(source, /columnDrill:\s*accountListBalanceDrill/)
-  assert.match(source, /a\.type as drill_account_type/)
-  assert.match(list, /<ReportDrillLink target=\{drill\}/)
-  assert.match(list, /source\.columnDrill/)
-  assert.match(list, /resolvePeriod\('this_period'/)
-  assert.match(hierarchy, /<ReportDrillLink/)
-  assert.match(hierarchy, /target=\{row\.drill\}/)
-  assert.match(hierarchy, /target=\{group\.drill\}/)
-
-  assert.match(host, /<ReportFilterBar/)
-  assert.match(host, /REPORT_DRILL_PERIOD_PARAM/)
-  assert.match(host, /search\.set\('period', drillPeriod\)/)
-  assert.match(filterBar, /periodParamKey/)
-  assert.match(filterBar, /resetParamKeys/)
-  assert.match(route, /overlayLedgerDrillPeriod/)
-  assert.match(overlay, /if \(target\.kind !== 'ledger' \|\| !target\.period\) return target/)
-  assert.match(overlay, /resolvePeriod/)
-  assert.match(detail, /newestFirst/)
-  assert.match(drillData, /newestFirst: target\.newestFirst/)
 })

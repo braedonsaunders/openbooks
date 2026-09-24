@@ -76,3 +76,56 @@ test('account list balances exclude journal lines outside the caller subsidiary 
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
 })
+
+test('an explicitly empty subsidiary scope reads no balance instead of widening to org scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const accountId = randomUUID()
+    const offsetAccountId = randomUUID()
+    const entryId = randomUUID()
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, is_summary, is_active)
+        values
+          (${accountId}, ${scratch.orgId}, '1099', 'Empty-scope account', 'asset_bank', false, true),
+          (${offsetAccountId}, ${scratch.orgId}, '4099', 'Empty-scope offset', 'income', false, true)
+      `)
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values
+          (${entryId}, ${scratch.orgId}, ${scratch.bookId}, ${scratch.subsidiaryId}, 'ACCOUNT-LIST-EMPTY-SCOPE',
+           ${scratch.date}, ${scratch.periodId}, 'draft', 'manual')
+      `)
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+        values
+          (${scratch.orgId}, ${entryId}, 1, ${accountId}, ${scratch.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1'),
+          (${scratch.orgId}, ${entryId}, 2, ${offsetAccountId}, ${scratch.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1')
+      `)
+      await db.execute(sql`
+        update journal_entries set status = 'posted', posted_at = now()
+         where id = ${entryId} and org_id = ${scratch.orgId}
+      `)
+    })
+
+    const joinFor = (scope?: ReadonlySet<string> | null) =>
+      (accountBaseJoins as unknown as (
+        today: string,
+        allowedSubsidiaryIds?: ReadonlySet<string> | null,
+      ) => ReturnType<typeof accountBaseJoins>)(scratch.date, scope)
+    const balanceUnder = async (scope?: ReadonlySet<string> | null) =>
+      (await withBypass(() => db.execute<{ balance: string | null }>(sql`
+        select account_balance.amount::text as balance
+          from accounts a
+          ${joinFor(scope)}
+         where a.org_id = ${scratch.orgId} and a.id = ${accountId}
+      `))).rows[0]?.balance ?? null
+
+    assert.equal(await balanceUnder(new Set()), '0', 'present-but-empty scope denies every line')
+    assert.equal(await balanceUnder(null), '100.0000', 'unrestricted scope still reads the posted line')
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
