@@ -555,3 +555,47 @@ test("project merge refuses a second primary baseline and moves schedule rows", 
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("project merge refuses pay-application collisions and moves revenue contracts", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PA-A", "Payapp Alpha");
+    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PA-B", "Payapp Beta");
+    await db.execute(sql`
+      insert into pay_applications (org_id, project_id, application_number, period_end, status)
+      values (${org.orgId}, ${a}, 7, '2026-08-31', 'approved'),
+             (${org.orgId}, ${b}, 7, '2026-08-31', 'posted')`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+      /pay application number 7 exists on both projects/,
+    );
+    // Same number reconciled away, but both sides still hold an open
+    // application: the partial unique index would fire on the move.
+    await db.execute(sql`
+      update pay_applications set application_number = 8
+       where org_id = ${org.orgId} and project_id = ${b}`);
+    await db.execute(sql`
+      insert into pay_applications (org_id, project_id, application_number, period_end, status)
+      values (${org.orgId}, ${b}, 9, '2026-08-31', 'submitted')`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+      /both projects hold an open pay application/,
+    );
+    // Closed applications and revenue contracts follow the merge.
+    await db.execute(sql`update pay_applications set status = 'posted' where org_id = ${org.orgId}`);
+    await db.execute(sql`
+      insert into revenue_contracts (org_id, project_id, contract_number, customer_id)
+      values (${org.orgId}, ${b}, 'RC-1', ${org.customerId})`);
+    const result = await mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor });
+    assert.equal(result.alreadyMerged, false);
+    for (const table of ["pay_applications", "revenue_contracts"]) {
+      const left = await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from ${sql.identifier(table)}
+         where org_id = ${org.orgId} and project_id = ${b}`);
+      assert.equal(left.rows[0]?.n, "0", table);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
