@@ -267,6 +267,23 @@ test("a reconcilable account refuses locally when no settlement currency is avai
   );
 });
 
+test("editable account labels identify their corresponding controls", async (t) => {
+  await mountDrawer(t);
+  for (const name of ["Name", "Number", "Type", "Description", "Parent account"]) {
+    const label = [...document.querySelectorAll("label")].find((candidate) =>
+      candidate.textContent?.trim().startsWith(name),
+    );
+    assert.ok(label, `${name} field label renders`);
+    assert.ok(label.htmlFor, `${name} label references its control`);
+    const control = document.getElementById(label.htmlFor);
+    assert.ok(control, `${name} label resolves to a rendered control`);
+    assert.ok(
+      ["INPUT", "TEXTAREA", "BUTTON"].includes(control.tagName),
+      `${name} label resolves to an interactive control`,
+    );
+  }
+});
+
 test("closing an account drawer removes its selector from the URL immediately", async (t) => {
   await mountDrawer(t, { createMode: false, url: "/accounts?account=acct-1&page=2" });
   const close = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null;
