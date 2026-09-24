@@ -132,7 +132,6 @@
     "web/app/api/internal/overhead/publish/route.test.ts": 1,
     "web/app/api/journals/actions/route.test.ts": 1,
     "web/app/api/payroll/settings/picker-vendors.test.ts": 2,
-    "web/app/api/platform/connections/[id]/run/route.test.ts": 1,
     "web/app/api/platform/connections/[id]/test/route.test.ts": 1,
     "web/app/api/recruiting/apply/route.test.ts": 1,
     "web/app/api/scripts/client/sandbox-contract.test.ts": 1,
