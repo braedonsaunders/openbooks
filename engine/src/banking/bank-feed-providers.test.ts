@@ -4,6 +4,7 @@ import { createServer, type Server } from "node:http";
 import { registerHooks } from "node:module";
 import test, { type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { Client } from "pg";
 import { sql } from "drizzle-orm";
 import {
   DEFAULT_FEED_SYNC_OVERLAP_DAYS,
@@ -99,7 +100,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
@@ -141,11 +142,13 @@ const routeHooks = registerHooks({
 
 type SyncRouteModule = {
   POST(req: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response>;
+  PATCH(req: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response>;
+  DELETE(req: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response>;
 };
 const routeModuleHref = pathToFileURL(
   fileURLToPath(new URL("../../../web/app/api/banking/bank-feeds/[id]/route.ts", import.meta.url)),
 ).href;
-const { POST: syncRoutePOST } = (await import(routeModuleHref)) as unknown as SyncRouteModule;
+const { POST: syncRoutePOST, PATCH: syncRoutePATCH, DELETE: syncRouteDELETE } = (await import(routeModuleHref)) as unknown as SyncRouteModule;
 routeHooks.deregister();
 
 interface FeedFixture {
@@ -153,6 +156,7 @@ interface FeedFixture {
   userId: string;
   connectionId: string;
   accountId: string;
+  subsidiaryId: string;
 }
 
 async function seedFeedFixture(): Promise<FeedFixture> {
@@ -177,7 +181,7 @@ async function seedFeedFixture(): Promise<FeedFixture> {
             ${sealCredentials({ clientId: "client-id", secret: "provider-secret", accessToken: "access-token", env: "sandbox" })},
             'plaid-external-1', 'hourly', null, true, ${userId})
   `);
-  return { orgId: org.orgId, userId, connectionId, accountId: org.accounts.bank };
+  return { orgId: org.orgId, userId, connectionId, accountId: org.accounts.bank, subsidiaryId: org.subsidiaryId };
 }
 
 /** Put a connection back in the scheduler's due set after a claimed sync. */
@@ -901,6 +905,219 @@ test(
       assert.equal(actors.auditActor, f.userId);
       assert.equal(await countZeroUuidActorRows(f.orgId), 0);
     } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "bank-feed probes cannot publish health from rotated credentials or after deletion",
+  { skip: !DB },
+  async () => {
+    const f = await seedFeedFixture();
+    const originalFetch = globalThis.fetch;
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.userId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const probeRequest = () => syncRoutePOST(
+      new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "test" }),
+      }),
+      { params: Promise.resolve({ id: f.connectionId }) },
+    );
+    try {
+      let release!: (response: Response) => void;
+      let started!: () => void;
+      const responseFromProvider = new Promise<Response>((resolve) => { release = resolve; });
+      const startedProvider = new Promise<void>((resolve) => { started = resolve; });
+      globalThis.fetch = (async () => { started(); return responseFromProvider; }) as typeof fetch;
+      const firstProbe = probeRequest();
+      await startedProvider;
+      const rotated = await syncRoutePATCH(
+        new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
+          method: "PATCH", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ credentials: { clientId: "client-id", secret: "provider-secret", accessToken: "rotated-token", env: "sandbox" } }),
+        }),
+        { params: Promise.resolve({ id: f.connectionId }) },
+      );
+      assert.equal(rotated.status, 200);
+      release(new Response(JSON.stringify({ accounts: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+      const stale = await firstProbe;
+      assert.equal(stale.status, 409);
+      assert.deepEqual(await stale.json(), { error: "stale probe" });
+      const statusAfterStaleProbe = await loadConnection(f.connectionId);
+      assert.equal(statusAfterStaleProbe.status, "pending");
+
+      let releaseDelete!: (response: Response) => void;
+      let startedDelete!: () => void;
+      const responseAfterDelete = new Promise<Response>((resolve) => { releaseDelete = resolve; });
+      const startedDeleteProbe = new Promise<void>((resolve) => { startedDelete = resolve; });
+      globalThis.fetch = (async () => { startedDelete(); return responseAfterDelete; }) as typeof fetch;
+      const deletingProbe = probeRequest();
+      await startedDeleteProbe;
+      const deleted = await syncRouteDELETE(
+        new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, { method: "DELETE" }),
+        { params: Promise.resolve({ id: f.connectionId }) },
+      );
+      assert.equal(deleted.status, 200);
+      releaseDelete(new Response(JSON.stringify({ accounts: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+      const deletedProbe = await deletingProbe;
+      assert.equal(deletedProbe.status, 409);
+      assert.deepEqual(await deletedProbe.json(), { error: "deleted while testing" });
+      assert.equal((await db.execute(sql`select 1 from bank_feed_connections where id=${f.connectionId} and org_id=${f.orgId}`)).rows.length, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      routeState.authz = null;
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "concurrent bank-feed deletes return one success and write one delete audit",
+  { skip: !DB },
+  async () => {
+    const f = await seedFeedFixture();
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.userId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const remove = () => syncRouteDELETE(
+      new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, { method: "DELETE" }),
+      { params: Promise.resolve({ id: f.connectionId }) },
+    );
+    try {
+      const responses = await Promise.all([remove(), remove()]);
+      assert.deepEqual(responses.map((response) => response.status).sort(), [200, 404]);
+      const audits = await db.execute<{ count: number }>(sql`
+        select count(*)::int as count from audit_log
+         where org_id = ${f.orgId} and table_name = 'bank_feed_connections'
+           and row_id = ${f.connectionId} and action = 'delete'
+      `);
+      assert.equal(audits.rows[0]?.count, 1);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "scheduled bank-feed claim refuses a scan snapshot changed before claim",
+  { skip: !DB },
+  async () => {
+    const f = await seedFeedFixture();
+    const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+    let holderOpen = false;
+    const originalFetch = globalThis.fetch;
+    let providerCalls = 0;
+    try {
+      await holder.connect();
+      holderOpen = true;
+      await holder.query("begin");
+      await holder.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+        [f.orgId],
+      );
+      await holder.query(
+        "select id from bank_feed_connections where id = $1 and org_id = $2 for update",
+        [f.connectionId, f.orgId],
+      );
+
+      globalThis.fetch = (async () => {
+        providerCalls += 1;
+        return new Response(JSON.stringify({ accounts: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch;
+      const scheduled = runDueBankFeeds();
+      const deadline = Date.now() + 15_000;
+      let waiting = false;
+      while (Date.now() < deadline) {
+        const activity = await db.execute<{ waiting: boolean }>(sql`
+          select exists (
+            select 1 from pg_stat_activity
+             where datname = current_database() and pid <> pg_backend_pid()
+               and wait_event_type = 'Lock'
+               and query ilike '%update bank_feed_connections c%'
+          ) as waiting
+        `);
+        if (activity.rows[0]?.waiting) { waiting = true; break; }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal(waiting, true, "scheduler reached its claim after scanning the due row");
+      await holder.query(
+        "update bank_feed_connections set is_active = false, credentials = $1, updated_at = clock_timestamp() where id = $2 and org_id = $3",
+        [sealCredentials({ clientId: "client-id", secret: "rotated", accessToken: "rotated-token", env: "sandbox" }), f.connectionId, f.orgId],
+      );
+      await holder.query("commit");
+      await holder.end();
+      holderOpen = false;
+
+      const outcomes = await scheduled;
+      assert.equal(outcomes.some((outcome) => outcome.connectionId === f.connectionId), false);
+      assert.equal(providerCalls, 0, "deactivated and rotated scan-time credentials must never be probed");
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (holderOpen) {
+        await holder.query("rollback").catch(() => {});
+        await holder.end().catch(() => {});
+      }
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "Sync Now preserves caller scope through a provider probe when its bank account is rehomed",
+  { skip: !DB },
+  async () => {
+    const f = await seedFeedFixture();
+    const originalFetch = globalThis.fetch;
+    let release!: (response: Response) => void;
+    let started!: () => void;
+    const providerResponse = new Promise<Response>((resolve) => { release = resolve; });
+    const providerStarted = new Promise<void>((resolve) => { started = resolve; });
+    globalThis.fetch = (async () => { started(); return providerResponse; }) as typeof fetch;
+    try {
+      const subA = f.subsidiaryId;
+      const subB = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${subB}, ${f.orgId}, ${subA}, 'Feed scope B', 'CAD', 'CA')
+      `);
+      await db.execute(sql`update accounts set subsidiary_id=${subA} where id=${f.accountId} and org_id=${f.orgId}`);
+      routeState.authz = {
+        user: { orgId: f.orgId, id: f.userId },
+        permissions: new Set(["admin.setup.manage"]),
+        allowedSubsidiaryIds: new Set([subA]),
+      };
+      const pending = syncRoutePOST(
+        new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "sync" }),
+        }),
+        { params: Promise.resolve({ id: f.connectionId }) },
+      );
+      await providerStarted;
+      await db.execute(sql`update accounts set subsidiary_id=${subB} where id=${f.accountId} and org_id=${f.orgId}`);
+      release(new Response(JSON.stringify(plaidPage([
+        feedTxn("feed-rehomed-during-sync", addCalendarDays(new Date().toISOString().slice(0, 10), -1), "-30.00"),
+      ]).body), { status: 200, headers: { "content-type": "application/json" } }));
+      const response = await pending;
+      assert.equal(response.status, 422);
+      const payload = (await response.json()) as { error?: string };
+      assert.match(payload.error ?? "", /not found/);
+      const rows = await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from bank_statement_lines where org_id=${f.orgId} and account_id=${f.accountId}`);
+      assert.equal(rows.rows[0]!.n, 0, "out-of-scope feed results must not become statement rows");
+    } finally {
+      globalThis.fetch = originalFetch;
       routeState.authz = null;
       await dropScratchOrgReporting(f.orgId);
     }
