@@ -87,6 +87,18 @@ test("assertRatingInScale refuses a non-decimal rating", () => {
   });
 });
 
+test("rating values beyond the persisted four-decimal scale are refused instead of truncated", () => {
+  const scale = parseRatingScale({ min: "1", max: "5", labels: [] });
+  assert.throws(
+    () => assertRatingInScale(scale, "4.00001", "Customer impact"),
+    /more than four decimal places.*persist at scale 4/,
+  );
+  assert.throws(
+    () => parseRatingScale({ min: "1.00001", max: "5", labels: [] }),
+    /at most four decimal places.*persist at scale 4/,
+  );
+});
+
 test("assertProgressPercent accepts 0 and 100 and refuses the rest", () => {
   assert.equal(assertProgressPercent(0), 0);
   assert.equal(assertProgressPercent(100), 100);
