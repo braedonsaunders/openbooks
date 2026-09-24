@@ -313,7 +313,9 @@
     "unbudgeted_project": "Projekt ohne Budget",
     "unmapped_component": "Nicht zugeordneter Lohnbestandteil",
     "unreconciled_activity": "Nicht abgestimmte Bewegungen",
-    "untaxed_item": "Artikel ohne Steuercode"
+    "untaxed_item": "Artikel ohne Steuercode",
+    "customerless_invoice": "Rechnung ohne Kunde",
+    "remittance_gap": "Lücke bei der Lohnabführung"
   },
   "actions": {
     "settings": "Agenteneinstellungen",
