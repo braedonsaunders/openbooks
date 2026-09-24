@@ -3,7 +3,6 @@ import { cmp, fromUnits, roundDiv, sum, toUnits } from "../money/money.ts";
 const SCALE = 10_000n;
 
 export type CrmLifecycleStage = "lead" | "prospect" | "customer";
-export type ForecastCategory = "omitted" | "worst_case" | "most_likely" | "upside";
 
 const LIFECYCLE_RANK: Record<CrmLifecycleStage, number> = { lead: 0, prospect: 1, customer: 2 };
 
@@ -207,27 +206,6 @@ export function validateContributionTotal(contributions: string[]): void {
   if (contributions.length === 0) return;
   if (sum(contributions) !== "100.0000") throw new Error("sales-team contribution must total exactly 100%");
   if (contributions.some((value) => cmp(value, "0") <= 0)) throw new Error("sales-team contribution must be positive");
-}
-
-export interface ForecastOpportunity {
-  amount: string;
-  weightedAmount: string;
-  category: ForecastCategory;
-  closedWon?: boolean;
-}
-
-export function rollupForecast(opportunities: ForecastOpportunity[]) {
-  const open = opportunities.filter((opportunity) => !opportunity.closedWon && opportunity.category !== "omitted");
-  const byCategory = (category: ForecastCategory) =>
-    sum(open.filter((opportunity) => opportunity.category === category).map((opportunity) => opportunity.amount));
-  return {
-    pipelineAmount: sum(open.map((opportunity) => opportunity.amount)),
-    weightedAmount: sum(open.map((opportunity) => opportunity.weightedAmount)),
-    worstCaseAmount: byCategory("worst_case"),
-    mostLikelyAmount: byCategory("most_likely"),
-    upsideAmount: byCategory("upside"),
-    closedAmount: sum(opportunities.filter((opportunity) => opportunity.closedWon).map((opportunity) => opportunity.amount)),
-  };
 }
 
 export type TerritoryRule = {

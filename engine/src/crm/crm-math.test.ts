@@ -5,7 +5,6 @@ import {
   computeOpportunityTotals,
   grossMarginPercent,
   matchesTerritory,
-  rollupForecast,
   shouldPromoteLifecycle,
   validateContributionTotal,
   validateOpportunityStageTransition,
@@ -67,22 +66,6 @@ test("sales-team contributions must total exactly one hundred percent", () => {
   assert.doesNotThrow(() => validateContributionTotal(["60", "40"]));
   assert.throws(() => validateContributionTotal(["60", "39.9999"]), /exactly 100/);
   assert.throws(() => validateContributionTotal(["100", "0"]), /positive/);
-});
-
-test("forecast rollup excludes omitted deals and keeps categories distinct", () => {
-  assert.deepEqual(rollupForecast([
-    { amount: "100.0000", weightedAmount: "75.0000", category: "most_likely" },
-    { amount: "40.0000", weightedAmount: "10.0000", category: "upside" },
-    { amount: "25.0000", weightedAmount: "0.0000", category: "omitted" },
-    { amount: "60.0000", weightedAmount: "60.0000", category: "worst_case", closedWon: true },
-  ]), {
-    pipelineAmount: "140.0000",
-    weightedAmount: "85.0000",
-    worstCaseAmount: "0.0000",
-    mostLikelyAmount: "100.0000",
-    upsideAmount: "40.0000",
-    closedAmount: "60.0000",
-  });
 });
 
 test("territory rules support deterministic exact comparisons", () => {
