@@ -6,6 +6,7 @@ import { Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, c
 import { useBusinessToday } from "@/components/business-date-provider";
 import { Empty, Field, Small, Status } from "./workspace-ui";
 import type { Money } from "./types";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type ReconciliationRow = {
   propertyId: string;
@@ -135,7 +136,7 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
                 ? (row.controlGroupVariance ?? row.linkedVariance)
                 : (row.controlVariance ?? row.linkedVariance);
               return (
-                <TableRow
+                <InteractiveTableRow
                   key={row.propertyId}
                   role="button"
                   tabIndex={0}
@@ -172,7 +173,7 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
                   </TableCell>
                   <TableCell>{row.lastActivityOn ?? "—"}</TableCell>
                   <TableCell><Status value={row.status} /></TableCell>
-                </TableRow>
+                </InteractiveTableRow>
               );
             })}
           </TableBody>

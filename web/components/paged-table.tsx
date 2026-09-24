@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@openbooks/ui'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export interface PagedColumn<T> {
   key: string
@@ -203,7 +204,7 @@ export function PagedTable<T>({
         </TableHeader>
         <TableBody>
           {view.map((row, i) => (
-            <TableRow
+            <InteractiveTableRow
               key={rowKey(row, start + i)}
               className={onRowClick ? `cursor-pointer ${rowClassName?.(row) ?? ''}` : rowClassName?.(row)}
               onClick={
@@ -245,7 +246,7 @@ export function PagedTable<T>({
                   {c.cell(row)}
                 </TableCell>
               ))}
-            </TableRow>
+            </InteractiveTableRow>
           ))}
           {footer}
         </TableBody>

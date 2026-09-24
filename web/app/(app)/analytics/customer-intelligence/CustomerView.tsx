@@ -50,6 +50,7 @@ import { ConfigEditor } from '../_ui/ConfigEditor'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney, fmtPct } from '../_ui/format'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
 type Tab = (typeof TABS)[number]
@@ -367,7 +368,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
   const avgHealth = rows.length ? Math.round(rows.reduce((a, r) => a + r.healthScore, 0) / rows.length) : 0
 
   const Row = ({ r }: { r: CustomerRow }) => (
-    <tr onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+    <InteractiveTableRow onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
       <td className="px-4 py-2">
         <p className="font-medium text-slate-800 dark:text-slate-200">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitle')}> ⚠️</span> : null}</p>
         <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('lastActive', { days: r.recencyDays >= 9999 ? '—' : t('daysAgo', { days: r.recencyDays }) })}</p>
@@ -385,7 +386,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
       <td className="px-4 py-2">
         <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap', REC_STYLE[r.recommendation])} title={r.recommendationDetail}>{t(`rec.${r.recommendation}`)}</span>
       </td>
-    </tr>
+    </InteractiveTableRow>
   )
 
   const header = (
@@ -445,16 +446,16 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
                     const rev = set.reduce((a, r) => a + r.revenue, 0)
                     return (
                       <GroupRows key={label}>
-                        <tr
+                        <InteractiveTableRow
                           className="cursor-pointer border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/40"
-                          onClick={() => setCollapsed((prev) => { const next = new Set(prev); if (next.has(label)) next.delete(label); else next.add(label); return next })}
+                          onClick={() => setCollapsed((prev) => { const next = new Set(prev); if (next.has(label)) next.delete(label); else next.add(label); return next })} noAnimate
                         >
                           <td colSpan={9} className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
                             <span className="mr-1.5 inline-block align-middle text-slate-400">{isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</span>
                             {label}
                             <span className="ml-2 font-normal text-slate-400">{t('groupSummary', { count: set.length, revenue: money(rev) })}</span>
                           </td>
-                        </tr>
+                        </InteractiveTableRow>
                         {!isCollapsed && set.map((r) => <Row key={r.id} r={r} />)}
                       </GroupRows>
                     )
@@ -1051,9 +1052,9 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                   const isOpen = expanded.has(c.customerId)
                   return (
                     <GroupRows key={c.customerId}>
-                      <tr
+                      <InteractiveTableRow
                         className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
-                        onClick={() => toggle(c.customerId)}
+                        onClick={() => toggle(c.customerId)} noAnimate
                       >
                         <td className="px-2 py-2.5 text-center text-slate-400">
                           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -1067,7 +1068,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                         <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', c.grossProfit < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</td>
                         <td className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct))}>{c.marginPct.toFixed(1)}%</td>
                         <td className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{t(`profitTier.${c.profitTier}`)}</span></td>
-                      </tr>
+                      </InteractiveTableRow>
                       {isOpen
                         ? c.jobs.map((j) => (
                             <tr key={j.jobId} className="border-b border-slate-50 bg-slate-50/40 text-xs dark:border-slate-800/60 dark:bg-slate-800/20">

@@ -7,6 +7,7 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import { decimalCmp, decimalSum } from "../../../lib/statement-format";
 import { Empty, Field, Status } from "./workspace-ui";
 import type { LeaseRow, Money, PropertyRow, PropertyWorkspace, UnitRow } from "./types";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type RentRollRow = {
   key: string;
@@ -164,7 +165,7 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
                 const open = () => row.lease ? onOpenLease(row.lease.id) :
                   row.unit ? onOpenUnit(row.unit.id) : undefined;
                 return (
-                  <TableRow key={row.key} role="button" tabIndex={0}
+                  <InteractiveTableRow key={row.key} role="button" tabIndex={0}
                     className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
                     onClick={open}
                     onKeyDown={(event) => {
@@ -202,7 +203,7 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
                         </Badge>
                       ) : "—"}
                     </TableCell>
-                  </TableRow>
+                  </InteractiveTableRow>
                 );
               })}
             </TableBody>

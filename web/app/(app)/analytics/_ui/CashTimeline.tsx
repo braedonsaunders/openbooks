@@ -8,6 +8,7 @@ import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { CategoryWeekly, WeekRow } from '../../../../lib/cash/core'
 import { CashWeekFlyout } from './CashWeekFlyout'
 import { useAnalyticsMoney } from './format'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /**
  * The weekly cash timeline — the cash cockpit's centerpiece. One click on a
@@ -69,10 +70,10 @@ export function CashTimeline({
         </thead>
         <tbody>
           {weeks.map((w) => (
-            <tr
+            <InteractiveTableRow
               key={w.weekStart}
               onClick={() => open(w)}
-              className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
+              className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate
             >
               <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
                 {w.label}
@@ -87,7 +88,7 @@ export function CashTimeline({
               {scheduling ? <td className="px-3 py-2.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{compareMoney(w.deferredOut, '0.0000') > 0 ? money(w.deferredOut) : '—'}</td> : null}
               <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', compareMoney(w.net, '0.0000') >= 0 ? 'text-slate-800 dark:text-slate-200' : 'text-red-600 dark:text-red-400')}>{money(w.net)}</td>
               <td className={cn('px-4 py-2.5 text-right font-bold tabular-nums', compareMoney(w.endingCash, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{money(w.endingCash)}</td>
-            </tr>
+            </InteractiveTableRow>
           ))}
         </tbody>
       </table>

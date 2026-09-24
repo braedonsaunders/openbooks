@@ -52,6 +52,7 @@ import type {
   PrebillListRow,
   WipAnalytics,
 } from "../../../../lib/wip-billing";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type ProjectOption = {
   id: string;
@@ -358,7 +359,7 @@ export function WipBillingWorkspace({
                 </TableHeader>
                 <TableBody>
                   {prebills.map((row) => (
-                    <TableRow
+                    <InteractiveTableRow
                       key={row.id}
                       className={cn(
                         "cursor-pointer",
@@ -389,7 +390,7 @@ export function WipBillingWorkspace({
                       <TableCell className="text-right tabular-nums">
                         {money(row.proposedBillAmount)}
                       </TableCell>
-                    </TableRow>
+                    </InteractiveTableRow>
                   ))}
                 </TableBody>
               </Table>

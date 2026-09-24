@@ -31,6 +31,7 @@ import {
   decimalSum,
 } from "../../../lib/statement-format";
 import { readApiErrorMessage } from "../../../lib/api-error";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type Option = { id: string; name: string; currency?: string | null };
 type Permissions = { create: boolean; approve: boolean; post: boolean; pay: boolean };
@@ -259,10 +260,10 @@ export function SubcontractsWorkspace({
             <Table>
               <TableHeader><TableRow><TableHead>{t("columns.number")}</TableHead><TableHead>{t("columns.subcontract")}</TableHead><TableHead>{t("columns.project")}</TableHead><TableHead>{t("columns.vendor")}</TableHead><TableHead>{t("columns.status")}</TableHead><TableHead className="text-right">{t("columns.revised")}</TableHead><TableHead className="text-right">{t("columns.billed")}</TableHead></TableRow></TableHeader>
               <TableBody>{rows.map((row) => (
-                <TableRow key={row.id} className="cursor-pointer" onClick={() => { setSelectedId(row.id); setTab("overview"); }}>
+                <InteractiveTableRow key={row.id} className="cursor-pointer" onClick={() => { setSelectedId(row.id); setTab("overview"); }}>
                   <TableCell className="font-medium">{row.number}</TableCell><TableCell>{row.title}</TableCell><TableCell>{row.projectName}</TableCell><TableCell>{row.vendorName}</TableCell>
                   <TableCell><StatusBadge status={row.status} /></TableCell><TableCell className="text-right tabular-nums">{money(row.revisedCommitment, row.currency)}</TableCell><TableCell className="text-right tabular-nums">{money(row.billedToDate, row.currency)}</TableCell>
-                </TableRow>
+                </InteractiveTableRow>
               ))}</TableBody>
             </Table>
           )}

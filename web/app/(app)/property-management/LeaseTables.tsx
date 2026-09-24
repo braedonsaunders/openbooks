@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import { Empty, Status } from "./workspace-ui";
 import type { DepositRow, LeaseRow, Money, ScheduleRow } from "./types";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; money: Money; onOpen: (id: string) => void }) {
   const t = useTranslations("entities.propertyManagement");
@@ -28,7 +29,7 @@ export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; mon
       </TableHeader>
       <TableBody>
         {leases.map((lease) => (
-          <TableRow
+          <InteractiveTableRow
             key={lease.id}
             role="button"
             tabIndex={0}
@@ -56,7 +57,7 @@ export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; mon
             <TableCell className="text-right tabular-nums">
               {money(lease.depositBalance, { currency: lease.currency })}
             </TableCell>
-          </TableRow>
+          </InteractiveTableRow>
         ))}
       </TableBody>
     </Table>

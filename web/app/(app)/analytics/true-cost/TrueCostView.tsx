@@ -21,6 +21,7 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney } from '../_ui/format'
 import { useMoney } from '@/components/money-provider'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -507,7 +508,7 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
           </thead>
           <tbody>
             {data.categories.map((c) => (
-              <tr key={c.id} onClick={() => openCat(c.id)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40">
+              <InteractiveTableRow key={c.id} onClick={() => openCat(c.id)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
                 <td className="px-4 py-2.5">
                   <span className="flex items-center gap-2.5">
                     <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ backgroundColor: `${c.color ?? FALLBACK}22`, color: c.color ?? FALLBACK }}><Layers size={13} /></span>
@@ -519,7 +520,7 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
                 <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.categoryType === 'expense' ? whole(c.accounts.length) : '—'}</td>
                 <td className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-300">{money0(c.totalAmount)}</td>
                 <td className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{rate(c.rate)}</td>
-              </tr>
+              </InteractiveTableRow>
             ))}
             <tr className="bg-slate-50/70 font-semibold dark:bg-slate-800/40">
               <td className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{t('deptFlyout.composite')}</td>

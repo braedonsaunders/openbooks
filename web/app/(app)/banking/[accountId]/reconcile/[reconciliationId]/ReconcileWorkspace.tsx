@@ -29,6 +29,7 @@ import { SortTh } from '../../../../../../components/sortable-th'
 import { confirmDialog } from '../../../../../../lib/confirm'
 import { isZeroAmount } from './DifferenceBadge'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type Search = Record<string, string | string[] | undefined>
 interface PaneParams {
@@ -307,8 +308,9 @@ export function ReconcileWorkspace({
                   stmtRows.map((l) => {
                     const selected = selectedStmt === l.id
                     return (
-                      <TableRow
+                      <InteractiveTableRow
                         key={l.id}
+                        aria-label={t('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })}
                         className={cn(!readOnly && 'cursor-pointer', selected && selectedRow)}
                         onClick={readOnly ? undefined : () => setSelectedStmt(selected ? null : l.id)}
                       >
@@ -333,7 +335,7 @@ export function ReconcileWorkspace({
                           ) : null}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
-                      </TableRow>
+                      </InteractiveTableRow>
                     )
                   })
                 )}
@@ -378,8 +380,9 @@ export function ReconcileWorkspace({
                         return next
                       })
                     return (
-                      <TableRow
+                      <InteractiveTableRow
                         key={l.id}
+                        aria-label={t('selectGlLineAria', { entry: l.entry_number, amount: money(l.amount) })}
                         className={cn(!readOnly && 'cursor-pointer', selected && selectedRow)}
                         onClick={readOnly ? undefined : toggle}
                       >
@@ -401,7 +404,7 @@ export function ReconcileWorkspace({
                           {l.memo ?? l.party ?? '—'}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
-                      </TableRow>
+                      </InteractiveTableRow>
                     )
                   })
                 )}

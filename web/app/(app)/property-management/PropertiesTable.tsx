@@ -13,6 +13,7 @@ import {
 } from "@openbooks/ui";
 import { Empty, Status } from "./workspace-ui";
 import type { PropertyRow, PropertyWorkspace } from "./types";
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type ListColumn = ListViewConfig["columns"][number];
 
@@ -115,7 +116,7 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
       </TableHeader>
       <TableBody>
         {data.properties.map((property) => (
-          <TableRow
+          <InteractiveTableRow
             key={property.id}
             tabIndex={0}
             role="button"
@@ -138,7 +139,7 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
                 {cell(property, column.key)}
               </TableCell>
             ))}
-          </TableRow>
+          </InteractiveTableRow>
         ))}
       </TableBody>
     </Table>

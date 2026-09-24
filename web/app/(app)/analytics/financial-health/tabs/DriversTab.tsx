@@ -7,6 +7,7 @@ import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { DivergingBar } from '../../_ui/charts'
 import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: string, name: string) => void }) {
   const fmtMoney = useAnalyticsMoney()
@@ -54,13 +55,13 @@ function DriverPanel({ title, icon: Icon, rows, onDrill }: { title: string; icon
             </thead>
             <tbody>
               {top.map((d) => (
-                <tr key={d.id} onClick={() => onDrill(d.id, d.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                <InteractiveTableRow key={d.id} onClick={() => onDrill(d.id, d.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
                   <td className="py-1.5 text-slate-700 dark:text-slate-300">{d.name}</td>
                   <td className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current, { compact: true })}</td>
                   <td className={cn('py-1.5 text-right tabular-nums', d.change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change, { compact: true })}</td>
                   <td className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{d.changePct === null ? '—' : fmtPct(d.changePct)}</td>
                   <td className="py-1.5 text-right tabular-nums text-slate-400 dark:text-slate-500">{fmtPct(d.contribution)}</td>
-                </tr>
+                </InteractiveTableRow>
               ))}
             </tbody>
           </table>

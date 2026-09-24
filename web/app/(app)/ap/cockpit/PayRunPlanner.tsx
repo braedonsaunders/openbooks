@@ -9,6 +9,7 @@ import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openb
 import { ArrowRight, ShieldCheck, Gauge, TriangleAlert } from 'lucide-react'
 import { Badge, Button, cn } from '@openbooks/ui'
 import { toChartNumber } from '../../analytics/_ui/format'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export interface PlannerEntry {
   id: string
@@ -105,10 +106,10 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
               {payable.map((e) => {
                 const on = selected.has(e.id)
                 return (
-                  <tr
+                  <InteractiveTableRow
                     key={e.id}
                     className="group cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
-                    onClick={() => toggle(e.id)}
+                    onClick={() => toggle(e.id)} noAnimate
                   >
                     <td className="w-9 py-2 pl-4">
                       <input type="checkbox" readOnly checked={on} className="h-4 w-4 accent-teal-600" aria-label={e.partyName} />
@@ -119,7 +120,7 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
                     </td>
                     <td className="py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{e.dueDate ? fmtDate(e.dueDate) : '—'}</td>
                     <td className="py-2 pr-4 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(e.amount)}</td>
-                  </tr>
+                  </InteractiveTableRow>
                 )
               })}
             </tbody>

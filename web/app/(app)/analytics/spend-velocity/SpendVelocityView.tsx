@@ -19,6 +19,7 @@ import { ConfigEditor } from '../_ui/ConfigEditor'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney } from '../_ui/format'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -228,12 +229,12 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
               </thead>
               <tbody>
                 {byVelocity.map((a) => (
-                  <tr key={a.id} onClick={() => onDrill({ kind: 'account', id: a.id, name: a.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40">
+                  <InteractiveTableRow key={a.id} onClick={() => onDrill({ kind: 'account', id: a.id, name: a.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
                     <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{a.name}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.totalSpend)}</td>
                     <td className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></td>
                     <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TREND_BADGE_CLS[a.trend])}>{t(`trend.${a.trend}`)}</span></td>
-                  </tr>
+                  </InteractiveTableRow>
                 ))}
               </tbody>
             </table>
@@ -353,7 +354,7 @@ function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
               </thead>
               <tbody>
                 {data.accountVelocity.map((a) => (
-                  <tr key={a.id} onClick={() => onDrill({ kind: 'account', id: a.id, name: a.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40">
+                  <InteractiveTableRow key={a.id} onClick={() => onDrill({ kind: 'account', id: a.id, name: a.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
                     <td className="px-4 py-2">
                       <p className="font-medium text-slate-800 dark:text-slate-200">{a.name}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500">{t('row.txnsMonths', { txns: a.transactionCount, months: a.monthCount })}</p>
@@ -363,7 +364,7 @@ function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
                     <td className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></td>
                     <td className="px-4 py-2 text-center"><Accel a={a.acceleration} /></td>
                     <td className="px-4 py-2"><Spark values={a.monthlyAmounts} /></td>
-                  </tr>
+                  </InteractiveTableRow>
                 ))}
               </tbody>
             </table>
@@ -383,14 +384,14 @@ function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
               </thead>
               <tbody>
                 {data.vendorVelocity.map((v) => (
-                  <tr key={v.id} onClick={() => onDrill({ kind: 'vendor', id: v.id, name: v.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40">
+                  <InteractiveTableRow key={v.id} onClick={() => onDrill({ kind: 'vendor', id: v.id, name: v.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
                     <td className="px-4 py-2">
                       <p className="font-medium text-slate-800 dark:text-slate-200">{v.name}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500">{t('row.txns', { txns: v.transactionCount })}</p>
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(v.totalSpend)}</td>
                     <td className="px-4 py-2 text-right"><VelocityPill v={v.velocity} /></td>
-                  </tr>
+                  </InteractiveTableRow>
                 ))}
               </tbody>
             </table>
@@ -460,10 +461,10 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
             </thead>
             <tbody>
               {alerts.length ? alerts.map((a, i) => (
-                <tr
+                <InteractiveTableRow
                   key={i}
                   onClick={a.accountId ? () => onDrill({ kind: 'account', id: a.accountId!, name: a.item }) : a.vendorId ? () => onDrill({ kind: 'vendor', id: a.vendorId!, name: a.item }) : undefined}
-                  className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', (a.accountId || a.vendorId) && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40')}
+                  className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', (a.accountId || a.vendorId) && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40')} noAnimate
                 >
                   <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{a.label}</td>
                   <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{a.item}</td>
@@ -472,7 +473,7 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.impact)}</td>
                   <td className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">{a.details}</td>
-                </tr>
+                </InteractiveTableRow>
               )) : (
                 <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.noAlerts')}{selected !== 'all' ? t('empty.forDetector') : ''}</td></tr>
               )}
@@ -579,7 +580,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
             </thead>
             <tbody>
               {rows.map((a) => (
-                <tr key={a.accountId} onClick={() => onDrill({ kind: 'account', id: a.accountId, name: a.accountName })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40">
+                <InteractiveTableRow key={a.accountId} onClick={() => onDrill({ kind: 'account', id: a.accountId, name: a.accountName })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
                   <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">
                     {a.accountName}
                     {a.isNew ? <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">{t('newBadge')}</span> : null}
@@ -592,7 +593,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
                   <td className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money0(a.projectedAmount)}</td>
                   <td className="px-4 py-2"><Spark values={a.monthlyTrend} /></td>
-                </tr>
+                </InteractiveTableRow>
               ))}
             </tbody>
           </table>

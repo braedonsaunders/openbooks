@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useFormatter, useTranslations } from 'next-intl'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ChevronRight } from 'lucide-react'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export type AuditListRow = {
   id: string
@@ -73,7 +74,7 @@ export function AuditRows({ rows, selectedId }: { rows: AuditListRow[]; selected
               ? t('summaries.metadata')
               : t('summaries.changeCount', { count: row.changeCount })
           return (
-            <TableRow
+            <InteractiveTableRow
               key={row.id}
               data-state={selectedId === row.id ? 'selected' : undefined}
               role="link"
@@ -107,7 +108,7 @@ export function AuditRows({ rows, selectedId }: { rows: AuditListRow[]; selected
                   />
                 </span>
               </TableCell>
-            </TableRow>
+            </InteractiveTableRow>
           )
         })}
       </TableBody>

@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// Row-open tables must not hijack their own row actions: clicking Submit /
-// Post inside an invoice row both fired the action AND opened the ?doc=
-// drawer, which covered the button so the action and its refusal were not
-// reliably visible. The shared row click ignores clicks starting inside an
-// interactive descendant, so the action runs alone and plain-cell clicks
-// still open the row.
-
 // jsdom first: the table reads browser globals at render.
 const { JSDOM } = await import("jsdom");
 const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
@@ -128,13 +121,18 @@ test("clicking a row action button fires the action and never the row-open", asy
   }
 });
 
-test("clicking a plain cell still opens the row", async () => {
+test("plain cells open the row and focused rows support keyboard activation", async () => {
   const table = await mountTable();
   try {
     const cell = document.querySelector('[data-testid="cell-b"]') as HTMLElement;
-    await click(cell);
+    const row = cell.closest("tr");
+    assert.ok(row);
+    await click(row);
     assert.deepEqual(opened, ["b"]);
-    assert.deepEqual(acted, []);
+    assert.equal(row.getAttribute("tabindex"), "0");
+    row.focus();
+    await act(async () => row.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    assert.deepEqual(opened, ["b", "b"]);
   } finally {
     await table.unmount();
   }

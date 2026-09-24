@@ -14,6 +14,7 @@ import { KpiCard } from '../analytics/_ui/KpiCard'
 import { Panel } from '../analytics/_ui/Panel'
 import { Donut, Chart } from '../analytics/_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../analytics/_ui/DrillDrawer'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 const pct1 = (n: number) => `${Math.round(n * 10) / 10}%`
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
@@ -216,10 +217,10 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
                 </thead>
                 <tbody>
                   {data.topSpenders.map((sp) => (
-                    <tr
+                    <InteractiveTableRow
                       key={sp.employeeId}
                       onClick={() => setDrill({ kind: 'party', id: sp.employeeId, name: sp.employeeName })}
-                      className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', drillRow)}
+                      className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', drillRow)} noAnimate
                     >
                       <td className="max-w-40 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={sp.employeeName}>{sp.employeeName}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(sp.totalSpend)}</td>
@@ -227,7 +228,7 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
                       <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', sp.changePct > 20 ? 'text-rose-600 dark:text-rose-400' : sp.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>
                         {sp.changePct > 0 ? '+' : ''}{pct1(sp.changePct)}
                       </td>
-                    </tr>
+                    </InteractiveTableRow>
                   ))}
                 </tbody>
               </table>
@@ -251,10 +252,10 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
                 </thead>
                 <tbody>
                   {data.categories.map((c) => (
-                    <tr
+                    <InteractiveTableRow
                       key={c.categoryId}
                       onClick={() => setDrill({ kind: 'account', id: c.categoryId, name: c.categoryName })}
-                      className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', drillRow)}
+                      className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', drillRow)} noAnimate
                     >
                       <td className="max-w-40 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={c.categoryName}>{c.categoryName}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(c.currentAmount)}</td>
@@ -262,7 +263,7 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
                       <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', c.changePct > 10 ? 'text-rose-600 dark:text-rose-400' : c.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>
                         {c.changePct > 0 ? '+' : ''}{pct1(c.changePct)}
                       </td>
-                    </tr>
+                    </InteractiveTableRow>
                   ))}
                 </tbody>
               </table>

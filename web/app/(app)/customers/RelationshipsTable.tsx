@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { EntityDrawer } from '../analytics/_ui/EntityDrawer'
 import type { CustomerExposureRow } from '../../../lib/module-home/customers'
+import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 /**
  * Customers-home hero table — one click on any relationship opens the shared
@@ -33,10 +34,10 @@ export function RelationshipsTable({ rows, crmEnabled = true }: { rows: Customer
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr
+            <InteractiveTableRow
               key={r.partyId ?? r.name}
               onClick={r.partyId ? () => setEntity({ id: r.partyId!, name: r.name }) : undefined}
-              className={`border-b border-slate-50 last:border-0 dark:border-slate-800/60 ${r.partyId ? 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''}`}
+              className={`border-b border-slate-50 last:border-0 dark:border-slate-800/60 ${r.partyId ? 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''}`} noAnimate
             >
               <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">{r.name}</td>
               {crmEnabled ? (
@@ -60,7 +61,7 @@ export function RelationshipsTable({ rows, crmEnabled = true }: { rows: Customer
                 )}
               </td>
               <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100">{money(r.open)}</td>
-            </tr>
+            </InteractiveTableRow>
           ))}
         </tbody>
       </table>
