@@ -76,6 +76,17 @@ COMMENT ON COLUMN public.tax_filings.registration_number IS
 COMMENT ON COLUMN public.tax_filings.snapshot_version IS
   'Snapshot schema version (0265): 1 hashed form/period/channel/boxes/adjustments only; 2 additionally hashes registration, currency and scope posture. Existing rows stay 1 so they verify exactly as prepared.';
 
+-- The backfill below must pass tax_filing_immutable (0001), which refuses
+-- every UPDATE except prepared->filed and has no migration escape, so on any
+-- install that already holds a filing the plain UPDATE died with "tax filing
+-- snapshots are immutable" (empty installs passed, which hid it). This file
+-- runs in the runner's single transaction, so the guard is suspended for this
+-- one NULL-guarded statement only and re-enabled before the transaction can
+-- commit; a failure anywhere rolls the DISABLE back with everything else. The
+-- DO block after the UPDATE refuses to commit if the trigger is not enabled
+-- again, so the migration can never leave filings unguarded.
+ALTER TABLE public.tax_filings DISABLE TRIGGER tax_filing_immutable;
+
 WITH filer_ccy AS (
   SELECT s.org_id, min(s.base_currency) AS ccy
     FROM public.subsidiaries s
@@ -100,6 +111,21 @@ UPDATE public.tax_filings f
   ) src
  WHERE f.org_id = src.org_id
    AND f.functional_currency IS NULL;
+
+ALTER TABLE public.tax_filings ENABLE TRIGGER tax_filing_immutable;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_trigger t
+     WHERE t.tgrelid = 'public.tax_filings'::regclass
+       AND t.tgname = 'tax_filing_immutable'
+       AND t.tgenabled = 'O'
+  ) THEN
+    RAISE EXCEPTION '0265: tax_filing_immutable must be enabled after the functional_currency backfill';
+  END IF;
+END $$;
 
 -- -- documents ship-to destination snapshot (D1) -----------------------------
 --

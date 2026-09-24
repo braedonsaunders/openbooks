@@ -1437,7 +1437,7 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0265_filing_currency_and_ship_to_snapshot.sql",
     from: "84fe8ca15877116d6f7cb221907a13c2163a1f38f13019afa85962ec80912498",
-    to: "ae246367720744529f44d87887e154b7f2c28b92bcb3f3fdc6ac0d4d6f76de65",
+    to: "863fb22fc97911ed8ef81a8a0808277a8069c4039b96838de94a7c8001639944",
     strategy: "reapply",
     reason:
       "corrective revision 97609eae (tax-nexus shard) appends the documents ship-to "
@@ -1448,6 +1448,21 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "gains the snapshot columns and backfill idempotently; the filings DDL is all "
       + "IF NOT EXISTS and its backfill NULL-guarded. Reapply, not restamp: the revision "
       + "adds real schema the old state lacks.",
+  },
+  {
+    filename: "generated/0265_filing_currency_and_ship_to_snapshot.sql",
+    from: "ae246367720744529f44d87887e154b7f2c28b92bcb3f3fdc6ac0d4d6f76de65",
+    to: "863fb22fc97911ed8ef81a8a0808277a8069c4039b96838de94a7c8001639944",
+    strategy: "reapply",
+    reason:
+      "corrective revision UPG-0265 (upgrade rehearsal R1): the functional_currency "
+      + "backfill UPDATEs tax_filings, whose baseline tax_filing_immutable guard refuses "
+      + "every UPDATE except prepared->filed, so any install holding a filing failed the "
+      + "upgrade. The revision suspends that one trigger for the single NULL-guarded "
+      + "statement inside the migration's transaction and asserts it is enabled again "
+      + "before commit. A database recorded at ae246367 (it could only have applied with "
+      + "no filings) re-runs the current body idempotently: every DDL is IF NOT EXISTS "
+      + "and both backfills are NULL-guarded. Reapply, not restamp: the body changed.",
   },
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
