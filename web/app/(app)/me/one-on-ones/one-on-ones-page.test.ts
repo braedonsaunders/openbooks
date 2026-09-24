@@ -79,7 +79,15 @@ const mockSources = new Map<string, string>([
         ]
       }
       export async function getOneOnOne() {
-        return { id: '${ONE_ID}', scheduledAt, status: 'scheduled', items: [] }
+        return {
+          id: '${ONE_ID}',
+          scheduledAt,
+          status: 'scheduled',
+          items: [
+            { id: 'item-1', kind: 'note', authorPartyId: 'party-1', body: 'Mine.', visibility: 'private', status: 'open' },
+            { id: 'item-2', kind: 'note', authorPartyId: 'party-2', body: 'Theirs.', visibility: 'shared', status: 'open' },
+          ],
+        }
       }
       export async function listOneOnOneDirectory() {
         return { employments: [] }
@@ -89,6 +97,10 @@ const mockSources = new Map<string, string>([
   [
     'mock:feedback',
     `export async function listOpenRequestsForParty() { return [] }`,
+  ],
+  [
+    'mock:approval-person',
+    `export async function loadApprovalPerson() { return { partyId: 'party-1' } }`,
   ],
   [
     'mock:business-date',
@@ -109,6 +121,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/hrm/performance/one-on-ones.ts', 'mock:one-on-ones'],
   ['@openbooks/engine/src/hrm/performance/feedback.ts', 'mock:feedback'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/src/hrm/authorization.ts', 'mock:approval-person'],
 ])
 
 registerHooks({
@@ -136,4 +149,14 @@ test('F3-92: the drawer names the org-zone wall time, never the raw ISO instant'
   assert.equal(data.detail.when, '2026-01-15 04:00')
   assert.match(data.detail.when, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, 'no T, zone suffix, or millis')
   assert.ok(data.detail.title.includes('04:00'), 'the drawer title agrees with the description')
+})
+
+test('F3-99: authorMine derives from the delivered author, never a constant', async () => {
+  const data = await loadMeOneOnOnesPage({ one: ONE_ID })
+  assert.ok(data.detail, 'the drawer detail resolves')
+  assert.deepEqual(
+    data.detail.items.map((item) => item.authorMine),
+    [true, false],
+    'the own-authored note reads mine, the other-authored note does not',
+  )
 })

@@ -27,6 +27,8 @@ import { listOpenRequestsForParty } from '@openbooks/engine/src/hrm/performance/
 import { getAuthz } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { meTabs } from '../../../../lib/hrm/self-service'
+import { loadApprovalPerson } from '@openbooks/engine/src/hrm/authorization.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessTimeZone, formatInZone, formatTimeInZone } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
@@ -278,6 +280,13 @@ export async function loadMeOneOnOnesPage(
         return `${formatInZone(at, timeZone)} ${hhmm.slice(0, 2)}:${hhmm.slice(2)}`
       }
       const when = inZone(one.scheduledAt)
+      // authorMine derives from the delivered authorPartyId — private
+      // notes arrive already filtered to their author by the service, so
+      // this only names the author, never widens delivery. An unlinked
+      // login resolves no party and sees every delivered item as not-mine.
+      const myPartyId = await loadApprovalPerson(db, authz.user.orgId, authz.user.id)
+        .then((person) => person.partyId)
+        .catch(() => null)
       detail = {
         id: one.id,
         title: `${otherName(one)} · ${when}`,
@@ -292,7 +301,7 @@ export async function loadMeOneOnOnesPage(
             i.kind === 'action_item' ? t('me.oneOnOnes.actionItem')
             : i.kind === 'note' ? t('me.oneOnOnes.note')
             : t('me.oneOnOnes.talkingPoint'),
-          authorMine: false,
+          authorMine: myPartyId !== null && i.authorPartyId === myPartyId,
           body: i.body,
           visibility: i.visibility,
           visibilityLabel: i.visibility === 'private' ? t('me.oneOnOnes.private') : t('me.oneOnOnes.shared'),
