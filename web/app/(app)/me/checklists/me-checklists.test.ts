@@ -1,35 +1,40 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Composition contract for Me checklists (/me/checklists): my steps through
-// the shared `table` block with the complete action in a row-action island.
-// Completion rides the existing step endpoint — the island posts there and
-// renders the service refusal inline.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-
-test("checklists render through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadMeChecklistsPage/, "page loads through the checklists loader");
-  assert.match(view, /meChecklistsSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+// Behaviour contract for the checklists page (/me/checklists). The spec
+// builder runs over hand-built data: a refused read renders its title
+// and remedy, and the steps table binds its rows with the tab strip in
+// the header. Step completion rides the shared hrm-step-complete widget
+// through the existing step endpoint — the widget contracts and the
+// steps routes own that path, not this page.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("steps render through the shared table block with an island action", () => {
-  assert.match(view, /table\(\{/, "rows compose a table block");
-  assert.match(view, /variant: 'app'/, "the table uses the app list variant");
-  assert.match(view, /rows: f\('rows'\)/, "the table reads the loader-resolved steps");
-  assert.match(view, /widgetCell\('hrm-step-complete'/, "completion rides a row-action island, never a bespoke button");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
+const { meChecklistsSpec } = await import("./view.ts");
+
+function specJson(data: Record<string, unknown>): string {
+  return JSON.stringify(meChecklistsSpec(data as never));
+}
+
+const TABS = [{ label: "Checklists", href: "/me/checklists" }];
+
+test("a refused checklists read renders the remedy", () => {
+  const json = specJson({ tabs: TABS, refusal: { title: "No checklists", message: "ask an administrator for a linked employment" } } as unknown as Record<string, unknown>);
+  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes("No checklists"), "the refusal title reaches the page");
+  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
 });
 
-test("the complete island posts to the existing step endpoint", () => {
-  const islands = readFileSync(new URL("../islands.tsx", import.meta.url), "utf8");
-  assert.match(
-    islands,
-    /\/api\/hrm\/processes\/steps\/\$\{stepId\}\/complete/,
-    "completion rides the existing step endpoint with unchanged evidence rules",
-  );
-  assert.match(islands, /if \(!res\.ok\)/, "error bodies are checked before they are parsed");
+test("the steps table binds with the tab strip in the header", () => {
+  const json = specJson({ tabs: TABS, refusal: null } as unknown as Record<string, unknown>);
+  assert.ok(json.includes("\"module-home-tabs\""), "the header carries the tab strip");
+  assert.ok(json.includes("/me/checklists"), "the strip links the checklists surface");
+  assert.ok(json.includes("\"hrm-step-complete\""), "the row action rides the shared step-complete widget");
 });
