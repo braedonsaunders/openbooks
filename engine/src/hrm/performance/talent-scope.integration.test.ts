@@ -10,7 +10,7 @@ import {
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
 import { createPosition } from "../positions.ts";
-import { HrmPerformanceError } from "./errors.ts";
+import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
 import { createCycle } from "./review-cycles.ts";
 import {
   addSuccessionCandidate,
@@ -312,19 +312,83 @@ test("succession plans and candidates stay inside the fence", async () => {
     assert.deepEqual(await listSuccessionPlans({ orgId: h.org.orgId, actorId: h.hrEmpty }), []);
     // Inside the fence everything works, including removal from a draft plan.
     await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrA, id: planA.id, status: "active" });
-    const candidate = await addSuccessionCandidate({
+    const activeAdd = perfError(await addSuccessionCandidate({
       orgId: h.org.orgId,
       actorId: h.hrA,
       planId: planA.id,
       employmentId: h.empA,
       readiness: "ready_now",
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    ));
+    assert.equal(activeAdd.code, "REFUSED");
+    assert.match(activeAdd.message, /active succession plan keeps its candidates as evidence/);
+    await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrAll, id: planA.id, status: "draft" });
+    const [candidate, secondCandidate] = await Promise.all([
+      addSuccessionCandidate({
+        orgId: h.org.orgId,
+        actorId: h.hrA,
+        planId: planA.id,
+        employmentId: h.empA,
+        readiness: "ready_now",
+      }),
+      addSuccessionCandidate({
+        orgId: h.org.orgId,
+        actorId: h.hrAll,
+        planId: planA.id,
+        employmentId: h.empB,
+        readiness: "one_to_two_years",
+      }),
+    ]);
+    assert.notEqual(candidate.order, secondCandidate.order, "concurrent appends receive distinct ranks");
+    const thirdEmployment = await mkEmployment(h.org.orgId, await mkParty(h.org.orgId, "Third candidate"), h.org.subsidiaryId);
+    const duplicateRank = db.execute(sql`
+      insert into hrm_succession_candidates
+        (org_id, plan_id, employment_id, readiness, candidate_order, created_by, updated_by)
+      values (${h.org.orgId}, ${planA.id}, ${thirdEmployment}, 'ready_now', ${candidate.order}, ${h.hrAll}, ${h.hrAll})
+    `);
+    await assert.rejects(duplicateRank, (error: unknown) => {
+      assert.ok(isUniqueViolationOn(error, "hrm_succession_candidates_unique_order"));
+      return true;
     });
-    assert.equal(candidate.employmentId, h.empA);
+    let removeSettled = false;
+    let removal: Promise<unknown> | undefined;
+    let waitedForPlanLock = false;
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select id from hrm_succession_plans where org_id = ${h.org.orgId} and id = ${planA.id} for update
+      `);
+      removal = removeSuccessionCandidate({
+        orgId: h.org.orgId,
+        actorId: h.hrAll,
+        planId: planA.id,
+        candidateId: candidate.id,
+      }).then(
+        () => { removeSettled = true; return null; },
+        (error: unknown) => { removeSettled = true; return error; },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      waitedForPlanLock = !removeSettled;
+      await tx.execute(sql`
+        update hrm_succession_plans set status = 'active'
+         where org_id = ${h.org.orgId} and id = ${planA.id}
+      `);
+    });
+    const removeOutcome = await removal!;
+    assert.equal(waitedForPlanLock, true);
+    const removeError = perfError(removeOutcome);
+    assert.equal(removeError.code, "REFUSED");
+    assert.match(removeError.message, /active succession plan keeps its candidates as evidence/);
+    const remainingBeforeDraft = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_succession_candidates
+       where org_id = ${h.org.orgId} and plan_id = ${planA.id}`)).rows[0]!.n;
+    assert.equal(remainingBeforeDraft, "2");
     await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrAll, id: planA.id, status: "draft" });
     await removeSuccessionCandidate({ orgId: h.org.orgId, actorId: h.hrAll, planId: planA.id, candidateId: candidate.id });
     const remaining = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_succession_candidates
        where org_id = ${h.org.orgId} and plan_id = ${planA.id}`)).rows[0]!.n;
-    assert.equal(remaining, "0");
+    assert.equal(remaining, "1");
   });
 });
