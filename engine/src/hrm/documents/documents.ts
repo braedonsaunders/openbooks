@@ -356,6 +356,9 @@ export interface DeliveryIntent {
 }
 
 const SIGNER_TOKEN_TTL_MS = 30 * 24 * 3_600_000; // 30 days
+const EMPLOYMENT_MERGE_FIELDS = new Set<DocumentMergeField>([
+  "department", "position_title", "manager_name", "employment_start",
+]);
 
 export async function generateDocument(input: {
   orgId: string;
@@ -408,6 +411,12 @@ export async function generateDocument(input: {
         );
       }
     }
+    if (!input.employmentId && declared.some((field) => EMPLOYMENT_MERGE_FIELDS.has(field as DocumentMergeField))) {
+      throw new HrmDocumentsError(
+        "REFUSED",
+        "this template needs employment details — choose an employment linked to the document subject before generating",
+      );
+    }
     if (input.employmentId) {
       const emp = (await db.execute<{ id: string; workerPartyId: string }>(sql`
         select id, worker_party_id as "workerPartyId"
@@ -417,6 +426,12 @@ export async function generateDocument(input: {
         throw new HrmDocumentsError(
           "NOT_FOUND",
           "employment is not visible in this organization and legal-entity scope",
+        );
+      }
+      if (emp.workerPartyId !== input.partyId) {
+        throw new HrmDocumentsError(
+          "REFUSED",
+          "the selected employment does not belong to this document subject — choose an employment for the selected person",
         );
       }
       await requirePartyInScope(db, input.orgId, input.actorId, emp.workerPartyId);
@@ -516,6 +531,12 @@ export async function uploadDocument(input: {
         throw new HrmDocumentsError(
           "NOT_FOUND",
           "employment is not visible in this organization and legal-entity scope",
+        );
+      }
+      if (emp.workerPartyId !== input.partyId) {
+        throw new HrmDocumentsError(
+          "REFUSED",
+          "the selected employment does not belong to this document subject — choose an employment for the selected person",
         );
       }
       await requirePartyInScope(db, input.orgId, input.actorId, emp.workerPartyId);
