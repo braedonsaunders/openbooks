@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -402,8 +402,55 @@ test("requires_attachment refused at submit until evidence is recorded", { skip:
       /requires an attachment/,
       async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and status = 'submitted'`)).rows[0]!.n,
     );
+    await assertLeaveRefusal(
+      () => recordLeaveAttachment({
+        orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id, attachmentId: randomUUID(),
+      }),
+      /existing file from this organization's File Cabinet/,
+      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and attachment_id is not null`)).rows[0]!.n,
+    );
+    const foreignOrg = await createScratchOrg();
+    try {
+      const foreignFolderId = (await db.execute<{ id: string }>(sql`
+        insert into folders (org_id, name, owner_id, is_private)
+        values (${foreignOrg.orgId}, 'Foreign leave evidence', null, false) returning id
+      `)).rows[0]!.id;
+      const foreignAttachmentId = (await db.execute<{ id: string }>(sql`
+        insert into files (org_id, folder_id, name, file_type, content_type, size_bytes)
+        values (${foreignOrg.orgId}, ${foreignFolderId}, 'foreign-evidence.pdf', 'pdf', 'application/pdf', 100) returning id
+      `)).rows[0]!.id;
+      await assert.rejects(
+        () => withOrgTransaction(h.org.orgId, () => db.execute(sql`
+          update hrm_leave_requests set attachment_id = ${foreignAttachmentId}
+           where org_id = ${h.org.orgId} and id = ${draft.id}
+        `)),
+        (error: unknown) => {
+          const cause = (error as { cause?: { code?: unknown } }).cause;
+          assert.equal(cause?.code, "23503");
+          return true;
+        },
+        "the tenant composite foreign key blocks cross-organization evidence at storage",
+      );
+      await assertLeaveRefusal(
+        () => recordLeaveAttachment({
+          orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id, attachmentId: foreignAttachmentId,
+        }),
+        /existing file from this organization's File Cabinet/,
+        async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and attachment_id is not null`)).rows[0]!.n,
+      );
+    } finally {
+      await dropScratchOrg(foreignOrg.orgId);
+    }
+    const folderId = (await db.execute<{ id: string }>(sql`
+      insert into folders (org_id, name, owner_id, is_private)
+      values (${h.org.orgId}, 'Leave evidence', ${h.employeeId}, true) returning id
+    `)).rows[0]!.id;
+    const attachmentId = (await db.execute<{ id: string }>(sql`
+      insert into files (org_id, folder_id, name, file_type, content_type, size_bytes)
+      values (${h.org.orgId}, ${folderId}, 'evidence.pdf', 'pdf', 'application/pdf', 100) returning id
+    `)).rows[0]!.id;
     await recordLeaveAttachment({
-      orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id, attachmentId: randomUUID(),
+      orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id, attachmentId,
     });
     await seedFlow(h.org.orgId, h.approverId);
     const submitted = await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id });

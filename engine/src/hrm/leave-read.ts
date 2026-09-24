@@ -367,12 +367,12 @@ export async function listLeaveTypes(exec: SqlExecutor, orgId: string): Promise<
 export async function listLeaveTypeOptions(
   exec: SqlExecutor,
   orgId: string,
-): Promise<{ id: string; label: string }[]> {
-  const rows = (await exec.execute<{ id: string; code: string; name: string }>(sql`
-    select id, code, name from hrm_leave_types
+): Promise<{ id: string; label: string; requiresAttachment: boolean }[]> {
+  const rows = (await exec.execute<{ id: string; code: string; name: string; requires_attachment: boolean }>(sql`
+    select id, code, name, requires_attachment from hrm_leave_types
      where org_id = ${orgId} and is_active order by code limit 200
   `)).rows;
-  return rows.map((row) => ({ id: row.id, label: `${row.code} — ${row.name}` }));
+  return rows.map((row) => ({ id: row.id, label: `${row.code} — ${row.name}`, requiresAttachment: row.requires_attachment }));
 }
 
 export interface LeaveFilingEmploymentOptionsQuery {
@@ -586,12 +586,15 @@ export interface LeaveRequestSummary {
   readonly decidedBy: string | null;
   readonly decidedAt: string | null;
   readonly decisionReason: string | null;
+  readonly attachmentId: string | null;
+  readonly requiresAttachment: boolean;
 }
 
 const SUMMARY_COLUMNS = sql`r.id, r.employment_id, e.worker_party_id as worker_party_id,
   r.leave_type_id, t.code as leave_type_code,
   r.starts_on::text as starts_on, r.ends_on::text as ends_on, r.hours::text as hours,
-  r.reason, r.status, r.decided_by, r.decided_at::text as decided_at, r.decision_reason`;
+  r.reason, r.status, r.decided_by, r.decided_at::text as decided_at, r.decision_reason,
+  r.attachment_id, t.requires_attachment`;
 
 function toSummary(row: Record<string, unknown>): LeaveRequestSummary {
   return {
@@ -608,6 +611,8 @@ function toSummary(row: Record<string, unknown>): LeaveRequestSummary {
     decidedBy: row.decided_by != null ? String(row.decided_by) : null,
     decidedAt: row.decided_at != null ? String(row.decided_at) : null,
     decisionReason: row.decision_reason != null ? String(row.decision_reason) : null,
+    attachmentId: row.attachment_id != null ? String(row.attachment_id) : null,
+    requiresAttachment: row.requires_attachment === true,
   };
 }
 

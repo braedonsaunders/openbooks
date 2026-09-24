@@ -93,7 +93,7 @@ interface Script {
   posts: Array<{ url: string; body: unknown }>;
 }
 
-function installFetch(script: Script, manageable: boolean, own: "two" | "one" | "none" = "two"): () => void {
+function installFetch(script: Script, manageable: boolean, own: "two" | "one" | "none" = "two", requiresAttachment = false): () => void {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -104,7 +104,10 @@ function installFetch(script: Script, manageable: boolean, own: "two" | "one" | 
       });
     }
     if (url.includes("/api/hrm/options?source=leave-types")) {
-      return Response.json({ options: [{ id: TYPE_ID, label: "PPL-VAC — Vacation" }] });
+      return Response.json({ options: [{ id: TYPE_ID, label: "PPL-VAC — Vacation", requiresAttachment }] });
+    }
+    if (url.startsWith("/api/file-cabinet/files?")) {
+      return Response.json({ files: [{ id: "file-evidence-1", name: "doctor-note.pdf" }] });
     }
     if (url.includes("/api/hrm/options?source=leave-own-employments")) {
       const options =
@@ -130,6 +133,10 @@ function installFetch(script: Script, manageable: boolean, own: "two" | "one" | 
     if (url === "/api/hrm/leave-requests" && init?.method === "POST") {
       script.posts.push({ url, body: JSON.parse(String(init.body)) });
       return Response.json({ request: { id: "request-1", status: "draft" } });
+    }
+    if (url === "/api/hrm/leave-requests/request-1/attachment" && init?.method === "POST") {
+      script.posts.push({ url, body: JSON.parse(String(init.body)) });
+      return Response.json({ request: { id: "request-1", status: "draft", attachmentId: "file-evidence-1" } });
     }
     return Response.json({});
   }) as typeof fetch;
@@ -290,6 +297,44 @@ test("the on-behalf mode refuses to file without naming the employee", async (t)
 
   assert.equal(script.posts.length, 0, "no POST leaves without a named target employee");
   assert.match(document.body.textContent ?? "", /Pick the employee this request is filed for/);
+});
+
+test("a leave type requiring evidence attaches a selected File Cabinet file before finishing filing", async (t) => {
+  (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
+  const script: Script = { posts: [] };
+  const restoreFetch = installFetch(script, false, "two", true);
+  t.after(restoreFetch);
+  const { unmount } = await mountFiling();
+  t.after(unmount);
+
+  const typePicker = nativeSelectFor("leave-type");
+  const employmentPicker = nativeSelectFor("leave-employment");
+  await act(async () => {
+    setSelect(employmentPicker, OWN_A);
+    setSelect(typePicker, TYPE_ID);
+    await tick();
+  });
+  assert.match(document.body.textContent ?? "", /requires an existing File Cabinet file/);
+  assert.match(document.body.textContent ?? "", /Evidence file/);
+  await click(buttonNamed("New request"));
+  assert.equal(script.posts.length, 0, "the filing route is not called before required evidence is selected");
+  await click(document.getElementById("leave-attachment")!);
+  const search = [...document.querySelectorAll("input")].find((input) => input.getAttribute("aria-label") === "Search…");
+  assert.ok(search, "the evidence picker exposes remote file search");
+  await act(async () => {
+    setInput(search as HTMLInputElement, "doctor");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  });
+  const evidenceOption = [...document.querySelectorAll('[role="option"]')].find((option) =>
+    option.textContent?.includes("doctor-note.pdf"),
+  );
+  assert.ok(evidenceOption, "the picker presents a File Cabinet search result");
+  await click(evidenceOption);
+  await click(buttonNamed("New request"));
+
+  assert.equal(script.posts.length, 2, "filing creates the draft and then records its evidence");
+  assert.equal(script.posts[1]!.url, "/api/hrm/leave-requests/request-1/attachment");
+  assert.deepEqual(script.posts[1]!.body, { attachmentId: "file-evidence-1" });
 });
 
 test("a self-service actor has no mode and posts without onBehalf", async (t) => {
