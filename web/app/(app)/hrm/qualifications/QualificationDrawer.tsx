@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
@@ -88,7 +88,7 @@ export function QualificationDrawer({
   const loading = qualificationId !== null && loaded?.id !== qualificationId && status === undefined
   const [form, setForm] = useState({ employmentId: '', typeId: '', issuedOn: '', expiresOn: '', identifier: '', notes: '' })
 
-  async function loadTypes(): Promise<void> {
+  const loadTypes = useCallback(async (): Promise<void> => {
     const requestId = ++typeRequestId.current
     setTypesError(null)
     try {
@@ -109,7 +109,7 @@ export function QualificationDrawer({
         setTypesError(t('qualifications.recordForm.typesFailed'))
       }
     }
-  }
+  }, [t])
 
   useEffect(() => {
     let cancelled = false
@@ -129,12 +129,12 @@ export function QualificationDrawer({
         }
       })()
     }
-    void loadTypes()
+    void Promise.resolve().then(loadTypes)
     return () => {
       cancelled = true
       typeRequestId.current += 1
     }
-  }, [qualificationId])
+  }, [qualificationId, loadTypes])
 
   async function run(path: string, method: string, body: unknown, okLabel: string): Promise<void> {
     setStatus(undefined)
