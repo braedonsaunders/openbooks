@@ -262,7 +262,8 @@
     "executedCopy": "Exemplaire signé",
     "executedCopyHint": "Joignez ici la renonciation signée numérisée. Elle reste dans la Bibliothèque de fichiers et est liée à cet enregistrement.",
     "errors": {
-      "partyAndProject": "Choisissez une partie et un projet — un privilège porte sur un projet précis."
+      "partyAndProject": "Choisissez une partie et un projet — un privilège porte sur un projet précis.",
+      "typeRequired": "Choisissez explicitement le type de renonciation avant de la créer."
     }
   },
   "informationReturns": {

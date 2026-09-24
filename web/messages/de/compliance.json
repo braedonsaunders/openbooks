@@ -262,7 +262,8 @@
     "executedCopy": "Vollzogenes Exemplar",
     "executedCopyHint": "Heften Sie hier die eingescannte unterschriebene Verzichtserklärung an. Sie bleibt in der Dateiablage und ist mit diesem Datensatz verknüpft.",
     "errors": {
-      "partyAndProject": "Wählen Sie Partei und Projekt — ein Pfandrecht lastet auf einem bestimmten Projekt."
+      "partyAndProject": "Wählen Sie Partei und Projekt — ein Pfandrecht lastet auf einem bestimmten Projekt.",
+      "typeRequired": "Wählen Sie den Verzichtstyp ausdrücklich aus, bevor Sie ihn erstellen."
     }
   },
   "informationReturns": {
