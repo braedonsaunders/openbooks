@@ -67,8 +67,8 @@ export async function teardownScopeHarness(h: ScopeHarness): Promise<void> {
   await dropScratchOrg(h.org.orgId);
 }
 
-export async function openScopedReq(orgId: string, actorId: string, subsidiaryId: string, title: string) {
-  const draft = await createRequisition({ orgId, actorId, title, employerSubsidiaryId: subsidiaryId, headcount: 1 });
+export async function openScopedReq(orgId: string, actorId: string, subsidiaryId: string, title: string, positionId?: string) {
+  const draft = await createRequisition({ orgId, actorId, title, employerSubsidiaryId: subsidiaryId, headcount: 1, positionId });
   return openRequisition({ orgId, actorId, requisitionId: draft.id });
 }
 
