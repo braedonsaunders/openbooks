@@ -19,6 +19,7 @@ import test from "node:test";
 // (scope, account population, translation) on a complicated one.
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
