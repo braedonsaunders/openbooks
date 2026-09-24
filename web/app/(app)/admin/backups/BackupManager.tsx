@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
@@ -62,10 +62,17 @@ export function BackupManager({
   s3Enabled,
   workerOnline,
 }: BackupManagerProps) {
+  const locale = useLocale();
   const { dateTime, number } = useViewerFormat();
   const formatWhen = (iso: string | null) => iso ? dateTime(new Date(iso)) : "—";
   const router = useRouter();
   const t = useTranslations("admin.backupsManager");
+  const formatUtcHour = (hour: number) => new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2000, 0, 1, hour)));
   const [pending, start] = useTransition();
 
   const [enabled, setEnabled] = useState(policy?.enabled ?? false);
@@ -235,7 +242,7 @@ export function BackupManager({
             >
               {Array.from({ length: 24 }, (_, h) => (
                 <option key={h} value={h}>
-                  {String(h).padStart(2, "0")}:00
+                  {formatUtcHour(h)}
                 </option>
               ))}
             </Select>
@@ -307,10 +314,10 @@ export function BackupManager({
                         {formatWhen(run.createdAt)}
                       </td>
                       <td className="py-2.5 pr-4">
-                        <Badge variant="outline">{run.kind}</Badge>
+                        <Badge variant="outline">{t(`table.kinds.${run.kind}`)}</Badge>
                       </td>
                       <td className="py-2.5 pr-4">
-                        <Badge variant={STATUS_VARIANT[run.status] ?? "secondary"}>{run.status}</Badge>
+                        <Badge variant={STATUS_VARIANT[run.status] ?? "secondary"}>{t(`table.statuses.${run.status}`)}</Badge>
                         {run.error && (
                           <div className="mt-1 max-w-64 text-xs break-words text-red-600 dark:text-red-400">
                             {run.error}
@@ -331,7 +338,7 @@ export function BackupManager({
                       <td className="py-2.5 pr-4 whitespace-nowrap">
                         {run.purgedAt ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
-                            {t("table.purged", { reason: run.purgeReason ?? "", when: formatWhen(run.purgedAt) })}
+                            {t("table.purged", { reason: run.purgeReason ? t(`table.reasons.${run.purgeReason}`) : "", when: formatWhen(run.purgedAt) })}
                           </span>
                         ) : (
                           <span className="text-xs text-slate-500 dark:text-slate-400">{t("table.kept")}</span>

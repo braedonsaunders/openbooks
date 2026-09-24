@@ -52,7 +52,7 @@
         "title": "Apps",
         "description": "Build with an agent, review drafts, and manage installed apps."
       },
-      "sandboxes": {
+  "sandboxes": {
         "title": "Environments",
         "description": "Create, refresh, and promote isolated sandbox copies of production"
       },
@@ -5146,6 +5146,9 @@
       "sha256": "SHA-256",
       "retention": "Retention",
       "actionsSr": "Actions",
+    "kinds": { "manual": "Manual", "scheduled": "Scheduled" },
+    "statuses": { "queued": "Queued", "running": "Running", "completed": "Completed", "failed": "Failed" },
+    "reasons": { "rotated": "rotated", "deleted": "deleted" },
       "rowsTables": "{rows} rows · {tables} tables",
       "purged": "purged ({reason}) · {when}",
       "kept": "kept",
@@ -5544,6 +5547,59 @@
       "summary": "Summary",
       "when": "When"
     }
+  },
+  "sandboxManager": {
+    "newEnvironment": "New environment",
+    "description": "A sandbox is an instant, isolated clone of production. Masked sandboxes scramble personal data on copy; all sandboxes have email, payments, and integrations safely disabled automatically.",
+    "name": "Name",
+    "namePlaceholder": "QA sandbox",
+    "tier": "Tier",
+    "tiers": {
+      "masked": "Masked full copy (recommended)",
+      "full": "Full copy (unmasked)",
+      "dev": "Dev (customizations only)",
+      "asOf": "As-of (books at a period close)",
+      "unknown": "Unknown tier"
+    },
+    "asOfPeriod": "As-of period",
+    "choosePeriod": "Choose a period…",
+    "periodOption": "{name} · ends {endsOn} · {calendar}",
+    "create": "Create sandbox",
+    "cutoffDescription": "The clone includes ledger entries posted on or before the chosen period’s end date, whatever calendar their period belongs to.",
+    "reviewChanges": "Review change sets",
+    "none": "No environments yet.",
+    "statuses": {
+      "ready": "Ready",
+      "provisioning": "Provisioning",
+      "refreshing": "Refreshing",
+      "deleting": "Deleting",
+      "failed": "Failed",
+      "unknown": "Unknown"
+    },
+    "masked": "Masked",
+    "storageSummary": "{records} records · {refreshed}{schedule, select, none {} other { · automatic refresh: {schedule}}}",
+    "refreshed": "refreshed {when}",
+    "neverRefreshed": "never refreshed",
+    "enter": "Enter",
+    "refreshTitle": "Re-pull production data, keep your customizations",
+    "refresh": "Refresh",
+    "resetConfirm": "Full reset discards sandbox customizations. Continue?",
+    "reset": "Reset",
+    "autoRefresh": "Automatic refresh",
+    "schedule": {
+      "manual": "Manual",
+      "hourly": "Hourly",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "unknown": "Unknown"
+    },
+    "deleteConfirm": "Delete “{name}” permanently?",
+    "delete": "Delete",
+    "changeSetName": "Change set name",
+    "changeSetDefaultName": "Sandbox changes",
+    "captureChanges": "Capture changes",
+    "captureFailed": "Capture did not complete. Check the change-set list before trying again.",
+    "captureTitle": "Capture configuration changes for independent review and approval"
   },
   "sandboxes": {
     "changeSets": {

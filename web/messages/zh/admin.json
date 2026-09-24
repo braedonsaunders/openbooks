@@ -52,7 +52,7 @@
         "title": "应用",
         "description": "构建并安装应用包——沙箱化前端加受治理的后端"
       },
-      "sandboxes": {
+  "sandboxes": {
         "title": "环境",
         "description": "创建、刷新并提升与生产隔离的沙箱副本"
       },
@@ -5146,6 +5146,9 @@
       "sha256": "SHA-256",
       "retention": "保留",
       "actionsSr": "操作",
+    "kinds": { "manual": "手动", "scheduled": "计划任务" },
+    "statuses": { "queued": "排队中", "running": "运行中", "completed": "已完成", "failed": "失败" },
+    "reasons": { "rotated": "轮换", "deleted": "已删除" },
       "rowsTables": "{rows} 行 · {tables} 个表",
       "purged": "已清除（{reason}）· {when}",
       "kept": "保留",
@@ -5544,6 +5547,59 @@
       "summary": "摘要",
       "when": "时间"
     }
+  },
+  "sandboxManager": {
+    "newEnvironment": "新建环境",
+    "description": "沙箱是生产环境的即时隔离副本。掩码沙箱会在复制时扰乱个人数据；所有沙箱都会自动安全地禁用邮件、付款和集成。",
+    "name": "名称",
+    "namePlaceholder": "QA 沙箱",
+    "tier": "类型",
+    "tiers": {
+      "masked": "完整掩码副本（推荐）",
+      "full": "完整副本（未掩码）",
+      "dev": "开发副本（仅自定义项）",
+      "asOf": "指定期间截止时的账簿",
+      "unknown": "未知类型"
+    },
+    "asOfPeriod": "截止期间",
+    "choosePeriod": "选择期间…",
+    "periodOption": "{name} · 截止 {endsOn} · {calendar}",
+    "create": "创建沙箱",
+    "cutoffDescription": "副本包含所选期间结束日期当天及之前过账的分录，与其所属日历无关。",
+    "reviewChanges": "查看变更集",
+    "none": "暂无环境。",
+    "statuses": {
+      "ready": "就绪",
+      "provisioning": "正在配置",
+      "refreshing": "正在刷新",
+      "deleting": "正在删除",
+      "failed": "失败",
+      "unknown": "未知"
+    },
+    "masked": "已掩码",
+    "storageSummary": "{records} 条记录 · {refreshed}{schedule, select, none {} other { · 自动刷新：{schedule}}}",
+    "refreshed": "刷新于 {when}",
+    "neverRefreshed": "从未刷新",
+    "enter": "进入",
+    "refreshTitle": "重新拉取生产数据并保留自定义项",
+    "refresh": "刷新",
+    "resetConfirm": "完全重置会丢弃沙箱自定义项。是否继续？",
+    "reset": "重置",
+    "autoRefresh": "自动刷新",
+    "schedule": {
+      "manual": "手动",
+      "hourly": "每小时",
+      "daily": "每天",
+      "weekly": "每周",
+      "unknown": "未知"
+    },
+    "deleteConfirm": "永久删除“{name}”？",
+    "delete": "删除",
+    "changeSetName": "变更集名称",
+    "changeSetDefaultName": "沙箱变更",
+    "captureChanges": "捕获变更",
+    "captureFailed": "未能完成捕获。重试前请检查变更集列表。",
+    "captureTitle": "捕获配置变更以供独立审核和批准"
   },
   "sandboxes": {
     "changeSets": {
