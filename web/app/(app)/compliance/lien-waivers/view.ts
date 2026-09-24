@@ -200,6 +200,9 @@ export async function loadLienWaiversPage(
     drawerOpen: Boolean(open),
     drawerProps: open
       ? {
+          // Keyed by the open waiver so the signer form remounts on a
+          // record switch instead of filing A's signer against B.
+          remountKey: openId,
           waiver: open,
           openBills,
           closeHref: `/compliance/lien-waivers${query.toString() ? `?${query}` : ''}`,

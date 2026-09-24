@@ -49,7 +49,7 @@ export async function loadActivities(
   const t = await getTranslations('crm')
   const openId = pickString(sp.activity)
 
-  let drawer: ActivityDrawerProps | null = null
+  let drawer: (ActivityDrawerProps & { remountKey: string }) | null = null
   if (openId && isUuid(openId)) {
     const [open, owners, accounts, opportunities] = await Promise.all([
       loadActivity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
@@ -61,6 +61,9 @@ export async function loadActivities(
       const requestedReturn = pickString(sp.drawerReturn)
       const closeHref = requestedReturn?.startsWith('/crm/activities') ? requestedReturn : '/crm/activities'
       drawer = {
+        // Same remount contract as the opportunity drawer: local form state
+        // must not survive a record switch.
+        remountKey: openId,
         data: open as unknown as ActivityDrawerProps['data'],
         owners: owners.rows as unknown as ActivityDrawerProps['owners'],
         accounts: accounts.rows as unknown as ActivityDrawerProps['accounts'],

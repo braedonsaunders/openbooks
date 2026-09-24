@@ -258,9 +258,10 @@ export const OPERATIONS_WIDGETS = {
     />
   ),
   'vendor-compliance-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof VendorComplianceDrawer> | null
+    const drawer = props.drawer as (ComponentProps<typeof VendorComplianceDrawer> & { remountKey: string }) | null
     if (!drawer) return null
-    return <VendorComplianceDrawer {...drawer} />
+    const { remountKey, ...rest } = drawer
+    return <VendorComplianceDrawer key={remountKey} {...rest} />
   },
   'new-filing': (props) => (
     <NewFilingButton
@@ -278,8 +279,9 @@ export const OPERATIONS_WIDGETS = {
     />
   ),
   'lien-waiver-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof LienWaiverDrawer> | null
+    const drawer = props.drawer as (ComponentProps<typeof LienWaiverDrawer> & { remountKey: string }) | null
     if (!drawer) return null
-    return <LienWaiverDrawer {...drawer} />
+    const { remountKey, ...rest } = drawer
+    return <LienWaiverDrawer key={remountKey} {...rest} />
   },
 } satisfies Record<string, WidgetRenderer>
