@@ -16,6 +16,7 @@ import {
   assertSgCovered,
   calculateSgStatutory,
   sgRatesForTaxYear,
+  sgTablesForTaxYear,
 } from "./cpf.ts";
 
 const CITIZEN_LE55 = { taxYear: 2026, cpfStatus: "citizen", ageBand: "le55" } as const;
@@ -131,24 +132,56 @@ test("any Additional Wages are refused — the AW ceiling is year-dependent", ()
 });
 
 test("foreigners, graduated SPR years and other age bands are refused by name", () => {
+  const tables2026 = sgTablesForTaxYear(2026);
   assert.throws(
-    () => assertSgCovered("foreigner", "le55"),
+    () => assertSgCovered("foreigner", "le55", tables2026),
     /no CPF for a foreign employee.*levy instead/,
   );
   assert.throws(
-    () => assertSgCovered("spr_1st_year", "le55"),
+    () => assertSgCovered("spr_1st_year", "le55", tables2026),
     /graduated rates by name/,
   );
   assert.throws(
-    () => assertSgCovered("spr_2nd_year", "le55"),
+    () => assertSgCovered("spr_2nd_year", "le55", tables2026),
     /graduated rates by name/,
   );
   for (const band of ["b55_60", "b60_65", "b65_70", "gt70"] as const) {
-    assert.throws(() => assertSgCovered("citizen", band), /refuses the ".*" age band by name/, band);
+    assert.throws(() => assertSgCovered("citizen", band, tables2026), /refuses the ".*" age band by name/, band);
   }
-  assert.throws(() => assertSgCovered("citizen" as never, "xx" as never), /age band/);
+  assert.throws(() => assertSgCovered("citizen" as never, "xx" as never, tables2026), /age band/);
   assert.throws(
     () => calculateSgStatutory({ taxYear: 2026, cpfStatus: "foreigner", ageBand: "le55", ordinaryWages: "4500.00" }),
     /no CPF for a foreign employee/,
+  );
+});
+
+test("the over-55 refusal names the calling year's own maxima (2024 vs 2026)", () => {
+  // The 55-and-below OW-leg maxima move with the OW ceiling: 2024 prints
+  // $2,516 / $1,360, 2025 $2,738 / $1,480, 2026 $2,960 / $1,600 (each year
+  // module quotes its own Table 1). A refusal citing 2026 figures for a
+  // 2024 run would misstate the year's own table.
+  assert.throws(
+    () => calculateSgStatutory({ taxYear: 2024, cpfStatus: "citizen", ageBand: "b55_60", ordinaryWages: "4500.00" }),
+    (error: Error) => {
+      assert.ok(error instanceof PayrollError);
+      assert.match(error.message, /\$2,516\.00/);
+      assert.match(error.message, /\$1,360\.00/);
+      assert.doesNotMatch(error.message, /\$2,960/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => calculateSgStatutory({ taxYear: 2026, cpfStatus: "citizen", ageBand: "b60_65", ordinaryWages: "4500.00" }),
+    (error: Error) => {
+      assert.ok(error instanceof PayrollError);
+      assert.match(error.message, /\$2,960\.00/);
+      assert.match(error.message, /\$1,600\.00/);
+      return true;
+    },
+  );
+  // The guard reads the same tables object the calculation prices from.
+  assert.throws(
+    () => assertSgCovered("citizen", "b65_70", sgTablesForTaxYear(2025)),
+    /\$2,738\.00/,
   );
 });

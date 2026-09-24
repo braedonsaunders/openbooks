@@ -151,8 +151,15 @@ const AGE_BAND_LABELS: Record<SgAgeBand, string> = {
   gt70: "Above 70",
 };
 
-/** Refuse every status/age combination round one does not compute, by name. */
-export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand): void {
+/**
+ * Refuse every status/age combination round one does not compute, by name.
+ *
+ * The calling year's own tables select the refusal figures: the over-55
+ * bands moved in January steps (see the year modules), so a refusal citing
+ * a fixed year's maxima would misstate the year's own Table 1. Callers pass
+ * the same tables object the calculation prices from.
+ */
+export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand, tables: SgYearTables): void {
   if (!STATUSES.includes(status)) {
     throw new PayrollError(
       `the SG payroll pack cannot price CPF status "${status}" — declare "citizen", "spr_3rd_year", `
@@ -181,16 +188,18 @@ export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand): void {
     );
   }
   if (ageBand !== "le55") {
+    const le55 = tables.cpfLe55;
     throw new PayrollError(
       `the SG payroll pack refuses the "${AGE_BAND_LABELS[ageBand]}" age band by name — only the Table 1 `
-      + `"55 & below" row (37% total / 20% employee, max $2,960 / $1,600) is transcribed`,
+      + `"55 & below" row for ${tables.year} (${le55.totalPct}% total / ${le55.employeePct}% employee, max `
+      + `${formatDollars(le55.maxTotalOw)} / ${formatDollars(le55.maxEmployeeOw)}) is transcribed`,
     );
   }
 }
 
 export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult {
-  assertSgCovered(input.cpfStatus, input.ageBand);
   const tables = sgTablesForTaxYear(input.taxYear);
+  assertSgCovered(input.cpfStatus, input.ageBand, tables);
 
   const aw = parseCents(input.additionalWages ?? "0", "Additional Wages");
   if (aw > 0n) {
