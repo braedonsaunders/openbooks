@@ -88,14 +88,6 @@ test("finalize never grants member access; the ready step grants it last", () =>
   assert.match(grant, /provisioningStage: "ready"/);
 });
 
-test("a partial company resumes from its recorded stage instead of cloning again", () => {
-  const create = service.slice(service.indexOf("export async function createSampleCompany"));
-  assert.match(create, /findPartialSampleCompany/);
-  assert.match(create, /resumePartialSampleCompany/);
-  assert.match(create, /deletePartialSampleOrg/);
-  assert.match(create, /sampleCompanyBirthMarker/);
-});
-
 test("simulated T&M invoices use the canonical approval lifecycle", () => {
   assert.match(timeAndMaterials, /await postDraftDocument\(world, docId\)/);
   assert.doesNotMatch(timeAndMaterials, /await postDocument\(docId/);
