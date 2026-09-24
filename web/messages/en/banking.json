@@ -760,7 +760,8 @@
         "testFailed": "Test failed: {detail}",
         "unknownError": "unknown error",
         "syncFailed": "Sync failed: {error}",
-        "imported": "Imported {imported} new, {duplicates} duplicate."
+        "imported": "Imported {imported} new, {duplicates} duplicate.",
+        "requestFailed": "Request failed (HTTP {status})"
       },
       "sftpCard": {
         "badge": "SFTP file drop",

@@ -785,7 +785,8 @@
         "testFailed": "La prueba falló: {detail}",
         "unknownError": "error desconocido",
         "syncFailed": "Falló la sincronización: {error}",
-        "imported": "Importados {imported} nuevos, {duplicates} duplicados."
+        "imported": "Importados {imported} nuevos, {duplicates} duplicados.",
+        "requestFailed": "La solicitud falló (HTTP {status})"
       },
       "sftpCard": {
         "badge": "Depósito de archivos SFTP",

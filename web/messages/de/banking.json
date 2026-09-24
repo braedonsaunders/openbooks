@@ -785,7 +785,8 @@
         "testFailed": "Test fehlgeschlagen: {detail}",
         "unknownError": "unbekannter Fehler",
         "syncFailed": "Synchronisierung fehlgeschlagen: {error}",
-        "imported": "{imported} neue importiert, {duplicates} Duplikate."
+        "imported": "{imported} neue importiert, {duplicates} Duplikate.",
+        "requestFailed": "Anfrage fehlgeschlagen (HTTP {status})"
       },
       "sftpCard": {
         "badge": "SFTP-Dateiablage",
