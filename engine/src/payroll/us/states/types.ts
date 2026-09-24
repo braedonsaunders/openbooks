@@ -34,6 +34,7 @@
  */
 import { PayrollError } from "../../error.ts";
 import { rate6, U } from "../../canada/decimal.ts";
+import { fromUnits, roundDiv, toUnits } from "../../../money/money.ts";
 import type { ResolvedCertificate } from "../../certificates.ts";
 import type { PayrollWorkAllocation } from "../../statutory-context.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -139,6 +140,102 @@ export function requireUsResidentWithholdingFacts(
     }
   }
   return facts;
+}
+
+/**
+ * Derive resident-credit wage and tax inputs from verified region allocations.
+ * Subregion shares are intentionally excluded here: they refine a region's
+ * allocation for local taxes and must not be counted a second time at state level.
+ */
+export function resolveUsResidentWithholdingFacts(
+  wages: string,
+  allocations: readonly UsWageAllocation[] | undefined,
+  workRegionTaxes: readonly { region: string; amount: string }[],
+  residenceRegion: string,
+): UsResidentWithholdingFacts {
+  const regional = (allocations ?? []).filter((item) => item.subRegion === null);
+  if (regional.length === 0) {
+    throw new PayrollError(
+      `${residenceRegion} resident withholding needs verified region-level work allocations; `
+      + "record sourced work shares before calculating; refused by name",
+    );
+  }
+  const shares = new Map<string, bigint>();
+  let totalShare = 0n;
+  for (const allocation of regional) {
+    if (!allocation.region || !allocation.source.trim() || shares.has(allocation.region)) {
+      throw new PayrollError(
+        `${residenceRegion} resident withholding received an ambiguous or unsourced region allocation; `
+        + "record one sourced share per work region before calculating; refused by name",
+      );
+    }
+    let share: bigint;
+    try {
+      share = rate6(allocation.workShare);
+    } catch {
+      throw new PayrollError(
+        `${allocation.region} work allocation must be an exact decimal share from 0 through 1; `
+        + "correct the verified work-share input before calculating; refused by name",
+      );
+    }
+    if (share < 0n || share > 1_000_000n) {
+      throw new PayrollError(
+        `${allocation.region} work allocation is outside 0–1; correct the verified work-share input before calculating; refused by name`,
+      );
+    }
+    shares.set(allocation.region, share);
+    totalShare += share;
+  }
+  if (totalShare !== 1_000_000n) {
+    throw new PayrollError(
+      `${residenceRegion} resident withholding region shares must total exactly 1; `
+      + `received ${fromUnits(roundDiv(totalShare * 10_000n, 1_000_000n))}. Correct the sourced work allocations; refused by name`,
+    );
+  }
+
+  let wagesUnits: bigint;
+  try {
+    wagesUnits = toUnits(wages);
+  } catch {
+    throw new PayrollError(
+      `${residenceRegion} resident withholding has no valid current-period wage amount; refused by name`,
+    );
+  }
+  const outOfRegionShare = [...shares]
+    .filter(([region]) => region !== residenceRegion)
+    .reduce((total, [, share]) => total + share, 0n);
+  const outOfRegionWages = fromUnits(roundDiv(wagesUnits * outOfRegionShare, 1_000_000n));
+  const sourceRegions = [...shares]
+    .filter(([region, share]) => region !== residenceRegion && share > 0n)
+    .map(([region]) => region);
+  const taxByRegion = new Map<string, string>();
+  for (const tax of workRegionTaxes) {
+    if (taxByRegion.has(tax.region)) {
+      throw new PayrollError(
+        `${residenceRegion} resident withholding received duplicate ${tax.region} work-region tax facts; `
+        + "provide one actual computed amount per work region; refused by name",
+      );
+    }
+    try {
+      U(tax.amount);
+    } catch {
+      throw new PayrollError(
+        `${residenceRegion} resident withholding received an invalid ${tax.region} work-region tax amount; refused by name`,
+      );
+    }
+    taxByRegion.set(tax.region, tax.amount);
+  }
+  const missingTaxRegions = sourceRegions.filter((region) => !taxByRegion.has(region));
+  if (missingTaxRegions.length > 0) {
+    throw new PayrollError(
+      `${residenceRegion} resident withholding needs the same-period computed work-region tax for `
+      + `${missingTaxRegions.join(", ")}; compute those work-region assessments before calculating; refused by name`,
+    );
+  }
+  return {
+    outOfRegionWages,
+    workRegionTaxes: sourceRegions.map((region) => ({ region, amount: taxByRegion.get(region)! })),
+  };
 }
 
 /** Pay periods per year → the printed period name, or null when there is none. */
