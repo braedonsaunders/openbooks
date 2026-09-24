@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  flowFieldValueError,
   interpolateTemplate,
   resolveDefaultValue,
   type ActionData,
@@ -248,6 +249,17 @@ export async function executeFlowPlan(
 
       case "set_field": {
         const v = resolveDefaultValue(action.value, evalCtx);
+        // resolveDefaultValue output is untyped (authored literals, formula
+        // results, {{interpolation}}): refuse a value that cannot inhabit the
+        // field's declared type before setField persists it. Only
+        // profile-writable header fields are checked here — anything else
+        // reaches the adapter, which owns the writability refusal (and the
+        // custom-field existence and reference-ownership checks).
+        const def = adapter.writableFields.has(action.field)
+          ? adapter.profile.fields.find((f) => f.key === action.field)
+          : undefined;
+        const typeError = def ? flowFieldValueError(def, v ?? null) : null;
+        if (typeError) throw new Error(typeError);
         await adapter.setField(subjectId, action.field, v ?? null, ctx);
         // Later nodes in this run see the new value.
         Object.defineProperty(values, action.field, {
