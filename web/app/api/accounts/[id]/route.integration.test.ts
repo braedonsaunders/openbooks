@@ -239,7 +239,7 @@ async function postingWinsClassificationPatch(
       patchSettled = true;
     });
     await waitForLock(
-      { queryPattern: "%update accounts set%" },
+      { queryPattern: "%select subsidiary_id%for update%" },
       () => patchSettled,
       "the account edit completed against a stale no-lines snapshot",
     );

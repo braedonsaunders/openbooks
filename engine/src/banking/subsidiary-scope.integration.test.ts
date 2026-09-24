@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import type { Client } from "pg";
 import { sql } from "drizzle-orm";
 import {
   adjustReconciliation,
@@ -215,6 +216,40 @@ test("start refuses an out-of-scope bank account and writes nothing", { skip: !D
     );
     assert.ok(shared.id);
   } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+test("import and reconciliation recheck account scope after a concurrent rehome", { skip: !DB }, async () => {
+  const fx = await seedTwoEntity();
+  const { Client } = await import("pg");
+  const scope = new Set([fx.subA]);
+  const ctx = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scope };
+  const holder: Client = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  await holder.connect();
+  try {
+    for (const action of ["import", "reconciliation"] as const) {
+      await db.execute(sql`update accounts set subsidiary_id=${fx.subA} where id=${fx.bankA} and org_id=${fx.orgId}`);
+      await holder.query("begin");
+      await holder.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)", [fx.orgId]);
+      const fence = action === "import" ? `bank-statement-import:${fx.orgId}:${fx.bankA}` : `bank-reconciliation:${fx.orgId}:${fx.bankA}`;
+      await holder.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [fence]);
+      await holder.query("update accounts set subsidiary_id=$1 where id=$2 and org_id=$3", [fx.subB, fx.bankA, fx.orgId]);
+      const pending = action === "import"
+        ? importStatement({ accountId: fx.bankA, source: "manual", currency: "CAD", statementDate: fx.date,
+            lines: [{ postedOn: fx.date, amount: "1", description: "Rehome race" }] }, ctx)
+        : startReconciliation({ accountId: fx.bankA, throughDate: fx.date, statementBalance: "0" }, ctx);
+      let settled = false;
+      let settledError: unknown;
+      void pending.then(() => { settled = true; }, (error) => { settledError = error; settled = true; });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      assert.equal(settled, false, `${action} must reach the account advisory fence after its scope preflight: ${String(settledError)}`);
+      await holder.query("commit");
+      await assert.rejects(pending, /not found/i, `${action} must refuse after the account moves out of caller scope`);
+    }
+  } finally {
+    await holder.query("rollback").catch(() => undefined);
+    await holder.end();
     await dropScratchOrg(fx.orgId);
   }
 });
