@@ -56,6 +56,7 @@ const hooks = registerHooks({
 });
 
 const { makePATCH } = await import("./handlers.ts");
+const { createOrder } = await import("./create.ts");
 hooks.deregister();
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
@@ -71,6 +72,7 @@ interface Fixture {
   actorId: string;
   orderId: string;
   customerId: string;
+  documentDate: string;
   itemId: string;
   goldId: string;
   assignmentId: string;
@@ -98,9 +100,8 @@ async function seedPricedQuote(tag: string): Promise<Fixture> {
       values (${goldId}, ${org.orgId}, 'GOLDB', 'Gold price', 'explicit', false, true)`);
     const baseId = (await db.execute<{ id: string }>(sql`
       select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id;
-    const today = new Date().toISOString().slice(0, 10);
     await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
-      values (${org.orgId}, ${org.customerId}, ${goldId}, ${today}, true)`);
+      values (${org.orgId}, ${org.customerId}, ${goldId}, ${org.date}, true)`);
     const goldSchedule = randomUUID();
     const baseSchedule = randomUUID();
     await db.execute(sql`insert into item_price_schedules
@@ -116,6 +117,7 @@ async function seedPricedQuote(tag: string): Promise<Fixture> {
        where org_id = ${org.orgId} and customer_id = ${org.customerId}`)).rows[0]!.id;
     return {
       orgId: org.orgId, actorId, orderId, customerId: org.customerId,
+      documentDate: org.date,
       itemId: org.items.service, goldId, assignmentId, goldScheduleId: goldSchedule,
     };
   });
@@ -144,21 +146,57 @@ async function patchLines(
 }
 
 test(
+  "create saves catalog provenance derived by the server, not client identifiers",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedPricedQuote("Q-BASIS-CREATE");
+    try {
+      const requestId = randomUUID();
+      const response = await withOrgContext(fixture.orgId, () => createOrder(
+        { kind: 'quote', createPerm: 'ar.create', numberPrefix: 'Q-' },
+        { user: { orgId: fixture.orgId, id: fixture.actorId }, allowedSubsidiaryIds: null } as never,
+        new Request('http://openbooks.test/api/quotes', { method: 'POST', headers: { 'Idempotency-Key': requestId } }),
+        {
+          partyId: fixture.customerId,
+          documentDate: fixture.documentDate,
+          lines: [{
+            itemId: fixture.itemId,
+            quantity: '1',
+            unitPrice: '100',
+            priceBasis: { kind: 'customer_level', scheduleId: randomUUID(), levelId: randomUUID(), assignmentId: randomUUID(), unitPrice: '100', resolvedAt: '2000-01-01T00:00:00.000Z' },
+          }],
+        },
+      ));
+      assert.equal(response.status, 201);
+      const line = await withOrgContext(fixture.orgId, async () => (await db.execute<{
+        price_basis: { kind: string; scheduleId: string; levelId: string; assignmentId: string; resolvedAt: string };
+      }>(sql`select price_basis from document_lines where document_id = ${requestId}`)).rows[0]);
+      assert.equal(line?.price_basis.kind, 'customer_level');
+      assert.equal(line?.price_basis.levelId, fixture.goldId);
+      assert.equal(line?.price_basis.scheduleId, fixture.goldScheduleId);
+      assert.equal(line?.price_basis.assignmentId, fixture.assignmentId);
+      assert.notEqual(line?.price_basis.resolvedAt, '2000-01-01T00:00:00.000Z');
+    } finally {
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
   "a line priced before the revoke replays from its basis after it",
   { skip: !DB },
   async () => {
     const fixture = await seedPricedQuote("Q-BASIS-1");
     try {
-      // Priced while Gold is offered: the drawer echoes the preview basis
-      // (kind, schedule/level/assignment ids, price, instant — the shape the
-      // price preview returns, locked by the preview route test).
+      // The client may send forged provenance. The server must derive every
+      // stored field from its own catalog resolution while Gold is offered.
       const basis = {
-        kind: 'customer_level',
-        scheduleId: fixture.goldScheduleId,
-        levelId: fixture.goldId,
-        assignmentId: fixture.assignmentId,
+        kind: 'customer_item',
+        scheduleId: null,
+        levelId: null,
+        assignmentId: null,
         unitPrice: '100.0000',
-        resolvedAt: new Date().toISOString(),
+        resolvedAt: '2000-01-01T00:00:00.000Z',
       };
       const saved = await patchLines(fixture, [
         { itemId: fixture.itemId, quantity: "1", unitPrice: '100.0000', priceBasis: basis },
@@ -200,18 +238,19 @@ test(
 );
 
 test(
-  "a basis for a different price refuses instead of persisting",
+  "a client cannot invent provenance for a price the catalog did not resolve",
   { skip: !DB },
   async () => {
     const fixture = await seedPricedQuote("Q-BASIS-2");
     try {
-      // Stale lineage: the basis says 100 but the line says 90.
+      // The forged basis agrees with the hand-entered amount, but the server
+      // catalog resolves Gold at 100 and must refuse the mismatched line.
       const res = await patchLines(fixture, [
         {
           itemId: fixture.itemId, quantity: "1", unitPrice: "90",
           priceBasis: {
-            kind: 'customer_level', scheduleId: fixture.goldScheduleId, levelId: fixture.goldId,
-            assignmentId: fixture.assignmentId, unitPrice: '100.0000', resolvedAt: new Date().toISOString(),
+            kind: 'customer_item', scheduleId: null, levelId: null,
+            assignmentId: null, unitPrice: '90', resolvedAt: '2000-01-01T00:00:00.000Z',
           },
         },
       ]);

@@ -1,7 +1,8 @@
 import { normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
 import { cmp, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
-import { parsePriceBasis, type PriceBasis } from '../../../lib/price-basis'
+import type { PriceBasis } from '../../../lib/price-basis'
+import { resolveItemPrice } from '../../../lib/item-pricing'
 
 export interface OrderLineInput {
   itemId?: string | null
@@ -18,10 +19,10 @@ export interface OrderLineInput {
   stockLocationId?: string | null
   extraDims?: Record<string, string | null>
   /**
-   * Pricing provenance echoed from the price preview (0336). Validated and
-   * persisted as document_lines.price_basis; null for hand-priced lines.
-   * Deliberately excluded from the idempotency match: it carries the
-   * preview instant, so a retry with a fresh preview must still replay.
+   * Non-null signals that the line came from a catalog price preview. Save
+   * re-resolves the price server-side and persists only that authoritative
+   * basis; null marks a hand-priced line. Excluded from idempotency matching
+   * because the preview instant can change on an otherwise identical retry.
    */
   priceBasis?: unknown
 }
@@ -96,21 +97,62 @@ export function selectPostableOrderLines(lines: OrderLineInput[]): { valid: Orde
 }
 
 /**
- * Validate a line's echoed price basis (0336): it must parse, and its price
- * must equal the line price — a basis for a different price is stale
- * lineage (or forgery) and refuses instead of persisting. Null means the
- * line was priced by hand: no basis is stored and replay reads the price.
- * Pure (kept here, never doubled: route suites double the DB-bound lib).
+ * Resolve pricing provenance on the server. A supplied client basis is only
+ * an indication that the line came from a catalog preview; none of its
+ * claims are persisted. The catalog resolver is the sole authority for the
+ * kind, ids, amount and resolution instant.
  */
-export function resolveLinePriceBasis(
-  lineNumber: number,
-  unitPrice: string | null | undefined,
-  raw: unknown,
-): PriceBasis | null | { error: string } {
-  const parsed = parsePriceBasis(raw ?? null)
-  if (parsed === null || 'error' in parsed) return parsed
-  if (canonicalDecimal(unitPrice ?? '0', 8) !== parsed.unitPrice) {
-    return { error: `Order line ${lineNumber}: price basis does not match the line price — re-resolve the price` }
+export async function resolveLinePriceBasis(input: {
+  lineNumber: number
+  orgId: string
+  customerId: string | null
+  currency: string
+  documentDate: string
+  line: OrderLineInput
+  overallItemQuantity: string
+}): Promise<PriceBasis | null | { error: string }> {
+  if (input.line.priceBasis == null) return null
+  if (!input.line.itemId) {
+    return { error: `Order line ${input.lineNumber}: price provenance requires an item — remove the catalog price basis` }
   }
-  return parsed
+  const resolved = await resolveItemPrice({
+    orgId: input.orgId,
+    itemId: input.line.itemId,
+    customerId: input.customerId,
+    currency: input.currency,
+    lineQuantity: input.line.quantity ?? '0',
+    overallItemQuantity: input.overallItemQuantity,
+    onDate: input.documentDate,
+  })
+  if (!resolved || canonicalDecimal(input.line.unitPrice ?? '0', 8) !== canonicalDecimal(resolved.unitPrice, 8)) {
+    return { error: `Order line ${input.lineNumber}: the catalog price changed or does not match this line — re-resolve the price or remove the catalog price basis` }
+  }
+  return {
+    kind: resolved.source,
+    scheduleId: resolved.scheduleId,
+    levelId: resolved.priceLevelId,
+    assignmentId: resolved.assignmentId,
+    unitPrice: canonicalDecimal(resolved.unitPrice, 8)!,
+    resolvedAt: resolved.resolvedAt,
+  }
+}
+
+/** Sum an item's line quantities without converting them through Number. */
+export function overallItemQuantities(lines: OrderLineInput[]): Map<string, string> {
+  const totals = new Map<string, bigint>()
+  for (const line of lines) {
+    if (!line.itemId) continue
+    const quantity = canonicalDecimal(line.quantity ?? '0', 8)
+    if (quantity === null) continue
+    const negative = quantity.startsWith('-')
+    const [whole, fraction = ''] = (negative ? quantity.slice(1) : quantity).split('.')
+    const units = BigInt(whole!) * 100_000_000n + BigInt(fraction.padEnd(8, '0'))
+    totals.set(line.itemId, (totals.get(line.itemId) ?? 0n) + (negative ? -units : units))
+  }
+  return new Map([...totals].map(([itemId, units]) => {
+    const whole = units / 100_000_000n
+    const fraction = (units < 0n ? -units : units) % 100_000_000n
+    const text = `${whole}.${fraction.toString().padStart(8, '0')}`.replace(/\.?0+$/, '')
+    return [itemId, text]
+  }))
 }

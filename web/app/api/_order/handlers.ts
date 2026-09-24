@@ -9,8 +9,7 @@ import { can, guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { assignOrderLineWarehouse, convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from './lib'
-import { resolveLinePriceBasis } from './line-selection'
-import { selectPostableOrderLines, type OrderLineInput } from './line-selection'
+import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from './line-selection'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { persistLineTaxComponents } from "../../../lib/bills.ts";
@@ -138,8 +137,8 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     const { id } = await params
     if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-    const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; updated_at: string }>(
-      sql`select status, document_date, subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    const existing = (await db.execute<{ status: string; document_date: string; currency: string; party_id: string | null; subsidiaryId: string | null; updated_at: string }>(
+      sql`select status, document_date, currency, party_id, subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const recordDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
@@ -447,6 +446,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         total,
       }
       preparedLines = []
+      const itemQuantities = overallItemQuantities(valid)
       for (let i = 0; i < computed.lines.length; i++) {
         const l = computed.lines[i]!
         const lineDims = validateExtraDims(l.extraDims, segments)
@@ -465,10 +465,17 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         if (taxAmount === 'invalid') {
           return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
         }
-        // Pricing provenance (0336): same contract as create — the drawer
-        // echoes the preview basis it priced from, hand-priced lines carry
-        // none, and a basis for a different price refuses.
-        const priceBasis = resolveLinePriceBasis(i + 1, l.unitPrice, l.priceBasis)
+        // The client basis is only a signal; the server resolves and stores
+        // its own provenance against the effective draft header and lines.
+        const priceBasis = await resolveLinePriceBasis({
+          lineNumber: i + 1,
+          orgId: user.orgId,
+          customerId: body.partyId !== undefined ? body.partyId : existing.rows[0].party_id,
+          currency: existing.rows[0].currency,
+          documentDate: body.documentDate ?? existing.rows[0].document_date,
+          line: l,
+          overallItemQuantity: itemQuantities.get(l.itemId ?? '') ?? (l.quantity ?? '0'),
+        })
         if (priceBasis !== null && 'error' in priceBasis) {
           return NextResponse.json({ error: priceBasis.error }, { status: 400 })
         }
