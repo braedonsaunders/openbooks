@@ -184,7 +184,6 @@
     "web/app/(app)/reports/aging/view.currency.test.ts": 6,
     "web/app/(app)/reports/aging/view.test.ts": 1,
     "web/app/(app)/reports/balance-sheet/view.test.ts": 2,
-    "web/app/(app)/reports/book-scope.test.ts": 2,
     "web/app/(app)/reports/cash-flow-indirect/view.test.ts": 2,
     "web/app/(app)/reports/cash-flow/view.test.ts": 2,
     "web/app/(app)/reports/general-ledger/view.banner.test.ts": 2,
