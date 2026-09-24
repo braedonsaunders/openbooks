@@ -28,7 +28,7 @@ import {
 } from "../../flows/approval-worklist.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { toWorklistScope } from "../guard.ts";
-import { isUuid } from "../../platform/uuid.ts";
+import { parseDelegationReason } from "../delegation.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -140,15 +140,11 @@ export const flowsApprovalAdapter: InboxAdapter = {
         return;
       }
       if (actionKey === "delegate") {
-        // The reason carries the delegatee user id: "user:<uuid>: <note>".
-        // delegateGate resolves the target; the note stays in the comment.
-        const match = /^user:(\S+)\s*:?\s*(.*)$/i.exec(reason ?? "");
-        if (!match || !isUuid(match[1])) {
-          throw new Error(
-            "delegation needs a recipient — give the reason as the colleague taking over, then the handover note",
-          );
-        }
-        await delegateGate(id, ctx.actorId, match[1]!, allowedSubsidiaryIds);
+        // The reason carries the delegatee user id plus the handover note:
+        // "user:<uuid>: <note>". delegateGate resolves the target and
+        // persists the note on the delegate's notice and the audit row.
+        const delegation = parseDelegationReason(reason);
+        await delegateGate(id, ctx.actorId, delegation.toUserId, allowedSubsidiaryIds, delegation.note);
         return;
       }
     }

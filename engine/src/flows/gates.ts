@@ -1215,6 +1215,11 @@ export async function worklistGateKindCounts(
  * (delegated_from_user_id) — not a free-text comment marker — so the audit
  * survives the decision and can't be forged by typing into a comment.
  *
+ * The handover `note` (the delegator's covering note, parsed from the inbox
+ * delegation reason) is persisted twice: in the delegate's notice body, so
+ * the colleague taking over actually sees it, and in the audit row, so the
+ * hand-off evidence keeps who said what. An empty note records as null.
+ *
  * Callers that carry an Authz subsidiary scope pass it: a restricted actor
  * must not hand off a gate outside their legal-entity boundary by id, any
  * more than they may decide it. Absent scope means no boundary to enforce.
@@ -1224,6 +1229,7 @@ export async function delegateGate(
   fromUserId: string,
   toUserId: string,
   allowedSubsidiaryIds?: GateSubsidiaryScope,
+  note?: string | null,
 ): Promise<void> {
   const gate = await loadGate(gateId);
   if (!gate) throw new GateError("approval not found");
@@ -1268,11 +1274,13 @@ export async function delegateGate(
       throw new GateError(`could not delegate: ${(e as Error).message}`);
     }
 
+    const handoverNote = note?.trim() ? note.trim() : null;
     await db.insert(schema.notifications).values({
       orgId: gate.orgId,
       userId: toUserId,
       kind: "approval",
       title: `Approval delegated to you: ${gate.title}`,
+      body: handoverNote,
       href: "/inbox",
     });
 
@@ -1282,7 +1290,7 @@ export async function delegateGate(
         event: "delegated",
         actor: { kind: "user", userId: fromUserId },
         before: { assigneeUserId: gate.assigneeUserId },
-        after: { assigneeUserId: toUserId, delegatedFromUserId: delegatedFrom },
+        after: { assigneeUserId: toUserId, delegatedFromUserId: delegatedFrom, handoverNote },
         runId: gate.runId,
         flowId: gate.flowId,
         subjectKind: gate.subjectKind,
