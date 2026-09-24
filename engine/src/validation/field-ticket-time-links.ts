@@ -131,14 +131,18 @@ export async function resolveTimeTicketLinks(
   return resolved;
 }
 
-/** Split resolved links into the report's unchanged shape. */
+/** Split resolved links into the report's unchanged shape. Each input row is
+ * classified exactly once: a row with no time entry is missing-time even when
+ * its ticket is also unknown, so the partition sums to the input count. */
 export function classifyTimeTicketLinks(
   resolved: readonly ResolvedLink[],
   sourceRows: number,
   uniqueSourceLinks: number,
 ): LinkClassification {
   const missingTimeEntries = resolved.filter((row) => !row.timeEntryId);
-  const missingTickets = resolved.filter((row) => !row.targetTicketId);
+  const missingTickets = resolved.filter(
+    (row) => row.timeEntryId && !row.targetTicketId,
+  );
   const projectConflicts = resolved.filter(
     (row) =>
       row.timeEntryId &&
@@ -157,6 +161,25 @@ export function classifyTimeTicketLinks(
   const protectedChanges = applicableChanges.filter(
     (row) => row.protectedEvidence,
   );
+  const exactCurrentLinks = resolved.filter(
+    (row) =>
+      row.timeEntryId &&
+      row.targetTicketId &&
+      row.currentTicketId === row.targetTicketId,
+  );
+  if (
+    missingTimeEntries.length +
+      missingTickets.length +
+      changes.length +
+      exactCurrentLinks.length !==
+    resolved.length
+  ) {
+    throw new Error(
+      `link classification does not partition the input: ${resolved.length} rows split into ` +
+        `${missingTimeEntries.length} missing entries, ${missingTickets.length} missing tickets, ` +
+        `${changes.length} changes, ${exactCurrentLinks.length} current`,
+    );
+  }
   return {
     missingTimeEntries,
     missingTickets,
@@ -167,11 +190,7 @@ export function classifyTimeTicketLinks(
     summary: {
       sourceRows,
       uniqueSourceLinks,
-      exactCurrentLinks:
-        resolved.length -
-        missingTimeEntries.length -
-        missingTickets.length -
-        changes.length,
+      exactCurrentLinks: exactCurrentLinks.length,
       requiredChanges: changes.length,
       applicableChanges: applicableChanges.length,
       protectedChanges: protectedChanges.length,
