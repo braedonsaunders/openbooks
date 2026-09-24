@@ -228,6 +228,7 @@ export function CompCycleDialog({ dialog }: { dialog: CompDialogData }) {
         <CycleCreateForm
           labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
           closeHref={dialog.closeHref}
+          defaultCurrency={dialog.defaultCurrency}
           kinds={dialog.kinds}
           kindLabel={dialog.kindLabel}
           nameLabel={dialog.nameLabel}

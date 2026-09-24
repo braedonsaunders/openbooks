@@ -30,6 +30,7 @@ function useClose(closeHref: string) {
 export function CycleCreateForm({
   labels,
   closeHref,
+  defaultCurrency,
   kinds,
   kindLabel,
   nameLabel,
@@ -38,6 +39,7 @@ export function CycleCreateForm({
 }: {
   labels: CompLabels
   closeHref: string
+  defaultCurrency: string
   kinds: { value: string; label: string }[]
   kindLabel: string
   nameLabel: string
@@ -49,7 +51,7 @@ export function CycleCreateForm({
   const [name, setName] = useState('')
   const [kind, setKind] = useState(kinds[0]?.value ?? 'merit')
   const [effectiveOn, setEffectiveOn] = useState('')
-  const [currency, setCurrency] = useState('CAD')
+  const [currency, setCurrency] = useState(defaultCurrency)
   const [error, setError] = useState<string | null>(null)
   // Shared action path: the refusal pins and toasts through the hook, and
   // busy always releases — a dead network can never wedge the button.
