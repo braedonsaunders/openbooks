@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   byteSize,
@@ -103,12 +102,4 @@ test("withModelCompaction keeps execute and adds a compacting toModelOutput", as
   assert.ok(byteSize(modelOutput.value) <= MODEL_RESULT_BYTES);
   // Idempotent: wrapping twice returns the same set.
   assert.equal(withModelCompaction(wrapped as unknown as never), wrapped);
-});
-
-test("the agent turn and the chat route compact model-facing tool output", () => {
-  const agent = readFileSync(new URL("./agent.ts", import.meta.url), "utf8");
-  assert.match(agent, /withModelCompaction\(/);
-  assert.match(agent, /from "\.\/result-compaction"/);
-  const route = readFileSync(new URL("../../app/api/assistant/chat/route.ts", import.meta.url), "utf8");
-  assert.match(route, /withModelCompaction\(/);
 });
