@@ -7,8 +7,9 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { BookOpen, ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Card, CardContent, Input, Label, Select, Textarea, cn } from '@openbooks/ui'
-import { useBusinessToday } from '../../../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
+import { useBusinessToday } from '../../../../../components/business-date-provider'
 import type { FinancialProfile, InvoicingProfile, BackupProfile, PnlLine } from '@openbooks/schema'
 
 export interface ProjectTypeRow {
@@ -207,54 +208,73 @@ export function ProjectTypesWorkspace({
       return toast.error(t('financialChangeReasonRequired'))
     }
     setBusy(true)
-    const isNew = draft.id === 'new'
-    const res = await fetch('/api/admin/setup/project-types', {
-      method: isNew ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...draft,
-        key: draft.key || draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-        ...(financialChanged ? { financialEffectiveFrom, financialChangeReason } : {}),
-      }),
-    })
-    const data = await res.json()
-    setBusy(false)
-    if (!res.ok) return toast.error(data.error ?? 'Save failed')
-    toast.success(t('saved'))
-    if (!isNew) {
-      const saved = {
-        ...draft,
-        financialProfileEffectiveFrom: financialChanged
-          ? financialEffectiveFrom
-          : draft.financialProfileEffectiveFrom,
+    try {
+      const isNew = draft.id === 'new'
+      const res = await fetch('/api/admin/setup/project-types', {
+        method: isNew ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...draft,
+          key: draft.key || draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+          ...(financialChanged ? { financialEffectiveFrom, financialChangeReason } : {}),
+        }),
+      })
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('saveFailed')))
+      const data = (await res.json().catch(() => null)) as { id?: unknown } | null
+      toast.success(t('saved'))
+      if (!isNew) {
+        const saved = {
+          ...draft,
+          financialProfileEffectiveFrom: financialChanged
+            ? financialEffectiveFrom
+            : draft.financialProfileEffectiveFrom,
+        }
+        setList(list.map((row) => (row.id === saved.id ? saved : row)))
+        setDraft(saved)
+        setFinancialChangeReason('')
       }
-      setList(list.map((row) => (row.id === saved.id ? saved : row)))
-      setDraft(saved)
-      setFinancialChangeReason('')
-    }
-    router.refresh()
-    if (isNew && data.id) {
-      const created = {
-        ...draft,
-        id: data.id as string,
-        financialProfileEffectiveFrom: today,
+      router.refresh()
+      // Never adopt an undefined id: without a real created id the new row
+      // stays selected as 'new' instead of corrupting the selection.
+      const createdId = typeof data?.id === 'string' && data.id ? data.id : null
+      if (isNew && createdId) {
+        const created = {
+          ...draft,
+          id: createdId,
+          financialProfileEffectiveFrom: today,
+        }
+        setList([...list, created])
+        setDraft(created)
+        setSelId(createdId)
       }
-      setList([...list, created])
-      setDraft(created)
-      setSelId(data.id)
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('saveFailed'))
+    } finally {
+      setBusy(false)
     }
   }
 
   async function remove() {
-    if (!confirm(t('deleteConfirm', { name: draft.name }))) return
+    const confirmed = await confirmDialog({
+      message: t('deleteConfirm', { name: draft.name }),
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setBusy(true)
-    const res = await fetch(`/api/admin/setup/project-types?id=${draft.id}`, { method: 'DELETE' })
-    setBusy(false)
-    if (!res.ok) return toast.error((await res.json().catch(() => null))?.error ?? 'Delete failed')
-    const nextList = list.filter((x) => x.id !== draft.id)
-    setList(nextList)
-    setSelId(nextList[0]?.id ?? 'new')
-    router.refresh()
+    try {
+      const res = await fetch(`/api/admin/setup/project-types?id=${draft.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('deleteFailed')))
+      const nextList = list.filter((x) => x.id !== draft.id)
+      setList(nextList)
+      setSelId(nextList[0]?.id ?? 'new')
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('deleteFailed'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
