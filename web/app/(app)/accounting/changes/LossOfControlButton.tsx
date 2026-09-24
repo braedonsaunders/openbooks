@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -38,6 +38,7 @@ type Oci = {
 export function LossOfControlButton({ interestId }: { interestId: string }) {
   const router = useRouter(),
     today = useBusinessToday();
+  const fieldId = useId();
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
@@ -94,9 +95,9 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
     })) ?? [];
   const field = (name: string, label: string, type = "text") => (
     <div key={name} className="space-y-1.5">
-      <Label htmlFor={`control-${name}`}>{label}</Label>
+      <Label htmlFor={`${fieldId}-${name}`}>{label}</Label>
       <Input
-        id={`control-${name}`}
+        id={`${fieldId}-${name}`}
         type={type}
         value={values[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
@@ -105,8 +106,10 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
   );
   const account = (name: string, label: string) => (
     <div key={name} className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label htmlFor={`${fieldId}-${name}`}>{label}</Label>
       <SearchSelect
+        id={`${fieldId}-${name}`}
+        ariaLabel={label}
         value={values[name] ?? ""}
         onChange={(v) => set(name, v)}
         options={accountOptions}
@@ -115,9 +118,9 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
   );
   const memo = (name: string, label: string) => (
     <div key={name} className="space-y-1.5">
-      <Label htmlFor={`control-${name}`}>{label}</Label>
+      <Label htmlFor={`${fieldId}-${name}`}>{label}</Label>
       <Textarea
-        id={`control-${name}`}
+        id={`${fieldId}-${name}`}
         value={values[name] ?? ""}
         onChange={(e) => set(name, e.target.value)}
       />
@@ -193,8 +196,10 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             "Control assessment, transaction evidence and attributed goodwill adjustments",
           )}
           <div>
-            <Label>Consolidation entity and presentation currency</Label>
+            <Label htmlFor={`${fieldId}-elimination-entity`}>Consolidation entity and presentation currency</Label>
             <SearchSelect
+              id={`${fieldId}-elimination-entity`}
+              ariaLabel="Consolidation entity and presentation currency"
               value={values.eliminationSubsidiaryId ?? ""}
               onChange={(v) => set("eliminationSubsidiaryId", v)}
               options={
@@ -237,6 +242,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
           <section className="space-y-3">
             <h3 className="font-semibold">Retained interest</h3>
             <Select
+              aria-label="Retained interest method"
               value={values.retainedMethod}
               onChange={(e) => {
                 set("retainedMethod", e.target.value);
@@ -298,10 +304,11 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             </p>
             {setup?.subsidiaries.map((s) => (
               <div key={s.id}>
-                <Label>
+                <Label htmlFor={`${fieldId}-rate-${s.id}`}>
                   {s.name} · {s.base_currency}
                 </Label>
                 <Input
+                  id={`${fieldId}-rate-${s.id}`}
                   value={rates[s.id] ?? ""}
                   onChange={(e) => {
                     setRates((v) => ({ ...v, [s.id]: e.target.value }));
@@ -325,6 +332,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             {adjustments.map((line, i) => (
               <div key={i} className="space-y-2">
                 <SearchSelect
+                  ariaLabel="Adjustment journal line"
                   value={line.lineId}
                   onChange={(id) => {
                     setAdjustments((rows) =>
@@ -402,6 +410,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
               return (
                 <div key={i} className="space-y-2">
                   <SearchSelect
+                    ariaLabel="Reserve account"
                     value={line.accountId}
                     onChange={(accountId) => update({ accountId })}
                     options={accountOptions}
@@ -418,6 +427,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                     onChange={(e) => update({ balance: e.target.value })}
                   />
                   <Select
+                    aria-label="Reserve treatment"
                     value={line.treatment}
                     onChange={(e) =>
                       update({ treatment: e.target.value as Oci["treatment"] })
@@ -439,6 +449,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                     ))}
                   </Select>
                   <SearchSelect
+                    ariaLabel="Destination account"
                     value={line.destinationAccountId}
                     onChange={(destinationAccountId) =>
                       update({ destinationAccountId })
