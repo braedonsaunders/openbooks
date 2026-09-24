@@ -476,6 +476,7 @@ export interface SubscriptionBillingActor {
 /** Actor options for the public entry points; omitted actor means system. */
 export interface SubscriptionBillingActorOptions {
   actorId?: string | null;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }
 
 /** Transaction-audit source (audit_log.changes.source / request_id) per path. */
@@ -1170,6 +1171,15 @@ export async function prorateFirstInvoice(
   // Same single-transaction row lock as changeSubscription: a double-click
   // must not cut two prorated first invoices from the same pre-bill state.
   return withOrg(orgId, async () => {
+    // A route may commit the subscription before requesting first proration.
+    // Recheck its customer under the shared party lock in this transaction so
+    // a rehome in that gap cannot authorize an invoice in another subsidiary.
+    await lockSubscriptionCustomerForScope(
+      db,
+      orgId,
+      subscriptionId,
+      actor?.allowedSubsidiaryIds ?? null,
+    );
     await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
     const row = await loadSubRow(subscriptionId, orgId);
     // loadSubRow reads under the row lock, so this status is current — a
