@@ -359,35 +359,40 @@ export async function renderStatementPdf(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const statementId = requireId(query.statementId, "statementId");
-  const row = (await db.execute<StatementRow>(sql`
-    select s.id, s.employment_id, s.cycle_id, s.period_from::text as period_from,
-           s.period_to::text as period_to, s.payload, s.file_id, s.generated_at::text as generated_at
-      from hrm_comp_statements s
-     where s.org_id = ${orgId} and s.id = ${statementId}`)).rows[0];
-  if (!row) throw statementNotVisible();
-  if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
-    try {
-      await requireHrmCompensationReadOnEmployment(db, orgId, actorId, row.employment_id);
-      return renderRowToPdf(row, query.orgName);
-    } catch (e) {
-      if (!(e instanceof HrmAuthorizationError)) throw e;
-      // A restricted grant never widens below; only the actor's own
-      // employment through hrm.self.read can still proceed. The denial
-      // names the statement exactly like a missing row, never the
-      // employment or its pay.
-      if (await isOwnEmployment(orgId, actorId, row.employment_id)) {
+  return withOrgTransaction(orgId, async () => {
+    const row = (await db.execute<StatementRow>(sql`
+      select s.id, s.employment_id, s.cycle_id, s.period_from::text as period_from,
+             s.period_to::text as period_to, s.payload, s.file_id, s.generated_at::text as generated_at
+        from hrm_comp_statements s
+       where s.org_id = ${orgId} and s.id = ${statementId}`)).rows[0];
+    if (!row) throw statementNotVisible();
+    if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
+      try {
+        await lockEmploymentsForScope(db, [row.employment_id], { orgId, actorId });
+        await requireHrmCompensationReadOnEmployment(db, orgId, actorId, row.employment_id);
         return renderRowToPdf(row, query.orgName);
+      } catch (e) {
+        if (!(e instanceof HrmAuthorizationError)) throw e;
+        // A restricted grant never widens below; only the actor's own
+        // employment through hrm.self.read can still proceed. The denial
+        // names the statement exactly like a missing row, never the
+        // employment or its pay.
+        if (await isOwnEmployment(orgId, actorId, row.employment_id)) {
+          await lockScopeRow(db, orgId, "employment", row.employment_id, null, "update");
+          return renderRowToPdf(row, query.orgName);
+        }
+        throw statementNotVisible();
       }
-      throw statementNotVisible();
     }
-  }
-  if (await isOwnEmployment(orgId, actorId, row.employment_id)) {
-    return renderRowToPdf(row, query.orgName);
-  }
-  // No in-scope HR grant and not the actor's own: uniform not-found, the
-  // same code and message as a missing statement id, so missing, foreign,
-  // and hidden statements are indistinguishable.
-  throw statementNotVisible();
+    if (await isOwnEmployment(orgId, actorId, row.employment_id)) {
+      await lockScopeRow(db, orgId, "employment", row.employment_id, null, "update");
+      return renderRowToPdf(row, query.orgName);
+    }
+    // No in-scope HR grant and not the actor's own: uniform not-found, the
+    // same code and message as a missing statement id, so missing, foreign,
+    // and hidden statements are indistinguishable.
+    throw statementNotVisible();
+  });
 }
 
 /** Store rendered PDF bytes in the File Cabinet (private comp-statements folder) and link the statement. */
