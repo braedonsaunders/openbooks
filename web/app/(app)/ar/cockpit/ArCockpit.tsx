@@ -33,6 +33,7 @@ import {
   AgingBars,
   ScheduleBars,
 } from "../../../../components/cockpit/ui";
+import { TableDrilldownButton } from "../../../../components/table-drilldown-button";
 import { CashWeekFlyout } from "../../analytics/_ui/CashWeekFlyout";
 import { formatExactPercent } from '../../analytics/_ui/format'
 import { EntityDrawer } from "../../analytics/_ui/EntityDrawer";
@@ -258,16 +259,14 @@ export function ArCockpit({
                       {visibleCustomers.map((c) => (
                         <tr
                           key={c.partyId ?? c.partyName}
-                          onClick={
-                            c.partyId
-                              ? () =>
-                                  setEntity({ id: c.partyId!, name: c.partyName })
-                              : undefined
-                          }
-                          className={`border-b border-slate-50 last:border-0 dark:border-slate-800/60 ${c.partyId ? "cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50" : ""}`}
+                          className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
                         >
                           <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
-                            {c.partyName}
+                            {c.partyId ? (
+                              <TableDrilldownButton onActivate={() => setEntity({ id: c.partyId!, name: c.partyName })}>
+                                {c.partyName}
+                              </TableDrilldownButton>
+                            ) : c.partyName}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
                             {compareMoney(c.overdue, '0.0000') > 0 ? (

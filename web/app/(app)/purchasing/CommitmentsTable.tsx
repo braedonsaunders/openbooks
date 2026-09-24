@@ -4,6 +4,7 @@ import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { EntityDrawer } from '../analytics/_ui/EntityDrawer'
+import { TableDrilldownButton } from '../../../components/table-drilldown-button'
 import type { VendorExposureRow } from '../../../lib/module-home/purchasing'
 
 /**
@@ -40,10 +41,15 @@ export function CommitmentsTable({
           {rows.map((r) => (
             <tr
               key={r.partyId ?? r.name}
-              onClick={r.partyId ? () => setEntity({ id: r.partyId!, name: r.name }) : undefined}
-              className={`border-b border-slate-50 last:border-0 dark:border-slate-800/60 ${r.partyId ? 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''}`}
+              className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
             >
-              <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">{r.name}</td>
+              <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                {r.partyId ? (
+                  <TableDrilldownButton onActivate={() => setEntity({ id: r.partyId!, name: r.name })}>
+                    {r.name}
+                  </TableDrilldownButton>
+                ) : r.name}
+              </td>
               {showPurchaseOrders ? (
               <td className="px-3 py-2.5 text-right tabular-nums">
                 {r.openPos > 0 ? (
