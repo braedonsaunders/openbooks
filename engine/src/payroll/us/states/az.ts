@@ -194,6 +194,11 @@ export const AZ_CERTIFICATE: PayrollCertificate = {
   label: "Employee's Arizona Withholding Election",
   scope: { level: "region", region: "AZ" },
   purpose: "withholding",
+  // Form A-4 zero-percent elections must be renewed for each taxable year.
+  validity: {
+    kind: "calendar_year_end",
+    appliesWhen: { field: "zero_percent", values: ["true"] },
+  },
   citation:
     "Arizona Form A-4, Employee's Arizona Withholding Election 2026 (published 01/01/2026); "
     + "A.R.S. § 43-401(E); azdor.gov/business/withholding-tax",

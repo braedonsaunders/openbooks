@@ -235,6 +235,21 @@ export interface PayrollCertificate {
    * carried entirely by other fields).
    */
   claimIdentity?: PayrollClaimIdentity;
+  /**
+   * A filed form may stop authorizing its answers on a pack-defined renewal
+   * date. The date is calculated from the row's effective date so historical
+   * payroll remains reproducible; `validThrough` is inclusive.
+   */
+  validity?:
+    | {
+      kind: "calendar_year_end";
+      appliesWhen?: { field: string; values: readonly string[] };
+    }
+    | {
+      kind: "following_year_date";
+      monthDay: `${number}${number}-${number}${number}`;
+      appliesWhen?: { field: string; values: readonly string[] };
+    };
   /** The publication or statute the form and its fields come from. */
   citation: string;
   /** One sentence for the operator: when does an employee file this? */
@@ -775,6 +790,20 @@ export function resolveCertificate(input: {
     .filter((row) => row.certificateKey === certificate.key)
     .filter((row) => !row.supersededOn || !asOf || row.supersededOn > asOf)
     .filter((row) => !row.effectiveFrom || !asOf || row.effectiveFrom <= asOf)
+    .filter((row) => {
+      if (!certificate.validity || !asOf) return true;
+      const condition = certificate.validity.appliesWhen;
+      if (condition && !condition.values.includes(row.answers[condition.field] ?? "")) return true;
+      // An undated row cannot prove that an annually renewable election is
+      // still current. Ignore it so the statutory no-current-certificate rule
+      // applies instead of carrying a stale exemption forward.
+      if (!row.effectiveFrom) return false;
+      const year = Number(row.effectiveFrom.slice(0, 4));
+      const validThrough = certificate.validity.kind === "calendar_year_end"
+        ? `${year}-12-31`
+        : `${year + 1}-${certificate.validity.monthDay}`;
+      return asOf <= validThrough;
+    })
     .sort((a, b) => (a.effectiveFrom ?? "").localeCompare(b.effectiveFrom ?? ""));
   const current = candidates[candidates.length - 1];
 

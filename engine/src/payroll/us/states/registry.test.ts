@@ -183,6 +183,58 @@ test("state certificates store answers in ROWS, never in a new column", () => {
   }
 });
 
+test("pack-declared certificate renewal dates stop stale statutory exemptions", () => {
+  const stored = (certificateKey: string, answers: Record<string, string>, effectiveFrom: string) => [{
+    certificateKey, answers, effectiveFrom, region: certificateKey.includes("_az_") ? "AZ" :
+      certificateKey.includes("_ct_") ? "CT" : "GA",
+  }];
+
+  const az = payrollCertificate("US", "us_az_a4");
+  const azBefore = resolveCertificate({
+    certificate: az,
+    stored: stored(az.key, { zero_percent: "true" }, "2025-01-01"),
+    asOf: "2025-12-31",
+  });
+  const azAfter = resolveCertificate({
+    certificate: az,
+    stored: stored(az.key, { zero_percent: "true" }, "2025-01-01"),
+    asOf: "2026-01-01",
+  });
+  assert.equal(azBefore.answers.zero_percent, "true");
+  assert.equal(azAfter.onFile, false);
+  assert.equal(azAfter.answers.zero_percent, null);
+
+  const ct = payrollCertificate("US", "us_ct_ctw4");
+  const ctBefore = resolveCertificate({
+    certificate: ct,
+    stored: stored(ct.key, { withholding_code: "E" }, "2025-02-16"),
+    asOf: "2026-02-15",
+  });
+  const ctAfter = resolveCertificate({
+    certificate: ct,
+    stored: stored(ct.key, { withholding_code: "E" }, "2025-02-16"),
+    asOf: "2026-02-16",
+  });
+  assert.equal(ctBefore.answers.withholding_code, "E");
+  assert.equal(ctAfter.onFile, false);
+  assert.equal(ctAfter.answers.withholding_code, null);
+
+  const ga = payrollCertificate("US", "us_ga_g4");
+  const gaBefore = resolveCertificate({
+    certificate: ga,
+    stored: stored(ga.key, { exempt: "true" }, "2025-02-16"),
+    asOf: "2026-02-15",
+  });
+  const gaAfter = resolveCertificate({
+    certificate: ga,
+    stored: stored(ga.key, { exempt: "true" }, "2025-02-16"),
+    asOf: "2026-02-16",
+  });
+  assert.equal(gaBefore.answers.exempt, "true");
+  assert.equal(gaAfter.onFile, false);
+  assert.equal(gaAfter.answers.exempt, null);
+});
+
 /* --------------------------------------------------------------------- */
 /* Reciprocity, on the real declarations                                  */
 /* --------------------------------------------------------------------- */
