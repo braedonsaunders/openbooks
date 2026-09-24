@@ -215,6 +215,8 @@
     "geofencesTitle": "打卡围栏",
     "geofencesHint": "每个项目一个圆和一个多边形。围栏外只记录并标记，绝不拒绝。",
     "noGeofences": "未声明围栏 — 所有打卡均为无需核对。",
+    "geofenceLoadFailed": "无法加载围栏；当前显示的数据可能已过期。",
+    "retry": "重试",
     "circle": "圆形",
     "polygon": "多边形",
     "corners": "个顶点",

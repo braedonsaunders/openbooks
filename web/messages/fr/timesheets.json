@@ -215,6 +215,8 @@
     "geofencesTitle": "Zones de pointage",
     "geofencesHint": "Un cercle et un polygone par projet. Le hors-zone est enregistré et signalé, jamais refusé.",
     "noGeofences": "Aucune zone — tout pointage est non requis.",
+    "geofenceLoadFailed": "Impossible de charger les zones; les lignes affichées peuvent être périmées.",
+    "retry": "Réessayer",
     "circle": "Cercle",
     "polygon": "Polygone",
     "corners": "sommets",

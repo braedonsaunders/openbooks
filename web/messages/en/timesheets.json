@@ -215,6 +215,8 @@
     "geofencesTitle": "Clock geofences",
     "geofencesHint": "One circle and one polygon per project. Outside fixes are recorded and flagged, never refused.",
     "noGeofences": "No geofence declared — every clock reads as not required.",
+    "geofenceLoadFailed": "Could not load geofences; the displayed rows may be out of date.",
+    "retry": "Retry",
     "circle": "Circle",
     "polygon": "Polygon",
     "corners": "corners",
