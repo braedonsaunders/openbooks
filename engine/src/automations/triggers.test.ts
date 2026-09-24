@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assertPublishableAutomationActions,
+  assertValidScheduleTrigger,
+  invalidScheduleCronReason,
   parseAutomationActions,
   parseAutomationConditions,
   parseAutomationRules,
@@ -103,4 +105,24 @@ test("conditions default to empty (match-all)", () => {
   const rules = parseAutomationRules(null);
   assert.equal(rules.departmentId, undefined);
   assert.deepEqual(rules.attributes, []);
+});
+
+test("a schedule that cannot parse is refused at save with the value named", () => {
+  // Parsing itself stays lenient (legacy rows must still read)…
+  assert.equal(
+    parseAutomationTrigger({ kind: "schedule", cron: "not-a-cron", timezone: "UTC" }).kind,
+    "schedule",
+  );
+  // …while the save-time check refuses by name with the remedy.
+  assert.equal(invalidScheduleCronReason("0 9 * * *", "UTC"), null);
+  assert.match(invalidScheduleCronReason("not-a-cron", "UTC") ?? "", /cron 'not-a-cron' is not a valid cron expression/);
+  assert.match(invalidScheduleCronReason("not-a-cron", "UTC") ?? "", /fix the cron and save again/);
+  assert.match(invalidScheduleCronReason("0 9 * * *", "Nope/Zone") ?? "", /timezone 'Nope\/Zone' is not a valid IANA timezone/);
+  assert.throws(
+    () => assertValidScheduleTrigger(parseAutomationTrigger({ kind: "schedule", cron: "not-a-cron", timezone: "UTC" })),
+    (e: unknown) =>
+      e instanceof AutomationContractError && /cron 'not-a-cron' is invalid|not a valid cron expression/.test((e as Error).message),
+  );
+  // Non-schedule triggers are untouched by the cron check.
+  assertValidScheduleTrigger(parseAutomationTrigger({ kind: "manual" }));
 });

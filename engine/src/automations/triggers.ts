@@ -1,4 +1,8 @@
 import { z } from "zod";
+// Named export, NOT the default: under ESM/tsx the default import resolves to
+// the module namespace (no .parse) — the same interop note as scripting.ts
+// and flows/scheduled.ts.
+import { CronExpressionParser } from "cron-parser";
 
 /**
  * HR-16 automation trigger / rules / conditions / actions contracts.
@@ -197,6 +201,48 @@ export type AutomationAction = z.infer<typeof automationAction>;
 export const automationActions = z.array(automationAction).min(1).max(25);
 
 export class AutomationContractError extends Error {}
+
+/**
+ * The tick evaluates schedule triggers with this same parser
+ * (flows/scheduled.ts lastCronOccurrenceBetween, one parse plus a forward
+ * step in the trigger's timezone): a cron that cannot parse here can never
+ * produce an occurrence there — the automation would sit enabled and never
+ * fire, with no run row and no alert. Null when the trigger can fire.
+ */
+export function invalidScheduleCronReason(cron: string, timezone?: string): string | null {
+  const tz = timezone || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz });
+  } catch {
+    return (
+      `schedule trigger timezone '${tz}' is not a valid IANA timezone — ` +
+      `no occurrence can ever be computed; fix the timezone and save again`
+    );
+  }
+  try {
+    CronExpressionParser.parse(cron, { currentDate: new Date(), tz }).next();
+    return null;
+  } catch {
+    return (
+      `schedule trigger cron '${cron}' is not a valid cron expression — ` +
+      `no occurrence can ever be computed; fix the cron and save again`
+    );
+  }
+}
+
+/**
+ * Save-time refusal for schedule triggers (create / update / enable): an
+ * invalid cron or timezone can never be stored on an enabled-bound recipe.
+ * Parsing itself stays lenient so rows stored before this check still READ
+ * — the tick records those legacy rows as failed runs instead.
+ */
+export function assertValidScheduleTrigger(trigger: AutomationTrigger): void {
+  if (trigger.kind !== "schedule") return;
+  const reason = invalidScheduleCronReason(trigger.cron, trigger.timezone);
+  if (reason) {
+    throw new AutomationContractError(`${reason} — fix the trigger and save again`);
+  }
+}
 
 /** Parse-or-refuse for every automation authoring surface (API, tick). */
 export function parseAutomationTrigger(raw: unknown): AutomationTrigger {

@@ -9,7 +9,7 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import { createAutomation } from "./services.ts";
+import { createAutomation, setAutomationStatus, updateAutomation } from "./services.ts";
 import { runAutomationTick, MAX_AUTOMATION_EVENT_ATTEMPTS } from "./tick.ts";
 import { stageAutomationEvent } from "./tick.ts";
 
@@ -254,6 +254,97 @@ test("a failed schedule firing keeps its run, holds the cursor, and counts faile
     `)).rows[0]!;
     assert.equal(row.status, "failed", "the durable run row keeps the failure");
     assert.equal(row.lastRunAt, null, "the schedule cursor does not advance on failure");
+  });
+});
+
+test("an invalid schedule cron refuses at create, update, and enable", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const action = { kind: "send_notification", to: "manager", body: "hi" };
+    await assert.rejects(
+      createAutomation({
+        orgId: h.org.orgId,
+        actorId: h.adminId,
+        name: "bad cron",
+        trigger: { kind: "schedule", cron: "not-a-cron", timezone: "UTC" },
+        rules: {},
+        conditions: {},
+        actions: [action],
+      }),
+      /cron 'not-a-cron' is not a valid cron expression/,
+    );
+    const ok = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "good cron",
+      trigger: { kind: "schedule", cron: "0 9 * * *", timezone: "UTC" },
+      rules: {},
+      conditions: {},
+      actions: [action],
+    });
+    await assert.rejects(
+      updateAutomation({
+        orgId: h.org.orgId,
+        actorId: h.adminId,
+        automationId: ok.id,
+        trigger: { kind: "schedule", cron: "also-bad", timezone: "UTC" },
+      }),
+      /cron 'also-bad' is not a valid cron expression/,
+    );
+    // A row stored before save-time validation refuses at enable.
+    const legacyId = randomUUID();
+    await db.execute(sql`
+      insert into automations (id, org_id, name, status, trigger, rules, conditions, actions, priority, created_by, updated_by)
+      values (${legacyId}, ${h.org.orgId}, 'legacy bad cron', 'draft',
+              ${JSON.stringify({ kind: "schedule", cron: "never-fires", timezone: "UTC" })}::jsonb,
+              '{}'::jsonb, '{}'::jsonb, ${JSON.stringify([action])}::jsonb,
+              100, ${h.adminId}, ${h.adminId})
+    `);
+    await assert.rejects(
+      setAutomationStatus({ orgId: h.org.orgId, actorId: h.adminId, automationId: legacyId, status: "enabled" }),
+      /cron 'never-fires' is not a valid cron expression/,
+    );
+  });
+});
+
+test("a stored invalid schedule cron records a failed run and parks the recipe", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const legacyId = randomUUID();
+    await db.execute(sql`
+      insert into automations (id, org_id, name, status, trigger, rules, conditions, actions, priority, created_by, updated_by, created_at)
+      values (${legacyId}, ${h.org.orgId}, 'legacy bad cron', 'enabled',
+              ${JSON.stringify({ kind: "schedule", cron: "not-a-cron", timezone: "UTC" })}::jsonb,
+              '{}'::jsonb, '{}'::jsonb,
+              ${JSON.stringify([{ kind: "send_notification", to: "manager", body: "hi" }])}::jsonb,
+              100, ${h.adminId}, ${h.adminId}, now() - interval '5 minutes')
+    `);
+    const summary = await runAutomationTick(new Date());
+    assert.equal(summary.schedulesFired, 0);
+    assert.equal(summary.schedulesFailed, 1);
+    // A failed run row carries the named refusal — never silence.
+    const run = (await db.execute<{ status: string; error: { message: string } | null }>(sql`
+      select status, error from automation_runs where automation_id = ${legacyId}
+    `)).rows[0];
+    assert.equal(run?.status, "failed");
+    assert.match(run?.error?.message ?? "", /cron 'not-a-cron' is not a valid cron expression/);
+    // The recipe parks in error with the cursor held, and the publisher is notified.
+    const recipe = (await db.execute<{ status: string; errorMessage: string | null; lastRunAt: string | null }>(sql`
+      select status, error_message as "errorMessage", last_run_at as "lastRunAt" from automations where id = ${legacyId}
+    `)).rows[0]!;
+    assert.equal(recipe.status, "error");
+    assert.match(recipe.errorMessage ?? "", /not-a-cron/);
+    assert.equal(recipe.lastRunAt, null);
+    const notes = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from notifications
+       where org_id = ${h.org.orgId} and user_id = ${h.adminId} and kind = 'automation_error'
+    `)).rows[0]!.n;
+    assert.equal(notes, 1);
+    // A second tick records nothing more: the error status parks the recipe.
+    const again = await runAutomationTick(new Date());
+    assert.equal(again.schedulesFailed, 0);
+    const runs = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from automation_runs where automation_id = ${legacyId}
+    `)).rows[0]!.n;
+    assert.equal(runs, 1);
   });
 });
 

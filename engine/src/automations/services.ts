@@ -6,6 +6,7 @@ import { featureEnabled } from "../organization/feature-registry.ts";
 import { AUTOMATION_STATUSES } from "@openbooks/schema/src/hrm-automations.ts";
 import {
   assertPublishableAutomationActions,
+  assertValidScheduleTrigger,
   parseAutomationActions,
   parseAutomationConditions,
   parseAutomationRules,
@@ -118,6 +119,10 @@ export async function createAutomation(input: {
   }
   // Parse-or-refuse every recipe part before anything is stored.
   const trigger = parseAutomationTrigger(parsed.data.trigger);
+  // A schedule that cannot parse can never fire: refuse the cron and
+  // timezone now (named 422 at the route) instead of storing a recipe
+  // that sits enabled and silent.
+  assertValidScheduleTrigger(trigger);
   const rules = parseAutomationRules(parsed.data.rules);
   const conditions = parseAutomationConditions(parsed.data.conditions);
   const actions = parseAutomationActions(parsed.data.actions);
@@ -170,7 +175,11 @@ export async function updateAutomation(input: {
       patch["name"] = input.name.trim();
     }
     if (input.description !== undefined) patch["description"] = input.description ?? "";
-    if (input.trigger !== undefined) patch["trigger"] = JSON.stringify(parseAutomationTrigger(input.trigger));
+    if (input.trigger !== undefined) {
+      const trigger = parseAutomationTrigger(input.trigger);
+      assertValidScheduleTrigger(trigger);
+      patch["trigger"] = JSON.stringify(trigger);
+    }
     if (input.rules !== undefined) patch["rules"] = JSON.stringify(parseAutomationRules(input.rules));
     if (input.conditions !== undefined) patch["conditions"] = JSON.stringify(parseAutomationConditions(input.conditions));
     if (input.actions !== undefined) {
@@ -220,7 +229,8 @@ export async function setAutomationStatus(input: {
     if (!row) throw new AutomationServiceError("automation not found — reload the list and try again");
     if (input.status === "enabled") {
       // A broken recipe can never be enabled: re-validate on the way in.
-      parseAutomationTrigger(row.trigger);
+      const trigger = parseAutomationTrigger(row.trigger);
+      assertValidScheduleTrigger(trigger);
       assertPublishableAutomationActions(parseAutomationActions(row.actions));
     }
     const updated = await db.execute<AutomationDTO>(sql`
