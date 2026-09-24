@@ -253,6 +253,30 @@ test("California DE 4 exemption lapses after February 15 until renewed", () => {
   assert.equal(expired.answers.filing_status, "single_or_dual");
 });
 
+test("South Carolina expires the exempt SC W-4 after February 15 and resumes zero allowances", () => {
+  // SCDOR withholding FAQ: absent a renewed exempt SC W-4 by February 15, use single/zero.
+  const certificate = payrollCertificate("US", "us_sc_scw4");
+  const exemptRow = {
+    certificateKey: certificate.key,
+    region: "SC",
+    effectiveFrom: "2025-01-01",
+    answers: { allowances: "4", exempt: "true" },
+  };
+  const current = resolveCertificate({ certificate, stored: [exemptRow], asOf: "2026-02-15" });
+  const expired = resolveCertificate({ certificate, stored: [exemptRow], asOf: "2026-02-16" });
+  const ordinaryRow = {
+    ...exemptRow,
+    answers: { allowances: "3", exempt: "false" },
+  };
+  const ordinary = resolveCertificate({ certificate, stored: [ordinaryRow], asOf: "2026-02-16" });
+
+  assert.equal(current.answers.exempt, "true");
+  assert.equal(expired.onFile, false);
+  assert.equal(expired.answers.exempt, null);
+  assert.equal(expired.answers.allowances, "0");
+  assert.equal(ordinary.answers.allowances, "3");
+});
+
 /* --------------------------------------------------------------------- */
 /* Reciprocity, on the real declarations                                  */
 /* --------------------------------------------------------------------- */
