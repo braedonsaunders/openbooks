@@ -1,3 +1,4 @@
+// source-pin-contract: CI test-partition scope and full-verification release gate wiring (test.yml, publish-container.yml)
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
