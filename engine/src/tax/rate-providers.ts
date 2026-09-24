@@ -894,6 +894,27 @@ export async function quoteViaAvalara(
   // The destination country is required: an empty ship-to used to fall back
   // to 'US', quoting every foreign document under US rules (or a false zero).
   const destinationCountry = requiredCountry(req.shipTo.country, "Avalara", "a destination country");
+  // Origin-based sourcing states tax by where the sale ships FROM: sending
+  // only singleLocation (the destination) prices them under the wrong
+  // jurisdiction. Whenever the origin is known, send shipFrom plus shipTo
+  // (AvaTax addresses); the destination-only singleLocation stays for
+  // origin-less quotes. A known origin without its own country keeps the
+  // destination country, mirroring the TaxJar path's ship-from-first
+  // fallback — only the fabricated country is gone.
+  const originKnown = [
+    req.shipFrom.line1,
+    req.shipFrom.city,
+    req.shipFrom.region,
+    req.shipFrom.postalCode,
+    req.shipFrom.country,
+  ].some((field) => (field ?? "").trim() !== "");
+  const shipToAddress = {
+    line1: req.shipTo.line1 ?? undefined,
+    city: req.shipTo.city ?? undefined,
+    region: req.shipTo.region ?? undefined,
+    postalCode: req.shipTo.postalCode ?? undefined,
+    country: destinationCountry,
+  };
   const body = {
     type: avalaraDocumentType(req.documentKind),
     // Per-counterparty identity: a shared literal here would apply one
@@ -903,15 +924,18 @@ export async function quoteViaAvalara(
     companyCode: String(config.companyCode ?? "DEFAULT"),
     date: config.quotedOn,
     currencyCode: req.currency ?? "USD",
-    addresses: {
-      singleLocation: {
-        line1: req.shipTo.line1 ?? undefined,
-        city: req.shipTo.city ?? undefined,
-        region: req.shipTo.region ?? undefined,
-        postalCode: req.shipTo.postalCode ?? undefined,
-        country: destinationCountry,
-      },
-    },
+    addresses: originKnown
+      ? {
+          shipFrom: {
+            line1: req.shipFrom.line1 ?? undefined,
+            city: req.shipFrom.city ?? undefined,
+            region: req.shipFrom.region ?? undefined,
+            postalCode: req.shipFrom.postalCode ?? undefined,
+            country: req.shipFrom.country?.trim() ? req.shipFrom.country : destinationCountry,
+          },
+          shipTo: shipToAddress,
+        }
+      : { singleLocation: shipToAddress },
     lines: [
       {
         number: "1",

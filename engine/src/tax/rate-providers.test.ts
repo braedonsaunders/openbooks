@@ -245,6 +245,60 @@ test("TaxJar carries a coded line's product tax code; uncoded lines stay aggrega
   }
 });
 
+test("Avalara sends shipFrom plus shipTo when the origin is known, singleLocation otherwise", async () => {
+  // Origin-based sourcing states tax by the ship-from: a destination-only
+  // singleLocation prices them under the wrong jurisdiction. Pin the
+  // outgoing CreateTransaction addresses against the stub (a published API
+  // contract): a known origin travels as shipFrom+shipTo, an origin-less
+  // quote keeps the historical singleLocation.
+  const local = { allowPrivateEndpoints: true } as const;
+  const bodies: Array<{ addresses?: Record<string, unknown> }> = [];
+  const server = createServer(async (req, res) => {
+    bodies.push(JSON.parse(await readBody(req)) as { addresses?: Record<string, unknown> });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ totalTax: 8.25, code: "Q", summary: [] }));
+  });
+  const origin = await listen(server);
+  const config = {
+    accountId: AVALARA_ACCOUNT_ID,
+    licenseKey: AVALARA_LICENSE_KEY,
+    baseUrl: origin,
+    quotedOn: quoteRequest.quotedOn!,
+  };
+  try {
+    await quoteViaAvalara(
+      {
+        ...quoteRequest,
+        shipFrom: { country: "US", region: "OR", city: "Portland", postalCode: "97201" },
+      },
+      config,
+      local,
+    );
+    assert.deepEqual(bodies[0]!.addresses, {
+      shipFrom: { city: "Portland", region: "OR", postalCode: "97201", country: "US" },
+      shipTo: {
+        line1: "123 Main St",
+        city: "Seattle",
+        region: "WA",
+        postalCode: "98101",
+        country: "US",
+      },
+    });
+    await quoteViaAvalara({ ...quoteRequest, shipFrom: {} }, config, local);
+    assert.deepEqual(bodies[1]!.addresses, {
+      singleLocation: {
+        line1: "123 Main St",
+        city: "Seattle",
+        region: "WA",
+        postalCode: "98101",
+        country: "US",
+      },
+    });
+  } finally {
+    await close(server);
+  }
+});
+
 test("Avalara quotes carry the non-committing document type for every kind", async () => {
   const local = { allowPrivateEndpoints: true } as const;
   const seenTypes: Array<{ type: unknown; amount: unknown }> = [];
