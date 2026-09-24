@@ -15,6 +15,7 @@ const AT_U30_2026: TaxReturnPack = {
     { lineCode: "022", label: "KZ 022 — Bemessungsgrundlage 20% Normalsteuersatz", sign: 1, sequence: 20 },
     { lineCode: "029", label: "KZ 029 — Bemessungsgrundlage 10% ermäßigter Steuersatz", sign: 1, sequence: 30 },
     { lineCode: "006", label: "KZ 006 — Bemessungsgrundlage 13% ermäßigter Steuersatz", sign: 1, sequence: 40 },
+    { lineCode: "037", label: "KZ 037 — Bemessungsgrundlage 19% Jungholz/Mittelberg (German customs union)", sign: 1, sequence: 45 },
     { lineCode: "060", label: "KZ 060 — Gesamtbetrag der abziehbaren Vorsteuern", sign: 1, sequence: 50 },
     { lineCode: "095", label: "KZ 095 — Vorauszahlung (Zahllast) / Überschuss (Gutschrift)", sign: 1, sequence: 60 },
     { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 70, basis: "tax_collected", glMap: "sales" },
@@ -112,6 +113,8 @@ export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 20,
         role: "standard",
         rates: [{ ratePercent: 20, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
+        truncatedScheduleReason:
+          "20% opens at USP applicability (2026-08-01), not at origin: no day-one date is verifiable in reachable primary text, so the band is applicability-dated by review.",
       },
       {
         code: "AT-VAT-RED10",
@@ -119,6 +122,8 @@ export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 10,
         role: "reduced",
         rates: [{ ratePercent: 10, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
+        truncatedScheduleReason:
+          "10% opens at USP applicability (2026-08-01), not at origin: no day-one date is verifiable in reachable primary text, so the band is applicability-dated by review.",
       },
       {
         code: "AT-VAT-RED13",
@@ -126,6 +131,8 @@ export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: 13,
         role: "reduced",
         rates: [{ ratePercent: 13, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
+        truncatedScheduleReason:
+          "13% opens at USP applicability (2026-08-01), not at the 2016 reform: no day-one date is verifiable in reachable primary text (RIS serves no BGBl here), so the band is applicability-dated by review.",
       },
       {
         code: "AT-VAT-ENCLAVE",

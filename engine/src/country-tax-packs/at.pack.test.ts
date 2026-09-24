@@ -35,9 +35,11 @@ test("AT pack is the maintained-pack shape: one return, pinned version", () => {
 
 test("the U30 carries the real Kennzahlen plus the two OB workpaper boxes", () => {
   const boxes = new Map(theReturn().boxes.map((box) => [box.lineCode, box]));
-  for (const kz of ["000", "022", "029", "006", "060", "095", "OB_OUTPUT", "OB_INPUT"]) {
+  for (const kz of ["000", "022", "029", "006", "037", "060", "095", "OB_OUTPUT", "OB_INPUT"]) {
     assert.ok(boxes.has(kz), `box ${kz} present`);
   }
+  // KZ 037 is the enclave 19% band's destination on the return.
+  assert.ok(boxes.get("037")?.label.includes("19%"), "KZ 037 must carry the 19% base");
   assert.equal(boxes.get("OB_OUTPUT")?.basis, "tax_collected");
   assert.equal(boxes.get("OB_OUTPUT")?.glMap, "sales");
   assert.equal(boxes.get("OB_INPUT")?.basis, "tax_paid");
