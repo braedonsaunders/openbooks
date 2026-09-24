@@ -1,5 +1,12 @@
 import "server-only";
 import { denyInactiveExtensionPermissions, extensionPermissionAvailability } from "@openbooks/engine/src/organization/extension-permission-availability.ts";
+import {
+  assertUnrestrictedScope,
+  subsidiaryScopeAllows,
+  type SubsidiaryScopeOptions,
+  UNRESTRICTED_SCOPE_REQUIRED,
+  UnrestrictedScopeError,
+} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -8,6 +15,11 @@ import { currentUser, type SessionUser } from "./auth";
 import { accessDeniedHref } from "./gate-targets";
 import { permissionSetCovers, resolveEffectivePermissions } from "./permissions";
 import { allowedSubsidiaryIds } from "./subsidiaries";
+
+export {
+  subsidiaryScopeAllows,
+  type SubsidiaryScopeOptions,
+} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 
 /**
  * Server-side authorization on top of the existing HMAC-cookie session.
@@ -121,34 +133,6 @@ export async function guardPermission(perm: string): Promise<Authz | NextRespons
 }
 
 /**
- * Subsidiary visibility for ONE loaded record — the direct-read/write twin of
- * the list WHERE fragments, so a record hidden from a restricted caller's
- * lists is equally unreachable by id. Unrestricted callers (null set) pass.
- *
- *   - documents/journals/payments/orders/runs: subsidiary_id must be IN the
- *     set; a null subsidiary fails closed, mirroring documentWhere's
- *     `d.subsidiary_id = any(...)`.
- *   - parties carry org-wide identity: their lists expose null-subsidiary
- *     rows (`p.subsidiary_id is null or ...`) — pass orgWideNull for them.
- */
-export interface SubsidiaryScopeOptions {
-  /** Null-subsidiary rows are org-wide shared (parties), not private. */
-  orgWideNull?: boolean;
-}
-
-export function subsidiaryScopeAllows(
-  scope: ReadonlySet<string> | null,
-  subsidiaryId: string | null | undefined,
-  opts: SubsidiaryScopeOptions = {},
-): boolean {
-  if (scope === null) return true;
-  if (subsidiaryId === null || subsidiaryId === undefined || subsidiaryId === "") {
-    return opts.orgWideNull === true;
-  }
-  return scope.has(subsidiaryId);
-}
-
-/**
  * Direct-record API gate over subsidiary scope. Returns the 404 response the
  * handler must send when the loaded record sits outside the caller's
  * subsidiary scope, or null when access may proceed. The denial is
@@ -159,6 +143,9 @@ export function subsidiaryScopeAllows(
  *   if (!row) return not-found;
  *   const denied = guardSubsidiaryScope(authz, row.subsidiaryId);
  *   if (denied) return denied;
+ *
+ * (The `subsidiaryScopeAllows` predicate this gate applies lives in the
+ * canonical engine scope module and is re-exported above.)
  */
 export function guardSubsidiaryScope(
   authz: Authz,
@@ -167,6 +154,28 @@ export function guardSubsidiaryScope(
 ): NextResponse | null {
   if (subsidiaryScopeAllows(authz.allowedSubsidiaryIds, subsidiaryId, opts)) return null;
   return NextResponse.json({ error: "not found" }, { status: 404 });
+}
+
+/**
+ * Org-wide configuration gate (canonical shape 2). Surfaces whose rows carry
+ * no subsidiary lineage (provider configs, quotas, dunning policy, agent
+ * runs, report classification, org-wide pricing setup) act on every entity at
+ * once, so a subsidiary-restricted caller must never reach their writes — and,
+ * where the read itself discloses cross-entity material, their reads either.
+ * Unlike record-level denials (uniform 404: the record is hidden), the record
+ * here is visible and only the scope is lacking, so the refusal names its
+ * remedy: a 403 `requires unrestricted subsidiary access`.
+ */
+export function guardUnrestrictedScope(authz: Authz): NextResponse | null {
+  try {
+    assertUnrestrictedScope(authz.allowedSubsidiaryIds);
+  } catch (error) {
+    if (error instanceof UnrestrictedScopeError) {
+      return NextResponse.json({ error: UNRESTRICTED_SCOPE_REQUIRED }, { status: 403 });
+    }
+    throw error;
+  }
+  return null;
 }
 
 /**

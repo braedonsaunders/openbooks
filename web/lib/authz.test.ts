@@ -144,6 +144,7 @@ const {
   can,
   subsidiaryScopeAllows,
   guardSubsidiaryScope,
+  guardUnrestrictedScope,
   subsidiariesInScope,
   getAuthz,
   guardPermission,
@@ -332,6 +333,20 @@ test("guardSubsidiaryScope returns null only when the record is in scope", () =>
   assert.equal(guardSubsidiaryScope(restricted, "sub-a"), null);
   assert.equal(guardSubsidiaryScope(restricted, null, { orgWideNull: true }), null);
   assert.equal(guardSubsidiaryScope(authzWith(["documents.manage"], null), "sub-b"), null);
+});
+
+test("guardUnrestrictedScope refuses restricted callers with the named 403 remedy", async () => {
+  const scopes: ReadonlyArray<Set<string>> = [new Set(["sub-a"]), new Set<string>()];
+  for (const scope of scopes) {
+    const denied = guardUnrestrictedScope(authzWith(["admin.setup.manage"], scope));
+    assert.ok(denied, "a restricted caller must not reach org-wide writes");
+    assert.equal(denied.status, 403);
+    assert.deepEqual(await denied.json(), { error: "requires unrestricted subsidiary access" });
+  }
+});
+
+test("guardUnrestrictedScope allows only the unrestricted caller", () => {
+  assert.equal(guardUnrestrictedScope(authzWith(["admin.setup.manage"], null)), null);
 });
 
 test("subsidiariesInScope refuses assigning a record the caller cannot see", () => {

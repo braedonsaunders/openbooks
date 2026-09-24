@@ -1,5 +1,5 @@
 import "server-only";
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { ambientTenantOrgId, db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
 import { subsidiaryFeatureEnabled } from "./features";
@@ -109,28 +109,10 @@ export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], sub
 }
 
 /**
- * WHERE fragment narrowing a documents-table `column` to the caller's visible
- * subsidiaries — the fail-closed predicate shared by every ad-hoc query that
- * fans out over documents outside the canonical list builders (global search,
- * party sublists, payment-run lists). Unrestricted callers get an empty
- * fragment; an empty set denies documents (`and false`). Master-data callers
- * may explicitly allow org-wide null assignments, matching guardSubsidiaryScope.
+ * The list/report WHERE predicate lives in the canonical engine scope module
+ * (shapes 1 and 3); re-exported here so existing importers keep working.
  */
-export function subsidiaryVisibleFilter(
-  column: SQL,
-  allowed: ReadonlySet<string> | null,
-  options: { orgWideNull?: boolean } = {},
-): SQL {
-  if (allowed === null) return sql``;
-  if (!allowed) return sql` and false`;
-  const ids = [...allowed];
-  if (options.orgWideNull) {
-    return sql` and (${column} is null or ${column} = any(${`{${ids.join(',')}}`}::uuid[]))`;
-  }
-  return ids.length
-    ? sql` and ${column} = any(${`{${ids.join(',')}}`}::uuid[])`
-    : sql` and false`;
-}
+export { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 
 /**
  * The subsidiaries this user may SEE, from the union of their roles'
