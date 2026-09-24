@@ -46,19 +46,7 @@ export type EftSettingsResult =
   | { ok: true; settings: EftSettings }
   | { ok: false; missing: string[] };
 
-/** Read and validate the org's EFT origination settings. Never fakes success. */
-export async function loadEftSettings(orgId: string, runId?: string): Promise<EftSettingsResult> {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
-    select p.originator_secrets_encrypted
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
-     where p.org_id = ${orgId} and p.is_active and f.rail = 'cpa005_credit'
-       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
-     order by case when r.id is not null then 0 else 1 end, p.created_at
-     limit 1
-  `));
-  const eft = unsealJson<Partial<EftSettings>>(r.rows[0]?.originator_secrets_encrypted) ?? {};
+export function validateEftSettings(eft: Partial<EftSettings>): EftSettingsResult {
   const missing = EFT_REQUIRED.filter((k) => {
     const v = eft[k];
     return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
@@ -73,7 +61,27 @@ export async function loadEftSettings(orgId: string, runId?: string): Promise<Ef
   if (!/^\d{5}$/.test(s.transit)) return { ok: false, missing: ["transit (must be 5 digits)"] };
   if (!/^\d{1,12}$/.test(s.account)) return { ok: false, missing: ["account (1–12 digits)"] };
   if (s.originatorId.length > 10) return { ok: false, missing: ["originatorId (max 10 characters)"] };
+  const transactionCode = (eft as Record<string, unknown>).transactionCode;
+  if (transactionCode !== undefined && (typeof transactionCode !== "string" || !/^\d{3}$/.test(transactionCode))) {
+    return { ok: false, missing: ["transactionCode (must be three digits; omit it to use the standard 460 code)"] };
+  }
   return { ok: true, settings: s };
+}
+
+/** Read and validate the org's EFT origination settings. Never fakes success. */
+export async function loadEftSettings(orgId: string, runId?: string): Promise<EftSettingsResult> {
+  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+    select p.originator_secrets_encrypted
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
+     where p.org_id = ${orgId} and p.is_active and f.rail = 'cpa005_credit'
+       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
+     order by case when r.id is not null then 0 else 1 end, p.created_at
+     limit 1
+  `));
+  const eft = unsealJson<Partial<EftSettings>>(r.rows[0]?.originator_secrets_encrypted) ?? {};
+  return validateEftSettings(eft);
 }
 
 // ---------------------------------------------------------------------------

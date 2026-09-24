@@ -4,7 +4,7 @@ import { buildCpa005File, type Cpa005Run } from "./rail-cpa005.ts";
 import { buildNachaFile, nachaFileIdModifierForRunNumber, nachaFileIdModifierForSequence } from "./rail-nacha.ts";
 import { buildSepaFile } from "./rail-sepa.ts";
 import { carryingAmountForSettlement, persistPaymentFxRate, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
-import { type EftSettings } from "./rail-settings.ts";
+import { type EftSettings, validateEftSettings } from "./rail-settings.ts";
 import { type NachaSettings } from "./rail-nacha.ts";
 import { PaymentError } from "./payment-errors.ts";
 
@@ -135,6 +135,20 @@ test("the CPA-005 item trace number carries its four mandated components", () =>
   assert.equal(segments[1]!.slice(40, 62), "1234" + "54321" + "0007" + "000000002");
   // The sequence is per item within the file, so no two credits share a trace.
   assert.notEqual(segments[0]!.slice(40, 62), segments[1]!.slice(40, 62));
+});
+
+test("CPA-005 refuses malformed transaction-code overrides instead of silently using 460", () => {
+  const malformed = { ...EFT, transactionCode: "46x" };
+  const checked = validateEftSettings(malformed);
+  assert.equal(checked.ok, false);
+  if (checked.ok) assert.fail("malformed CPA transaction code must be refused");
+  assert.match(checked.missing.join(", "), /transactionCode.*three digits/);
+  assert.throws(
+    () => buildCpa005File(cpa005Run({ settings: malformed })),
+    (error: Error) => error instanceof PaymentError && /transaction code override must be three digits/.test(error.message),
+  );
+  const defaultSegment = creditSegments(buildCpa005File(cpa005Run()))[0]!;
+  assert.equal(defaultSegment.slice(0, 3), "460", "omitting the override retains the CPA default");
 });
 
 test("composing the item trace number leaves every other credit-segment offset alone", () => {

@@ -73,6 +73,52 @@ test("concurrent bank-profile secret rotations preserve both fields and audit th
   }
 });
 
+test("CPA profile creation and secret updates refuse malformed transaction-code overrides", { skip: !DB }, async () => {
+  const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
+  process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "CPA profile operator", "admin"));
+    await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
+    const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      select id from payment_formats where org_id = ${org.orgId} and code = 'CPA005'
+    `))).rows[0]!;
+    const profileInput = {
+      name: "CPA transaction code profile",
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      paymentFormatId: format.id,
+      currency: "CAD",
+    };
+    await assert.rejects(
+      withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
+        ...profileInput,
+        originatorSecrets: { transactionCode: "46x" },
+      })),
+      /CPA-005 transaction code override must be three digits/,
+    );
+    const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
+      ...profileInput,
+      originatorSecrets: { transactionCode: "460" },
+    }));
+    await assert.rejects(
+      withOrgContext(org.orgId, () => updatePaymentBankProfile(profile.id, org.orgId, actorId, {
+        originatorSecrets: { transactionCode: "4" },
+      })),
+      /CPA-005 transaction code override must be three digits/,
+    );
+    const stored = (await withOrgContext(org.orgId, () => db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+      select originator_secrets_encrypted from payment_bank_profiles
+       where id = ${profile.id} and org_id = ${org.orgId}
+    `))).rows[0]!;
+    assert.equal(unsealJson<{ transactionCode?: string }>(stored.originator_secrets_encrypted)?.transactionCode, "460");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+    if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+    else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
+  }
+});
+
 test(
   "a returned payment instruction cannot be relabelled settled while a sent instruction still can",
   { skip: !DB },
