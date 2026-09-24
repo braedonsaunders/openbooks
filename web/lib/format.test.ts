@@ -1,16 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  countLabel,
-  currencyLabel,
-  dateLabel,
-  dateTime,
-  decimalLabel,
-  monthLabel,
-  monthYearLabel,
-  shortDateLabel,
-  trendWeekLabel,
-} from "./format";
+import { countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCivilDate, formatCount, formatPercent01, monthLabel, monthYearLabel, shortDateLabel, trendWeekLabel } from './format';
 
 // Timestamps must render in the viewer's locale (F-t01-014): the Users
 // list passes its request locale through, so the formatter has to honor
@@ -96,4 +86,24 @@ test("decimalLabel trims trailing zeros in the requested locale", () => {
 test("currencyLabel renders whole-unit amounts in the requested locale", () => {
   assert.match(currencyLabel(125000, "USD", "en-US"), /\$125,000/);
   assert.notEqual(currencyLabel(125000, "USD", "en-US"), currencyLabel(125000, "USD", "fr"));
+});
+
+test("counts group in the operator locale", () => {
+  assert.equal(nbsp(formatCount(1234, "en")), "1,234");
+  assert.equal(nbsp(formatCount(1234, "de")), "1.234");
+  assert.equal(nbsp(formatCount(1234, "fr")), "1 234");
+});
+
+test("percents localize placement instead of concatenating %", () => {
+  assert.equal(nbsp(formatPercent01(0.125, "en")), "13%");
+  assert.equal(nbsp(formatPercent01(0.125, "de")), "13 %");
+  assert.equal(nbsp(formatPercent01(0.125, "fr")), "13 %");
+  assert.equal(nbsp(formatPercent01(0, "de")), "0 %");
+});
+
+test("civil dates render medium in the operator locale without shifting days", () => {
+  assert.equal(formatCivilDate("2026-01-05", "en"), "Jan 5, 2026");
+  assert.equal(formatCivilDate("2026-01-05", "de"), "5. Jan. 2026");
+  assert.equal(formatCivilDate("2026-01-05", "fr"), "5 janv. 2026");
+  assert.equal(formatCivilDate("2026-01-05T00:00:00", "en"), "Jan 5, 2026");
 });
