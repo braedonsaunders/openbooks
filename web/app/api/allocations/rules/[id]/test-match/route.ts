@@ -28,7 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!parsed.ok) return parsed.response
   const body = parsed.data as { versionId?: unknown; line?: unknown; periodId?: unknown }
   try {
-    const { rule, versions } = await getRuleDetail(gate.user.orgId, id)
+    const { rule, versions } = await getRuleDetail(gate.user.orgId, id, gate.allowedSubsidiaryIds)
     if (rule.mode === 'period') {
       const period = typeof body.periodId === 'string' ? body.periodId : ''
       return NextResponse.json({
@@ -53,7 +53,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!entry) {
       return NextResponse.json({ error: 'Rule has no version to test.', code: 'INVALID' }, { status: 422 })
     }
-    const { version, targets } = await getRuleVersion(gate.user.orgId, entry.version.id)
+    const { version, targets } = await getRuleVersion(gate.user.orgId, entry.version.id, gate.allowedSubsidiaryIds)
     const line = {
       accountId: rawLine['accountId'] as string,
       documentKind: typeof rawLine['documentKind'] === 'string' ? (rawLine['documentKind'] as string) : null,

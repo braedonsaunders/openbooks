@@ -237,7 +237,7 @@ const getAllocationRule: AssistantToolDef = {
     if (typeof resolved !== "string") return resolved;
     let detail;
     try {
-      detail = await getRuleDetail(authz.user.orgId, resolved);
+      detail = await getRuleDetail(authz.user.orgId, resolved, authz.allowedSubsidiaryIds);
     } catch (error) {
       if (error instanceof AllocationRuleError && error.code === "NOT_FOUND") {
         return { ok: false, error: "allocation_rule_not_found" };
@@ -248,7 +248,7 @@ const getAllocationRule: AssistantToolDef = {
     let currentVersion: unknown = null;
     if (currentId) {
       try {
-        const full = await getRuleVersion(authz.user.orgId, currentId);
+        const full = await getRuleVersion(authz.user.orgId, currentId, authz.allowedSubsidiaryIds);
         const targets = compactRows(full.targets, { limit: 100 });
         currentVersion = {
           ...full.version,

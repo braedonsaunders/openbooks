@@ -8,6 +8,7 @@ import {
 } from '../../../../../engine/src/allocations/index.ts'
 import { businessToday } from '../../../../../engine/src/platform/business-date.ts'
 import { guardAllocations } from '../../../../lib/allocations-gate'
+import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { allocationErrorResponse } from '../_lib.ts'
 
 export const runtime = 'nodejs'
@@ -42,6 +43,10 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const parsed = await parseJsonBody(req, createRuleSchema)
   if (!parsed.ok) return parsed.response
+  // The initial draft names no subsidiaries, so it is org-wide policy from
+  // the first row: restricted callers get the named 403 with no write at all.
+  const scope = guardUnrestrictedScope(gate)
+  if (scope) return scope
   try {
     const created = await createRule(
       {
@@ -59,7 +64,11 @@ export async function POST(req: Request) {
     // initial draft starts today and the drawer adjusts it before publish.
     const draft = await createDraftVersion(
       created.rule.id,
-      { orgId: gate.user.orgId, effectiveFrom: await businessToday(gate.user.orgId) },
+      {
+        orgId: gate.user.orgId,
+        effectiveFrom: await businessToday(gate.user.orgId),
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      },
       { actorId: gate.user.id },
     )
     return NextResponse.json(

@@ -2,7 +2,8 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { createDraftVersion } from '../../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../../lib/allocations-gate'
-import { allocationErrorResponse, requireRuleId } from '../../../_lib.ts'
+import { guardUnrestrictedScope } from '../../../../../../lib/authz'
+import { allocationWriteErrorResponse, requireRuleId } from '../../../_lib.ts'
 
 export const runtime = 'nodejs'
 
@@ -19,12 +20,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsed = await parseJsonBody(req, jsonObject)
   if (!parsed.ok) return parsed.response
   const body = parsed.data as { fromVersionId?: unknown }
+  // A blank draft names no subsidiaries, so it is org-wide policy from the
+  // first row: restricted callers get the named 403 with no lookup at all.
+  // Copies name the source version's subsidiaries and are asserted in the
+  // engine, where a denied copy answers exactly like a missing version.
+  if (body.fromVersionId === undefined) {
+    const scope = guardUnrestrictedScope(gate)
+    if (scope) return scope
+  }
   try {
     const created = await createDraftVersion(
       id,
       {
         orgId: gate.user.orgId,
         fromVersionId: typeof body.fromVersionId === 'string' ? body.fromVersionId : undefined,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       },
       { actorId: gate.user.id },
     )
@@ -36,6 +46,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       { status: 201 },
     )
   } catch (error) {
-    return allocationErrorResponse(error)
+    return allocationWriteErrorResponse(error)
   }
 }

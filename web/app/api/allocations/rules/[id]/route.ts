@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { getRuleDetail, updateRule } from '../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../lib/allocations-gate'
-import { allocationErrorResponse, allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../_lib.ts'
+import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../_lib.ts'
 
 export const runtime = 'nodejs'
 
@@ -13,9 +13,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const id = requireRuleId((await params).id)
   if (id instanceof NextResponse) return id
   try {
-    return NextResponse.json(await getRuleDetail(gate.user.orgId, id))
+    return NextResponse.json(await getRuleDetail(gate.user.orgId, id, gate.allowedSubsidiaryIds))
   } catch (error) {
-    return allocationErrorResponse(error)
+    return allocationWriteErrorResponse(error)
   }
 }
 

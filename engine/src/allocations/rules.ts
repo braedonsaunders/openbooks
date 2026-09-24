@@ -153,6 +153,8 @@ export interface AllocationTargetInput {
 export interface DraftVersionInput extends AllocationOrgScope {
   /** Copy the definition and targets of this same-rule version; nothing else may be set. */
   fromVersionId?: string;
+  /** Subsidiaries the actor may configure; null = unrestricted (explicit sentinel, never omitted). */
+  allowedSubsidiaryIds: SubsidiaryScope;
   effectiveFrom?: string;
   effectiveTo?: string | null;
   bookScope?: AllocationBookScope;
@@ -181,10 +183,7 @@ export interface DraftVersionInput extends AllocationOrgScope {
   targets?: AllocationTargetInput[];
 }
 
-export type UpdateDraftInput = Omit<DraftVersionInput, "fromVersionId" | "targets"> & {
-  /** Subsidiaries the actor may configure; null = unrestricted (explicit sentinel, never omitted). */
-  allowedSubsidiaryIds: SubsidiaryScope;
-};
+export type UpdateDraftInput = Omit<DraftVersionInput, "fromVersionId" | "targets">;
 
 export interface ReplaceTargetsInput extends AllocationOrgScope {
   targets: AllocationTargetInput[];
@@ -947,6 +946,13 @@ export async function createDraftVersion(
       def = { ...defaultDefinition(), ...partial };
       targets = input.targets ?? [];
     }
+    // Creates name their subsidiaries outright (blank or copied): anything
+    // out of scope is an out-of-scope write, refused before anything is stored.
+    assertRuleVisible(
+      input.allowedSubsidiaryIds,
+      def,
+      targets.map((t) => t.subsidiaryId ?? null),
+    );
     if (def.effectiveFrom === "") throw new AllocationRuleError("INVALID", "effectiveFrom is required for a new version");
     const versionId = randomUUID();
     try {
@@ -1346,7 +1352,11 @@ export async function listRuleHeads(
 }
 
 /** A rule head with its full version timeline (each with revision and target count). */
-export async function getRuleDetail(orgId: string, ruleId: string): Promise<RuleDetail> {
+export async function getRuleDetail(
+  orgId: string,
+  ruleId: string,
+  scope: SubsidiaryScope,
+): Promise<RuleDetail> {
   const oid = uuid(orgId, "orgId");
   const rid = uuid(ruleId, "ruleId");
   return withOrgTransaction(oid, async () => {
@@ -1359,25 +1369,49 @@ export async function getRuleDetail(orgId: string, ruleId: string): Promise<Rule
       from allocation_rule_versions v
       where v.org_id = ${oid} and v.rule_id = ${rid}
       order by v.version_no`);
-    return {
-      rule,
-      revision,
-      versions: versionRows.rows.map((row) => ({
-        version: mapVersion(row, "version_"),
+    // The timeline shows only visible versions: a restricted caller never
+    // learns another entity's versions exist. A rule with versions but none
+    // visible answers the bare uniform not-found.
+    const versions: RuleDetail["versions"] = [];
+    for (const row of versionRows.rows) {
+      const version = mapVersion(row, "version_");
+      const targets = await loadTargets(oid, version.id);
+      if (
+        !allocationRuleVisible(scope, {
+          sourceSubsidiaryIds: version.dimensionFilters.subsidiaryIds,
+          targetKind: version.targetKind,
+          dynamicDimension: version.dynamicTarget.dimension,
+          dynamicIncludes: version.dynamicTarget.include,
+          targetSubsidiaryIds: targets.map((t) => t.subsidiaryId),
+        })
+      ) {
+        continue;
+      }
+      versions.push({
+        version,
         revision: String(row["version_revision"]),
         targetCount: Number(row["target_count"]),
-      })),
-    };
+      });
+    }
+    if (versionRows.rows.length > 0 && versions.length === 0) {
+      throw new AllocationRuleError("NOT_FOUND", "not found");
+    }
+    return { rule, revision, versions };
   });
 }
 
 /** One version with its targets and revision — the drawer's edit payload. */
-export async function getRuleVersion(orgId: string, versionId: string): Promise<RuleVersionWithTargets> {
+export async function getRuleVersion(
+  orgId: string,
+  versionId: string,
+  scope: SubsidiaryScope,
+): Promise<RuleVersionWithTargets> {
   const oid = uuid(orgId, "orgId");
   const vid = uuid(versionId, "versionId");
   return withOrgTransaction(oid, async () => {
     const version = mapVersion(await loadVersionRow(oid, vid), "version_");
     const targets = await loadTargets(oid, vid);
+    assertRuleVisible(scope, version, targets.map((t) => t.subsidiaryId));
     const revision = await readRevision("allocation_rule_versions", oid, vid);
     return { version, targets, revision };
   });

@@ -307,7 +307,7 @@ test("publishing a mid-period effective date refuses with the boundary suggestio
     );
     const draft = await createDraftVersion(
       created.rule.id,
-      { orgId: org.orgId, effectiveFrom: "2026-01-15", targets: [{ fixedPercent: "100" }] },
+      { allowedSubsidiaryIds: null, orgId: org.orgId, effectiveFrom: "2026-01-15", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     await assert.rejects(
@@ -348,6 +348,7 @@ test("boundary-aligned versions publish and each run prices under its own versio
     const v1 = await createDraftVersion(
       created.rule.id,
       {
+        allowedSubsidiaryIds: null,
         orgId: org.orgId,
         effectiveFrom: "2026-01-01",
         effectiveTo: "2026-01-31",
@@ -363,6 +364,7 @@ test("boundary-aligned versions publish and each run prices under its own versio
     const v2 = await createDraftVersion(
       created.rule.id,
       {
+        allowedSubsidiaryIds: null,
         orgId: org.orgId,
         effectiveFrom: "2026-02-01",
         accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] },
@@ -425,7 +427,7 @@ test("entry-mode versions keep arbitrary effective dates", { skip: !DB }, async 
     );
     const draft = await createDraftVersion(
       created.rule.id,
-      { orgId: org.orgId, effectiveFrom: "2026-01-15", targets: [{ fixedPercent: "100" }] },
+      { allowedSubsidiaryIds: null, orgId: org.orgId, effectiveFrom: "2026-01-15", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     const published = await publishVersion(draft.version.id, { orgId: org.orgId, ...AUDIT, allowedSubsidiaryIds: null });

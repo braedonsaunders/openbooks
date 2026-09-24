@@ -450,6 +450,7 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
         rule.rule.id,
         {
           orgId: ledger.orgId,
+          allowedSubsidiaryIds: null,
           effectiveFrom: "2026-01-01",
           accountScope: { kind: "accounts", accountIds: [ctx.roles.freight] },
           basisKind: "fixed_percent",
@@ -460,7 +461,7 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
         audit,
       );
       await publishVersion(draft.version.id, { orgId: ledger.orgId, actorId: ledger.actorId, allowedSubsidiaryIds: null });
-      const before = await getRuleVersion(ledger.orgId, draft.version.id);
+      const before = await getRuleVersion(ledger.orgId, draft.version.id, null);
       const refusals: Record<string, string> = {};
       try {
         await updateDraftVersion(draft.version.id, { orgId: ledger.orgId, memoTemplate: "changed", allowedSubsidiaryIds: null }, audit);
@@ -484,7 +485,7 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
         if (error instanceof AllocationRuleError) refusals["republishRefused"] = error.code;
         else throw error;
       }
-      const after = await getRuleVersion(ledger.orgId, draft.version.id);
+      const after = await getRuleVersion(ledger.orgId, draft.version.id, null);
       return {
         values: {
           definitionRefused: refusals["definitionRefused"] ?? "accepted",
