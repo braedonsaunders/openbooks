@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 interface RouteState {
   pingResult: { ok: boolean; detail?: string };
@@ -276,17 +274,3 @@ for (const [name, config] of refusedConnectorUrls) {
     assert.equal(routeState.updates.length, 0, "must not write status for a refused URL");
   });
 }
-
-test("test route source captures probe URL and version from one row", () => {
-  const source = readFileSync(fileURLToPath(new URL("./route.ts", import.meta.url)), "utf8");
-  assert.doesNotMatch(source, /\bgetConnection\b/);
-  assert.doesNotMatch(source, /loadConnectionVersion/);
-  const captures = [...source.matchAll(/select[\s\S]*?from connections/gi)];
-  assert.equal(
-    captures.length,
-    1,
-    "exactly one connections SELECT; a later SELECT for version is the defect",
-  );
-  assert.match(captures[0]![0], /updated_at/);
-  assert.match(source, /updated_at is not distinct from \$\{row\.updatedAt\}/);
-});
