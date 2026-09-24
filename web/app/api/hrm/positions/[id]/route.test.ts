@@ -155,114 +155,119 @@ function patchRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("item route gates on the hrm feature and the position permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.position\.manage"\)/);
-    assert.match(source, /guardPermission\("hrm\.position\.read"\)/);
-    assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-  });
-} else {
-  test("an unknown id never reaches the service", async () => {
-    reset();
-    const bad = { params: Promise.resolve({ id: "nope" }) };
-    assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close" }), bad)).status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), params)).status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("detail forwards org, actor, position, and date to the read service", async () => {
-    reset();
-    const response = await itemRoute!.GET(
-      new Request(`http://openbooks.test/api/hrm/positions/${POSITION_ID}?effectiveDate=2026-07-15`),
-      params,
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { position: { id: "position-1" } });
-    assert.equal(routeState.calls.length, 1);
-    assert.equal(routeState.calls[0]!.fn, "detail");
-    const args = routeState.calls[0]!.args as Record<string, unknown>;
-    assert.equal(args.orgId, "org-1");
-    assert.equal(args.actorId, "user-1");
-    assert.equal(args.positionId, POSITION_ID);
-    assert.equal(args.effectiveDate, "2026-07-15");
-    assert.match(args.knownAt as string, /^\d{4}-\d{2}-\d{2}T/);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("patch validates the action-discriminated body before the service runs", async () => {
-    reset();
-    assert.equal((await itemRoute!.PATCH(patchRequest({}), params)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "revise" }), params)).status, 400);
-    assert.equal(
-      (await itemRoute!.PATCH(patchRequest({ action: "close" }), params)).status,
-      400,
-    );
-    assert.equal(
-      (await itemRoute!.PATCH(patchRequest({ action: "close", effectiveDate: "15-07-2026", reason: "x" }), params)).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-    assert.deepEqual(routeState.mapped, []);
-  });
+test("an unknown id never reaches the service", async () => {
+  reset();
+  const bad = { params: Promise.resolve({ id: "nope" }) };
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close" }), bad)).status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("close forwards position, date, and reason", async () => {
-    reset();
-    const response = await itemRoute!.PATCH(
-      patchRequest({ action: "close", effectiveDate: "2026-07-15", reason: "retire" }),
-      params,
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "close",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          positionId: POSITION_ID,
-          effectiveDate: "2026-07-15",
-          reason: "retire",
-        },
+test("detail forwards org, actor, position, and date to the read service", async () => {
+  reset();
+  const response = await itemRoute!.GET(
+    new Request(`http://openbooks.test/api/hrm/positions/${POSITION_ID}?effectiveDate=2026-07-15`),
+    params,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { position: { id: "position-1" } });
+  assert.equal(routeState.calls.length, 1);
+  assert.equal(routeState.calls[0]!.fn, "detail");
+  const args = routeState.calls[0]!.args as Record<string, unknown>;
+  assert.equal(args.orgId, "org-1");
+  assert.equal(args.actorId, "user-1");
+  assert.equal(args.positionId, POSITION_ID);
+  assert.equal(args.effectiveDate, "2026-07-15");
+  assert.match(args.knownAt as string, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test("patch validates the action-discriminated body before the service runs", async () => {
+  reset();
+  assert.equal((await itemRoute!.PATCH(patchRequest({}), params)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "revise" }), params)).status, 400);
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ action: "close" }), params)).status,
+    400,
+  );
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ action: "close", effectiveDate: "15-07-2026", reason: "x" }), params)).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+  assert.deepEqual(routeState.mapped, []);
+});
+
+test("close forwards position, date, and reason", async () => {
+  reset();
+  const response = await itemRoute!.PATCH(
+    patchRequest({ action: "close", effectiveDate: "2026-07-15", reason: "retire" }),
+    params,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "close",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        positionId: POSITION_ID,
+        effectiveDate: "2026-07-15",
+        reason: "retire",
       },
-    ]);
-  });
+    },
+  ]);
+});
 
-  test("fund forwards the plan and returns funding with its preflight", async () => {
-    reset();
-    const response = await itemRoute!.PATCH(
-      patchRequest({ action: "fund", periodId: PERIOD_ID, fundedFte: "1.5000", reason: "plan" }),
-      params,
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { funding: { id: "funding-1" }, preflight: null });
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "fund",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          positionId: POSITION_ID,
-          periodId: PERIOD_ID,
-          fundedFte: "1.5000",
-          fundingSourceId: undefined,
-          amount: undefined,
-          currency: undefined,
-          reason: "plan",
-        },
+test("fund forwards the plan and returns funding with its preflight", async () => {
+  reset();
+  const response = await itemRoute!.PATCH(
+    patchRequest({ action: "fund", periodId: PERIOD_ID, fundedFte: "1.5000", reason: "plan" }),
+    params,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { funding: { id: "funding-1" }, preflight: null });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "fund",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        positionId: POSITION_ID,
+        periodId: PERIOD_ID,
+        fundedFte: "1.5000",
+        fundingSourceId: undefined,
+        amount: undefined,
+        currency: undefined,
+        reason: "plan",
       },
-    ]);
-  });
+    },
+  ]);
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("the position changed while the write was applying");
-    routeState.serviceThrow = refusal;
-    const response = await itemRoute!.PATCH(
-      patchRequest({ action: "revise", plannedFte: "2.0000", reason: "grow" }),
-      params,
-    );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped.length, 1);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("the position changed while the write was applying");
+  routeState.serviceThrow = refusal;
+  const response = await itemRoute!.PATCH(
+    patchRequest({ action: "revise", plannedFte: "2.0000", reason: "grow" }),
+    params,
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped.length, 1);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
