@@ -8,6 +8,7 @@ import type { CellValue } from '../../../../lib/data-io/types'
 import { toCsv, toJson, toXlsx } from '../../../../lib/data-io/serialize'
 import { csvResponse, safeName, xlsxResponse } from '../../../../lib/export'
 import { requestedExportFormat, type ExportFormat } from '../../../../lib/data-io/types'
+import { selectExportColumns } from '../../../../lib/data-io/export-selection'
 
 export const runtime = 'nodejs'
 
@@ -61,11 +62,11 @@ export async function POST(req: Request) {
     }
     throw error
   }
-  const selected =
-    Array.isArray(body.columns) && body.columns.length > 0
-      ? columns.filter((c) => body.columns!.includes(c.key))
-      : columns
-  const cols = selected.length > 0 ? selected : columns
+  const selection = selectExportColumns(columns, body.columns)
+  if (!selection.ok) {
+    return NextResponse.json({ error: selection.error }, { status: 400 })
+  }
+  const cols = selection.columns
 
   const title = safeName(resource.descriptor.label || resource.descriptor.key)
   const stamp = await businessToday(authz.user.orgId)
