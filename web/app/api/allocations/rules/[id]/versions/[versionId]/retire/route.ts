@@ -27,7 +27,7 @@ export async function POST(
   try {
     const retired = await retireVersion(
       versionParam,
-      { orgId: gate.user.orgId, actorId: gate.user.id, reason: body.reason.trim(), allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
+      { orgId: gate.user.orgId, expectedRuleId: ruleId, actorId: gate.user.id, reason: body.reason.trim(), allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
     )
     if (retired.version.ruleId !== ruleId) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })

@@ -24,7 +24,7 @@ export async function POST(
   try {
     const published = await publishVersion(
       versionParam,
-      { orgId: gate.user.orgId, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
+      { orgId: gate.user.orgId, expectedRuleId: ruleId, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
     )
     if (published.version.ruleId !== ruleId) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
