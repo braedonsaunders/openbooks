@@ -116,7 +116,7 @@ async function mountFiling() {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <LeaveDrawer requestId={null} onClose={() => {}} />
+        <LeaveDrawer requestId={null} canWithdrawCancel onClose={() => {}} />
       </NextIntlClientProvider>,
     );
     await tick();

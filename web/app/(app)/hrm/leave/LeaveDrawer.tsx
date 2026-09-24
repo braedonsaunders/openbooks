@@ -41,7 +41,16 @@ interface Detail {
   asOf: string
 }
 
-export function LeaveDrawer({ requestId, onClose }: { requestId: string | null; onClose: () => void }) {
+export function LeaveDrawer({
+  requestId,
+  canWithdrawCancel,
+  onClose,
+}: {
+  requestId: string | null
+  /** Holds hrm.leave.request (mirrors the withdraw/cancel route guard). */
+  canWithdrawCancel: boolean
+  onClose: () => void
+}) {
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -89,8 +98,13 @@ export function LeaveDrawer({ requestId, onClose }: { requestId: string | null; 
     onClose()
   }
 
-  const askReason = async (title: string): Promise<string | null> =>
-    promptDialog({ title, label: title })
+  // An empty reason never posts: the routes refuse it (reason required),
+  // so posting it would only turn a dismissed prompt into a 400.
+  const askReason = async (title: string): Promise<string | null> => {
+    const reason = await promptDialog({ title, label: title })
+    if (reason !== null && reason.trim().length === 0) return null
+    return reason
+  }
 
   return (
     <Drawer open onClose={onClose} size="md" title={requestId ? t('leave.drawerTitle') : t('leave.fileTitle')}>
@@ -153,7 +167,7 @@ export function LeaveDrawer({ requestId, onClose }: { requestId: string | null; 
                 {t('leave.submitButton')}
               </Button>
             ) : null}
-            {detail.request.status === 'draft' || detail.request.status === 'submitted' ? (
+            {canWithdrawCancel && (detail.request.status === 'draft' || detail.request.status === 'submitted') ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -166,7 +180,7 @@ export function LeaveDrawer({ requestId, onClose }: { requestId: string | null; 
                 {t('leave.withdrawButton')}
               </Button>
             ) : null}
-            {detail.request.status === 'approved' ? (
+            {canWithdrawCancel && detail.request.status === 'approved' ? (
               <Button
                 size="sm"
                 variant="outline"
