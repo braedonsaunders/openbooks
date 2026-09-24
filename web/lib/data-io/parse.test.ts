@@ -107,6 +107,18 @@ test('CSV parsing treats trim-equal headers as duplicates', async () => {
   )
 })
 
+test('XLSX parsing refuses a spreadsheet error value naming its cell', async () => {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Transactions')
+  sheet.addRow(['documentDate', 'amount'])
+  sheet.addRow(['2026-01-01', { error: '#DIV/0!' }])
+  const buffer = await workbook.xlsx.writeBuffer()
+  await assert.rejects(
+    () => parseImportFile('xlsx', { base64: Buffer.from(buffer as ArrayBuffer).toString('base64') }),
+    /cell B2.*#DIV\/0!/,
+  )
+})
+
 test('XLSX parsing refuses duplicate headers', async () => {
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Transactions')

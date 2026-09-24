@@ -1,6 +1,6 @@
 import 'server-only'
 import { parseCsvRows } from '@openbooks/engine/src/banking/banking.ts'
-import { isSheetFormulaCellValue, readSheet, type SheetCellValue } from '@openbooks/office'
+import { isSheetFormulaCellValue, readSheet, SheetReadError, type SheetCellValue } from '@openbooks/office'
 import { CELL_PROVENANCE_KEY, type CellProvenance, type ImportFormat } from './types'
 
 export interface ParsedFile {
@@ -58,7 +58,16 @@ export async function parseImportFile(
   if (format === 'xlsx') {
     if (!payload.base64) return { headers: [], rows: [], truncated: false }
     const buf = Buffer.from(payload.base64, 'base64')
-    const { headers, rows } = await readSheet(buf)
+    // An unreadable cell is an operator-fixable file problem, so it rides
+    // the import's own 400 refusal — never a 500 the filler cannot act on.
+    let headers: string[]
+    let rows: SheetCellValue[][]
+    try {
+      ({ headers, rows } = await readSheet(buf))
+    } catch (error) {
+      if (error instanceof SheetReadError) throw new ImportParseError(error.message)
+      throw error
+    }
     assertUniqueHeaders(headers)
     return {
       ...matrixToObjects(headers, rows.slice(0, MAX_IMPORT_ROWS)),

@@ -379,6 +379,33 @@ export function isSheetFormulaCellValue(value: SheetCellValue): value is SheetFo
   return typeof value === 'object' && value.kind === 'formula'
 }
 
+/**
+ * An import cell whose shape the reader does not understand (an Excel error
+ * value like #DIV/0!, or a future ExcelJS shape). Carries the cell address
+ * so the caller can refuse naming it — importing it as '' would report
+ * success while silently dropping a value the user supplied.
+ */
+export class SheetReadError extends Error {
+  readonly address: string
+  constructor(address: string, detail: string) {
+    super(`cell ${address} ${detail}`)
+    this.name = 'SheetReadError'
+    this.address = address
+  }
+}
+
+/** Zero-based column index → Excel letters (0 → A, 27 → AB). */
+function columnLabel(index: number): string {
+  let label = ''
+  let n = index + 1
+  while (n > 0) {
+    const rest = (n - 1) % 26
+    label = String.fromCharCode(65 + rest) + label
+    n = Math.floor((n - 1) / 26)
+  }
+  return label
+}
+
 interface SheetCellRange {
   top: number
   bottom: number
@@ -432,7 +459,7 @@ export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; ro
     if (v instanceof Date) return v.toISOString().slice(0, 10)
     return typeof v === 'string' ? v : String(v)
   }
-  const cell = (v: ExcelJS.CellValue, inArrayFormula: boolean): SheetCellValue => {
+  const cell = (v: ExcelJS.CellValue, inArrayFormula: boolean, address: string): SheetCellValue => {
     if (v === null || v === undefined) return ''
     if (typeof v === 'object') {
       const o = v as {
@@ -441,14 +468,24 @@ export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; ro
         hyperlink?: string
         formula?: string
         sharedFormula?: string
+        richText?: Array<{ text?: unknown }>
+        error?: unknown
       }
       if (typeof o.formula === 'string' || typeof o.sharedFormula === 'string') {
         return { kind: 'formula', value: scalar(o.result) }
       }
       if (inArrayFormula) return { kind: 'formula', value: scalar(v) }
+      // Formatted text runs ({ richText: [{ text, font }, …] }) carry no
+      // top-level .text — reading only .text imported them as empty.
+      if (Array.isArray(o.richText)) {
+        return o.richText.map((run) => (typeof run?.text === 'string' ? run.text : '')).join('')
+      }
       if (typeof o.text === 'string') return o.text
       if (v instanceof Date) return v.toISOString().slice(0, 10)
-      return ''
+      if (typeof o.error === 'string') {
+        throw new SheetReadError(address, `holds the spreadsheet error ${o.error} — fix it before importing`)
+      }
+      throw new SheetReadError(address, 'has a value this import does not understand — remove it before importing')
     }
     if (inArrayFormula) return { kind: 'formula', value: scalar(v) }
     return scalar(v)
@@ -465,7 +502,7 @@ export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; ro
           column >= range.left &&
           column <= range.right,
       )
-      return cell(value, inArrayFormula)
+      return cell(value, inArrayFormula, `${columnLabel(index)}${row.number}`)
     }))
   })
   const headers = (matrix.shift() ?? []).map((h) =>
