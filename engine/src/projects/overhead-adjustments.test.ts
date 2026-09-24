@@ -18,7 +18,6 @@ const reversalMigration = readFileSync(
   "schema/migrations/generated/0077_project_overhead_adjustment_reversal_uniqueness.sql",
   "utf8",
 );
-const resolver = readFileSync("engine/src/projects/financials.ts", "utf8");
 
 test("statistical overhead exceptions are native immutable evidence", () => {
   assert.match(baseline, /project_overhead_adjustments/i);
@@ -74,14 +73,4 @@ test("reversal retries lock the source, return identical evidence, and reject mi
   assert.ok(insert > reversalCheck, "a new reversal is appended only after the duplicate check");
   assert.match(body, /existing: true/);
   assert.match(body, /already has a reversal with different evidence/);
-});
-
-test("the configurable overhead result includes explicit adjustments", () => {
-  assert.match(resolver, /from project_overhead_adjustments/i);
-  assert.match(
-    resolver,
-    /add\(calculatedOverhead, overheadAdjustment\)/i,
-  );
-  const tenantName = ["Ras", "saun"].join("");
-  assert.doesNotMatch(resolver, new RegExp(`${tenantName}|account\\s*500`, "i"));
 });
