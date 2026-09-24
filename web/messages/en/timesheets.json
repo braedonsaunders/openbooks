@@ -227,6 +227,18 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Use my location",
     "locationDenied": "Location is unavailable — enter coordinates by hand.",
-    "saveGeofence": "Save geofence"
+    "saveGeofence": "Save geofence",
+    "subjects": {
+      "timesheetWeek": "Timesheet week",
+      "crewTimeBatch": "Crew time batch"
+    },
+    "approvers": {
+      "supervisor": "Supervisor",
+      "projectManager": "Project manager",
+      "payroll": "Payroll",
+      "role": "Role",
+      "namedRole": "Role: {role}"
+    },
+    "unknownApprovalTarget": "Unknown approval target"
   }
 }
