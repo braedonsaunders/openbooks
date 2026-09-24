@@ -52,7 +52,11 @@ export async function runLocalBackup({
   writeManifest = persistManifest,
 }: LocalBackupOptions) {
   if (!isUuid(orgId)) {
-    throw new Error("--org=<uuid> is required");
+    // C-49: fail at arg-parse with the offending value named, using the same
+    // canonical 8-4-4-4-12 shape backup uses. The old /^[0-9a-f-]{36}$/
+    // check accepted 36 dashes and failed mid-run, after the output
+    // directory already existed.
+    throw new Error(`--org must be a canonical uuid, got ${JSON.stringify(orgId)}`);
   }
   if (!out?.startsWith("/")) throw new Error("--out=<absolute-path> is required");
   const manifestPath = `${out}.manifest.json`;
