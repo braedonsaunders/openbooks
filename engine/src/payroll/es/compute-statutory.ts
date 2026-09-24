@@ -217,14 +217,35 @@ export async function computeEsStatutory(
   // Monthly SS on the period bases; the employee share annualised feeds IRPF
   // COTIZACIONES (exact when the base holds all year; mid-year changes take
   // the regularización path, which is refused by name).
+  const pensionableUnits = dec(pensionable, "pensionable");
+  const insurableUnits = dec(insurable === "" ? pensionable : insurable, "insurable");
+  const pensionableNonPeriodicUnits = dec(ctx.pensionableNonPeriodic ?? "0", "pensionableNonPeriodic");
+  if (pensionableNonPeriodicUnits > pensionableUnits) {
+    fail("pensionableNonPeriodic exceeds the current pensionable base");
+  }
+  if (pensionableNonPeriodicUnits > insurableUnits) {
+    fail("pensionableNonPeriodic exceeds the current insurable base");
+  }
   const ss = calculateEsSeguridadSocial2026({
     payDate,
     grupo,
-    base: D(dec(pensionable, "pensionable")),
-    retribucionMensual: D(dec(insurable === "" ? pensionable : insurable, "insurable")),
+    base: D(pensionableUnits),
+    retribucionMensual: D(insurableUnits),
     contratoTemporal: temporal === "true",
   });
-  const cotizacionesAnual = D(U(ss.trabajadorTotal) * 12n);
+  const ssRecurrente = pensionableNonPeriodicUnits === 0n
+    ? ss
+    : calculateEsSeguridadSocial2026({
+      payDate,
+      grupo,
+      base: D(pensionableUnits - pensionableNonPeriodicUnits),
+      retribucionMensual: D(insurableUnits - pensionableNonPeriodicUnits),
+      contratoTemporal: temporal === "true",
+    });
+  const cotizacionesAnual = D(
+    U(ssRecurrente.trabajadorTotal) * 12n
+      + U(ss.trabajadorTotal) - U(ssRecurrente.trabajadorTotal),
+  );
 
   // Annual RETRIB = twelve months plus the once-paid non-periodic amount.
   const retribAnual = D(dec(income, "income") * 12n + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic"));

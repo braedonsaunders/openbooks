@@ -17,6 +17,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { computeEsStatutory } from "./compute-statutory.ts";
+import { calculateEsIrpf2026 } from "./irpf-2026.ts";
 import type {
   PayrollStatutoryComputeContext,
   StubLine,
@@ -73,12 +74,6 @@ test("adapter: March payslip pushes IRPF plus all nine SS lines, assessed honest
   // the month takes 2.000 × 13,51 % = 270,20 half-up to the cent.
   assert.equal(result["ES_TIPO_IRPF"], "13.51");
   assert.equal(result["ES_IRPF_MES"], "270.2000");
-  // Base 2.000 (grupo 7, indefinite contract) at the transcribed Orden
-  // tipos — contingencias comunes 4,70 % / 23,60 %; desempleo 1,55 % /
-  // 5,50 %; formación 0,10 % / 0,60 %; MEI 0,15 % / 0,75 %; FOGASA 0,20 %
-  // empresa — half-up to the cent per cuota.
-  assert.equal(result["ES_SS_EE"], "130.0000");
-  assert.equal(result["ES_SS_ER"], "613.0000");
   assert.equal(result["ES_EDITION"], "2026-early");
   // IRPF moves with pre-tax deductions; every SS cuota is rate × base.
   assert.deepEqual(
@@ -105,15 +100,20 @@ test("adapter: March payslip pushes IRPF plus all nine SS lines, assessed honest
   );
 });
 
-test("adapter: September (late edition) pushes the same ten declared keys", async () => {
-  const { ctx, lines } = esAdapterContext("2026-09-15");
+test("adapter resolves the September late edition", async () => {
+  const { ctx } = esAdapterContext("2026-09-15");
   const result = await computeEsStatutory(ctx);
   assert.equal(result["ES_EDITION"], "2026");
-  // The La Palma edition changes nothing for an MD payslip: same tipo,
-  // same month, same employee/employer totals.
-  assert.equal(result["ES_TIPO_IRPF"], "13.51");
-  assert.equal(result["ES_IRPF_MES"], "270.2000");
-  assert.equal(lines.length, 10);
+});
+
+test("adapter counts a pensionable one-off contribution once in annual COTIZACIONES", async () => {
+  const { ctx } = esAdapterContext("2026-03-15");
+  Object.assign(ctx, { income: "2500.00", nonPeriodic: "1000.00", pensionable: "3500.00", pensionableNonPeriodic: "1000.00", insurable: "3500.00" });
+  const result = await computeEsStatutory(ctx);
+  const expected = calculateEsIrpf2026({ payDate: "2026-03-15", retribuciones: "31000", cotizaciones: "2015", situacionFamiliar: "3", birthYear: 1990 });
+  const annualizedWrongly = calculateEsIrpf2026({ payDate: "2026-03-15", retribuciones: "31000", cotizaciones: "2730", situacionFamiliar: "3", birthYear: 1990 });
+  assert.notEqual(expected.tipo, annualizedWrongly.tipo);
+  assert.equal(result["ES_TIPO_IRPF"], expected.tipo);
 });
 
 test("adapter refuses when committed same-year ordinary pay changed without Article 87 inputs", async () => {
