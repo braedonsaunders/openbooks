@@ -808,3 +808,36 @@ test(
     }
   },
 );
+
+test(
+  "one org's unreadable business day is recorded by name and still bills the next org",
+  { skip: !DB },
+  async () => {
+    // A stored business time zone no IANA database knows makes businessToday
+    // throw for exactly one tenant. The tick must record that org by name,
+    // continue the scan, and still bill the healthy org's leases.
+    const poisoned = await createScratchOrg();
+    const fx = await seedPropertyFixture();
+    try {
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(coalesce(settings,'{}'::jsonb), '{features}',
+          coalesce(settings->'features','{}'::jsonb) || '{"propertyManagement": true}'::jsonb)
+         where id = ${poisoned.orgId}`);
+      await db.execute(sql`
+        update orgs
+           set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{timeZone}', '"Not/AZone"')
+         where id = ${poisoned.orgId}
+      `);
+      // No asOf: the runner must read each org's own business day, which is
+      // where the poisoned org throws.
+      const run = await runDuePropertyBilling();
+      assert.equal(run.orgErrors.length, 1);
+      assert.equal(run.orgErrors[0]!.orgId, poisoned.orgId);
+      assert.match(run.orgErrors[0]!.error, /not a known IANA time zone/);
+      assert.ok((await rentInvoiceIds(fx.org.orgId)).rows.length > 0, "the healthy org still bills");
+    } finally {
+      await dropScratchOrgReporting(poisoned.orgId);
+      await dropScratchOrgReporting(fx.org.orgId);
+    }
+  },
+);

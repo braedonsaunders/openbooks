@@ -2632,20 +2632,32 @@ export async function propertyManagementWorkspace(orgId: string, asOf?: string) 
  * never an org-wide first actor. Interactive callers attribute their own
  * authenticated user instead.
  */
-export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: number; invoices: number; lateFees: number }> {
-  const result = { billed: 0, invoices: 0, lateFees: 0 };
+export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: number; invoices: number; lateFees: number; orgErrors: { orgId: string; error: string }[] }> {
+  const result: { billed: number; invoices: number; lateFees: number; orgErrors: { orgId: string; error: string }[] } =
+    { billed: 0, invoices: 0, lateFees: 0, orgErrors: [] };
   const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where coalesce((settings->'features'->>'propertyManagement')::boolean,false)`)));
-  for (const org of orgs.rows) await withOrg(org.id, async () => {
-    // Each org bills on its own calendar day.
-    const date = asOf ?? await businessToday(org.id);
-    const leases = (await db.execute<{ id: string }>(sql`select id from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`));
-    for (const lease of leases.rows) {
-      // Null-author leases are ordinary scheduler work; no actor is consulted.
-      await scheduleLeaseCharges(org.id, null, lease.id);
+  for (const org of orgs.rows) {
+    try {
+      await withOrg(org.id, async () => {
+        // Each org bills on its own calendar day.
+        const date = asOf ?? await businessToday(org.id);
+        const leases = (await db.execute<{ id: string }>(sql`select id from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`));
+        for (const lease of leases.rows) {
+          // Null-author leases are ordinary scheduler work; no actor is consulted.
+          await scheduleLeaseCharges(org.id, null, lease.id);
+        }
+        const fees = await assessLeaseLateFees(org.id, null, date);
+        const billed = await billDueLeaseCharges(org.id, null, date);
+        result.billed += billed.billed; result.invoices += billed.invoices.length; result.lateFees += fees.created;
+      });
+    } catch (e) {
+      // Per-org isolation, same shape as dunning and subscription billing:
+      // one tenant's misconfiguration is recorded by name and the loop
+      // continues instead of silencing every later org's billing this tick.
+      const message = e instanceof Error ? e.message : String(e);
+      result.orgErrors.push({ orgId: org.id, error: message });
+      console.error(`[property-billing] org ${org.id} billing failed:`, e);
     }
-    const fees = await assessLeaseLateFees(org.id, null, date);
-    const billed = await billDueLeaseCharges(org.id, null, date);
-    result.billed += billed.billed; result.invoices += billed.invoices.length; result.lateFees += fees.created;
-  });
+  }
   return result;
 }

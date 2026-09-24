@@ -200,6 +200,46 @@ test(
 );
 
 test(
+  "one org's unreadable business day fails its own subscriptions and still bills the next org",
+  { skip: !DB },
+  async () => {
+    // A stored business time zone no IANA database knows makes businessToday
+    // throw for exactly one tenant. The tick must surface that org's failure
+    // through last_error, continue the scan, and still bill the healthy org.
+    const poisoned = await createScratchOrg();
+    const healthy = await createScratchOrg();
+    try {
+      const poisonedActor = await createScratchUser(poisoned.orgId, "Billing", "admin");
+      const healthyActor = await createScratchUser(healthy.orgId, "Billing", "admin");
+      const poisonedSub = await seedPlainSubscription(poisoned, poisonedActor);
+      const healthySub = await seedPlainSubscription(healthy, healthyActor);
+      await db.execute(sql`
+        update orgs
+           set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{timeZone}', '"Not/AZone"')
+         where id = ${poisoned.orgId}
+      `);
+      // No asOf: the runner must read each org's own business day, which is
+      // where the poisoned org throws. Both subscriptions are due long ago.
+      const run = await runDueSubscriptions();
+      assert.equal(await postedInvoiceCount(healthy.orgId), 1, "the healthy org still bills");
+      const poisonedError = (await db.execute<{ lastError: string | null }>(sql`
+        select last_error as "lastError" from subscriptions where id = ${poisonedSub}
+      `)).rows[0]!.lastError;
+      assert.match(poisonedError ?? "", /business day unavailable.*not a known IANA time zone/);
+      const healthyError = (await db.execute<{ lastError: string | null }>(sql`
+        select last_error as "lastError" from subscriptions where id = ${healthySub}
+      `)).rows[0]!.lastError;
+      assert.equal(healthyError, null);
+      assert.ok(run.failed >= 1, "the poisoned org's subscriptions count as failed");
+      assert.equal(run.billed, 1);
+    } finally {
+      await dropScratchOrgReporting(poisoned.orgId);
+      await dropScratchOrgReporting(healthy.orgId);
+    }
+  },
+);
+
+test(
   "concurrent scheduler ticks converge on exactly one invoice for the due period",
   { skip: !DB },
   async () => {
