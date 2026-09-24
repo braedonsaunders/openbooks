@@ -85,6 +85,11 @@ const forecastMocks = new Map<string, string>([
     `
       export async function calculateForecast() { return [] }
       export async function countUndatedForecastExcluded() { return 3 }
+      // loadOpportunity(id, orgId, allowed?) rides the same lib/crm
+      // specifier the opportunities-loader half of this file maps to its
+      // own double; it must exist on this double too so the mock surface
+      // covers every importer. It never fires in the forecasts tests.
+      export async function loadOpportunity() { throw new Error('unexpected opportunity load') }
     `,
   ],
   [
