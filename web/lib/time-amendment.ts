@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { neg } from '@openbooks/engine/src/money/money.ts'
+import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { pinTimesheetEmployee, pinTimesheetLineRefs, setTimesheetWeekStatus, weekStart, weekWindow } from '../app/api/timesheets/_lib'
 import { checkProjectsWriteEnabled } from './features'
 import { lockReasonsFor } from './time-lifecycle'
@@ -27,8 +28,16 @@ export async function amendTimeEntry(
   orgId: string,
   actorId: string,
   entryId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ id: string; amendsEntryId: string; amended: number }> {
   return withOrgTransaction(orgId, async () => {
+    // Probe only the employee identity first, then take the authoritative
+    // party scope lock before locking the entry or its week.
+    const identity = (await db.execute<{ employee_party_id: string }>(sql`
+      select employee_party_id from time_entries where id = ${entryId} and org_id = ${orgId}
+    `)).rows[0]
+    if (!identity) throw new Error('time entry not found')
+    await lockScopeRow(db, orgId, 'party', identity.employee_party_id, allowedSubsidiaryIds, 'share')
     const src = (await db.execute<AmendableRow>(sql`
       select ${AMENDABLE_COLUMNS}
         from time_entries
@@ -37,6 +46,7 @@ export async function amendTimeEntry(
     `))
     const row = src.rows[0]
     if (!row) throw new Error('time entry not found')
+    if (row.employee_party_id !== identity.employee_party_id) throw new ScopeNotFoundError()
     if (row.amends_entry_id) throw new Error('an amendment cannot itself be amended — amend the original')
     // Only approved history is amended. An entry that is still draft,
     // submitted, or rejected remains editable, so a contra against it would
@@ -44,7 +54,7 @@ export async function amendTimeEntry(
     // offset into phantom negative hours. Correct editable entries by saving,
     // and consumed ones here.
     if (row.status !== 'approved') throw new Error('only an approved entry can be amended — edit or submit it first')
-    const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id)
+    const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id, allowedSubsidiaryIds)
     if (!ownedEmployee) throw new Error('employee not found')
     row.employee_party_id = ownedEmployee
     const already = (await db.execute(sql`
@@ -192,9 +202,11 @@ export async function amendLockedWeek(
   actorId: string,
   employeeId: string,
   sundayIso: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ amended: number }> {
   return withOrgTransaction(orgId, async () => {
-    const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId)
+    await lockScopeRow(db, orgId, 'party', employeeId, allowedSubsidiaryIds, 'share')
+    const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId, allowedSubsidiaryIds)
     if (!ownedEmployee) throw new Error('employee not found')
     const week = weekStart(sundayIso)
     const days = weekWindow(week)

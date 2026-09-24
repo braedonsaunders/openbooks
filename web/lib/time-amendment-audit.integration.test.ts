@@ -106,7 +106,7 @@ test(
       ${SEED}
       const fixture = await seedWeek('approved');
       try {
-        const result = await amendTimeEntry(fixture.org.orgId, fixture.actorId, fixture.timeEntryId);
+        const result = await amendTimeEntry(fixture.org.orgId, fixture.actorId, fixture.timeEntryId, null);
         const audit = await db.execute(sql\`
           select action, actor_id as "actorId", changes
             from audit_log
@@ -137,7 +137,7 @@ test(
       const fixture = await seedWeek('draft');
       try {
         await assert.rejects(
-          amendTimeEntry(fixture.org.orgId, fixture.actorId, fixture.timeEntryId),
+          amendTimeEntry(fixture.org.orgId, fixture.actorId, fixture.timeEntryId, null),
           /only an approved entry/,
         );
         const audit = await db.execute(sql\`
