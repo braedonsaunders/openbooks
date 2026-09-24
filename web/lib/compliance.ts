@@ -582,6 +582,8 @@ export type LienWaiverRow = {
 
 export async function loadLienWaivers(args: {
   orgId: string
+  /** Targeted open-record lookup: bypasses the list filters but keeps the org/subsidiary scope. */
+  id?: string | null
   direction?: 'received' | 'issued' | null
   status?: string | null
   projectId?: string | null
@@ -608,6 +610,7 @@ export async function loadLienWaivers(args: {
       join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
       left join documents bill on bill.id = lw.bill_document_id and bill.org_id = lw.org_id
      where lw.org_id = ${args.orgId}
+       and (${args.id ?? null}::uuid is null or lw.id = ${args.id ?? null}::uuid)
        and (${args.direction ?? null}::text is null or lw.direction = ${args.direction ?? null})
        and (${args.status ?? null}::text is null or lw.status = ${args.status ?? null})
        and (${args.projectId ?? null}::uuid is null or lw.project_id = ${args.projectId ?? null}::uuid)
