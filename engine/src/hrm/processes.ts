@@ -320,24 +320,28 @@ async function assertTemplateWriteScope(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
-  employerSubsidiaryId: string | null,
+  appliesTo: { employerSubsidiaryId: string | null; departmentId: string | null },
 ): Promise<void> {
-  if (employerSubsidiaryId === null) {
-    await requireUnrestrictedHrmScope(exec, orgId, actorId);
-    return;
-  }
-  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
-  if (allowed !== null && !allowed.has(employerSubsidiaryId)) {
-    throw new HrmProcessError(
-      "NOT_FOUND",
-      "process template not found in this organization — check the template id",
-    );
+  try {
+    await assertAppliesToTargets(exec, orgId, actorId, appliesTo);
+  } catch (error) {
+    if (error instanceof HrmProcessError && error.code === "NOT_FOUND") {
+      throw new HrmProcessError(
+        "NOT_FOUND",
+        "process template not found in this organization — check the template id",
+      );
+    }
+    throw error;
   }
 }
 
-function templateEmployer(appliesTo: { employer_subsidiary_id?: unknown } | null): string | null {
-  const value = appliesTo?.employer_subsidiary_id;
-  return typeof value === "string" ? value : null;
+function templateAppliesTo(
+  appliesTo: { employer_subsidiary_id?: unknown; department_id?: unknown } | null,
+): { employerSubsidiaryId: string | null; departmentId: string | null } {
+  return {
+    employerSubsidiaryId: typeof appliesTo?.employer_subsidiary_id === "string" ? appliesTo.employer_subsidiary_id : null,
+    departmentId: typeof appliesTo?.department_id === "string" ? appliesTo.department_id : null,
+  };
 }
 
 /**
@@ -359,6 +363,7 @@ async function assertAppliesToTargets(
       );
     }
   }
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (appliesTo.employerSubsidiaryId === null) {
     // Declaring (or keeping) an org-wide target is an org-wide write.
     await requireUnrestrictedHrmScope(exec, orgId, actorId);
@@ -366,7 +371,6 @@ async function assertAppliesToTargets(
     // One scoped-existence check covers unknown, cross-org, and
     // out-of-scope subsidiaries identically: a B subsidiary reads to an
     // A-scoped actor exactly like a fabricated id.
-    const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
     const found = (await exec.execute(sql`
       select 1 as one from subsidiaries
        where org_id = ${orgId} and id = ${appliesTo.employerSubsidiaryId}
@@ -380,13 +384,30 @@ async function assertAppliesToTargets(
     }
   }
   if (appliesTo.departmentId !== null) {
-    const found = (await exec.execute(sql`
-      select 1 as one from departments where org_id = ${orgId} and id = ${appliesTo.departmentId}
+    const department = (await exec.execute<{ subsidiary_id: string | null; owner_exists: boolean }>(sql`
+      select d.subsidiary_id,
+             (d.subsidiary_id is null or s.id is not null) as owner_exists
+        from departments d
+        left join subsidiaries s on s.org_id = d.org_id and s.id = d.subsidiary_id
+       where d.org_id = ${orgId} and d.id = ${appliesTo.departmentId}
     `)).rows[0];
-    if (!found) {
+    if (!department?.owner_exists || (department.subsidiary_id !== null && allowed !== null && !allowed.has(department.subsidiary_id))) {
+      throw new HrmProcessError(
+        "NOT_FOUND",
+        "process template target is not visible in this organization — check the department id",
+      );
+    }
+    // A shared department has no subsidiary owner and may be narrowed by an
+    // explicit employer target. A subsidiary-owned department must match
+    // that employer exactly; otherwise the template would cross entity lines.
+    if (
+      appliesTo.employerSubsidiaryId !== null &&
+      department.subsidiary_id !== null &&
+      department.subsidiary_id !== appliesTo.employerSubsidiaryId
+    ) {
       throw new HrmProcessError(
         "REFUSED",
-        "the applies_to department is not visible in this organization — pick a department of this organization, or null for all",
+        "the applies_to department belongs to a different subsidiary than the employer target — choose a matching department or a shared department",
       );
     }
   }
@@ -523,7 +544,7 @@ export async function updateProcessTemplate(query: UpdateTemplateQuery): Promise
     }
     // The locked row's current target is rechecked first: a B-targeted
     // template refuses as not-found before the new target is even read.
-    await assertTemplateWriteScope(db, orgId, actorId, templateEmployer(current.applies_to));
+    await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(current.applies_to));
     const name = query.name === undefined ? current.name : requireNonBlank("name", query.name);
     const appliesTo =
       query.appliesTo === undefined
@@ -607,7 +628,7 @@ export async function deleteProcessTemplate(query: {
     }
     // Deleting retires the instrument for every targeted entity: same
     // locked-row scope as updating.
-    await assertTemplateWriteScope(db, orgId, actorId, templateEmployer(current.applies_to));
+    await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(current.applies_to));
     const opened = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_processes where org_id = ${orgId} and template_id = ${templateId}
     `)).rows[0]?.n ?? 0;
@@ -689,7 +710,7 @@ export async function upsertProcessTemplateStep(query: UpsertTemplateStepQuery):
     }
     // Steps execute for the template's targeted employees: the locked
     // template's target governs every step write on it.
-    await assertTemplateWriteScope(db, orgId, actorId, templateEmployer(template.applies_to));
+    await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(template.applies_to));
     await assertOwnerParty(db, orgId, ownerPartyId);
     const description = query.description ?? null;
     const required = query.required ?? true;
@@ -776,7 +797,7 @@ export async function reorderProcessTemplateSteps(query: {
     }
     // Reordering rewrites the steps the targeted employees execute:
     // same locked-template scope as every other step write.
-    await assertTemplateWriteScope(db, orgId, actorId, templateEmployer(template.applies_to));
+    await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(template.applies_to));
     const current = (await db.execute<{ id: string }>(sql`
       select id from hrm_process_template_steps where org_id = ${orgId} and template_id = ${templateId}
     `)).rows.map((row) => row.id);
@@ -853,7 +874,7 @@ export async function deleteProcessTemplateStep(query: {
     }
     // Deleting a step removes it from the targeted employees' future
     // checklists: same locked-template scope as the other step writes.
-    await assertTemplateWriteScope(db, orgId, actorId, templateEmployer(template.applies_to));
+    await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(template.applies_to));
     // Opened processes hold snapshots, so deleting a template step never
     // rewrites history — lineage on copied steps simply clears (SET NULL).
     const deleted = (await db.execute(sql`

@@ -12,6 +12,7 @@ import {
   createProcessTemplate,
   deleteProcessTemplate,
   deleteProcessTemplateStep,
+  reorderProcessTemplateSteps,
   updateProcessTemplate,
   upsertProcessTemplateStep,
 } from "./processes.ts";
@@ -83,10 +84,16 @@ test("H-PROCESSTEMPLATES: template writes need the targeted entity's scope", { s
         from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
     const managerA = await createScratchUser(org.orgId, "Process Manager A", "pt_mgr_a");
     await scopeRole(org.orgId, "pt_mgr_a", ["hrm.process.manage"], [org.subsidiaryId]);
-    const createAs = (employerSubsidiaryId: string | null, name: string) =>
+    const departmentB = randomUUID();
+    const sharedDepartment = randomUUID();
+    await db.execute(sql`
+      insert into departments (id, org_id, name, subsidiary_id)
+      values (${departmentB}, ${org.orgId}, 'B department', ${subB}),
+             (${sharedDepartment}, ${org.orgId}, 'Shared department', null)`);
+    const createAs = (employerSubsidiaryId: string | null, name: string, departmentId: string | null = null) =>
       createProcessTemplate({
         orgId: org.orgId, actorId: managerA, kind: "onboarding", name,
-        appliesTo: { employerSubsidiaryId, departmentId: null },
+        appliesTo: { employerSubsidiaryId, departmentId },
       });
 
     // A B-targeted template refuses exactly like a fabricated subsidiary.
@@ -94,6 +101,20 @@ test("H-PROCESSTEMPLATES: template writes need the targeted entity's scope", { s
     const fabricated = await refusalOf(createAs(randomUUID(), "Fabricated onboarding"));
     assert.deepEqual(foreign, fabricated);
     assert.equal(foreign.code, "NOT_FOUND");
+
+    // A visible A employer cannot be paired with a B-owned department.
+    // A global department is deliberately valid with a specific employer:
+    // the employer target supplies the legal-entity boundary.
+    const foreignDepartment = await refusalOf(createAs(org.subsidiaryId, "A with B department", departmentB));
+    assert.equal(foreignDepartment.code, "NOT_FOUND");
+    const inconsistentTargets = await refusalOf(createProcessTemplate({
+      orgId: org.orgId, actorId: adminId, kind: "onboarding", name: "A employer with B department",
+      appliesTo: { employerSubsidiaryId: org.subsidiaryId, departmentId: departmentB },
+    }));
+    assert.equal(inconsistentTargets.code, "REFUSED");
+    assert.match(inconsistentTargets.message, /different subsidiary than the employer target/);
+    const sharedDepartmentTemplate = await createAs(org.subsidiaryId, "A with shared department", sharedDepartment);
+    assert.ok(sharedDepartmentTemplate.id);
 
     // An org-wide template executes for every entity: needs unrestricted scope.
     const orgWide = await refusalOf(createAs(null, "Org onboarding"));
@@ -109,6 +130,29 @@ test("H-PROCESSTEMPLATES: template writes need the targeted entity's scope", { s
       orgId: org.orgId, actorId: adminId, kind: "offboarding", name: "B offboarding",
       appliesTo: { employerSubsidiaryId: subB, departmentId: null },
     });
+
+    // Simulate a legacy mismatched row: every mutation, including every
+    // step operation, must revalidate both parts of the locked target.
+    const legacyMismatchId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_process_templates (id, org_id, kind, name, applies_to, created_by, updated_by)
+      values (${legacyMismatchId}, ${org.orgId}, 'onboarding', 'Legacy A with B department',
+        ${JSON.stringify({ employer_subsidiary_id: org.subsidiaryId, department_id: departmentB })}::jsonb,
+        ${adminId}, ${adminId})`);
+    const legacyStepId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_process_template_steps (id, org_id, template_id, position, title, owner_kind, created_by, updated_by)
+      values (${legacyStepId}, ${org.orgId}, ${legacyMismatchId}, 0, 'Legacy step', 'hr', ${adminId}, ${adminId})`);
+    for (const mutation of [
+      () => updateProcessTemplate({ orgId: org.orgId, actorId: managerA, templateId: legacyMismatchId, name: "Changed" }),
+      () => upsertProcessTemplateStep({ orgId: org.orgId, actorId: managerA, templateId: legacyMismatchId, ...STEP }),
+      () => reorderProcessTemplateSteps({ orgId: org.orgId, actorId: managerA, templateId: legacyMismatchId, orderedStepIds: [legacyStepId] }),
+      () => deleteProcessTemplateStep({ orgId: org.orgId, actorId: managerA, templateId: legacyMismatchId, stepId: legacyStepId }),
+      () => deleteProcessTemplate({ orgId: org.orgId, actorId: managerA, templateId: legacyMismatchId }),
+    ]) {
+      const hidden = await refusalOf(mutation());
+      assert.equal(hidden.code, "NOT_FOUND");
+    }
     const templateOrg = await createProcessTemplate({
       orgId: org.orgId, actorId: adminId, kind: "transfer", name: "Org transfer",
       appliesTo: { employerSubsidiaryId: null, departmentId: null },
