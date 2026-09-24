@@ -4,7 +4,7 @@
  *   npx tsx engine/src/sandbox/cli.ts create "QA sandbox" --tier=masked
  *   npx tsx engine/src/sandbox/cli.ts refresh <sandboxId> [--reset]
  *   npx tsx engine/src/sandbox/cli.ts delete <sandboxId>
- *   npx tsx engine/src/sandbox/cli.ts promote <sandboxId> "My change set"
+ *   npx tsx engine/src/sandbox/cli.ts promote <sandboxId> "My change set" --actor=<userId>
  *   npx tsx engine/src/sandbox/cli.ts apply <changeSetId>
  *
  * The production org defaults to the first org row; pass --org=<uuid> to target
@@ -16,6 +16,7 @@ import { applyChangeSet, buildChangeSet } from "./promote.ts";
 import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
 import { listSandboxes } from "./index.ts";
 import type { SandboxTier } from "./clone.ts";
+import { resolveCliActor } from "./cli-actor.ts";
 
 function flag(args: string[], name: string): string | undefined {
   const p = args.find((a) => a.startsWith(`--${name}=`));
@@ -84,8 +85,9 @@ async function main() {
     }
     case "promote": {
       const [id, name] = positional;
-      if (!id) throw new Error("usage: promote <sandboxId> [name]");
-      const { changeSetId, itemCount } = await buildChangeSet(id, name ?? "Change set");
+      if (!id) throw new Error("usage: promote <sandboxId> [name] --actor <userId>");
+      const actorId = await resolveCliActor(rest);
+      const { changeSetId, itemCount } = await buildChangeSet(id, name ?? "Change set", actorId);
       console.log(`✓ change set ${changeSetId} with ${itemCount} item(s). Apply with: apply ${changeSetId}`);
       break;
     }
