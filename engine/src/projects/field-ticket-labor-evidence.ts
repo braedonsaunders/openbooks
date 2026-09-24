@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { db, withOrg } from "../platform/db.ts";
 
 export type FieldTicketLaborEvidenceBasis =
@@ -112,6 +113,13 @@ function validateInput(args: CaptureFieldTicketLaborEvidenceArgs): void {
       /^-?0(?:\.0+)?$/.test(line.hours)
     ) {
       throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} needs non-zero decimal hours and an ISO date`);
+    }
+    // ISO_DATE is shape-only: 2026-02-30 passes the regex and then
+    // (workedOn)::date throws a raw Postgres error. Calendar-validate
+    // through the shared helper so the refusal is always a named
+    // FieldTicketLaborEvidenceError and no raw cast reaches the database.
+    if (!isIsoCalendarDate(line.workedOn)) {
+      throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} has an impossible calendar date "${line.workedOn}" (expected a real YYYY-MM-DD day)`);
     }
     for (const value of [line.costRate, line.billRate, line.costAmount, line.billAmount]) {
       if (value != null && !DECIMAL.test(value)) {
