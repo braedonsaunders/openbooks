@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { subsidiaryScopeAllows } from "../../organization/subsidiary-scope.ts";
 import {
   actorHoldsRecruitingRead,
   actorOnInterviewPanel,
@@ -8,6 +10,7 @@ import {
   requireHrmRecruitingRead,
   requireOwnRequisitionForHiringManager,
 } from "../authorization.ts";
+import { candidateSharedViaPool } from "./candidate-scope.ts";
 import { RecruitingError } from "./errors.ts";
 import { effectiveOfferStatus, funnelCounts, timeToFillDays } from "./funnel.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
@@ -469,14 +472,17 @@ export interface CandidateDetail extends CandidateView {
 /**
  * The candidate drawer: applications and interviews with PII redacted
  * unless the viewer holds hrm.recruiting.read. A hiring manager reaches a
- * candidate only through a requisition they manage.
+ * candidate only through a requisition they manage. A grant holder reaches
+ * a candidate only through an application on an in-scope requisition (or a
+ * shared talent pool, with PII redacted): the grant alone never opens
+ * another entity's pipeline, and denials are uniform with not-found.
  */
 export async function getCandidateDetail(query: GetCandidateQuery): Promise<CandidateDetail> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const candidateId = requireId(query.candidateId, "candidateId");
-  const canSeePii = await actorHoldsRecruitingRead(db, orgId, actorId);
-  if (!canSeePii) {
+  const holdsReadGrant = await actorHoldsRecruitingRead(db, orgId, actorId);
+  if (!holdsReadGrant) {
     // Without the grant, the only path in is managing one of the
     // candidate's requisitions.
     const requisitions = (await db.execute<{ requisitionId: string }>(sql`
@@ -516,6 +522,7 @@ export async function getCandidateDetail(query: GetCandidateQuery): Promise<Cand
   }
   const applications = (await db.execute<{
     requisitionId: string;
+    employerSubsidiaryId: string;
     requisitionNumber: string;
     requisitionTitle: string;
     applicationId: string;
@@ -523,7 +530,9 @@ export async function getCandidateDetail(query: GetCandidateQuery): Promise<Cand
     status: string;
     appliedOn: string;
   }>(sql`
-    select a.requisition_id as "requisitionId", r.requisition_number as "requisitionNumber",
+    select a.requisition_id as "requisitionId",
+           r.employer_subsidiary_id as "employerSubsidiaryId",
+           r.requisition_number as "requisitionNumber",
            r.title as "requisitionTitle", a.id as "applicationId",
            s.name as "stageName", a.status, a.applied_on as "appliedOn"
       from hrm_applications a
@@ -532,7 +541,7 @@ export async function getCandidateDetail(query: GetCandidateQuery): Promise<Cand
      where a.org_id = ${orgId} and a.candidate_id = ${candidateId}
      order by a.applied_on
   `)).rows;
-  if (!canSeePii) {
+  if (!holdsReadGrant) {
     // The manager sees only the applications on their own requisitions.
     const own: typeof applications = [];
     for (const entry of applications) {
@@ -557,14 +566,40 @@ export async function getCandidateDetail(query: GetCandidateQuery): Promise<Cand
       resumeAttachmentId: null,
       isInternal: candidate.isInternal,
       href: `/hrm/recruiting?candidate=${candidate.id}`,
-      applications: own,
+      applications: own.map(({ employerSubsidiaryId: _employer, ...rest }) => rest),
       interviews,
+    };
+  }
+  // Grant path: the grant proves the reader is recruiting staff, but scope
+  // comes from the candidate's own applications — only applications on
+  // in-scope requisitions are shown, and contact PII opens only when at
+  // least one such application exists. A candidate reachable solely through
+  // a shared talent pool renders identity-only (no PII, no funnel rows);
+  // anything else is uniform not-found.
+  const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+  const inScope = applications.filter((entry) => subsidiaryScopeAllows(allowed, entry.employerSubsidiaryId));
+  if (inScope.length === 0) {
+    const shared = await candidateSharedViaPool(db, orgId, candidateId);
+    if (!shared) {
+      throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
+    }
+    return {
+      id: candidate.id,
+      displayName: candidate.displayName,
+      email: null,
+      phone: null,
+      source: candidate.source,
+      resumeAttachmentId: null,
+      isInternal: candidate.isInternal,
+      href: `/hrm/recruiting?candidate=${candidate.id}`,
+      applications: [],
+      interviews: [],
     };
   }
   const interviews = await interviewsFor(
     db,
     orgId,
-    new Set(applications.map((entry) => entry.applicationId)),
+    new Set(inScope.map((entry) => entry.applicationId)),
   );
   return {
     id: candidate.id,
@@ -575,7 +610,7 @@ export async function getCandidateDetail(query: GetCandidateQuery): Promise<Cand
     resumeAttachmentId: candidate.resumeAttachmentId,
     isInternal: candidate.isInternal,
     href: `/hrm/recruiting?candidate=${candidate.id}`,
-    applications,
+    applications: inScope.map(({ employerSubsidiaryId: _employer, ...rest }) => rest),
     interviews,
   };
 }
