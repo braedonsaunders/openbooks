@@ -6,6 +6,7 @@ import { Play } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { Button, Select } from "@openbooks/ui";
+import { throwApiErrorIfNotOk } from "../../../lib/api-error";
 
 export function StartCloseButton({
   periodId,
@@ -28,8 +29,8 @@ export function StartCloseButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ periodId, bookId }),
       });
+      await throwApiErrorIfNotOk(response, t("errors.actionFailed"));
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? t("errors.actionFailed"));
       router.push(`/close?run=${data.runId}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
