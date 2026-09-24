@@ -1,8 +1,6 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   page,
   pageHeader,
@@ -14,7 +12,7 @@ import {
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../lib/list-params'
-import { loadBudgetBooksAndYears, loadBudgetWorkspace, loadUnsavedBudgetWorkspace, type BudgetDimensions, type BudgetWorkspace } from '../../../lib/budgets'
+import { listBudgetSourceOptions, loadBudgetBooksAndYears, loadBudgetWorkspace, loadUnsavedBudgetWorkspace, type BudgetDimensions, type BudgetWorkspace } from '../../../lib/budgets'
 import type { BudgetDrawer } from './BudgetDrawer'
 
 /**
@@ -78,10 +76,9 @@ export async function loadBudgets(
   const canCreate = canManage && books.length > 0 && years.length > 0
   const creating = pickString(sp.budgetNew) === '1' && canCreate && !budgetId
   const [sources, workspace, unsaved] = await Promise.all([
-    ((budgetId && isUuid(budgetId)) || creating) ? db.execute(sql`
-      select id, name, fiscal_year from budget_scenarios
-       where org_id = ${orgId} and status <> 'archived' order by updated_at desc limit 50
-    `) as Promise<{ rows: { id: string; name: string; fiscal_year: number }[] }> : Promise.resolve({ rows: [] }),
+    ((budgetId && isUuid(budgetId)) || creating)
+      ? listBudgetSourceOptions(orgId, authz.allowedSubsidiaryIds).then((rows) => ({ rows }))
+      : Promise.resolve({ rows: [] as { id: string; name: string; fiscal_year: number }[] }),
     budgetId && isUuid(budgetId) ? loadBudgetWorkspace(budgetId, orgId, {
       q: budgetList.q,
       page: budgetList.page,
