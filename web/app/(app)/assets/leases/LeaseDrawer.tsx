@@ -423,11 +423,12 @@ function ChangeLease({
   lease: LeaseDisplay;
   accounts: Option[];
 }) {
+  const today = useBusinessToday();
   const router = useRouter(),
     [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false);
   const [operation, setOperation] = useState("modification"),
-    [date, setDate] = useState(useBusinessToday()),
+    [date, setDate] = useState(today),
     [reason, setReason] = useState(""),
     [assessment, setAssessment] = useState("");
   const [payment, setPayment] = useState(lease.payment_amount),
@@ -438,10 +439,45 @@ function ChangeLease({
   const [scope, setScope] = useState("0"),
     [settlement, setSettlement] = useState("0"),
     [gainAccount, setGainAccount] = useState(""),
-    [key] = useState(() => crypto.randomUUID());
+    [key, setKey] = useState(() => crypto.randomUUID());
+
+  // Start the form from the given lease with a fresh idempotency key.
+  function resetToLease() {
+    setOperation("modification");
+    setDate(today);
+    setReason("");
+    setAssessment("");
+    setPayment(lease.payment_amount);
+    setPeriods(String(lease.term_periods));
+    setRate(lease.annual_discount_rate_percent);
+    setTiming(lease.payment_timing);
+    setFrequency(lease.payment_frequency);
+    setScope("0");
+    setSettlement("0");
+    setGainAccount("");
+    setCriteria((lease.classification_inputs ?? {}) as Record<string, unknown>);
+    setKey(crypto.randomUUID());
+  }
+
+  // Every open also resets to THIS lease with a fresh key: without it, a
+  // reopened popover replays the previous terms, and the second proposal
+  // replays the first key and the server refuses it.
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) return;
+    resetToLease();
+  }
   const [criteria, setCriteria] = useState<Record<string, unknown>>(
     lease.classification_inputs,
   );
+  // A new lease id resets the form even when no remount happens (a keyless
+  // parent): otherwise a proposal typed for lease A stays in the form when
+  // the page shows lease B. Placed after every useState it touches.
+  const [seenLeaseId, setSeenLeaseId] = useState(lease.id);
+  if (seenLeaseId !== lease.id) {
+    setSeenLeaseId(lease.id);
+    resetToLease();
+  }
   const criterion = (key: string, value: unknown) =>
     setCriteria((old) => ({ ...old, [key]: value }));
   async function propose() {
@@ -481,9 +517,9 @@ function ChangeLease({
   return (
     <Popover
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={handleOpenChange}
       trigger={
-        <Button variant="outline" onClick={() => setOpen(!open)}>
+        <Button variant="outline" onClick={() => handleOpenChange(!open)}>
           Change / terminate
         </Button>
       }
