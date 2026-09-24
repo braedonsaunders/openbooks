@@ -193,12 +193,12 @@ test("pack-declared certificate renewal dates stop stale statutory exemptions", 
   const azBefore = resolveCertificate({
     certificate: az,
     stored: stored(az.key, { zero_percent: "true" }, "2025-01-01"),
-    asOf: "2025-12-31",
+    asOf: "2026-02-15",
   });
   const azAfter = resolveCertificate({
     certificate: az,
     stored: stored(az.key, { zero_percent: "true" }, "2025-01-01"),
-    asOf: "2026-01-01",
+    asOf: "2026-02-16",
   });
   assert.equal(azBefore.answers.zero_percent, "true");
   assert.equal(azAfter.onFile, false);
