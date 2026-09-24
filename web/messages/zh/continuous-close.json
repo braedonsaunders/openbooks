@@ -336,6 +336,13 @@
     "dismiss": "发现项已忽略。",
     "reopen": "发现项已重新打开。",
     "actionFailed": "无法更新该发现项。",
+    "errors": {
+      "invalid_transition": "该操作对此发现已不再可用。请刷新查看其当前状态。",
+      "reason_required": "驳回该发现需要填写原因。",
+      "conflict": "其他人刚刚更新了该发现。请刷新后重试。",
+      "forbidden": "您没有更改该发现的权限。",
+      "not_found": "该发现已不存在。请刷新列表。"
+    },
     "recorded": "反馈已记录。",
     "wasHelpful": "此发现项是否有用？",
     "helpful": "有用",

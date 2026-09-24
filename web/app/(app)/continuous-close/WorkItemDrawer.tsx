@@ -12,6 +12,7 @@ import { Badge, Button, Textarea, UrlDrawer } from '@openbooks/ui'
 import { ApplicationCommandCard } from '@/components/assistant/application-command-card'
 import type { FindingProposalCommand } from '@/lib/agents/proposals'
 import { displayRoleName } from '@/lib/role-display'
+import { readApiErrorMessage } from '../../../lib/api-error'
 type Evidence = {
   id: string
   kind: string
@@ -97,6 +98,28 @@ export function WorkItemDrawer({
   const [dismissMode, setDismissMode] = useState(false)
   const [reason, setReason] = useState('')
   const [feedback, setFeedback] = useState(item.feedback)
+  // A refused mutation pins to the drawer until the next action — a toast
+  // alone vanishes, and a refresh would wipe the explanation away. Cleared
+  // on every new attempt and on success.
+  const [refusal, setRefusal] = useState<string | null>(null)
+
+  /**
+   * The server names refusals with short codes (invalid_transition,
+   * reason_required, conflict, forbidden, ...). Known codes resolve to
+   * translated copy; any other named refusal renders verbatim so the
+   * operator still sees what the server said. A body that is not JSON keeps
+   * the translated fallback, never a SyntaxError.
+   */
+  async function refusalMessage(response: Response, fallback: string): Promise<string> {
+    const named = await readApiErrorMessage(response, fallback)
+    if (t.has(`feedback.errors.${named}` as never)) return t(`feedback.errors.${named}` as never)
+    return named
+  }
+
+  function pinRefusal(message: string) {
+    setRefusal(message)
+    toast.error(message)
+  }
   const href = typeof item.summary.href === 'string' ? item.summary.href : null
   const aiAnalysis = item.summary.aiAnalysis && typeof item.summary.aiAnalysis === 'object' && !Array.isArray(item.summary.aiAnalysis)
     ? item.summary.aiAnalysis as Record<string, unknown>
@@ -104,18 +127,27 @@ export function WorkItemDrawer({
 
   async function mutate(action: 'review' | 'resolve' | 'dismiss' | 'reopen') {
     setBusy(true)
+    setRefusal(null)
     try {
       const response = await fetch(`/api/continuous-close/items/${item.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action, reason: action === 'dismiss' ? reason : undefined }),
       })
-      if (!response.ok) throw new Error()
+      // The status is checked before the body is parsed: the refusal pins
+      // beside the finding with its server-named reason, and the finding is
+      // NOT refreshed — the transition did not land, so the explanation must
+      // stay where the next attempt happens.
+      if (!response.ok) {
+        pinRefusal(await refusalMessage(response, t('feedback.actionFailed')))
+        return
+      }
+      setRefusal(null)
       toast.success(t(`feedback.${action}`))
       router.refresh()
       if (action === 'dismiss') setDismissMode(false)
     } catch {
-      toast.error(t('feedback.actionFailed'))
+      pinRefusal(t('feedback.actionFailed'))
     } finally {
       setBusy(false)
     }
@@ -128,6 +160,7 @@ export function WorkItemDrawer({
 
   async function saveAssignment(clear = false) {
     setBusy(true)
+    setRefusal(null)
     try {
       const response = await fetch(`/api/continuous-close/items/${item.id}`, {
         method: 'PATCH',
@@ -139,11 +172,15 @@ export function WorkItemDrawer({
           dueAt: clear || !dueDate ? null : new Date(`${dueDate}T00:00:00`).toISOString(),
         }),
       })
-      if (!response.ok) throw new Error()
+      if (!response.ok) {
+        pinRefusal(await refusalMessage(response, ta('drawer.assignment.saveFailed')))
+        return
+      }
+      setRefusal(null)
       toast.success(ta('drawer.assignment.saved'))
       router.refresh()
     } catch {
-      toast.error(ta('drawer.assignment.saveFailed'))
+      pinRefusal(ta('drawer.assignment.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -153,35 +190,45 @@ export function WorkItemDrawer({
     const body = noteBody.trim()
     if (!body) return
     setBusy(true)
+    setRefusal(null)
     try {
       const response = await fetch(`/api/continuous-close/items/${item.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'note', body }),
       })
-      if (!response.ok) throw new Error()
+      if (!response.ok) {
+        pinRefusal(await refusalMessage(response, ta('drawer.notes.addFailed')))
+        return
+      }
+      setRefusal(null)
       setNoteBody('')
       toast.success(ta('drawer.notes.added'))
       router.refresh()
     } catch {
-      toast.error(ta('drawer.notes.addFailed'))
+      pinRefusal(ta('drawer.notes.addFailed'))
     } finally {
       setBusy(false)
     }
   }
 
   async function rate(rating: 'helpful' | 'not_helpful') {
+    setRefusal(null)
     try {
       const response = await fetch(`/api/continuous-close/items/${item.id}/feedback`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ rating }),
       })
-      if (!response.ok) throw new Error()
+      if (!response.ok) {
+        pinRefusal(await refusalMessage(response, t('feedback.actionFailed')))
+        return
+      }
+      setRefusal(null)
       setFeedback(rating)
       toast.success(t('feedback.recorded'))
     } catch {
-      toast.error(t('feedback.actionFailed'))
+      pinRefusal(t('feedback.actionFailed'))
     }
   }
 
@@ -209,6 +256,11 @@ export function WorkItemDrawer({
       ) : undefined}
     >
       <div className="space-y-5">
+        {refusal ? (
+          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+            {refusal}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={SEVERITY_VARIANT[item.severity]}>{t(`severity.${item.severity}`)}</Badge>
           <Badge variant={STATUS_VARIANT[item.status]}>{t(`status.${item.status}`)}</Badge>

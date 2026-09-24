@@ -336,6 +336,13 @@
     "dismiss": "Constatação descartada.",
     "reopen": "Constatação reaberta.",
     "actionFailed": "Não foi possível atualizar a constatação.",
+    "errors": {
+      "invalid_transition": "Essa ação não está mais disponível para este achado. Atualize para ver o status atual.",
+      "reason_required": "É necessário informar um motivo para dispensar este achado.",
+      "conflict": "Outra pessoa acabou de atualizar este achado. Atualize e tente novamente.",
+      "forbidden": "Você não tem permissão para alterar este achado.",
+      "not_found": "Este achado não existe mais. Atualize a lista."
+    },
     "recorded": "Feedback registrado.",
     "wasHelpful": "Esta constatação foi útil?",
     "helpful": "Útil",
