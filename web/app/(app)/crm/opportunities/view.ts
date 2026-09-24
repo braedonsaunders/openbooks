@@ -62,8 +62,17 @@ export async function loadOpportunities(
   const openId = pickString(sp.opportunity)
   const viewMode: 'board' | 'list' = pickString(sp.view) === 'board' ? 'board' : 'list'
   // Forecast exclusion note links here with `undated=1`: the pipeline the
-  // weighted forecast cannot see is exactly the undated population.
+  // weighted forecast cannot see is exactly the undated population. The
+  // forecast carries its active owner/team scope on that link, and the board
+  // honours it — otherwise the board widens to the whole org while the
+  // exclusion count beside the link stays scoped. Owner wins over team,
+  // mirroring the forecasts loader's exclusivity.
   const undatedOnly = pickString(sp.undated) === '1'
+  const requestedOwner = pickString(sp.owner)
+  const requestedTeam = pickString(sp.team)
+  const boardOwnerUserId = requestedOwner && isUuid(requestedOwner) ? requestedOwner : null
+  const boardSalesTeamId =
+    !boardOwnerUserId && requestedTeam && isUuid(requestedTeam) ? requestedTeam : null
 
   let board: OpportunitiesData['board'] = null
   if (viewMode === 'board') {
@@ -128,6 +137,8 @@ export async function loadOpportunities(
           left join crm_sales_teams st on st.id = o.sales_team_id and st.org_id = o.org_id
          where o.org_id = ${authz.user.orgId} and o.is_active${crmOpportunityScope(authz.allowedSubsidiaryIds)}
            ${undatedOnly ? sql`and o.expected_close_date is null` : sql``}
+           ${boardOwnerUserId ? sql`and o.owner_user_id = ${boardOwnerUserId}` : sql``}
+           ${boardSalesTeamId ? sql`and o.sales_team_id = ${boardSalesTeamId}` : sql``}
          order by o.expected_close_date nulls last, o.created_at desc
          limit 500`),
     ])
