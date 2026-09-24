@@ -4,6 +4,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { financialClosePeriodScope, revaluationReadiness } from "./fx-revaluation.ts";
 import { sourceEvidencePolicyActive } from "../banking/banking.ts";
+import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
 
 type ReadinessCheck = {
@@ -141,6 +142,10 @@ export async function readinessChecks(
   const subsidiaryIds = ctx.scope?.subsidiaryIds ?? [];
   const scoped = subsidiaryIds.length > 0;
   const inScope = (entity: SQL) => closeEntityScope(subsidiaryIds, entity);
+  // Unattributed revenue lines fall back to the shared unscoped-posting
+  // default (the hierarchy root) — the same fallback runRevenueRecognition
+  // posts them under — never the oldest subsidiary.
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
   // Documents without an assigned entity still require accountant attention;
   // never hide an unresolved posting assignment from an entity close.
   const documentScope = sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)})`;
@@ -254,15 +259,12 @@ export async function readinessChecks(
         left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id
         left join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
         left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
-        left join lateral (
-          select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1
-        ) sub0 on true
        where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
          and s.book_id = ${ctx.book_id} and l.journal_entry_id is null and l.planned_amount <> 0
          and o.status <> 'cancelled' and not r.is_forecast
          and (p.ends_on <= ${ctx.ends_on}
               or (r.method = 'percent_complete' and p.starts_on <= ${ctx.ends_on}))
-         and ${inScope(sql`coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id)`)}`),
+         and ${inScope(sql`coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId})`)}`),
       db.execute(sql`
       select count(*) as count
         from (

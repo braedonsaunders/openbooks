@@ -64,3 +64,40 @@ test("unrecognized deferred revenue blocks readiness until it posts", { skip: !D
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("entity-scoped readiness attributes unattributed revenue to the root", { skip: !DB }, async () => {
+  // One close run per subsidiary scope: a root-scoped and an elder-scoped
+  // run each get their own org with the same unattributed line.
+  for (const scope of ["root", "elder"] as const) {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const elderId = randomUUID();
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${elderId},${org.orgId},${org.subsidiaryId},'Elder child','CAD','CA')`);
+      await db.execute(sql`update subsidiaries set created_at='2020-01-01T00:00:00Z' where org_id=${org.orgId} and id=${elderId}`);
+      await seedUnrecognized(org.orgId, org.bookId, org.periodId, actorId, org.customerId);
+      // The runner posts the unattributed line under the root, so a
+      // root-scoped run must see it while an elder-scoped run must not —
+      // the check and the runner share one fallback.
+      const runId = await startCloseRun({
+        orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, actorId,
+        subsidiaryIds: [scope === "root" ? org.subsidiaryId : elderId],
+      });
+      if (scope === "root") {
+        assert.equal(
+          (await openCounts(org.orgId, runId))["recognition-unposted"],
+          1,
+          "a root-scoped run must see the unattributed line",
+        );
+      } else {
+        assert.ok(
+          !("recognition-unposted" in (await openCounts(org.orgId, runId))),
+          "an elder-scoped run must not see the unattributed line",
+        );
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  }
+});
