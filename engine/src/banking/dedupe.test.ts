@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   filterDuplicateStatementLines,
-  isProvenReplay,
   normalizeFingerprintText,
   statementSourceSha256,
   type ParsedStatementLine,
@@ -25,8 +24,8 @@ const line = (overrides: Partial<ParsedStatementLine> = {}): ParsedStatementLine
 // The filter primitive keys ONLY on transaction IDs, never on content: it
 // cannot tell two ID-less lines apart, so every ID-less line passes through
 // it untouched. Content overlap is partitioned at the import level, where a
-// tuple proves a replay only inside proven scope and otherwise imports
-// flagged (see the re-import integration tests).
+// colliding tuple always imports flagged — only an exact source-byte replay
+// or a bank-provided ID may auto-skip (see the re-import integration tests).
 test("the filter primitive keys only on transaction IDs, not on content", () => {
   const first = filterDuplicateStatementLines([line()], new Set());
   assert.equal(first.lines.length, 1);
@@ -52,47 +51,6 @@ test("content comparison ignores description case and spacing", () => {
   assert.equal(normalizeFingerprintText("  coffee   shop "), "COFFEE SHOP");
   assert.equal(normalizeFingerprintText(null), "");
   assert.notEqual(normalizeFingerprintText("COFFEE SHOP"), normalizeFingerprintText("TEA SHOP"));
-});
-
-test("a replay needs an overlapping window plus a matching balance", () => {
-  const incoming = {
-    fromDate: "2026-09-01",
-    toDate: "2026-09-30",
-    openingBalance: "1000.0000",
-    closingBalance: "900.0000",
-  };
-  // Same window, same closing balance: proven.
-  assert.equal(
-    isProvenReplay(incoming, { ...incoming }),
-    true,
-  );
-  // Same window, same opening balance, different close: still proven.
-  assert.equal(
-    isProvenReplay(incoming, { ...incoming, closingBalance: "800.0000" }),
-    true,
-  );
-  // Same window but neither balance matches: possible overlap, not proof.
-  assert.equal(
-    isProvenReplay(incoming, { ...incoming, openingBalance: "0.0000", closingBalance: "800.0000" }),
-    false,
-  );
-  // Matching balances on a disjoint window: a different statement.
-  assert.equal(
-    isProvenReplay(incoming, { ...incoming, fromDate: "2026-08-01", toDate: "2026-08-31" }),
-    false,
-  );
-  // Touching windows overlap; a file without balance evidence proves nothing.
-  assert.equal(
-    isProvenReplay(incoming, { ...incoming, fromDate: "2026-09-30", toDate: "2026-10-05" }),
-    true,
-  );
-  assert.equal(
-    isProvenReplay(
-      { ...incoming, openingBalance: null, closingBalance: null },
-      { ...incoming },
-    ),
-    false,
-  );
 });
 
 test("exact retries of an ID-less statement source suppress every line", () => {

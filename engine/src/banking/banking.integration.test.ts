@@ -785,7 +785,81 @@ test(
 );
 
 test(
-  "a re-exported ID-less file inside proven replay scope skips without flags",
+  "an equal closing balance on a distinct file never drops a genuine twin",
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      const first = await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          openingBalance: "1000",
+          closingBalance: "995",
+          currency: "CAD",
+          lines: [
+            { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
+          ],
+        },
+        ctx,
+      );
+      assert.equal(first.imported, 1);
+      assert.equal(first.duplicates, 0);
+
+      // A distinct second file ends on the same closing balance — offsetting
+      // activity in between restores it. A balance match is not transaction
+      // identity, so the genuine second coffee imports flagged, never drops.
+      const second = await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          openingBalance: "1005",
+          closingBalance: "995",
+          currency: "CAD",
+          lines: [
+            { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
+            { postedOn: org.date, amount: "-5.0000", description: "SNACK BAR" },
+          ],
+        },
+        ctx,
+      );
+      assert.equal(second.imported, 2);
+      assert.equal(second.duplicates, 0);
+      assert.equal(second.possibleDuplicates, 1);
+      const [coffee, snack] = second.lines;
+      assert.ok(coffee!.possibleDuplicateOf);
+      assert.equal(snack!.possibleDuplicateOf, null);
+
+      // The flag points at the earlier file's line, and all lines persist.
+      const stored = await db.execute<{
+        id: string;
+        description: string | null;
+        possible_duplicate_of: string | null;
+      }>(sql`
+        select id, description, possible_duplicate_of
+          from bank_statement_lines
+         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
+      `);
+      assert.equal(stored.rows.length, 3);
+      const earlier = stored.rows.find((row) => !row.possible_duplicate_of)!;
+      assert.equal(earlier.description, "COFFEE SHOP");
+      assert.equal(coffee!.possibleDuplicateOf, earlier.id);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a re-exported ID-less file with different bytes imports flagged, never skips",
   async () => {
     const org = await createScratchOrg();
     try {
@@ -810,8 +884,10 @@ test(
       };
       const first = await importStatement(month, ctx);
       assert.equal(first.imported, 2);
-      // Same window, same closing balance, rows reordered with a reflowed
-      // description: proven replay, so both lines skip with no flags.
+      // Same window, same balances, rows reordered with a reflowed
+      // description: different source bytes, so not an exact replay. A
+      // balance match is not transaction identity — both lines import,
+      // flagged against the earlier import for review.
       const reexport = await importStatement(
         {
           ...month,
@@ -822,9 +898,9 @@ test(
         },
         ctx,
       );
-      assert.equal(reexport.imported, 0);
-      assert.equal(reexport.duplicates, 2);
-      assert.equal(reexport.possibleDuplicates, 0);
+      assert.equal(reexport.imported, 2);
+      assert.equal(reexport.duplicates, 0);
+      assert.equal(reexport.possibleDuplicates, 2);
     } finally {
       await dropScratchOrg(org.orgId);
     }
