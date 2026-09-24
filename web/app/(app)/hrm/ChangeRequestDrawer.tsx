@@ -61,6 +61,23 @@ function asText(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
+/**
+ * Canonical payload text for change detection (sorted keys, recursively):
+ * the server's guard refuses a revision bump without a draft edit, so an
+ * unchanged payload must skip the PATCH — re-sending the stored bytes on
+ * submit-for-approval is a touch, never an edit.
+ */
+function canonicalPayloadText(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalPayloadText).join(',')}]`
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPayloadText(entry)}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
 export function ChangeRequestDrawer({
   employmentId,
   initialRequest,
@@ -369,6 +386,17 @@ export function ChangeRequestDrawer({
     return true
   }
 
+  /**
+   * The submit path always re-sends the payload; when nothing changed it is
+   * canonically the stored draft, and the PATCH is skipped so the revision
+   * never moves on a touch. A changed payload patches (exactly one bump)
+   * before the submit POST that follows.
+   */
+  async function patchDraftIfChanged(requestId: string, payload: Record<string, unknown>): Promise<boolean> {
+    if (canonicalPayloadText(payload) === canonicalPayloadText(initialPayload)) return true
+    return patchDraft(requestId, payload)
+  }
+
   async function submitDraft(requestId: string, submitReason: string): Promise<boolean> {
     // HR-16: classification rides submit only while the feature is on.
     if (reasonsOn && !action) {
@@ -425,7 +453,7 @@ export function ChangeRequestDrawer({
     const payload = buildPayload()
     let ok = false
     if (editing && initialRequest) {
-      ok = await patchDraft(initialRequest.id, payload)
+      ok = await patchDraftIfChanged(initialRequest.id, payload)
       if (ok) toast.success(t('employment.changeRequests.updatedToast'))
     } else {
       ok = (await postCreate(payload)) !== null
@@ -449,7 +477,7 @@ export function ChangeRequestDrawer({
     const payload = buildPayload()
     let requestId: string | null = null
     if (editing && initialRequest) {
-      requestId = (await patchDraft(initialRequest.id, payload)) ? initialRequest.id : null
+      requestId = (await patchDraftIfChanged(initialRequest.id, payload)) ? initialRequest.id : null
     } else {
       requestId = await postCreate(payload)
     }

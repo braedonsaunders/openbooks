@@ -47,3 +47,19 @@ test("an unexpected failure is a 500 without leaking internals", async () => {
   const body = (await response.json()) as { error: string };
   assert.equal(body.error, "internal error");
 });
+
+// OM-19: the 0185 revision guard used to surface as a raw driver error and
+// 500 'internal error'. The engine maps guard refusals to named domain
+// errors, so the boundary answers 409 with the trigger's message (and its
+// remedy) intact — never a 500.
+test("a mapped guard refusal answers 409 with the trigger message intact", async () => {
+  const response = changeRequestErrorResponse(
+    new HrmChangeRequestError(
+      "STALE_REVISION",
+      "HRM change request revision moves only with a draft edit, by exactly one — leave request_revision alone on a touch update.",
+    ),
+  );
+  assert.equal(response.status, 409);
+  const body = (await response.json()) as { error: string };
+  assert.match(body.error, /revision moves only with a draft edit/, "the named refusal, not 'internal error'");
+});
