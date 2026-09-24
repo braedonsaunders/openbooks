@@ -13,12 +13,7 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-comp-cycles-route-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
+const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
@@ -190,7 +185,7 @@ const mockUrls = new Map<string, string>([
 let collectionRoute: typeof import("./route.ts") | undefined;
 let itemRoute: typeof import("./[id]/route.ts") | undefined;
 let lineRoute: typeof import("./[id]/lines/[lineId]/route.ts") | undefined;
-if (!isVitest) {
+{
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -242,15 +237,6 @@ function patchRequest(url: string, body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("comp cycles gate reads on compensation.read and writes on manage", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.compensation\.read"\)/);
-    assert.match(source, /guardPermission\("hrm\.compensation\.manage"\)/);
-    assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrmMeritCycles"\)/);
-  });
-} else {
   test("cycles 404 while hrmMeritCycles is off — the feature-off refusal", async () => {
     reset("hrm.compensation.read");
     routeState.features = { hrmCompensation: true, hrmMeritCycles: false };
@@ -374,4 +360,3 @@ if (isVitest) {
     assert.match(((await refused.json()) as { error: string }).error, /exactly one of proposedPct or proposedRate/);
     routeState.serviceThrow = null;
   });
-}
