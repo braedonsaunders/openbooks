@@ -121,9 +121,12 @@ export interface PartiesData {
   roleOptions: { value: string; label: string; count: number }[]
   canManage: boolean
   isEmpty: boolean
+  isFilteredEmpty: boolean
   hasRows: boolean
   emptyTitle: string
   emptyDescription: string
+  filteredEmptyTitle: string
+  filteredEmptyDescription: string
   columnName: string
   columnShortCode: string
   columnRoles: string
@@ -404,9 +407,12 @@ export async function loadParties(
     ],
     canManage,
     isEmpty: total === 0,
-    hasRows: total > 0,
+    isFilteredEmpty: total > 0 && filteredTotal === 0,
+    hasRows: filteredTotal > 0,
     emptyTitle: t('list.emptyTitle'),
     emptyDescription: t('list.emptyDescription'),
+    filteredEmptyTitle: t('list.filteredEmptyTitle'),
+    filteredEmptyDescription: t('list.filteredEmptyDescription'),
     columnName: tc('labels.name'),
     columnShortCode: t('list.shortCode'),
     columnRoles: t('list.roles'),
@@ -480,6 +486,14 @@ export function partiesSpec(data: PartiesData): PageSpec {
           action: data.canManage ? 'new-party' : null,
         }),
         when: f('isEmpty'),
+      },
+      {
+        ...widgetBlock('empty-state', {
+          title: data.filteredEmptyTitle,
+          description: data.filteredEmptyDescription,
+          action: null,
+        }),
+        when: f('isFilteredEmpty'),
       },
       {
         ...table({

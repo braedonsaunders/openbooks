@@ -7,7 +7,9 @@
     "shortCode": "简码",
     "phone": "电话",
     "emptyTitle": "尚无往来单位",
-    "emptyDescription": "添加第一个客户、供应商或员工，开始建立名录。"
+    "emptyDescription": "添加第一个客户、供应商或员工，开始建立名录。",
+    "filteredEmptyTitle": "没有符合这些筛选条件的往来单位",
+    "filteredEmptyDescription": "请尝试其他搜索或角色筛选。"
   },
   "newParty": {
     "defaultLabel": "新建往来单位",

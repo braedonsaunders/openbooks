@@ -7,7 +7,9 @@
     "shortCode": "Short code",
     "phone": "Phone",
     "emptyTitle": "No parties yet",
-    "emptyDescription": "Add the first customer, vendor, or employee to start the directory."
+    "emptyDescription": "Add the first customer, vendor, or employee to start the directory.",
+    "filteredEmptyTitle": "No parties match these filters",
+    "filteredEmptyDescription": "Try a different search or role filter."
   },
   "newParty": {
     "defaultLabel": "New party",

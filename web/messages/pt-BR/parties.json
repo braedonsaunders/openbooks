@@ -7,7 +7,9 @@
     "shortCode": "Código curto",
     "phone": "Telefone",
     "emptyTitle": "Nenhuma parte ainda",
-    "emptyDescription": "Adicione o primeiro cliente, fornecedor ou funcionário para começar o diretório."
+    "emptyDescription": "Adicione o primeiro cliente, fornecedor ou funcionário para começar o diretório.",
+    "filteredEmptyTitle": "Nenhuma parte corresponde a estes filtros",
+    "filteredEmptyDescription": "Tente outra pesquisa ou filtro de papel."
   },
   "newParty": {
     "defaultLabel": "Nova parte",

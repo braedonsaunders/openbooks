@@ -7,7 +7,9 @@
     "shortCode": "略称コード",
     "phone": "電話",
     "emptyTitle": "取引先はまだありません",
-    "emptyDescription": "最初の得意先、仕入先、または従業員を追加して、ディレクトリを開始してください。"
+    "emptyDescription": "最初の得意先、仕入先、または従業員を追加して、ディレクトリを開始してください。",
+    "filteredEmptyTitle": "条件に一致する取引先がありません",
+    "filteredEmptyDescription": "検索条件またはロールフィルターを変えてお試しください。"
   },
   "newParty": {
     "defaultLabel": "新規取引先",
