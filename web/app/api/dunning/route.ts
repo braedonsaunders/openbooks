@@ -141,6 +141,15 @@ export async function POST(req: Request) {
   ) {
     return NextResponse.json({ error: "replyTo must be a valid email address" }, { status: 400 });
   }
+  // A ladder with no rungs can never fire: activating one only parks a
+  // collections policy the runner skips every tick. Refuse the activation
+  // itself — with the fix named — rather than storing a live no-op. Runs
+  // after every other validation so malformed fields still report their
+  // own errors first.
+  const active = (body.isActive as boolean | undefined) ?? true;
+  if (active && stages.length === 0) {
+    return NextResponse.json({ error: "cannot activate a policy with no stages — add at least one stage or create it inactive" }, { status: 422 });
+  }
 
   const id = await db.transaction(async (tx) => {
     const created = (await tx.execute<Record<string, unknown>>(sql`
@@ -148,7 +157,7 @@ export async function POST(req: Request) {
                                     reply_to, is_active, created_by, updated_by)
       values (${authz.user.orgId}, ${body.name}, ${appliesToKind},
               ${gracePeriodDays}, ${minBalance},
-              ${(body.replyTo as string | null) ?? null}, ${(body.isActive as boolean | undefined) ?? true},
+              ${(body.replyTo as string | null) ?? null}, ${active},
               ${authz.user.id}, ${authz.user.id})
       returning *
     `));

@@ -672,6 +672,32 @@ test("a policy pointed at a payable kind never duns the vendor", { skip: !DB }, 
   }
 });
 
+test("an active stage-less policy is surfaced as skipped, not silently ignored", { skip: !DB }, async () => {
+  // A-S19: a ladder with no rungs can never fire. Activation is refused at
+  // the boundary now, but legacy rows predate that fence — the tick must
+  // name them instead of collecting no documents forever.
+  const org = await createScratchOrg();
+  try {
+    // A legacy active policy with no ladder: no invoice is needed because
+    // the skip fires before the document scan.
+    const policyId = randomUUID();
+    await db.execute(sql`
+      insert into dunning_policies (id, org_id, name, applies_to_kind, grace_period_days, min_balance)
+      values (${policyId}, ${org.orgId}, 'Collections', 'customer_invoice', 0, '0')
+    `);
+    const run = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(run.sent, 0);
+    assert.deepEqual(run.notices, []);
+    assert.equal(run.skippedPolicies.length, 1);
+    assert.equal(run.skippedPolicies[0]!.policyId, policyId);
+    assert.equal(run.skippedPolicies[0]!.policyName, "Collections");
+    assert.match(run.skippedPolicies[0]!.reason, /no stages/);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 /** One ladder per scenario, each in its own org: policies scan every invoice
  * of their kind, so two ladders sharing an org would dun each other's
  * invoices instead of isolating the rung under test. */

@@ -49,6 +49,14 @@ async function policyRow(orgId: string, id: string): Promise<{ name: string; gra
   return r.rows[0];
 }
 
+const ladderStage = () => ({
+  sequence: 1,
+  name: "Nudge",
+  offsetDays: 7,
+  subjectTemplate: "s",
+  bodyTemplate: "b",
+});
+
 test("dunning writes reject an invalid grace period or an empty name", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
@@ -66,7 +74,7 @@ test("dunning writes reject an invalid grace period or an empty name", { skip: !
     );
     assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
 
-    const created = await create(json("POST", { name: "Collections", gracePeriodDays: 3, stages: [] }));
+    const created = await create(json("POST", { name: "Collections", gracePeriodDays: 3, stages: [ladderStage()] }));
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
     const { id } = (await created.json()) as { id: string };
 
@@ -114,7 +122,7 @@ test("dunning writes reject an invalid reply-to and store a valid one", { skip: 
 
     // POST: a valid reply-to stores; omission stores null (org default applies).
     const stored = await create(
-      json("POST", { name: "Collections", gracePeriodDays: 3, stages: [], replyTo: "ar@example.com" }),
+      json("POST", { name: "Collections", gracePeriodDays: 3, stages: [ladderStage()], replyTo: "ar@example.com" }),
     );
     assert.equal(stored.status, 201, JSON.stringify(await stored.clone().json()));
     const { id } = (await stored.json()) as { id: string };

@@ -123,6 +123,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     gracePeriodDays = parsed;
   }
+  // Same activation fence as POST: flipping a stage-less ladder on, or
+  // pruning the ladder off a live policy, stores a collections policy the
+  // runner skips every tick. Judge the resulting state (supplied half plus
+  // the stored half), not just the supplied keys.
+  if (("isActive" in body && body.isActive === true) || "stages" in body) {
+    const current = (await db.execute<{ isActive: boolean; stageCount: number }>(sql`
+      select p.is_active as "isActive",
+             (select count(*)::int from dunning_stages s where s.policy_id = p.id and s.org_id = p.org_id) as "stageCount"
+        from dunning_policies p where p.id = ${id} and p.org_id = ${authz.user.orgId}
+    `)).rows[0]!;
+    const resultingActive = "isActive" in body ? (body.isActive as boolean) : current.isActive;
+    const resultingStages = stages !== undefined ? stages.length : current.stageCount;
+    if (resultingActive && resultingStages === 0) {
+      return NextResponse.json({ error: "cannot activate a policy with no stages — add at least one stage or deactivate it first" }, { status: 422 });
+    }
+  }
 
   await db.transaction(async (tx) => {
     // Snapshot the current policy and its ladder before anything changes.
