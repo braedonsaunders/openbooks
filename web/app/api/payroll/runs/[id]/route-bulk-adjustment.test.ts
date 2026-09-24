@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+const realRunLifecycleUrl = new URL('../../../../../../engine/src/payroll/run-lifecycle.ts', import.meta.url).href
+const realAuthzUrl = new URL('../../../../../lib/authz.ts', import.meta.url).href
 
 /**
  * POST bulk-adjustment — every malformed shape refuses by NAME (422), and the
@@ -46,16 +48,17 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      export { guardUnrestrictedScope, subsidiaryScopeAllows, subsidiariesInScope, can } from '${realAuthzUrl}'
       export function guardSubsidiaryScope() { return undefined }
     `,
   ],
   [
     'mock:payroll-run',
     `
+      export { attributePayRunEntity, discardPayRun } from '${realRunLifecycleUrl}'
       export async function acknowledgePayRunRefusals() { throw new Error('not under test') }
       export async function calculatePayRun() { throw new Error('not under test') }
       export async function commitPayRun() { throw new Error('not under test') }
-      export async function discardPayRun() { throw new Error('not under test') }
       export async function previewPayRunGl() { throw new Error('not under test') }
     `,
   ],

@@ -18,6 +18,7 @@ const { CONTINUOUS_CLOSE_AGENT_KEYS, agentPackMeta, agentPackMetas } = await imp
  */
 
 const thisDir = import.meta.dirname
+const realAuthzUrl = new URL('../authz.ts?setup-agents-test', import.meta.url).href
 
 /**
  * Gate proofs for the thin API adapters: every setup-agents route demands
@@ -31,6 +32,7 @@ const gateState: { granted: Set<string>; calls: GateCall[] } = { granted: new Se
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = gateState
 
 const gateAuthz = `
+  export { guardUnrestrictedScope, subsidiaryScopeAllows, subsidiariesInScope, can } from '${realAuthzUrl}'
   import { NextResponse } from 'next/server'
   const state = globalThis[Symbol.for('openbooks.setup-agents-gate-test')]
   async function demand(permission) {

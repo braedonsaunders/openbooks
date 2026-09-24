@@ -146,6 +146,7 @@ registerHooks({
           export async function requirePermission() { return authz }
           export async function guardPermission() { return authz }
           export function can() { return false }
+          export { guardUnrestrictedScope } from '${root}web/lib/authz.ts'
         `,
         shortCircuit: true,
       }
@@ -169,7 +170,7 @@ registerHooks({
     if (url === 'mock:ai-cutover-intl') {
       return {
         format: 'module',
-        source: 'export async function getTranslations() { return (key) => key }',
+        source: 'export async function getTranslations() { return (key) => key } export async function getLocale() { return "en" } export async function getFormatter() { return new Intl.DateTimeFormat("en") }',
         shortCircuit: true,
       }
     }

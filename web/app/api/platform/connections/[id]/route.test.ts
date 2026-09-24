@@ -54,10 +54,34 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.connectionIdSqlText
       export const db = {
         async transaction(callback) {
-          state.persisted += 1
           const tx = {
+            select() {
+              const query = {
+                from() { return query },
+                where() { return query },
+                async for() {
+                  return [{
+                    id: "connection-1",
+                    orgId: "org-1",
+                    source: "qbo",
+                    displayName: "QuickBooks",
+                    authKind: "oauth2",
+                    status: "active",
+                    config: { environment: "sandbox" },
+                    secrets: "sealed",
+                    mirrorEnabled: false,
+                    mirrorSchedule: "daily",
+                    postedChangePolicy: "review_required",
+                  }]
+                },
+              }
+              return query
+            },
             async execute(query) {
               const text = sqlText(query)
+              if (/\b(insert into|update|delete from)\b/i.test(text)) {
+                state.persisted += 1
+              }
               if (text.includes("delete from connections")) {
                 state.deletes += 1
                 return { rows: state.deleteRows }

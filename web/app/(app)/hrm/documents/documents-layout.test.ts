@@ -10,7 +10,7 @@ registerHooks({
     if (specifier === 'next-intl/server') {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent('export async function getTranslations(){return (s)=>s;}'),
+        url: 'data:text/javascript,' + encodeURIComponent('export async function getTranslations(){return (s)=>s;}export async function getLocale(){return "en"}export async function getFormatter(){return new Intl.DateTimeFormat("en")}'),
       }
     }
     return next(specifier, context)

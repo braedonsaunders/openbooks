@@ -18,7 +18,7 @@ registerHooks({
     if (specifier === 'next-intl') {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export function useTranslations(){return (k)=>k}export function useLocale(){return "en"}export function NextIntlClientProvider(p){return p.children}',
+        url: 'data:text/javascript,export function useTranslations(){return (k)=>k}export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}export function NextIntlClientProvider(p){return p.children}',
       }
     }
     if (specifier === 'sonner') {

@@ -42,6 +42,7 @@ const mockSources = new Map<string, string>([
         },
       }
       export async function withOrgTransaction(_orgId, work) { return work() }
+      export async function withOrgContext() { throw new Error('unexpected org context helper in this route test') }
     `,
   ],
   [

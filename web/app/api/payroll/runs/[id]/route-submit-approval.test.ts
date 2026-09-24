@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+const realRunLifecycleUrl = new URL('../../../../../../engine/src/payroll/run-lifecycle.ts', import.meta.url).href
+const realAuthzUrl = new URL('../../../../../lib/authz.ts', import.meta.url).href
 
 /**
  * POST submit-approval — the remedy the commit refusal names.
@@ -63,17 +65,18 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      export { guardUnrestrictedScope, subsidiaryScopeAllows, subsidiariesInScope, can } from '${realAuthzUrl}'
       export function guardSubsidiaryScope() { return undefined }
     `,
   ],
   [
     'mock:payroll-run',
     `
+      export { attributePayRunEntity, discardPayRun } from '${realRunLifecycleUrl}'
       const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
       export async function acknowledgePayRunRefusals() { throw new Error('not under test') }
       export async function calculatePayRun() { throw new Error('not under test') }
       export async function commitPayRun(input) { state.commitCalls.push(input); return { ok: true, lines: 1 } }
-      export async function discardPayRun() { throw new Error('not under test') }
       export async function previewPayRunGl() { throw new Error('not under test') }
     `,
   ],

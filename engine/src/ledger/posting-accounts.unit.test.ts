@@ -78,8 +78,8 @@ const expenseDoc = (over: Record<string, unknown> = {}): Doc =>
   ({ id: "doc-1", orgId: "org-1", kind: "expense_report", ...over }) as unknown as Doc;
 
 const featureStep = (enabled: boolean, orgId: string): ScriptStep => ({
-  sql: /revenueRecognition/,
-  rows: [{ enabled }],
+  sql: /settings->'features'/,
+  rows: [{ features: { revenueRecognition: enabled } }],
   check: ({ params }) =>
     assert.ok(params.includes(orgId), "feature check is scoped to the org"),
 });
