@@ -326,8 +326,13 @@ export async function requireFolderAccess(authz: Authz, folderId: string, min: A
 }
 
 /** Gate: the caller must have at least `min` access on a file. */
-export async function requireFileAccess(authz: Authz, fileId: string, min: AccessLevel): Promise<NextResponse | null> {
-  const level = await fileAccessLevel(authz.user.orgId, fileViewer(authz), fileId)
+export async function requireFileAccess(
+  authz: Authz,
+  fileId: string,
+  min: AccessLevel,
+  options: { includeInactive?: boolean } = {},
+): Promise<NextResponse | null> {
+  const level = await fileAccessLevel(authz.user.orgId, fileViewer(authz), fileId, undefined, options)
   if (!accessAtLeast(level, min)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   return null
 }

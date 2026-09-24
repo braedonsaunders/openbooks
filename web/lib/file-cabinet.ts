@@ -474,6 +474,7 @@ export async function fileAccessLevel(
   viewer: FileViewer,
   fileId: string,
   executor?: SqlExecutor,
+  options: { includeInactive?: boolean } = {},
 ): Promise<AccessLevel> {
   const exec = executor ?? db
   const folderFence = recordTargetVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fo.record_table`, sql`fo.record_id`)
@@ -487,7 +488,9 @@ export async function fileAccessLevel(
       ${folderFence ?? sql`true`} as "folderRecordVisible",
       ${attachFence ?? sql`true`} as "attachVisible"
       from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
-     where fi.id = ${fileId} and ${liveFilePredicate(orgId)}
+     where fi.id = ${fileId} and ${options.includeInactive
+       ? sql`fi.org_id = ${orgId}`
+       : liveFilePredicate(orgId)}
   `))
   const row = r.rows[0]
   if (!row) return 'none'
@@ -1988,10 +1991,11 @@ async function viewerFileGate(
   audit: FileMutationAudit | undefined,
   fileId: string,
   min: AccessLevel,
+  options: { includeInactive?: boolean } = {},
 ): Promise<boolean> {
   if (!audit?.viewer) return true
   await lockCabinetAuthorization(exec, orgId)
-  return accessAtLeast(await fileAccessLevel(orgId, audit.viewer, fileId, exec), min)
+  return accessAtLeast(await fileAccessLevel(orgId, audit.viewer, fileId, exec, options), min)
 }
 
 async function viewerFolderGate(
@@ -2185,7 +2189,7 @@ export async function restoreFile(
        for update
     `)).rows[0]
     if (!before) return false
-    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return false
+    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager', { includeInactive: true }))) return false
     await tx.execute(sql`
       update files set is_inactive = false, updated_at = now()
        where id = ${id} and org_id = ${orgId}

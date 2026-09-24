@@ -11,7 +11,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const access = await requireFileAccess(gate, id, 'manager')
+  const access = await requireFileAccess(gate, id, 'manager', { includeInactive: true })
   if (access) return access
   const ok = await restoreFile(gate.user.orgId, id, { actorId: gate.user.id, viewer: fileViewer(gate) })
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
