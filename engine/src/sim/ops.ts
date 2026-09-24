@@ -59,6 +59,8 @@ export async function payVendor(
     orgId: world.orgId,
     kind: "vendor_payment",
     createdBy: actorId,
+    // Sim world operation: system provenance, unrestricted by construction.
+    allowedSubsidiaryIds: null,
     partyId: vendorId,
     bankAccountId: world.accounts.bank,
     documentDate,
@@ -98,6 +100,8 @@ export async function reimburseEmployee(
     orgId: world.orgId,
     kind: "vendor_payment",
     createdBy: actorId,
+    // Sim world operation: system provenance, unrestricted by construction.
+    allowedSubsidiaryIds: null,
     partyId: employeeId,
     bankAccountId: world.accounts.bank,
     documentDate,

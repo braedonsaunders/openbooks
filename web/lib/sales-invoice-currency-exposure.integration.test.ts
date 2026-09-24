@@ -137,7 +137,7 @@ async function payInFull(
     return r.rows[0]!.id;
   });
   await withBypassContext(async () => {
-    const receipt = await createPaymentDocument({
+    const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: actorId,

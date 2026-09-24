@@ -31,7 +31,7 @@ test('the ticket header refuses an impossible document date', enabled, async () 
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'HDR-DATE', 'Header date job',
                 ${org.customerId}, 'active', true, '{}'::jsonb)`)
 
-      const created = await createFieldTicket(org.orgId, actor, { projectId })
+      const created = await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})
       const loaded = await loadFieldTicket(org.orgId, created.id)
 
       await assert.rejects(

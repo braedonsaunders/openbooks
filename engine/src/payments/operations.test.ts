@@ -90,7 +90,7 @@ test(
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
         `);
 
-        const payment = await createPaymentDocument({
+        const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           kind: "customer_payment",
           createdBy: actorId,
@@ -279,7 +279,7 @@ test(
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
         `);
 
-        const payment = await createPaymentDocument({
+        const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           kind: "customer_payment",
           createdBy: actorId,
@@ -1597,7 +1597,7 @@ test(
       ];
       for (const c of cases) {
         const payment = await withOrgContext(org.orgId, () =>
-          createPaymentDocument({
+          createPaymentDocument({ allowedSubsidiaryIds: null,
             orgId: org.orgId,
             kind: c.kind,
             createdBy: actorId,
@@ -1671,7 +1671,7 @@ test(
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
         `);
 
-        const payment = await createPaymentDocument({
+        const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           kind: "customer_payment",
           createdBy: actorId,

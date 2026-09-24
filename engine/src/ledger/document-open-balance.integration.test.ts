@@ -35,7 +35,7 @@ async function invoice(org: ScratchOrg, actor: string, currency = "EUR") {
 }
 
 async function payment(org: ScratchOrg, actor: string, line: string, partial = false, currency = "USD") {
-  const result = await createPaymentDocument({ orgId: org.orgId, kind: "customer_payment", createdBy: actor,
+  const result = await createPaymentDocument({ allowedSubsidiaryIds: null, orgId: org.orgId, kind: "customer_payment", createdBy: actor,
     partyId: org.customerId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId,
     documentDate: org.date, currency, fxRate: currency === "CAD" ? "1" : "1.625" });
   await updateDraftPayment(result.id, { bankAccountId: org.accounts.bank, allocations: [{ openLineId: line,

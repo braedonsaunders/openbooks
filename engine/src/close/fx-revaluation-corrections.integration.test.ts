@@ -76,7 +76,7 @@ async function nativeInvoice(f: Awaited<ReturnType<typeof fixture>>, currency: "
   if (currency === "EUR") await db.execute(sql`insert into fx_rates(org_id,from_currency,to_currency,as_of,rate_type,rate)
     values(${f.orgId},'EUR','CAD','2026-07-31','spot',1.5)`);
   return async (partial = false, date = f.date, periodId = f.periodId) => {
-    const payment = await createPaymentDocument({ orgId: f.orgId, kind: "customer_payment", createdBy: f.actorId,
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null, orgId: f.orgId, kind: "customer_payment", createdBy: f.actorId,
       partyId: f.customerId, bankAccountId: f.accounts.bank, subsidiaryId: f.subsidiaryId,
       documentDate: date, currency: "USD", fxRate: currency === "EUR" ? "1.625" : "1.35" });
     await updateDraftPayment(payment.id, { allocations: [{ openLineId: target.id,

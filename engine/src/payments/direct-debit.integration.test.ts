@@ -268,7 +268,7 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
 
     await withOrgContext(org.orgId, async () => {
       const { createPaymentDocument, updateDraftPayment } = await import("./payment-documents.ts"), { postPaymentWithApplications } = await import("./payment-posting.ts"), { sameCurrencyAllocation } = await import("./settlement-policy.ts");
-      const receipt = await createPaymentDocument({
+      const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "customer_payment",
         createdBy: ids.actorId,

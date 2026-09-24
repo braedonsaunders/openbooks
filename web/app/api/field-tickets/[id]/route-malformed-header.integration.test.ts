@@ -89,7 +89,7 @@ async function makeTicket(org: { orgId: string; subsidiaryId: string; customerId
       (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
       values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'FT-HDR', 'Header contract job',
               ${org.customerId}, 'active', true, '{}'::jsonb)`);
-    return createFieldTicket(org.orgId, adminId, { projectId });
+    return createFieldTicket(org.orgId, adminId, { projectId, allowedSubsidiaryIds: null});
   });
 }
 

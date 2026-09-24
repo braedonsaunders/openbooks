@@ -77,7 +77,7 @@ test("an ad-hoc payment cannot pay a compliance-blocked bill", { skip: !DB }, as
     const open = await openItemsForParty(vendorId, "ap", org.orgId);
     const line = open.find((item) => item.documentId === billId);
     assert.ok(line, "bill has an open payable line");
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId, kind: "vendor_payment", createdBy: actor, partyId: vendorId,
       bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date,
     });

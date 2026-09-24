@@ -30,7 +30,7 @@ test("goods receipts bring stock in once, govern billing, and clear received-not
     const org = await createScratchOrg();
     try {
       const userId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID()));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -187,7 +187,7 @@ test("goods receipts bring stock in once, govern billing, and clear received-not
         update item_inventory_profiles set received_not_billed_account_id = null
          where org_id = \${org.orgId} and item_id = \${org.items.movingAvg}
       \`);
-      const bare = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID()));
+      const bare = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
       const bareLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -251,7 +251,7 @@ test("goods receipt rejects a non-calendar date without mutating the order", { s
     const org = await createScratchOrg();
     try {
       const userId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID()));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -333,7 +333,7 @@ test("voiding a goods receipt unwinds stock and restores counters, then the orde
     const org = await createScratchOrg();
     try {
       const userId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID()));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines

@@ -392,7 +392,7 @@ test("partial credit plus cash with full adjust-out leaves exactly the residual 
     // the 2 cash. The bill and the credit both leave the open-item ledger.
     const listed = await creditItemsForParty(org.vendorId, "ap", org.orgId);
     assert.ok(listed.some((item) => item.lineId === creditLine), "credit must be listed as appliable");
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId, kind: "vendor_payment", createdBy: actor,
       partyId: org.vendorId, bankAccountId: org.accounts.bank,
       subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: "CAD",

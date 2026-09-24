@@ -239,7 +239,7 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
   const entry = await post(org, billId);
   const lineId = await withOrgContext(org.orgId, async () =>
     (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id=${entry} and is_open_item`)).rows[0]!.id);
-  const payment = await withOrgTransaction(org.orgId, () => createPaymentDocument({ orgId: org.orgId, kind: 'vendor_payment', createdBy: actor,
+  const payment = await withOrgTransaction(org.orgId, () => createPaymentDocument({ allowedSubsidiaryIds: null, orgId: org.orgId, kind: 'vendor_payment', createdBy: actor,
     partyId: org.vendorId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: 'CAD' }));
   if (path === 'service') {
     await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, { allocations: [sameCurrencyAllocation(lineId, '100')] }, actor, org.orgId));

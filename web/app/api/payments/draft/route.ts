@@ -27,6 +27,9 @@ export async function POST(req: Request) {
       orgId: user.orgId,
       kind,
       createdBy: user.id,
+      // A restricted caller defaults to their own subsidiary, or a named
+      // refusal — never the org root.
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     return NextResponse.json(doc)
   } catch (e) {

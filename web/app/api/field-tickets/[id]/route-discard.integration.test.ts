@@ -102,7 +102,7 @@ test("DELETE discards an untouched ticket draft", { skip: !DB }, async () => {
         permissions: new Set(["time.manage"]),
         allowedSubsidiaryIds: null,
       };
-      const created = await createFieldTicket(org.orgId, adminId);
+      const created = await createFieldTicket(org.orgId, adminId, { allowedSubsidiaryIds: null });
       const loaded = await loadFieldTicket(org.orgId, created.id);
       const removed = await deleteRequest(org.orgId, created.id, { expectedRevision: loaded.revision });
       assert.equal(removed.status, 200, `discarding the empty draft must succeed, got ${removed.status}: ${JSON.stringify(removed.json)}`);
@@ -127,7 +127,7 @@ test("DELETE refuses a draft that already carries content", { skip: !DB }, async
         permissions: new Set(["time.manage"]),
         allowedSubsidiaryIds: null,
       };
-      const created = await createFieldTicket(org.orgId, adminId);
+      const created = await createFieldTicket(org.orgId, adminId, { allowedSubsidiaryIds: null });
       await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, quantity, unit_price, amount)
         values (${org.orgId}, ${created.id}, 1, ${org.accounts.revenue}, 1, 10, 10)`);
       const loaded = await loadFieldTicket(org.orgId, created.id);

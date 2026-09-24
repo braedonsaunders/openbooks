@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { createOrderDraft, OrderDraftError } from '../../../../lib/order-cycle'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -27,11 +28,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
   }
   try {
+    // The draft must land in a subsidiary the actor's own reads can observe:
+    // a restricted caller gets their single allowed subsidiary, or a named
+    // refusal — never an implicit null.
+    const resolved = resolveDraftSubsidiary(gate.allowedSubsidiaryIds)
+    if (!resolved.ok) throw new OrderDraftError(resolved.error)
     const doc = await createOrderDraft(
       user.orgId,
       user.id,
       'purchase_order',
       idempotencyKey,
+      resolved.subsidiaryId,
     )
     return NextResponse.json({ id: doc.id, document_number: doc.document_number }, { status: doc.replayed ? 200 : 201 })
   } catch (error) {

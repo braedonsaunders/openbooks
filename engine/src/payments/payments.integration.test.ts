@@ -305,7 +305,7 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
     `));
     const targetLineId = invoiceControl.rows[0]!.id;
 
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: userId,
@@ -2160,7 +2160,7 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
          and is_open_item and amount < 0
     `)).rows[0]!.id;
 
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "vendor_payment",
       createdBy: userId,
@@ -2224,7 +2224,7 @@ test("customer-payment surcharge posting rejects a non-income fee account", { sk
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Fee account guard", "admin");
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: userId,
@@ -2263,7 +2263,7 @@ test("draft allocation shape validation fails closed before any open-item read",
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Allocation shape guard", "admin");
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "vendor_payment",
       createdBy: userId,
@@ -2352,7 +2352,7 @@ test("settlement evidence must cross-foot and match the currency rules", { skip:
          and is_open_item
     `)).rows[0]!.id;
 
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: userId,
@@ -2409,7 +2409,7 @@ test("settlement evidence must cross-foot and match the currency rules", { skip:
        where entry_id = ${foreignEntryId} and org_id = ${org.orgId}
          and is_open_item
     `)).rows[0]!.id;
-    const foreignPayment = await createPaymentDocument({
+    const foreignPayment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: userId,
@@ -2490,7 +2490,7 @@ test("posting compares allocations against the approved snapshot", { skip: !DB }
     });
     const paymentIds: string[] = [];
     for (let i = 0; i < 2; i += 1) {
-      const payment = await createPaymentDocument({
+      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "customer_payment",
         createdBy: userId,
@@ -2569,7 +2569,7 @@ test("customer receipts refuse a vendor-style early-payment discount", { skip: !
          and is_open_item
     `)).rows[0]!.id;
 
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: userId,

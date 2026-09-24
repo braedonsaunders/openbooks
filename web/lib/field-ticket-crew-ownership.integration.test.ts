@@ -44,9 +44,9 @@ test('the crew grid refuses crew members, items, and days it cannot own', {skip:
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'CREW-OWN', 'Crew ownership job',
                 ${org.customerId}, 'active', true, '{}'::jsonb)`)
 
-      const day = (await loadFieldTicket(org.orgId, (await createFieldTicket(org.orgId, actor, { projectId })).id)).fieldTicket.periodStart
+      const day = (await loadFieldTicket(org.orgId, (await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})).id)).fieldTicket.periodStart
       const ticketFor = async () => {
-        const created = await createFieldTicket(org.orgId, actor, { projectId })
+        const created = await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})
         const loaded = await loadFieldTicket(org.orgId, created.id)
         return { id: created.id, revision: loaded.revision, start: loaded.fieldTicket.periodStart, end: loaded.fieldTicket.periodEnd }
       }
@@ -127,11 +127,11 @@ test('the crew grid refuses crew members, items, and days it cannot own', {skip:
       // the authority after a concurrent project rehome.
       const beforeTickets = (await db.execute<{n:number}>(sql`select count(*)::int n from field_tickets where org_id=${org.orgId}`)).rows[0]!.n
       await assert.rejects(createFieldTicket(org.orgId,actor,{projectId,allowedSubsidiaryIds:new Set()}),/Project not found/)
-      await assert.rejects(createFieldTicket(org.orgId,actor,{projectId,date:'2026-02-30'}),/Invalid ticket date/)
+      await assert.rejects(createFieldTicket(org.orgId,actor,{projectId,date:'2026-02-30', allowedSubsidiaryIds: null}),/Invalid ticket date/)
       assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from field_tickets where org_id=${org.orgId}`)).rows[0]!.n,beforeTickets)
       // This week spans February into March: a regex and lexical window check
       // alone accepted the impossible February 30 date and reached a SQL cast.
-      const feb = await createFieldTicket(org.orgId,actor,{projectId,date:'2027-03-01',period:'weekly'})
+      const feb = await createFieldTicket(org.orgId,actor,{projectId,date:'2027-03-01',period:'weekly', allowedSubsidiaryIds: null})
       const febLoaded=await loadFieldTicket(org.orgId,feb.id)
       await assert.rejects(saveCrewGrid(org.orgId,actor,feb.id,[{
         employeePartyId:employeeId,itemId:null,timeTypeId,hours:{'2027-02-30':'8'},

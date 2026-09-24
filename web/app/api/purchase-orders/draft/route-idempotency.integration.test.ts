@@ -115,8 +115,8 @@ test('two orgs sending the same opaque key each mint their own draft', { skip: !
     // counter-style key like 'order-1' never collides across tenants into
     // a false 409.
     const [a, b] = await Promise.all([
-      withOrgContext(first.org.orgId, () => createOrderDraft(first.org.orgId, first.actor, 'purchase_order', 'order-1')),
-      withOrgContext(second.org.orgId, () => createOrderDraft(second.org.orgId, second.actor, 'purchase_order', 'order-1')),
+      withOrgContext(first.org.orgId, () => createOrderDraft(first.org.orgId, first.actor, 'purchase_order', 'order-1', null)),
+      withOrgContext(second.org.orgId, () => createOrderDraft(second.org.orgId, second.actor, 'purchase_order', 'order-1', null)),
     ])
     assert.equal(a.replayed, false)
     assert.equal(b.replayed, false)

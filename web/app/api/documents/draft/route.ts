@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
-import { createDocumentDraft, isDocKindEnabled } from "../../../../lib/documents.ts";
+import { createDocumentDraft, DocumentDraftError, isDocKindEnabled } from "../../../../lib/documents.ts";
 import { DOC_KINDS, createPermission } from "../../../../lib/document-kinds.ts";
 
 export const runtime = 'nodejs'
@@ -21,6 +21,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
-  const doc = await createDocumentDraft(user.orgId, user.id, body.kind)
-  return NextResponse.json(doc)
+  try {
+    // A restricted caller's draft lands in their own subsidiary, or a named
+    // refusal — never the org root, which excludes their own reads.
+    const doc = await createDocumentDraft(user.orgId, user.id, body.kind, {
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
+    return NextResponse.json(doc)
+  } catch (error) {
+    if (error instanceof DocumentDraftError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    throw error
+  }
 }

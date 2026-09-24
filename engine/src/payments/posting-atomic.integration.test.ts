@@ -23,7 +23,7 @@ test(
         createScratchUser(org.orgId, "Payment poster", "admin"),
       );
       const payment = await withOrgContext(org.orgId, () =>
-        createPaymentDocument({
+        createPaymentDocument({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           kind: "customer_payment",
           createdBy: actorId,

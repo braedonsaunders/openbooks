@@ -90,7 +90,7 @@ for (const [currency, fxRate, total, paid, open, baseOpen, baseTotal] of [
       const line = (await withBypass(() => db.execute<{ id: string }>(
         sql`select id from journal_lines where entry_id = ${entry} and is_open_item`,
       ))).rows[0]!.id
-      const payment = await withBypassContext(() => createPaymentDocument({
+      const payment = await withBypassContext(() => createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: scratch.orgId, kind: 'customer_payment', createdBy: actor,
         partyId: scratch.customerId, bankAccountId: scratch.accounts.bank,
         subsidiaryId: scratch.subsidiaryId, documentDate: scratch.date,

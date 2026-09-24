@@ -664,7 +664,7 @@ test("a receipt keeps the over-collected remainder on-account when another chann
        where je.source_document_id = ${invoiceId} and jl.org_id = ${org.orgId}
          and jl.is_open_item
     `)).rows[0]!.id;
-    const first = await createPaymentDocument({
+    const first = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: userId,
@@ -1119,7 +1119,7 @@ test("redelivery resumes onto the reserved receipt draft after a mid-settlement 
       status: 200,
       json: async () => ({ id: "cs_draft_1", url: "https://checkout.stripe.test/cs_draft_1" }),
     }));
-    const draft = await createPaymentDocument({
+    const draft = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: fx.userId,

@@ -77,7 +77,7 @@ async function postedRun(mixed = false) {
 
 async function ordinaryPayment(fx: Awaited<ReturnType<typeof postedRun>>, amount: string, foreign = false) {
   return withOrgTransaction(fx.orgId, async () => {
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: fx.orgId, createdBy: fx.actorId, kind: "vendor_payment", partyId: fx.employeeId,
       bankAccountId: fx.bankAccountId, subsidiaryId: fx.source.subsidiary_id,
       documentDate: "2026-07-21", currency: foreign ? "USD" : fx.source.currency,
@@ -156,7 +156,7 @@ test("payroll liability cannot masquerade as the credit; the run pays the full l
       and entry_id=${invoiceEntry} and account_id=${fx.source.account_id} and amount>0`)).rows[0]!;
     await assert.rejects(
       withOrgTransaction(fx.orgId, async () => {
-        const receipt = await createPaymentDocument({ orgId: fx.orgId, createdBy: fx.actorId, kind: "customer_payment",
+        const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null, orgId: fx.orgId, createdBy: fx.actorId, kind: "customer_payment",
           partyId: fx.employeeId, bankAccountId: fx.bankAccountId, subsidiaryId: fx.subsidiaryId, documentDate: "2026-07-21", currency: "CAD" });
         await updateDraftPayment(receipt.id, {
           controlAccountId: fx.source.account_id,
