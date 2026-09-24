@@ -51,7 +51,7 @@ const SL_BIN = '22222222-2222-4222-8222-222222222222'
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   postBodies: [] as Array<Record<string, unknown>>,
-  postBehavior: [] as Array<'fail' | 'ok'>,
+  postBehavior: [] as Array<'fail' | 'ok' | Response>,
 }
 Object.assign(globalThis, {
   __countRetryToasts: script.toasts,
@@ -159,6 +159,7 @@ async function mountCounts(t: TestContext, props: Record<string, unknown>): Prom
       script.postBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>)
       const behavior = script.postBehavior.shift() ?? 'ok'
       if (behavior === 'fail') throw new TypeError('fetch failed')
+      if (behavior instanceof Response) return behavior
       // The replay returns the ORIGINAL count id — the retry must surface
       // that same id, never a second count.
       return Response.json({ ok: true, replayed: script.postBodies.length > 1, id: COUNT_ID })
@@ -337,4 +338,21 @@ test('a lost record response retried with the same quantity reuses the step key'
   assert.ok(first!.idempotencyKey, 'the record step must carry a retry identity')
   assert.equal(retry!.idempotencyKey, first!.idempotencyKey, 'the retry must reuse the step key, not mint a new one')
   assert.equal(retry!.countedQuantity, '7', 'the retry must replay the same counted quantity')
+})
+
+test('a refused create names the server reason and a 502 names the translated fallback (F2-6)', async (t) => {
+  await mountCounts(t, baseProps())
+  await fillCreate()
+  script.postBehavior.push(
+    Response.json({ error: 'count date is in a closed period' }, { status: 422 }),
+    new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }),
+  )
+  await clickButtonNamed('Open count')
+  await clickButtonNamed('Open count')
+  const errors = script.toasts.filter((toast) => toast.kind === 'error').map((toast) => toast.message)
+  assert.deepEqual(
+    errors,
+    ['count date is in a closed period', 'Stock count request failed (status 502)'],
+    'a named refusal must surface verbatim and a non-JSON failure must carry the translated fallback with the status — never a hard-coded Request failed or a SyntaxError',
+  )
 })
