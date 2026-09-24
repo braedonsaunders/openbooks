@@ -268,6 +268,32 @@ export interface MacrsYearResult {
   remainingBasis: string;
 }
 
+export type MacrsMidQuarterTestAsset = Pick<MacrsYearInput,
+  "basis" | "placedInServiceOn" | "section179" | "businessUsePercent"
+> & { disposedOn?: string | null };
+
+/**
+ * IRS Pub. 946 applies the 40% mid-quarter test to depreciable basis after
+ * section 179 and business-use limits, before bonus depreciation:
+ * https://www.irs.gov/publications/p946
+ */
+export function macrsVintageUsesMidQuarter(
+  assets: readonly MacrsMidQuarterTestAsset[],
+  placedInServiceYear: number,
+): boolean {
+  let total = 0n;
+  let fourthQuarter = 0n;
+  for (const asset of assets) {
+    const placed = parseIsoDate(asset.placedInServiceOn);
+    if (!placed || placed.year !== placedInServiceYear) continue;
+    if (asset.disposedOn && parseIsoDate(asset.disposedOn)?.year === placedInServiceYear) continue;
+    const basis = toUnits(macrsBasisAfterSection179(asset).after179);
+    total += basis;
+    if (placed.month >= 10) fourthQuarter += basis;
+  }
+  return total > 0n && fourthQuarter * 100n > total * 40n;
+}
+
 /** Persist MACRS basis through exact decimal then ledger money. Fail closed. */
 function persistMacrsBasis(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
@@ -299,6 +325,18 @@ function persistMacrsBusinessUsePercent(value: unknown): string {
   } catch {
     throw new Error("businessUsePercent must be an exact decimal");
   }
+}
+
+function macrsBasisAfterSection179(
+  input: Pick<MacrsYearInput, "basis" | "section179" | "businessUsePercent">,
+  businessUsePercent = persistMacrsBusinessUsePercent(input.businessUsePercent ?? "100"),
+): { originalBasis: string; section179Cap: string; after179: string } {
+  if (cmp(businessUsePercent, "0") < 0 || cmp(businessUsePercent, "100") > 0) {
+    throw new Error("business use percent must be between 0 and 100");
+  }
+  const originalBasis = mulPercent(persistMacrsBasis(input.basis), businessUsePercent);
+  const section179Cap = minMoney(originalBasis, nonnegative(persistMacrsSection179(input.section179 ?? "0")));
+  return { originalBasis, section179Cap, after179: add(originalBasis, neg(section179Cap)) };
 }
 
 /** Persist MACRS bonus percent through exact decimal then ledger money. Fail closed. */
@@ -336,10 +374,8 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
   const disposed = input.disposedOn ? parseIsoDate(input.disposedOn) : null;
   if (!placed || input.taxYear < placed.year) return zeroMacrs("0");
   if (disposed && input.taxYear > disposed.year) return zeroMacrs("0");
-  const originalBasis = mulPercent(persistMacrsBasis(input.basis), businessUsePercent);
-  const section179Cap = minMoney(originalBasis, nonnegative(persistMacrsSection179(input.section179 ?? "0")));
+  const { originalBasis, section179Cap, after179 } = macrsBasisAfterSection179(input, businessUsePercent);
   const elected179 = placed.year === input.taxYear ? section179Cap : "0.0000";
-  const after179 = add(originalBasis, neg(section179Cap));
   const bonus = placed.year === input.taxYear ? mulPercent(after179, bonusPercent) : "0.0000";
   const macrsBasis = add(after179, neg(mulPercent(after179, bonusPercent)));
 

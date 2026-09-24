@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, formatMoney, fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
-import { computeMacrsYear, computePoolYear, costCapForAcquisition, type PoolClassDef, type PoolYearResult, TAX_DEPRECIATION_REGIMES } from "./depreciation-pool.ts";
+import { computeMacrsYear, computePoolYear, costCapForAcquisition, macrsVintageUsesMidQuarter, type MacrsMidQuarterTestAsset, type PoolClassDef, type PoolYearResult, TAX_DEPRECIATION_REGIMES } from "./depreciation-pool.ts";
 
 /**
  * Run a jurisdiction's tax depreciation pools for a tax year on a book. Groups
@@ -524,20 +524,25 @@ async function runMacrs(
     );
   }
 
-  // The mid-quarter test is made per placed-in-service vintage. If more than
-  // 40% of eligible basis was placed in service in the final three months,
-  // that vintage uses mid-quarter instead of half-year for its full schedule.
-  const vintageBasis = new Map<number, { total: bigint; q4: bigint }>();
+  // The mid-quarter test is made per placed-in-service vintage. It uses the
+  // same Section 179 and business-use elections as each asset's MACRS schedule
+  // and excludes bonus depreciation from the test basis (IRS Pub. 946).
+  const vintageAssets = new Map<number, MacrsMidQuarterTestAsset[]>();
   for (const asset of assets.rows) {
-    const def = classes.get(asset.class_code);
-    if (!def || def.convention !== "half_year" || asset.disposed_on?.slice(0, 4) === asset.placed_on.slice(0, 4)) continue;
     const year = Number(asset.placed_on.slice(0, 4));
-    const amount = toUnits(asset.acquisition_cost);
-    const v = vintageBasis.get(year) ?? { total: 0n, q4: 0n };
-    v.total += amount;
-    if (Number(asset.placed_on.slice(5, 7)) >= 10) v.q4 += amount;
-    vintageBasis.set(year, v);
+    const config = taxAssetConfig(asset.custom, run.regime);
+    const vintage = vintageAssets.get(year) ?? [];
+    vintage.push({
+      basis: asset.acquisition_cost,
+      placedInServiceOn: asset.placed_on,
+      disposedOn: asset.disposed_on,
+      section179: String(config.section179 ?? "0"),
+      businessUsePercent: decimalOr(config.businessUsePercent, "100"),
+    });
+    vintageAssets.set(year, vintage);
   }
+  const vintageUsesMidQuarter = new Map([...vintageAssets].map(([year, vintage]) =>
+    [year, macrsVintageUsesMidQuarter(vintage, year)]));
 
   const grouped = new Map<string, { def: PoolClassDef; assets: MacrsAssetRow[] }>();
   for (const asset of assets.rows) {
@@ -560,8 +565,7 @@ async function runMacrs(
     for (const asset of group.assets) {
       const config = taxAssetConfig(asset.custom, run.regime);
       const placedYear = Number(asset.placed_on.slice(0, 4));
-      const vintage = vintageBasis.get(placedYear);
-      const convention = group.def.convention === "half_year" && vintage && vintage.total > 0n && vintage.q4 * 100n > vintage.total * 40n
+      const convention = group.def.convention === "half_year" && vintageUsesMidQuarter.get(placedYear)
         ? "mid_quarter"
         : group.def.convention!;
       const input = {
