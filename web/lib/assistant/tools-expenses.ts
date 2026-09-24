@@ -230,12 +230,7 @@ const expenseApprovals: AssistantToolDef = {
     if (!can(authz, "flows.approve") && !can(authz, "ap.approve") && !can(authz, "ar.approve")) {
       return { ok: true, data: { returned: 0, total: 0, approvals: [], href: "/inbox" } };
     }
-    let items: Awaited<ReturnType<typeof approvalWorklistForAuthz>> = [];
-    try {
-      items = await approvalWorklistForAuthz(authz);
-    } catch {
-      return { ok: true, data: { returned: 0, total: 0, approvals: [], href: "/inbox" } };
-    }
+    const items = await approvalWorklistForAuthz(authz);
     const approvals: Record<string, unknown>[] = [];
     for (const item of items) {
       if (item.kind === "flow_gate") {
