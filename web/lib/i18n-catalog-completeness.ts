@@ -74,9 +74,17 @@ export function readFallbackManifest(): FallbackManifest {
  * - `propertyManagement.detail.description` is placeholders plus a middle
  *   dot (`{subsidiary} · {location}`) — identical by construction in every
  *   locale, with no prose to translate.
+ * - `assets.leases` German "Revision"/"Status", Portuguese "Status" and
+ *   French "Description" are the same ordinary nouns, used for the same
+ *   table headers in both languages.
  */
 export const I18N1_IDENTICAL_BY_FACT: ReadonlySet<string> = new Set([
   'de:accounting.lifecycle.status|Status',
+  'de:assets.leases.colRevision|Revision',
+  'de:assets.leases.colStatus|Status',
+  'de:assets.leases.revision|Revision',
+  'fr:assets.leases.fieldDescription|Description',
+  'pt-BR:assets.leases.colStatus|Status',
   'de:entities.propertyManagement.detail.description|{subsidiary} · {location}',
   'de:entities.propertyManagement.detail.fields.name|Name',
   'de:entities.propertyManagement.detail.fields.status|Status',
