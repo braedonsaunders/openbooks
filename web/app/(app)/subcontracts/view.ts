@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
@@ -56,6 +57,7 @@ export interface SubcontractsData {
 export async function loadSubcontracts(): Promise<SubcontractsData> {
   const authz = await requirePermission('ap.read')
   await requireSubcontractsFeature(authz.user.orgId)
+  const t = await getTranslations('subcontracts')
   const orgId = authz.user.orgId
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const [projects, vendors, accounts, parties] = await Promise.all([
@@ -77,9 +79,8 @@ export async function loadSubcontracts(): Promise<SubcontractsData> {
       order by display_name limit 2000`),
   ])
   return {
-    // Hard-coded in the native PageHeader, not a message key.
-    title: 'Subcontracts',
-    description: 'Vendor commitments, progress applications, retainage, and payment controls.',
+    title: t('title'),
+    description: t('description'),
     projects: projects.rows as SubcontractOption[],
     vendors: vendors.rows as SubcontractOption[],
     expenseAccounts: accounts.rows as SubcontractOption[],

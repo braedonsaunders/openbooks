@@ -295,11 +295,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/subcontracts/SubcontractsWorkspace.tsx",
-    "fn": "SubcontractsWorkspace",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/pay/[token]/PayButton.tsx",
     "fn": "pay",
     "reason": "server always returns JSON; guard adoption pending. POST /api/pay/[token] (web/app/api/pay/[token]/route.ts): createCheckoutSession sits inside try/catch-all answering NextResponse.json (422/500); no rethrow; outside-try work is a token-length check and framework reads. Verified by reading the handler."
