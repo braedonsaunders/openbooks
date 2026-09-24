@@ -109,7 +109,7 @@ test("detrazione lavoro taper with truncated 4dp ratios", () => {
   });
   assert.equal(at20.detrazioneLavoro, "2642.2100");
   // R = 40.000: 1.910 x trunc4(10.000/22.000) = 1.910 x 0,4545 = 868,095
-  // → 868,10. No +65: R = 40.000 sits outside the 25.001–35.000 c. 2 band.
+  // → 868,10. No +65: R = 40.000 sits outside art. 13 c. 2's R > 25.000–35.000 band.
   // Ulteriore detrazione is 0 at exactly 40.000, so no capienza split.
   const at40 = calculateIt2025({
     ...BASE, annualGrossEmployment: "40000", annualPensionable: "0", hasDetrazioniDeclaration: true,
@@ -117,7 +117,7 @@ test("detrazione lavoro taper with truncated 4dp ratios", () => {
   assert.equal(at40.detrazioneLavoro, "868.1000");
   assert.equal(at40.ulterioreDetrazione, "0.0000");
   // R = 30.000 (pens 0): 1.910 x trunc4(20.000/22.000 = 0,9090) =
-  // 1.736,19, plus 65 (inside 25.001–35.000) → 1.801,19.
+  // 1.736,19, plus 65 (inside art. 13 c. 2's R > 25.000 band) → 1.801,19.
   const at30 = calculateIt2025({
     ...BASE, annualGrossEmployment: "30000", annualPensionable: "0", hasDetrazioniDeclaration: true,
   });
@@ -270,4 +270,28 @@ test("refused list stays honest about the out-of-scope mechanics", () => {
   assert.ok(IT_REFUSED_2025.some((r) => r.includes("art. 12 TUIR")));
   assert.ok(IT_REFUSED_2025.some((r) => r.includes("TFR")));
   assert.ok(IT_REFUSED_2025.some((r) => r.includes("INAIL")));
+});
+
+test("c. 2 +65 boundary is cent-precise: 25,000.00 / 25,000.01 / 25,000.50", () => {
+  // TUIR art. 13 c. 2: "superiore a 25.000 euro ma non a 35.000 euro". R is
+  // cent-precise, so the gate is R > 25.000 — a 25.001 whole-euro floor
+  // prices 25.000,01–25.000,99 at 0 instead of 65. Band-B detC1 is identical
+  // at all three points (trunc4((28.000 − R)/13.000) = 0,2307 → 1.910 +
+  // 1.190 × 0,2307 = 2.184,53), so the ONLY movement across the gate is
+  // the +65. Pensionable "0" keeps R exactly on the gross (no INPS noise).
+  const atFloor = calculateIt2025({
+    ...BASE, annualGrossEmployment: "25000.00", annualPensionable: "0", hasDetrazioniDeclaration: true,
+  });
+  assert.equal(atFloor.redditoComplessivo, "25000.0000");
+  assert.equal(atFloor.detrazioneLavoro, "2184.5300");
+  const atCent = calculateIt2025({
+    ...BASE, annualGrossEmployment: "25000.01", annualPensionable: "0", hasDetrazioniDeclaration: true,
+  });
+  assert.equal(atCent.redditoComplessivo, "25000.0100");
+  assert.equal(atCent.detrazioneLavoro, "2249.5300");
+  const atHalf = calculateIt2025({
+    ...BASE, annualGrossEmployment: "25000.50", annualPensionable: "0", hasDetrazioniDeclaration: true,
+  });
+  assert.equal(atHalf.redditoComplessivo, "25000.5000");
+  assert.equal(atHalf.detrazioneLavoro, "2249.5300");
 });

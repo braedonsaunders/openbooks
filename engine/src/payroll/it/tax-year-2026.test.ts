@@ -190,3 +190,28 @@ test("refused list carries 2025's gaps plus the 2026-only substitute regimes", (
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("200.000")), "sterilizzazione recorded, not branched");
   assert.ok(IT_REFUSED_2026.some((r) => r.includes("c. 18–21")), "tourism integrativo refused by name");
 });
+
+test("c. 2 +65 boundary is cent-precise: 25,000.00 / 25,000.01 / 25,000.50", () => {
+  // TUIR art. 13 c. 2 (standing law, untouched by L. 199/2025): "superiore a
+  // 25.000 euro ma non a 35.000 euro". R is cent-precise, so the gate is
+  // R > 25.000 — a 25.001 whole-euro floor prices 25.000,01–25.000,99 at 0
+  // instead of 65. Band-B detC1 is identical at all three points
+  // (trunc4((28.000 − R)/13.000) = 0,2307 → 1.910 + 1.190 × 0,2307 =
+  // 2.184,53), so the ONLY movement across the gate is the +65.
+  // Pensionable "0" keeps R exactly on the gross (no INPS noise).
+  const atFloor = calculateIt2026({
+    ...BASE, annualGrossEmployment: "25000.00", annualPensionable: "0", hasDetrazioniDeclaration: true,
+  });
+  assert.equal(atFloor.redditoComplessivo, "25000.0000");
+  assert.equal(atFloor.detrazioneLavoro, "2184.5300");
+  const atCent = calculateIt2026({
+    ...BASE, annualGrossEmployment: "25000.01", annualPensionable: "0", hasDetrazioniDeclaration: true,
+  });
+  assert.equal(atCent.redditoComplessivo, "25000.0100");
+  assert.equal(atCent.detrazioneLavoro, "2249.5300");
+  const atHalf = calculateIt2026({
+    ...BASE, annualGrossEmployment: "25000.50", annualPensionable: "0", hasDetrazioniDeclaration: true,
+  });
+  assert.equal(atHalf.redditoComplessivo, "25000.5000");
+  assert.equal(atHalf.detrazioneLavoro, "2249.5300");
+});

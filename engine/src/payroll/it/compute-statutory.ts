@@ -352,7 +352,8 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   const irpefLorda = r2(marginalTax(imponibile, tables.bands));
 
   // Art. 13 detrazione lavoro dipendente (declaration-gated) with the
-  // c. 2 +65 euro increase for 25.001–35.000.
+  // c. 2 +65 euro increase for R > 25.000 through R ≤ 35.000 (art. 13 c. 2
+  // TUIR "superiore a 25.000 ... ma non a 35.000", cent-precise).
   const L = tables.detrazioneLavoro;
   let detC1 = ZERO;
   if (R <= U(L.bandA_cap)) {
@@ -367,7 +368,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   }
   detC1 = r2(detC1);
   const C2 = tables.detrazioneC2;
-  const detC2 = R >= U(C2.fromExclusive) && R <= U(C2.toInclusive) ? U(C2.amount) : ZERO;
+  const detC2 = R > U(C2.fromExclusive) && R <= U(C2.toInclusive) ? U(C2.amount) : ZERO;
   const detLavoro = input.hasDetrazioniDeclaration ? detC1 + detC2 : ZERO;
 
   // L. 207/2024 c. 6 ulteriore detrazione (automatic per Circ. 4/E c. 7;

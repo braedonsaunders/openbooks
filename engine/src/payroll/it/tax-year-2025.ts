@@ -124,13 +124,18 @@ export const IT_2025_DETRAZIONE_LAVORO = {
 } as const;
 
 /**
- * Art. 13 c. 2 TUIR increase as applied for 2025 — 730/2026 TABELLA 6
- * note (4): "La detrazione spettante è aumentata di un importo pari a 65
- * euro, se il reddito complessivo è compreso tra 25.001 euro e 35.000 euro."
+ * Art. 13 c. 2 TUIR increase as applied for 2025 — the STATUTE governs:
+ * "La detrazione spettante ai sensi del comma 1 è aumentata di un importo
+ * pari a 65 euro, se il reddito complessivo è superiore a 25.000 euro ma
+ * non a 35.000 euro." The gate is cent-precise (R > 25.000 and R ≤ 35.000):
+ * 730/2026 TABELLA 6 note (4) prints the same band as "compreso tra 25.001
+ * euro e 35.000 euro" — whole-euro shorthand that would leave 25.000,01–
+ * 25.000,99 outside, so the statute's "superiore a 25.000" wins. The
+ * constant below carries the EXCLUSIVE bound the engine compares with `>`.
  */
 export const IT_2025_DETRAZIONE_C2 = {
   amount: "65",
-  fromExclusive: "25001",
+  fromExclusive: "25000",
   toInclusive: "35000",
 } as const;
 
