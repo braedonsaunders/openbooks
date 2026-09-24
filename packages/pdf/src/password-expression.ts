@@ -26,6 +26,15 @@
 
 export class PasswordExpressionError extends Error {}
 
+/**
+ * Minimum strength of a derived PDF open password. A stub password guards
+ * emailed wage data, so a rule that can produce a 1-character credential
+ * ('last 1' of a name) is refused: the derivation must reach this length AND
+ * mix letters with digits, both when the rule is saved and when a password
+ * is derived from a real record.
+ */
+export const MIN_DERIVED_PASSWORD_LENGTH = 8;
+
 export type PasswordTokenKind = "text" | "date";
 
 /** token name → kind. The caller owns the vocabulary; this module owns the grammar. */
@@ -99,7 +108,50 @@ export function parsePasswordExpression(
   if (segments.every((segment) => segment.kind === "literal")) {
     throw new PasswordExpressionError("the password expression uses no record values");
   }
+  assertPasswordStrength(segments, catalog);
   return segments;
+}
+
+/**
+ * Save-time strength floor: refuse a rule whose SHORTEST derivable password
+ * is below the minimum, or that cannot mix letters with digits at all (a
+ * date-only rule derives digits forever). Derive-time re-checks the actual
+ * credential, since a structurally sound rule can still meet a short name.
+ */
+function assertPasswordStrength(segments: Segment[], catalog: PasswordTokenCatalog): void {
+  let floor = 0;
+  let canYieldLetter = false;
+  let canYieldDigit = false;
+  for (const segment of segments) {
+    if (segment.kind === "literal") {
+      floor += segment.text.length;
+      if (/[A-Za-z]/.test(segment.text)) canYieldLetter = true;
+      if (/[0-9]/.test(segment.text)) canYieldDigit = true;
+      continue;
+    }
+    if (catalog[segment.token] === "date") {
+      // A date renders a fixed layout (MMDDYYYY is 8, MMDD is 4); measure a
+      // representative value so new layouts are covered without a table.
+      floor += DATE_FORMATS[segment.argument!]!({ y: "2000", m: "01", d: "02" }).length;
+      canYieldDigit = true;
+    } else {
+      // A text component always yields at least one usable character (an
+      // empty one throws at derive time) and cleans to letters or digits.
+      floor += 1;
+      canYieldLetter = true;
+      canYieldDigit = true;
+    }
+  }
+  if (floor < MIN_DERIVED_PASSWORD_LENGTH) {
+    throw new PasswordExpressionError(
+      `the password expression can derive passwords as short as ${floor} characters (minimum ${MIN_DERIVED_PASSWORD_LENGTH}) — add a longer component, e.g. a date token like {dob:MMDDYYYY}`,
+    );
+  }
+  if (!canYieldLetter || !canYieldDigit) {
+    throw new PasswordExpressionError(
+      "the password expression must be able to mix letters and digits — combine a text token with a date or numeric component",
+    );
+  }
 }
 
 function parseToken(body: string, catalog: PasswordTokenCatalog): TokenSegment {
@@ -172,6 +224,17 @@ export function renderPasswordExpression(
     out += renderToken(segment, catalog[segment.token]!, String(raw));
   }
   if (out.length === 0) throw new PasswordExpressionError("the password expression produced nothing");
+  // Length needs no second check here: the save-time floor lower-bounds every
+  // derivation (each component yields at least its counted minimum), so a
+  // rule that passed saving always derives at least the minimum — including
+  // legacy rules, which re-parse (and re-check) on every render. The mix is
+  // re-checked because structure cannot guarantee it: a text token assumed
+  // alphanumeric can meet an all-digit value like an employee number.
+  if (!/[A-Za-z]/.test(out) || !/[0-9]/.test(out)) {
+    throw new PasswordExpressionError(
+      "the derived password must mix letters and digits — use a rule combining a text token with a date or numeric component",
+    );
+  }
   return out;
 }
 

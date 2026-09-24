@@ -40,19 +40,73 @@ test("the customer's rule: first three of the surname + DOB as MMDDYYYY", () => 
 })
 
 test('literals, whole values, and the other date layouts', () => {
-  assert.equal(renderPasswordExpression('{surname}', CATALOG, EMPLOYEE), 'Hopper')
+  // A bare whole-value rule cannot be saved (any name can be one character),
+  // so whole-value rendering is covered through a save-passing rule.
+  assert.equal(
+    renderPasswordExpression('{surname}{dob:MMDDYYYY}', CATALOG, { ...EMPLOYEE, surname: 'Richardson7' }),
+    'Richardson712091906',
+  )
   assert.equal(renderPasswordExpression('{givenName:1|lower}-{dob:YYYYMMDD}', CATALOG, EMPLOYEE), 'g-19061209')
   assert.equal(renderPasswordExpression('pay{dob:DDMMYY}', CATALOG, EMPLOYEE), 'pay091206')
-  assert.equal(renderPasswordExpression('{dob:YYYY}{surname:2}', CATALOG, EMPLOYEE), '1906Ho')
+  assert.equal(renderPasswordExpression('{dob:YYYYMMDD}{surname:2}', CATALOG, EMPLOYEE), '19061209Ho')
   // Punctuation and accents are dropped so the value types the way the
   // employer's published rule reads it.
   assert.equal(
-    renderPasswordExpression('{employeeNumber}', CATALOG, EMPLOYEE),
-    'E4471',
+    renderPasswordExpression('{employeeNumber}-{dob:MMDDYY}', CATALOG, EMPLOYEE),
+    'E4471-120906',
   )
   assert.equal(
-    renderPasswordExpression('{surname:4}', CATALOG, { ...EMPLOYEE, surname: "O'Brién" }),
-    'OBri',
+    renderPasswordExpression('{surname:4}{dob:MMDDYYYY}', CATALOG, { ...EMPLOYEE, surname: "O'Brién" }),
+    'OBri12091906',
+  )
+})
+
+test('weak rules are refused at save time, naming the minimum', () => {
+  // A 1-character derivation, the finding's example.
+  assert.throws(
+    () => assertValidPasswordExpression('{surname:1}', CATALOG),
+    (error: unknown) => {
+      assert.ok(error instanceof PasswordExpressionError)
+      assert.match((error as Error).message, /as short as 1 characters.*minimum 8/)
+      return true
+    },
+  )
+  // A structurally short rule, even with a long record behind it.
+  assert.throws(
+    () => assertValidPasswordExpression('{surname:3|upper}', CATALOG),
+    PasswordExpressionError,
+  )
+  // A date-only rule can never mix letters in.
+  assert.throws(
+    () => assertValidPasswordExpression('{dob:MMDDYYYY}', CATALOG),
+    (error: unknown) => {
+      assert.ok(error instanceof PasswordExpressionError)
+      assert.match((error as Error).message, /mix letters and digits/)
+      return true
+    },
+  )
+  // The same refusals fire at derive time, so a legacy saved rule cannot
+  // produce a weak credential at send time.
+  assert.throws(
+    () => renderPasswordExpression('{surname:1}', CATALOG, EMPLOYEE),
+    PasswordExpressionError,
+  )
+})
+
+test('a rule that derives a single-class password is refused at derive time', () => {
+  // The rule is structurally sound (a text token may yield letters), but this
+  // record's numeric surname derives digits only.
+  assert.throws(
+    () =>
+      renderPasswordExpression('{surname:3}{dob:MMDDYYYY}', CATALOG, {
+        ...EMPLOYEE,
+        surname: '12345',
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof PasswordExpressionError)
+      assert.match((error as Error).message, /must mix letters and digits/)
+      return true
+    },
   )
 })
 
@@ -122,7 +176,7 @@ test('a record missing the value fails rather than shortening the password', () 
 
 test('braces can be escaped into the password itself', () => {
   assert.equal(
-    renderPasswordExpression('{{{surname:2}}}', CATALOG, EMPLOYEE),
-    '{Ho}',
+    renderPasswordExpression('{{{surname:2}}}{dob:MMDDYYYY}', CATALOG, EMPLOYEE),
+    '{Ho}12091906',
   )
 })

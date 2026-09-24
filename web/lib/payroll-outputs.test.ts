@@ -475,7 +475,7 @@ test('every eligible delivery is encrypted with the employee-derived password', 
 })
 
 test('an encryption failure is recorded and never reported as a successful send', async () => {
-  reset([stub()], { enabled: true, expression: '{employeeNumber|upper}' })
+  reset([stub()], { enabled: true, expression: '{employeeNumber|upper}{dob:MMDDYYYY}' })
   state.encryptionError = new Error('qpdf unavailable')
 
   const result = await emailRunStubs('org-1', 'run-1')
@@ -483,11 +483,11 @@ test('an encryption failure is recorded and never reported as a successful send'
   assert.equal(result.sent, 0)
   assert.deepEqual(result.failed, [{ name: 'Jordan Sparks', error: 'qpdf unavailable' }])
   assert.equal(state.deliveryCalls.length, 0)
-  assert.deepEqual(state.encryptionPasswords, ['EMP42'])
+  assert.deepEqual(state.encryptionPasswords, ['EMP4202031990'])
 })
 
 test('a renderer outage flags the batch and names the outage per stub', async () => {
-  reset([stub(), stub({ id: 'stub-2', name: 'Alex Ray' })], { enabled: true, expression: '{employeeNumber|upper}' })
+  reset([stub(), stub({ id: 'stub-2', name: 'Alex Ray' })], { enabled: true, expression: '{employeeNumber|upper}{dob:MMDDYYYY}' })
   state.renderError = new MockRendererUnavailableError('/usr/bin/chromium')
 
   const result = await emailRunStubs('org-1', 'run-1')
