@@ -51,8 +51,9 @@ test("application evidence lock holds both source documents and endpoints throug
     const lockReady = new Promise<void>((resolve) => { locked = resolve; });
     const release = new Promise<void>((resolve) => { unlock = resolve; });
     const holder = withOrg(org.orgId, () => db.transaction(async (tx) => {
-      const result = await lockApplicationEvidence(tx, org.orgId, [lineId]);
+      const result = await lockApplicationEvidence(tx, org.orgId, [lineId], [], [entryId]);
       assert.deepEqual(result.documentIds, [documentId]);
+      assert.deepEqual(result.entryIds, [entryId]);
       assert.deepEqual(result.lineIds, [lineId]);
       locked();
       await release;
@@ -69,6 +70,17 @@ test("application evidence lock holds both source documents and endpoints throug
       await contender.query("set local lock_timeout = '100ms'");
       await assert.rejects(
         contender.query("select id from documents where id = $1 and org_id = $2 for update", [documentId, org.orgId]),
+        (error: unknown) => (error as { code?: string }).code === "55P03",
+      );
+      await contender.query("rollback");
+      await contender.query("begin");
+      await contender.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+        [org.orgId],
+      );
+      await contender.query("set local lock_timeout = '100ms'");
+      await assert.rejects(
+        contender.query("select id from journal_entries where id = $1 and org_id = $2 for update", [entryId, org.orgId]),
         (error: unknown) => (error as { code?: string }).code === "55P03",
       );
       await contender.query("rollback");

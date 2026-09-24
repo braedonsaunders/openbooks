@@ -1,7 +1,28 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { PoolClient } from "pg";
 import { db, pool } from "../platform/db.ts";
 import { divRate, fromUnits, mulRate, toUnits } from "../money/money.ts";
+import { lockApplicationEvidenceWithQuery } from "../records/application-lock.ts";
 import type { SourceApplicationLink } from "./source.ts";
+
+const applicationLockDialect = new PgDialect();
+
+function lockApplicationEvidenceOnClient(
+  client: PoolClient,
+  orgId: string,
+  lineIds: readonly string[],
+) {
+  return lockApplicationEvidenceWithQuery(
+    async (statement: SQL) => {
+      const query = applicationLockDialect.sqlToQuery(statement);
+      const result = await client.query(query.sql, query.params);
+      return { rows: result.rows as Record<string, unknown>[] };
+    },
+    orgId,
+    lineIds,
+  );
+}
 
 /**
  * Payment-application reconciler — the platform's settlement sync.
@@ -19,10 +40,9 @@ import type { SourceApplicationLink } from "./source.ts";
  * are reported as `unallocated`, never forced.
  *
  * Concurrency boundary: the per-org advisory lock orders overlapping syncs,
- * the batch's endpoint lines are locked id-ordered before hydration (the same
- * locks every manual application takes, so no manual commit can slip between
- * hydration and insert), and every involved entry is re-verified posted just
- * before writing (a void reverses entries without taking line locks).
+ * source documents, entries, and endpoint lines are locked in the shared
+ * application-evidence order before hydration, and every involved entry is
+ * re-verified posted just before writing.
  */
 
 /**
@@ -400,12 +420,7 @@ export async function reconcileApplications(
         [orgId, refKey, batchRefs],
       );
       const lockIds = [...new Set(scoped.rows.map((r) => r.id))];
-      if (lockIds.length > 0) {
-        await client.query(
-          `select id from journal_lines where id = any($1::uuid[]) order by id for update`,
-          [lockIds],
-        );
-      }
+      if (lockIds.length > 0) await lockApplicationEvidenceOnClient(client, orgId, lockIds);
     }
 
     // -- open AR/AP lines per source ref ----------------------------------------
