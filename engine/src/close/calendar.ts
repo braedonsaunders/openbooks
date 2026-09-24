@@ -2,6 +2,7 @@ import { CloseError, CLOSE_MODULES } from "./period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
+import { periodScopeAdvisoryLock } from "./period-locks.ts";
 type CalendarRow = {
   id: string;
   cadence:
@@ -278,7 +279,31 @@ export async function generateAccountingPeriods(
   // nothing posted, and is left alone — never an error — once it has.
   let updated = 0;
   await db.transaction(async (tx) => {
+    const candidates: { period: GeneratedPeriod; id: string }[] = [];
     for (const period of periods) {
+      const row = await loadExisting(tx, period.number);
+      if (!row) continue;
+      const datesChanged =
+        row.starts_on !== period.startsOn ||
+        row.ends_on !== period.endsOn ||
+        row.is_adjustment !== period.adjustment;
+      if (datesChanged) candidates.push({ period, id: row.id });
+    }
+
+    if (candidates.length > 0) {
+      const books = (await tx.execute<{ id: string }>(sql`
+        select id from accounting_books where org_id = ${orgId} and is_active order by id`)).rows;
+      for (const candidate of [...candidates].sort((a, b) => a.id.localeCompare(b.id))) {
+        for (const book of books) {
+          await periodScopeAdvisoryLock(tx, orgId, candidate.id, book.id);
+        }
+      }
+    }
+
+    for (const period of periods) {
+      // Boundary candidates were locked above; this read after lock acquisition
+      // makes the entry check and date write share the same serialized view as
+      // markTaxFilingFiled and close transitions.
       const row = await loadExisting(tx, period.number);
       if (!row) continue;
       const datesChanged =
@@ -292,11 +317,17 @@ export async function generateAccountingPeriods(
           `${row.name} has ledger activity and its dates cannot be regenerated`,
         );
       if (datesChanged || !row.has_entries) {
-        await tx.execute(sql`
+        const result = await tx.execute<{ id: string }>(sql`
           update accounting_periods
              set name = ${period.name}, starts_on = ${period.startsOn}, ends_on = ${period.endsOn},
                  is_adjustment = ${period.adjustment}, updated_at = now(), updated_by = ${actorId}
-           where id = ${row.id} and org_id = ${orgId}`);
+           where id = ${row.id} and org_id = ${orgId}
+          returning id`);
+        if (!result.rows[0]) {
+          throw new CloseError(
+            `${row.name} disappeared while regenerating its dates; no calendar change was saved`,
+          );
+        }
         updated++;
       }
       // Otherwise: cosmetic name drift on a period with postings — the

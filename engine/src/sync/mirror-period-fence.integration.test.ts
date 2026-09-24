@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import pg from "pg";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, pool } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { syncSourceAccountingPeriods } from "./migrate.ts";
 import type { MigrationSource, SourceEntity } from "./source.ts";
@@ -81,6 +81,9 @@ test("the period mirror takes the 0022 exclusive fence before writing lock rows"
       select fiscal_year, period_number, name, starts_on::text, ends_on::text
         from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}
     `)).rows[0]!;
+    const movedEndsOn = new Date(
+      Date.parse(`${period.ends_on}T00:00:00Z`) + 86_400_000,
+    ).toISOString().slice(0, 10);
     const fenceKey = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
 
     // Parking brake on the exclusive side of the close/posting fence. A
@@ -95,7 +98,7 @@ test("the period mirror takes the 0022 exclusive fence before writing lock rows"
         periodNumber: period.period_number,
         name: period.name,
         startsOn: period.starts_on,
-        endsOn: period.ends_on,
+        endsOn: movedEndsOn,
       }),
       org.orgId,
     ).then(
@@ -121,9 +124,34 @@ test("the period mirror takes the 0022 exclusive fence before writing lock rows"
     assert.equal(settled, false);
     assert.equal(await importedLockCount(org.orgId, org.periodId), 0);
 
+    // While the mirror is queued on the period fence, another transaction can
+    // still acquire the period row. That proves the mirror has not rewritten
+    // the certified date window before acquiring the fence.
+    const observer = await pool.connect();
+    try {
+      await observer.query("begin");
+      await observer.query(
+        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+        [org.orgId],
+      );
+      await observer.query(
+        "select id from accounting_periods where org_id = $1 and id = $2 for update nowait",
+        [org.orgId, org.periodId],
+      );
+      await observer.query("commit");
+    } finally {
+      await observer.query("rollback").catch(() => undefined);
+      observer.release();
+    }
+
     await brake.query(`select pg_advisory_unlock(hashtextextended($1, 0))`, [fenceKey]);
     const stats = await sync;
     assert.equal(stats.created + stats.updated, 1);
+    const changedWindow = (await db.execute<{ ends_on: string }>(sql`
+      select ends_on::text from accounting_periods
+       where org_id = ${org.orgId} and id = ${org.periodId}
+    `)).rows[0]!;
+    assert.equal(changedWindow.ends_on, movedEndsOn);
     const gl = (await db.execute<{ state: string; reason: string }>(sql`
       select state, reason from period_locks
        where org_id = ${org.orgId} and period_id = ${org.periodId}

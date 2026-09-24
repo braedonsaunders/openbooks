@@ -24,6 +24,7 @@ import type {
   ProvisionSourceSnapshot,
 } from "./income-tax-provision.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { generateAccountingPeriods } from "../close/calendar.ts";
 import { closeApprovedRun } from "../close/run-completion.ts";
 import { startCloseRun } from "../close/run-start.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
@@ -1106,7 +1107,7 @@ function closeCoveredPeriod(org: ScratchOrg): Promise<void> {
   });
 }
 
-async function waitForAdvisoryWaiter(key: string): Promise<boolean> {
+async function waitForAdvisoryWaiter(key: string, expected = 1): Promise<boolean> {
   for (let attempt = 0; attempt < 200; attempt++) {
     const rows = await db.execute<{ n: number }>(sql`
       select count(*)::int as n
@@ -1117,7 +1118,7 @@ async function waitForAdvisoryWaiter(key: string): Promise<boolean> {
          and objid::text = (k.h & 4294967295)::text
          and not granted
     `);
-    if (Number(rows.rows[0]?.n ?? 0) > 0) return true;
+    if (Number(rows.rows[0]?.n ?? 0) >= expected) return true;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   return false;
@@ -1167,6 +1168,74 @@ test("mark-filed serializes with a concurrent controlled period reopen", { skip:
       (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
     );
     assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+  } finally {
+    if (holder) {
+      await holder.query("rollback").catch(() => undefined);
+      holder.release();
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("period generation serializes its boundary rewrite with mark-filed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let holder: PoolClient | null = null;
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Calendar Race", "admin");
+    await seedFilingFingerprintFixture(org);
+    const prepared = await prepareFiling(org, userId);
+    await closeCoveredPeriod(org);
+    const calendarId = (await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars
+       where org_id = ${org.orgId} and is_default and is_active
+       limit 1`)).rows[0]!.id;
+    const configured = [
+      ["2026-01-01", "2026-01-31"],
+      ["2026-02-01", "2026-02-28"],
+      ["2026-03-01", "2026-03-31"],
+      ["2026-04-01", "2026-04-30"],
+      ["2026-05-01", "2026-05-31"],
+      ["2026-06-01", "2026-06-30"],
+      ["2026-07-01", "2026-08-01"],
+    ].map(([startsOn, endsOn], index) => ({
+      startsOn, endsOn, name: `Period ${index + 1}`, adjustment: false,
+    }));
+    await db.execute(sql`
+      update fiscal_calendars
+         set cadence = 'custom', adjustment_period_enabled = false,
+             config = ${JSON.stringify({ years: { "2026": configured } })}::jsonb
+       where org_id = ${org.orgId} and id = ${calendarId}`);
+
+    const connection = await pool.connect();
+    holder = connection;
+    await connection.query("begin");
+    await connection.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+      [org.orgId],
+    );
+    const key = `period-lock:${org.orgId}:${org.periodId}:${org.bookId}`;
+    await connection.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+
+    // Filing resolves the old July window and queues on the period fence.
+    const filing = markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-CALENDAR-RACE");
+    assert.ok(await waitForAdvisoryWaiter(key), "mark-filed waits on the period/book fence");
+    // Generation wants to move the July boundary too, so it must queue behind
+    // the same filing fence instead of certifying against a date range that is
+    // being rewritten concurrently.
+    const generation = generateAccountingPeriods(org.orgId, calendarId, 2026, userId);
+    assert.ok(await waitForAdvisoryWaiter(key, 2), "generation also waits on the held period/book fence");
+
+    await connection.query("commit");
+    connection.release();
+    holder = null;
+
+    await filing;
+    await generation;
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+    const period = (await db.execute<{ ends_on: string }>(sql`
+      select ends_on::text as ends_on from accounting_periods
+       where org_id = ${org.orgId} and id = ${org.periodId}`)).rows[0]!;
+    assert.equal(period.ends_on, "2026-08-01");
   } finally {
     if (holder) {
       await holder.query("rollback").catch(() => undefined);

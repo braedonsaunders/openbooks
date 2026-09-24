@@ -584,7 +584,7 @@ async function loadAccountingPeriods(
   const books = (await db.execute(sql`
     select id from accounting_books
      where org_id = ${orgId} and is_active
-     order by is_primary desc, created_at, id
+     order by id
   `)) as { rows: { id: string }[] };
   if (books.rows.length === 0) {
     s.skipped += records.length;
@@ -610,9 +610,10 @@ async function loadAccountingPeriods(
     // One transaction per period: the definition and every book/module lock
     // land atomically, and the 0022 exclusive fence serializes these lock
     // writes against in-flight postings (shared side in je_guard) and local
-    // close writers (setPeriodLockState/closeApprovedRun). Books iterate in a
-    // total, stable order so concurrent mirrors acquire the per-book fences
-    // in the same sequence instead of deadlocking.
+    // close writers (setPeriodLockState/closeApprovedRun). Existing rows take
+    // the scope fence before the date-window upsert so filing cannot certify a
+    // boundary while the mirror changes it. Books iterate by id, matching
+    // calendar generation's lock order and preventing cross-writer deadlocks.
     await db.transaction(async (tx) => {
       const existing = (await tx.execute(sql`
         select id from accounting_periods
@@ -622,6 +623,24 @@ async function loadAccountingPeriods(
            and period_number = ${periodNumber}
          limit 1
       `)) as { rows: { id: string }[] };
+      const existingPeriodId = existing.rows[0]?.id;
+      if (existingPeriodId) {
+        // Existing period definitions can change the date window a tax filing
+        // certifies. Take the same period/book fence BEFORE the upsert, then
+        // re-read the row under that fence. New periods have no prior filing
+        // scope to race and take the fence immediately after insertion below.
+        for (const book of books.rows) {
+          await periodScopeAdvisoryLock(tx, orgId, existingPeriodId, book.id);
+        }
+        const lockedPeriod = (await tx.execute(sql`
+          select id from accounting_periods
+           where org_id = ${orgId} and id = ${existingPeriodId}
+           for update
+        `)) as { rows: { id: string }[] };
+        if (!lockedPeriod.rows[0]) {
+          throw new Error(`accounting period ${existingPeriodId} disappeared while waiting for its scope fence`);
+        }
+      }
       const period = (await tx.execute(sql`
         insert into accounting_periods
           (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
@@ -651,7 +670,7 @@ async function loadAccountingPeriods(
         : {};
       const closedAt = str(f.closedAt);
       for (const book of books.rows) {
-        await periodScopeAdvisoryLock(tx, orgId, periodId, book.id);
+        if (!existingPeriodId) await periodScopeAdvisoryLock(tx, orgId, periodId, book.id);
         for (const module of CLOSE_MODULES) {
           const closed = fullyClosed ||
             (module === "ar" && f.arLocked === true) ||
