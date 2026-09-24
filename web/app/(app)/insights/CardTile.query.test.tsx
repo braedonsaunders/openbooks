@@ -1,35 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 
 // CardTile F4T2-1: the tile fetched POST /api/insights/query and called
 // res.json() before checking res.ok, so a non-JSON error body escaped the
 // effect as a SyntaxError instead of failing the tile with the server's
 // named refusal. The status is checked first through the shared helper.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/insights/dashboards/d-1',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/insights/dashboards/d-1' })
 
 declare global {
   var __tileQueryImpl: (() => Promise<Response>) | undefined
@@ -51,7 +28,6 @@ registerHooks({
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

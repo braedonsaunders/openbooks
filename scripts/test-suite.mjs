@@ -339,6 +339,8 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     '--import',
     'tsx',
     '--import',
+    './scripts/test-hooks.mjs',
+    '--import',
     './engine/src/testing/database-bypass.ts',
     ...(pooled ? ['--import', './scripts/test-fixture-lifecycle.mjs'] : []),
     '--test',

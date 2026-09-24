@@ -2,15 +2,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { FRAME_NAMES, WIDGET_NAMES } from './registry-names'
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'server-only' || specifier.endsWith('.css')) {
-      return { shortCircuit: true, url: 'data:text/javascript,' }
-    }
-    return next(specifier, context)
-  },
-})
 const { WIDGET_REGISTRY } = await import('./widgets')
 const { FRAME_REGISTRY } = await import('./blocks')
 

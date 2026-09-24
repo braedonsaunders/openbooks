@@ -93,7 +93,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Test workflow contract
-        run: node --test scripts/test-workflow.test.mjs
+        run: node --import ./scripts/test-hooks.mjs --test scripts/test-workflow.test.mjs
       - name: Product-neutrality audit
         run: npm run check:product-neutrality
       - name: Engine module boundaries

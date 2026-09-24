@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
+import { importWithMocks } from "@openbooks/engine/src/testing/module-mocks.ts";
 
-const mockSources = new Map<string, string>([
+const { GET } = await importWithMocks<typeof import("./route.ts")>(
+  "./route.ts",
   [
-    "mock:v1",
-    `
+    [
+      "../../../../lib/api/v1-request",
+      `
       export async function withV1Request(request, label, operation) {
         try {
           const result = await operation(
@@ -34,40 +36,18 @@ const mockSources = new Map<string, string>([
         return key
       }
     `,
-  ],
-  [
-    "mock:vitals",
-    `
+    ],
+    [
+      "../../../../lib/application/vitals",
+      `
       export async function orgVitals() {
         return { cash: "100.00", approvalsPending: 2 }
       }
     `,
+    ],
   ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../lib/application/vitals", "mock:vitals"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
-  },
-});
-
-const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
+  import.meta.url,
+);
 
 test("GET /api/v1/vitals returns the org snapshot", async () => {
   const response = await GET(
