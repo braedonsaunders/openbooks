@@ -1615,7 +1615,7 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0327_item_price_level_activation_history.sql",
     from: "26606980c32021dae07ba3942fbe0bf955c6c10dae5e5f5985f84b19ce4049b2",
-    to: "696333297953bfffdf39879cd5618a585a10c5b85a8fa8ffb6e81bb0c7372091",
+    to: "b70ecb046f73f2f4310cacfaa9f45075819466e09e73a85d2902db75a65c8eab",
     strategy: "reapply",
     reason:
       "corrective revision PRC15d: revoking a future-effective assignment "
@@ -1626,16 +1626,17 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "The trigger now removes any revocation before the row ever starts "
       + "(today or later), the backfill deletes matching pre-upgrade rows, "
       + "and the resolver honours an inactive row only for its closed "
-      + "history. Same idempotence story as the PRC15c entry: IF NOT EXISTS "
-      + "DDL, CREATE OR REPLACE FUNCTION, conditional triggers, gap-only "
-      + "backfills. Reapply, not restamp: enforced trigger behavior changes. "
-      + "For databases still at the original digest; databases already at the "
-      + "PRC15c digest use the next entry.",
+      + "history. Every removal writes a before-image audit row, trigger and "
+      + "backfill alike. Same idempotence story as the PRC15c entry: IF NOT "
+      + "EXISTS DDL, CREATE OR REPLACE FUNCTION, conditional triggers, "
+      + "gap-only backfills. Reapply, not restamp: enforced trigger behavior "
+      + "changes. For databases still at the original digest; databases "
+      + "already at the PRC15c digest use the next entry.",
   },
   {
     filename: "generated/0327_item_price_level_activation_history.sql",
     from: "74408c2026f5e84d304f1a1586dca7e7967222efd6cdb388f02ffd128f9552be",
-    to: "696333297953bfffdf39879cd5618a585a10c5b85a8fa8ffb6e81bb0c7372091",
+    to: "b70ecb046f73f2f4310cacfaa9f45075819466e09e73a85d2902db75a65c8eab",
     strategy: "reapply",
     reason:
       "same PRC15d revision as the entry above, for databases that already "
