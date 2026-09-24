@@ -18,21 +18,33 @@ interface HarnessState {
 const harnessState: HarnessState = { authz: null }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = harnessState
 
-const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.account-warnings-test')]
-  export async function guardPermission(_permission) {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-`
+const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
+  shortCircuit: true,
+  format: "module",
+  url: `data:text/javascript,${encodeURIComponent(source)}`,
+})
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
+    // Re-export the REAL authz module and override only the session gate, so
+    // the subsidiary-scope guards the routes call are the production
+    // functions. Gates without an explicit scope default to unrestricted,
+    // matching the pre-scope tests that never restricted the caller.
     if (specifier === '../../../lib/authz' || specifier === '../../../../lib/authz') {
-      return { url: 'mock:authz', shortCircuit: true }
+      const real = nextResolve(specifier, context).url
+      const nextServer = nextResolve('next/server', context).url
+      return module_(`
+        export * from ${JSON.stringify(real)};
+        const state = globalThis[Symbol.for('openbooks.account-warnings-test')];
+        const { NextResponse } = await import(${JSON.stringify(nextServer)});
+        export async function guardPermission(_permission) {
+          if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+          return { permissions: new Set(), allowedSubsidiaryIds: null, ...state.authz };
+        }
+      `)
     }
     if (specifier.startsWith('@/') && context.parentURL) {
       const parentDir = decodeURIComponent(new URL('.', context.parentURL).href)
@@ -41,12 +53,6 @@ const hooks = registerHooks({
       return nextResolve(new URL(parentDir.slice(0, webRoot + 5) + specifier.slice(2) + '.ts').href, context)
     }
     return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    if (url === 'mock:authz') {
-      return { format: 'module', source: mockAuthz, shortCircuit: true }
-    }
-    return nextLoad(url, context)
   },
 })
 

@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
-import { guardPermission } from '../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope } from '../../../lib/authz'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { assetBankHygieneWarning } from '../../../lib/accounts-hygiene'
@@ -79,13 +79,18 @@ export async function POST(request: Request) {
 
   if (parentId) {
     if (!isUuid(parentId)) return bad('invalid_parent', 'parentId')
-    const parent = (await db.execute<{ is_summary: boolean; type: string }>(sql`
-      select is_summary, type from accounts
+    const parent = (await db.execute<{ is_summary: boolean; type: string; subsidiary_id: string | null }>(sql`
+      select is_summary, type, subsidiary_id from accounts
        where id = ${parentId} and org_id = ${gate.user.orgId}
     `))
     if (!parent.rows[0]) return bad('invalid_parent', 'parentId')
     if (!parent.rows[0].is_summary) return bad('parent_must_be_summary', 'parentId')
     if (parent.rows[0].type !== body.type) return bad('parent_type_mismatch', 'parentId')
+    // The hierarchy places the account: a parent the caller cannot see is the
+    // same as a missing one.
+    if (guardSubsidiaryScope(gate, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
+      return bad('invalid_parent', 'parentId')
+    }
   }
 
   const currencyRestriction = textOrNull(body.currencyRestriction)?.toUpperCase() ?? null
@@ -111,6 +116,14 @@ export async function POST(request: Request) {
        where id = ${subsidiaryId} and org_id = ${gate.user.orgId}
     `))
     if (!subsidiary.rows[0]) return bad('invalid_subsidiary', 'subsidiaryId')
+    // A restricted caller may never mint an account for a subsidiary they
+    // cannot see; a missing or foreign id stays invalid_subsidiary above.
+    const denied = guardSubsidiaryScope(gate, subsidiaryId)
+    if (denied) return denied
+  } else {
+    // No subsidiary means the shared chart: an org-wide write.
+    const orgWideDenied = guardUnrestrictedScope(gate)
+    if (orgWideDenied) return orgWideDenied
   }
 
   const definitions = (await db.execute<{ key: string }>(sql`

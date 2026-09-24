@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -35,10 +35,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const group = await loadGroup(id, gate.user.orgId);
   if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const acct = await db.execute(sql`
-    select id from accounts where id = ${accountId} and org_id = ${gate.user.orgId}
+  const acct = await db.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from accounts where id = ${accountId} and org_id = ${gate.user.orgId}
   `);
   if (!acct.rows.length) return NextResponse.json({ error: "account not found" }, { status: 404 });
+  // Pins classify the account in reporting: pinning an out-of-scope account
+  // is indistinguishable from pinning a missing one, and the shared chart
+  // (null subsidiary) is an org-wide write.
+  const subsidiaryId = acct.rows[0]!.subsidiary_id;
+  const scopeDenied = subsidiaryId === null
+    ? guardUnrestrictedScope(gate)
+    : guardSubsidiaryScope(gate, subsidiaryId);
+  if (scopeDenied) return scopeDenied;
 
   // The delete and insert must share one transaction and one per-account /
   // per-dimension fence.  Otherwise two replicas can both clear siblings
@@ -78,6 +86,16 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   const group = await loadGroup(id, gate.user.orgId);
   if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  const existing = await db.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from accounts where id = ${accountId} and org_id = ${gate.user.orgId}
+  `);
+  if (!existing.rows.length) return NextResponse.json({ error: "account not found" }, { status: 404 });
+  const existingSubsidiaryId = existing.rows[0]!.subsidiary_id;
+  const existingDenied = existingSubsidiaryId === null
+    ? guardUnrestrictedScope(gate)
+    : guardSubsidiaryScope(gate, existingSubsidiaryId);
+  if (existingDenied) return existingDenied;
 
   const pinLockKey = `account-group-pin:${gate.user.orgId}:${group.dimension}:${accountId}`;
   await db.transaction(async (tx) => {

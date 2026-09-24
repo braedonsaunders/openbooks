@@ -70,10 +70,7 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksAccountsSqlText = sqlText;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:db",
-    `
+const dbDoubleBody = `
       const state = globalThis[Symbol.for('openbooks.accounts-route-test')]
       const sqlText = globalThis.openbooksAccountsSqlText
       function respond(query) {
@@ -118,14 +115,9 @@ const mockSources = new Map<string, string>([
           },
         }),
       }
-    `,
-  ],
-  [
-    "mock:authz",
-    `export async function guardPermission() {
-       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
-     }`,
-  ],
+`;
+
+const mockSources = new Map<string, string>([
   [
     "mock:features",
     "export async function isFeatureEnabled() { return true }\nexport async function subsidiaryFeatureEnabled() { return true }",
@@ -160,9 +152,7 @@ const mockSources = new Map<string, string>([
 // { ok: true }, never the boundary refusals the route must enforce. The real
 // module loads through tsx.
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/schema", "mock:schema"],
-  ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],
   ["../../../lib/custom-fields", "mock:custom-fields"],
   ["../../../lib/list-params", "mock:list-params"],
@@ -173,6 +163,28 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // The real '@/lib/api/json' imports 'server-only', which is inert here.
     if (specifier === "server-only") return { url: "data:text/javascript,export {}", shortCircuit: true };
+    // Re-export the REAL authz module and override only the session gate with
+    // an unrestricted caller: the idempotency contract never restricts the
+    // caller, and a hand-copied guard double could only drift from the
+    // production guards the route now calls.
+    if (specifier === "../../../lib/authz") {
+      const real = nextResolve(specifier, context).url;
+      const source = `
+        export * from ${JSON.stringify(real)};
+        export async function guardPermission() {
+          return { user: { orgId: ${JSON.stringify(ORG_ID)}, id: ${JSON.stringify(USER_ID)} }, permissions: new Set(), allowedSubsidiaryIds: null };
+        }
+      `;
+      return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true };
+    }
+    // Re-export the REAL platform db and override only `db`: the authz graph
+    // above needs the module's other exports (bypass contexts, ambient org),
+    // and listing them by hand would be a list that can only omit.
+    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+      const real = nextResolve(specifier, context).url;
+      const source = `export * from ${JSON.stringify(real)};\n${dbDoubleBody}`;
+      return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true };
+    }
     if (specifier === "@openbooks/engine/src/platform/canonical-json.ts") {
       return {
         url: new URL(

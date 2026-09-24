@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { guardUnrestrictedScope } from '@/lib/authz'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
 import { validateRateBookLines, type RateBookInputLine, type ValidRateBookLine } from '@/lib/item-rate-book-lines'
@@ -23,6 +24,10 @@ function databaseCode(error: unknown): string | undefined {
 export async function POST(request: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'projects')
   if (gate instanceof NextResponse) return gate
+  // Rate books and their versions price every entity with no subsidiary
+  // lineage of their own: a restricted caller must not rewrite them.
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const parsed = await parseJsonBody(request, jsonObject)
   if (!parsed.ok) return parsed.response
   const body = parsed.data as Record<string, unknown>
