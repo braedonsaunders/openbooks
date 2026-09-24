@@ -12,6 +12,7 @@ import {
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/delivery/email-config.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
 import { verifyPdfEncryption } from '@openbooks/pdf'
 import { isFeatureEnabled } from '../features'
@@ -182,12 +183,16 @@ export async function sendRecordPdfEmail(args: {
   // off — the email just omits the CTA.
   let paymentUrl: string | undefined
   if (args.recordType === 'customer_invoice' && (await isFeatureEnabled(args.orgId, 'onlinePayments'))) {
-    const link = (await db.execute<{ token: string }>(sql`
-      select token from payment_links
+    const link = (await db.execute<{ token: string | null; tokenSealed: string | null }>(sql`
+      select token, token_sealed as "tokenSealed" from payment_links
        where org_id = ${args.orgId} and document_id = ${args.id} and status = 'active'
        order by created_at desc limit 1
     `))
-    if (link.rows[0]) paymentUrl = `${appBaseUrl()}/pay/${link.rows[0].token}`
+    // An unsealable token omits the call-to-action rather than mailing a
+    // dead /pay URL: the operator reissues from the invoice's link panel.
+    const sealed = link.rows[0]?.tokenSealed
+    const plain = sealed ? unsealSecret(sealed) : (link.rows[0]?.token ?? null)
+    if (plain) paymentUrl = `${appBaseUrl()}/pay/${plain}`
   }
   const body = documentEmail({
     orgName,

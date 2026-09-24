@@ -7,6 +7,7 @@ import { Badge, Button, Select } from "@openbooks/ui";
 type Link = {
   id: string;
   token: string;
+  tokenState: "ok" | "unsealable";
   provider: string;
   amount: string;
   surchargeAmount: string;
@@ -130,13 +131,19 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
               </span>
               {link.status === "active" ? (
                 <>
-                  <button
-                    type="button"
-                    className="text-xs text-teal-700 hover:underline dark:text-teal-300"
-                    onClick={() => copy(link.token)}
-                  >
-                    {copied === link.token ? t("copied") : t("copyLink")}
-                  </button>
+                  {link.tokenState === "unsealable" ? (
+                    <span className="text-xs text-red-600 dark:text-red-400" role="alert">
+                      {t("unavailable")}: {t("reissueHint")}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-xs text-teal-700 hover:underline dark:text-teal-300"
+                      onClick={() => copy(link.token)}
+                    >
+                      {copied === link.token ? t("copied") : t("copyLink")}
+                    </button>
+                  )}
                   {canManage ? (
                     <button
                       type="button"

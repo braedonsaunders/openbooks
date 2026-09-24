@@ -168,6 +168,8 @@
     "copyLink": "Copy link",
     "copied": "Copied",
     "void": "Void",
+    "unavailable": "Unavailable — needs reissue",
+    "reissueHint": "Void this link and create a new one to collect payment.",
     "status": {
       "active": "active",
       "paid": "paid",
