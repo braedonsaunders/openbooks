@@ -195,9 +195,14 @@ async function resolveProjectFinancialsInSnapshot(
     profile.overhead.method === 'posted_gl_account_group' && profile.overhead.accountGroup
       ? { source: 'account_group', dimension: profile.overhead.accountGroup.dimension, groupKeys: profile.overhead.accountGroup.groupKeys }
       : { source: 'none' }
-  const [costIds, overheadIds] = await Promise.all([
+  const laborCostSource: CostSource =
+    profile.laborCost.source === 'account_group' && profile.laborCost.dimension
+      ? { source: 'account_group', dimension: profile.laborCost.dimension, groupKeys: profile.laborCost.groupKeys }
+      : { source: 'none' }
+  const [costIds, overheadIds, laborIds] = await Promise.all([
     groupAccountIds(orgId, profile.actualCost),
     groupAccountIds(orgId, overheadCostSource),
+    groupAccountIds(orgId, laborCostSource),
   ])
   const financialAdjustmentsPromise = projectFinancialAdjustments(
     orgId,
@@ -388,7 +393,19 @@ async function resolveProjectFinancialsInSnapshot(
                where te.org_id = ${orgId} and te.project_id = ${projectId}
                  and te.status = 'approved' and te.costing_basis = 'estimated'
              group by 1`)
-        : db.execute(sql`select 0 as labor`),
+        : profile.laborCost.source === 'account_group'
+          ? (!profile.laborCost.dimension
+              ? Promise.reject(new Error("laborCost.source 'account_group' requires laborCost.dimension"))
+              : db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
+                   coalesce(sum(l.amount) filter (where ${costPredicate(laborCostSource, laborIds)}), 0) as labor
+                 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
+                 left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+                where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+                  and ${primaryBookSql(orgId)}
+                group by 1`))
+          : profile.laborCost.source === 'in_actual_cost' || profile.laborCost.source === 'none'
+            ? db.execute(sql`select 0 as labor`)
+            : Promise.reject(new Error(`Unknown laborCost.source '${profile.laborCost.source as string}' — refusing instead of pricing labor as zero`)),
     // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
     profile.overhead.method !== 'posted_gl_account_group'
       ? db.execute(sql`select 0 as overhead`)

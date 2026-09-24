@@ -324,3 +324,44 @@ test("rate-engine overhead matches org-wide rates and the posted net-zero pair",
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("account-group labor resolves posted GL on the grouped accounts", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // A labor pool holding the wage account, mirroring the overhead
+    // posted-GL account-group pattern.
+    const groupId = randomUUID();
+    await db.execute(sql`
+      insert into account_groups (id, org_id, dimension, key, name, is_catch_all, is_active)
+      values (${groupId}, ${org.orgId}, 'labor_pool', 'field_labor', 'Field labor', false, true)`);
+    await db.execute(sql`
+      insert into account_group_members (id, org_id, group_id, account_id, dimension)
+      values (${randomUUID()}, ${org.orgId}, ${groupId}, ${org.accounts.cogs}, 'labor_pool')`);
+    const projectId = await seedProjectWithPostedCost(db, org, "LABOR-GRP-1", "500");
+    const grouped: FinancialProfile = {
+      ...structuredClone(profile),
+      laborCost: { source: "account_group", dimension: "labor_pool", groupKeys: ["field_labor"] },
+    };
+    const report = await resolveProjectFinancials(org.orgId, projectId, grouped);
+    assert.equal(report.measures.labor_cost, "500.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an unknown labor source refuses instead of pricing labor as zero", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const projectId = await seedProjectWithPostedCost(db, org, "LABOR-UNK-1", "500");
+    const bogus: FinancialProfile = {
+      ...structuredClone(profile),
+      laborCost: { source: "unknown_source" as unknown as FinancialProfile["laborCost"]["source"] },
+    };
+    await assert.rejects(
+      resolveProjectFinancials(org.orgId, projectId, bogus),
+      /Unknown laborCost\.source 'unknown_source'/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
