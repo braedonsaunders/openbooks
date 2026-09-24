@@ -22,33 +22,22 @@ export const runtime = "nodejs";
  * the one the reviewer reads, so it is declared here rather than left
  * to a generic "expected number".
  */
-const PCT_MESSAGE = "proposedPct must be a non-negative percent";
+const PCT_MESSAGE = "proposedPct must be a non-negative percent supplied as a decimal string";
 const RATE_MESSAGE = "proposedRate must be a positive amount with at most 4 decimals";
 
-function exactProposedPct(value: unknown): string | null {
-  if (typeof value !== "string" && typeof value !== "number") return null;
-  // A JSON number is already binary at this boundary. Keep fractional
-  // number compatibility only while its representation can retain six
-  // decimal places; larger fractional values must arrive as decimal text.
-  if (typeof value === "number" && !Number.isFinite(value)) return null;
+function exactProposedPct(value: string): string | null {
   const exact = canonicalDecimal(value, 6);
   if (exact === null || exact.startsWith("-")) return null;
-  if (typeof value === "number") {
-    if (Number.isInteger(value) && !Number.isSafeInteger(value)) return null;
-    if (!Number.isInteger(value) && exact.split(".")[0]!.length > 9) return null;
-  }
   return exact;
 }
 
 const cycleLineBody = z.object({
-  // F3-33: the client sends the canonical decimal string the exact
-  // parser produced. JSON-number compatibility is normalized directly
-  // through the canonical parser and returned as text. One refine keeps
-  // the single named refusal (a union reports a bare invalid_union).
+  // F3-33: the client sends canonical decimal text; JSON numbers are refused
+  // before the engine can mistake an already-rounded binary value for input.
   proposedPct: z
-    .unknown()
-    .refine((v) => v === null || v === undefined || exactProposedPct(v) !== null, PCT_MESSAGE)
-    .transform((v) => (v == null ? v : exactProposedPct(v)!))
+    .string({ error: PCT_MESSAGE })
+    .refine((v) => exactProposedPct(v) !== null, PCT_MESSAGE)
+    .transform((v) => exactProposedPct(v)!)
     .nullish(),
   proposedRate: z
     .string({ error: RATE_MESSAGE })

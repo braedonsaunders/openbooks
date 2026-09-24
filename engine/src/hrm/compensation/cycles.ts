@@ -998,7 +998,7 @@ export interface ProposeLineQuery {
   readonly actorId: string;
   readonly lineId: string;
   /** Proposed raise percent as exact decimal text (e.g. "3.5"). Exactly one of pct/rate. */
-  readonly proposedPct?: string | number | null;
+  readonly proposedPct?: string | null;
   readonly proposedRate?: string | null;
   readonly reason?: string | null;
 }
@@ -1009,8 +1009,11 @@ export interface ProposeLineQuery {
  * remedy instead of computing a wage from full precision while storing
  * a rounded percent — the two evidences must agree.
  */
-function pctInput6(pct: string | number): string {
-  const text = String(pct);
+function pctInput6(pct: string): string {
+  if (typeof pct !== "string") {
+    throw new CompensationError("INVALID_INPUT", "proposedPct must be supplied as a decimal string");
+  }
+  const text = pct;
   let canonical: string;
   try {
     canonical = normalizeDecimal(text, 6);
@@ -1088,7 +1091,7 @@ export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLin
   if (hasPct === hasRate) {
     throw new CompensationError("INVALID_INPUT", "propose exactly one of proposedPct or proposedRate — the other derives, never both typed");
   }
-  const pct6: string | null = hasPct ? pctInput6(query.proposedPct as string | number) : null;
+  const pct6: string | null = hasPct ? pctInput6(query.proposedPct as string) : null;
   if (hasRate && !/^\d+(\.\d{1,4})?$/.test(query.proposedRate as string)) {
     throw new CompensationError("INVALID_INPUT", "proposedRate must be a positive amount with at most 4 decimals");
   }

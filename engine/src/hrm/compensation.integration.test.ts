@@ -377,19 +377,19 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
     assert.equal(empLine.guidelineMinPct, "2.000000");
     // Outside-guideline without a reason refuses and writes nothing.
     await assert.rejects(
-      proposeLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, proposedPct: 10 }),
+      proposeLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, proposedPct: "10" }),
       /outside the guideline 2%–4%.*need a reason/,
     );
     const untouched = (await db.execute<{ status: string }>(sql`
       select status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${empLine.id}`)).rows[0];
     assert.equal(untouched?.status, "pending");
     // Within guideline proposes cleanly.
-    const proposed = await proposeLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, proposedPct: 3 });
+    const proposed = await proposeLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, proposedPct: "3" });
     assert.equal(proposed.status, "proposed");
     assert.equal(proposed.proposedRate, "92700.0000");
     // A stranger (no manage grant, no team) is refused.
     await assert.rejects(
-      proposeLine({ orgId: org.orgId, actorId: h.outsiderId, lineId: empLine.id, proposedPct: 3 }),
+      proposeLine({ orgId: org.orgId, actorId: h.outsiderId, lineId: empLine.id, proposedPct: "3" }),
       /proposals come from the employment's manager/,
     );
     // Reopen a decided line with reason; pushed lines never reopen (covered below).
@@ -398,7 +398,7 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
     const reopened = await reopenLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, reason: "market moved" });
     assert.equal(reopened.status, "proposed");
     // The proposer cannot decide their own line.
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id, proposedPct: 3 });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id, proposedPct: "3" });
     await assert.rejects(
       approveLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id }),
       /cannot decide their own line/,
@@ -430,7 +430,7 @@ test("HR-12 cycle approval runs through Flows and push writes each wage once", {
     });
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 3, reason: "hr proposes" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3", reason: "hr proposes" });
     // Submitting with no enabled flow refuses by name (the approval IS a Flows run).
     await assert.rejects(
       submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }),
@@ -536,7 +536,7 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
     }
     // Cycle A runs the whole lifecycle to pushed.
     const pushed = await approvedCycle("Post-push");
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: pushed.lineId, proposedPct: 3 });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: pushed.lineId, proposedPct: "3" });
     await releaseCycle(pushed.cycleId);
     await approveLine({ orgId: org.orgId, actorId: cycleApprover, lineId: pushed.lineId });
     const result = await pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: pushed.cycleId });
@@ -547,7 +547,7 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
       "submit-for-approval after push refuses",
     );
     await assert.rejects(
-      proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: pushed.lineId, proposedPct: 2 }),
+      proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: pushed.lineId, proposedPct: "2" }),
       /takes no proposals/,
       "proposing after push refuses",
     );
@@ -572,7 +572,7 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
     // Cycle B approves a zero raise: the push refuses instead of writing
     // an identical wage row, and nothing is stored.
     const flat = await approvedCycle("No raise");
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: flat.lineId, proposedPct: 0 });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: flat.lineId, proposedPct: "0" });
     await releaseCycle(flat.cycleId);
     await approveLine({ orgId: org.orgId, actorId: cycleApprover, lineId: flat.lineId });
     await assert.rejects(
@@ -606,7 +606,7 @@ test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB },
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     await seedApprovalFlow(org.orgId, { subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND, assignees: [{ type: "user", userId: h.hrId }], mode: "any" });
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 2, reason: "x" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "2", reason: "x" });
     // Forge a real wage row in a SECOND org and link it onto the pushed
     // line (bypassing the service, the way a hostile write would): the
     // FK lets the link exist (it names a real rate), so the service's
@@ -944,8 +944,8 @@ test("HR-12 cycle reads fence salaries to the actor's subsidiary lens", { skip: 
     // The envelope math itself is unchanged, only the input rows fence.
     const lineA = allLines.find((l) => l.employmentId === empA.employmentId)!;
     const lineB = allLines.find((l) => l.employmentId === empB.employmentId)!;
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineA.id, proposedPct: 3, reason: "scope test" });
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineB.id, proposedPct: 3, reason: "scope test" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineA.id, proposedPct: "3", reason: "scope test" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineB.id, proposedPct: "3", reason: "scope test" });
     const full = await cyclePacing(org.orgId, h.hrId, open.id);
     assert.ok(Math.abs(full.totalPct! - 57) < 1e-9);
     assert.equal(full.overBudget, false);
@@ -990,7 +990,7 @@ test("HR-12 cycle propose stays open to grant-less structural managers", { skip:
     // Over budget with no reason: refused, and the refusal carries no
     // whole-cycle percentage — the manager holds no compensation.read
     // grant, and public cyclePacing would deny them the same number.
-    const refusal = await proposeLine({ orgId: org.orgId, actorId: teamMgr, lineId: empLine.id, proposedPct: 3 }).then(
+    const refusal = await proposeLine({ orgId: org.orgId, actorId: teamMgr, lineId: empLine.id, proposedPct: "3" }).then(
       () => { throw new Error("expected the over-budget proposal to refuse"); },
       (e: unknown) => String((e as { message?: unknown }).message ?? e),
     );
@@ -999,7 +999,7 @@ test("HR-12 cycle propose stays open to grant-less structural managers", { skip:
     // With a reason the same proposal lands: the write control demands
     // no read grant, so a valid proposal is never rolled back on a
     // permission refusal.
-    const proposed = await proposeLine({ orgId: org.orgId, actorId: teamMgr, lineId: empLine.id, proposedPct: 3, reason: "annual merit" });
+    const proposed = await proposeLine({ orgId: org.orgId, actorId: teamMgr, lineId: empLine.id, proposedPct: "3", reason: "annual merit" });
     assert.equal(proposed.status, "proposed");
     assert.equal(proposed.proposedRate, "92700.0000");
     // The read side stays gated: the same manager cannot list salaries.
@@ -1046,12 +1046,12 @@ test("HR-12 restricted proposers still face the whole-cycle budget control", { s
     const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const lineA = lines.find((l) => l.employmentId === empA.employmentId)!;
     const lineB = lines.find((l) => l.employmentId === empB.employmentId)!;
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineB.id, proposedPct: 3, reason: "scope test" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineB.id, proposedPct: "3", reason: "scope test" });
     // The restricted proposer takes their in-scope A line over the whole
     // cycle budget without a reason: refused even though their visible 54%
     // slice looks funded — the lens cannot shrink the envelope.
     const refusal = await proposeLine({
-      orgId: org.orgId, actorId: proposerA, lineId: lineA.id, proposedPct: 3,
+      orgId: org.orgId, actorId: proposerA, lineId: lineA.id, proposedPct: "3",
     }).then(
       () => { throw new Error("expected the over-budget proposal to refuse"); },
       (e: unknown) => String((e as { message?: unknown }).message ?? e),
@@ -1064,7 +1064,7 @@ test("HR-12 restricted proposers still face the whole-cycle budget control", { s
     assert.equal(untouched?.status, "pending");
     // With a reason the same proposal lands.
     const proposed = await proposeLine({
-      orgId: org.orgId, actorId: proposerA, lineId: lineA.id, proposedPct: 3, reason: "market catch-up",
+      orgId: org.orgId, actorId: proposerA, lineId: lineA.id, proposedPct: "3", reason: "market catch-up",
     });
     assert.equal(proposed.status, "proposed");
   });

@@ -282,7 +282,7 @@ function patchRequest(url: string, body: unknown): Request {
     const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
     const proposed = await lineRoute!.PATCH(
       patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`, {
-        proposedPct: 3,
+        proposedPct: "3",
       }),
       params as never,
     );
@@ -338,23 +338,16 @@ function patchRequest(url: string, body: unknown): Request {
     ]);
   });
 
-  test("JSON number compatibility uses canonical text and refuses beyond its six-place precision", async () => {
+  test("JSON numbers are refused instead of crossing the proposal precision boundary", async () => {
     reset("hrm.compensation.read");
     const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
     const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
-    const compatible = await lineRoute!.PATCH(patchRequest(url, { proposedPct: 3.5 }), params as never);
-    assert.equal(compatible.status, 200);
-    assert.deepEqual(routeState.calls[0]?.args, {
-      orgId: "org-1", actorId: "user-1", lineId: LINE_ID,
-      proposedPct: "3.5", proposedRate: null, reason: null,
-    });
-    const wholeNumber = await lineRoute!.PATCH(patchRequest(url, { proposedPct: 1_234_567_890 }), params as never);
-    assert.equal(wholeNumber.status, 200);
-    assert.equal((routeState.calls[1]?.args as { proposedPct: string }).proposedPct, "1234567890");
-    const refused = await lineRoute!.PATCH(patchRequest(url, { proposedPct: 9_007_199_254.000002 }), params as never);
-    assert.equal(refused.status, 400);
-    assert.match(((await refused.json()) as { error: string }).error, /proposedPct must be a non-negative percent/);
-    assert.equal(routeState.calls.length, 2, "an imprecise JSON number never reaches compensation pricing");
+    for (const proposedPct of [3.5, 1_234_567_890, 0.12345600000000001]) {
+      const refused = await lineRoute!.PATCH(patchRequest(url, { proposedPct }), params as never);
+      assert.equal(refused.status, 400, `${proposedPct} must be a decimal string`);
+      assert.match(((await refused.json()) as { error: string }).error, /proposedPct.*decimal string/);
+    }
+    assert.deepEqual(routeState.calls, [], "no JSON number reaches compensation pricing");
   });
 
   test("line propose preserves high-magnitude percent text through the service boundary", async () => {
