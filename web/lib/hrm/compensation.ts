@@ -549,6 +549,7 @@ export interface CompCycleDetailData {
     pctLabel: string
     rateLabel: string
     reasonLabel: string
+    pctInvalid: string
     decideReasonLabel: string
     failed: string
     submit: string
@@ -708,6 +709,7 @@ export async function loadCompCycleDetail(
       pctLabel: t('compensation.drawer.pctLabel'),
       rateLabel: t('compensation.drawer.rateLabel'),
       reasonLabel: t('compensation.drawer.reasonLabel'),
+      pctInvalid: t('compensation.drawer.pctInvalid'),
       decideReasonLabel: t('compensation.drawer.decideReasonLabel'),
       failed: t('compensation.drawer.failed'),
       submit: t('compensation.drawer.submit'),

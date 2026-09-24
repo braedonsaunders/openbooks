@@ -85,6 +85,7 @@ export interface CompDrawerLabels {
   pctLabel: string
   rateLabel: string
   reasonLabel: string
+  pctInvalid: string
   decideReasonLabel: string
   failed: string
   submit: string
@@ -122,6 +123,7 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
             pctLabel={drawer.labels.pctLabel}
             rateLabel={drawer.labels.rateLabel}
             reasonLabel={drawer.labels.reasonLabel}
+            pctInvalidLabel={drawer.labels.pctInvalid}
             closeHref={drawer.closeHref}
           />
         </div>

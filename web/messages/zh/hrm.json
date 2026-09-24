@@ -1640,6 +1640,7 @@
       "pctLabel": "涨幅 %",
       "rateLabel": "新标准",
       "reasonLabel": "原因",
+      "pctInvalid": "加薪幅度必须是最多6位小数的纯非负数字（例如 3.5） — 百分号、逗号和字母均会被拒绝",
       "decideReasonLabel": "决策原因",
       "cancelReasonLabel": "取消原因",
       "cancelReasonRequired": "取消需要说明原因 — 请记录取消本轮周期的原因。",

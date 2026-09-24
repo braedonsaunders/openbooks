@@ -1696,6 +1696,7 @@
       "pctLabel": "Raise %",
       "rateLabel": "New rate",
       "reasonLabel": "Reason",
+      "pctInvalid": "The raise must be a plain non-negative number with at most 6 decimals (for example 3.5) — percent signs, commas, and letters are refused",
       "decideReasonLabel": "Decision reason",
       "cancelReasonLabel": "Cancellation reason",
       "cancelReasonRequired": "Cancelling needs a reason — record why the cycle is cancelled.",

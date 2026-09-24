@@ -1640,6 +1640,7 @@
       "pctLabel": "昇給 %",
       "rateLabel": "新レート",
       "reasonLabel": "理由",
+      "pctInvalid": "昇給率は小数点以下最大6桁の単純な非負の数値で入力してください（例: 3.5） — パーセント記号、カンマ、文字は使用できません",
       "decideReasonLabel": "決定理由",
       "cancelReasonLabel": "キャンセル理由",
       "cancelReasonRequired": "キャンセルには理由が必要です — サイクルをキャンセルする理由を記録してください。",
