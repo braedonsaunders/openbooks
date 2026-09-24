@@ -21,7 +21,7 @@ import {
   setSectionCompetency,
 } from "./competencies.ts";
 import { createGoal } from "./goals.ts";
-import { fulfillRequest, listFeedback, writeFeedback } from "./feedback.ts";
+import { fulfillRequest, listFeedback, retractFeedback, writeFeedback } from "./feedback.ts";
 import { getCycleDetail, getRetentionOverview, getReviewDetail, getTurnover, listMyReviews } from "./performance-read.ts";
 import { getExitRecord, listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
 
@@ -427,6 +427,87 @@ test("fulfilling a request twice returns the one fulfilment", { skip: !DB }, asy
        where org_id = ${h.org.orgId} and kind = 'feedback'
          and context->>'fulfills_request_id' = ${request.id}`)).rows[0]!.n;
     assert.equal(count, "1");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("a restricted HR retracts feedback only inside their legal-entity scope", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const onB = await writeFeedback({
+      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.b.employmentId,
+      kind: "feedback", visibility: "manager_and_subject", body: "B-side note",
+    });
+    // HR-A holds the manage grant but covers A only: the B row answers
+    // as missing, never as refused — they cannot read it, so from their
+    // side there is nothing to retract.
+    await assert.rejects(
+      retractFeedback({ orgId: h.org.orgId, actorId: h.hrA, id: onB.id }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "NOT_FOUND");
+        assert.match(e.message, /another organization or already be retracted/);
+        return true;
+      },
+    );
+    // The covering HR retracts it; a second retraction names the state —
+    // the row is in scope and readable, so the refusal says retracted,
+    // never missing.
+    await retractFeedback({ orgId: h.org.orgId, actorId: h.hrB, id: onB.id });
+    await assert.rejects(
+      retractFeedback({ orgId: h.org.orgId, actorId: h.hrB, id: onB.id }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "BAD_STATE");
+        assert.match(e.message, /already retracted/);
+        return true;
+      },
+    );
+    // In-scope retraction by the restricted HR works on their own side.
+    const onA = await writeFeedback({
+      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId,
+      kind: "feedback", visibility: "manager_and_subject", body: "A-side note",
+    });
+    await retractFeedback({ orgId: h.org.orgId, actorId: h.hrA, id: onA.id });
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("a restricted HR fulfils requests only inside their legal-entity scope", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const request = await writeFeedback({
+      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.b.employmentId,
+      kind: "request", visibility: "manager_and_subject", body: "Tell me about the launch",
+      requestedFromPartyId: h.b.managerPartyId,
+    });
+    // HR-A is neither the requested party nor the covering HR: refused,
+    // and the refusal stores nothing.
+    await assert.rejects(
+      fulfillRequest({
+        orgId: h.org.orgId, actorId: h.hrA, requestId: request.id,
+        visibility: "manager_and_subject", body: "Out-of-scope answer",
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "FORBIDDEN");
+        assert.match(e.message, /only the requested party or HR may fulfil/);
+        return true;
+      },
+    );
+    const stored = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_feedback
+       where org_id = ${h.org.orgId} and kind = 'feedback'
+         and context->>'fulfills_request_id' = ${request.id}`)).rows[0]!.n;
+    assert.equal(stored, "0");
+    // The covering HR fulfils it.
+    const answer = await fulfillRequest({
+      orgId: h.org.orgId, actorId: h.hrB, requestId: request.id,
+      visibility: "manager_and_subject", body: "They led the launch",
+    });
+    assert.equal(answer.subjectEmploymentId, h.b.employmentId);
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
