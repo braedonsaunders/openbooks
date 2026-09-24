@@ -7,7 +7,7 @@ import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "./tax.ts";
 import { computeTaxReturn } from "../tax-returns/return.ts";
-import { providerEvidenceMismatch, quoteExternalTax, readTaxRateProviderConfig, resolveCounterpartyTaxAddress, resolveEntityTaxAddress, resolveProviderTaxComponents, saveTaxRateProviderConfig, type TaxQuoteResult } from "./rate-providers.ts";
+import { providerEvidenceMismatch, quoteExternalTax, readTaxRateProviderConfig, readTaxRateProviderConfigForPosting, resolveCounterpartyTaxAddress, resolveEntityTaxAddress, resolveProviderTaxComponents, saveTaxRateProviderConfig, type TaxQuoteResult } from "./rate-providers.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { businessToday } from "../platform/business-date.ts";
 
@@ -479,6 +479,82 @@ test("manual aggregate overrides preserve recovery ratio when rounded tax is zer
   });
   assert.equal(negative.components[0]?.recoverableAmount, "-4.0000");
   assert.equal(negative.components[0]?.nonrecoverableAmount, "-6.0000");
+});
+
+test("provider posting fences config and every mapped tax code through commit", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const configId = randomUUID();
+    const codeIds = [randomUUID(), randomUUID()];
+    await db.execute(sql`
+      insert into tax_codes (id, org_id, code, name, calculation_type, recoverable_percent, is_active)
+      values (${codeIds[0]}, ${org.orgId}, 'RACE-A', 'Race A', 'standard', '100', true),
+             (${codeIds[1]}, ${org.orgId}, 'RACE-B', 'Race B', 'standard', '100', true)`);
+    await db.execute(sql`
+      insert into tax_rate_provider_configs
+        (id, org_id, provider, display_name, is_enabled, prefer_provider, settings)
+      values (${configId}, ${org.orgId}, 'avalara', 'Race provider', true, true,
+              ${JSON.stringify({ jurisdictionTaxCodes: { A: codeIds[0], B: codeIds[1] } })}::jsonb)`);
+
+    // Enumerate both mutation classes protected by posting's config read:
+    // the provider row (which serializes mapping edits) and every tax code
+    // referenced by that mapping. The poster must hold each FOR SHARE until
+    // its ambient transaction commits.
+    const targets: Array<{ label: string; resource: "config" | "tax_code"; id?: string }> = [
+      { label: 'provider config', resource: "config" },
+      ...codeIds.map((id) => ({ label: `mapped tax code ${id}`, resource: "tax_code" as const, id })),
+    ];
+    for (const target of targets) {
+      let releaseHolder!: () => void;
+      let holderReady!: (pid: number) => void;
+      let writerStarted!: () => void;
+      const held = new Promise<void>((resolve) => { releaseHolder = resolve; });
+      const ready = new Promise<number>((resolve) => { holderReady = resolve; });
+      const writerReady = new Promise<void>((resolve) => { writerStarted = resolve; });
+      const holding = db.transaction(async (tx) => {
+        const config = await readTaxRateProviderConfigForPosting(org.orgId, tx);
+        assert.equal(config?.id, configId);
+        const holder = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0];
+        assert.ok(holder);
+        holderReady(Number(holder.pid));
+        await held;
+      });
+      const holderPid = await ready;
+      const writing = db.transaction(async (tx) => {
+        writerStarted();
+        if (target.resource === "config") {
+          await tx.execute(sql`
+            update tax_rate_provider_configs set display_name = display_name
+             where org_id = ${org.orgId}`);
+        } else {
+          await tx.execute(sql`
+            update tax_codes set name = name where org_id = ${org.orgId} and id = ${target.id}`);
+        }
+      });
+      await writerReady;
+      let blocked = false;
+      try {
+        const deadline = Date.now() + 3_000;
+        while (Date.now() < deadline) {
+          blocked = (await db.execute<{ blocked: boolean }>(sql`
+            select exists (
+              select 1 from pg_stat_activity
+               where ${holderPid} = any(pg_blocking_pids(pid))
+            ) as blocked
+          `)).rows[0]!.blocked;
+          if (blocked) break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      } finally {
+        releaseHolder();
+      }
+      await holding;
+      await writing;
+      assert.equal(blocked, true, `posting did not fence ${target.label} until commit`);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
 
 test("approved sales and purchases use the configured provider atomically and retain line provenance", { skip: !DB }, async () => {

@@ -98,11 +98,42 @@ const CONFIG_COLS = sql`
 export async function readTaxRateProviderConfig(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
+  forShare = false,
 ): Promise<TaxRateProviderConfigRow | null> {
   const r = (await runner.execute<TaxRateProviderConfigRow>(sql`
     select ${CONFIG_COLS} from tax_rate_provider_configs where org_id = ${orgId} limit 1
+    ${forShare ? sql`for share` : sql``}
   `));
   return r.rows[0] ?? null;
+}
+
+/**
+ * Read and fence the provider configuration used by posting. The config's
+ * shared row lock conflicts with saveTaxRateProviderConfig's FOR UPDATE; each
+ * mapped code is also locked in stable id order so tax-code edits cannot
+ * change the posting binding before its transaction commits.
+ */
+export async function readTaxRateProviderConfigForPosting(
+  orgId: string,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<TaxRateProviderConfigRow | null> {
+  const config = await readTaxRateProviderConfig(orgId, runner, true);
+  if (!config?.isEnabled || !config.preferProvider || config.provider === "manual") return config;
+  let mapping: Record<string, string>;
+  try {
+    mapping = readJurisdictionMapping(config.settings);
+  } catch {
+    // Preserve the normal posting refusal path for malformed settings. There
+    // are no valid targets to lock until that configuration is repaired.
+    return config;
+  }
+  const codeIds = [...new Set(Object.values(mapping).filter((id) => UUID_SHAPE.test(id)))].sort();
+  for (const codeId of codeIds) {
+    await runner.execute(sql`
+      select id from tax_codes where org_id = ${orgId} and id = ${codeId} for share
+    `);
+  }
+  return config;
 }
 
 export async function readTaxRateProviderConfigView(orgId: string) {
@@ -1368,6 +1399,7 @@ async function providerTaxCodeFields(
   codeId: string,
   jurisdiction: string,
   runner: Pick<typeof db, "execute">,
+  forShare = false,
 ): Promise<ProviderTaxCodeFields> {
   const row = (
     await runner.execute<{
@@ -1386,7 +1418,8 @@ async function providerTaxCodeFields(
              collected_account_id as "collectedAccountId", paid_account_id as "paidAccountId",
              withholding_account_id as "withholdingAccountId", is_active as "isActive"
         from tax_codes where org_id = ${orgId} and id = ${codeId}
-    `)
+        ${forShare ? sql`for share` : sql``}
+      `)
   ).rows[0];
   if (!row) {
     throw new TaxRateProviderError(
@@ -1555,6 +1588,7 @@ export async function providerBindingMismatch(
   quote: TaxComponentQuote[],
   settings: Record<string, unknown>,
   runner: Pick<typeof db, "execute"> = db,
+  forShare = false,
 ): Promise<string | null> {
   const ordered = [...evidence].sort((a, b) => a.sequence - b.sequence);
   if (ordered.length !== quote.length) {
@@ -1576,7 +1610,7 @@ export async function providerBindingMismatch(
         `re-quote the draft against the current provider mapping before approval`
       );
     }
-    const code = await providerTaxCodeFields(orgId, expected, quoted.jurisdiction, runner).catch(
+    const code = await providerTaxCodeFields(orgId, expected, quoted.jurisdiction, runner, forShare).catch(
       (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         return { failed: message } as const;
