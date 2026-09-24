@@ -8,7 +8,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { loadEquipment } from '../_lib'
+import { loadEquipment, loadEquipmentInWrite } from '../_lib'
 
 function text(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null }
 function bad(error: string) { return NextResponse.json({ error, code: error }, { status: 422 }) }
@@ -22,8 +22,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('assets.read', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const data = isUuid(id) ? await loadEquipment(id, gate.user.orgId) : null
-  if (!data || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(data.unit.subsidiary_id)))) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  // The loader checks the scope first, on the locked unit row: an
+  // out-of-scope unit answers exactly like a missing one, with no post-hoc
+  // check for a concurrent rehome to race.
+  const data = isUuid(id) ? await loadEquipment(id, gate.user.orgId, gate.allowedSubsidiaryIds) : null
+  if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   return NextResponse.json(data)
 }
 
@@ -219,7 +222,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (sets.length === 0) {
         // A replay of the stored values: idempotent no-op, no new revision
         // and no audit row for a write that changed nothing.
-        return NextResponse.json(await loadEquipment(id, gate.user.orgId))
+        return NextResponse.json(await loadEquipmentInWrite(tx, id, gate.user.orgId, gate.allowedSubsidiaryIds))
       }
       const updated = await tx.execute(sql`
         update equipment_units
@@ -242,7 +245,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         values (${gate.user.orgId}, 'equipment_units', ${id}, 'update',
                 ${JSON.stringify({ before: current, after: updated.rows[0] })}::jsonb, ${gate.user.id})
       `)
-      return NextResponse.json(await loadEquipment(id, gate.user.orgId))
+      return NextResponse.json(await loadEquipmentInWrite(tx, id, gate.user.orgId, gate.allowedSubsidiaryIds))
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
