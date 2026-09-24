@@ -99,20 +99,26 @@ export function ViewStudio({
   // --- live preview (debounced) via the shared report run route (ad-hoc) ---
   const runPreview = useCallback(async (plan: ReportCustomQuery) => {
     setPreviewing(true)
-    const res = await fetch('/api/reports/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: plan }),
-    })
-    const data = await res.json()
-    if (res.ok) {
-      setPreview(data.result)
-      setPreviewError(null)
-    } else {
+    try {
+      const res = await fetch('/api/reports/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: plan }),
+      })
+      const data = await res.json().catch(() => null) as { result?: ReportRunResult; error?: unknown } | null
+      if (res.ok && data) {
+        setPreview(data.result ?? null)
+        setPreviewError(null)
+      } else {
+        setPreview(null)
+        setPreviewError(typeof data?.error === 'string' && data.error ? data.error : tb('previewFailed'))
+      }
+    } catch {
       setPreview(null)
-      setPreviewError(data.error ?? tb('previewFailed'))
+      setPreviewError(tb('previewFailed'))
+    } finally {
+      setPreviewing(false)
     }
-    setPreviewing(false)
   }, [tb])
 
   const firstPreview = useRef(true)
