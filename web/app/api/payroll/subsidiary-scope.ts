@@ -42,6 +42,8 @@ export async function guardPayrollEmployees(
       from parties p
      where p.org_id = ${gate.user.orgId}
        and p.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+     order by p.id
+       for share of p
   `)).rows
   // An unresolved employee id is indistinguishable from an out-of-scope one.
   if (rows.length !== ids.length) return notFound()
