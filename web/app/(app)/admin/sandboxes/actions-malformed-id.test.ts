@@ -128,3 +128,13 @@ test("sandbox enqueues refuse a malformed intent key", async () => {
     /invalid/i,
   );
 });
+
+test("as-of sandbox creation refuses synchronously before enqueue without a cutoff", async () => {
+  managerAuthz();
+  state.enqueues = [];
+  await assert.rejects(
+    actions.createSandboxAction({ name: "Historical QA", tier: "as_of", clientOpKey: OP_KEY }),
+    /as-of sandbox requires a cutoff period/,
+  );
+  assert.equal(state.enqueues.length, 0, "invalid as-of operation must never reach the worker queue");
+});
