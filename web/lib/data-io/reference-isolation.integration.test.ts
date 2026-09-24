@@ -29,10 +29,14 @@ const { MASTER_BY_KEY, masterResource } = (await import('./master-data-resources
 const { propertyDataResource } = (await import('./property-resources.ts')) as typeof import(
   './property-resources.ts'
 )
+const { recordSecurityDeposit } = (await import('@openbooks/engine/src/property/management.ts')) as typeof import(
+  '@openbooks/engine/src/property/management.ts'
+)
 hooks.deregister()
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 
 /**
  * Import references are tenant data: a file carrying another org's UUID must
@@ -358,6 +362,42 @@ test(
     } finally {
       await dropScratchOrgReporting(orgA.orgId)
       await dropScratchOrgReporting(orgB.orgId)
+    }
+  },
+)
+
+test(
+  'security-deposit import keys refuse changed values and treat identical rows as a no-op',
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg()
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId
+      const propertyId = randomUUID()
+      const leaseId = randomUUID()
+      const externalKey = `import-${randomUUID()}`
+      const leaseNumber = `LEASE-${randomUUID().slice(0, 8)}`
+      const account = (await db.execute<{ number: string }>(sql`select number from accounts where org_id=${org.orgId} and id=${org.accounts.adjustment}`)).rows[0]
+      assert.ok(account)
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"propertyManagement":true}'::jsonb) where id=${org.orgId}`)
+      await db.execute(sql`insert into managed_properties
+        (id,org_id,subsidiary_id,location_id,code,name,property_type,status,currency,rent_income_account_id,deposit_liability_account_id,default_bank_account_id)
+        values (${propertyId},${org.orgId},${org.subsidiaryId},${org.locationId},${`P-${randomUUID().slice(0,8)}`},'Import fixture','commercial','active','CAD',${org.accounts.revenue},${org.accounts.deferred},${org.accounts.bank})`)
+      await db.execute(sql`insert into property_leases (id,org_id,property_id,tenant_id,lease_number,status,starts_on)
+        values (${leaseId},${org.orgId},${propertyId},${org.customerId},${leaseNumber},'active',${org.date})`)
+      await recordSecurityDeposit({ orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, kind: 'adjustment_increase', occurredOn: org.date, amount: '125.50', offsetAccountId: org.accounts.adjustment, memo: 'Opening deposit', importKey: externalKey })
+      const resource = propertyDataResource(org.orgId, 'security-deposit-opening-balances')
+      assert.ok(resource)
+      const context = { orgId: org.orgId, actorId, dryRun: false }
+      const identical = await resource.write([{ externalKey, leaseNumber, occurredOn: org.date, amount: '125.5000', offsetAccount: account.number, memo: 'Opening deposit' }], 'upsert', context)
+      assert.deepEqual({ created: identical.created, updated: identical.updated, failed: identical.failed }, { created: 0, updated: 0, failed: 0 })
+      const changed = await resource.write([{ externalKey, leaseNumber, occurredOn: org.date, amount: '126', offsetAccount: account.number, memo: 'Opening deposit' }], 'upsert', context)
+      assert.deepEqual({ created: changed.created, updated: changed.updated, failed: changed.failed }, { created: 0, updated: 0, failed: 1 })
+      assert.match(changed.errors[0]?.message ?? '', new RegExp(externalKey))
+      const count = await db.execute<{ count: number }>(sql`select count(*)::int as count from security_deposit_transactions where org_id=${org.orgId} and import_key=${externalKey}`)
+      assert.equal(count.rows[0]?.count, 1)
+    } finally {
+      await dropScratchOrgReporting(org.orgId)
     }
   },
 )

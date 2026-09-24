@@ -431,16 +431,26 @@ function depositOpeningResource(orgId: string): DataResource {
         const externalKey = String(src.externalKey ?? '').trim()
         const leaseNumber = String(src.leaseNumber ?? '').trim()
         if (!externalKey || !leaseNumber || !src.occurredOn || !src.amount || !src.offsetAccount) throw new Error('externalKey, leaseNumber, occurredOn, amount, and offsetAccount are required')
-        const existing = (await db.execute(sql`select id from security_deposit_transactions where org_id=${ctx.orgId} and import_key=${externalKey} limit 1`)) as { rows: { id: string }[] }
-        if (existing.rows[0]) {
-          if (mode === 'insert') throw new Error(`already exists (externalKey=${externalKey})`)
-          outcome.updated++
-          continue
-        }
+        const existing = (await db.execute(sql`select id, lease_id, occurred_on, amount, offset_account_id, memo from security_deposit_transactions where org_id=${ctx.orgId} and import_key=${externalKey} limit 1`)) as { rows: { id: string; lease_id: string; occurred_on: string; amount: string; offset_account_id: string | null; memo: string | null }[] }
         const lease = (await db.execute(sql`select id from property_leases where org_id=${ctx.orgId} and lease_number=${leaseNumber} limit 1`)) as { rows: { id: string }[] }
         const offsetAccountId = await resolver.resolveId({ resource: 'accounts', by: 'number' }, src.offsetAccount)
         if (!lease.rows[0] || !offsetAccountId) throw new Error('leaseNumber or offsetAccount was not found')
-        if (!ctx.dryRun) await recordSecurityDeposit({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, leaseId: lease.rows[0].id, kind: 'adjustment_increase', occurredOn: String(src.occurredOn), amount: String(src.amount), offsetAccountId, memo: src.memo ? String(src.memo) : 'Imported security deposit opening balance', importKey: externalKey })
+        const occurredOn = String(src.occurredOn)
+        const amount = String(src.amount)
+        const memo = src.memo ? String(src.memo) : 'Imported security deposit opening balance'
+        if (existing.rows[0]) {
+          if (mode === 'insert') throw new Error(`already exists (externalKey=${externalKey})`)
+          const same = (await db.execute(sql`select
+            lease_id = ${lease.rows[0].id}::uuid
+            and occurred_on = ${occurredOn}::date
+            and amount = ${amount}::numeric
+            and offset_account_id is not distinct from ${offsetAccountId}::uuid
+            and memo is not distinct from ${memo}::text as same
+            from security_deposit_transactions where org_id=${ctx.orgId} and id=${existing.rows[0].id}`)) as { rows: { same: boolean }[] }
+          if (same.rows[0]?.same !== true) throw new Error(`security deposit with externalKey=${externalKey} already exists with different values; use a new external key`)
+          continue
+        }
+        if (!ctx.dryRun) await recordSecurityDeposit({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, leaseId: lease.rows[0].id, kind: 'adjustment_increase', occurredOn, amount, offsetAccountId, memo, importKey: externalKey })
         outcome.created++
       } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
       return outcome
