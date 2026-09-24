@@ -191,6 +191,28 @@ export function docKindConfig(kind: string): DocKindConfig | undefined {
   return DOC_KINDS[kind]
 }
 
+/**
+ * Permission key for reading a document of a kind through the generic
+ * document endpoints. Project charges are a Projects-domain record (their
+ * drawer, list and kind-specific routes gate on projects.read), so they
+ * read through the Projects grant rather than the GL namespace their
+ * posting rule lives under.
+ */
+export function documentReadPermission(kind: string): string {
+  if (kind === 'project_charge') return 'projects.read'
+  return readPermission(kind)
+}
+
+/**
+ * Permission key for editing a document of a kind through the generic
+ * document endpoints. Mirrors documentReadPermission: project charges edit
+ * through projects.manage.
+ */
+export function documentEditPermission(kind: string): string {
+  if (kind === 'project_charge') return 'projects.manage'
+  return createPermission(kind)
+}
+
 /** Permission key for the create/submit action on a kind. */
 export function createPermission(kind: string): string {
   const cfg = DOC_KINDS[kind]
