@@ -120,7 +120,7 @@ const CNAB240_SETTINGS = {
   conta: "123456",
   contaDv: "1",
   nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-  versaoLayoutArquivo: "084",
+  versaoLayoutArquivo: "087",
 };
 
 const originatorFor = (

@@ -80,7 +80,7 @@ const CNAB_ORIGINATOR: PayrollOriginatorConfig = {
     conta: "123456",
     contaDv: "1",
     nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-    versaoLayoutArquivo: "084",
+    versaoLayoutArquivo: "087",
   },
 };
 
@@ -157,7 +157,7 @@ test("the CNAB 240 format is registered, enabled, and settled in BRL on the cnab
  * 12345678000195 | convênio "123456789" + "0126" + 7 blanks | agência
  * "01234" + DV "0" | conta "000000123456" + DV "1" + "0" | company name |
  * "BANCO DO BRASIL" | 10 blanks | "1" | "14082026" | "093000" | NSA
- * "000007" | layout "084" | "00000" | blanks to 240.
+ * "000007" | layout "087" | "00000" | blanks to 240.
  *
  * Header de lote: "001" | lote | "1" | "C" | "30" (Pagamento de Salários) |
  * forma ("01" same-bank, "41" TED) | "045" | blank | "2" + CNPJ | convênio
@@ -179,7 +179,7 @@ test("the CNAB 240 format is registered, enabled, and settled in BRL on the cnab
  * whole-file record count | 6 zeros | 205 blanks.
  */
 const CNAB_GOLDEN =
-  "00100000         2123456780001951234567890126       01234000000012345610EMPRESA EXEMPLO LTDA          BANCO DO BRASIL                         11408202609300000000708400000                                                                     \r\n" +
+  "00100000         2123456780001951234567890126       01234000000012345610EMPRESA EXEMPLO LTDA          BANCO DO BRASIL                         11408202609300000000708700000                                                                     \r\n" +
   "00100011C3001045 2123456780001951234567890126       01234000000012345610EMPRESA EXEMPLO LTDA                                                                                                                                                    \r\n" +
   "0010001300001A0000000010432120000009876543 ADA AZEVEDO                   PAY EMP-0001        21082026BRL000000000000000000000000250000                    00000000000000000000000                                                    0          \r\n" +
   "0010001300002B   100011144477735                                                                                                                                                                                                 0              \r\n" +
@@ -226,7 +226,7 @@ test("the golden header de arquivo carries the convênio, debit account, NSA and
   assert.equal(header.slice(143, 151), "14082026");
   assert.equal(header.slice(151, 157), "093000");
   assert.equal(header.slice(157, 163), "000007");
-  assert.equal(header.slice(163, 166), "084");
+  assert.equal(header.slice(163, 166), "087");
   assert.equal(header.slice(166, 171), "00000");
 });
 
@@ -655,7 +655,7 @@ test("validateCnab240BbSettings accepts a complete originator and names every ga
     conta: "123456",
     contaDv: "1",
     nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-    versaoLayoutArquivo: "084",
+    versaoLayoutArquivo: "087",
   });
   if (!good.ok) assert.fail(`expected a valid CNAB originator: ${good.missing.join(", ")}`);
   assert.deepEqual(good.settings, {
@@ -666,8 +666,16 @@ test("validateCnab240BbSettings accepts a complete originator and names every ga
     conta: "123456",
     contaDv: "1",
     nomeEmpresa: "EMPRESA EXEMPLO LTDA",
+    versaoLayoutArquivo: "087",
+  });
+  const mismatchedVersion = validateCnab240BbSettings({
+    ...good.settings,
     versaoLayoutArquivo: "084",
   });
+  if (mismatchedVersion.ok) {
+    assert.fail("arquivo version 084 must be refused when the emitted lote version is 045");
+  }
+  assert.match(mismatchedVersion.missing.join(", "), /087.*lote 045/);
   const bad = validateCnab240BbSettings({
     cnpjEmpresa: "bogus",
     convenio: "12",
@@ -728,7 +736,7 @@ test("a cnab240_bb_credit bank profile is listed for payroll and resolves its or
     conta: "123456",
     contaDv: "1",
     nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-    versaoLayoutArquivo: "084",
+    versaoLayoutArquivo: "087",
   });
   // Reachable: the operator's picker sees the profile, on the cnab240 format,
   // fully configured — the "No originating bank profile is set up" dead end
@@ -755,7 +763,7 @@ test("a cnab240_bb_credit bank profile is listed for payroll and resolves its or
     conta: "123456",
     contaDv: "1",
     nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-    versaoLayoutArquivo: "084",
+    versaoLayoutArquivo: "087",
   });
 });
 
@@ -768,7 +776,7 @@ test("a cnab240 profile with a malformed convênio is listed as not configured, 
     conta: "123456",
     contaDv: "1",
     nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-    versaoLayoutArquivo: "084",
+    versaoLayoutArquivo: "087",
   });
   const profiles = await payrollBankProfiles(fx.orgId);
   assert.equal(profiles[0]?.configured, false);
