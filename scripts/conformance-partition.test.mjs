@@ -12,7 +12,7 @@ import { testManifest } from './test-suite.mjs'
 // database-owned (the `.integration.test.ts` suffix or a
 // DATABASE_TEST_OVERRIDES entry, as resolved by the single testManifest
 // source of truth).
-const DATABASE_SIGNALS = /OPENBOOKS_DB_URL|test-fixtures|createConformanceOrg|from\s+['"]\.\/roles(\.ts)?['"]|skip:\s*!/
+const DATABASE_SIGNALS = /process\.env\.OPENBOOKS_DB_URL|test-fixtures|createConformanceOrg|from\s+['"]\.\/roles(\.ts)?['"]|skip:\s*!/
 
 function needsDatabase(file) {
   return DATABASE_SIGNALS.test(readFileSync(join('engine/src/conformance', file), 'utf8'))
