@@ -7,6 +7,7 @@ import { resolveOrgId } from "../org-scope";
 import { decimalCmp, decimalSum, type ExactDecimal } from "../statement-format";
 import { decimalRatio, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 
 // ---------------------------------------------------------------------------
 // Project profitability — per-project revenue, cost and margin (job costing)
@@ -241,13 +242,16 @@ export async function projectProfitability(
 }
 
 /** Customers that own at least one project, including historical/inactive rows. */
-export async function projectProfitabilityCustomerOptions(orgId?: string): Promise<{ id: string; name: string }[]> {
-  const resolvedOrgId = await resolveOrgId(orgId)
+export async function projectProfitabilityCustomerOptions(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ id: string; name: string }[]> {
   const result = (await db.execute<{ id: string; name: string }>(sql`
     select distinct cu.id, cu.display_name as name
       from projects p
       join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
-     where p.org_id = ${resolvedOrgId}
+     where p.org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by cu.display_name, cu.id
   `))
   return result.rows
