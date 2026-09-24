@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import {
   decidePaymentFile,
   decidePaymentRun,
+  claimPaymentFileDelivery,
   generatePaymentFileArtifact,
   nachaOriginator,
   recordPaymentFileDownload,
+  recordPaymentFileSftpDelivery,
   recordPaymentSettlement,
   rollbackPaymentRun,
   sepaOriginator,
@@ -26,7 +27,6 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 
-const paymentOperationsSource = readFileSync(new URL("./operations.ts", import.meta.url), "utf8");
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 function postgresFailure(error: unknown): { code?: string; constraint?: string } | null {
@@ -417,64 +417,6 @@ test(
   },
 );
 
-test("payment approval fails closed when the maker is not identified", () => {
-  assert.match(
-    paymentOperationsSource,
-    /if \(makerId === null\) throw new PaymentError\(`\$\{subject\} approval requires an identified \$\{maker\}`\)/,
-  );
-  // Runs: a null submitter is a system submission (the payment scheduler) —
-  // its maker is the system itself, so the approval predicate lets any
-  // authenticated human through and the self-approval guard below rejects only
-  // a submitter approving their own run. Files still require an identified
-  // human maker: a system-generated file cannot be approved.
-  assert.match(
-    paymentOperationsSource,
-    /submitted_by is null\s+or submitted_by <> \$\{userId\}/,
-  );
-  assert.match(
-    paymentOperationsSource,
-    /the payment run submitter cannot approve the same run/,
-  );
-  assert.match(
-    paymentOperationsSource,
-    /generated_by is not null and generated_by <> \$\{userId\}/,
-  );
-});
-
-test("artifact generation re-judges the run lifecycle under a row lock inside the tenant transaction", () => {
-  // loadFormatContext reads outside any transaction, so the pre-render status
-  // check is advisory only. The committed state must be re-judged under the
-  // run's row lock before any artifact row is written.
-  const gate = paymentOperationsSource.match(
-    /select status from payment_runs[\s\S]*?status in \('approved', 'generated', 'delivered', 'partially_failed'\)[\s\S]*?for update/,
-  );
-  assert.ok(gate, "generation must gate on select ... for update over generable statuses");
-});
-
-test("the generated-file transition cannot resurrect a run that left the generable states", () => {
-  assert.match(
-    paymentOperationsSource,
-    /update payment_runs set status = 'generated'[\s\S]*?and status in \('approved', 'generated', 'delivered', 'partially_failed'\)\s*returning status/,
-  );
-});
-
-test("delivery recording refuses a file that is no longer approved at write time", () => {
-  const statements = paymentOperationsSource.match(
-    /update payment_files set status = 'delivered'[\s\S]*?returning id/g,
-  ) ?? [];
-  assert.equal(statements.length, 2, "download and sftp delivery must both use guarded updates");
-  const download = statements.find((s) => !s.includes("delivery_claim_token"));
-  const sftp = statements.find((s) => s.includes("delivery_claim_token"));
-  assert.ok(download, "the download path must keep its guarded update");
-  assert.ok(sftp, "the sftp path must keep its guarded update");
-  assert.match(download, /status in \('approved', 'delivered'\)/);
-  // The SFTP record is claim-conditional (delivering under the presented
-  // token) — strictly stronger than the approval predicate it replaces: a
-  // void, supersede, or rejection that lands after the claim refuses the
-  // record instead of delivering a disallowed file.
-  assert.match(sftp, /status = 'delivering' and delivery_claim_token/);
-});
-
 async function seedPaymentRun(
   org: ScratchOrg,
   submitterId: string,
@@ -582,6 +524,10 @@ async function removePaymentFileFixture(orgId: string, fileId: string): Promise<
     `);
     await tx.execute(sql`
       delete from payment_events
+       where org_id = ${orgId} and payment_file_id = ${fileId}
+    `);
+    await tx.execute(sql`
+      delete from payment_file_deliveries
        where org_id = ${orgId} and payment_file_id = ${fileId}
     `);
     await tx.execute(sql`
@@ -1136,6 +1082,86 @@ test(
 );
 
 test(
+  "generation cannot publish an artifact when rollback commits during rendering",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let releaseRollback!: () => void;
+    let announceRollback!: () => void;
+    const rollbackHeld = new Promise<void>((resolve) => { announceRollback = resolve; });
+    const release = new Promise<void>((resolve) => { releaseRollback = resolve; });
+    let rollbackTransaction: Promise<void> | undefined;
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Concurrent Generation Operator", "admin"),
+      );
+      const runId = await withOrgContext(org.orgId, () => seedGeneratableRun(org, actorId));
+      rollbackTransaction = withOrgTransaction(org.orgId, async () => {
+        await db.execute(sql`
+          update payment_runs set status = 'rolled_back', updated_at = now(), updated_by = ${actorId}
+           where id = ${runId} and org_id = ${org.orgId}
+        `);
+        announceRollback();
+        await release;
+      });
+      await rollbackHeld;
+
+      // The generator reads the still-committed approved snapshot, then waits
+      // on the row whose rollback is uncommitted. Once rollback commits, its
+      // write path must re-judge the lifecycle before creating any artifact.
+      const generation = withOrgContext(org.orgId, () =>
+        generatePaymentFileArtifact(runId, org.orgId, actorId),
+      );
+      let blockedOnRunRow = false;
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline && !blockedOnRunRow) {
+        const waiting = await withBypass(async () =>
+          (await db.execute<{ waiting: boolean }>(sql`
+            select exists (
+              select 1 from pg_stat_activity
+               where datname = current_database()
+                 and pid <> pg_backend_pid()
+                 and wait_event_type = 'Lock'
+                 and query like '%update payment_runs set file_created_at%'
+            ) as waiting
+          `)).rows[0]?.waiting ?? false,
+        );
+        blockedOnRunRow = waiting;
+        if (!blockedOnRunRow) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal(blockedOnRunRow, true, "generation should wait for the rollback's run-row lock");
+      releaseRollback();
+      await rollbackTransaction;
+      await assert.rejects(
+        generation,
+        (error: Error) => error instanceof PaymentError
+          && error.message === "approve the payment run before generating its file",
+      );
+      assert.deepEqual(
+        await withOrgContext(org.orgId, () => generationOutcomeSnapshot(org.orgId, runId)),
+        { live_files: 0, generated_events: 0, run_status: "rolled_back" },
+      );
+    } finally {
+      releaseRollback();
+      await rollbackTransaction?.catch(() => undefined);
+      const artifactIds = await withBypass(async () =>
+        (await db.execute<{ id: string }>(sql`
+          select id from payment_files where org_id = ${org.orgId}
+            and payment_run_id in (
+              select id from payment_runs where org_id = ${org.orgId}
+                and run_number like 'GEN-%'
+            )
+        `)).rows.map((row) => row.id),
+      );
+      for (const artifactId of artifactIds) {
+        await withBypass(() => removePaymentFileFixture(org.orgId, artifactId));
+      }
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
   "a payment file decision whose evidence write fails rolls the whole decision back",
   { skip: !DB },
   async () => {
@@ -1458,6 +1484,107 @@ test(
         const cleanupFileId = seeded.fileId;
         await withBypass(() => removePaymentFileFixture(org.orgId, cleanupFileId));
       }
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "SFTP delivery records only the file claim that was approved and published",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let seeded: { fileId: string; runId: string } | undefined;
+    try {
+      const generatorId = await withBypass(() =>
+        createScratchUser(org.orgId, "SFTP File Generator", "payment_file_generator"),
+      );
+      const approverId = await withBypass(() =>
+        createScratchUser(org.orgId, "SFTP File Approver", "payment_file_approver"),
+      );
+      seeded = await withOrgContext(org.orgId, () =>
+        seedPendingPaymentFile(org, generatorId, approverId),
+      );
+      await withOrgContext(org.orgId, () =>
+        decidePaymentFile(seeded!.fileId, org.orgId, approverId, "approve"),
+      );
+      const claim = await withOrgContext(org.orgId, () => claimPaymentFileDelivery({
+        fileId: seeded!.fileId,
+        orgId: org.orgId,
+        userId: approverId,
+        owner: "sftp:primary-bank",
+      }));
+
+      await assert.rejects(
+        withOrgContext(org.orgId, () => recordPaymentFileSftpDelivery({
+          fileId: seeded!.fileId,
+          orgId: org.orgId,
+          userId: approverId,
+          targetRef: "primary-bank/payments",
+          claimToken: randomUUID(),
+        })),
+        (error: Error) => error instanceof PaymentError
+          && error.message.includes("cannot record the SFTP delivery")
+          && error.message.includes("claim by sftp:primary-bank"),
+      );
+      const afterWrongClaim = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{ file_status: string; deliveries: number }>(sql`
+          select pf.status as file_status,
+                 (select count(*)::int from payment_file_deliveries d
+                   where d.payment_file_id = pf.id and d.org_id = pf.org_id) as deliveries
+            from payment_files pf
+           where pf.id = ${seeded!.fileId} and pf.org_id = ${org.orgId}
+        `)).rows[0],
+      );
+      assert.deepEqual(afterWrongClaim, { file_status: "delivering", deliveries: 0 });
+
+      await withOrgContext(org.orgId, () => recordPaymentFileSftpDelivery({
+        fileId: seeded!.fileId,
+        orgId: org.orgId,
+        userId: approverId,
+        targetRef: "primary-bank/payments",
+        claimToken: claim.token,
+        response: { remoteId: "batch-2048" },
+      }));
+      const recorded = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          file_status: string;
+          claim_token: string | null;
+          run_status: string;
+          delivery_count: number;
+          delivery_target: string | null;
+          remote_id: string | null;
+          delivery_events: number;
+        }>(sql`
+          select pf.status as file_status, pf.delivery_claim_token as claim_token,
+                 r.status as run_status,
+                 (select count(*)::int from payment_file_deliveries d
+                   where d.payment_file_id = pf.id and d.org_id = pf.org_id) as delivery_count,
+                 (select d.target_ref from payment_file_deliveries d
+                   where d.payment_file_id = pf.id and d.org_id = pf.org_id
+                     and d.channel = 'sftp') as delivery_target,
+                 (select d.response ->> 'remoteId' from payment_file_deliveries d
+                   where d.payment_file_id = pf.id and d.org_id = pf.org_id
+                     and d.channel = 'sftp') as remote_id,
+                 (select count(*)::int from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_delivered_sftp') as delivery_events
+            from payment_files pf
+            join payment_runs r on r.id = pf.payment_run_id and r.org_id = pf.org_id
+           where pf.id = ${seeded!.fileId} and pf.org_id = ${org.orgId}
+        `)).rows[0],
+      );
+      assert.deepEqual(recorded, {
+        file_status: "delivered",
+        claim_token: null,
+        run_status: "delivered",
+        delivery_count: 1,
+        delivery_target: "primary-bank/payments",
+        remote_id: "batch-2048",
+        delivery_events: 1,
+      });
+    } finally {
+      if (seeded) await withBypass(() => removePaymentFileFixture(org.orgId, seeded!.fileId));
       await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
