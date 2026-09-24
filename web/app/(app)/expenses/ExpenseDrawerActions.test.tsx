@@ -74,6 +74,12 @@ registerHooks({
         url: 'data:text/javascript,export async function promptDialog(){return globalThis.__expenseDrawerTestPrompt}',
       }
     }
+    if (specifier.endsWith('/lib/void-reversal-period')) {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export async function promptVoidReversalPeriod(){return {cancelled:false,reversalPeriodId:"period-1"}}',
+      }
+    }
     return next(specifier, context)
   },
 })
@@ -155,6 +161,9 @@ async function mountDrawer(
     }
     if (url === `/api/expenses/${REPORT_ID}/correct` && method === 'POST') {
       return Response.json(args.scripted.correctResponse ?? { ok: true, correctionId: 'new-draft-id', correctionNumber: 'EXP-00002', voidStatus: 'voided', requestId: null })
+    }
+    if (url === `/api/documents/${REPORT_ID}/void` && method === 'POST') {
+      return Response.json({ status: 'voided' })
     }
     throw new Error(`unexpected fetch ${method} ${url}`)
   }) as typeof fetch
@@ -310,4 +319,25 @@ test('a posted report Edits by correcting: reason prompt, then the correction dr
     script.pushed.some((url) => url.includes('expense=new-draft-id') && url.includes('mode=edit')),
     'after correcting, the drawer must route to the correction draft for continued editing',
   )
+})
+
+test('void sends the reason, selected reversal period, and exact loaded revision', async (t) => {
+  const { requests } = await mountDrawer(t, {
+    status: 'posted',
+    canSubmit: false,
+    canPost: true,
+    canRecall: false,
+    scripted: { canonicalDoc: makeDoc('posted') },
+    promptResult: 'correct the final travel total',
+  })
+  await openActions()
+  const voidButton = findButton('Void')
+  assert.ok(voidButton, `posted expense reports with post access can be voided; buttons: ${[...document.querySelectorAll('button')].map((button) => button.textContent?.trim()).join(' | ')}`)
+  await click(voidButton)
+  const request = requests.find((entry) => entry.url === `/api/documents/${REPORT_ID}/void`)
+  assert.deepEqual(request?.body, {
+    reason: 'correct the final travel total',
+    expectedUpdatedAt: UPDATED_AT,
+    reversalPeriodId: 'period-1',
+  })
 })
