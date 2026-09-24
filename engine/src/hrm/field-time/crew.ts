@@ -391,46 +391,58 @@ export async function submitBatch(input: {
 }): Promise<void> {
   await requireCrewFeature(input.orgId);
   const batch = await loadBatch(input.orgId, input.batchId);
-  await assertBatchOwnerOrSupervisor(input.orgId, input.actorUserId, batch, input.canManageAll);
-  if (batch.status !== "draft" && batch.status !== "rejected") {
-    refuse("batch_not_submittable", `Only a draft batch can be submitted — this batch is ${batch.status}`);
-  }
-  const lines = (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from crew_time_batch_lines where batch_id = ${input.batchId}`)).rows[0];
-  if (!lines || lines.n === "0") {
-    refuse("batch_empty", "The batch has no lines — add worker lines before submitting");
-  }
-  const settings = await loadFieldTimeSettings(input.orgId);
-  if (settings.signatureRequired) {
-    const name = input.signerName?.trim() ?? "";
-    if (name === "") {
-      refuse("signature_required", "Sign-and-submit needs the foreman signature — sign the batch before submitting");
+  await withOrgTransaction(input.orgId, async () => {
+    await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
+    const current = (await db.execute<BatchStatusRow>(sql`
+      select id::text as id, status, project_id::text as project_id,
+             foreman_party_id::text as foreman_party_id, worked_on::text as worked_on
+        from crew_time_batches
+       where org_id = ${input.orgId} and id = ${input.batchId}
+       for update`)).rows[0];
+    if (!current) refuse("batch_unknown", "The crew batch is unknown in this organization — reload the crew list");
+    if (current.project_id !== batch.project_id) {
+      refuse("batch_moved", "The batch project moved while submitting — reload and retry");
+    }
+    await assertBatchOwnerOrSupervisor(input.orgId, input.actorUserId, current, input.canManageAll);
+    if (current.status !== "draft" && current.status !== "rejected") {
+      refuse("batch_not_submittable", `Only a draft batch can be submitted — this batch is ${current.status}`);
     }
     const rows = (await db.execute<CrewLineRow>(sql`
       select employee_party_id as "employeePartyId", hours::text as hours,
              time_type_id::text as "timeTypeId", project_task_id::text as "projectTaskId",
              cost_code_ref as "costCodeRef", equipment_id::text as "equipmentId",
              equipment_hours::text as "equipmentHours", memo
-        from crew_time_batch_lines where batch_id = ${input.batchId}`)).rows;
-    const digest = canonicalLinesDigest(rows);
-    const evidence = {
-      signerName: name,
-      signedAt: new Date().toISOString(),
-      linesDigest: digest,
-      hmac: keyedFingerprint("crew-time-batch-signature", `${input.batchId}|${digest}|${name}`),
-    };
-    await db.execute(sql`
-      update crew_time_batches
-         set signature_evidence = ${JSON.stringify(evidence)}::jsonb
-       where org_id = ${input.orgId} and id = ${input.batchId}`);
-  }
-  await withOrgTransaction(input.orgId, async () => {
-    await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
+        from crew_time_batch_lines where batch_id = ${input.batchId}
+       order by id`)).rows;
+    if (rows.length === 0) {
+      refuse("batch_empty", "The batch has no lines — add worker lines before submitting");
+    }
+    const settings = await loadFieldTimeSettings(input.orgId);
+    let evidence: {
+      signerName: string;
+      signedAt: string;
+      linesDigest: string;
+      hmac: string;
+    } | null = null;
+    if (settings.signatureRequired) {
+      const name = input.signerName?.trim() ?? "";
+      if (name === "") {
+        refuse("signature_required", "Sign-and-submit needs the foreman signature — sign the batch before submitting");
+      }
+      const digest = canonicalLinesDigest(rows);
+      evidence = {
+        signerName: name,
+        signedAt: new Date().toISOString(),
+        linesDigest: digest,
+        hmac: keyedFingerprint("crew-time-batch-signature", `${input.batchId}|${digest}|${name}`),
+      };
+    }
     const moved = (await db.execute<{ n: number }>(sql`
       update crew_time_batches
-         set status = 'submitted', submitted_at = now(), updated_at = now(), updated_by = ${input.actorUserId}
+         set status = 'submitted', signature_evidence = ${evidence === null ? null : JSON.stringify(evidence)}::jsonb,
+             submitted_at = now(), updated_at = now(), updated_by = ${input.actorUserId}
        where org_id = ${input.orgId} and id = ${input.batchId}
-         and status in ('draft', 'rejected')`)).rowCount ?? 0;
+         and status = ${current.status}`)).rowCount ?? 0;
     if (moved !== 1) {
       refuse("batch_not_submittable", "The batch moved while submitting — reload and retry");
     }

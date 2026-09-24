@@ -12,10 +12,10 @@
  * - Feature-off: recording refuses with the remedy, never a row.
  */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../../platform/db.ts";
+import { db, withOrg, withOrgTransaction } from "../../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
 import { recordClockEvent, replayClockEvents } from "./clock.ts";
 import { identifyByPin, registerKiosk, setWorkerPin } from "./kiosk.ts";
@@ -210,6 +210,67 @@ test("batch post creates entries and balanced equipment charges once", { skip: !
       assert.equal(line?.equipment_unit_id, unitId);
     });
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("submission signs the batch lines that remain after a concurrent edit", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let releaseEdit!: () => void;
+  let acquiredEdit!: () => void;
+  const editHeld = new Promise<void>((resolve) => { acquiredEdit = resolve; });
+  const editCanCommit = new Promise<void>((resolve) => { releaseEdit = resolve; });
+  try {
+    await enableFieldTime(org.orgId);
+    const foreman = randomUUID();
+    const workerA = randomUUID();
+    const workerB = randomUUID();
+    const projectId = randomUUID();
+    const actor = randomUUID();
+    const batchId = await withOrg(org.orgId, async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{fieldTime,signatureRequired}', 'true'::jsonb, true) where id = ${org.orgId}`);
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${workerA}, ${org.orgId}, 'person', 'Crew A'), (${workerB}, ${org.orgId}, 'person', 'Crew B')`);
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-SIGN', 'Signing job', 'active', true, '{}'::jsonb)`);
+      await db.execute(sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`);
+      const id = await createBatch({ orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman, projectId, workedOn: "2026-09-15", canManageAll: true, allowedSubsidiaryIds: null });
+      await setBatchLines({ orgId: org.orgId, actorUserId: actor, batchId: id, lines: [{ employeePartyId: workerA, hours: "4.0000" }], canManageAll: true, allowedSubsidiaryIds: null });
+      return id;
+    });
+
+    const editTransaction = withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`select id from crew_time_batches where org_id = ${org.orgId} and id = ${batchId} for update`);
+      acquiredEdit();
+      await editCanCommit;
+      await db.execute(sql`delete from crew_time_batch_lines where org_id = ${org.orgId} and batch_id = ${batchId}`);
+      await db.execute(sql`insert into crew_time_batch_lines (org_id, batch_id, employee_party_id, hours, created_by, updated_by) values (${org.orgId}, ${batchId}, ${workerB}, '6.0000', ${actor}, ${actor})`);
+    });
+    await editHeld;
+    const submission = withOrg(org.orgId, () => submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, signerName: "Foreman A", canManageAll: true, allowedSubsidiaryIds: null }));
+    let waiting = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const result = await withOrg(org.orgId, () => db.execute(sql`
+        select pid from pg_stat_activity where datname = current_database()
+          and pid <> pg_backend_pid() and wait_event_type = 'Lock'
+          and query ilike '%crew_time_batches%'`));
+      if (result.rows.length > 0) { waiting = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.ok(waiting, "submission waits for the edit's batch lock before reading signed lines");
+    releaseEdit();
+    await editTransaction;
+    await submission;
+
+    await withOrg(org.orgId, async () => {
+      const result = (await db.execute<{ employee_party_id: string; hours: string; signature_evidence: { linesDigest: string } }>(sql`
+        select l.employee_party_id::text as employee_party_id, l.hours::text as hours, b.signature_evidence
+          from crew_time_batches b join crew_time_batch_lines l on l.batch_id = b.id
+         where b.org_id = ${org.orgId} and b.id = ${batchId}`)).rows[0];
+      assert.equal(result?.employee_party_id, workerB);
+      const expected = createHash("sha256").update([workerB, "6.0000", "", "", "", "", "", ""].join("|")).digest("hex");
+      assert.equal(result?.signature_evidence.linesDigest, expected, "signature evidence identifies the lines actually submitted");
+    });
+  } finally {
+    releaseEdit();
     await dropScratchOrg(org.orgId);
   }
 });
