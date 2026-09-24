@@ -37,6 +37,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH } = await import('./route.ts')
+const { loadActivity } = await import('../../../../../lib/crm')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
@@ -80,10 +81,18 @@ async function duration(orgId: string, activityId: string): Promise<number | nul
   })
 }
 
+// The loader-projected revision token every PATCH must echo back.
+async function token(activityId: string): Promise<string> {
+  return await withOrgContext(state.orgId, async () => {
+    const loaded = await loadActivity(activityId, state.orgId, null)
+    return (loaded!.activity as Record<string, unknown>).updated_at as string
+  })
+}
+
 test('PATCH refuses an out-of-int32 duration without writing', { skip: !DB }, async () => {
   const { org, activityId } = await fixture()
   try {
-    const result = await patch(activityId, { durationMinutes: '99999999999999999999' })
+    const result = await patch(activityId, { durationMinutes: '99999999999999999999', expectedUpdatedAt: await token(activityId) })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.equal(await duration(org.orgId, activityId), 30)
   } finally {
@@ -94,7 +103,7 @@ test('PATCH refuses an out-of-int32 duration without writing', { skip: !DB }, as
 test('PATCH still saves an ordinary duration', { skip: !DB }, async () => {
   const { org, activityId } = await fixture()
   try {
-    const result = await patch(activityId, { durationMinutes: 45 })
+    const result = await patch(activityId, { durationMinutes: 45, expectedUpdatedAt: await token(activityId) })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.equal(await duration(org.orgId, activityId), 45)
   } finally {

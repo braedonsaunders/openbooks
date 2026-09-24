@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { toast } from 'sonner'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 /** One activity row as the drawer reads it: stamps arrive as Dates. */
 export interface ActivityRecord {
@@ -18,6 +19,9 @@ export interface ActivityRecord {
   starts_at: Date | string | null
   ends_at: Date | string | null
   due_at: Date | string | null
+  /** Exact persisted revision token (loader-projected); every save sends it
+   *  back as expectedUpdatedAt so two tabs 409 instead of overwriting. */
+  updated_at: string
 }
 
 export interface ActivityLink { subject_kind: string; subject_id: string }
@@ -44,10 +48,10 @@ export function ActivityDrawer({ data, owners, accounts, opportunities, closeHre
     if (!form.subject.trim()) return toast.error(t('validation.subjectRequired'))
     setBusy(true)
     try {
-      const response = await fetch(`/api/crm/activities/${row.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...form, assignedUserId: form.assignedUserId || null, startsAt: form.startsAt || null, endsAt: form.endsAt || null, dueAt: form.dueAt || null, links: form.subjectId ? [{ subjectKind: form.subjectKind, subjectId: form.subjectId }] : [] }) })
-      if (!response.ok) throw new Error()
+      const response = await fetch(`/api/crm/activities/${row.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...form, assignedUserId: form.assignedUserId || null, startsAt: form.startsAt || null, endsAt: form.endsAt || null, dueAt: form.dueAt || null, links: form.subjectId ? [{ subjectKind: form.subjectKind, subjectId: form.subjectId }] : [], expectedUpdatedAt: row.updated_at }) })
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, tc('feedback.saveFailed')))
       toast.success(tc('feedback.saved')); router.refresh()
-    } catch { toast.error(tc('feedback.saveFailed')) } finally { setBusy(false) }
+    } catch (error) { toast.error(error instanceof Error ? error.message : tc('feedback.saveFailed')) } finally { setBusy(false) }
   }
   const related = form.subjectKind === 'opportunity'
     ? opportunities.map((o) => ({ id: o.id, label: `${o.opportunity_number} · ${o.title}` }))

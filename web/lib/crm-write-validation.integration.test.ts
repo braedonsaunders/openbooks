@@ -50,6 +50,16 @@ const { NextRequest } = await import('next/server')
 const request = (body: unknown) =>
   new Request('http://crm.local', { method: 'PATCH', body: JSON.stringify(body) })
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
+const { loadActivity } = await import('./crm')
+const { documentRevisionSql } = await import('@openbooks/engine/src/records/revision.ts')
+// The account PATCH requires the profile's current revision token (79b64f876).
+const accountToken = async (orgId: string, partyId: string) =>
+  (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
+    from crm_account_profiles where org_id=${orgId} and party_id=${partyId}`)).rows[0]!.revision
+// The loader-projected revision token every activity PATCH must echo back.
+// Fetched at each call site so sequential saves always carry a fresh token.
+const activityToken = async (orgId: string, id: string) =>
+  ((await loadActivity(id, orgId, null))!.activity as Record<string, unknown>).updated_at as string
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -267,27 +277,27 @@ test(
           { endsAt: '2026-09-05T25:00' },
           { startsAt: '2026-09-05T10:30', endsAt: '2026-09-05T09:00' },
         ]) {
-          const response = await activityEdit(request(body), params(activityId))
+          const response = await activityEdit(request({ ...body, expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
           assert.equal(response.status, 422, JSON.stringify(body))
         }
         const scheduled = await activityEdit(
-          request({ startsAt: '2026-09-05T10:30', endsAt: '2026-09-05T11:30', dueAt: '2026-09-05', reminderAt: '2026-09-05T10:00:00Z' }),
+          request({ startsAt: '2026-09-05T10:30', endsAt: '2026-09-05T11:30', dueAt: '2026-09-05', reminderAt: '2026-09-05T10:00:00Z', expectedUpdatedAt: await activityToken(org.orgId, activityId) }),
           params(activityId),
         )
         assert.equal(scheduled.status, 200, JSON.stringify(await scheduled.clone().json()))
         // Cross-field ordering is checked against the STORED start when only
         // the end moves, so the database check constraint never fires a 500.
-        const reordered = await activityEdit(request({ endsAt: '2026-09-05T09:00' }), params(activityId))
+        const reordered = await activityEdit(request({ endsAt: '2026-09-05T09:00', expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
         assert.equal(reordered.status, 422)
 
         await db.execute(
           sql`insert into crm_account_profiles(org_id,party_id,lifecycle_stage,created_by,updated_by) values (${org.orgId},${org.customerId},'customer',${actor},${actor}) on conflict do nothing`,
         )
         for (const nextActionAt of ['soon', '2026-02-30T10:00', 'later']) {
-          const response = await accountEdit(request({ nextActionAt }), params(org.customerId))
+          const response = await accountEdit(request({ nextActionAt, expectedUpdatedAt: await accountToken(org.orgId, org.customerId) }), params(org.customerId))
           assert.equal(response.status, 422, nextActionAt)
         }
-        const followUp = await accountEdit(request({ nextActionAt: '2026-09-05T10:30' }), params(org.customerId))
+        const followUp = await accountEdit(request({ nextActionAt: '2026-09-05T10:30', expectedUpdatedAt: await accountToken(org.orgId, org.customerId) }), params(org.customerId))
         assert.equal(followUp.status, 200, JSON.stringify(await followUp.clone().json()))
       })
     } finally {
@@ -313,9 +323,9 @@ test(
           (await db.execute<{ action: string; actor_id: string; changes: { before: { subject: string } } }>(
             sql`select action, actor_id, changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} order by at, id`,
           )).rows
-        const first = await activityEdit(request({ subject: 'First save' }), params(activityId))
+        const first = await activityEdit(request({ subject: 'First save', expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
         assert.equal(first.status, 200, JSON.stringify(await first.clone().json()))
-        const second = await activityEdit(request({ subject: 'Second save' }), params(activityId))
+        const second = await activityEdit(request({ subject: 'Second save', expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
         assert.equal(second.status, 200)
         const updates = (await audits()).filter((row) => row.action === 'update')
         assert.equal(updates.length, 2)
@@ -359,10 +369,10 @@ test(
           { participants: [null] },
           { participants: [42] },
         ]) {
-          const response = await activityEdit(request(body), params(activityId))
+          const response = await activityEdit(request({ ...body, expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
           assert.equal(response.status, 422, JSON.stringify(body))
         }
-        const applied = await activityEdit(request({ isPrivate: true }), params(activityId))
+        const applied = await activityEdit(request({ isPrivate: true, expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
         assert.equal(applied.status, 200, JSON.stringify(await applied.clone().json()))
         const stored = (await db.execute<{ is_private: boolean }>(
           sql`select is_private from crm_activities where org_id=${org.orgId} and id=${activityId}`,
@@ -395,7 +405,7 @@ test(
         assert.equal(draft.status, 200)
         const activityId = (await draft.json()).id
         const edited = await activityEdit(
-          request({ subject: 'Evidence save', participants: [{ userId: actor }] }),
+          request({ subject: 'Evidence save', participants: [{ userId: actor }], expectedUpdatedAt: await activityToken(org.orgId, activityId) }),
           params(activityId),
         )
         assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
@@ -474,7 +484,7 @@ test('activity draft and link writes refuse out-of-scope subjects and write noth
       const activityId = (await accepted.json()).id as string
       assert.deepEqual(await linkSubjects(org.orgId, activityId), [visible])
 
-      const relink = await activityEdit(request({ links: [{ subjectKind: 'document', subjectId: concealed }] }), params(activityId))
+      const relink = await activityEdit(request({ links: [{ subjectKind: 'document', subjectId: concealed }], expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
       assert.equal(relink.status, 422, JSON.stringify(await relink.clone().json()))
       assert.deepEqual(await linkSubjects(org.orgId, activityId), [visible], 'a refused relink keeps the stored links')
     })
@@ -520,7 +530,7 @@ test('activity draft waits on a subject rehome in flight instead of racing it', 
   }
 })
 
-test('activity audit uses the serialized predecessor and preserves deleted children',
+test('activity PATCH refuses a token predating a concurrent commit and preserves deleted children',
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const { org, actor } = await fixture()
     const writer = await pool.connect()
@@ -531,11 +541,14 @@ test('activity audit uses the serialized predecessor and preserves deleted child
       ))
       assert.equal(draft.status,200)
       const id = (await draft.json()).id as string
+      // Token read before the concurrent commit: the pending save below must
+      // lose to it with a 409 instead of silently overwriting it.
+      const stale = await withOrgContext(org.orgId, () => activityToken(org.orgId, id))
       await writer.query('begin')
       await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
       const pid = (await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid
-      await writer.query('update crm_activities set subject=$1 where id=$2 and org_id=$3',['Concurrent predecessor',id,org.orgId])
-      pending = withOrgContext(org.orgId, () => activityEdit(request({subject:'Final save',participants:[{userId:actor}]}),params(id)))
+      await writer.query('update crm_activities set subject=$1, updated_at=now() where id=$2 and org_id=$3',['Concurrent predecessor',id,org.orgId])
+      pending = withOrgContext(org.orgId, () => activityEdit(request({subject:'Final save',participants:[{userId:actor}],expectedUpdatedAt:stale}),params(id)))
       let blocked=false
       for(let n=0;n<200;n++) {
         blocked=!!(await pool.query('select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))',[pid])).rowCount
@@ -545,12 +558,21 @@ test('activity audit uses the serialized predecessor and preserves deleted child
       assert.ok(blocked,'PATCH read its preflight and waits on the locked predecessor')
       await writer.query('commit')
       const response=await pending
-      assert.equal(response.status,200)
+      assert.equal(response.status,409,JSON.stringify(await response.clone().json()))
+      assert.match(String((await response.json() as { error?: unknown }).error ?? ''),/changed after you opened it/)
       await withOrgContext(org.orgId,async()=>{
-        const update=(await db.execute<{changes:{before:{subject:string};after:{subject:string}}}>(sql`
-          select changes from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='update'`)).rows[0]!
-        assert.equal(update.changes.before.subject,'Concurrent predecessor')
-        assert.equal(update.changes.after.subject,'Final save')
+        // The refused write changed nothing and left no update evidence: the
+        // concurrent predecessor stands.
+        const stored=(await db.execute<{subject:string}>(sql`
+          select subject from crm_activities where org_id=${org.orgId} and id=${id}`)).rows[0]!
+        assert.equal(stored.subject,'Concurrent predecessor')
+        const updates=(await db.execute<{action:string}>(sql`
+          select action from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='update'`)).rows
+        assert.equal(updates.length,0)
+        // A fresh token still saves, so the delete half keeps its participant
+        // evidence coverage.
+        const resave=await activityEdit(request({subject:'Final save',participants:[{userId:actor}],expectedUpdatedAt:await activityToken(org.orgId,id)}),params(id))
+        assert.equal(resave.status,200,JSON.stringify(await resave.clone().json()))
         const result=await activityDelete(new Request('http://crm.local',{method:'DELETE'}),params(id))
         assert.equal(result.status,200)
         const removed=(await db.execute<{changes:{after:null;participants:{user_id:string}[];links:unknown[]}}>(sql`
