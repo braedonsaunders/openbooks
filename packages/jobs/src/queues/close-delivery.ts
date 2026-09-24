@@ -17,6 +17,15 @@ export type CloseDeliveryJobData = {
   periodId?: string
   bookId?: string
   /**
+   * Explicit send-now marker: an operator pressed "Send now" for this
+   * delivery. The worker honours it regardless of the package's cadence —
+   * manual cadence means "only when someone sends it", so a marked job
+   * must deliver. Unmarked jobs are cadence-driven and skip manual
+   * packages. Only the send-package route sets this; the publish path
+   * never does, so scheduled ticks keep skipping manual packages.
+   */
+  manualTrigger?: boolean
+  /**
    * The user who authorized this send (publish actor, or the manual
    * "Send now" actor). The worker mints each report render under this
    * principal and the render route re-resolves their grants — a send

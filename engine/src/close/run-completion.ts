@@ -276,6 +276,8 @@ export async function publishCloseRun(
   // Redis enqueue isn't transactional with the DB, and delivery must never fire
   // for a rolled-back publish). Best-effort: the worker itself skips manual
   // cadence / no recipients, and a queue outage must not fail publication.
+  // This stays a cadence-driven (unmarked) job on purpose: manual-cadence
+  // packages skip the publish tick and only deliver on explicit Send now.
   const packageRow = (await db.execute<{ reporting_package_id: string | null }>(sql`
     select reporting_package_id from close_runs where id = ${runId} and org_id = ${orgId}`));
   const packageId = packageRow.rows[0]?.reporting_package_id;
