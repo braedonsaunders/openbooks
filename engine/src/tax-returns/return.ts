@@ -7,6 +7,7 @@ import {
   spotRateToPresentation,
 } from "./income-tax-provision.ts";
 import { taxReturnPackBox } from "../country-tax-packs/index.ts";
+import { taxRegistrationFormProblem, taxReturnPack } from "../tax/seed-tax-forms.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { buildFilingCalendar, type FilingFrequency } from "../tax/nexus.ts";
 
@@ -932,11 +933,13 @@ async function resolveReturnRegistration(
     const pin = (await runner.execute<{
       id: string; registration_number: string | null; return_form_code: string | null;
       effective_from: string | null; effective_to: string | null;
+      jurisdiction_code: string;
     }>(sql`
-      select id, registration_number, return_form_code,
-             effective_from::text, effective_to::text
-        from tax_registrations
-       where id = ${pinnedId} and org_id = ${orgId} and is_active`));
+      select r.id, r.registration_number, r.return_form_code,
+             r.effective_from::text, r.effective_to::text, j.code as jurisdiction_code
+        from tax_registrations r
+        join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
+       where r.id = ${pinnedId} and r.org_id = ${orgId} and r.is_active`));
     const row = pin.rows[0];
     if (!row) {
       throw new TaxReturnError(
@@ -948,6 +951,16 @@ async function resolveReturnRegistration(
         `registration "${row.registration_number ?? row.id}" files form "${row.return_form_code ?? "(none)"}", not "${formCode}"`,
       );
     }
+    // The pin names the form, not the jurisdiction: a registration whose
+    // jurisdiction does not own the pinned form (a California registration
+    // pinned to a New York return) refuses here by name instead of printing
+    // the wrong jurisdiction's number on the return.
+    const pinProblem = taxRegistrationFormProblem({
+      registrationLabel: row.registration_number ?? row.id,
+      registrationJurisdictionCode: row.jurisdiction_code,
+      formCode,
+    });
+    if (pinProblem) throw new TaxReturnError(pinProblem);
     return {
       registrationNumber: row.registration_number,
       registrationId: row.id,
@@ -955,16 +968,36 @@ async function resolveReturnRegistration(
       effectiveTo: row.effective_to,
     };
   }
-  const regRes = (await runner.execute<{ id: string; registration_number: string | null }>(sql`
-    select id, registration_number
-      from tax_registrations
-     where org_id = ${orgId} and is_active and return_form_code = ${formCode}
-       and (effective_from is null or effective_from <= ${to})
-       and (effective_to is null or effective_to >= ${from})
-     order by effective_from desc nulls last, id limit 1`));
+  const regRes = (await runner.execute<{ id: string; registration_number: string | null; jurisdiction_code: string }>(sql`
+    select r.id, r.registration_number, j.code as jurisdiction_code
+      from tax_registrations r
+      join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
+     where r.org_id = ${orgId} and r.is_active and r.return_form_code = ${formCode}
+       and (r.effective_from is null or r.effective_from <= ${to})
+       and (r.effective_to is null or r.effective_to >= ${from})
+     order by r.effective_from desc nulls last, r.id`));
+  // The form match alone is not the identity: a catalog-known form belongs
+  // to one jurisdiction, so a registration from another jurisdiction (a
+  // legacy mismatched row saved before the write-time check) must refuse by
+  // name rather than lend its number to the wrong jurisdiction's return.
+  // Tenant-defined forms carry no catalog rule and keep the historical pick.
+  const expectedJurisdiction = taxReturnPack(formCode)?.jurisdiction.code ?? null;
+  const inJurisdiction = expectedJurisdiction
+    ? regRes.rows.filter((row) => row.jurisdiction_code === expectedJurisdiction)
+    : regRes.rows;
+  if (inJurisdiction.length === 0 && regRes.rows.length > 0) {
+    const legacy = regRes.rows[0]!;
+    throw new TaxReturnError(
+      taxRegistrationFormProblem({
+        registrationLabel: legacy.registration_number ?? legacy.id,
+        registrationJurisdictionCode: legacy.jurisdiction_code,
+        formCode,
+      }) ?? `tax return "${formCode}" has no registration in jurisdiction "${expectedJurisdiction}"`,
+    );
+  }
   return {
-    registrationNumber: regRes.rows[0]?.registration_number ?? null,
-    registrationId: regRes.rows[0]?.id ?? null,
+    registrationNumber: inJurisdiction[0]?.registration_number ?? null,
+    registrationId: inJurisdiction[0]?.id ?? null,
     effectiveFrom: null,
     effectiveTo: null,
   };

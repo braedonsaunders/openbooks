@@ -32,6 +32,32 @@ export function taxReturnPack(code: string): TaxReturnPack | undefined {
   return TAX_RETURN_PACKS.find((pack) => pack.code === code);
 }
 
+/**
+ * A registration filing a form that belongs to another jurisdiction. The
+ * return-pack catalog owns the form→jurisdiction mapping: a registration
+ * pairing (say) a Canadian jurisdiction with US_NY_ST100 saves, and the
+ * unpinned resolve then prints the New York return with the Canadian
+ * registration number. Unknown (tenant-defined) forms carry no catalog rule
+ * and pass — only a catalog-known form in the wrong jurisdiction refuses,
+ * naming the registration, both jurisdictions, and the remedy.
+ */
+export function taxRegistrationFormProblem(args: {
+  registrationLabel: string;
+  registrationJurisdictionCode: string;
+  formCode: string;
+}): string | null {
+  const pack = taxReturnPack(args.formCode);
+  if (!pack) return null;
+  if (pack.jurisdiction.code === args.registrationJurisdictionCode) return null;
+  return (
+    `tax registration "${args.registrationLabel}" is in jurisdiction ` +
+    `"${args.registrationJurisdictionCode}" but files form "${args.formCode}", which belongs ` +
+    `to jurisdiction "${pack.jurisdiction.code}" (${pack.jurisdiction.name}) — ` +
+    `choose a form for "${args.registrationJurisdictionCode}" or move the registration ` +
+    `to "${pack.jurisdiction.code}"`
+  );
+}
+
 /** Install several country-pack returns atomically so a failure never leaves a partial installation. */
 export async function installTaxReturnPacks(
   orgId: string,

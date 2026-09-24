@@ -45,6 +45,7 @@ import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leav
 import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
+import { taxRegistrationFormProblem } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
 import { saveSetupBook } from './books'
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
 import { featureEnabled, featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../features'
@@ -502,6 +503,47 @@ export async function validateEntityIntegrity(
     }
     const fraction = Number(value('firstYearFraction', 'first_year_fraction') ?? 1)
     if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) return 'first-year-fraction-out-of-range'
+  }
+  if (entity.key === 'tax-registrations') {
+    // A registration's form must belong to its jurisdiction (from the
+    // return-pack catalog): a Canadian jurisdiction paired with US_NY_ST100
+    // saves, and the return then prints the New York form with the Canadian
+    // number. Refuse the mismatched pair at save, by name, with the remedy.
+    // Tenant-defined forms carry no catalog rule and pass; a blank form
+    // (the drawer sends '' for untouched inputs) validates as unset.
+    const current = rowId
+      ? (((await executor.execute(sql`
+          select jurisdiction_id, registration_number, return_form_code
+            from tax_registrations where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const registrationJurisdictionId = String(
+      body.jurisdictionId !== undefined && body.jurisdictionId !== ''
+        ? body.jurisdictionId
+        : current?.jurisdiction_id ?? '',
+    )
+    const formCode = String(
+      body.returnFormCode !== undefined && body.returnFormCode !== ''
+        ? body.returnFormCode
+        : current?.return_form_code ?? '',
+    ).trim()
+    if (formCode && registrationJurisdictionId) {
+      const jurisdiction = ((await executor.execute(sql`
+        select code from tax_jurisdictions
+         where id = ${registrationJurisdictionId} and org_id = ${orgId}`))).rows[0]
+      if (jurisdiction) {
+        const problem = taxRegistrationFormProblem({
+          registrationLabel: String(
+            body.registrationNumber !== undefined && body.registrationNumber !== ''
+              ? body.registrationNumber
+              : current?.registration_number ?? formCode,
+          ),
+          registrationJurisdictionCode: String(jurisdiction.code),
+          formCode,
+        })
+        if (problem) return problem
+      }
+    }
   }
   if (entity.key === 'recognition-rules') {
     // One exact contract with the recognition engine (engine/src/revenue):
