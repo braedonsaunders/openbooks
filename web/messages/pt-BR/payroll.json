@@ -307,7 +307,10 @@
       "printCheques": "Imprimir {count, plural, one {# cheque salarial} other {# cheques salariais}}",
       "partialTitle": "{count, plural, one {Folha parcial — # funcionário excluído por decisão} other {Folha parcial — # funcionários excluídos por decisão}}",
       "partialRecorded": "Confirmado em {date}. Esta decisão fica registrada na folha.",
-      "partialRecovery": "Para pagar os funcionários excluídos: informe os dados faltantes assim que sua tela de entrada estiver disponível e pague-os em uma folha extra. Uma folha contabilizada nunca é alterada depois."
+      "partialRecovery": "Para pagar os funcionários excluídos: informe os dados faltantes assim que sua tela de entrada estiver disponível e pague-os em uma folha extra. Uma folha contabilizada nunca é alterada depois.",
+      "attributeEntity": "Atribuir entidade",
+      "entityAttributed": "Entidade legal registrada. A folha agora pode ser recolhida.",
+      "entityTarget": "Entidade legal"
     },
     "adjust": {
       "title": "Ajustes",

@@ -127,6 +127,8 @@ export type RunHeader = {
   document_number: string
   document_status: string
   currency: string
+  /** Legal entity the run books into; null on legacy entityless runs. */
+  subsidiary_id: string | null
   posted_entry_id: string | null
   paid_at: string | null
   paid_entry_id: string | null
@@ -363,6 +365,13 @@ export function RunWizard(props: {
    *  period. The commit button stays off while nonzero; the commit route
    *  refuses regardless. Zero while hrmPayrollAnomalies is off. */
   anomalyBlocks: number
+  /**
+   * Active, non-elimination entities visible to the caller — the target
+   * list for the Attribute entity action on a subsidiary-less run.
+   */
+  entityOptions: { id: string; label: string }[]
+  /** Attribution is org-wide: false for scoped callers the route would 404. */
+  canAttributeEntity: boolean
 }) {
   const t = useTranslations('payroll')
   const router = useRouter()
@@ -762,6 +771,25 @@ export function RunWizard(props: {
     }
   }
 
+  async function attributeEntity(subsidiaryId: string) {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'attribute-entity', subsidiaryId }),
+      })
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+      toast.success(t('wizard.finish.entityAttributed'))
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function post() {
     setBusy(true)
     try {
@@ -1002,8 +1030,11 @@ export function RunWizard(props: {
           onPost={post}
           onEmailStubs={emailStubs}
           onRecordPayment={recordPayment}
+          onAttributeEntity={attributeEntity}
           registerReportId={props.registerReportId}
           bankAccounts={props.bankAccounts}
+          entityOptions={props.entityOptions}
+          canAttributeEntity={props.canAttributeEntity}
           funding={props.funding}
           canRun={props.canRun}
           acknowledgement={acknowledgement}
@@ -2698,8 +2729,11 @@ function FinishStep({
   onPost,
   onEmailStubs,
   onRecordPayment,
+  onAttributeEntity,
   registerReportId,
   bankAccounts,
+  entityOptions,
+  canAttributeEntity,
   funding,
   canRun,
   acknowledgement,
@@ -2715,8 +2749,11 @@ function FinishStep({
   onPost: () => void
   onEmailStubs: () => void
   onRecordPayment: (bankAccountId: string) => void
+  onAttributeEntity: (subsidiaryId: string) => void
   registerReportId: string | null
   bankAccounts: { id: string; label: string }[]
+  entityOptions: { id: string; label: string }[]
+  canAttributeEntity: boolean
   funding: Funding
   canRun: boolean
   acknowledgement: PayRunRefusalAcknowledgement | null
@@ -2808,6 +2845,18 @@ function FinishStep({
                   <Send size={14} aria-hidden />
                   {t('wizard.finish.emailStubs')}
                 </Button>
+              )}
+              {/* Legacy entityless run: attributing it here is the remedy the
+                  remittance refusal names. Offered only while the header
+                  carries no entity and only to callers the route serves
+                  (scoped roles get a 404 there); a refresh after
+                  attributing removes it. */}
+              {canRun && canAttributeEntity && run.subsidiary_id == null && entityOptions.length > 0 && (
+                <AttributeEntityControl
+                  entityOptions={entityOptions}
+                  busy={busy}
+                  onAttribute={onAttributeEntity}
+                />
               )}
             </>
           )}
@@ -2931,6 +2980,41 @@ function HeaderFact({ label, children }: { label: string; children: React.ReactN
         {children}
       </dd>
     </div>
+  )
+}
+
+/**
+ * Entity pick + one-click legacy attribution of a subsidiary-less run.
+ * Same shape as RecordPaymentControl: a labelled select composed with the
+ * action button, so the picker never drifts from the house control pattern.
+ */
+function AttributeEntityControl({
+  entityOptions,
+  busy,
+  onAttribute,
+}: {
+  entityOptions: { id: string; label: string }[]
+  busy: boolean
+  onAttribute: (subsidiaryId: string) => void
+}) {
+  const t = useTranslations('payroll')
+  const [subsidiaryId, setSubsidiaryId] = useState(entityOptions[0]?.id ?? '')
+  return (
+    <span className="flex items-center gap-2">
+      <select
+        aria-label={t('wizard.finish.entityTarget')}
+        value={subsidiaryId}
+        onChange={(e) => setSubsidiaryId(e.target.value)}
+        className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+      >
+        {entityOptions.map((option) => (
+          <option key={option.id} value={option.id}>{option.label}</option>
+        ))}
+      </select>
+      <Button size="sm" disabled={busy || !subsidiaryId} onClick={() => onAttribute(subsidiaryId)}>
+        {t('wizard.finish.attributeEntity')}
+      </Button>
+    </span>
   )
 }
 

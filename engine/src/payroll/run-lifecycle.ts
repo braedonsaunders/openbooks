@@ -8,6 +8,10 @@ import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.t
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "../records/transaction-audit.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { resolvePayrollRunContext } from "./packs.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
@@ -291,6 +295,111 @@ export async function payScheduleSubsidiaryProblem(
  * calculation traces outright, so duplicate protection — which only ever
  * sees live runs — no longer blocks a correct replacement for the period.
  */
+/**
+ * Attribute a committed run that was committed with no subsidiary (legacy).
+ *
+ * History stays history: the run keeps its stubs, lines, totals and status —
+ * only the document's subsidiary moves null → target. Posted books are never
+ * rewritten: journal lines cannot carry a null tag (not-null since baseline),
+ * so a posted run attributes only to the entity its books already name —
+ * anything else refuses, and the operator voids and re-issues under the
+ * right entity. Anything else that would rewrite meaning refuses too: an
+ * already-attributed run (re-attribution would move live books between
+ * entities), a non-committed run (drafts are edited, voided runs are gone),
+ * and an inactive target.
+ *
+ * Evidence is the run document's own audit trail (before/after, actor,
+ * reason), the same envelope controlled voids write. The target must sit in
+ * the caller's scope; entityless runs are invisible to scoped roles at the
+ * route boundary, so attribution is an org-wide act.
+ */
+export async function attributePayRunEntity(input: {
+  orgId: string; documentId: string; actorId: string; subsidiaryId: string;
+  /** Caller role scope; null/undefined is unrestricted. */
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+}): Promise<{ documentNumber: string; reclassedLines: number }> {
+  const { orgId, documentId, actorId, subsidiaryId } = input;
+  if (!/^[0-9a-f-]{36}$/i.test(subsidiaryId)) {
+    throw new PayrollError("choose a subsidiary to attribute this run to");
+  }
+  if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, subsidiaryId)) {
+    throw new PayrollError("pay run not found");
+  }
+  return await db.transaction(async (tx) => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
+    const runRows = (await tx.execute<{
+      run_status: string; document_number: string; doc_status: string;
+      doc_subsidiary_id: string | null;
+    }>(sql`
+      select r.run_status, d.document_number, d.status as doc_status,
+             d.subsidiary_id as doc_subsidiary_id
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where r.org_id = ${orgId} and r.document_id = ${documentId}
+       for update of r, d
+    `));
+    const run = runRows.rows[0];
+    if (!run) throw new PayrollError("pay run not found");
+    const number = run.document_number;
+    if (run.run_status !== "committed") {
+      throw new PayrollError(
+        run.run_status === "voided"
+          ? `pay run ${number} is voided and cannot be attributed`
+          : `pay run ${number} is not committed — set its subsidiary by editing the draft`,
+      );
+    }
+    if (run.doc_subsidiary_id !== null) {
+      throw new PayrollError(
+        `pay run ${number} is already attributed and cannot be re-attributed`,
+      );
+    }
+    const target = (await tx.execute<{ id: string; name: string | null }>(sql`
+      select id::text as id, name from subsidiaries
+       where org_id = ${orgId} and id = ${subsidiaryId} and is_active
+    `)).rows[0];
+    if (!target) {
+      throw new PayrollError("the subsidiary is missing or inactive — choose an active subsidiary");
+    }
+    // Posted books are never rewritten: the run's posted lines must all
+    // already name the target (the entityless document posts into the root
+    // by default, so attributing to the root is a header alignment, not a
+    // move). Lines naming any other entity are live books elsewhere — void
+    // the run and re-issue it under the right entity. No posted row is
+    // written here, so the journal immutability guard is never engaged.
+    const posted = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+      select l.subsidiary_id::text as subsidiary_id
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       where l.org_id = ${orgId} and e.source_document_id = ${documentId}
+         and e.status = 'posted'
+       for update of l
+    `));
+    const foreign = posted.rows.filter((line) => line.subsidiary_id !== subsidiaryId);
+    if (foreign.length > 0) {
+      throw new PayrollError(
+        `pay run ${number} already posts into another entity — void the run and re-issue it under the right entity`,
+      );
+    }
+    const before = await captureTransactionAuditSnapshot(tx, documentId, orgId);
+    if (!before) throw new PayrollError("pay run not found");
+    await tx.execute(sql`
+      update documents set subsidiary_id = ${subsidiaryId},
+             updated_by = ${actorId}, updated_at = now()
+       where org_id = ${orgId} and id = ${documentId}`);
+    const after = await captureTransactionAuditSnapshot(tx, documentId, orgId);
+    await recordTransactionAudit(tx, {
+      orgId, documentId, action: "update", actorId,
+      source: "payroll_legacy_attribution",
+      reason: `legacy attribution of a committed run with no subsidiary to ${target.name ?? subsidiaryId}`,
+      before, after,
+    });
+    // No posted row moves: the header aligns to books that already name the
+    // target (or to no books yet, for an unposted run). The count stays in
+    // the contract so callers can assert nothing was rewritten.
+    return { documentNumber: number, reclassedLines: 0 };
+  });
+}
+
 export async function discardPayRun(input: {
   orgId: string; documentId: string; actorId: string;
   /** Caller role scope; null/undefined is unrestricted. */

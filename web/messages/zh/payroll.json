@@ -307,7 +307,10 @@
       "printCheques": "{count, plural, one {打印 # 张支票} other {打印 # 张支票}}",
       "partialTitle": "{count, plural, one {部分核算 — 经决定排除 # 名员工} other {部分核算 — 经决定排除 # 名员工}}",
       "partialRecorded": "确认日期：{date}。该决定已记录在本次核算中。",
-      "partialRecovery": "若要向被排除的员工支付：在其录入界面可用后补足缺失的输入，然后通过核算外单支付。已过账的核算绝不在事后修改。"
+      "partialRecovery": "若要向被排除的员工支付：在其录入界面可用后补足缺失的输入，然后通过核算外单支付。已过账的核算绝不在事后修改。",
+      "attributeEntity": "归属实体",
+      "entityAttributed": "法律实体已记录。该工资周期现在可以汇缴。",
+      "entityTarget": "法律实体"
     },
     "adjust": {
       "title": "调整",

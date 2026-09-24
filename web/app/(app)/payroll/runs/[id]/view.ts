@@ -33,6 +33,7 @@ import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/
 import { factorLabelForPack, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 import { buildRegisterBuckets, type RegisterBucket } from '../../../../../lib/payroll-register-buckets.ts'
 import { can, requirePermission } from '../../../../../lib/authz'
+import { subsidiaryUiOptions } from '../../../../../lib/subsidiaries'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
@@ -133,6 +134,18 @@ export interface PayRunWizardData {
    *  period. Zero while hrmPayrollAnomalies is off; the commit route
    *  refuses while this is nonzero. */
   anomalyBlocks: number
+  /**
+   * Active, non-elimination entities the caller may see — the target list
+   * for the Attribute entity action on a subsidiary-less run. Empty in a
+   * single-entity org (where every document already carries the root).
+   */
+  entityOptions: { id: string; label: string }[]
+  /**
+   * Attribution is an org-wide act: an entityless run is invisible to
+   * scoped roles (the route 404s them like a missing run), so the control
+   * renders only for unrestricted callers.
+   */
+  canAttributeEntity: boolean
 }
 
 export async function loadPayRunWizard(
@@ -148,7 +161,7 @@ export async function loadPayRunWizard(
   return db.transaction(async () => {
     const runs = (await db.execute<RunHeader & { calculation_errors: unknown; refusal_acknowledgement: unknown }>(sql`
       select r.document_id, d.document_number, d.status as document_status, d.currency,
-             d.posted_entry_id, s.name as schedule_name,
+             d.subsidiary_id, d.posted_entry_id, s.name as schedule_name,
              r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.tax_year, r.run_status, r.run_type, r.pay_schedule_id,
              r.gross_total, r.net_total, r.employer_cost_total, r.employee_count,
@@ -438,6 +451,13 @@ export async function loadPayRunWizard(
 
     const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
 
+    // Attribution targets: active, non-elimination entities this caller may
+    // see. The route re-checks visibility and activity at write time, so a
+    // target deactivated after this render still refuses.
+    const entityOptions = (await subsidiaryUiOptions(orgId))
+      .filter((option) => authz.allowedSubsidiaryIds == null || authz.allowedSubsidiaryIds.has(option.id))
+      .map((option) => ({ id: option.id, label: option.name }))
+
     return {
       title: `${t('run.title')} ${run.document_number}`,
       description: `${run.schedule_name ?? ''} · ${run.period_start} – ${run.period_end}`.replace(
@@ -472,6 +492,8 @@ export async function loadPayRunWizard(
       refusalsAcknowledged,
       approval,
       anomalyBlocks,
+      entityOptions,
+      canAttributeEntity: authz.allowedSubsidiaryIds == null,
     }
   })
 }
@@ -522,6 +544,8 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         refusalsAcknowledged: data.refusalsAcknowledged,
         approval: data.approval,
         anomalyBlocks: data.anomalyBlocks,
+        entityOptions: data.entityOptions,
+        canAttributeEntity: data.canAttributeEntity,
       }),
     ],
   })

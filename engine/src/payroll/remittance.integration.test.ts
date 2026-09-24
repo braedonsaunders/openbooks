@@ -15,6 +15,7 @@ import {
   RemittanceSourceIntegrityError,
 } from "./remittance.ts";
 import { PayrollError } from "./error.ts";
+import { attributePayRunEntity } from "./run-lifecycle.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -75,7 +76,7 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
 async function addCommittedRemittanceAccrual(
   fixture: RemittanceFixture,
   input: { payDate: string; amount: string; employeeId?: string; snapshotPartyId?: string; subsidiaryId?: string | null },
-): Promise<void> {
+): Promise<{ runDocumentId: string }> {
   const { org, actorId, componentId, liabilityAccountId, scheduleId } = fixture;
   const employeeId = input.employeeId ?? randomUUID();
   // An explicit null subsidiary seeds a run document with no legal entity:
@@ -125,6 +126,7 @@ async function addCommittedRemittanceAccrual(
       (${lineId}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction',
        'Test withholding', ${input.amount}, 10, ${liabilityAccountId}, 'commit',
        ${input.snapshotPartyId ?? org.vendorId}, ${actorId}, ${actorId})`);
+  return { runDocumentId: documentId };
 }
 
 async function waitForRemittanceFenceWaiter(key: string): Promise<void> {
@@ -1036,6 +1038,244 @@ test(
            and status <> 'voided'
       `)).rows[0]!;
       assert.equal(bills.n, 0, "a refused billing creates no bill");
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "an entityless committed run remits after legacy attribution",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-15", amount: "10.00",
+      });
+      const entityless = await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-20", amount: "5.00", subsidiaryId: null,
+      });
+      await assert.rejects(
+        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+        }),
+        /no legal entity/,
+      );
+      // The run is unposted, so no journal follows it yet — only the
+      // document's subsidiary moves, with an audited trail.
+      const attributed = await attributePayRunEntity({
+        orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+        actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
+      });
+      assert.equal(attributed.reclassedLines, 0);
+      const audit = (await db.execute<{ action: string; changes: string }>(sql`
+        select action, changes::text as changes from audit_log
+         where org_id = ${fixture.org.orgId} and row_id = ${entityless.runDocumentId}
+         order by id desc limit 1`)).rows[0]!;
+      assert.equal(audit.action, "update");
+      assert.match(audit.changes, /legacy attribution/);
+      assert.match(audit.changes, new RegExp(fixture.actorId));
+      // Attributed, the same window remits whole: both accruals, one bill.
+      const groups = await payrollRemittanceSummary(fixture.org.orgId, {
+        from: "2026-01-01", to: "2026-01-31",
+      });
+      const group = groups.find((candidate) => candidate.partyId === fixture.org.vendorId)!;
+      assert.equal(group.hasEntitylessAccruals, false);
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+      });
+      const total = (await db.execute<{ total: string }>(sql`
+        select total::text as total from documents
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+      assert.equal(cmp(total.total, "15.00"), 0);
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "attribution refuses what it must not rewrite",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      const entityless = await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-20", amount: "5.00", subsidiaryId: null,
+      });
+      // A malformed target, an out-of-scope target, and an inactive target
+      // all refuse before any row moves.
+      await assert.rejects(
+        attributePayRunEntity({
+          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+          actorId: fixture.actorId, subsidiaryId: "not-a-subsidiary",
+        }),
+        /choose a subsidiary/,
+      );
+      await assert.rejects(
+        attributePayRunEntity({
+          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+          actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
+          allowedSubsidiaryIds: new Set([randomUUID()]),
+        }),
+        /pay run not found/,
+      );
+      // The root can never go inactive (the tree guard refuses), so the
+      // inactive target is a retired child entity.
+      const retired = (await db.execute<{ id: string }>(sql`
+        insert into subsidiaries (org_id, parent_id, name, base_currency, country)
+        select org_id, id, 'Retired entity', base_currency, country
+          from subsidiaries where org_id = ${fixture.org.orgId} limit 1
+        returning id::text as id`)).rows[0]!;
+      await db.execute(sql`
+        update subsidiaries set is_active = false
+         where org_id = ${fixture.org.orgId} and id = ${retired.id}`);
+      await assert.rejects(
+        attributePayRunEntity({
+          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+          actorId: fixture.actorId, subsidiaryId: retired.id,
+        }),
+        /missing or inactive/,
+      );
+      await attributePayRunEntity({
+        orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+        actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
+      });
+      // Re-attribution would move live books between entities.
+      await assert.rejects(
+        attributePayRunEntity({
+          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+          actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
+        }),
+        /already attributed and cannot be re-attributed/,
+      );
+      // A voided run is gone: attribution cannot resurrect it.
+      await db.execute(sql`
+        update pay_runs set run_status = 'voided'
+         where org_id = ${fixture.org.orgId} and document_id = ${entityless.runDocumentId}`);
+      await assert.rejects(
+        attributePayRunEntity({
+          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+          actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
+        }),
+        /is voided and cannot be attributed/,
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "a posted run attributes to the entity its books already name",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      // Posting needs a date inside the scratch org's open period.
+      const entityless = await addCommittedRemittanceAccrual(fixture, {
+        payDate: fixture.org.date, amount: "5.00", subsidiaryId: null,
+      });
+      // The committed GL projection commitPayRun would have materialized
+      // (DR wages, CR withholding) — the fixture seeds runs pre-commit, so
+      // the test writes the balanced line set itself while still draft.
+      await db.execute(sql`
+        insert into document_lines (org_id, document_id, line_number, account_id, description, amount)
+        values (${fixture.org.orgId}, ${entityless.runDocumentId}, 1, ${fixture.org.accounts.cogs}, 'Wages', '5.00'),
+               (${fixture.org.orgId}, ${entityless.runDocumentId}, 2, ${fixture.liabilityAccountId}, 'Withholding', '-5.00')`);
+      // Posting an entityless document stamps its lines with the root
+      // entity — journal lines cannot carry a null tag (not-null since
+      // baseline), so attributing to the root aligns the header without
+      // rewriting any posted row.
+      await submitAndReleaseIfUngated("pay_run", entityless.runDocumentId, fixture.actorId);
+      await postDocument(entityless.runDocumentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      });
+      const attributed = await attributePayRunEntity({
+        orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+        actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
+      });
+      assert.equal(attributed.reclassedLines, 0, "no posted row is rewritten");
+      const doc = (await db.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id::text as subsidiary_id from documents
+         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`)).rows[0]!;
+      assert.equal(doc.subsidiary_id, fixture.org.subsidiaryId);
+      // Aligned, the posted run remits: its accruals now sit in the root's
+      // slice instead of the entityless consolidated group.
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId, from: fixture.org.date, to: fixture.org.date,
+      });
+      const total = (await db.execute<{ total: string }>(sql`
+        select total::text as total from documents
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+      assert.equal(cmp(total.total, "5.00"), 0);
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "attribution refuses posted lines that already name another entity",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      // Posting needs a date inside the scratch org's open period.
+      const entityless = await addCommittedRemittanceAccrual(fixture, {
+        payDate: fixture.org.date, amount: "5.00", subsidiaryId: null,
+      });
+      // Same committed projection as the reclass test: the run posts whole
+      // before one line is tampered into a second entity.
+      await db.execute(sql`
+        insert into document_lines (org_id, document_id, line_number, account_id, description, amount)
+        values (${fixture.org.orgId}, ${entityless.runDocumentId}, 1, ${fixture.org.accounts.cogs}, 'Wages', '5.00'),
+               (${fixture.org.orgId}, ${entityless.runDocumentId}, 2, ${fixture.liabilityAccountId}, 'Withholding', '-5.00')`);
+      await submitAndReleaseIfUngated("pay_run", entityless.runDocumentId, fixture.actorId);
+      await postDocument(entityless.runDocumentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      });
+      // The whole posted entry already books into a second entity: moving
+      // the run would silently rewrite live books elsewhere. The full entry
+      // moves together (a single leg alone would unbalance both entities).
+      const second = (await db.execute<{ id: string }>(sql`
+        insert into subsidiaries (org_id, parent_id, name, base_currency, country)
+        select org_id, id, 'Second entity', base_currency, country
+          from subsidiaries where org_id = ${fixture.org.orgId} limit 1
+        returning id::text as id`)).rows[0]!;
+      // A direct-DB divergence, so it runs through the governed amend path
+      // an out-of-band writer would have needed — the point is what the
+      // attribution refuses, not how the divergence got there.
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`set local openbooks.amend = on`);
+        await tx.execute(sql`
+          update journal_lines l set subsidiary_id = ${second.id}
+            from journal_entries e
+           where l.entry_id = e.id and l.org_id = e.org_id
+             and l.org_id = ${fixture.org.orgId}
+             and e.source_document_id = ${entityless.runDocumentId}
+             and e.status = 'posted'`);
+      });
+      await assert.rejects(
+        attributePayRunEntity({
+          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
+          actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
+        }),
+        /already posts into another entity/,
+      );
+      const doc = (await db.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id::text as subsidiary_id from documents
+         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`)).rows[0]!;
+      assert.equal(doc.subsidiary_id, null, "a refused attribution moves nothing");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
     }

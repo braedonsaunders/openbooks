@@ -1939,7 +1939,8 @@ export async function createRemittanceBill(
     }
     if (found.hasEntitylessAccruals) {
       throw new PayrollError(
-        "this remittance group includes payroll with no legal entity — attribute its pay runs to an active subsidiary before remitting",
+        "this remittance group includes payroll with no legal entity — attribute its pay runs "
+        + "to an active subsidiary before remitting (open the pay run and choose Attribute entity)",
       );
     }
     entityId = pickRemittanceSlice(found, null).subsidiaryId;
@@ -2028,7 +2029,8 @@ export async function createRemittanceBill(
     // would remit a partial period as if it were whole.
     if (group.hasEntitylessAccruals) {
       throw new PayrollError(
-        "this remittance group includes payroll with no legal entity — attribute its pay runs to an active subsidiary before remitting",
+        "this remittance group includes payroll with no legal entity — attribute its pay runs "
+        + "to an active subsidiary before remitting (open the pay run and choose Attribute entity)",
       );
     }
     const slice = pickRemittanceSlice(group, input.subsidiaryId ?? null);
