@@ -120,7 +120,7 @@ async function frPayrollOrg(): Promise<Fixture> {
                                              region, sub_region, answers, effective_from,
                                              created_by, updated_by)
       values (${org.orgId}, ${id}, 'FR', 'fr_pas_option', null, null,
-              '{"domicile": "metropole_hors_france"}'::jsonb, '2026-01-01', ${actorId}, ${actorId})`);
+              '{"domicile": "metropole"}'::jsonb, '2026-01-01', ${actorId}, ${actorId})`);
     return id;
   };
   const camille = await employee("Camille Martin", "24000");

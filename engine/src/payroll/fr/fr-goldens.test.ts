@@ -9,9 +9,9 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateFrPas2026 } from "./compute-statutory.ts";
+import { calculateFrPas2026, computeFrStatutory } from "./compute-statutory.ts";
 
-const METRO = "metropole_hors_france" as const;
+const METRO = "metropole" as const;
 
 test("DGFiP example: 2 000 € monthly salary -> 2,9 % -> 58 € retenue", () => {
   // "Son salaire imposable s'élève chaque mois à 2 000 €. Le taux par défaut
@@ -156,4 +156,44 @@ test("guards: DOM domiciles, out-of-year dates, bad rates and periods refuse", (
     () => calculateFrPas2026({ ...base, base: "-10.00" }),
     /non-negative/,
   );
+});
+
+test("a hors-de-France domicile refuses with the 182 A mechanism, never grille I", async () => {
+  // CGI art. 182 A prices salaires for French work paid to non-residents —
+  // "différente du PAS" (DGFiP non-resident fiche 03-2026). Pricing grille I
+  // here would be the wrong mechanism at the right rate shape, so both the
+  // pure grille function and the pack adapter refuse by name.
+  assert.throws(
+    () =>
+      calculateFrPas2026({
+        base: "2000.00",
+        payDate: "2026-06-15",
+        periodsPerYear: 12,
+        transmittedRatePct: null,
+        domicile: "hors_de_france",
+      }),
+    /182 A.*never priced with grille I/,
+  );
+  // The adapter refuses before any line is pushed: a minimal context reaches
+  // the domicile branch with only taxYear, region, pay date and answers.
+  const ctx = {
+    taxYear: 2026,
+    region: "FR",
+    run: { pay_date: "2026-06-15" },
+    certificateFor: () => ({ answers: { domicile: "hors_de_france" } }),
+  } as never;
+  await assert.rejects(computeFrStatutory(ctx), /182 A.*never priced with grille I/);
+});
+
+test("the retired lumped domicile refuses with the re-affirmation remedy", async () => {
+  // "metropole_hors_france" affirmed two populations that price under
+  // different mechanisms. Stored answers carrying it must not silently
+  // price as métropole — the operator re-affirms the split domicile.
+  const ctx = {
+    taxYear: 2026,
+    region: "FR",
+    run: { pay_date: "2026-06-15" },
+    certificateFor: () => ({ answers: { domicile: "metropole_hors_france" } }),
+  } as never;
+  await assert.rejects(computeFrStatutory(ctx), /re-affirm domicile/);
 });

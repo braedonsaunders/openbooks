@@ -137,7 +137,7 @@ test("answer validation accepts a complete NL declaration and refuses what it do
   const pas = packCertificates("FR").certificates.find((certificate) => certificate.key === "fr_pas_option")!;
   assert.match(certificateAnswersProblem(pas, {}) ?? "", /"domicile" is required/);
   assert.equal(
-    certificateAnswersProblem(pas, { domicile: "metropole_hors_france" }),
+    certificateAnswersProblem(pas, { domicile: "metropole" }),
     null,
   );
   // Count and code kinds, through the DE pack's real declaration.

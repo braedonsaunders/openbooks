@@ -254,7 +254,7 @@ test("adapter: 2 000 € June versement pushes PAS, the nine URSSAF lines and th
     },
     storedCertificates: [],
     certificateFor: (() => ({
-      answers: { domicile: "metropole_hors_france", taux_option: "non_personnalise" },
+      answers: { domicile: "metropole", taux_option: "non_personnalise" },
     })) as never,
     bool: () => false,
     assertRegionSupported: () => {},
@@ -339,7 +339,7 @@ test("adapter refuses without a known effectif, naming FNAL", async () => {
     pushStatutory: () => {},
     storedCertificates: [],
     certificateFor: (() => ({
-      answers: { domicile: "metropole_hors_france" },
+      answers: { domicile: "metropole" },
     })) as never,
     bool: () => false,
     assertRegionSupported: () => {},

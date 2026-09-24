@@ -137,7 +137,7 @@ test("FR certificate declares the PAS rate option, not a W-4 clone", () => {
   assert.equal(domicile?.required, true);
   assert.deepEqual(
     domicile?.choices?.map((choice) => choice.value),
-    ["metropole_hors_france", "guadeloupe_reunion_martinique", "guyane_mayotte"],
+    ["metropole", "hors_de_france", "guadeloupe_reunion_martinique", "guyane_mayotte"],
   );
 });
 
