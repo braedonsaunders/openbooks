@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmRecruitingManage, requireHrmRecruitingManageOrg } from "../authorization.ts";
+import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import { requireAggregateRecruitingRead, requireHrmRecruitingManage } from "../authorization.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { RecruitingError } from "./errors.ts";
 import { isUniqueViolation, requireActorId, requireId, requireOrgId } from "./input.ts";
@@ -169,16 +170,26 @@ export async function listPostings(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    // A read: the read grant plus the actor's employer scope over the
+    // posting's requisition — a scoped reader lists only their entities'
+    // postings, never the whole org board.
+    const allowed = await requireAggregateRecruitingRead(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmJobBoards");
     const rows = (await db.execute<PostingRow>(sql`
-      select ${POSTING_COLUMNS} from hrm_job_postings
-       where org_id = ${orgId}
+      select p.id, p.requisition_id as "requisitionId", p.board_key as "boardKey",
+             p.external_ref as "externalRef", p.status,
+             p.published_at as "publishedAt", p.closed_at as "closedAt",
+             p.error_message as "errorMessage"
+        from hrm_job_postings p
+       where p.org_id = ${orgId}
          -- Cast: an untyped null parameter makes PostgreSQL refuse the
          -- statement, so listing every posting threw while listing one
          -- requisition's postings worked.
-         and (${query.requisitionId ?? null}::uuid is null or requisition_id = ${query.requisitionId ?? null}::uuid)
-       order by board_key
+         and (${query.requisitionId ?? null}::uuid is null or p.requisition_id = ${query.requisitionId ?? null}::uuid)
+         and p.requisition_id in (select r.id from hrm_requisitions r
+                                   where r.org_id = ${orgId}
+                                     ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)})
+       order by p.board_key
     `)).rows;
     return Promise.all(
       rows.map(async (row) => ({ ...row, applyCount: await applyCount(db, orgId, row.id) })),
