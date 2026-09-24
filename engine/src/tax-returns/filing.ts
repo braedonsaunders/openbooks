@@ -10,6 +10,7 @@ import {
   type TaxReturnTranslation,
 } from "./return.ts";
 import { resolveCoveringPeriodsInWindow } from "../close/period-resolution.ts";
+import { periodScopeAdvisoryLock } from "../close/period-locks.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 
 /**
@@ -213,6 +214,14 @@ async function assertCoveredPeriodsClosed(
       "period-not-closed",
       `no accounting period covers ${from}..${to} — generate the fiscal calendar before filing`,
     );
+  }
+
+  // Controlled reopen and close writers serialize on this period/book fence.
+  // Take every lock in a stable order and retain them through mark-filed's
+  // status and audit writes, so a reopen cannot commit after this check while
+  // the filing is being certified against the now-open period.
+  for (const period of [...periods].sort((a, b) => a.id.localeCompare(b.id))) {
+    await periodScopeAdvisoryLock(db, orgId, period.id, bookId);
   }
 
   // A frozen scope that no longer resolves is not an empty covered set (which
