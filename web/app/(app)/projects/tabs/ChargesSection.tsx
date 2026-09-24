@@ -123,7 +123,12 @@ export function ChargesSection({
       // body (a proxy page, an empty 502) must surface the refusal, never a
       // SyntaxError from res.json() that also wedges the button.
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('failed')))
-      toast.success(t('created'))
+      // A caller without the posting permission gets the charge back as a
+      // draft with a named postRefusal: surface the remedy instead of
+      // reporting a posting that never happened.
+      const data = await res.json().catch(() => null) as { postRefusal?: unknown } | null
+      if (typeof data?.postRefusal === 'string') toast.warning(data.postRefusal)
+      else toast.success(t('created'))
       setItemId(''); setEquipmentUnitId(''); setEmployeeId(''); setQuantity('1'); setCostRate(''); setBillRate('')
       onFormOpenChange(false)
       router.refresh()

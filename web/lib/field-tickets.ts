@@ -19,7 +19,8 @@ import { acquireFeatureGateLock, checkProjectsWriteEnabled, isFeatureEnabled } f
 import { createProjectCharge } from './project-charges'
 import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
 import { getS3Blob } from './file-storage'
-import { subsidiaryScopeAllows } from './authz'
+import { can, resolveAuthzByUserId, subsidiaryScopeAllows } from './authz'
+import { postPermission } from './document-kinds'
 import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
@@ -1243,6 +1244,17 @@ export async function releaseFieldTicketApproval(
       .map((component) => ({ rateLineId: component.rate_line_id, unitCode: component.unit_code,
         unitName: component.unit_name, quantity: component.quantity, rate: component.rate, amount: component.amount,
         ...(component.quantity_ratio ? { quantityRatio: component.quantity_ratio } : {}) }))
+    // Approving the ticket releases its outcome, not the approver's personal
+    // GL authority: materializing the charge posts DR project COGS / CR cost
+    // pool, so without the kind's postPermission the charge stays a draft for
+    // a gl.post holder to post — the same rule as POST /api/project-charges.
+    // The draft id still links from the ticket (charge_document_id below).
+    const releaser = await resolveAuthzByUserId(orgId, userId)
+    const mayPostCharge = releaser !== null && can(releaser, postPermission('project_charge'))
+    // An unknown releaser (departed approver) acts under the approval grant
+    // Flows already recorded: unrestricted by explicit sentinel, so the
+    // charge still stamps the locked project's subsidiary. The in-transaction
+    // lock rechecks the project itself, never the pre-read.
     const charge = await createProjectCharge(
       orgId,
       userId,
@@ -1280,7 +1292,7 @@ export async function releaseFieldTicketApproval(
           }
         }),
       },
-      { post: true },
+      { post: mayPostCharge, allowedSubsidiaryIds: releaser?.allowedSubsidiaryIds ?? null },
     )
     await db.execute(sql`
       insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)

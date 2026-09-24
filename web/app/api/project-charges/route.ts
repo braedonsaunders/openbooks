@@ -4,14 +4,16 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
-import { guardPermission } from '../../../lib/authz'
+import { can, guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import {
   createProjectCharge,
   ChargeCommittedError,
   ChargeError,
+  ChargeNotFoundError,
   type ChargeLineInput,
 } from '../../../lib/project-charges'
+import { postPermission } from '../../../lib/document-kinds'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -135,13 +137,31 @@ export async function POST(req: Request) {
     }
   }
   try {
+    // project_charge is a GL-family direct-post kind (DR project COGS / CR
+    // cost pool). Originating the charge takes projects.manage, but posting
+    // it takes the kind's postPermission — the same map the generic document
+    // actions route enforces — so a projects.manage-only role can never post
+    // to the GL here. Without it the charge is saved as a draft carrying the
+    // named refusal; a gl.post holder posts it through the generic actions.
+    const postPerm = postPermission('project_charge')
+    const mayPost = can(gate, postPerm)
     const created = await createProjectCharge(gate.user.orgId, gate.user.id, {
       projectId: body.projectId,
       referenceNumber: body.referenceNumber ?? null,
       lines,
+    }, { post: mayPost, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
+    if (mayPost) return NextResponse.json(created)
+    return NextResponse.json({
+      ...created,
+      posted: false,
+      postRefusal: `missing permission: ${postPerm} — the charge was saved as a draft; posting needs ${postPerm}`,
     })
-    return NextResponse.json(created)
   } catch (e) {
+    // The in-transaction scope recheck refuses exactly like the pre-read
+    // above (a concurrent rehome moved the project after it), never a 422.
+    if (e instanceof ChargeNotFoundError) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
     // Creation commits before approval/posting so a lifecycle failure must
     // identify the durable charge instead of inviting a duplicate retry.
     if (e instanceof ChargeCommittedError) {

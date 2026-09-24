@@ -3,15 +3,16 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// Live-Postgres regression: POST /api/project-charges validates line
-// quantities to 8dp and rates to 4dp but never bounds their magnitude, so a
-// pasted oversized figure sails through and dies in Postgres as a raw numeric
-// overflow (HTTP 500 — the catch only maps ChargeError to 422) instead of
-// failing closed with a named 422 and nothing written. Every charge-line
-// figure lands in a numeric(19,4) column — rates and amounts directly, and the
-// quantity again through base_quantity, the derived amounts, and the rate
-// components — so 15 whole digits is the honest bound for all of them.
-const stateKey = Symbol.for("openbooks.project-charge-magnitude-test");
+// Live-Postgres regression for H-PROJCHARGE: POST /api/project-charges
+// requires only projects.manage at the boundary, then createProjectCharge
+// submits and posts the GL-family direct-post kind (DR project COGS / CR
+// cost pool). A projects.manage-only role must never advance a charge past
+// draft: without the kind's postPermission (gl.post — the same map the
+// generic document actions route enforces) the charge is saved as a draft
+// carrying the named refusal. With gl.post the identical request flows
+// through submission as before. Only authz is doubled; the route, the
+// charge service, and Postgres are real.
+const stateKey = Symbol.for("openbooks.project-charge-post-permission-test");
 interface RouteState {
   authz: {
     user: { orgId: string; id: string };
@@ -23,13 +24,14 @@ const routeState: RouteState = { authz: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.project-charge-magnitude-test')]
+  const state = globalThis[Symbol.for('openbooks.project-charge-post-permission-test')]
   export async function guardPermission(_permission) {
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
-  // Fixture authz carries every permission; mirror the wildcard semantics the
-  // real check applies so the posting decision stays allowed here.
+  // The permission SETS under test are real data (a projects.manage-only set
+  // versus one that also holds gl.post); only the check itself is doubled,
+  // with the wildcard semantics the real check applies.
   export function can(authz, perm) {
     const perms = authz.permissions
     if (!perms) return false
@@ -53,19 +55,19 @@ const hooks = registerHooks({
       specifier === "../../../lib/authz" &&
       context.parentURL?.includes("/api/project-charges/")
     ) {
-      return { url: "mock:project-charge-magnitude-authz", shortCircuit: true };
+      return { url: "mock:project-charge-post-permission-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === "mock:project-charge-magnitude-authz") {
+    if (url === "mock:project-charge-post-permission-authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
 });
 
-const routeUrl = "./route.ts?project-charge-magnitude-test";
+const routeUrl = "./route.ts?project-charge-post-permission-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
@@ -98,10 +100,13 @@ async function seed(): Promise<Fixture> {
   return { orgId: org.orgId, actorId, projectId, itemId: org.items.service };
 }
 
-async function post(fixture: Fixture, line: Record<string, unknown>): Promise<{ status: number; json: unknown }> {
+async function postAs(
+  fixture: Fixture,
+  permissions: string[],
+): Promise<{ status: number; json: Record<string, unknown> }> {
   routeState.authz = {
     user: { orgId: fixture.orgId, id: fixture.actorId },
-    permissions: new Set(["*"]),
+    permissions: new Set(permissions),
     allowedSubsidiaryIds: null,
   };
   try {
@@ -111,60 +116,48 @@ async function post(fixture: Fixture, line: Record<string, unknown>): Promise<{ 
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           projectId: fixture.projectId,
-          lines: [{ itemId: fixture.itemId, quantity: "1", ...line }],
+          // Zero-cost line: posting is skipped for a zero total, so the
+          // observable contrast is submission — released (approved) versus
+          // never submitted (draft). A denied caller must never reach the
+          // submit/post lifecycle at all.
+          lines: [{ itemId: fixture.itemId, quantity: "1", costRate: "0", billRate: "0" }],
         }),
       }),
     ));
-    return { status: response.status, json: await response.json().catch(() => null) };
+    return { status: response.status, json: (await response.json().catch(() => null)) as Record<string, unknown> };
   } catch (error) {
     return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } };
   }
 }
 
-async function chargeCount(orgId: string): Promise<number> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from documents
-     where org_id = ${orgId} and kind = 'project_charge'`))).rows;
-  return rows[0]!.n;
+async function chargeStatus(orgId: string, id: string): Promise<string | null> {
+  const rows = (await withOrgContext(orgId, () => db.execute<{ status: string }>(sql`
+    select status from documents where org_id = ${orgId} and id = ${id}`))).rows;
+  return rows[0]?.status ?? null;
 }
 
-test("POST refuses a bill rate wider than numeric(19,4) without writing", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("POST with projects.manage but no gl.post saves a draft and names gl.post", { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const fixture = await withBypass(seed);
   try {
-    const result = await post(fixture, { billRate: "99999999999999999999" });
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`);
-    assert.equal(await chargeCount(fixture.orgId), 0);
-  } finally {
-    await withBypass(() => dropScratchOrg(fixture.orgId));
-  }
-});
-
-test("POST refuses a quantity wider than numeric(19,4) without writing", { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const fixture = await withBypass(seed);
-  try {
-    const result = await post(fixture, { quantity: "99999999999999999999" });
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`);
-    assert.equal(await chargeCount(fixture.orgId), 0);
-  } finally {
-    await withBypass(() => dropScratchOrg(fixture.orgId));
-  }
-});
-
-test("POST still saves column-maximum rate and quantity with identical read-back", { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const fixture = await withBypass(seed);
-  try {
-    const result = await post(fixture, {
-      quantity: "999999999999999.9999",
-      costRate: "0",
-      billRate: "0",
-    });
+    const result = await postAs(fixture, ["projects.manage", "projects.read"]);
     assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`);
-    const rows = (await withOrgContext(fixture.orgId, () => db.execute<{ quantity: string; bill_rate: string }>(sql`
-      select quantity::text as quantity, bill_rate::text as bill_rate
-        from document_lines
-       where org_id = ${fixture.orgId}`))).rows;
-    assert.equal(rows[0]!.quantity, "999999999999999.99990000");
-    assert.equal(rows[0]!.bill_rate, "0.0000");
+    assert.equal(result.json.posted, false);
+    assert.match(String(result.json.postRefusal), /gl\.post/);
+    assert.equal(await chargeStatus(fixture.orgId, String(result.json.id)), "draft");
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
+
+test("POST with gl.post flows through submission as before", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const fixture = await withBypass(seed);
+  try {
+    const result = await postAs(fixture, ["projects.manage", "projects.read", "gl.post"]);
+    assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(result.json.postRefusal, undefined);
+    // Ungated submission releases the zero-total charge to approved; a zero
+    // total posts nothing, so approved (not draft) is the flowing outcome.
+    assert.equal(await chargeStatus(fixture.orgId, String(result.json.id)), "approved");
   } finally {
     await withBypass(() => dropScratchOrg(fixture.orgId));
   }
