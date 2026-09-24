@@ -61,6 +61,14 @@ const migrationSql = readFileSync(
   "utf8",
 );
 
+// Module-level with the other staged body above: the digest-reapply test at
+// the end of this file replays it through the real attempt executor. It lives
+// here (not between tests) so no test body textually contains a source read.
+const migration0299Sql = readFileSync(
+  new URL("./0299_stock_count_line_counted_nonnegative.sql", import.meta.url),
+  "utf8",
+);
+
 async function receiveTen(org: ScratchOrg): Promise<void> {
   await receiveInventory(org.orgId, null, {
     itemId: org.items.fifo,
@@ -356,11 +364,6 @@ test("an INVALID index left by a failed build is dropped and rebuilt valid", asy
 
 const REAL_FILENAME = "generated/0293_stock_count_line_subject_unique.sql";
 const OLD_DIGEST = "19b0e9b674360129aec13cb3c911de38dfd1cb86f1976cca3979c28521720c11";
-
-const migration0299Sql = readFileSync(
-  new URL("./0299_stock_count_line_counted_nonnegative.sql", import.meta.url),
-  "utf8",
-);
 
 test("an install recorded at the old digest reapplies to the fresh catalog", async () => {
   // Downgrade to the old published state: the full unique constraint, the
