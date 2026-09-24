@@ -14,6 +14,8 @@
 -- its journal entry stayed posted. The only sanctioned exits from posted
 -- are the controlled void (posted -> voided with void evidence in the same
 -- write, engine/src/ledger/document-void.ts) and the governed amend path.
+-- A sandbox wipe passes only through openbooks_sandbox_wipe_allowed(org_id),
+-- never a raw session GUC any session could SET.
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
@@ -29,10 +31,9 @@ CREATE OR REPLACE FUNCTION public.posted_document_status_guard() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 begin
-  if coalesce(current_setting('openbooks.sandbox_wipe', true), 'off') = 'on' then
-    return new;
-  end if;
-  if openbooks_sandbox_wipe_allowed(old.org_id) then
+  -- Only the hardened per-org check admits a sandbox wipe; a raw session
+  -- GUC is settable by any session and would reopen posted -> draft.
+  if public.openbooks_sandbox_wipe_allowed(old.org_id) then
     return new;
   end if;
   -- The controlled void writes its evidence (voided_at, voided_by,
