@@ -65,10 +65,25 @@ async function seedAdmin(orgId: string, adminId: string) {
   `);
   await db.execute(sql`
     insert into scheduler_outbox (org_id, kind, subject_id, occurrence_key, status, error, attempt_count, payload)
-    values (${orgId}, 'flow_email', ${randomUUID()}, 'probe-1', 'pending', null, 0, '{}'::jsonb),
-           (${orgId}, 'flow_email', ${randomUUID()}, 'probe-2', 'failed', 'worker exploded', 3, '{}'::jsonb)
+      values (${orgId}, 'flow_email', ${randomUUID()}, 'probe-1', 'pending', null, 0, '{}'::jsonb),
+             (${orgId}, 'flow_email', ${randomUUID()}, 'probe-2', 'failed', 'worker exploded', 3, '{}'::jsonb)
   `);
-  return { rowId };
+  const reportId = randomUUID();
+  const runId = randomUUID();
+  const recipient = `private-recipient-${randomUUID()}@example.test`;
+  await db.execute(sql`
+    insert into report_definitions (id, org_id, slug, name, report_type, system)
+    values (${reportId}, ${orgId}, ${`probe-${reportId}`}, 'Probe report', 'built_in', true)
+  `);
+  await db.execute(sql`
+    insert into report_runs (id, org_id, definition_id, status, created_by)
+    values (${runId}, ${orgId}, ${reportId}, 'failed', ${adminId})
+  `);
+  await db.execute(sql`
+    insert into report_delivery_outbox (org_id, run_id, recipient, status, attempt_count, error)
+    values (${orgId}, ${runId}, ${recipient}, 'failed', 4, 'delivery failed')
+  `);
+  return { rowId, recipient };
   });
 }
 
@@ -76,7 +91,7 @@ test('admin reads mirror the admin pages without leaking secrets', { skip: !proc
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId));
-    const { rowId } = await seedAdmin(org.orgId, actors.adminId);
+    const { rowId, recipient } = await seedAdmin(org.orgId, actors.adminId);
     const authz = {
       user: userFor(org.orgId, actors.adminId),
       permissions: new Set(ADMIN_PERMS),
@@ -130,9 +145,12 @@ test('admin reads mirror the admin pages without leaking secrets', { skip: !proc
       };
       assert.equal(outboxData.scheduler.byStatus.pending, 1);
       assert.equal(outboxData.scheduler.byStatus.failed, 1);
-      assert.equal(outboxData.recentFailures.length, 1);
+      assert.equal(outboxData.recentFailures.length, 2);
+      const failures = JSON.stringify(outboxData.recentFailures);
+      assert.ok(!failures.includes(recipient), 'report-delivery recipients must not leave the server');
+      assert.ok(outboxData.recentFailures.some((failure) => failure.jobType === 'report_delivery' && typeof failure.jobId === 'string'));
       for (const key of Object.keys(outboxData.recentFailures[0]!)) {
-        assert.ok(!/payload|lease_token/i.test(key), `no job payload leaks (${key})`);
+        assert.ok(!/payload|lease_token|recipient|error|job$/i.test(key), `no recipient or job details leak (${key})`);
       }
     });
   } finally {
