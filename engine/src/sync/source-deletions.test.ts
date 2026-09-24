@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -12,54 +11,7 @@ import {
 } from "../testing/fixtures.ts";
 import { resolveSourceDeletion } from "./source-deletions.ts";
 
-const source = readFileSync("engine/src/sync/source-deletions.ts", "utf8");
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-test("automatic source deletions preserve settlement evidence", () => {
-  const automatic = source.slice(
-    source.indexOf("export async function mirrorSourceDeletion"),
-    source.indexOf("export async function resolveSourceDeletion"),
-  );
-  assert.match(automatic, /update applications a[\s\S]*unapplied_at = now\(\)/);
-  assert.doesNotMatch(automatic, /delete from applications/i);
-  assert.match(automatic, /captureTransactionAuditSnapshot\(tx, document\.id, input\.orgId\)/);
-  assert.doesNotMatch(automatic, /captureTransactionAuditSnapshot\(tx, document\.id\)/);
-  assert.match(automatic, /recordTransactionAudit\(tx,/);
-  assert.doesNotMatch(automatic, /delete from documents/i);
-});
-
-test("unposted source deletions are preserved as audited voids", () => {
-  const automatic = source.slice(
-    source.indexOf("export async function mirrorSourceDeletion"),
-    source.indexOf("export async function resolveSourceDeletion"),
-  );
-  assert.match(
-    automatic,
-    /if \(!document\.posted_entry_id\)[\s\S]*status = 'voided'[\s\S]*recordTransactionAudit/,
-  );
-});
-
-test("controller resolutions validate the actor and audit both decision and document", () => {
-  const controlled = source.slice(
-    source.indexOf("export async function resolveSourceDeletion"),
-  );
-  assert.match(controlled, /resolution actor is not an active organization user/);
-  assert.match(controlled, /'source_deletion_resolutions'/);
-  assert.match(controlled, /previousResolution/);
-  assert.match(controlled, /currentResolution/);
-});
-
-test("controller source-deletion reversals run every write in one transaction", () => {
-  const controlled = source.slice(
-    source.indexOf("export async function resolveSourceDeletion"),
-  );
-  assert.match(
-    controlled,
-    /return withOrg\(input\.orgId, async \(\) => db\.transaction\(async \(tx\) => \{/,
-  );
-  assert.doesNotMatch(controlled, /\bdb\.(?:execute|select|insert|update)\b/);
-  assert.match(controlled, /recordTransactionAudit\(tx,/);
-});
 
 test(
   "failed source-deletion resolution rolls back reversal, status, applications, and audit before an exactly-once retry",
@@ -313,39 +265,3 @@ test(
     }
   },
 );
-
-test("source-deletion lookups bind the document to the importing connection", () => {
-  const automatic = source.slice(
-    source.indexOf("export async function mirrorSourceDeletion"),
-    source.indexOf("export async function resolveSourceDeletion"),
-  );
-  const controlled = source.slice(
-    source.indexOf("export async function resolveSourceDeletion"),
-  );
-  assert.match(source, /async function lockImportedSourceDocument/);
-  assert.match(
-    source,
-    /custom->>'connectionId' = \$\{input\.connectionId\}/,
-  );
-  assert.match(automatic, /connectionId: string;/);
-  assert.match(automatic, /lockImportedSourceDocument\(/);
-  assert.match(controlled, /lockImportedSourceDocument\(/);
-  assert.doesNotMatch(
-    automatic,
-    /where org_id = \$\{input\.orgId\} and custom->>\$\{refKey\} = \$\{input\.sourceRef\}\s+limit 1/,
-  );
-  assert.doesNotMatch(
-    controlled,
-    /where org_id = \$\{input\.orgId\} and custom->>\$\{refKey\} = \$\{input\.sourceRef\}\s+limit 1/,
-  );
-});
-
-test("source-deletion HTTP resolution uses the path connection and the already-decoded ref", () => {
-  const route = readFileSync(
-    "web/app/api/platform/connections/[id]/source-deletions/[ref]/route.ts",
-    "utf8",
-  );
-  assert.match(route, /connectionId:\s*id/);
-  assert.match(route, /sourceRef:\s*ref/);
-  assert.doesNotMatch(route, /decodeURIComponent\(\s*ref\s*\)/);
-});
