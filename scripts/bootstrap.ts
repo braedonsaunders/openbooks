@@ -1667,6 +1667,20 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "idempotently. Reapply, not restamp.",
   },
   {
+    filename: "generated/0327_item_price_level_activation_history.sql",
+    from: "b70ecb046f73f2f4310cacfaa9f45075819466e09e73a85d2902db75a65c8eab",
+    to: "683a93ba8734ba3b472ce6dbdff1fe4a7fe1477c687b70a90a837b22129f5432",
+    strategy: "reapply",
+    reason:
+      "same revision as the two entries above, for databases that applied the "
+      + "interim PRC15d body (b70ecb04, briefly on local main between the PRC15d "
+      + "and residual commits and applied by the coordinator's and shards' test "
+      + "databases): the residual replaced that body without a transition from it, "
+      + "so those databases could not reach the current digest. The delta is the "
+      + "keep-and-stamp revocation (revoked_at/revoked_by) and activation instants; "
+      + "every statement is idempotent. Reapply, not restamp.",
+  },
+  {
     filename: "generated/0334_tenant_isolation_and_posting_guards.sql",
     from: "08c69798a164afcace78fbf2b18bc196f983de7ab0d8599f62a7b8d94c99a30f",
     to: "85e22004dcc3ea50eb5225e683c7e39de5335a65d7c004f02c4e4c0a3b55e7b7",
