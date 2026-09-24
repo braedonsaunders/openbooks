@@ -42,7 +42,7 @@ const describeCapabilities: AssistantToolDef = {
     const visible = ASSISTANT_TOOLS.filter((tool) => canRunTool(authz, tool, features)).map((tool) => ({
       name: tool.name,
       blurb: oneLine(tool.description),
-      module: tool.feature ?? "core",
+      module: moduleOfTool(tool.name, tool.feature),
     }));
     for (const definition of APPLICATION_TOOLS) {
       if (!applicationToolVisible(definition, authz, features)) continue;
@@ -50,7 +50,7 @@ const describeCapabilities: AssistantToolDef = {
       visible.push({
         name: definition.name,
         blurb: oneLine(definition.description),
-        module: definition.featureKey ?? "core",
+        module: moduleOfTool(definition.name, definition.featureKey),
       });
     }
     const byModule = new Map<string, { name: string; blurb: string }[]>();
