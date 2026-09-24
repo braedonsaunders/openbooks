@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { attachExisting, getFile, uploadAndAttach } from '../../../../lib/file-cabinet'
 import { isUuid } from '../../../../lib/list-params'
 import { can, getAuthz } from '../../../../lib/authz'
+import { attachmentMutationRefusal, authorizeAttachmentTargetMutation } from '../lib'
 import {
   attachmentReadPermission,
   attachmentTargetInScope,
@@ -79,15 +80,23 @@ export async function POST(req: Request) {
     if (bytes.length > MAX_BYTES) return NextResponse.json({ error: 'file exceeds 25 MB limit' }, { status: 413 })
     if (bytes.length === 0) return NextResponse.json({ error: 'file is empty' }, { status: 400 })
 
-    const meta = await uploadAndAttach({
-      orgId: gate.user.orgId,
-      targetTable,
-      targetId,
-      filename: file.name || 'attachment',
-      contentType: file.type.split(';')[0]!.trim().toLowerCase(),
-      bytes,
-      createdBy: gate.user.id,
-    })
+    let meta: Awaited<ReturnType<typeof uploadAndAttach>>
+    try {
+      meta = await uploadAndAttach({
+        orgId: gate.user.orgId,
+        targetTable,
+        targetId,
+        filename: file.name || 'attachment',
+        contentType: file.type.split(';')[0]!.trim().toLowerCase(),
+        bytes,
+        createdBy: gate.user.id,
+        authorizeTarget: (tx) => authorizeAttachmentTargetMutation(gate, targetTable, targetId, tx),
+      })
+    } catch (error) {
+      const refusal = attachmentMutationRefusal(error)
+      if (refusal) return refusal
+      throw error
+    }
     return NextResponse.json({ attachment: meta }, { status: 201 })
   }
 
@@ -112,13 +121,21 @@ export async function POST(req: Request) {
   if (!(await getFile(gate.user.orgId, fileId, fileViewer(gate)))) {
     return NextResponse.json({ error: 'file not found' }, { status: 404 })
   }
-  const id = await attachExisting({
-    orgId: gate.user.orgId,
-    fileId,
-    targetTable,
-    targetId,
-    createdBy: gate.user.id,
-  })
+  let id: string | null
+  try {
+    id = await attachExisting({
+      orgId: gate.user.orgId,
+      fileId,
+      targetTable,
+      targetId,
+      createdBy: gate.user.id,
+      authorizeTarget: (tx) => authorizeAttachmentTargetMutation(gate, targetTable, targetId, tx),
+    })
+  } catch (error) {
+    const refusal = attachmentMutationRefusal(error)
+    if (refusal) return refusal
+    throw error
+  }
   if (!id) return NextResponse.json({ error: 'already attached' }, { status: 409 })
   return NextResponse.json({ id }, { status: 201 })
 }

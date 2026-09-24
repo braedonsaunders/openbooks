@@ -4,7 +4,9 @@ import { can } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import {
   attachmentReadPermission,
+  attachmentMutationRefusal,
   attachmentTargetInScope,
+  authorizeAttachmentTargetMutation,
   canMutateFiles,
   loadAttachmentTarget,
   requireSession,
@@ -41,7 +43,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const result = await detachAttachment(gate.user.orgId, id, { actorId: gate.user.id })
+  let result: Awaited<ReturnType<typeof detachAttachment>>
+  try {
+    result = await detachAttachment(gate.user.orgId, id, {
+      actorId: gate.user.id,
+      authorizeAttachmentTarget: (tx, target) => authorizeAttachmentTargetMutation(gate, target.targetTable, target.targetId, tx),
+    })
+  } catch (error) {
+    const refusal = attachmentMutationRefusal(error)
+    if (refusal) return refusal
+    throw error
+  }
   if (!result.ok) {
     if (result.reason === 'retained') {
       return NextResponse.json({ error: 'attachments of posted or active records are retained' }, { status: 409 })

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { can, getAuthz, subsidiaryScopeAllows, type Authz } from '../../../lib/authz'
 import { accessAtLeast, fileAccessLevel, folderAccessLevel, getFile, listAttachments, type AttachedFile, type AccessLevel, type FileViewer } from '../../../lib/file-cabinet'
 
@@ -97,58 +97,68 @@ export interface AttachmentTarget {
 }
 
 /** Load an attachment target without disclosing anything outside the org. */
-export async function loadAttachmentTarget(orgId: string, targetTable: string, targetId: string): Promise<AttachmentTarget | null> {
+export async function loadAttachmentTarget(
+  orgId: string,
+  targetTable: string,
+  targetId: string,
+  executor: SqlExecutor = db,
+  forUpdate = false,
+): Promise<AttachmentTarget | null> {
+  const lock = forUpdate ? sql`for update` : sql``
   type RawTarget = {
     kind?: string | null
     subsidiaryId?: string | null
     partySubsidiaryId?: string | null
     projectSubsidiaryId?: string | null
+    projectId?: string | null
   }
   const row = (
     targetTable === 'documents'
       ? (
-          await db.execute<{ kind: string; subsidiaryId: string | null }>(sql`
+          await executor.execute<{ kind: string; subsidiaryId: string | null }>(sql`
         select kind, subsidiary_id as "subsidiaryId"
           from documents
-         where id = ${targetId} and org_id = ${orgId}`)
+         where id = ${targetId} and org_id = ${orgId} ${lock}`)
         ).rows[0]
       : targetTable === 'parties'
         ? (
-            await db.execute<{ subsidiaryId: string | null }>(sql`
+            await executor.execute<{ subsidiaryId: string | null }>(sql`
           select subsidiary_id as "subsidiaryId"
             from parties
-           where id = ${targetId} and org_id = ${orgId}`)
+           where id = ${targetId} and org_id = ${orgId} ${lock}`)
           ).rows[0]
         : targetTable === 'item_rate_versions'
           ? (
-              await db.execute(sql`
+              await executor.execute(sql`
             select id
               from item_rate_versions
-             where id = ${targetId} and org_id = ${orgId}`)
+             where id = ${targetId} and org_id = ${orgId} ${lock}`)
             ).rows[0]
           : targetTable === 'fixed_assets'
             ? (
-                await db.execute<{ subsidiaryId: string | null }>(sql`
+                await executor.execute<{ subsidiaryId: string | null }>(sql`
               select subsidiary_id as "subsidiaryId"
                 from fixed_assets
-               where id = ${targetId} and org_id = ${orgId}`)
+               where id = ${targetId} and org_id = ${orgId} ${lock}`)
               ).rows[0]
             : targetTable === 'compliance_records'
               ? (
-                  await db.execute<{
+                  await executor.execute<{
                     partySubsidiaryId: string | null
                     projectSubsidiaryId: string | null
+                    projectId: string | null
                   }>(sql`
-                select p.subsidiary_id as "partySubsidiaryId",
+                select cr.project_id as "projectId", p.subsidiary_id as "partySubsidiaryId",
                        pj.subsidiary_id as "projectSubsidiaryId"
                   from compliance_records cr
                   join parties p on p.id = cr.party_id and p.org_id = cr.org_id
                   left join projects pj on pj.id = cr.project_id and pj.org_id = cr.org_id
-                 where cr.id = ${targetId} and cr.org_id = ${orgId}`)
+                 where cr.id = ${targetId} and cr.org_id = ${orgId}
+                 ${forUpdate ? sql`for update of cr, p` : sql``}`)
                 ).rows[0]
               : targetTable === 'lien_waivers'
                 ? (
-                    await db.execute<{
+                    await executor.execute<{
                       partySubsidiaryId: string | null
                       projectSubsidiaryId: string | null
                     }>(sql`
@@ -157,12 +167,19 @@ export async function loadAttachmentTarget(orgId: string, targetTable: string, t
                     from lien_waivers lw
                     join parties p on p.id = lw.party_id and p.org_id = lw.org_id
                   join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
-                   where lw.id = ${targetId} and lw.org_id = ${orgId}`)
+                   where lw.id = ${targetId} and lw.org_id = ${orgId}
+                   ${forUpdate ? sql`for update of lw, p, pj` : sql``}`)
                   ).rows[0]
                 : undefined
   ) as RawTarget | undefined
 
   if (!row) return null
+  if (forUpdate && targetTable === 'compliance_records' && row.projectId) {
+    const project = await executor.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from projects
+       where id = ${row.projectId} and org_id = ${orgId} for update`)
+    row.projectSubsidiaryId = project.rows[0]?.subsidiaryId ?? null
+  }
   return {
     targetTable,
     targetId,
@@ -209,6 +226,29 @@ export function attachmentTargetInScope(authz: Authz, target: AttachmentTarget):
 export async function attachmentTargetVisible(authz: Authz, targetTable: string, targetId: string): Promise<boolean> {
   const target = await loadAttachmentTarget(authz.user.orgId, targetTable, targetId)
   return target !== null && attachmentTargetInScope(authz, target)
+}
+
+export class AttachmentMutationRefusal extends Error {
+  constructor(readonly status: 403 | 404) {
+    super(status === 404 ? 'not found' : 'forbidden')
+  }
+}
+
+/** Recheck target identity, scope, and kind permission under the write transaction's row lock. */
+export async function authorizeAttachmentTargetMutation(
+  authz: Authz,
+  targetTable: string,
+  targetId: string,
+  executor: SqlExecutor,
+): Promise<void> {
+  const target = await loadAttachmentTarget(authz.user.orgId, targetTable, targetId, executor, true)
+  if (!target || !attachmentTargetInScope(authz, target)) throw new AttachmentMutationRefusal(404)
+  if (!canMutateFiles(authz, targetTable, target.kind)) throw new AttachmentMutationRefusal(403)
+}
+
+export function attachmentMutationRefusal(error: unknown): NextResponse | null {
+  if (!(error instanceof AttachmentMutationRefusal)) return null
+  return NextResponse.json({ error: error.message }, { status: error.status })
 }
 
 /** Owning resource permission for a target (or its document kind). */
