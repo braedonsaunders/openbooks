@@ -697,6 +697,16 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // key), preserving sent/skipped history exactly with one audit_log row
     // per cleared row.
     "0329_dunning_sent_at_delivery_evidence.sql",
+    // The migration chain relied on the bootstrap environments.sql backstop
+    // for tenant isolation, so three tables shipped FORCE-without-ENABLE
+    // (0026, 0153) or no RLS at all (0281) and read cross-tenant on a
+    // scratch install; posted documents could regress to draft in storage;
+    // amend-deletes fenced softer than amend-updates; and the GL monthly,
+    // document-balance and payment-stats summaries could drift behind the
+    // rows they summarize. 0334 makes the chain correct standalone and
+    // heals NULL open-balance caches, and widens the governed query
+    // catalog to every reportable org table.
+    "0334_tenant_isolation_and_posting_guards.sql",
     // Content-identical ID-less statement lines are possible overlap, not
     // identity: 0335 adds the nullable self-referencing
     // bank_statement_lines.possible_duplicate_of flag (tenant-coherent
