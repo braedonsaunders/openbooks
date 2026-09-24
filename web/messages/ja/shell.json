@@ -22,7 +22,17 @@
     "platformDescription": "導入全体の運用ツール",
     "security": "サインインのセキュリティ",
     "sandbox": "sandbox",
-    "sampleCompany": "サンプル企業"
+    "sampleCompany": "サンプル企業",
+    "workspace": "ワークスペース",
+    "production": "本番環境",
+    "manageEnvironments": "環境を管理"
+  },
+  "sandboxBanner": {
+    "sandbox": "サンドボックス環境",
+    "sampleCompany": "サンプル企業",
+    "withName": "{environment} · {name} — メール、支払い、連携は無効になっています。",
+    "withoutName": "{environment} — メール、支払い、連携は無効になっています。",
+    "exit": "本番環境に戻る"
   },
   "language": {
     "label": "言語",
@@ -40,7 +50,8 @@
   },
   "topNav": {
     "ariaLabel": "プライマリ",
-    "more": "その他"
+    "more": "その他",
+    "itemsWaiting": "{count, plural, one {待機中 # 件} other {待機中 # 件}}"
   },
   "apps": {
     "ariaLabel": "アプリを開く",

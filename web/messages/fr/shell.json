@@ -22,7 +22,17 @@
     "platformDescription": "Outils d’opérateur pour tout le déploiement",
     "security": "Sécurité de connexion",
     "sampleCompany": "société exemple",
-    "sandbox": "sandbox"
+    "sandbox": "sandbox",
+    "workspace": "Espace de travail",
+    "production": "Production",
+    "manageEnvironments": "Gérer les environnements"
+  },
+  "sandboxBanner": {
+    "sandbox": "Environnement sandbox",
+    "sampleCompany": "Société exemple",
+    "withName": "{environment} · {name} — e-mails, paiements et intégrations désactivés.",
+    "withoutName": "{environment} — e-mails, paiements et intégrations désactivés.",
+    "exit": "Retour à la production"
   },
   "language": {
     "label": "Langue",
@@ -40,7 +50,8 @@
   },
   "topNav": {
     "ariaLabel": "Principal",
-    "more": "Plus"
+    "more": "Plus",
+    "itemsWaiting": "{count, plural, one {# élément en attente} other {# éléments en attente}}"
   },
   "apps": {
     "ariaLabel": "Ouvrir les applications",

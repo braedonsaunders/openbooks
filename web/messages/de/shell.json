@@ -22,7 +22,17 @@
     "platformDescription": "Installationsweite Operator-Werkzeuge",
     "security": "Anmeldesicherheit",
     "sandbox": "sandbox",
-    "sampleCompany": "Beispielunternehmen"
+    "sampleCompany": "Beispielunternehmen",
+    "workspace": "Arbeitsbereich",
+    "production": "Produktion",
+    "manageEnvironments": "Umgebungen verwalten"
+  },
+  "sandboxBanner": {
+    "sandbox": "Sandbox-Umgebung",
+    "sampleCompany": "Beispielunternehmen",
+    "withName": "{environment} · {name} — E-Mails, Zahlungen und Integrationen sind deaktiviert.",
+    "withoutName": "{environment} — E-Mails, Zahlungen und Integrationen sind deaktiviert.",
+    "exit": "Zur Produktion wechseln"
   },
   "language": {
     "label": "Sprache",
@@ -40,7 +50,8 @@
   },
   "topNav": {
     "ariaLabel": "Primär",
-    "more": "Mehr"
+    "more": "Mehr",
+    "itemsWaiting": "{count, plural, one {# wartender Eintrag} other {# wartende Einträge}}"
   },
   "apps": {
     "ariaLabel": "Apps öffnen",

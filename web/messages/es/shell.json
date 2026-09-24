@@ -22,7 +22,17 @@
     "platformDescription": "Herramientas de operador de toda la instalación",
     "security": "Seguridad de inicio",
     "sandbox": "sandbox",
-    "sampleCompany": "empresa de ejemplo"
+    "sampleCompany": "empresa de ejemplo",
+    "workspace": "Espacio de trabajo",
+    "production": "Producción",
+    "manageEnvironments": "Gestionar entornos"
+  },
+  "sandboxBanner": {
+    "sandbox": "Entorno de sandbox",
+    "sampleCompany": "Empresa de ejemplo",
+    "withName": "{environment} · {name} — correos electrónicos, pagos e integraciones desactivados.",
+    "withoutName": "{environment} — correos electrónicos, pagos e integraciones desactivados.",
+    "exit": "Salir a producción"
   },
   "language": {
     "label": "Idioma",
@@ -40,7 +50,8 @@
   },
   "topNav": {
     "ariaLabel": "Principal",
-    "more": "Más"
+    "more": "Más",
+    "itemsWaiting": "{count, plural, one {# elemento en espera} other {# elementos en espera}}"
   },
   "apps": {
     "ariaLabel": "Abrir aplicaciones",

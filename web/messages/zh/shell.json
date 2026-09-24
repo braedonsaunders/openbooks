@@ -22,7 +22,17 @@
     "platformDescription": "部署级运维工具",
     "security": "登录安全",
     "sandbox": "sandbox",
-    "sampleCompany": "示例企业"
+    "sampleCompany": "示例企业",
+    "workspace": "工作区",
+    "production": "生产环境",
+    "manageEnvironments": "管理环境"
+  },
+  "sandboxBanner": {
+    "sandbox": "沙盒环境",
+    "sampleCompany": "示例企业",
+    "withName": "{environment} · {name} — 电子邮件、付款和集成已禁用。",
+    "withoutName": "{environment} — 电子邮件、付款和集成已禁用。",
+    "exit": "返回生产环境"
   },
   "language": {
     "label": "语言",
@@ -40,7 +50,8 @@
   },
   "topNav": {
     "ariaLabel": "主要",
-    "more": "更多"
+    "more": "更多",
+    "itemsWaiting": "{count, plural, one {# 个待处理} other {# 个待处理}}"
   },
   "apps": {
     "ariaLabel": "打开应用",
