@@ -21,7 +21,9 @@ export function SignDocumentForm(props: {
   const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>(
     props.signerStatus === 'signed' ? 'done' : 'idle',
   )
-  const [doneAction, setDoneAction] = useState<'signed' | 'declined' | 'acknowledged'>('signed')
+  const [doneAction, setDoneAction] = useState<'signed' | 'declined' | 'acknowledged'>(
+    props.acknowledgmentOnly ? 'acknowledged' : 'signed',
+  )
   const [error, setError] = useState('')
   const router = useRouter()
 
