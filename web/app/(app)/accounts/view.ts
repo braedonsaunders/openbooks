@@ -208,13 +208,15 @@ export async function loadAccounts(
   }))
 
   const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled, baseCurrency] = await Promise.all([
-    accountId && isUuid(accountId) ? loadAccount(accountId, authz.user.orgId) : null,
+    accountId && isUuid(accountId)
+      ? loadAccount(accountId, authz.user.orgId, authz.allowedSubsidiaryIds)
+      : null,
     subsidiaryFeatureEnabled(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
     orgInfo(authz.user.orgId).then((org) => org?.base_currency ?? ''),
   ])
   const drawerOptions =
-    accountId || creating
+    openAccount || creating
       ? await Promise.all([
           db.execute<ParentOption>(sql`
           select id, number, name, type from accounts

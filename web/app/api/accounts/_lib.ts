@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 export interface AccountPayload {
   account: Record<string, unknown>
@@ -21,7 +22,14 @@ export async function orgBaseCurrency(orgId: string): Promise<string | null> {
 }
 
 /** Tenant-scoped account payload used by both the list flyout and API. */
-export async function loadAccount(id: string, orgId: string): Promise<AccountPayload | null> {
+export async function loadAccount(
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<AccountPayload | null> {
+  const subsidiaryScope = allowedSubsidiaryIds === undefined
+    ? sql``
+    : subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
   const result = (await db.execute<Record<string, unknown>>(sql`
     select a.*,
            case when parent.id is null then null else concat_ws(' ', parent.number, parent.name) end as parent_name,
@@ -34,7 +42,7 @@ export async function loadAccount(id: string, orgId: string): Promise<AccountPay
       from accounts a
       left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
       left join subsidiaries s on s.id = a.subsidiary_id and s.org_id = a.org_id
-     where a.id = ${id} and a.org_id = ${orgId}
+     where a.id = ${id} and a.org_id = ${orgId} ${subsidiaryScope}
   `))
   const row = result.rows[0]
   if (!row) return null
