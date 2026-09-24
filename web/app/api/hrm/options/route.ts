@@ -6,7 +6,11 @@ import {
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { listPositionOptions } from "@openbooks/engine/src/hrm/positions-read.ts";
-import { listLeaveFilingEmploymentOptions, listLeaveTypeOptions } from "@openbooks/engine/src/hrm/leave-read.ts";
+import {
+  listLeaveFilingEmploymentOptions,
+  listLeaveTypeOptions,
+  listOwnLeaveEmploymentOptions,
+} from "@openbooks/engine/src/hrm/leave-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
@@ -29,9 +33,13 @@ export const runtime = "nodejs";
  * caller may file leave on behalf of for the drawer's manager filing mode
  * (managers hold hrm.leave.manage — the same grant plus employer scope the
  * filing gate enforces, never the employment read grant, so a line manager
- * without it can still reach the remedy). The drawer submits ids, never
- * labels; unknown or out-of-scope ids stay absent rather than leaking
- * existence. GET carries no body, so no JSON boundary parser runs here.
+ * without it can still reach the remedy). `source=leave-own-employments`
+ * names the caller's own employments for self-service filing (filers hold
+ * hrm.leave.request — the same ownership the filing gate enforces, so the
+ * picker can never offer an employment the filing refusal would reject).
+ * The drawer submits ids, never labels; unknown or out-of-scope ids stay
+ * absent rather than leaking existence. GET carries no body, so no JSON
+ * boundary parser runs here.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -41,10 +49,14 @@ export async function GET(req: Request) {
     source !== "locations" &&
     source !== "positions" &&
     source !== "leave-types" &&
-    source !== "leave-filing-employments"
+    source !== "leave-filing-employments" &&
+    source !== "leave-own-employments"
   ) {
     return NextResponse.json(
-      { error: "source must be one of employments, locations, positions, leave-types, leave-filing-employments" },
+      {
+        error:
+          "source must be one of employments, locations, positions, leave-types, leave-filing-employments, leave-own-employments",
+      },
       { status: 400 },
     );
   }
@@ -57,7 +69,9 @@ export async function GET(req: Request) {
       ? await guardLeaveOptions()
       : source === "leave-filing-employments"
         ? await guardFeaturePermission("hrm.leave.manage", "hrm")
-        : await guardFeaturePermission(source === "positions" ? "hrm.position.read" : "hrm.employment.read", "hrm");
+        : source === "leave-own-employments"
+          ? await guardFeaturePermission("hrm.leave.request", "hrm")
+          : await guardFeaturePermission(source === "positions" ? "hrm.position.read" : "hrm.employment.read", "hrm");
   if (gate instanceof NextResponse) return gate;
   const rawLimit = url.searchParams.get("limit");
   if (rawLimit !== null && !/^\d+$/.test(rawLimit)) {
@@ -85,6 +99,10 @@ export async function GET(req: Request) {
       const options = await listLeaveFilingEmploymentOptions(
         include === null ? base : { ...base, includeEmploymentId: include },
       );
+      return NextResponse.json({ options: options.map((option) => ({ id: option.employmentId, label: option.label })) });
+    }
+    if (source === "leave-own-employments") {
+      const options = await listOwnLeaveEmploymentOptions({ orgId: gate.user.orgId, actorId: gate.user.id });
       return NextResponse.json({ options: options.map((option) => ({ id: option.employmentId, label: option.label })) });
     }
     const options =

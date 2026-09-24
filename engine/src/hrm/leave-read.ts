@@ -511,6 +511,65 @@ export async function listLeaveFilingEmploymentOptions(
   });
 }
 
+export interface OwnLeaveEmploymentOption {
+  readonly employmentId: string;
+  readonly label: string;
+}
+
+/**
+ * The actor's OWN employments for self-service filing. Authority is the same
+ * ownership the filing gate enforces (requireOwnEmploymentForRequest), so
+ * the picker can never offer an employment the filing refusal would reject.
+ * Labels mirror the on-behalf picker (person, employer, live primary job
+ * title) — the drawer submits the employment id, never a name. An actor
+ * linked to no employment gets [] (truthful empty, never a refusal).
+ */
+export async function listOwnLeaveEmploymentOptions(query: {
+  orgId: string;
+  actorId: string;
+}): Promise<readonly OwnLeaveEmploymentOption[]> {
+  return withOrgTransaction(query.orgId, async () => {
+    const own = await loadOwnEmploymentIds(db, query.orgId, query.actorId);
+    if (own.length === 0) return [];
+    type OwnOptionRow = {
+      employmentId: string;
+      personName: string;
+      employerName: string;
+      jobTitle: string | null;
+    };
+    // Bare JS arrays must never be interpolated into ANY() (they bind as row
+    // constructors); each id is its own parameter.
+    const ids = own.map((id) => sql`${id}::uuid`);
+    const rows = (await db.execute<OwnOptionRow>(sql`
+      select e.id::text as "employmentId",
+             p.display_name as "personName",
+             s.name as "employerName",
+             jt.job_title as "jobTitle"
+        from worker_employments e
+        join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+        join subsidiaries s on s.org_id = e.org_id and s.id = e.employer_subsidiary_id
+        left join lateral (
+          select av.job_title
+            from employment_assignment_versions av
+           where av.org_id = e.org_id
+             and av.employment_id = e.id
+             and av.recorded_until is null
+             and av.is_primary
+           order by av.version_no desc
+           limit 1
+        ) jt on true
+       where e.org_id = ${query.orgId}::uuid
+         and e.id in (${sql.join(ids, sql`, `)})
+       order by p.display_name, e.id`)).rows;
+    return rows.map((row) => ({
+      employmentId: row.employmentId,
+      label: row.jobTitle
+        ? `${row.personName} · ${row.employerName} · ${row.jobTitle}`
+        : `${row.personName} · ${row.employerName}`,
+    }));
+  });
+}
+
 // --- Request reads ----------------------------------------------------------
 
 export interface LeaveRequestSummary {

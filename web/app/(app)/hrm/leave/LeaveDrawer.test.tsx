@@ -77,17 +77,33 @@ const TYPE_ID = "00000000-0000-4000-8000-000000000022";
 const MANAGED_A = "00000000-0000-4000-8000-0000000000a1";
 const MANAGED_B = "00000000-0000-4000-8000-0000000000a2";
 const UNMANAGED = "00000000-0000-4000-8000-0000000000b9";
+// The actor's own employments: self-service files only through these ids,
+// never a free-text uuid.
+const OWN_A = "00000000-0000-4000-8000-0000000000c1";
+const OWN_B = "00000000-0000-4000-8000-0000000000c2";
 
 interface Script {
   posts: Array<{ url: string; body: unknown }>;
 }
 
-function installFetch(script: Script, manageable: boolean): () => void {
+function installFetch(script: Script, manageable: boolean, own: "two" | "one" | "none" = "two"): () => void {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     if (url.includes("/api/hrm/options?source=leave-types")) {
       return Response.json({ options: [{ id: TYPE_ID, label: "PPL-VAC — Vacation" }] });
+    }
+    if (url.includes("/api/hrm/options?source=leave-own-employments")) {
+      const options =
+        own === "two"
+          ? [
+              { id: OWN_A, label: "Quinn Vidal · Main · Nurse" },
+              { id: OWN_B, label: "Rae Smith · Main · Clerk" },
+            ]
+          : own === "one"
+            ? [{ id: OWN_A, label: "Quinn Vidal · Main · Nurse" }]
+            : [];
+      return Response.json({ options });
     }
     if (url.includes("/api/hrm/options?source=leave-filing-employments")) {
       if (!manageable) return Response.json({ error: "denied" }, { status: 403 });
@@ -261,13 +277,20 @@ test("a self-service actor has no mode and posts without onBehalf", async (t) =>
   t.after(unmount);
 
   // The 403 capability probe is the self-service shape, not an error: no
-  // mode, no alert, just the own-employment input.
+  // mode, no alert — and the employment is a picker over the actor's own
+  // employments, never a free-text uuid.
   assert.deepEqual(radios(), [], "a self-service actor never sees the on-behalf mode");
   assert.equal(document.querySelector('[role="alert"]'), null);
-  assert.ok(document.querySelector("input#leave-employment"), "self-service still files by employment");
+  assert.equal(document.querySelector("input#leave-employment") === null, true, "no uuid text input remains");
+  const employmentPicker = nativeSelectFor("leave-employment");
+  assert.deepEqual(
+    [...employmentPicker.querySelectorAll("option")].map((o) => o.value),
+    ["", OWN_A, OWN_B],
+    "the picker names exactly the actor's own employments",
+  );
 
   await act(async () => {
-    setInput(document.querySelector("input#leave-employment") as HTMLInputElement, MANAGED_A);
+    setSelect(employmentPicker, OWN_B);
     await tick();
   });
   const typePicker = nativeSelectFor("leave-type");
@@ -287,5 +310,47 @@ test("a self-service actor has no mode and posts without onBehalf", async (t) =>
   assert.equal(script.posts.length, 1);
   const body = script.posts[0]!.body as Record<string, unknown>;
   assert.ok(!("onBehalf" in body), "self-service filing posts without onBehalf");
-  assert.equal(body.employmentId, MANAGED_A);
+  assert.equal(body.employmentId, OWN_B);
+});
+
+test("self-service filing refuses to save without naming the employment", async (t) => {
+  (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
+  const script: Script = { posts: [] };
+  const restoreFetch = installFetch(script, false);
+  t.after(restoreFetch);
+  const { unmount } = await mountFiling();
+  t.after(unmount);
+
+  await click(buttonNamed("New request"));
+
+  assert.equal(script.posts.length, 0, "no POST leaves without a named employment");
+  assert.match(document.body.textContent ?? "", /Pick the employment this request is filed for/);
+});
+
+test("a single own employment preselects, and none explains instead of an empty picker", async (t) => {
+  (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
+  const script: Script = { posts: [] };
+  const restoreFetch = installFetch(script, false, "one");
+  t.after(restoreFetch);
+  const first = await mountFiling();
+  try {
+    const picker = nativeSelectFor("leave-employment");
+    assert.equal((picker as HTMLSelectElement).value, OWN_A, "the single employment preselects");
+  } finally {
+    await first.unmount();
+  }
+  restoreFetch();
+  const restoreEmpty = installFetch(script, false, "none");
+  t.after(restoreEmpty);
+  const second = await mountFiling();
+  try {
+    assert.equal(document.getElementById("leave-employment"), null, "no empty picker renders");
+    assert.match(
+      document.body.textContent ?? "",
+      /None of your employments can take leave requests/,
+      "the empty shape names the remedy",
+    );
+  } finally {
+    await second.unmount();
+  }
 });

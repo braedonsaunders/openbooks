@@ -226,6 +226,11 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
   const [manageOptions, setManageOptions] = useState<{ value: string; label: string }[]>([])
   const [manageLoaded, setManageLoaded] = useState(false)
   const [onBehalfEmploymentId, setOnBehalfEmploymentId] = useState('')
+  // Self-service employments: the actor's own employments behind the
+  // request grant — the same ownership the filing gate enforces — so the
+  // picker can never offer an employment the filing refusal would reject.
+  const [ownOptions, setOwnOptions] = useState<{ value: string; label: string }[]>([])
+  const [ownLoaded, setOwnLoaded] = useState(false)
   const canFileOnBehalf = manageOptions.length > 0
   const onBehalf = manageLoaded && canFileOnBehalf && filingFor === 'onBehalf'
 
@@ -300,9 +305,53 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
     }
   }, [t])
 
+  // The actor's own employments ride the same options route behind the
+  // request grant. A refusal surfaces with its message intact — it names
+  // the missing grant, which is the remedy.
+  useEffect(() => {
+    let live = true
+    fetch('/api/hrm/options?source=leave-own-employments&limit=100', { method: 'GET' })
+      .then(async (res) => {
+        if (!live) return
+        if (!res.ok) {
+          setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
+          setOwnLoaded(true)
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { id?: unknown; label?: unknown }[]
+        }
+        if (!live) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        const list = page.flatMap((row) =>
+          typeof row.id === 'string' && typeof row.label === 'string'
+            ? [{ value: row.id, label: row.label }]
+            : [],
+        )
+        setOwnOptions(list)
+        // A single employment files without a choice: preselect it so the
+        // common case never meets the required-field refusal.
+        if (list.length === 1 && list[0]) setEmploymentId(list[0].value)
+        setOwnLoaded(true)
+      })
+      .catch(() => {
+        if (live) {
+          setStatus(t('leave.fileFailed'))
+          setOwnLoaded(true)
+        }
+      })
+    return () => {
+      live = false
+    }
+  }, [t])
+
   const save = async (): Promise<void> => {
     if (onBehalf && !onBehalfEmploymentId) {
       setStatus(t('leave.onBehalfEmploymentRequired'))
+      return
+    }
+    if (!onBehalf && !employmentId) {
+      setStatus(t('leave.fileEmploymentRequired'))
       return
     }
     setSaving(true)
@@ -374,10 +423,23 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
             ))}
           </Select>
         </div>
+      ) : ownLoaded && ownOptions.length === 0 ? (
+        <p className="text-sm text-slate-500">{t('leave.fileNoEmployment')}</p>
       ) : (
         <div>
           <Label htmlFor="leave-employment">{t('leave.fileEmploymentLabel')}</Label>
-          <Input id="leave-employment" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)} placeholder={t('leave.fileEmploymentPlaceholder')} />
+          <Select
+            id="leave-employment"
+            value={employmentId}
+            onChange={(event) => setEmploymentId(event.target.value)}
+          >
+            <option value="">{t('leave.fileEmploymentPlaceholder')}</option>
+            {ownOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </div>
       )}
       <div>
