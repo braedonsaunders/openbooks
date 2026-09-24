@@ -357,15 +357,11 @@ async function postInTransitReclass(
     p.direction === "ship"
       ? await stockLocationDim(tx, p.orgId, p.order.from_stock_location_id, null)
       : await stockLocationDim(tx, p.orgId, p.order.to_stock_location_id, null);
-  // Orders without any transit stock location keep the endpoint attribution
-  // rather than failing: resolveTransitLocation refuses those outright.
-  let transitDim: string | null = null;
-  try {
-    transitDim = await stockLocationDim(tx, p.orgId, await resolveTransitLocation(tx, p.orgId, p.order), null);
-  } catch {
-    transitDim = null;
-  }
-  transitDim ??= endpointDim;
+  // Both callers resolve (and validate) the transit location before any
+  // movement or journal posts, so this re-resolution cannot fail where they
+  // succeeded. A refusal propagates by name — never a silent fallback to
+  // the endpoint, which would mis-attribute the in-transit leg.
+  const transitDim = await stockLocationDim(tx, p.orgId, await resolveTransitLocation(tx, p.orgId, p.order), null);
   const lines: JournalLineInput[] =
     p.direction === "ship"
       ? [
