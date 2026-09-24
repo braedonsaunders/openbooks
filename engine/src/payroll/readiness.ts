@@ -1548,47 +1548,129 @@ async function employerLevyRoomConsumed(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<boolean> {
   const run = (await executor.execute<{
-    tax_year: number; calculated_at: Date | string | null; countries: (string | null)[];
+    tax_year: number; calculated_at: Date | string | null;
+    period_start: string; pay_schedule_id: string; schedule_subsidiary_id: string | null;
   }>(sql`
-    select r.tax_year, r.calculated_at,
-           array_remove(array_agg(distinct prof.country), null) as countries
+    select r.tax_year, r.calculated_at, r.period_start::text as period_start,
+           r.pay_schedule_id, s.subsidiary_id as schedule_subsidiary_id
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
-      left join employee_payroll_profiles prof
-        on prof.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
-       and prof.is_active
+      join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-     group by r.tax_year, r.calculated_at
   `));
   const info = run.rows[0];
   if (!info || info.calculated_at === null) return false;
-  const roster = new Set(info.countries.filter((c): c is string => c !== null));
-  let declared = false;
-  for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
-    if (!roster.has(country)) continue;
-    // Phase-8 employer levies manage employer-level room outside the
-    // aggregate channel (CA's EHT exemption), so their presence alone arms
-    // this check — no country branch, just the declared hook.
-    if (pack.applyEmployerLevies != null) {
-      declared = true;
-      break;
+  // The run's affected employees: the population whose earnings claim room —
+  // active schedule profiles, in the schedule's entity, excluding profiles
+  // terminated before the period started (they are not paid, so their
+  // country arms nothing and their absence shares nothing).
+  const mine = (await executor.execute<{
+    employee_party_id: string; country: string; province: string | null;
+  }>(sql`
+    select prof.employee_party_id, prof.country, prof.province
+      from employee_payroll_profiles prof
+      join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+      left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
+     where prof.org_id = ${orgId} and prof.pay_schedule_id = ${info.pay_schedule_id}
+       and prof.is_active and prof.country is not null
+       and (er.terminated_on is null or er.terminated_on >= ${info.period_start}::date)
+       and (${info.schedule_subsidiary_id}::uuid is null
+        or p.subsidiary_id = ${info.schedule_subsidiary_id}::uuid)
+  `)).rows;
+  interface LevyArm {
+    country: string;
+    /** Phase-8 hook levies (CA EHT et al): employer room per province. */
+    phase8: boolean;
+    /** Declared base scope of a per-run aggregate levy. */
+    regional: boolean;
+    /** Per-employee caps are consumed only through shared employees. */
+    perEmployeeCap: boolean;
+    regions: string[];
+    regionless: boolean;
+    employees: string[];
+  }
+  const arms: LevyArm[] = [];
+  for (const row of mine) {
+    const pack = PAYROLL_COUNTRY_PACKS[row.country];
+    if (!pack) continue;
+    let arm = arms.find((a) => a.country === row.country && a.phase8 === (pack.applyEmployerLevies != null));
+    if (!arm) {
+      arm = {
+        country: row.country,
+        phase8: pack.applyEmployerLevies != null,
+        regional: false,
+        perEmployeeCap: false,
+        regions: [],
+        regionless: false,
+        employees: [],
+      };
+      arms.push(arm);
     }
-    let levies: readonly { timing: string }[];
+    if (row.province == null) arm.regionless = true;
+    else if (!arm.regions.includes(row.province)) arm.regions.push(row.province);
+    if (!arm.employees.includes(row.employee_party_id)) arm.employees.push(row.employee_party_id);
+  }
+  const declaredArms: LevyArm[] = [];
+  for (const arm of arms) {
+    const pack = PAYROLL_COUNTRY_PACKS[arm.country]!;
+    if (arm.phase8) {
+      // Phase-8 employer levies manage employer-level room outside the
+      // aggregate channel (CA's EHT exemption), so the hook's presence
+      // alone arms this check — no country branch, just the declared hook.
+      declaredArms.push(arm);
+      continue;
+    }
+    let levies: readonly {
+      timing: string; base?: { scope?: string }; allowance?: { kind?: string };
+    }[];
     try {
       levies = pack.employerAggregateLevies?.(info.tax_year) ?? [];
     } catch {
+      // A pack that refuses the year contributes no levies here, as before.
       continue;
     }
-    if (levies.some((levy) => levy.timing === "per_run")) {
-      declared = true;
-      break;
+    for (const levy of levies) {
+      if (levy.timing !== "per_run") continue;
+      declaredArms.push({
+        ...arm,
+        regional: levy.base?.scope === "region",
+        perEmployeeCap: levy.allowance?.kind === "per_employee_cap",
+      });
     }
   }
-  if (!declared) return false;
+  if (declaredArms.length === 0) return false;
   const calculatedAt = info.calculated_at instanceof Date
     ? info.calculated_at.toISOString()
     : info.calculated_at;
+  // Room truth is caller-independent (the engines read committed history
+  // org-wide with no subsidiary predicate), so the consumer match is scoped
+  // by what the engines actually share: the pack, the levy's aggregation
+  // unit (the employer as a whole, or the employer in one region), and —
+  // for per-employee caps — the affected employees. A US-pack run, a run
+  // with no employee in the levy's unit, and a terminated roster share no
+  // room with this run and never stale it.
+  const armPredicates = declaredArms.map((arm) => sql`
+    exists (
+      select 1
+        from employee_payroll_profiles oprof
+        join parties op on op.id = oprof.employee_party_id and op.org_id = oprof.org_id
+        join pay_schedules osch on osch.id = oprof.pay_schedule_id and osch.org_id = oprof.org_id
+        left join employee_roles oer on oer.party_id = op.id and oer.org_id = oprof.org_id
+       where oprof.org_id = ${orgId} and oprof.pay_schedule_id = other.pay_schedule_id
+         and oprof.is_active and oprof.country = ${arm.country}
+         and (oer.terminated_on is null or oer.terminated_on >= other.period_start)
+         and (osch.subsidiary_id is null or op.subsidiary_id = osch.subsidiary_id)
+         ${arm.regional || arm.phase8
+           ? arm.regionless
+             ? sql``
+             : sql`and oprof.province in (${sql.join(arm.regions.map((r) => sql`${r}`), sql`, `)})`
+           : sql``}
+         ${arm.perEmployeeCap
+           ? sql`and oprof.employee_party_id in (${sql.join(arm.employees.map((e) => sql`${e}`), sql`, `)})`
+           : sql``}
+    )
+  `);
   const consumed = (await executor.execute<{ consumed: boolean }>(sql`
     select exists (
       select 1 from pay_runs other
@@ -1596,6 +1678,7 @@ async function employerLevyRoomConsumed(
          and other.tax_year = ${info.tax_year}
          and other.run_status in ('committed', 'voided')
          and other.updated_at > ${calculatedAt}
+         and (${sql.join(armPredicates, sql` or `)})
     ) as consumed
   `));
   return consumed.rows[0]!.consumed;
