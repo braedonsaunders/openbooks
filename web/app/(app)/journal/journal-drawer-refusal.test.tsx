@@ -148,6 +148,7 @@ async function mountJournal(doc: Record<string, unknown>, initialMode?: string, 
             headerDefs={[]}
             lineDefs={[]}
             initialMode={initialMode as never}
+            canPost
           />
         </MoneyProvider>
       </NextIntlClientProvider>,

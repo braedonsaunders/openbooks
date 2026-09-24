@@ -222,6 +222,9 @@ export async function loadJournal(
           layout: resolvedForm?.layout,
           segments: pickers[7],
           createMode: creating,
+          // Every drawer mutation (save, post, delete, void) requires
+          // gl.post server-side — the drawer hides them all without it.
+          canPost: can(authz, 'gl.post'),
           closeHref,
         }
       : null

@@ -295,6 +295,10 @@ export async function loadRelatedTransactionDrawerData({
         projects: (dimensions.projects),
         subsidiaries,
         segments: (segments),
+        // The drawer hides every mutation (save, post, delete, void)
+        // without gl.post — the related flyout must carry the same flag
+        // the journal page's own loader passes.
+        canPost: can(authz, 'gl.post'),
         headerDefs: headerDefs as JournalProps['headerDefs'],
         lineDefs: lineDefs as JournalProps['lineDefs'],
         layout: resolvedForm.layout,

@@ -129,6 +129,7 @@ test("an editable journal names what belongs in Reference vs Memo", async (t) =>
             headerDefs={[]}
             lineDefs={[]}
             initialMode={"edit" as never}
+            canPost
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
