@@ -152,6 +152,42 @@ test('adjustment inputs are associated with their visible labels', async (t) => 
   }
 })
 
+test('adjustment balance refuses exponent notation and posts large amounts as exact text', async (t) => {
+  let requestBody: Record<string, unknown> | undefined
+  await mountWorkspace(t, (async (_input: unknown, init?: RequestInit) => {
+    if (init?.method === 'PATCH') requestBody = JSON.parse(String(init.body)) as Record<string, unknown>
+    return Response.json({})
+  }) as typeof fetch)
+  const adjust = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Adjust'))
+  assert.ok(adjust)
+  await act(async () => {
+    adjust.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+  })
+  const balance = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null
+  assert.ok(balance)
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+  await act(async () => {
+    setter?.call(balance, '1e3')
+    balance.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+  const save = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Save')) as HTMLButtonElement | undefined
+  assert.ok(save && save.disabled, 'scientific notation must be refused client-side')
+  await act(async () => {
+    setter?.call(balance, '9007199254740993.0123')
+    balance.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+  assert.ok(save && !save.disabled)
+  await act(async () => {
+    save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+  })
+  assert.equal(requestBody?.statementBalance, '9007199254740993.0123')
+})
+
 test('a sign-off refusal surfaces the server message', async (t) => {
   await mountWorkspace(t, (async () => Response.json(
     { error: 'Cannot sign off: 3 statement line(s) through the cutoff remain unmatched' },

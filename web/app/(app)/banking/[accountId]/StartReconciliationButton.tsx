@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 /**
  * Start a reconciliation session (through date + bank statement balance),
  * or resume the account's open one — one open session per account.
@@ -82,7 +83,7 @@ export function StartReconciliationButton({
             <Button variant="outline" onClick={() => setOpen(false)}>
               {tCommon('actions.cancel')}
             </Button>
-            <Button disabled={busy || !throughDate || statementBalance.trim() === '' || Number.isNaN(Number(statementBalance))} onClick={start}>
+            <Button disabled={busy || !throughDate || canonicalDecimal(statementBalance, 4) === null} onClick={start}>
               {busy ? t('starting') : t('start')}
             </Button>
           </>

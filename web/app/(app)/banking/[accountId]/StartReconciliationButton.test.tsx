@@ -130,7 +130,7 @@ test('reconciliation inputs are associated with their visible labels', async (t)
 })
 
 /** Open the drawer and enter a statement balance so Start enables. */
-async function openAndFill(): Promise<void> {
+async function openAndFill(value = '1250.00'): Promise<void> {
   const open = findButton('Start reconciliation')
   assert.ok(open, 'the start button must render')
   await click(open)
@@ -138,12 +138,28 @@ async function openAndFill(): Promise<void> {
   assert.ok(balance, 'the drawer must ask for the statement balance')
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-    setter?.call(balance, '1250.00')
+    setter?.call(balance, value)
     balance.dispatchEvent(new window.Event('input', { bubbles: true }))
     await tick()
     await tick()
   })
 }
+
+test('statement balance input refuses exponent notation without changing exact decimals', async (t) => {
+  await mount(t, () => Response.json({ id: 'rec-9' }))
+  await openAndFill('1e3')
+  const start = findButton('Start')
+  assert.ok(start && start.disabled, 'scientific notation is not a canonical money input')
+})
+
+test('statement balance input keeps large decimal spelling exact until the API boundary', async (t) => {
+  await mount(t, () => Response.json({ id: 'rec-9' }))
+  await openAndFill('9007199254740993.0123')
+  const start = findButton('Start')
+  assert.ok(start && !start.disabled, 'plain decimals with up to four places are accepted')
+  await click(start)
+  assert.deepEqual(script.pushed, ['/banking/acc-1/reconcile/rec-9'])
+})
 
 test('a non-JSON 502 toasts the translated fallback with the status and releases Start', async (t) => {
   await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
