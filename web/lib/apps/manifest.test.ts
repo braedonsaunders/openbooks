@@ -1,5 +1,4 @@
 // Run with:  node --import tsx --test web/lib/apps/manifest.test.ts   (from repo root)
-//
 // Unit tests for App manifest parsing, bundle validation, and content typing.
 
 import { test } from 'node:test'

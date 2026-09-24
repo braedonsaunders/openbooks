@@ -1,5 +1,4 @@
 // Run with:  node --import tsx --test web/lib/apps/manifest-tools.test.ts   (from repo root)
-//
 // Unit tests for App-declared assistant/MCP tools: the manifest `tools`
 // contract (AppToolSpec) and its install-time validation.
 

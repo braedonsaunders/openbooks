@@ -1,5 +1,4 @@
 // Run with: node --import tsx --test web/lib/apps/store-audit.test.ts
-//
 // The source-level checks stay runnable without PostgreSQL (and guard the
 // ordering that makes the evidence durable). When a test database is
 // available, the integration cases below exercise the actual store entry

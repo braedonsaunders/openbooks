@@ -1,5 +1,4 @@
 // Run with:  node --import tsx --test web/lib/apps/zip.test.ts   (from repo root)
-//
 // Unit tests for zip-bundle parsing and objects/*.json spec validation.
 
 import { test } from 'node:test'
