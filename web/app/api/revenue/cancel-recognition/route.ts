@@ -4,6 +4,7 @@ import {
   cancelRevenueRecognitionForInvoice,
   RevenueRecognitionCancellationError,
 } from '@openbooks/engine/src/revenue/recognition.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { DocumentVoidError } from '@openbooks/engine/src/ledger/document-void.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -66,12 +67,16 @@ export async function POST(req: Request) {
       actorId: user.id,
       reason: body.reason,
       reversalDate,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     return NextResponse.json(
       { ok: true, ...result },
       { status: result.status === 'pending_approval' ? 202 : 200 },
     )
   } catch (error) {
+    if (error instanceof ScopeNotFoundError) {
+      return NextResponse.json({ error: 'invoice not found' }, { status: 404 })
+    }
     if (error instanceof RevenueRecognitionCancellationError) {
       return NextResponse.json({ error: error.message }, { status: 422 })
     }

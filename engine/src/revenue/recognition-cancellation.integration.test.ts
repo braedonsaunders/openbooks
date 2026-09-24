@@ -135,6 +135,7 @@ test(
         actorId: actors.adminId,
         reason: "Customer contract terminated before the remaining service term",
         reversalDate: "2026-07-31",
+        allowedSubsidiaryIds: null,
       };
 
       // A downstream posted document blocks the invoice's controlled void.
