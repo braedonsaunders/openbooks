@@ -70,7 +70,7 @@ test(
         await db.execute(sql\`
           update orgs
              set settings = settings || \${JSON.stringify({
-               laborCosting: { mode: "post", hoursPerDay: 8, annualHours: 2080, components: [] },
+               laborCosting: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] },
                controlAccounts: {
                  ar: org.accounts.ar,
                  ap: org.accounts.ap,
@@ -123,6 +123,7 @@ test(
             actorId,
             employeePartyId: employeeId,
             weekStart: "2026-07-12",
+            allowedSubsidiaryIds: null,
           }),
           /no accounting period covers/,
         );
@@ -188,8 +189,8 @@ test(
              set settings = settings || \${JSON.stringify({
                laborCosting: {
                  mode: "post",
-                 hoursPerDay: 8,
-                 annualHours: 2080,
+                 hoursPerDay: "8",
+                 annualHours: "2080",
                  components: [],
                },
                controlAccounts: {
@@ -300,6 +301,7 @@ test(
             actorId: failed.actorId,
             employeePartyId: failed.employeeId,
             weekStart: '2026-07-12',
+            allowedSubsidiaryIds: null,
           }),
           (error) => /injected timesheet header update failure/.test(
             String(error?.cause?.message ?? error?.message),
@@ -350,6 +352,7 @@ test(
           actorId: committed.actorId,
           employeePartyId: committed.employeeId,
           weekStart: '2026-07-12',
+          allowedSubsidiaryIds: null,
         });
         assert.deepEqual(ids, [committed.timeEntryId]);
 

@@ -52,7 +52,14 @@ export async function registerFlowApprovalReleaseHandlers(): Promise<void> {
   }) => {
     if (!ctx.userId) throw new Error('timesheet approval needs an acting user')
     const { releaseTimesheetWeekApproval } = await import('./timesheet-approval-release')
-    await releaseTimesheetWeekApproval(ctx.orgId, ctx.userId, subjectId, outcome, comment)
+    await releaseTimesheetWeekApproval(
+      ctx.orgId,
+      ctx.userId,
+      subjectId,
+      outcome,
+      ctx.allowedSubsidiaryIds ?? null,
+      comment,
+    )
   })
 
   // Crew batch approval routing is tenant-authored in Flows as well. The

@@ -17,6 +17,8 @@ export interface FlowExecCtx {
   orgId: string;
   /** The acting user when the event came from a request; absent for timers. */
   userId?: string | null;
+  /** Request scope is carried through approval release hooks to locked writers. */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }
 
 /**

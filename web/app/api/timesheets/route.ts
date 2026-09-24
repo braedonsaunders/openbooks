@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { checkProjectsWriteEnabled, isFeatureEnabled } from '../../../lib/features'
@@ -90,9 +91,16 @@ export async function GET(req: Request) {
 
   const ownedEmployee = await pinTimesheetEmployee(orgId, employee, gate.allowedSubsidiaryIds)
   if (!ownedEmployee) return bad('Employee not found')
-
-  const payload = await loadWeek(orgId, ownedEmployee, weekStart(weekParam), gate.allowedSubsidiaryIds)
-  return NextResponse.json(payload)
+  try {
+    return await withOrgTransaction(orgId, async () => {
+      await lockScopeRow(db, orgId, 'party', ownedEmployee, gate.allowedSubsidiaryIds, 'share')
+      const payload = await loadWeek(orgId, ownedEmployee, weekStart(weekParam), gate.allowedSubsidiaryIds)
+      return NextResponse.json(payload)
+    })
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    throw error
+  }
 }
 
 /**
@@ -276,8 +284,11 @@ async function save(req: Request) {
   // Set when the revision fence below refuses the save; answered as a 409
   // after the transaction (which wrote nothing) commits empty.
   let staleRevision: string | null = null
-  const projectsRefused = await withOrgTransaction(orgId, async () => {
+  let projectsRefused: boolean
+  try {
+    projectsRefused = await withOrgTransaction(orgId, async () => {
     const tx = db
+    await lockScopeRow(tx, orgId, 'party', ownedEmployee, gate.allowedSubsidiaryIds, 'share')
     // When approval is not required, saved entries land already approved, so
     // the replaceable set has to include those too — otherwise every save
     // would insert a second copy of the week's hours alongside the first.
@@ -461,7 +472,11 @@ async function save(req: Request) {
     // carry theirs.
     if (newStatus === 'approved') await runTimeApprovalEffects(orgId, user.id, savedIds)
     return false
-  })
+    })
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    throw error
+  }
   if (staleRevision !== null) {
     return NextResponse.json(
       { error: STALE_WEEK_ERROR, code: 'timesheet_stale_revision', revision: staleRevision },

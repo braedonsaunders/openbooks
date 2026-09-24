@@ -53,6 +53,7 @@ const SEED = `
     seedFlowActors,
   } from "./engine/src/testing/fixtures.ts";
   import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
+  import { releaseTimesheetWeekApproval } from "./web/lib/timesheet-approval-release.ts";
 
   installTrustedTestDatabaseBypass();
 
@@ -155,6 +156,7 @@ test(
             actorId: fixture.actorId,
             employeePartyId: fixture.employeeId,
             weekStart: "2026-07-12",
+            allowedSubsidiaryIds: null,
           }),
           /no submitted entries|nothing submitted/i,
         );
@@ -185,6 +187,7 @@ test(
           actorId: fixture.actorId,
           employeePartyId: fixture.employeeId,
           weekStart: "2026-07-12",
+          allowedSubsidiaryIds: null,
         });
         await assert.rejects(
           approveSubmittedTimeEntries({
@@ -192,6 +195,7 @@ test(
             actorId: fixture.actorId,
             employeePartyId: fixture.employeeId,
             weekStart: "2026-07-12",
+            allowedSubsidiaryIds: null,
           }),
           /already approved by .+ on \\d{4}-\\d{2}-\\d{2}.*reopen or amend/i,
         );
@@ -217,6 +221,7 @@ test(
             actorId: fixture.actorId,
             employeePartyId: fixture.employeeId,
             weekStart: "2026-07-12",
+            allowedSubsidiaryIds: null,
           }),
           /pending approval|approval workflow|open gate/i,
         );
@@ -261,6 +266,7 @@ test(
             actorId: fixture.actorId,
             employeePartyId: fixture.employeeId,
             weekStart: "2026-07-12",
+            allowedSubsidiaryIds: null,
           }),
           /no covering wage rate.*Guard Worker.*2026-07-15.*labor costing setup/i,
         );
@@ -293,6 +299,7 @@ test(
           actorId: fixture.actorId,
           employeePartyId: fixture.employeeId,
           weekStart: "2026-07-12",
+          allowedSubsidiaryIds: null,
         });
         assert.deepEqual(ids, [fixture.timeEntryId]);
         const entry = await db.execute(sql\`
@@ -325,6 +332,7 @@ test(
           actorId: fixture.actorId,
           employeePartyId: fixture.employeeId,
           weekStart: "2026-07-12",
+          allowedSubsidiaryIds: null,
         });
         assert.deepEqual(ids, [fixture.timeEntryId]);
         const entry = await db.execute(sql\`
@@ -332,6 +340,53 @@ test(
         \`);
         assert.equal(entry.rows[0].status, "approved");
         assert.equal(entry.rows[0].cost_rate, null);
+      } finally {
+        await dropScratchOrg(fixture.org.orgId);
+      }
+    `);
+  },
+);
+
+test(
+  "every timesheet approval writer refuses a rehomed employee under the service transaction lock",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runIntegrationSource(`
+      ${SEED}
+      const fixture = await seedWeek({ withSubmittedEntry: true, withWage: true });
+      const subsidiaryB = randomUUID();
+      try {
+        await db.execute(sql\`
+          insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+          values (\${subsidiaryB}, \${fixture.org.orgId}, \${fixture.org.subsidiaryId}, 'Approval rehome target', 'CAD', 'CA')
+        \`);
+        // This is the change that can race the route's earlier pin. The
+        // service must observe B while acquiring its party lock in the same
+        // transaction that would approve and post the hours.
+        await db.execute(sql\`update parties set subsidiary_id = \${subsidiaryB} where org_id = \${fixture.org.orgId} and id = \${fixture.employeeId}\`);
+        const allowedSubsidiaryIds = new Set([fixture.org.subsidiaryId]);
+        const approvalWriters = [
+          ['direct approval', () => approveSubmittedTimeEntries({
+            orgId: fixture.org.orgId,
+            actorId: fixture.actorId,
+            employeePartyId: fixture.employeeId,
+            weekStart: '2026-07-12',
+            allowedSubsidiaryIds,
+          })],
+          ['flow gate release', () => releaseTimesheetWeekApproval(
+            fixture.org.orgId,
+            fixture.actorId,
+            fixture.headerId,
+            'approved',
+            allowedSubsidiaryIds,
+          )],
+        ];
+        for (const [name, write] of approvalWriters) {
+          await assert.rejects(write(), (error) => error?.name === 'ScopeNotFoundError' && error?.status === 404, name);
+        }
+        const entry = await db.execute(sql\`select status, cost_journal_entry_id from time_entries where id = \${fixture.timeEntryId}\`);
+        assert.equal(entry.rows[0].status, 'submitted');
+        assert.equal(entry.rows[0].cost_journal_entry_id, null);
       } finally {
         await dropScratchOrg(fixture.org.orgId);
       }

@@ -21,6 +21,7 @@ export async function releaseTimesheetWeekApproval(
   actorId: string,
   subjectId: string,
   outcome: 'approved' | 'rejected',
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   comment?: string | null,
 ): Promise<void> {
   const parsed = await resolveTimesheetWeek(subjectId, orgId)
@@ -33,6 +34,7 @@ export async function releaseTimesheetWeekApproval(
       actorId,
       employeePartyId: parsed.employeePartyId,
       weekStart: from,
+      allowedSubsidiaryIds,
     })
     return
   }
