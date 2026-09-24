@@ -18,14 +18,15 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockAuthz = `
+const mockAuthz = (realUrl: string): string => `
   const state = globalThis[Symbol.for('openbooks.payment-providers-route-test')]
+  export * from ${JSON.stringify(realUrl)}
   export async function guardPermission(_permission) {
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
@@ -52,20 +53,26 @@ const hooks = registerHooks({
       );
     }
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/payment-providers")) {
-      return { url: "mock:authz", shortCircuit: true };
+      // Re-export the REAL authz module and override only the session gate,
+      // so scope guards under test (guardUnrestrictedScope, guardSubsidiaryScope)
+      // are the production implementations, never test-double copies.
+      const real = nextResolve(specifier, context).url;
+      const source = mockAuthz(real);
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: `data:text/javascript,${encodeURIComponent(source)}`,
+      };
     }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === "mock:authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
     return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?payment-providers-boundary-test";
-const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
@@ -106,6 +113,50 @@ function authorize(f: Fixture): void {
     permissions: new Set(["admin.setup.manage"]),
     allowedSubsidiaryIds: null,
   };
+}
+
+function authorizeScope(f: Fixture, scope: Set<string> | null): void {
+  routeState.authz = {
+    user: { orgId: f.orgId, id: f.actorId },
+    permissions: new Set(["admin.setup.manage"]),
+    allowedSubsidiaryIds: scope,
+  };
+}
+
+/** A second entity with its own bank and income accounts, invisible to A-only callers. */
+async function seedForeignEntity(orgId: string, parentSubsidiaryId: string): Promise<{
+  subsidiaryId: string;
+  bankAccountId: string;
+  incomeAccountId: string;
+}> {
+  const subsidiaryId = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${subsidiaryId}, ${orgId}, ${parentSubsidiaryId}, 'Entity B', 'CAD', 'CA')
+  `);
+  const bankAccountId = randomUUID();
+  await db.execute(sql`
+    insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active,
+                          eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+    values (${bankAccountId}, ${orgId}, '1099-B', 'Entity B settlement', 'asset_bank', ${subsidiaryId},
+            false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
+  `);
+  const incomeAccountId = randomUUID();
+  await db.execute(sql`
+    insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active,
+                          eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+    values (${incomeAccountId}, ${orgId}, '4199-B', 'Entity B fee income', 'income', ${subsidiaryId},
+            false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
+  `);
+  return { subsidiaryId, bankAccountId, incomeAccountId };
+}
+
+/** The scratch org's own (Main Co) subsidiary: the A-only caller's scope. */
+async function ownSubsidiaryId(orgId: string): Promise<string> {
+  const rows = await db.execute<{ id: string }>(sql`
+    select id from subsidiaries where org_id = ${orgId} order by created_at limit 1
+  `);
+  return rows.rows[0]!.id;
 }
 
 /** How much trace exists in this org: stored rules and audit rows. */
@@ -507,6 +558,87 @@ test("deletion stores the real deactivated row and refuses phantom or repeat del
     const t = await trace(f.orgId);
     assert.equal(t.rules, 1);
     assert.equal(t.audits, 2);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("a restricted caller lists only shared and in-scope accounts, never another entity's", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    const own = await ownSubsidiaryId(f.orgId);
+    const foreign = await seedForeignEntity(f.orgId, own);
+    authorizeScope(f, new Set([own]));
+    const res = await GET();
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      bankAccounts: Array<{ id: string; number: string; name: string }>;
+      incomeAccounts: Array<{ id: string; number: string; name: string }>;
+    };
+    const bankIds = body.bankAccounts.map((a) => a.id);
+    const incomeIds = body.incomeAccounts.map((a) => a.id);
+    assert.ok(!bankIds.includes(foreign.bankAccountId), "Entity B's settlement bank must not enumerate");
+    assert.ok(!incomeIds.includes(foreign.incomeAccountId), "Entity B's fee income account must not enumerate");
+    assert.ok(bankIds.includes(f.bankAccount), "shared-chart bank accounts stay visible");
+    assert.ok(incomeIds.includes(f.revenueAccount), "shared-chart income accounts stay visible");
+    assert.ok(
+      body.bankAccounts.every((a) => a.name !== "Entity B settlement"),
+      "no foreign account name may leak through the picker",
+    );
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("a restricted caller cannot save org-wide provider config, and nothing persists", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    const own = await ownSubsidiaryId(f.orgId);
+    await seedForeignEntity(f.orgId, own);
+    // Baseline saved by an unrestricted caller.
+    authorize(f);
+    const baseline = await POST(postRequest({
+      provider: "stripe",
+      acceptanceEnabled: true,
+      defaultBankAccountId: f.bankAccount,
+    }));
+    assert.equal(baseline.status, 200);
+    // A restricted caller naming even an in-scope bank is refused by name.
+    authorizeScope(f, new Set([own]));
+    const refused = await POST(postRequest({
+      provider: "stripe",
+      acceptanceEnabled: true,
+      defaultBankAccountId: f.bankAccount,
+    }));
+    assert.equal(refused.status, 403);
+    assert.deepEqual(await refused.json(), { error: "requires unrestricted subsidiary access" });
+    const stored = await db.execute<{ bank_account_id: string | null }>(sql`
+      select default_bank_account_id as bank_account_id
+        from psp_provider_configs where org_id = ${f.orgId} and provider = 'stripe'
+    `);
+    assert.equal(stored.rows[0]!.bank_account_id, f.bankAccount);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("a restricted caller cannot point a surcharge rule at another entity's fee account", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    const own = await ownSubsidiaryId(f.orgId);
+    const foreign = await seedForeignEntity(f.orgId, own);
+    authorizeScope(f, new Set([own]));
+    const res = await POST(postRequest(baseRule({ feeIncomeAccountId: foreign.incomeAccountId })));
+    assert.equal(res.status, 422);
+    assert.deepEqual(await res.json(), { error: "fee income account not found" });
+    assert.deepEqual(await storedRules(f.orgId), []);
+    // Their own scope still works: the shared-chart fee account saves.
+    const allowed = await POST(postRequest(baseRule({ feeIncomeAccountId: f.revenueAccount })));
+    assert.equal(allowed.status, 200);
+    assert.equal((await storedRules(f.orgId)).length, 1);
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);
