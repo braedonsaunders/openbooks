@@ -75,7 +75,7 @@ function call(
   method: string,
   body: unknown,
   params: boolean,
-  id = randomUUID(),
+  id: string = randomUUID(),
 ): Promise<Response> {
   const handler = handlers.get(file)!;
   const req = new Request(`http://openbooks.test/${file}`, {
