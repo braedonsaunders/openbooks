@@ -12,7 +12,7 @@ import {
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/delivery/email-config.ts'
 import { deriveEmailDeliveryKey, documentEmail, isValidEmailAddress, sendVia } from '@openbooks/emails'
-import { guardPermission } from '../../../../../../lib/authz'
+import { can, guardPermission, subsidiaryScopeAllows } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { resolvePeriod } from '../../../../../../lib/periods'
@@ -43,10 +43,20 @@ function sideOf(req: Request, body?: { side?: unknown }): Side {
 }
 
 async function loadParty(orgId: string, id: string) {
-  const rows = (await db.execute<{ id: string; display_name: string | null; email: string | null }>(sql`
-    select id, display_name, email from parties where id = ${id} and org_id = ${orgId} limit 1
+  const rows = (await db.execute<{ id: string; display_name: string | null; email: string | null; subsidiary_id: string | null }>(sql`
+    select id, display_name, email, subsidiary_id from parties where id = ${id} and org_id = ${orgId} limit 1
   `)).rows
   return rows[0] ?? null
+}
+
+/**
+ * The party is the record boundary (null-subsidiary parties are org-wide,
+ * like the transaction drawer): an out-of-scope party answers exactly like
+ * a missing one, so neither the GET prefill nor the POST send discloses or
+ * delivers another subsidiary's contact.
+ */
+function partyInScope(allowedSubsidiaryIds: Set<string> | null, party: { subsidiary_id: string | null }): boolean {
+  return subsidiaryScopeAllows(allowedSubsidiaryIds, party.subsidiary_id, { orgWideNull: true })
 }
 
 /** GET — default recipient to prefill the send dialog. */
@@ -57,7 +67,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (gate instanceof NextResponse) return gate
   if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const party = await loadParty(gate.user.orgId, id)
-  if (!party) return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
+    return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  }
   return NextResponse.json({ to: party.email?.trim() || null, partyName: party.display_name })
 }
 
@@ -71,9 +83,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const sendPermission = side === 'ap' ? 'ap.create' : 'ar.create'
   const gate = await guardPermission(sendPermission)
   if (gate instanceof NextResponse) return gate
+  // Rendering the statement runs the report engine, which requires
+  // reports.read (requireReportAuthz): a create-only sender would otherwise
+  // reach it and answer a generic 422 'Report access denied'. Require the
+  // full set at the boundary, by name.
+  if (!can(gate, 'reports.read')) {
+    return NextResponse.json({ error: 'missing permission: reports.read' }, { status: 403 })
+  }
   if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const party = await loadParty(gate.user.orgId, id)
-  if (!party) return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
+    return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  }
 
   const requestedTo = typeof body.to === 'string' ? body.to.trim() : ''
   if (requestedTo !== '' && !isValidEmailAddress(requestedTo)) {
