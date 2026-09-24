@@ -109,7 +109,6 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'web/lib/multi-book-balance-readers.test.ts',
   'web/lib/rate-adjustment-pricing.test.ts',
   'web/lib/reports-posted.test.ts',
-  'web/lib/setup-route-contract.test.ts',
 ])
 
 // Restore is an isolated disaster-recovery rehearsal. It has its own

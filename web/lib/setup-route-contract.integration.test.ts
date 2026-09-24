@@ -9,6 +9,11 @@ import { sql } from "drizzle-orm";
 // used to build a uuid[] literal out of request ids; a malformed account id
 // must be refused as the documented client error at the boundary — never a
 // server-side 22P02 escaping as a 500, and never a partial write.
+//
+// Database partition: every case here needs PostgreSQL (scratch orgs,
+// ownership interests, segment hierarchies). The unit partition has no
+// database, so this file carries the .integration suffix with no skip
+// guards.
 const stateKey = Symbol.for("openbooks.setup-route-contract-test");
 interface RouteState {
   authz: {
@@ -164,7 +169,7 @@ async function persistedAuditCount(orgId: string): Promise<number> {
   return r.rows[0]!.n;
 }
 
-test("a valid ownership write persists the interest with audit evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a valid ownership write persists the interest with audit evidence", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -199,7 +204,7 @@ test("a valid ownership write persists the interest with audit evidence", { skip
   }
 });
 
-test("a malformed or hostile ownership account id is a contract 400 that writes nothing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a malformed or hostile ownership account id is a contract 400 that writes nothing", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -258,7 +263,7 @@ function fullOwnershipBody(f: Fixture): Record<string, unknown> {
   };
 }
 
-test("a full-method ownership without goodwill legs is a typed refusal without SQL", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a full-method ownership without goodwill legs is a typed refusal without SQL", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -282,7 +287,7 @@ test("a full-method ownership without goodwill legs is a typed refusal without S
   }
 });
 
-test("a full-method ownership with goodwill legs persists", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("a full-method ownership with goodwill legs persists", async () => {
   const f = await seed();
   try {
     routeState.authz = {
@@ -307,7 +312,7 @@ test("a full-method ownership with goodwill legs persists", { skip: !process.env
   }
 });
 
-test("blank keepDefault ownership fields fall through to database defaults", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("blank keepDefault ownership fields fall through to database defaults", async () => {
   // F-t06-022: the drawer sends explicit empty strings for untouched
   // keepDefault inputs. The registry documents those columns as NOT NULL
   // WITH a database default, so blanks are legal input — never a missing
@@ -409,7 +414,7 @@ async function segmentAuditCount(orgId: string): Promise<number> {
   return result.rows[0]!.n;
 }
 
-test("segment value PATCH preflights cycles and preserves the audited valid path", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("segment value PATCH preflights cycles and preserves the audited valid path", async () => {
   const f = await seedSegmentFixture();
   try {
     routeState.authz = {
@@ -444,7 +449,7 @@ test("segment value PATCH preflights cycles and preserves the audited valid path
   }
 });
 
-test("segment value imports inherit storage scope enforcement and audit valid writes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("segment value imports inherit storage scope enforcement and audit valid writes", async () => {
   const f = await seedSegmentFixture();
   try {
     const entity = SETUP_ENTITY_BY_KEY.get("segment-values");
