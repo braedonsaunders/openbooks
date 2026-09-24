@@ -274,7 +274,7 @@
       "matchMode": "规则匹配",
       "rules": "分派规则",
       "rulesHint": "可选。每条规则将某个字段与某个值进行匹配，以将线索分派至此。字段：region、country、annualRevenue。运算符：equals、contains、in、gte、lte。",
-      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
       "members": "团队成员",
       "targetType": "目标类型",
       "isQualified": "已鉴定状态",

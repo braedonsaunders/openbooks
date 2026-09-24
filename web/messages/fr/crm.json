@@ -281,7 +281,7 @@
       "isDefault": "Par défaut",
       "isActive": "Actif",
       "rulesHint": "Facultatif. Chaque règle compare un champ à une valeur pour router les pistes ici. Champs : region, country, annualRevenue. Opérateurs : equals, contains, in, gte, lte.",
-      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "rulesPlaceholder": "['{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }']",
       "requiresLines": "Lignes obligatoires",
       "requiresPrimaryContact": "Contact principal obligatoire",
       "requiresPositiveAmount": "Montant positif obligatoire",
