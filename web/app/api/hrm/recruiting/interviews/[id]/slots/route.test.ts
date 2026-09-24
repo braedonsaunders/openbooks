@@ -138,61 +138,60 @@ function params() {
   return { params: Promise.resolve({ id: INTERVIEW_ID }) };
 }
 
-if (isVitest) {
-  test("slots routes gate on the scheduling switch and the manage grant", async () => {
-    const { readFileSync } = await import("node:fs");
-    assert.match(readFileSync(new URL("./route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.manage"\)/);
-    assert.match(readFileSync(new URL("./route.ts", import.meta.url), "utf8"), /hrmInterviewScheduling/);
-    assert.match(readFileSync(new URL("./bodies.ts", import.meta.url), "utf8"), /poolId/);
-  });
-} else {
-  test("a switched-off scheduling surface 404s before the service runs", async () => {
-    reset();
-    routeState.features.hrmInterviewScheduling = false;
-    assert.equal(
-      (await slotsRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", { poolId: "pool-1" }), params())).status,
-      404,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a switched-off scheduling surface 404s before the service runs", async () => {
+  reset();
+  routeState.features.hrmInterviewScheduling = false;
+  assert.equal(
+    (await slotsRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", { poolId: "pool-1" }), params())).status,
+    404,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("propose forwards the pool id when windows ride a pool", async () => {
-    reset();
-    const response = await slotsRoute!.POST(
-      jsonRequest("http://openbooks.test/x", "POST", { poolId: "pool-1" }),
-      params(),
-    );
-    assert.equal(response.status, 201);
-    assert.equal(routeState.calls[0]!.fn, "propose");
-    const args = routeState.calls[0]!.args as Record<string, unknown>;
-    assert.equal(args.poolId, "pool-1");
-    assert.equal(args.windows, undefined);
-    assert.equal(args.interviewId, INTERVIEW_ID);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  const response = await slotsRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", { poolId: "pool-1" }), params());
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("propose forwards explicit windows unchanged", async () => {
-    reset();
-    const windows = [{ startsAt: "2027-10-01T09:00:00Z", endsAt: "2027-10-01T09:30:00Z", timezone: "America/Toronto" }];
-    const response = await slotsRoute!.POST(
-      jsonRequest("http://openbooks.test/x", "POST", { windows }),
-      params(),
-    );
-    assert.equal(response.status, 201);
-    assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).windows, windows);
-  });
+test("propose forwards the pool id when windows ride a pool", async () => {
+  reset();
+  const response = await slotsRoute!.POST(
+    jsonRequest("http://openbooks.test/x", "POST", { poolId: "pool-1" }),
+    params(),
+  );
+  assert.equal(response.status, 201);
+  assert.equal(routeState.calls[0]!.fn, "propose");
+  const args = routeState.calls[0]!.args as Record<string, unknown>;
+  assert.equal(args.poolId, "pool-1");
+  assert.equal(args.windows, undefined);
+  assert.equal(args.interviewId, INTERVIEW_ID);
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("propose at least one availability window or name an interviewer pool");
-    routeState.serviceThrow = refusal;
-    const response = await slotsRoute!.POST(
-      jsonRequest("http://openbooks.test/x", "POST", {}),
-      params(),
-    );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-    // The error body is checked before it is parsed: the refusal arrives as
-    // JSON with an error member, never a parse failure.
-    assert.match(String((await response.json()).error), /availability window/);
-  });
-}
+test("propose forwards explicit windows unchanged", async () => {
+  reset();
+  const windows = [{ startsAt: "2027-10-01T09:00:00Z", endsAt: "2027-10-01T09:30:00Z", timezone: "America/Toronto" }];
+  const response = await slotsRoute!.POST(
+    jsonRequest("http://openbooks.test/x", "POST", { windows }),
+    params(),
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).windows, windows);
+});
+
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("propose at least one availability window or name an interviewer pool");
+  routeState.serviceThrow = refusal;
+  const response = await slotsRoute!.POST(
+    jsonRequest("http://openbooks.test/x", "POST", {}),
+    params(),
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+  // The error body is checked before it is parsed: the refusal arrives as
+  // JSON with an error member, never a parse failure.
+  assert.match(String((await response.json()).error), /availability window/);
+});
