@@ -245,11 +245,31 @@ test("computeStatutory prices a 2026 OW month end to end (the adapter path)", as
   assert.equal(pushed.find((line) => line.systemKey === "sdl")?.amount, "11.2500");
 });
 
+test("a foreign employee has no CPF lines but still owes the monthly SDL", async () => {
+  const { ctx, pushed } = stubContext({
+    income: "2000.00",
+    pensionable: "2000.00",
+    insurable: "2000.00",
+    certificateFor: () => ({
+      certificate: SG_PAYROLL_PACK.certificates().certificates[0]!,
+      onFile: true,
+      effectiveFrom: "2026-01-01",
+      answers: { cpf_status: "foreigner", age_band: "le55" },
+      missing: [],
+    }),
+  });
+  const factors = await SG_PAYROLL_PACK.computeStatutory(ctx);
+  assert.equal(factors["CPF_APPLICABLE"], "false");
+  assert.equal(factors["CPF_EE"], undefined);
+  assert.equal(factors["CPF_ER"], undefined);
+  assert.equal(factors["SDL"], "5.0000");
+  assert.deepEqual(pushed.map(({ systemKey }) => systemKey), ["sdl"]);
+});
+
 test("computeStatutory refuses without the certificate, and refuses foreign/PR/aged statuses", async () => {
   const { ctx: noCert } = stubContext({ certificateFor: () => null });
   await assert.rejects(() => SG_PAYROLL_PACK.computeStatutory(noCert), /without the sg_cpf_status certificate/);
   for (const [status, band, pattern] of [
-    ["foreigner", "le55", /no CPF for a foreign employee/],
     ["spr_1st_year", "le55", /graduated rates/],
     ["citizen", "b60_65", /age band/],
   ] as const) {

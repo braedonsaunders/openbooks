@@ -128,6 +128,8 @@ export interface SgStatutoryInput {
 }
 
 export interface SgStatutoryResult {
+  /** False for foreigners, who are outside CPF but remain subject to SDL. */
+  cpfApplicable: boolean;
   /** OW subject to CPF after the $8,000 monthly ceiling, cents. */
   owSubjectCents: bigint;
   /** Total CPF contribution, whole dollars as cents. */
@@ -166,18 +168,13 @@ export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand, tables:
       + `"spr_1st_year", "spr_2nd_year" or "foreigner"`,
     );
   }
+  // Foreign workers are outside CPF by statute. Their work-permit levy, if
+  // any, is a separate MOM employer charge; it does not make SDL inapplicable.
+  if (status === "foreigner") return;
   if (!AGE_BANDS.includes(ageBand)) {
     throw new PayrollError(
       `the SG payroll pack cannot price age band "${ageBand}" — declare "le55", "b55_60", "b60_65", `
       + `"b65_70" or "gt70"`,
-    );
-  }
-  if (status === "foreigner") {
-    throw new PayrollError(
-      "the SG payroll pack computes no CPF for a foreign employee — the CPF Board exempts "
-      + "\"Persons who are not Singapore Citizens or Singapore Permanent Residents\" (Who should "
-      + "receive CPF contributions), and foreign workers attract a Ministry of Manpower levy instead, "
-      + "whose schedule is not transcribed",
     );
   }
   if (status === "spr_1st_year" || status === "spr_2nd_year") {
@@ -216,15 +213,19 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
     );
   }
 
-  const ow = parseCents(input.ordinaryWages, "Ordinary Wages");
-  const ceiling = parseCents(tables.owCeilingMonthly, "OW ceiling");
-  const owSubject = ow > ceiling ? ceiling : ow;
-
-  // Table 1, 55 & below. With no AW, TW = OW and the rows price on owSubject.
-  // "$50 or less: Nil / Nil".
+  const cpfApplicable = input.cpfStatus !== "foreigner";
+  let owSubject = 0n;
   let totalDollars = 0n;
   let employeeDollars = 0n;
-  if (owSubject > 5000n) {
+  if (cpfApplicable) {
+    const ow = parseCents(input.ordinaryWages, "Ordinary Wages");
+    const ceiling = parseCents(tables.owCeilingMonthly, "OW ceiling");
+    owSubject = ow > ceiling ? ceiling : ow;
+  }
+
+  // Table 1, 55 & below. With no AW, TW = OW and the rows price on owSubject.
+  // "$50 or less: Nil / Nil". Foreigners have no CPF OW base or contribution.
+  if (cpfApplicable && owSubject > 5000n) {
     if (owSubject <= 50000n) {
       // "> $50 to $500: 17% (TW)" total, employee "Nil".
       totalDollars = (owSubject * 17n + 5000n) / 10000n;
@@ -269,6 +270,7 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
   if (w > parseCents(tables.sdl.maxWage, "SDL cap wage") && sdlCents > sdlMax) sdlCents = sdlMax;
 
   return {
+    cpfApplicable,
     owSubjectCents: owSubject,
     totalCents: totalDollars * 100n,
     employeeCents: employeeDollars * 100n,
@@ -300,6 +302,7 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
  * employer shares, Skills Development Levy) — see the module header.
  */
 export const SG_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  CPF_APPLICABLE: "CPF contribution obligation applies",
   CPF_EE: "CPF — employee share",
   CPF_ER: "CPF — employer share",
   CPF_TOTAL: "CPF — total",
@@ -338,14 +341,19 @@ export async function computeSgStatutory(
     ageBand,
   });
 
-  ctx.pushStatutory("cpf_ee", "deduction", "CPF — employee share", d4(result.employeeCents), 110);
-  ctx.pushStatutory("cpf_er", "employer_contribution", "CPF — employer share", d4(result.employerCents), 210);
+  if (result.cpfApplicable) {
+    ctx.pushStatutory("cpf_ee", "deduction", "CPF — employee share", d4(result.employeeCents), 110);
+    ctx.pushStatutory("cpf_er", "employer_contribution", "CPF — employer share", d4(result.employerCents), 210);
+  }
   ctx.pushStatutory("sdl", "employer_contribution", "Skills Development Levy", d4(result.sdlCents), 220);
 
   return {
-    CPF_EE: d4(result.employeeCents),
-    CPF_ER: d4(result.employerCents),
-    CPF_TOTAL: d4(result.totalCents),
+    CPF_APPLICABLE: result.cpfApplicable ? "true" : "false",
+    ...(result.cpfApplicable ? {
+      CPF_EE: d4(result.employeeCents),
+      CPF_ER: d4(result.employerCents),
+      CPF_TOTAL: d4(result.totalCents),
+    } : {}),
     SDL: d4(result.sdlCents),
   };
 }
