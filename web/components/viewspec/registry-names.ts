@@ -2,8 +2,8 @@
  * The names the renderer can render.
  *
  * Mirrored from `WIDGET_REGISTRY` (widgets.tsx) and `FRAME_REGISTRY`
- * (blocks.tsx), and kept honest by `registry-names.test.ts`, which re-reads
- * both registries from source and fails if this list drifts.
+ * (blocks.tsx), and kept honest by `registry-names.test.ts`, which compares
+ * the names with the live registries.
  *
  * Why a mirror rather than `Object.keys(WIDGET_REGISTRY)`: the registries are
  * a graph of ~200 React components. The places that need only the NAMES — the

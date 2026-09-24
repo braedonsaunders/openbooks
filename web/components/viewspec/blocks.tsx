@@ -62,7 +62,7 @@ import { Badge } from '@openbooks/ui'
  */
 type FrameComponent = (props: Record<string, unknown> & { children: ReactNode }) => ReactNode
 
-const FRAME_REGISTRY: Record<string, FrameComponent> = {
+export const FRAME_REGISTRY: Record<string, FrameComponent> = {
   'tab-content': TabContent as unknown as FrameComponent,
   /** The plain full-height page shell, for pages that sit under it natively. */
   'page-container': ((props: Record<string, unknown> & { children: ReactNode }) => (
