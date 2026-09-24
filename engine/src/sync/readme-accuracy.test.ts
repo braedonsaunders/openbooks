@@ -1,3 +1,4 @@
+// source-pin-contract: README.md's published claims (return-pack count, connectors, locales, compose install) match the shipped catalog and files; claims are read from README.md
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
