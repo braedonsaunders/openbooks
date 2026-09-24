@@ -785,7 +785,8 @@
         "testFailed": "Teste falhou: {detail}",
         "unknownError": "erro desconhecido",
         "syncFailed": "Falha na sincronização: {error}",
-        "imported": "{imported} novos importados, {duplicates} duplicados."
+        "imported": "{imported} novos importados, {duplicates} duplicados.",
+        "requestFailed": "A solicitação falhou (HTTP {status})"
       },
       "sftpCard": {
         "badge": "Entrega de arquivos SFTP",

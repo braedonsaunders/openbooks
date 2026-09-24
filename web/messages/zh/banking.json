@@ -785,7 +785,8 @@
         "testFailed": "测试失败：{detail}",
         "unknownError": "未知错误",
         "syncFailed": "同步失败：{error}",
-        "imported": "已导入新增 {imported} 条，重复 {duplicates} 条。"
+        "imported": "已导入新增 {imported} 条，重复 {duplicates} 条。",
+        "requestFailed": "请求失败 (HTTP {status})"
       },
       "sftpCard": {
         "badge": "SFTP文件投递",

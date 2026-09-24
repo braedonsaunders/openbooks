@@ -214,6 +214,116 @@ async function mountSftpSchedules(
   return { host, root }
 }
 
+// F4T2-14 (feedAction read the body before the status: a 500 with an empty
+// body gave r.json().catch -> {}, b.error is falsy, and the operator got an
+// 'imported' toast with undefined counts though nothing was imported). The
+// status is checked before the body is parsed; a body that carries no counts
+// is a named failure, never a phantom success; busy always releases.
+const plaidConnection = {
+  ...connection,
+  id: 'conn-plaid',
+  name: 'Plaid test feed',
+  provider: 'plaid',
+}
+
+async function mountFeed(fetchImpl: typeof fetch) {
+  globalThis.fetch = fetchImpl
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <BankFeedsClient
+          connections={[plaidConnection]}
+          sftpServers={[]}
+          sftpSchedules={[]}
+          accounts={[{ id: 'acc-1', label: '1000 Operating Cash' }]}
+          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+        />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  return { host, root }
+}
+
+function actionButton(host: Element, label: string): HTMLButtonElement {
+  const btn = [...host.querySelectorAll('button')].find(
+    (b) => (b.textContent ?? '').trim() === label,
+  ) as HTMLButtonElement | undefined
+  assert.ok(btn, `the connection must offer ${label}`)
+  return btn
+}
+
+async function clickAndSettle(btn: HTMLButtonElement) {
+  await act(async () => {
+    btn.click()
+    await tick()
+    await tick()
+    await tick()
+    await tick()
+  })
+}
+
+test('a non-JSON 500 on sync is a named failure, never a phantom import (F4T2-14)', async (t) => {
+  const { host, root } = await mountFeed((async () => new Response('', { status: 500 })) as typeof fetch)
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  const btn = actionButton(host, 'Sync')
+  await clickAndSettle(btn)
+  assert.match(host.textContent ?? '', /Request failed \(HTTP 500\)/)
+  assert.doesNotMatch(host.textContent ?? '', /Imported/, 'no phantom import toast for work the server never did')
+  assert.equal(btn.disabled, false, 'busy releases after the failure')
+})
+
+test('a named 422 on sync surfaces the server refusal (F4T2-14)', async (t) => {
+  const { host, root } = await mountFeed(
+    (async () => Response.json({ error: 'not an API provider' }, { status: 422 })) as typeof fetch,
+  )
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickAndSettle(actionButton(host, 'Sync'))
+  assert.match(host.textContent ?? '', /Sync failed: not an API provider/)
+  assert.doesNotMatch(host.textContent ?? '', /Imported/)
+})
+
+test('a successful sync still reports its counts (F4T2-14)', async (t) => {
+  const { host, root } = await mountFeed(
+    (async () => Response.json({ imported: 3, duplicates: 1 }, { status: 200 })) as typeof fetch,
+  )
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await clickAndSettle(actionButton(host, 'Sync'))
+  assert.match(host.textContent ?? '', /Imported 3 new, 1 duplicate/)
+})
+
+test('a refused probe reports its detail, a verified one confirms (F4T2-14)', async (t) => {
+  const refused = await mountFeed(
+    (async () => Response.json({ ok: false, detail: 'bad token' }, { status: 200 })) as typeof fetch,
+  )
+  t.after(async () => {
+    await act(async () => {
+      refused.root.unmount()
+    })
+    refused.host.remove()
+  })
+  await clickAndSettle(actionButton(refused.host, 'Test'))
+  assert.match(refused.host.textContent ?? '', /Test failed: bad token/)
+})
+
 test('an unbound identifying schedule reads paused, bound and CSV routes do not', async (t) => {
   const { host, root } = await mountSftpSchedules([
     { id: 'sched-unbound-ofx', format: 'ofx', expectedExternalAccountId: null },

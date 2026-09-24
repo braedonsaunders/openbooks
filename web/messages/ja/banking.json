@@ -785,7 +785,8 @@
         "testFailed": "テストに失敗しました: {detail}",
         "unknownError": "不明なエラー",
         "syncFailed": "同期に失敗しました: {error}",
-        "imported": "新規 {imported} 件、重複 {duplicates} 件をインポートしました。"
+        "imported": "新規 {imported} 件、重複 {duplicates} 件をインポートしました。",
+        "requestFailed": "リクエストに失敗しました (HTTP {status})"
       },
       "sftpCard": {
         "badge": "SFTPファイル受信",

@@ -785,7 +785,8 @@
         "testFailed": "Échec du test : {detail}",
         "unknownError": "erreur inconnue",
         "syncFailed": "Échec de la synchronisation : {error}",
-        "imported": "{imported} nouveaux importés, {duplicates} doublons."
+        "imported": "{imported} nouveaux importés, {duplicates} doublons.",
+        "requestFailed": "La requête a échoué (HTTP {status})"
       },
       "sftpCard": {
         "badge": "Dépôt de fichiers SFTP",

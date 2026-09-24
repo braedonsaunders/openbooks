@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../../lib/api-error";
 import {
   BANK_COUNTRIES,
   BANK_DIRECTORY,
@@ -140,27 +141,67 @@ export function BankFeedsClient({
   const feedAction = async (id: string, action: "test" | "sync") => {
     setBusy(true);
     setMsg(null);
-    const r = await fetch(`/api/banking/bank-feeds/${id}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    const b = await r.json().catch(() => ({}));
-    setBusy(false);
-    setMsg(
-      action === "test"
-        ? b.ok
-          ? t("feedMessages.verified")
-          : t("feedMessages.testFailed", {
-              detail: b.detail ?? t("feedMessages.unknownError"),
-            })
-        : b.error
-          ? t("feedMessages.syncFailed", { error: b.error })
-          : t("feedMessages.imported", {
-              imported: b.imported,
-              duplicates: b.duplicates,
+    try {
+      const r = await fetch(`/api/banking/bank-feeds/${id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      // The status is checked before the body is parsed: a non-JSON error
+      // body (an empty 500, a proxy page) must surface the failure, never a
+      // SyntaxError from r.json() — and never a phantom "imported" toast
+      // with undefined counts for work the server never did.
+      if (!r.ok) throw new Error(await readApiErrorMessage(r, t("feedMessages.requestFailed", { status: r.status })));
+      const b = (await r.json().catch(() => null)) as {
+        ok?: unknown;
+        detail?: unknown;
+        error?: unknown;
+        imported?: unknown;
+        duplicates?: unknown;
+      } | null;
+      if (!b || typeof b !== "object") {
+        throw new Error(t("feedMessages.requestFailed", { status: r.status }));
+      }
+      if (action === "test") {
+        if (b.ok) {
+          setMsg(t("feedMessages.verified"));
+        } else {
+          setMsg(
+            t("feedMessages.testFailed", {
+              detail:
+                typeof b.detail === "string" && b.detail.trim()
+                  ? b.detail.trim()
+                  : t("feedMessages.unknownError"),
             }),
-    );
+          );
+        }
+      } else if (typeof b.error === "string" && b.error.trim()) {
+        setMsg(t("feedMessages.syncFailed", { error: b.error.trim() }));
+      } else if (typeof b.imported === "number" && typeof b.duplicates === "number") {
+        setMsg(
+          t("feedMessages.imported", {
+            imported: b.imported,
+            duplicates: b.duplicates,
+          }),
+        );
+      } else {
+        // A 200 without counts or a refusal is unusable: fail closed rather
+        // than toasting an import that cannot be observed.
+        throw new Error(t("feedMessages.requestFailed", { status: r.status }));
+      }
+    } catch (e) {
+      // Protocol failures (non-2xx, unusable bodies, network drops) land
+      // here with the named refusal or the request fallback — wrapped in the
+      // action's own template so a sync failure never reads as a probe note.
+      const detail = (e as Error)?.message ?? t("feedMessages.unknownError");
+      setMsg(
+        action === "test"
+          ? t("feedMessages.testFailed", { detail })
+          : t("feedMessages.syncFailed", { error: detail }),
+      );
+    } finally {
+      setBusy(false);
+    }
     refresh();
   };
 
