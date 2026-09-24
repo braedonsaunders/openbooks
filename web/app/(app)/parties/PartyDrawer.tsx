@@ -56,6 +56,7 @@ import { ApprovalHistory } from '../../../components/approval-history'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
+import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
 import { formatMoney } from '@openbooks/engine/src/money/money.ts'
 type Opt = {
@@ -663,6 +664,22 @@ export function PartyDrawer({
     else if (editable) setDirty(true)
   }
 
+  // A dirty editor never closes silently: the X button (via beforeClose)
+  // and Cancel both ask first, so typed work survives a stray click.
+  async function confirmDiscard() {
+    if (mode !== 'edit' || !dirty) return true
+    return confirmDialog({
+      message: tc('feedback.unsavedChanges'),
+      confirmLabel: tc('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
+  async function cancelWithConfirm() {
+    if (!(await confirmDiscard())) return
+    cancel()
+  }
+
   /** Reset every field back to the loaded party (used by Cancel). */
   function resetForm() {
     setKind(p.kind ?? 'company')
@@ -1115,6 +1132,7 @@ export function PartyDrawer({
   return (
     <TransactionDrawer
       closeHref={returnHref}
+      beforeClose={confirmDiscard}
       recordId={createMode ? '' : String(p.id)}
       targetTable="parties"
       canEditAttachments={canManage && !createMode}
@@ -1141,7 +1159,7 @@ export function PartyDrawer({
         </span>
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
-      primaryAction={canManage ? <Button variant="outline" size="sm" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>{mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}</Button> : undefined}
+      primaryAction={canManage ? <Button variant="outline" size="sm" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>{mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}</Button> : undefined}
       actionsMenuHeader={forms.length > 0 ? (
         <div className="border-b border-slate-200 p-2 dark:border-slate-800">
           <Label className="mb-1 block text-xs">{t('customForm')}</Label>

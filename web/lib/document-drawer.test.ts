@@ -553,6 +553,14 @@ test('a canonical read adopts clean editors, pins unchanged dirty content, and c
     reconcileCanonicalDraftRead({ current, incoming: movedOn, isDirty: false }),
     { action: 'adopt', snapshot: movedOn },
   )
+  // Clean and already current (newer token, same content): pin the token
+  // WITHOUT resetting the form — adopting rebuilds row/object state with
+  // fresh identities, which the dirty tracker would read as user edits and
+  // prompt on close with nothing to discard.
+  assert.deepEqual(
+    reconcileCanonicalDraftRead({ current, incoming: sameContent, isDirty: false }),
+    { action: 'pin', revision: CONCURRENT_REVISION },
+  )
   // Dirty but nothing actually changed server-side (only Date→token shape):
   // keep the edits, take the exact token.
   assert.deepEqual(

@@ -472,7 +472,19 @@ export function reconcileCanonicalDraftRead(args: {
   if (args.current.documentId !== args.incoming.documentId) {
     return { action: 'conflict', snapshot: args.incoming }
   }
-  if (!args.isDirty) return { action: 'adopt', snapshot: args.incoming }
+  // Clean but already current: pin the newer token WITHOUT resetting the
+  // form. Adopting (resetForm) rebuilds row/object state with fresh
+  // identities, which the dirty tracker reads as user edits — an untouched
+  // editor would then prompt on close with nothing to discard.
+  if (!args.isDirty) {
+    if (
+      args.current.revision === args.incoming.revision ||
+      draftContentFingerprint(args.current) === draftContentFingerprint(args.incoming)
+    ) {
+      return { action: 'pin', revision: args.incoming.revision }
+    }
+    return { action: 'adopt', snapshot: args.incoming }
+  }
   if (
     args.current.revision === args.incoming.revision ||
     draftContentFingerprint(args.current) === draftContentFingerprint(args.incoming)

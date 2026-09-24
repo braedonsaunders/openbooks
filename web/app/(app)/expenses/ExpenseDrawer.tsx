@@ -444,6 +444,22 @@ export function ExpenseDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload])
 
+  // A dirty editor never closes silently: the X button (via beforeClose)
+  // and Cancel both ask first, so typed work survives a stray click.
+  async function confirmDiscard() {
+    if (mode !== 'edit' || !dirty) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
+  async function cancelWithConfirm() {
+    if (!(await confirmDiscard())) return
+    cancel()
+  }
+
   // -- optimistic-concurrency fence -----------------------------------------
   // The expense PATCH route refuses any write without an exact revision token.
   // RSC props carry updated_at as a lossy Date that can never satisfy that
@@ -962,6 +978,7 @@ export function ExpenseDrawer({
   return (
     <TransactionDrawer
       closeHref={closeHref}
+      beforeClose={confirmDiscard}
       recordId={String(doc.id)}
       canEditAttachments={canSubmit}
       panelClassName={docTypeMeta('expense_report').surfaceCls}
@@ -977,7 +994,7 @@ export function ExpenseDrawer({
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.employee_name ?? undefined)}
       primaryAction={
         canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : void beginEdit()}>
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : void beginEdit()}>
             {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
           </Button>
         ) : null
