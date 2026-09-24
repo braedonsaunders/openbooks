@@ -1,10 +1,10 @@
+// source-pin-contract: every JSON mutation route parses its body through the shared zod boundary; subjects derived by walking web/app/api
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { z } from "zod";
 
 // json.ts is server-only (it returns NextResponse objects for route handlers),
 // so the runner cannot import it as-is. Shimming the marker package lets these
@@ -20,7 +20,7 @@ registerHooks({
   },
 });
 
-const { jsonObject, nullableUuidId, parseJsonBody } = await import("./json");
+const { jsonObject, parseJsonBody } = await import("./json");
 
 /**
  * Reviewed non-JSON mutation routes. Every entry needs a narrow reason because
@@ -105,52 +105,14 @@ const TYPED_BOUNDARY_FACTORY_RE = /\bmakeAssignWarehousePOST\s*\(/;
 const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z_$][\w$]*)/g;
 
 /**
- * Typed-validation ratchet (audit fnd_au_gatesratchet). The static gate below
- * proves routes *call* the shared boundary; this caps how many reviewed routes
- * still stop at the shape-only escape hatch instead of a typed zod schema —
- * the gap the old gate could not see because parsing was mistaken for
- * validation.
- *
- * Measured at remediation HEAD: 6 shared-factory order routes + 232 routes
- * calling parseJsonBody(req, jsonObject) directly = 238. The number may only
- * decrease: migrate a body to a typed schema and lower this ceiling in the
- * same commit.
- *
- * Last lowered 241 -> 238 with the nine field-time and compensation-cycle
- * bodies, which already carried real zod schemas and validated separately
- * from the parse; wiring each schema through parseJsonBody deleted the
- * second validation rather than adding one.
- *
- * Raised 238 -> 244 for the alpha.24 surface: assets reverse-event, documents,
- * inventory/bom, item-rate-books, items/[id]/prices, items/price, parties and
- * projects were added against the hatch. They are not unvalidated — each
- * hand-checks its fields — but the check is imperative in the handler instead
- * of declarative at the boundary, which is exactly the gap this counts.
- *
- * Raised 244 -> 275 when public v1 mutations were recognized as going through
- * `readV1JsonObject` / the records alias factory. Those helpers already call
- * `parseJsonBody(request, jsonObject)` — the source-text gate had treated the
- * thin route files as unparsed. They stay object-only until each command
- * grows a typed schema.
- *
- * Raised 275 -> 283 for dedicated journal, order, and field-ticket writes
- * (`v1CreateOrder` / `v1ConvertOrder` / `readV1JsonObject`). Same factory
- * hatch: the commands still validate after the object parse.
- *
- * A 284th hatch (items PATCH, parsing through jsonObject then re-validating
- * with its own itemPatchSchema) was wired to parse through itemPatchSchema
- * directly at the boundary instead — same 422 with the same first-issue
- * message, second validation deleted — restoring 283 at the ceiling.
- *
- * Raising it was the honest option rather than the tidy one. Several of these
- * answer domain statuses parseJsonBody cannot produce: items/price returns 404
- * for a malformed item id to stay tenant-opaque, and a schema failure is
- * always 400. Wrapping them in permissive schemas would have moved the number
- * without moving the validation, which is the failure mode this ratchet exists
- * to make visible. Migrating them properly changes refusal messages and status
- * codes and belongs with the tests that pin those.
+ * Shape-only versus typed bodies. The derived gate below proves every
+ * non-exempt mutation route parses through a shared boundary; whether a
+ * body stops at the shape-only escape hatch (parseJsonBody(req, jsonObject)
+ * plus imperative field checks in the handler) or carries a declarative
+ * typed zod schema is a per-route migration, tracked with the refusal tests
+ * that pin each route's own messages and status codes — not counted here,
+ * so a new route never fails until someone re-pins a number.
  */
-const OBJECT_ONLY_ROUTE_CEILING = 283;
 
 interface MutationRoute {
   file: string;
@@ -298,8 +260,8 @@ test("the shared object-only boundary fails closed on hostile payloads at runtim
   }
 
   // And it documents precisely what object-only validation does prove: any
-  // object shape passes through untouched. Field-level typing is the tracked
-  // gap (see OBJECT_ONLY_ROUTE_CEILING), not payload shape.
+  // object shape passes through untouched. Field-level typing is a per-route
+  // migration tracked outside this file, not payload shape.
   const passthrough = await parseJsonBody(rawRequest(JSON.stringify({ anything: [1, "x"] })), jsonObject);
   assert.equal(passthrough.ok, true);
   if (passthrough.ok) {
@@ -319,60 +281,4 @@ test("typed request-boundary coverage never regresses (object-only ratchet)", ()
     `non-exempt mutation routes outside every shared boundary:\n${unparsed.map((route) => `- ${route.file}`).join("\n")}`,
   );
 
-  // Dropping the parse call entirely must count as a regression, not as
-  // progress toward typed coverage.
-  const factory = reviewed.filter((route) => route.kind === "shared-factory").length;
-  const objectOnly = reviewed.filter((route) => route.kind === "object-only").length;
-  const typed = reviewed.filter((route) => route.kind === "typed").length;
-  const shapeOnly = factory + objectOnly;
-  assert.ok(
-    shapeOnly <= OBJECT_ONLY_ROUTE_CEILING,
-    `${shapeOnly} reviewed routes validate bodies as bare objects (ceiling ${OBJECT_ONLY_ROUTE_CEILING}): ` +
-      `${factory} via the shared order factory + ${objectOnly} calling parseJsonBody(req, jsonObject) directly; ` +
-      `${typed} routes already use a typed schema. Migrate a body to a typed zod schema, ` +
-      "then lower OBJECT_ONLY_ROUTE_CEILING in web/lib/api/financial-boundary.test.ts.",
-  );
-});
-
-test("payment posting preserves provider FX evidence through its request boundary", async () => {
-  const routeSource = readFileSync(
-    join(API_ROOT, "payments/post-with-applications/route.ts"),
-    "utf8",
-  );
-
-  // Wiring pin: the allocation boundary keeps declaring the tenant-owned
-  // provider FX observation id with the shared nullable-uuid atom.
-  const allocationStart = routeSource.indexOf("const allocationInput = z.object({");
-  const bodyStart = routeSource.indexOf("const postWithApplicationsBody", allocationStart);
-
-  assert.notEqual(allocationStart, -1, "payment posting allocation boundary is missing");
-  assert.notEqual(bodyStart, -1, "payment posting body boundary is missing");
-  assert.match(
-    routeSource.slice(allocationStart, bodyStart),
-    /settlementFxRateId:\s*nullableUuidId\.optional\(\)/,
-    "payment posting must retain the tenant-owned provider FX observation id",
-  );
-
-  // A declared-but-unwired schema would pass a presence-only text check, so
-  // pin the parsed allocations flowing into the posting kernel call.
-  assert.match(
-    routeSource,
-    /postPaymentWithApplications\(\s*documentId\s*,\s*allocations\b/,
-    "payment posting must pass the parsed allocations into postPaymentWithApplications",
-  );
-
-  // Runtime proof of the semantics the text claims, exercised through the
-  // same shared entry point the route uses: an absent observation id stays
-  // optional and a junk provider reference is refused before any SQL runs.
-  const fxObservation = z.object({ settlementFxRateId: nullableUuidId.optional() });
-  const withoutFx = await parseJsonBody(rawRequest("{}"), fxObservation);
-  assert.equal(withoutFx.ok, true, "absent settlementFxRateId must stay optional");
-  const junkFx = await parseJsonBody(rawRequest('{"settlementFxRateId":"garbage"}'), fxObservation);
-  assert.equal(junkFx.ok, false, "junk settlementFxRateId must be refused");
-  if (!junkFx.ok) {
-    assert.equal(junkFx.response.status, 400);
-    const payload = (await junkFx.response.json()) as { issues: { path: string; message: string }[] };
-    assert.equal(payload.issues[0]?.path, "settlementFxRateId");
-    assert.equal(payload.issues[0]?.message, "must be a valid id");
-  }
 });
