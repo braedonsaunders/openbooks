@@ -159,7 +159,7 @@
     "rates": "Tarifas",
     "tierOverrides": "Recargos de mano de obra",
     "tierOverridesHide": "Ocultar recargos de mano de obra",
-    "tierAuto": "auto"
+    "tierAuto": "Automático"
   },
   "rateBookDrawer": {
     "newTitle": "Nuevo libro de tarifas",
