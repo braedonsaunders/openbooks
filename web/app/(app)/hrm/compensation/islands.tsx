@@ -212,6 +212,7 @@ export function LineDecideButtons({
   cycleId,
   lineId,
   labels,
+  reasonLabel,
   approveLabel,
   rejectLabel,
   reopenLabel,
@@ -219,6 +220,7 @@ export function LineDecideButtons({
   cycleId: string
   lineId: string
   labels: CompLabels
+  reasonLabel: string
   approveLabel: string
   rejectLabel: string
   reopenLabel: string
@@ -248,7 +250,7 @@ export function LineDecideButtons({
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <Label htmlFor="comp-line-decide-reason">{labels.submit}</Label>
+        <Label htmlFor="comp-line-decide-reason">{reasonLabel}</Label>
         <Textarea id="comp-line-decide-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -275,6 +277,8 @@ export function CycleMoveButtons({
   pushLabel,
   closeLabel,
   cancelLabel,
+  cancelReasonLabel,
+  cancelReasonRequired,
 }: {
   cycleId: string
   labels: CompLabels
@@ -283,13 +287,22 @@ export function CycleMoveButtons({
   pushLabel: string
   closeLabel: string
   cancelLabel: string
+  cancelReasonLabel: string
+  cancelReasonRequired: string
 }) {
   const router = useRouter()
+  const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
 
   async function act(action: 'open' | 'submit' | 'push' | 'close' | 'cancel') {
     setError(null)
+    // Cancelling records the operator's own words as the audit reason —
+    // never a hard-coded string, and never an empty one.
+    if (action === 'cancel' && reason.trim() === '') {
+      setError(cancelReasonRequired)
+      return
+    }
     await execute(
       () =>
         fetchAction(`/api/hrm/comp-cycles/${cycleId}`, {
@@ -297,7 +310,7 @@ export function CycleMoveButtons({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             action,
-            reason: action === 'cancel' ? 'cancelled from the cycle page' : undefined,
+            reason: action === 'cancel' ? reason.trim() : undefined,
           }),
         }),
       {
@@ -310,6 +323,10 @@ export function CycleMoveButtons({
 
   return (
     <div className="flex flex-col gap-2">
+      <div>
+        <Label htmlFor="comp-cycle-cancel-reason">{cancelReasonLabel}</Label>
+        <Textarea id="comp-cycle-cancel-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} />
+      </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" disabled={busy} onClick={() => act('open')}>
@@ -571,12 +588,14 @@ export function CompensationSettingsForm({
   thresholdLabel,
   responseDaysLabel,
   roundingLabel,
+  roundingOptions,
   burdenLabel,
 }: {
   labels: CompLabels
   initial: { comparisonAttributeKey: string; gapThresholdPct: string; responseDays: string; fteRounding: string; burdenRate: string }
   attributeLabel: string
   thresholdLabel: string
+  roundingOptions: { value: string; label: string }[]
   responseDaysLabel: string
   roundingLabel: string
   burdenLabel: string
@@ -631,9 +650,11 @@ export function CompensationSettingsForm({
       <div>
         <Label htmlFor="comp-set-rounding">{roundingLabel}</Label>
         <Select id="comp-set-rounding" value={rounding} onChange={(e) => setRounding(e.target.value)}>
-          <option value="up_to_whole">up_to_whole</option>
-          <option value="nearest_tenth">nearest_tenth</option>
-          <option value="nearest_hundredth">nearest_hundredth</option>
+          {roundingOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
       </div>
       <div>

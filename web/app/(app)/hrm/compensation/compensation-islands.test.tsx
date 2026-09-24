@@ -1,0 +1,109 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+const { registerHooks } = await import("node:module");
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "next/navigation") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function useRouter() { return { push() {}, refresh() {} }; }",
+      };
+    }
+    return next(specifier, context);
+  },
+});
+
+const React = await import("react");
+// The shared @openbooks/ui Select compiles against a global React.
+Object.assign(globalThis, { React });
+const { renderToString } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+// The shared @openbooks/ui Label resolves its help copy through
+// next-intl, so the islands render inside the same provider the app
+// always supplies — backed by the real en catalogs, never stubbed.
+const messages = (await import("../../../../messages/en")).default;
+const { LineDecideButtons, CycleMoveButtons, CompensationSettingsForm } = await import("./islands.tsx");
+
+function renderWithIntl(node: React.ReactElement): string {
+  return renderToString(
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      {node}
+    </NextIntlClientProvider>,
+  );
+}
+
+// F3-30/F3-31/F3-32: the compensation islands labelled controls with the
+// wrong strings — the decide reason with the Submit copy (wrong for screen
+// readers too), the cancel audit reason hard-coded in English, and the
+// FTE-rounding select showing raw snake_case codes. Every string now
+// arrives as props (loader-resolved from the catalog); the render below
+// drives the real components and proves the props reach the controls.
+const LABELS = { failed: "The change was refused", submit: "Save", cancel: "Back" };
+
+function labelFor(html: string, id: string): string | null {
+  const match = html.match(new RegExp(`<label[^>]*for="${id}"[^>]*>([^<]*)<`));
+  return match?.[1] ?? null;
+}
+
+test("the decide reason is labelled with its own label, never Submit", () => {
+  const html = renderWithIntl(
+    <LineDecideButtons
+      cycleId="cycle-1"
+      lineId="line-1"
+      labels={LABELS}
+      reasonLabel="Decision reason"
+      approveLabel="Approve"
+      rejectLabel="Reject"
+      reopenLabel="Reopen"
+    />,
+  );
+  assert.equal(labelFor(html, "comp-line-decide-reason"), "Decision reason", "the reason textarea carries its own label");
+  const labels = [...html.matchAll(/<label[^>]*>([^<]*)</g)].map((m) => m[1]);
+  assert.ok(labels.length > 0, "the buttons render their labels");
+  assert.ok(!labels.includes("Save"), "no control is labelled with the Submit string");
+});
+
+test("cycle cancel asks for a reason instead of posting English audit copy", () => {
+  const html = renderWithIntl(
+    <CycleMoveButtons
+      cycleId="cycle-1"
+      labels={LABELS}
+      openLabel="Open"
+      submitLabel="Submit"
+      pushLabel="Push"
+      closeLabel="Close"
+      cancelLabel="Cancel cycle"
+      cancelReasonLabel="Cancellation reason"
+      cancelReasonRequired="Cancelling needs a reason"
+    />,
+  );
+  assert.equal(labelFor(html, "comp-cycle-cancel-reason"), "Cancellation reason", "the cancel reason field is labelled");
+  assert.match(html, /<textarea[^>]*id="comp-cycle-cancel-reason"/, "the reason is an entered field, not a constant");
+  assert.ok(!html.includes("cancelled from the cycle page"), "no hard-coded English audit reason renders");
+});
+
+test("the FTE-rounding select shows translated labels, never raw codes", () => {
+  const html = renderWithIntl(
+    <CompensationSettingsForm
+      labels={LABELS}
+      initial={{ comparisonAttributeKey: "", gapThresholdPct: "", responseDays: "", fteRounding: "up_to_whole", burdenRate: "" }}
+      attributeLabel="Attribute"
+      thresholdLabel="Threshold"
+      responseDaysLabel="Response days"
+      roundingLabel="Rounding"
+      roundingOptions={[
+        { value: "up_to_whole", label: "Up to a whole number" },
+        { value: "nearest_tenth", label: "Nearest tenth" },
+        { value: "nearest_hundredth", label: "Nearest hundredth" },
+      ]}
+      burdenLabel="Burden"
+    />,
+  );
+  for (const label of ["Up to a whole number", "Nearest tenth", "Nearest hundredth"]) {
+    assert.ok(html.includes(`>${label}</option>`), `the select offers "${label}"`);
+  }
+  assert.ok(!html.includes(">up_to_whole<"), "no raw snake_case code renders as an option");
+  assert.ok(!html.includes(">nearest_tenth<"), "no raw snake_case code renders as an option");
+  assert.ok(!html.includes(">nearest_hundredth<"), "no raw snake_case code renders as an option");
+});

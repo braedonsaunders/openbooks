@@ -1633,6 +1633,9 @@
       "pctLabel": "Aumento %",
       "rateLabel": "Nova taxa",
       "reasonLabel": "Motivo",
+      "decideReasonLabel": "Motivo da decisão",
+      "cancelReasonLabel": "Motivo do cancelamento",
+      "cancelReasonRequired": "Cancelar exige um motivo — registre por que o ciclo está sendo cancelado.",
       "failed": "A alteração foi recusada",
       "submit": "Salvar",
       "cancel": "Cancelar",
@@ -1645,7 +1648,14 @@
       "reason": "Motivo",
       "at": "Data"
     },
-    "emptyHistory": "Sem eventos."
+    "emptyHistory": "Sem eventos.",
+    "settings": {
+      "rounding": {
+        "upToWhole": "Arredondar para cima ao inteiro",
+        "nearestTenth": "Décimo mais próximo",
+        "nearestHundredth": "Centésimo mais próximo"
+      }
+    }
   },
   "equity": {
     "title": "Equidade salarial",

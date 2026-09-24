@@ -1633,6 +1633,9 @@
       "pctLabel": "Hausse %",
       "rateLabel": "Nouveau taux",
       "reasonLabel": "Motif",
+      "decideReasonLabel": "Motif de la décision",
+      "cancelReasonLabel": "Motif d'annulation",
+      "cancelReasonRequired": "L'annulation exige un motif — indiquez pourquoi le cycle est annulé.",
       "failed": "La modification a été refusée",
       "submit": "Enregistrer",
       "cancel": "Annuler",
@@ -1645,7 +1648,14 @@
       "reason": "Motif",
       "at": "Date"
     },
-    "emptyHistory": "Aucun événement."
+    "emptyHistory": "Aucun événement.",
+    "settings": {
+      "rounding": {
+        "upToWhole": "Arrondir à l'entier supérieur",
+        "nearestTenth": "Dixième le plus proche",
+        "nearestHundredth": "Centième le plus proche"
+      }
+    }
   },
   "equity": {
     "title": "Équité salariale",

@@ -1633,6 +1633,9 @@
       "pctLabel": "昇給 %",
       "rateLabel": "新レート",
       "reasonLabel": "理由",
+      "decideReasonLabel": "決定理由",
+      "cancelReasonLabel": "キャンセル理由",
+      "cancelReasonRequired": "キャンセルには理由が必要です — サイクルをキャンセルする理由を記録してください。",
       "failed": "変更は拒否されました",
       "submit": "保存",
       "cancel": "キャンセル",
@@ -1645,7 +1648,14 @@
       "reason": "理由",
       "at": "日時"
     },
-    "emptyHistory": "イベントがありません。"
+    "emptyHistory": "イベントがありません。",
+    "settings": {
+      "rounding": {
+        "upToWhole": "整数に切り上げ",
+        "nearestTenth": "小数第1位に丸める",
+        "nearestHundredth": "小数第2位に丸める"
+      }
+    }
   },
   "equity": {
     "title": "給与の公平性",

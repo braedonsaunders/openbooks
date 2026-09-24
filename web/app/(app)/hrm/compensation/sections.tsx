@@ -85,6 +85,7 @@ export interface CompDrawerLabels {
   pctLabel: string
   rateLabel: string
   reasonLabel: string
+  decideReasonLabel: string
   failed: string
   submit: string
   cancel: string
@@ -131,6 +132,7 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
               cycleId={drawer.cycleId}
               lineId={line.id}
               labels={{ failed: drawer.labels.failed, submit: drawer.labels.submit, cancel: drawer.labels.cancel }}
+              reasonLabel={drawer.labels.decideReasonLabel}
               approveLabel={drawer.labels.approve}
               rejectLabel={drawer.labels.reject}
               reopenLabel={drawer.labels.reopen}
