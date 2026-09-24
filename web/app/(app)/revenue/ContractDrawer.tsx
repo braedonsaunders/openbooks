@@ -134,7 +134,7 @@ export function ContractDrawer({
         ) : null}
         {payload.changes?.length ? (
           <section className="space-y-2">
-            <h3 className="font-semibold">Accounting events</h3>
+            <h3 className="font-semibold">{t("drawer.eventsTitle")}</h3>
             {payload.changes.map((change) => (
               <p key={change.id}>
                 <Link
@@ -223,9 +223,9 @@ export function ContractDrawer({
                           variant={l.journal_entry_id ? "success" : "outline"}
                         >
                           {l.superseded_by_change_id
-                            ? "Superseded plan"
+                            ? t("drawer.supersededStatus")
                             : l.reversal_journal_entry_id
-                              ? "Reversed"
+                              ? t("drawer.reversedStatus")
                               : l.journal_entry_id
                                 ? t("drawer.postedStatus")
                                 : t("drawer.plannedStatus")}

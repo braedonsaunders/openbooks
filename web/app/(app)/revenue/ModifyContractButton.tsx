@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   Button,
@@ -40,11 +41,12 @@ export function ModifyContractButton({
   payload: ContractPayload;
   options: RevenueModificationOptions;
 }) {
+  const t = useTranslations("revenue");
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        Modify contract
+        {t("modify.trigger")}
       </Button>
       {open ? (
         <Form
@@ -65,6 +67,7 @@ function Form({
   options: RevenueModificationOptions;
   close: () => void;
 }) {
+  const t = useTranslations("revenue");
   const router = useRouter(),
     today = useBusinessToday();
   const existing = payload.obligations.filter((o) => o.status !== "cancelled");
@@ -155,17 +158,14 @@ function Form({
       );
       if (!res.ok)
         throw new Error(
-          await readApiErrorMessage(
-            res,
-            "Contract modification could not be proposed",
-          ),
+          await readApiErrorMessage(res, t("modify.proposeFailed")),
         );
       const result = (await res.json()) as { changeId: string };
       close();
       router.push(`/accounting/changes?change=${result.changeId}`);
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Modification failed");
+      toast.error(e instanceof Error ? e.message : t("modify.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -176,30 +176,27 @@ function Form({
       onClose={close}
       stacked
       size="2xl"
-      title={`Modify ${payload.contract.contract_number}`}
-      description="The original journals remain. Submit this assessment for independent approval before changing the allocation."
+      title={t("modify.title", { number: payload.contract.contract_number })}
+      description={t("modify.description")}
     >
       <div className="space-y-5 p-4">
-        <Field label="Effective date">
+        <Field label={t("modify.fieldEffectiveDate")}>
           <Input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
         </Field>
-        <Field label="Legal entity">
+        <Field label={t("modify.fieldEntity")}>
           <SearchSelect
             value={subsidiaryId}
             options={options.subsidiaries}
             onChange={(v) => setSubsidiary(v ?? "")}
-            ariaLabel="Contract legal entity"
+            ariaLabel={t("modify.entityAria")}
           />
         </Field>
         {options.books.map((b) => (
-          <Field
-            key={b.value}
-            label={`${b.label}: recognition exchange rate (contract to functional currency)`}
-          >
+          <Field key={b.value} label={t("modify.rateLabel", { book: b.label })}>
             <Input
               value={
                 rates[b.value] ??
@@ -219,7 +216,9 @@ function Form({
         {groups.map((g, i) => (
           <section className="space-y-3 rounded-lg border p-3" key={i}>
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Accounting group {i + 1}</h3>
+              <h3 className="font-semibold">
+                {t("modify.groupTitle", { index: i + 1 })}
+              </h3>
               {groups.length > 1 ? (
                 <Button
                   variant="ghost"
@@ -227,11 +226,11 @@ function Form({
                     setGroups((old) => old.filter((_, n) => n !== i))
                   }
                 >
-                  Remove group
+                  {t("modify.removeGroup")}
                 </Button>
               ) : null}
             </div>
-            <Field label="Accounting treatment">
+            <Field label={t("modify.treatment")}>
               <Select
                 value={g.treatment}
                 onChange={(e) =>
@@ -241,17 +240,15 @@ function Form({
                 {[
                   {
                     value: "prospective",
-                    label: "Remaining distinct promises — prospective",
+                    label: t("modify.treatProspective"),
                   },
                   {
                     value: "catch_up",
-                    label:
-                      "Existing non-distinct promise — cumulative catch-up",
+                    label: t("modify.treatCatchUp"),
                   },
                   {
                     value: "separate",
-                    label:
-                      "Additional distinct promises at SSP — separate contract",
+                    label: t("modify.treatSeparate"),
                   },
                 ].map((option) => (
                   <option key={option.value} value={option.value}>
@@ -260,7 +257,7 @@ function Form({
                 ))}
               </Select>
             </Field>
-            <Field label="Change in consideration (negative for a reduction)">
+            <Field label={t("modify.consideration")}>
               <Input
                 value={g.considerationChange}
                 onChange={(e) =>
@@ -276,8 +273,7 @@ function Form({
                   patch(i, { remainingDistinct: e.target.checked })
                 }
               />
-              Remaining / added goods or services are distinct from those
-              transferred
+              {t("modify.distinct")}
             </label>
             <label className="flex gap-2 text-sm">
               <input
@@ -287,12 +283,9 @@ function Form({
                   patch(i, { additionsAtStandalonePrice: e.target.checked })
                 }
               />
-              Added promises are priced commensurately with standalone selling
-              prices
+              {t("modify.commensurate")}
             </label>
-            <p className="text-sm font-medium">
-              Existing promises affected by this group
-            </p>
+            <p className="text-sm font-medium">{t("modify.affected")}</p>
             {existing.map((o) => (
               <label className="flex gap-2 text-sm" key={o.id}>
                 <input
@@ -310,17 +303,15 @@ function Form({
               </label>
             ))}
             <p className="text-xs text-muted-foreground">
-              An affected promise omitted below ends at its earned-to-date
-              amount. Add a group for each distinctness treatment in a mixed
-              amendment.
+              {t("modify.omittedHint")}
             </p>
             {g.promises.map((p, n) => (
               <div className="space-y-3 rounded border p-3" key={n}>
-                <Field label="Promise after modification">
+                <Field label={t("modify.promiseAfter")}>
                   <SearchSelect
                     value={p.existingId ?? "new"}
                     options={[
-                      { value: "new", label: "New performance obligation" },
+                      { value: "new", label: t("modify.newPromise") },
                       ...existing.map((o) => ({
                         value: o.id,
                         label: o.description,
@@ -337,10 +328,10 @@ function Form({
                         ),
                       })
                     }
-                    ariaLabel="Revised promise"
+                    ariaLabel={t("modify.revisedAria")}
                   />
                 </Field>
-                <Field label="Description">
+                <Field label={t("modify.fieldDescription")}>
                   <Input
                     value={p.description}
                     onChange={(e) =>
@@ -348,7 +339,7 @@ function Form({
                     }
                   />
                 </Field>
-                <Field label="Extended standalone selling price">
+                <Field label={t("modify.ssp")}>
                   <Input
                     value={p.standaloneSellingPrice}
                     onChange={(e) =>
@@ -356,17 +347,17 @@ function Form({
                     }
                   />
                 </Field>
-                <Field label="Recognition rule">
+                <Field label={t("modify.rule")}>
                   <SearchSelect
                     value={p.recognitionRuleId}
                     options={options.rules}
                     onChange={(v) =>
                       promise(i, n, { recognitionRuleId: v ?? "" })
                     }
-                    ariaLabel="Recognition rule"
+                    ariaLabel={t("modify.ruleAria")}
                   />
                 </Field>
-                <Field label="Remaining service ends">
+                <Field label={t("modify.endsOn")}>
                   <Input
                     type="date"
                     value={p.recognitionEndsOn ?? ""}
@@ -377,7 +368,7 @@ function Form({
                     }
                   />
                 </Field>
-                <Field label="Assessed cumulative progress (%)">
+                <Field label={t("modify.progress")}>
                   <Input
                     value={p.percentComplete}
                     onChange={(e) =>
@@ -385,24 +376,24 @@ function Form({
                     }
                   />
                 </Field>
-                <Field label="Deferred revenue / contract asset account">
+                <Field label={t("modify.deferred")}>
                   <SearchSelect
                     value={p.deferredAccountId}
                     options={options.accounts}
                     onChange={(v) =>
                       promise(i, n, { deferredAccountId: v ?? "" })
                     }
-                    ariaLabel="Deferred revenue account"
+                    ariaLabel={t("modify.deferredAria")}
                   />
                 </Field>
-                <Field label="Recognized revenue account">
+                <Field label={t("modify.recognized")}>
                   <SearchSelect
                     value={p.recognizedAccountId}
                     options={options.accounts}
                     onChange={(v) =>
                       promise(i, n, { recognizedAccountId: v ?? "" })
                     }
-                    ariaLabel="Revenue account"
+                    ariaLabel={t("modify.recognizedAria")}
                   />
                 </Field>
                 {["milestone", "usage"].includes(
@@ -413,7 +404,7 @@ function Form({
                     {(p.events ?? []).map((event, ei) => (
                       <div key={ei} className="grid grid-cols-3 gap-2">
                         <Input
-                          aria-label="Event month"
+                          aria-label={t("modify.eventMonth")}
                           type="month"
                           value={event.periodMonth.slice(0, 7)}
                           onChange={(e) =>
@@ -430,7 +421,7 @@ function Form({
                           }
                         />
                         <Input
-                          aria-label="Event amount"
+                          aria-label={t("modify.eventAmount")}
                           value={event.amount}
                           onChange={(e) =>
                             promise(i, n, {
@@ -443,7 +434,7 @@ function Form({
                           }
                         />
                         <Input
-                          aria-label="Event evidence"
+                          aria-label={t("modify.eventEvidence")}
                           value={event.description}
                           onChange={(e) =>
                             promise(i, n, {
@@ -472,7 +463,7 @@ function Form({
                         })
                       }
                     >
-                      Add performance event
+                      {t("modify.addEvent")}
                     </Button>
                   </div>
                 ) : null}
@@ -485,7 +476,7 @@ function Form({
                       })
                     }
                   >
-                    Remove from remaining promises
+                    {t("modify.removePromise")}
                   </Button>
                 ) : null}
               </div>
@@ -494,7 +485,7 @@ function Form({
               variant="outline"
               onClick={() => patch(i, { promises: [...g.promises, initial()] })}
             >
-              Add promise
+              {t("modify.addPromise")}
             </Button>
           </section>
         ))}
@@ -502,28 +493,28 @@ function Form({
           variant="outline"
           onClick={() => setGroups((old) => [...old, empty()])}
         >
-          Add accounting group
+          {t("modify.addGroup")}
         </Button>
-        <Field label="Evidence of the parties’ enforceable amendment">
+        <Field label={t("modify.rights")}>
           <Textarea
             value={rights}
             onChange={(e) => setRights(e.target.value)}
           />
         </Field>
-        <Field label="Distinctness, price, progress and historical exchange-rate assessment">
+        <Field label={t("modify.assessment")}>
           <Textarea
             value={assessment}
             onChange={(e) => setAssessment(e.target.value)}
           />
         </Field>
-        <Field label="Reason">
+        <Field label={t("modify.reason")}>
           <Textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
         </Field>
         <Button disabled={busy} onClick={save}>
-          Create approval proposal
+          {t("modify.propose")}
         </Button>
       </div>
     </Drawer>
