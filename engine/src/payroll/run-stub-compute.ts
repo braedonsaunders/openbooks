@@ -413,6 +413,15 @@ export async function calculateStub(
   let factors: Record<string, string> = {};
   let firstEarningsAssessed: EarningsAssessedLine[] | null = null;
 
+  // Named, non-blocking advisories the statutory pass reports (a reciprocity
+  // form to collect). Read once per stub like the certificates: the
+  // deduction-protection fixpoint re-runs the pass, and the same advisory
+  // reported twice is still one warning.
+  const advisories: string[] = [];
+  const noteAdvisory = (message: string): void => {
+    if (!advisories.includes(message)) advisories.push(message);
+  };
+
   const runStatutoryPass = async (): Promise<void> => {
     clearIncomeAssessedLines();
     factors = await pack.computeStatutory({
@@ -424,7 +433,7 @@ export async function calculateStub(
       income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,
       reducedBases: reducedBases(),
       deduction,
-      pushStatutory, storedCertificates, certificateFor, bool,
+      pushStatutory, storedCertificates, certificateFor, noteAdvisory, bool,
       assertRegionSupported: (region) => assertPayrollRegionSupported(country, region),
       employerLevies,
     });
@@ -547,6 +556,6 @@ export async function calculateStub(
 
   return {
     employeePartyId, province, gross, net, employerCost,
-    errors: [], warnings: entitlementWarnings,
+    errors: [], warnings: entitlementWarnings, advisories,
   };
 }

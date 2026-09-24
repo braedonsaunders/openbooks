@@ -20,6 +20,12 @@ export interface StubComputation {
   errors: string[];
   /** Non-fatal entitlement notices (a bank at or over its scoped limit). */
   warnings: EntitlementWarning[];
+  /**
+   * Named, non-blocking advisories the statutory pass reported (a reciprocity
+   * form to collect). Surfaced as run warnings — the commit gate binds to
+   * refusals only, so a correct stub with advice still commits.
+   */
+  advisories: string[];
 }
 
 /**

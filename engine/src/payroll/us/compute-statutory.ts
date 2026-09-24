@@ -10,7 +10,7 @@ import {
   certificateSubRegions,
   packCertificates,
 } from "../certificates.ts";
-import { blockingGaps, resolveWithholding } from "../withholding-resolution.ts";
+import { advisoryGaps, blockingGaps, resolveWithholding } from "../withholding-resolution.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { computeUsWithholding, usSubRegionRateIndex } from "./withholding.ts";
@@ -37,6 +37,7 @@ export const US_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   IE: "Insurable earnings this period",
   WITHHOLDING_RESIDENCE: "Withholding residence region",
   WITHHOLDING_RESIDENCE_SOURCE: "Withholding residence source",
+  WITHHOLDING_ADVISORY: "Withholding advisory — collect the named form",
 };
 
 /**
@@ -179,10 +180,29 @@ export async function computeUsStatutory(
   });
 
   const blocking = blockingGaps(resolution);
+  const advisory = advisoryGaps(resolution);
   if (blocking.length > 0) {
+    // The operator hitting a blocking refusal on a cross-border employee
+    // still needs the missing reciprocity form named: the refusal teaches the
+    // blocking rule, and without this the form that changes the answer stays
+    // hidden. Worded for the refused run — no claim about what is withheld,
+    // because nothing was.
+    const unclaimed = advisory.length > 0
+      && resolution.agreement?.taxedBy === "residence"
+      && resolution.agreement.certificateKey
+      ? ` In addition, the ${resolution.workRegion}/${resolution.residenceRegion} reciprocity`
+        + ` agreement is unclaimed (${resolution.agreement.certificateKey} is not on file): once`
+        + " the above is resolved, collecting the form moves withholding to the residence region."
+      : "";
     throw new PayrollError(
-      `${employeeName}: ${blocking.map((gap) => gap.message).join(" ")}`,
+      `${employeeName}: ${blocking.map((gap) => gap.message).join(" ")}${unclaimed}`,
     );
+  }
+  // Advisory gaps reach the operator as named, non-blocking run warnings and
+  // on the employee's stub trace — never as silence, and never as a refusal.
+  for (const gap of advisory) ctx.noteAdvisory?.(gap.message);
+  if (advisory.length > 0) {
+    factors.WITHHOLDING_ADVISORY = advisory.map((gap) => gap.message).join(" ");
   }
 
   let regionTax: string | undefined;

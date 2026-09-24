@@ -317,6 +317,12 @@ test(
       // is the state most new cross-border hires are actually in, and it is
       // invisible in every system that models reciprocity as a boolean.
       const unclaimed = await usEmployee(fx, "Unfiled Ulric", { state: "NJ", residence: "PA" });
+      // The mirror direction: a New Jersey resident working in Pennsylvania
+      // with no REV-419. The resolution withholds Pennsylvania, but New
+      // Jersey's unimplemented resident credit blocks the run — and the
+      // refusal names the REV-419 anyway, so the operator learns the form
+      // changes the answer.
+      const jersey = await usEmployee(fx, "Jersey June", { state: "PA", residence: "NJ" });
 
       const { run, result } = await runPayroll(fx);
 
@@ -350,6 +356,15 @@ test(
       assert.ok(refusal, "the unfiled employee is refused by name");
       assert.match(refusal!.message, /resides in PA and works in NJ/);
       assert.match(refusal!.message, /Pennsylvania personal income tax requires the employer/);
+      // The refusal still names the missing reciprocity form: the operator
+      // learns the NJ-165 changes the answer, not just the blocking rule.
+      assert.match(refusal!.message, /us_nj_nj165 is not on file/);
+
+      assert.equal(await stubOf(fx, run.documentId, jersey), null);
+      const jerseyRefusal = result.errors.find((error) => error.employee === "Jersey June");
+      assert.ok(jerseyRefusal, "the NJ resident is refused by name");
+      assert.match(jerseyRefusal!.message, /resides in NJ and works in PA/);
+      assert.match(jerseyRefusal!.message, /us_pa_rev419 is not on file/);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

@@ -153,6 +153,13 @@ export interface PayrollStatutoryComputeContext {
   pushStatutory: PushStatutoryFn;
   storedCertificates: readonly StoredCertificate[];
   certificateFor: (key: string) => ResolvedCertificate | null;
+  /**
+   * Report a named, non-blocking advisory for the run's per-employee warning
+   * channel (a reciprocity form to collect, not a refusal). Optional so packs
+   * that have nothing advisory keep ignoring it; the stub carries the
+   * advisories that matter on its own trace factors.
+   */
+  noteAdvisory?: (message: string) => void;
   bool: (value: string | null | undefined) => boolean;
   /** Bound by `calculateStub` — the pack refuses unsupported regions itself. */
   assertRegionSupported: (region: string) => void;

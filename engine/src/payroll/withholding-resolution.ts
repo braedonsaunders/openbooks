@@ -686,3 +686,13 @@ export function compareRates(a: string, b: string): number {
 export function blockingGaps(resolution: WithholdingResolution): WithholdingGap[] {
   return resolution.gaps.filter((gap) => gap.severity === "blocking");
 }
+
+/**
+ * Advisory gaps only — the ones the operator should know about but the run
+ * proceeds past. The reciprocal-form case: withholding the work region is
+ * correct, and stopping the payroll over a missing form would be wrong — but
+ * nobody learns to collect the form unless these reach an operator surface.
+ */
+export function advisoryGaps(resolution: WithholdingResolution): WithholdingGap[] {
+  return resolution.gaps.filter((gap) => gap.severity === "advisory");
+}
