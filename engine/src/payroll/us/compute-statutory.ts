@@ -29,6 +29,7 @@ export type UsYtdRow = {
   suiOtherRegions: string;
   suiOpeningUnscoped: boolean;
   supplemental: string;
+  regularWageTaxWithheldThisYear: boolean;
   fica_tax: string;
 };
 
@@ -96,6 +97,10 @@ export async function usEmployeeYtd(
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
+      coalesce(bool_or(
+        coalesce((s.factors->>'B')::numeric, 0) = 0
+        and coalesce((s.factors->>${`SIT_${region}`})::numeric, 0) > 0
+      ), false) as "regularWageTaxWithheldThisYear",
       coalesce((select ${sql.raw(ficaWithheldColumn)} from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'SS')::numeric), 0)
@@ -299,6 +304,7 @@ export async function computeUsStatutory(
       wages: income,
       supplemental: nonPeriodic,
       supplementalPaymentTiming,
+      regularWageTaxWithheldThisYear: ytd.regularWageTaxWithheldThisYear,
       wageAllocations: ctx.workAllocations,
       residentWithholdingFacts: levy.basis === "resident_out_of_region"
         ? resolveUsResidentWithholdingFacts(
