@@ -417,6 +417,7 @@ export async function attachStatementPdf(query: {
       select employment_id from hrm_comp_statements where org_id = ${orgId} and id = ${statementId}`)).rows[0];
     if (!source) throw statementNotVisible();
     try {
+      await lockEmploymentsForScope(db, [source.employment_id], { orgId, actorId });
       await requireHrmCompensationManageOnEmployment(db, orgId, actorId, source.employment_id);
     } catch (e) {
       if (e instanceof HrmAuthorizationError) throw statementNotVisible();
@@ -471,21 +472,27 @@ export async function listStatements(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const employmentId = requireId(query.employmentId, "employmentId");
-  if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
-    const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
-    const rows = await fetchStatements(orgId, employmentId, allowed);
-    if (rows.length > 0) return rows.map(toStatementDTO);
-    // Empty through the lens falls through to self-service: the
-    // employment may be the actor's own outside a restricted HR lens. A
-    // restricted grant never widens here — the self leg demands
-    // hrm.self.read plus identity.
+  return withOrgTransaction(orgId, async () => {
+    if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
+      const subjects = await lockEmploymentsForScope(db, [employmentId], { orgId, actorId, outOfScope: "filter" });
+      if (subjects.length > 0) {
+        const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+        return (await fetchStatements(orgId, employmentId, allowed)).map(toStatementDTO);
+      }
+      // Empty through the lens falls through to self-service: the
+      // employment may be the actor's own outside a restricted HR lens. A
+      // restricted grant never widens here — the self leg demands
+      // hrm.self.read plus identity.
+      if (await isOwnEmployment(orgId, actorId, employmentId)) {
+        await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
+        return (await fetchStatements(orgId, employmentId, null)).map(toStatementDTO);
+      }
+      return [];
+    }
     if (await isOwnEmployment(orgId, actorId, employmentId)) {
+      await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
       return (await fetchStatements(orgId, employmentId, null)).map(toStatementDTO);
     }
-    return rows.map(toStatementDTO);
-  }
-  if (await isOwnEmployment(orgId, actorId, employmentId)) {
-    return (await fetchStatements(orgId, employmentId, null)).map(toStatementDTO);
-  }
-  throw new CompensationError("REFUSED", "statements read for your own employment — HR reads the rest");
+    throw new CompensationError("REFUSED", "statements read for your own employment — HR reads the rest");
+  });
 }

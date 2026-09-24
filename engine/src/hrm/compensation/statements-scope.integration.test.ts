@@ -283,6 +283,7 @@ async function assertEmploymentLockHeld(
   orgId: string,
   employmentId: string,
   operation: () => Promise<unknown>,
+  surfaceName = "statement",
 ): Promise<void> {
   let settled = false;
   let failure: unknown;
@@ -305,7 +306,7 @@ async function assertEmploymentLockHeld(
        for update`);
     releaseStart();
     await new Promise((resolve) => setTimeout(resolve, 75));
-    assert.equal(settled, false, failure instanceof Error ? failure.message : "the statement operation must wait for the employment row lock");
+    assert.equal(settled, false, failure instanceof Error ? failure.message : `${surfaceName} must wait for the employment row lock`);
   });
   await observed;
   assert.equal(failure, undefined);
@@ -485,5 +486,39 @@ test("I1-refix-151 statement rendering holds the employment lock through PDF gen
     await assertEmploymentLockHeld(h.org.orgId, h.empA.employmentId, () => renderStatementPdf({
       orgId: h.org.orgId, actorId: h.readerAId, statementId: h.statementAId, orgName: "Scratch",
     }));
+  });
+});
+
+test("I1-refix statement scope class: every statement surface locks the employment", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const surfaces: Array<{ name: string; run: () => Promise<unknown> }> = [
+      {
+        name: "list",
+        run: () => listStatements({ orgId: h.org.orgId, actorId: h.readerAId, employmentId: h.empA.employmentId }),
+      },
+      {
+        name: "render",
+        run: () => renderStatementPdf({
+          orgId: h.org.orgId, actorId: h.readerAId, statementId: h.statementAId, orgName: "Scratch",
+        }),
+      },
+      {
+        name: "generate",
+        run: () => generateStatement({
+          orgId: h.org.orgId, actorId: h.managerAId, employmentId: h.empA.employmentId,
+          periodFrom: "2025-01-01", periodTo: "2025-12-31",
+        }),
+      },
+      {
+        name: "attach",
+        run: () => attachStatementPdf({
+          orgId: h.org.orgId, actorId: h.managerAId, statementId: h.statementAId,
+          filename: "statement.pdf", bytes: Buffer.from("%PDF-1.4 scope-lock"),
+        }),
+      },
+    ];
+    for (const surface of surfaces) {
+      await assertEmploymentLockHeld(h.org.orgId, h.empA.employmentId, surface.run, surface.name);
+    }
   });
 });
