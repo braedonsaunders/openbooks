@@ -191,6 +191,20 @@ test('setup booleans accept documented scalar spellings and reject malformed con
   for (const value of ['false-ish', 'truthy', 2, -1, 0.5, NaN, Infinity, [], ['yes'], { enabled: true }]) assert.deepEqual(coerceField(field, value), { error: 'taxable must be a boolean' })
 })
 
+test('worker-comp group rates refuse negatives through the declared field (B-PRJ-09)', () => {
+  // A worker-comp rate prices into every affected cost rate, so a negative
+  // rate must refuse at the write boundary — the generic percent coercion
+  // admits negatives unless the field declares min. The costing read path
+  // refuses negative group rates by name as well, for rows around this rule.
+  const entity = SETUP_ENTITY_BY_KEY.get('worker-comp-groups')
+  assert.ok(entity)
+  const field = entity.fields.find((f) => f.key === 'ratePercent')
+  assert.ok(field)
+  assert.deepEqual(coerceField(field, -2.5), { error: 'ratePercent must be at least 0' })
+  const ok = coerceField(field, 5)
+  assert.ok('column' in ok && ok.column === 'rate_percent')
+})
+
 test('refs to natural-key entities carry the key, never a UUID (hrm-document-categories)', () => {
   // Templates and retention schedules store the category KEY, and the generic
   // picker offers it via refValue — so the writer must accept what the picker

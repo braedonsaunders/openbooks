@@ -2286,7 +2286,12 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
-      { key: 'ratePercent', kind: 'percent' },
+      // A worker-comp rate is a burden priced into every affected cost rate:
+      // it cannot be negative (a negative rate silently reduced rates), and
+      // the generic percent coercion otherwise admits negatives. The costing
+      // read path refuses negative group rates by name as well, for rows
+      // written around this rule.
+      { key: 'ratePercent', kind: 'percent', min: 0 },
       { key: 'maxAssessable', kind: 'decimal', helpTextKey: 'fieldHelp.maxAssessable' },
       { key: 'isActive', kind: 'boolean' },
     ],
