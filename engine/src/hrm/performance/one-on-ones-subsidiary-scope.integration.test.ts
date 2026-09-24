@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -176,8 +176,8 @@ test("a restricted HR writes only the pairs they cover", { skip: !DB }, async ()
       }),
       (e: unknown) => {
         assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "FORBIDDEN");
-        assert.match(e.message, /outside your allowed subsidiaries/);
+        assert.equal(e.code, "NOT_FOUND");
+        assert.match(e.message, /not found/);
         return true;
       },
     );
@@ -192,8 +192,8 @@ test("a restricted HR writes only the pairs they cover", { skip: !DB }, async ()
       holdOneOnOne({ orgId: h.orgId, actorId: h.hrA, id: h.oneB }),
       (e: unknown) => {
         assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "FORBIDDEN");
-        assert.match(e.message, /outside your allowed subsidiaries/);
+        assert.equal(e.code, "NOT_FOUND");
+        assert.match(e.message, /not found/);
         return true;
       },
     );
@@ -202,7 +202,8 @@ test("a restricted HR writes only the pairs they cover", { skip: !DB }, async ()
       skipOneOnOne({ orgId: h.orgId, actorId: h.hrA, id: h.oneB, reason: "away" }),
       (e: unknown) => {
         assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "FORBIDDEN");
+        assert.equal(e.code, "NOT_FOUND");
+        assert.match(e.message, /not found/);
         return true;
       },
     );
@@ -210,12 +211,43 @@ test("a restricted HR writes only the pairs they cover", { skip: !DB }, async ()
       cancelOneOnOne({ orgId: h.orgId, actorId: h.hrA, id: h.oneB }),
       (e: unknown) => {
         assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "FORBIDDEN");
+        assert.equal(e.code, "NOT_FOUND");
+        assert.match(e.message, /not found/);
         return true;
       },
     );
     await cancelOneOnOne({ orgId: h.orgId, actorId: h.hrA, id: scheduled.id });
   } finally {
+    await dropScratchOrg(h.orgId);
+  }
+});
+
+test("a 1:1 write waits for the report employment scope lock", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  let releaseHolder!: () => void;
+  let reportLocked!: () => void;
+  const hold = new Promise<void>((resolve) => { releaseHolder = resolve; });
+  const locked = new Promise<void>((resolve) => { reportLocked = resolve; });
+  const holder = withOrgTransaction(h.orgId, async () => {
+    await db.execute(sql`
+      select id from worker_employments
+       where org_id = ${h.orgId} and id = ${h.a.reportEmploymentId}
+       for update`);
+    reportLocked();
+    await hold;
+  });
+  try {
+    await locked;
+    let finished = false;
+    const writing = holdOneOnOne({ orgId: h.orgId, actorId: h.hrA, id: h.oneA }).finally(() => { finished = true; });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(finished, false, "the write must wait until the report's locked employer has been rechecked");
+    releaseHolder();
+    await holder;
+    assert.equal((await writing).status, "held");
+  } finally {
+    releaseHolder();
+    await holder;
     await dropScratchOrg(h.orgId);
   }
 });

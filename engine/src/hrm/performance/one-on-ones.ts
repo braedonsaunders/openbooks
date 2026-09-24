@@ -4,9 +4,11 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import {
+  HrmAuthorizationError,
   loadApprovalPerson,
   loadManagedEmploymentIds,
   loadOwnEmploymentIds,
+  lockEmploymentsForScope,
   requireAggregatePerformanceManage,
   requireAggregatePerformanceRead,
 } from "../authorization.ts";
@@ -123,6 +125,29 @@ async function reportEmployer(db: SqlExecutor, orgId: string, reportEmploymentId
      where org_id = ${orgId} and id = ${reportEmploymentId}
   `)).rows;
   return rows[0]?.employerSubsidiaryId ?? null;
+}
+
+function reportNotVisible(): HrmPerformanceError {
+  return new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+}
+
+/** Read only the report id, then lock and scope-check it before loading a 1:1's joined data. */
+async function lockOneOnOneReport(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  oneOnOneId: string,
+): Promise<void> {
+  const reportEmploymentId = (await db.execute<{ report_employment_id: string }>(sql`
+    select report_employment_id from hrm_one_on_ones where org_id = ${orgId} and id = ${oneOnOneId}
+  `)).rows[0]?.report_employment_id;
+  if (!reportEmploymentId) throw reportNotVisible();
+  try {
+    await lockEmploymentsForScope(db, [reportEmploymentId], { orgId, actorId });
+  } catch (error) {
+    if (error instanceof HrmAuthorizationError) throw reportNotVisible();
+    throw error;
+  }
 }
 
 type StoredOneOnOne = {
@@ -341,6 +366,12 @@ export async function scheduleOneOnOne(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
+    try {
+      await lockEmploymentsForScope(db, [reportEmploymentId], { orgId, actorId });
+    } catch (error) {
+      if (error instanceof HrmAuthorizationError) throw reportNotVisible();
+      throw error;
+    }
     const managerParty = await employmentParty(db, orgId, managerEmploymentId);
     const reportParty = await employmentParty(db, orgId, reportEmploymentId);
     if (!managerParty || !reportParty) {
@@ -430,8 +461,9 @@ export async function holdOneOnOne(args: { orgId: string; actorId: string; id: s
   const id = requireId("id", args.id);
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
+    await lockOneOnOneReport(db, orgId, actorId, id);
     const one = await loadOneOnOne(db, orgId, id);
-    if (!one) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+    if (!one) throw reportNotVisible();
     await requireWriteAuthority(db, orgId, actorId, one);
     if (one.status !== "scheduled") {
       throw new HrmPerformanceError(
@@ -519,8 +551,9 @@ export async function skipOneOnOne(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
+    await lockOneOnOneReport(db, orgId, actorId, id);
     const one = await loadOneOnOne(db, orgId, id);
-    if (!one) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+    if (!one) throw reportNotVisible();
     await requireWriteAuthority(db, orgId, actorId, one);
     if (one.status !== "scheduled") {
       throw new HrmPerformanceError("BAD_STATE", `only a scheduled 1:1 can be skipped — this one is ${one.status}`);
@@ -559,8 +592,9 @@ export async function cancelOneOnOne(args: { orgId: string; actorId: string; id:
   const id = requireId("id", args.id);
   await withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
+    await lockOneOnOneReport(db, orgId, actorId, id);
     const one = await loadOneOnOne(db, orgId, id);
-    if (!one) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+    if (!one) throw reportNotVisible();
     await requireWriteAuthority(db, orgId, actorId, one);
     if (one.status !== "scheduled") {
       throw new HrmPerformanceError("BAD_STATE", `only a scheduled 1:1 can be cancelled — this one is ${one.status}`);
@@ -601,8 +635,9 @@ export async function addOneOnOneItem(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
+    await lockOneOnOneReport(db, orgId, actorId, oneOnOneId);
     const one = await loadOneOnOne(db, orgId, oneOnOneId);
-    if (!one) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+    if (!one) throw reportNotVisible();
     // Either party adds items; a private item belongs to its author.
     await requireWriteAuthority(db, orgId, actorId, one);
     if (one.status !== "scheduled") {
@@ -650,8 +685,9 @@ export async function setOneOnOneItemDone(args: {
   const itemId = requireId("itemId", args.itemId);
   await withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
+    await lockOneOnOneReport(db, orgId, actorId, oneOnOneId);
     const one = await loadOneOnOne(db, orgId, oneOnOneId);
-    if (!one) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+    if (!one) throw reportNotVisible();
     await requireWriteAuthority(db, orgId, actorId, one);
     const target = args.done ? "done" : "open";
     const updated = (await db.execute<{ id: string }>(sql`
@@ -703,7 +739,13 @@ export async function listOneOnOneDirectory(args: {
          ${scopeFilter}
          order by name
       `)).rows;
-      return { employments: rows.map((row) => ({ ...row, mine: false })) };
+      const scoped = await lockEmploymentsForScope(
+        db,
+        rows.map((row) => row.id),
+        { orgId, actorId, outOfScope: "filter" },
+      );
+      const visibleIds = new Set(scoped.map((employment) => employment.id));
+      return { employments: rows.filter((row) => visibleIds.has(row.id)).map((row) => ({ ...row, mine: false })) };
     }
     if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) {
       throw new HrmPerformanceError(
@@ -724,8 +766,14 @@ export async function listOneOnOneDirectory(args: {
        where e.org_id = ${orgId} and e.id in (${sql.join(params, sql`, `)})
        order by name
     `)).rows;
+    const scoped = await lockEmploymentsForScope(
+      db,
+      rows.map((row) => row.id),
+      { orgId, actorId, outOfScope: "filter" },
+    );
+    const visibleIds = new Set(scoped.map((employment) => employment.id));
     const mine = new Set(own);
-    return { employments: rows.map((row) => ({ id: row.id, name: row.name, mine: mine.has(row.id) })) };
+    return { employments: rows.filter((row) => visibleIds.has(row.id)).map((row) => ({ id: row.id, name: row.name, mine: mine.has(row.id) })) };
   });
 }
 
@@ -735,8 +783,9 @@ export async function getOneOnOne(args: { orgId: string; actorId: string; id: st
   const id = requireId("id", args.id);
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
+    await lockOneOnOneReport(db, orgId, actorId, id);
     const one = await loadOneOnOne(db, orgId, id);
-    if (!one) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
+    if (!one) throw reportNotVisible();
     if (!(await canSeeOneOnOne(db, orgId, actorId, one))) {
       // Uniform NOT_FOUND so existence cannot be probed across the pair boundary.
       throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
@@ -779,9 +828,16 @@ export async function listOneOnOnes(args: {
        where o.org_id = ${orgId}${statusFilter}${employmentFilter}
        order by o.scheduled_at desc
     `)).rows;
+    const visibleEmployments = await lockEmploymentsForScope(
+      db,
+      rows.map((row) => row.report_employment_id),
+      { orgId, actorId, outOfScope: "filter" },
+    );
+    const visibleEmploymentIds = new Set(visibleEmployments.map((employment) => employment.id));
     const out: OneOnOneDTO[] = [];
     for (const raw of rows) {
       const one: StoredOneOnOne = { ...raw, recurrence: (raw.recurrence ?? null) as StoredOneOnOne["recurrence"] };
+      if (!visibleEmploymentIds.has(one.report_employment_id)) continue;
       // HR sees only pairs whose report sits inside their allowed
       // subsidiaries — the privileged flag alone is never enough.
       const inScope =
@@ -816,6 +872,12 @@ export async function listHeldSharedItemsForEmployment(args: {
   const employmentId = requireId("employmentId", args.employmentId);
   return withOrgTransaction(orgId, async () => {
     await assertContinuousFeature(db, orgId);
+    try {
+      await lockEmploymentsForScope(db, [employmentId], { orgId, actorId });
+    } catch (error) {
+      if (error instanceof HrmAuthorizationError) throw reportNotVisible();
+      throw error;
+    }
     // Evidence serves the manager review: HR reads only evidence for
     // employments inside their allowed subsidiaries, otherwise the
     // reader must manage the employment structurally.
@@ -851,4 +913,3 @@ export async function listHeldSharedItemsForEmployment(args: {
     return rows;
   });
 }
-
