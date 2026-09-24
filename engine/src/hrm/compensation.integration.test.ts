@@ -494,6 +494,100 @@ test("HR-12 cycle approval runs through Flows and push writes each wage once", {
   });
 });
 
+test("HR-12 post-push line actions refuse, and push refuses approved lines with no raise", { skip: !DB }, async () => {
+  // F3-38: pushed history is immutable through the service (submit,
+  // propose, decide, and reopen all refuse past push), and an approved
+  // line that changes nothing refuses the push instead of writing a
+  // redundant wage row. The pushed audit event names the count.
+  await withHarness(async (h) => {
+    const { org } = h;
+    const { level } = await seedArchitecture(org.orgId, h.hrId);
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
+    const cycleApprover = await createScratchUser(org.orgId, "Comp Cycle Approver", "comp_cycle_approver");
+    await grantPermissions(org.orgId, cycleApprover, ["hrm.compensation.read", "hrm.compensation.approve"]);
+    await linkPerson(org.orgId, cycleApprover);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+      assignees: [{ type: "user", userId: cycleApprover }],
+      mode: "any",
+    });
+    const wide = { min: 0, max: 10 };
+    const matrix = {
+      rows: ["meets"],
+      cols: ["q1", "q2", "q3", "q4"],
+      cells: { meets: { q1: wide, q2: wide, q3: wide, q4: wide } },
+      unratedRow: "meets",
+    };
+    async function approvedCycle(name: string): Promise<{ cycleId: string; lineId: string }> {
+      const cycle = await createCycle({
+        orgId: org.orgId, actorId: h.hrId, name, kind: "adjustment",
+        effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: matrix,
+      });
+      await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+      const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+      return { cycleId: cycle.id, lineId: line!.id };
+    }
+    async function releaseCycle(cycleId: string): Promise<void> {
+      await submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId });
+      const gate = (await db.execute<{ id: string }>(sql`
+        select id from flow_gates where subject_id = ${cycleId} order by created_at`)).rows[0]!;
+      await decideGate({ gateId: gate.id, decision: "approved", userId: cycleApprover });
+    }
+    // Cycle A runs the whole lifecycle to pushed.
+    const pushed = await approvedCycle("Post-push");
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: pushed.lineId, proposedPct: 3 });
+    await releaseCycle(pushed.cycleId);
+    await approveLine({ orgId: org.orgId, actorId: cycleApprover, lineId: pushed.lineId });
+    const result = await pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: pushed.cycleId });
+    assert.equal(result.pushed, 1);
+    await assert.rejects(
+      submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId: pushed.cycleId }),
+      /cannot be submitted/,
+      "submit-for-approval after push refuses",
+    );
+    await assert.rejects(
+      proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: pushed.lineId, proposedPct: 2 }),
+      /takes no proposals/,
+      "proposing after push refuses",
+    );
+    await assert.rejects(
+      approveLine({ orgId: org.orgId, actorId: cycleApprover, lineId: pushed.lineId }),
+      /decides no lines/,
+      "deciding after push refuses",
+    );
+    await assert.rejects(
+      rejectLine({ orgId: org.orgId, actorId: cycleApprover, lineId: pushed.lineId, reason: "late" }),
+      /decides no lines/,
+      "rejecting after push refuses",
+    );
+    const trail = (await db.execute<{ lineId: string | null; reason: string | null }>(sql`
+      select line_id as "lineId", reason from hrm_comp_events
+       where org_id = ${org.orgId} and cycle_id = ${pushed.cycleId} and kind = 'pushed'
+       order by line_id nulls last`)).rows;
+    assert.equal(trail.length, 2, "the push leaves the line event and the cycle event");
+    assert.equal(trail[0]!.lineId, pushed.lineId, "the line event names its line");
+    assert.equal(trail[1]!.lineId, null, "the cycle event closes the round");
+    assert.match(trail[1]!.reason ?? "", /1 lines pushed/, "the cycle event names the pushed count");
+    // Cycle B approves a zero raise: the push refuses instead of writing
+    // an identical wage row, and nothing is stored.
+    const flat = await approvedCycle("No raise");
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: flat.lineId, proposedPct: 0 });
+    await releaseCycle(flat.cycleId);
+    await approveLine({ orgId: org.orgId, actorId: cycleApprover, lineId: flat.lineId });
+    await assert.rejects(
+      pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: flat.cycleId }),
+      /carries no raise/,
+      "an approved line with no raise refuses the push",
+    );
+    const wages = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from labor_cost_rates
+       where org_id = ${org.orgId} and employee_party_id = ${emp.workerPartyId}
+         and effective_from = '2025-04-01'::date`)).rows[0];
+    assert.equal(wages?.n, "1", "only cycle A wrote a wage row");
+  });
+});
+
 test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const { org } = h;

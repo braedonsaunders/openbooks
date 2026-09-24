@@ -1397,6 +1397,15 @@ export async function pushCycle(query: {
           "an approved line carries no proposed rate — the decision is incomplete; reopen and re-propose before pushing",
         );
       }
+      // F3-38: an approved line with no raise pushes a redundant wage row
+      // that rewrites history without changing pay. Refuse it by name —
+      // reject the line or reopen with a real proposal before pushing.
+      if (toUnits(String(line.proposed_rate)) <= toUnits(String(line.current_rate))) {
+        throw new CompensationError(
+          "REFUSED",
+          "an approved line carries no raise — pushing it would write an identical wage row; reject the line or reopen with a real proposal before pushing",
+        );
+      }
       const outcome = await supersedeLaborCostRate({
         orgId,
         actorId,

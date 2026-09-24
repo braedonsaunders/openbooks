@@ -189,9 +189,8 @@ registerHooks({
   },
 });
 
-const { loadCompensationHome, loadCompCycleDetail, loadHeadcountPlanDetail, loadEquity } = await import(
-  "../../../../lib/hrm/compensation.ts"
-);
+const { loadCompensationHome, loadCompCycleDetail, loadHeadcountPlanDetail, loadEquity, lineActionAvailability } =
+  await import("../../../../lib/hrm/compensation.ts");
 
 const gap = globalThis as Record<string, unknown>;
 
@@ -600,5 +599,30 @@ test("the plan lines head their six columns from the resolved catalog, never lit
     );
   } finally {
     (gap as Record<string, unknown>).__compDlgDetail = false;
+  }
+});
+
+test("the line drawer arms only the actions the transition table allows", () => {
+  // F3-38: propose while the round is live and the line is undecided;
+  // decide while the round is live or approved and the line is proposed.
+  // Anything else hides the forms — the engine refuses them anyway.
+  const cases: Array<[string, string | null, boolean, boolean]> = [
+    ["open", "pending", true, false],
+    ["open", "proposed", true, true],
+    ["in_review", "proposed", true, true],
+    ["approved", "proposed", false, true],
+    ["approved", "approved", false, false],
+    ["pushed", "proposed", false, false],
+    ["pushed", "pushed", false, false],
+    ["closed", "approved", false, false],
+    ["cancelled", "pending", false, false],
+    ["open", null, false, false],
+  ];
+  for (const [cycle, line, canPropose, canDecideLine] of cases) {
+    assert.deepEqual(
+      lineActionAvailability(cycle, line),
+      { canPropose, canDecideLine },
+      `${cycle}/${line ?? "none"} arms exactly its actions`,
+    );
   }
 });
