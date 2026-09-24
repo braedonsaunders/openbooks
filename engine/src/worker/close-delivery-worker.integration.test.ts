@@ -225,6 +225,96 @@ test("an enqueue failure with an unreachable queue records no delivery and fails
   }
 });
 
+async function seedMisconfiguredPackage(
+  orgId: string,
+  senderId: string,
+  patch: { recipients?: string; reports?: string; delivery?: string },
+): Promise<{ packageId: string; runId: string }> {
+  const packageId = randomUUID();
+  await db.execute(sql`
+    insert into close_reporting_packages (id, org_id, name, reports, recipients, delivery, created_by)
+    values (${packageId}, ${orgId}, 'misconfigured package',
+            ${patch.reports ?? '[{"slug":"close-probe"}]'}::jsonb,
+            ${patch.recipients ?? '["ops@scratch.test"]'}::jsonb,
+            ${patch.delivery ?? '{}'}::jsonb, ${senderId})`);
+  const period = (await db.execute<{ id: string }>(sql`
+    select id from accounting_periods where org_id = ${orgId} order by starts_on limit 1
+  `)).rows[0]!;
+  const book = (await db.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} limit 1
+  `)).rows[0]!;
+  const runId = await startCloseRun({
+    orgId, periodId: period.id, bookId: book.id, actorId: senderId, reportingPackageId: packageId,
+  });
+  await db.execute(sql`
+    update close_runs set status = 'closed', reporting_package_id = ${packageId}
+     where id = ${runId} and org_id = ${orgId}`);
+  return { packageId, runId };
+}
+
+async function deliveryFailures(orgId: string, runId: string | null): Promise<{ reason: string | null }[]> {
+  const rows = (await db.execute<{ reason: string | null }>(sql`
+    select payload->>'reason' as reason from close_events
+     where org_id = ${orgId}
+       and ((${runId}::uuid is null and run_id is null)
+         or (${runId}::uuid is not null and run_id = ${runId}::uuid))
+       and event_type = 'package.delivery_failed'`)).rows;
+  return rows;
+}
+
+test("a scheduled package with no recipients fails named and visible, never skipped", { skip: !DB }, async () => {
+  // C-52: zero recipients on an on-publish package is misconfiguration,
+  // not a skip. The worker records package.delivery_failed on the run
+  // timeline and throws so BullMQ never marks it complete.
+  const org = await createScratchOrg();
+  try {
+    const sender = await createScratchUser(org.orgId, "Sender", "sender");
+    const { packageId, runId } = await seedMisconfiguredPackage(org.orgId, sender, { recipients: "[]" });
+    await assert.rejects(
+      processCloseDeliveryJobData({ orgId: org.orgId, packageId, runId, senderId: sender }, {}),
+      /no recipients/,
+    );
+    assert.deepEqual(await deliveryFailures(org.orgId, runId), [{ reason: "no-recipients" }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a scheduled package with no reports fails named and visible, never skipped", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const sender = await createScratchUser(org.orgId, "Sender", "sender");
+    const { packageId, runId } = await seedMisconfiguredPackage(org.orgId, sender, { reports: "[]" });
+    await assert.rejects(
+      processCloseDeliveryJobData({ orgId: org.orgId, packageId, runId, senderId: sender }, {}),
+      /no reports/,
+    );
+    assert.deepEqual(await deliveryFailures(org.orgId, runId), [{ reason: "no-reports" }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a manual-cadence package skips quietly on both triggers", { skip: !DB }, async () => {
+  // C-52: manual cadence is a legitimate skip — auto-delivery is off, and
+  // the job completes without recording a failure.
+  const org = await createScratchOrg();
+  try {
+    const sender = await createScratchUser(org.orgId, "Sender", "sender");
+    const { packageId, runId } = await seedMisconfiguredPackage(org.orgId, sender, {
+      recipients: "[]",
+      delivery: '{"cadence":"manual"}',
+    });
+    const result = await processCloseDeliveryJobData(
+      { orgId: org.orgId, packageId, runId, senderId: sender }, {},
+    ) as { skipped: string };
+    assert.equal(result.skipped, "manual cadence");
+    assert.deepEqual(await deliveryFailures(org.orgId, runId), []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("close delivery without any principal refuses by name", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
