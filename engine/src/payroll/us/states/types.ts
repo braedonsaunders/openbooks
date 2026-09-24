@@ -326,6 +326,8 @@ export interface UsStateWithholdingInput {
    * publication assumes one of the two without saying which.
    */
   basis: "resident" | "nonresident";
+  /** Federal Form W-4 total-exemption status, used by Illinois to validate the IL-W-4 total exemption claim. */
+  federalWithholdingExempt?: boolean;
   /** Shared verified work-location shares for local and state variants. */
   wageAllocations?: readonly UsWageAllocation[];
   /** Inputs required when this levy is a residence-region claim on out-of-region pay. */

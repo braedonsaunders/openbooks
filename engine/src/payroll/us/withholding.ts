@@ -272,6 +272,8 @@ export interface UsWithholdingInput {
   residentWithholdingFacts?: UsResidentWithholdingFacts;
   /** Current paycheck's computed federal income-tax withholding. */
   federalIncomeTax: string;
+  /** Employee's total-exemption claim on the federal Form W-4, when known. */
+  federalWithholdingExempt?: boolean;
   /** Tax-qualified deductions from this period, used by Nebraska's floor. */
   taxQualifiedDeductions?: string;
   /**
@@ -403,6 +405,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         wages: input.wages,
         supplemental: "0",
         federalIncomeTax: input.federalIncomeTax,
+        federalWithholdingExempt: input.federalWithholdingExempt,
         taxQualifiedDeductions: input.taxQualifiedDeductions,
         certificate,
         basis: levy.reach,
@@ -474,6 +477,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       supplemental: input.supplemental,
       supplementalPaymentTiming: input.supplementalPaymentTiming,
       federalIncomeTax: input.federalIncomeTax,
+      federalWithholdingExempt: input.federalWithholdingExempt,
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
@@ -515,6 +519,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       wages: input.wages,
       supplemental: input.supplemental,
       federalIncomeTax: input.federalIncomeTax,
+      federalWithholdingExempt: input.federalWithholdingExempt,
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,

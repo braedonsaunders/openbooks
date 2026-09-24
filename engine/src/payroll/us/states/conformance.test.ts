@@ -233,6 +233,27 @@ test("IL with NO certificate on file withholds with no allowances", () => {
   assert.equal(result.tax, money("39.60")); // 800 × .0495
 });
 
+test("IL-W-4 total exemption is disregarded without a total-exemption federal W-4", () => {
+  // Illinois Department of Revenue, Publication 130 (R-02/26), pp. 7–8:
+  // disregard an IL-W-4 claiming total exemption when no total-exemption
+  // federal Form W-4 is on file, then withhold with no allowances.
+  // https://tax.illinois.gov/content/dam/soi/en/web/tax/research/publications/pubs/documents/pub-130.pdf
+  const result = IL_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
+    certificate: ilw4({ exempt: "true" }), federalWithholdingExempt: false,
+  });
+  assert.equal(result.tax, money("39.60"));
+  assert.equal(result.factors.IL_ANNUAL_EXEMPTION, money("0"));
+});
+
+test("IL honors total exemption when both IL-W-4 and federal W-4 claim it", () => {
+  const result = IL_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
+    certificate: ilw4({ exempt: "true" }), federalWithholdingExempt: true,
+  });
+  assert.equal(result.tax, money("0"));
+});
+
 test("IL Line 3 is added AFTER the rate, not taxed", () => {
   const result = IL_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
