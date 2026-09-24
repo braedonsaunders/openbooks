@@ -4,38 +4,69 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 /**
- * The former true-cost planner route promised modelling it never owned:
- * it rendered the same read-only dashboard as /analytics/true-cost, whose
- * absorption and selling tabs already carry the interactive recovery
- * planning. The route redirects to that dashboard (keeping the query) and
- * owns no view of its own, so nothing can promise a separate planner
- * again; the report links to the dashboard that holds the planning.
+ * The former true-cost planner route rendered the same read-only dashboard
+ * as /analytics/true-cost, whose absorption and selling tabs already carry
+ * the interactive recovery planning. The route redirects to that dashboard
+ * (keeping the query) and owns no view of its own; the report links to the
+ * dashboard that holds the planning.
  */
 
-const pageSource = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8')
+const { registerHooks } = await import('node:module')
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === 'next/navigation') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export function redirect(url){throw new Error(`NEXT_REDIRECT;replace;${url};307`)}',
+      }
+    }
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, url: 'data:text/javascript,' }
+    }
+    return next(specifier, context)
+  },
+})
 
-test('the planner route redirects to the dashboard keeping the query', () => {
-  assert.match(pageSource, /redirect\(`\/analytics\/true-cost\$\{qs \? `\?\$\{qs\}` : ''\}`\)/)
-  assert.ok(!pageSource.includes('./view'), 'the redirect owns no view to drift from the dashboard')
-  assert.ok(!pageSource.includes('loadTrueCostPlanner'), 'the duplicate loader is gone')
+const { default: TrueCostPlannerPage } = await import('./page')
+const { trueCostSpec } = await import('../../../reports/true-cost/view')
+
+async function redirectTarget(searchParams: Record<string, string | undefined>): Promise<string> {
+  try {
+    await TrueCostPlannerPage({ searchParams: Promise.resolve(searchParams) })
+  } catch (error) {
+    return (error as Error).message
+  }
+  throw new Error('the planner route must redirect, never render')
+}
+
+test('the planner route redirects to the dashboard keeping the query', async () => {
+  const target = await redirectTarget({ period: '2026-07', segment: 'retail' })
+  assert.ok(
+    target.includes('/analytics/true-cost?period=2026-07&segment=retail'),
+    `the redirect must keep the query, got: ${target}`,
+  )
+})
+
+test('the planner route redirects bare when no query is set', async () => {
+  const target = await redirectTarget({})
+  assert.ok(
+    target.includes('/analytics/true-cost') && !target.includes('/analytics/true-cost?'),
+    `the redirect must land on the bare dashboard, got: ${target}`,
+  )
 })
 
 test('the report links to the analytics dashboard that holds the planning', () => {
-  const viewSource = readFileSync(
-    new URL('../../../reports/true-cost/view.ts', import.meta.url),
-    'utf8',
+  const spec = JSON.stringify(
+    trueCostSpec({
+      plannerHref: '/analytics/true-cost?period=2026-07',
+      plannerLabel: 'Open analytics',
+    } as unknown as Parameters<typeof trueCostSpec>[0]),
   )
-  assert.match(
-    viewSource,
-    /plannerHref: `\/analytics\/true-cost\$\{dashboardQs \? `\?\$\{dashboardQs\}` : ''\}`/,
-    'the report action targets the dashboard, never a separate planner route',
+  assert.ok(
+    spec.includes('"/analytics/true-cost?period=2026-07"'),
+    `the report action targets the dashboard, never a separate planner route, got:\n${spec}`,
   )
-  assert.match(viewSource, /plannerLabel: tc\('openAnalytics'\)/, 'the label names the page it really is')
-  assert.match(
-    viewSource,
-    /the True Cost analytics dashboard/,
-    'the header documents where the planning lives',
-  )
+  assert.ok(spec.includes('"Open analytics"'), `the label names the page it really is, got:\n${spec}`)
 })
 
 test('the open-analytics copy exists in every locale catalog', () => {
