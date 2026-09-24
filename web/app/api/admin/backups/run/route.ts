@@ -35,11 +35,13 @@ export async function POST() {
       values (${orgId}, 'manual', 'queued', ${actor.id})
       returning id`));
   } catch (error) {
-    const postgresError = error as { code?: string; constraint?: string };
-    if (
-      postgresError.code === "23505" &&
-      postgresError.constraint === "backup_runs_one_inflight_per_org"
-    ) {
+    // db.execute rejects with a DrizzleQueryError wrapper: the Postgres code
+    // and constraint live on its cause, so reading them off the wrapper
+    // directly never matches and the 409 below would stay dead.
+    const wrapped = error as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
+    const code = wrapped.code ?? wrapped.cause?.code;
+    const constraint = wrapped.constraint ?? wrapped.cause?.constraint;
+    if (code === "23505" && constraint === "backup_runs_one_inflight_per_org") {
       return NextResponse.json({ error: "a backup is already in progress" }, { status: 409 });
     }
     throw error;
