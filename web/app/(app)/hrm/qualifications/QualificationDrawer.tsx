@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
@@ -74,6 +74,8 @@ export function QualificationDrawer({
   const [loaded, setLoaded] = useState<{ id: string; detail: Detail } | null>(null)
   const detail = loaded && loaded.id === qualificationId ? loaded.detail : null
   const [types, setTypes] = useState<QualificationType[]>([])
+  const [typesError, setTypesError] = useState<string | null>(null)
+  const typeRequestId = useRef(0)
   // The record form names the worker through the employments picker (ids,
   // never free-text uuids). A picker failure is an error with retry, never
   // a silent empty list.
@@ -85,6 +87,29 @@ export function QualificationDrawer({
   // nothing has failed.
   const loading = qualificationId !== null && loaded?.id !== qualificationId && status === undefined
   const [form, setForm] = useState({ employmentId: '', typeId: '', issuedOn: '', expiresOn: '', identifier: '', notes: '' })
+
+  async function loadTypes(): Promise<void> {
+    const requestId = ++typeRequestId.current
+    setTypesError(null)
+    try {
+      const res = await fetch('/api/hrm/qualification-types')
+      if (!res.ok) {
+        const message = await readApiErrorMessage(res, t('qualifications.recordForm.typesFailed'))
+        if (requestId === typeRequestId.current) setTypesError(message)
+        return
+      }
+      const payload = (await res.json()) as { types?: unknown }
+      if (!Array.isArray(payload.types)) {
+        if (requestId === typeRequestId.current) setTypesError(t('qualifications.recordForm.typesFailed'))
+        return
+      }
+      if (requestId === typeRequestId.current) setTypes(payload.types as QualificationType[])
+    } catch {
+      if (requestId === typeRequestId.current) {
+        setTypesError(t('qualifications.recordForm.typesFailed'))
+      }
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -104,19 +129,10 @@ export function QualificationDrawer({
         }
       })()
     }
-    ;(async () => {
-      try {
-        const res = await fetch('/api/hrm/qualification-types')
-        if (!res.ok) return
-        const j = (await res.json()) as { types?: QualificationType[] }
-        if (!cancelled && Array.isArray(j.types)) setTypes(j.types)
-      } catch {
-        // The type list failing leaves the record form unusable, not the
-        // drawer: detail still renders, recording waits for types.
-      }
-    })()
+    void loadTypes()
     return () => {
       cancelled = true
+      typeRequestId.current += 1
     }
   }, [qualificationId])
 
@@ -335,6 +351,14 @@ export function QualificationDrawer({
                 <option key={type.id} value={type.id}>{type.code} · {type.name}</option>
               ))}
             </Select>
+            {typesError ? (
+              <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+                {typesError}{' '}
+                <Button variant="ghost" size="sm" onClick={() => void loadTypes()}>
+                  {tCommon('actions.retry')}
+                </Button>
+              </p>
+            ) : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

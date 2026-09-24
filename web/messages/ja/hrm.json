@@ -1832,6 +1832,7 @@
       "type": "資格種類",
       "employmentPlaceholder": "従業員を選択…",
       "employmentsFailed": "従業員を読み込めませんでした。",
+      "typesFailed": "資格の種類を読み込めませんでした。",
       "recordFailed": "資格を記録できませんでした。",
       "issuedOn": "発行日",
       "expiresOn": "有効期限",

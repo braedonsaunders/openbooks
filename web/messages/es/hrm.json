@@ -1832,6 +1832,7 @@
       "type": "Tipo de cualificación",
       "employmentPlaceholder": "Seleccionar un empleado…",
       "employmentsFailed": "No se pudieron cargar los empleados.",
+      "typesFailed": "No se pudieron cargar los tipos de cualificación.",
       "recordFailed": "No se pudo registrar la cualificación.",
       "issuedOn": "Emitida el",
       "expiresOn": "Vence el",

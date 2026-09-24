@@ -1832,6 +1832,7 @@
       "type": "Type de qualification",
       "employmentPlaceholder": "Sélectionner un employé…",
       "employmentsFailed": "Les employés n’ont pas pu être chargés.",
+      "typesFailed": "Les types de qualification n’ont pas pu être chargés.",
       "recordFailed": "La qualification n’a pas pu être enregistrée.",
       "issuedOn": "Délivrée le",
       "expiresOn": "Expire le",

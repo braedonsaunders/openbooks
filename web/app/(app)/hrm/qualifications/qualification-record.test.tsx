@@ -235,6 +235,35 @@ test('a picker failure renders the translated error with retry', async () => {
   }
 })
 
+test('a qualification type list failure is named and can be retried', async () => {
+  let attempts = 0
+  const m = await mount(async (url) => {
+    if (url.includes('/api/hrm/qualification-types')) {
+      attempts += 1
+      if (attempts === 1) throw new Error('connection reset')
+      return { ok: true, body: TYPES }
+    }
+    if (url.includes('/api/hrm/options?source=employments')) return { ok: true, body: EMPLOYMENTS }
+    throw new Error(`unexpected fetch ${url}`)
+  })
+  try {
+    const { act } = await import('react')
+    await flushAsync()
+    assert.match(m.document.body.textContent ?? '', /Qualification types could not be loaded/)
+    const retry = [...m.document.querySelectorAll('button')].find((b) => b.textContent === 'Retry')
+    assert.ok(retry, 'the failed type list offers a retry')
+    await act(async () => {
+      m.click(retry!)
+    })
+    await flushAsync()
+    assert.equal(attempts, 2, 'retry reloads the type list')
+    const nativeSelects = [...m.document.querySelectorAll('select')]
+    assert.match(nativeSelects[1]?.textContent ?? '', /FIRST-AID · First aid/, 'the recovered list populates the type picker')
+  } finally {
+    await m.unmount()
+  }
+})
+
 // F3-37: Verify, Renew and Revoke render for the manage grant only — a
 // read-only viewer sees the credential detail with no action buttons.
 const PENDING_DETAIL = {
