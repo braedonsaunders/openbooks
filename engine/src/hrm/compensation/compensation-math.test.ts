@@ -199,6 +199,13 @@ describe("ordinary least squares", () => {
     assert.deepEqual(meanAndMedian([3, 1, 2], "wages"), { mean: 2, median: 2 });
     assert.throws(() => meanAndMedian([], "wages"), /has no records/);
   });
+
+  test("even-length medians average both middle values", () => {
+    // F3-35: an even headcount once reported the lower middle value.
+    assert.deepEqual(meanAndMedian([1, 5], "wages"), { mean: 3, median: 3 });
+    assert.deepEqual(meanAndMedian([1, 2, 3, 4], "wages"), { mean: 2.5, median: 2.5 });
+    assert.deepEqual(meanAndMedian([40, 10], "rates"), { mean: 25, median: 25 });
+  });
 });
 
 describe("unexplained gap fit", () => {
