@@ -295,6 +295,50 @@ test("Rhode Island EXEMPT and EXEMPT-MS elections expire after their calendar ye
   assert.equal(expired.answers.allowances, "0");
 });
 
+test("Wisconsin WT-4 complete exemption expires after the April 30 renewal deadline", () => {
+  // Wisconsin DOR Publication W-166 (January 2026), p. 8: a complete WT-4
+  // exemption must be refiled by April 30; without renewal it becomes zero.
+  const certificate = payrollCertificate("US", "us_wi_wt4");
+  const exemptRow = {
+    certificateKey: certificate.key,
+    region: "WI",
+    effectiveFrom: "2025-01-01",
+    answers: { marital_status: "married", exemptions: "4", exempt: "true" },
+  };
+  const throughDeadline = resolveCertificate({ certificate, stored: [exemptRow], asOf: "2026-04-30" });
+  const afterDeadline = resolveCertificate({ certificate, stored: [exemptRow], asOf: "2026-05-01" });
+  const ordinaryCertificate = resolveCertificate({
+    certificate,
+    stored: [{ ...exemptRow, answers: { ...exemptRow.answers, exempt: "false" } }],
+    asOf: "2026-05-01",
+  });
+
+  assert.equal(throughDeadline.answers.exempt, "true");
+  assert.equal(afterDeadline.onFile, false);
+  assert.equal(afterDeadline.answers.exempt, null);
+  assert.equal(afterDeadline.answers.exemptions, "0");
+  assert.equal(ordinaryCertificate.answers.exemptions, "4");
+});
+
+test("Virginia VA-4 exemption expires at the end of its calendar year", () => {
+  // Virginia Form VA-4 line 3: a new exemption form is required each year.
+  // https://www.tax.virginia.gov/sites/default/files/taxforms/withholding/any/va-4-any.pdf
+  const certificate = payrollCertificate("US", "us_va_va4");
+  const row = {
+    certificateKey: certificate.key,
+    region: "VA",
+    effectiveFrom: "2026-01-01",
+    answers: { personal_exemptions: "2", exempt: "true" },
+  };
+  const current = resolveCertificate({ certificate, stored: [row], asOf: "2026-12-31" });
+  const expired = resolveCertificate({ certificate, stored: [row], asOf: "2027-01-01" });
+
+  assert.equal(current.answers.exempt, "true");
+  assert.equal(expired.onFile, false);
+  assert.equal(expired.answers.exempt, null);
+  assert.equal(expired.answers.personal_exemptions, "0");
+});
+
 /* --------------------------------------------------------------------- */
 /* Reciprocity, on the real declarations                                  */
 /* --------------------------------------------------------------------- */
