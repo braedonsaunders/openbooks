@@ -212,4 +212,5 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   // No `emp` facts: the engine reads the tax code and student-loan flags
   // off the certificate answers, never off bare profile keys.
   employeeFacts: GB_EMPLOYEE_FACTS,
+  employerFacts: [],
 };

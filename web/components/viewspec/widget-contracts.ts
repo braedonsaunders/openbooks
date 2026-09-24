@@ -382,6 +382,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'payroll-payday-tab': { props: [] },
   'payroll-previous-run': { props: ['employeesLabel', 'netLabel', 'noneText', 'payDateLabel', 'periodLabel', 'run'] },
   'payroll-rates-tab': { props: [] },
+  'payroll-employer-facts-tab': { props: [] },
   'payroll-schedules-tab': { props: [] },
   'payroll-settings-banner': { props: ['openSettingsLabel', 'settings', 'text'] },
   'payroll-setup-banner': { props: ['launcher'] },

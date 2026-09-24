@@ -9,6 +9,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import "../packs.ts";
 import { calculateFrPas2026, computeFrStatutory } from "./compute-statutory.ts";
 
 const METRO = "metropole" as const;
@@ -177,6 +178,9 @@ test("a hors-de-France domicile refuses with the 182 A mechanism, never grille I
   // The adapter refuses before any line is pushed: a minimal context reaches
   // the domicile branch with only taxYear, region, pay date and answers.
   const ctx = {
+    tx: { execute: async () => ({ rows: [{ fact_value: "12.00" }] }) },
+    orgId: "org",
+    subsidiaryId: "legal-employer",
     taxYear: 2026,
     region: "FR",
     run: { pay_date: "2026-06-15" },
@@ -190,6 +194,9 @@ test("the retired lumped domicile refuses with the re-affirmation remedy", async
   // different mechanisms. Stored answers carrying it must not silently
   // price as métropole — the operator re-affirms the split domicile.
   const ctx = {
+    tx: { execute: async () => ({ rows: [{ fact_value: "12.00" }] }) },
+    orgId: "org",
+    subsidiaryId: "legal-employer",
     taxYear: 2026,
     region: "FR",
     run: { pay_date: "2026-06-15" },
@@ -207,13 +214,16 @@ test("2026 RGDU eligible SMIC payroll refuses until its reduction can be priced"
   // and URSSAF RGDU rules (https://www.urssaf.fr/accueil/employeur/beneficier-exonerations/reduction-generale-cotisation.html).
   const pushed: unknown[] = [];
   const ctx = {
+    tx: { execute: async () => ({ rows: [{ fact_value: "12.00" }] }) },
+    orgId: "org",
+    subsidiaryId: "legal-employer",
     taxYear: 2026,
     region: "FR",
     run: { pay_date: "2026-06-30" },
     income: "1823.03",
     nonPeriodic: "0.0000",
     periodsPerYear: 12,
-    employerEmployeeCount: 12,
+    employerEffectif: "12.00",
     certificateFor: () => ({ answers: { domicile: "metropole" } }),
     pushStatutory: (...args: unknown[]) => pushed.push(args),
   } as never;

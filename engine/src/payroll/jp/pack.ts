@@ -168,4 +168,5 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
   // 所得税法第185条 (the table) under the 源泉徴収 duty of 第183条.
   statutoryEngineLabel: "月額表",
   employeeFacts: JP_EMPLOYEE_FACTS,
+  employerFacts: [],
 };

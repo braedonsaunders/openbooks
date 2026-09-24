@@ -400,6 +400,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'payroll-payday-tab',
   'payroll-previous-run',
   'payroll-rates-tab',
+  'payroll-employer-facts-tab',
   'payroll-schedules-tab',
   'payroll-settings-banner',
   'payroll-setup-banner',

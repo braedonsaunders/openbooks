@@ -283,6 +283,7 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     ...CA_COMPUTE_FACTOR_LABELS,
   },
   employeeFacts: CA_EMPLOYEE_FACTS,
+  employerFacts: [],
   // HR-13: construction carve-outs as pack data — statute transcribed
   // with citations, consumed by generic readers, never a generic branch.
   construction: CA_CONSTRUCTION,

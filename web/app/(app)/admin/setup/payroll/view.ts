@@ -71,7 +71,7 @@ const TABS = [
   // Employer-supplied statutory rates (experience-rated SUI, the FUTA credit
   // reduction, provincial employer health levies), at the scope the pack
   // declares each varies by.
-  'rates',
+  'rates', 'employerFacts',
   // The hours and days employees are normally scheduled to work — a generic
   // employment attribute (engine/src/payroll/work-schedules.ts) that several
   // jurisdictions' statutory holiday pay is computed FROM.
@@ -90,7 +90,7 @@ const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 
 /** The two-level arrangement: ≤5 top-row groups, subtabs within. */
 const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tabs: Tab[] }[] = [
-  { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'schedules', 'workSchedules', 'filing'] },
+  { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'employerFacts', 'schedules', 'workSchedules', 'filing'] },
   { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
   { key: 'entitlements', tabs: ['entitlements', 'limits', 'service'] },
   { key: 'payday', tabs: ['payday'] },
@@ -109,6 +109,7 @@ export interface PayrollSetupData {
   onAccounts: boolean
   onPayday: boolean
   onRates: boolean
+  onEmployerFacts: boolean
   onWorkSchedules: boolean
   onEntityTab: boolean
   entityKey: string | null
@@ -159,6 +160,8 @@ export async function loadPayrollSetup(
               ? tabLabel(key, 'Payday')
               : key === 'rates'
                 ? tabLabel(key, 'Statutory Rates')
+                : key === 'employerFacts'
+                  ? tabLabel(key, 'Employer Facts')
                 : t(`tabs.${key}`)
 
   const groups = GROUPS
@@ -200,6 +203,7 @@ export async function loadPayrollSetup(
     onAccounts: tab === 'accounts',
     onPayday: tab === 'payday',
     onRates: tab === 'rates',
+    onEmployerFacts: tab === 'employerFacts',
     onWorkSchedules: tab === 'workSchedules',
     onEntityTab: isEntityTab(tab),
     entityKey: entityKeyFor(tab),
@@ -265,6 +269,10 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
         {
           ...widgetBlock('payroll-rates-tab', {}),
           when: f('onRates'),
+        },
+        {
+          ...widgetBlock('payroll-employer-facts-tab', {}),
+          when: f('onEmployerFacts'),
         },
         {
           ...widgetBlock('payroll-schedules-tab', {}),

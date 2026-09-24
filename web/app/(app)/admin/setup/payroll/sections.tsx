@@ -33,6 +33,7 @@ import { PayrollSetupLauncher } from './PayrollSetupLauncher'
 import { PayrollSetupWorkspace } from './PayrollSetupWorkspace'
 import { StatHolidayPaySection } from './StatHolidayPaySection'
 import { StatutoryRatesSection } from './StatutoryRatesSection'
+import { EmployerFactsSection } from './EmployerFactsSection'
 import { WorkSchedulesSection } from './WorkSchedulesSection'
 
 /**
@@ -308,6 +309,11 @@ export async function PaydayTabSlot() {
 /** Statutory rates tab: fully client-rendered over pack-declared slots. */
 export function RatesTabSlot() {
   return <StatutoryRatesSection />
+}
+
+/** Pack-declared employer facts tab: audited legal-employer values. */
+export function EmployerFactsTabSlot() {
+  return <EmployerFactsSection />
 }
 
 /** Work schedules tab: manage gate re-derived from the session. */

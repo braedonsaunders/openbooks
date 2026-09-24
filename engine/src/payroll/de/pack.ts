@@ -467,6 +467,7 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   // reads the three attestation facts declared in ./employee-facts.ts
   // (required: false, so the monthly path stays untouched).
   employeeFacts: DE_EMPLOYEE_FACTS,
+  employerFacts: [],
   // The 2026 Lohnsteuer-Jahresausgleich (§42b EStG): one edition per
   // transcribed year, null for every untranscribed year. Absent a published
   // December program for 2026, the December monthly pass stands and this

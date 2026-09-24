@@ -203,6 +203,7 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
   statutoryEngineLabel: "PIT/ZUS",
   factorLabels: { ...PL_FACTOR_LABELS },
   employeeFacts: PL_EMPLOYEE_FACTS,
+  employerFacts: [],
   // The PESEL derives the birth year it encodes (see `./pesel.ts` for the
   // cited century rule). The profile API reads this generically: a derived
   // year prefills a blank `pl_rok_urodzenia`, while a supplied year that

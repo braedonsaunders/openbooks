@@ -429,6 +429,7 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   },
   describeFactor: usDescribeFactor,
   employeeFacts: US_EMPLOYEE_FACTS,
+  employerFacts: [],
   // HR-13: the federal weekly file and one state XML, declared by the
   // pack — the generic layer lists whatever is declared here. LAZY like
   // filings/certificates so the builders never evaluate with the pack.

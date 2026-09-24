@@ -42,6 +42,7 @@ import {
   registerPayrollWithholdingSource,
 } from "./withholding-jurisdictions.ts";
 import type { PayrollEmployeeFact } from "./employee-facts.ts";
+import { registerEmployerFacts, type PayrollEmployerFact } from "./employer-facts.ts";
 import type { PayrollPackRates, PayrollStatutoryRateSlot } from "./statutory-rates.ts";
 import { payrollDraftTaxYears, payrollSupportedTaxYears } from "./tax-years.ts";
 import { taxYearFor } from "./tax-year-math.ts";
@@ -782,6 +783,8 @@ export interface PayrollCountryPack {
    * certificate / profile-column declarations, never in prose.
    */
   employeeFacts: readonly PayrollEmployeeFact[];
+  /** Effective-dated legal-employer values required by this pack. */
+  employerFacts: readonly PayrollEmployerFact[];
   /**
    * Profile-column values the pack DERIVES from facts it already collects,
    * keyed by `employee_payroll_profiles` column — today, only the PL birth
@@ -1418,6 +1421,7 @@ Object.setPrototypeOf(PAYROLL_COUNTRY_PACKS, null);
  */
 export function publishPackDeclarations(): void {
   for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    registerEmployerFacts(pack.country, pack.employerFacts);
     registerPayrollCertificateSource(pack.country, pack.certificates);
     registerPayrollWithholdingSource(pack.country, pack.withholding);
     if (pack.reciprocity) registerPayrollReciprocitySource(pack.country, pack.reciprocity);

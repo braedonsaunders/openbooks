@@ -91,6 +91,7 @@ function fixturePack(): PayrollCountryPack {
     factorLabels: {},
     // The fixture reads no `emp` facts, stated.
     employeeFacts: [],
+    employerFacts: [],
   };
 }
 

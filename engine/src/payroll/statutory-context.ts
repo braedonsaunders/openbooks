@@ -107,6 +107,8 @@ export interface PayrollWorkAllocation {
 export interface PayrollStatutoryComputeContext {
   tx: Pick<typeof db, "execute">;
   orgId: string;
+  /** The legal-employer subsidiary whose effective facts govern this run. */
+  subsidiaryId?: string;
   documentId: string;
   employeePartyId: string;
   employeeName: string;

@@ -52,7 +52,7 @@
  * away from zero (roundDiv) — the same discipline as ./compute-statutory.ts
  * and canada/decimal.ts. Never floating point.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   FR_AGS_ER_2026,
@@ -145,11 +145,11 @@ export interface FrCotisations2026Input {
   /** Usual pay periodicity; 12 = monthly caps directly. */
   periodsPerYear: number;
   /**
-   * Employer's effectif for the FNAL 50-salarié threshold, isolated to
-   * its legal entity. null = unknown → the engine REFUSES (named FNAL
-   * refusal) rather than assuming a size.
+   * Pack-declared annual employer effectif for the FNAL threshold, effective
+   * for this legal employer. null = unknown → named refusal; a live roster is
+   * not a substitute for the legally defined prior-year average.
    */
-  employerEmployeeCount: number | null;
+  employerEffectif: string | null;
   /** The employer has a source-backed exemption/special regime that allows
    * the reduced family rate. Missing means ordinary employer (5.25%). */
   allocFamReducedEligible?: boolean;
@@ -286,22 +286,29 @@ export function calculateFrCotisations2026(
   const csaEr = lineOf(brut, rate6(FR_CSA_ER_2026.rate));
   const dialogueEr = lineOf(brut, rate6(FR_DIALOGUE_SOCIAL_ER_2026.rate));
 
-  // FNAL: effectif decides; unknown effectif fail-closes.
-  const count = input.employerEmployeeCount;
-  if (count === null || count === undefined) {
+  // FNAL: the legal employer's declared annual effectif decides; the live
+  // roster is not the statutory measure (CSS L.130-1 / R.130-1).
+  const declaredEffectif = input.employerEffectif;
+  if (declaredEffectif === null || declaredEffectif === undefined) {
     throw new PayrollPackError(
-      "FR FNAL refuses: employerEmployeeCount is unknown — the 0,10 % "
+      "FR FNAL refuses: effectif_moyen_annuel is not configured — the 0,10 % "
       + "plafonné (< 50 salariés) vs 0,50 % sur la totalité (≥ 50) choice "
-      + "cannot be made without the employer's effectif "
-      + "(see FR_COTISATION_REFUSALS_2026).",
+      + "needs the prior-calendar-year legal-employer average including its establishments "
+      + "(CSS L.130-1 and R.130-1). Configure the effective-dated fact in Payroll Setup.",
     );
   }
-  if (!Number.isInteger(count) || count < 0) {
+  let effectif: bigint;
+  try {
+    const exact = normalizeDecimal(declaredEffectif, 2);
+    if (exact !== declaredEffectif) throw new Error("not canonical");
+    effectif = U(exact);
+  } catch {
     throw new PayrollPackError(
-      `FR FNAL needs a non-negative integer employerEmployeeCount, got ${count}`,
+      `FR FNAL refuses: effectif_moyen_annuel must be a non-negative exact value to hundredths, got "${declaredEffectif}"`,
     );
   }
-  const fnalEr = count >= 50
+  if (effectif < 0n) throw new PayrollPackError(`FR FNAL refuses: effectif_moyen_annuel cannot be negative, got "${declaredEffectif}"`);
+  const fnalEr = effectif >= U("50")
     ? lineOf(brut, rate6(FR_FNAL_ER_2026.cinquanteEtPlus.rate))
     : lineOf(plafPer, rate6(FR_FNAL_ER_2026.moins50.rate));
 
