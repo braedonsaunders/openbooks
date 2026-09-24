@@ -489,15 +489,15 @@
     },
     "segmentsLabel": "Anzeigen",
     "templates": {
-      "title": "Checklist templates", "description": "Reusable onboarding, offboarding, and transfer checklists. Opening a checklist snapshots its template so later edits never rewrite history.",
-      "newTemplate": "New template", "editTemplate": "Edit template", "createTemplate": "Create a template", "createDescription": "Define who this checklist covers, then add its ordered steps.", "editDescription": "Edit the reusable definition. Already-opened checklists keep their original snapshot.",
-      "template": "Template", "name": "Name", "kind": "Kind", "scope": "Applies to", "status": "Status", "active": "Active", "retired": "Retired", "subsidiary": "Employer subsidiary", "department": "Department", "allSubsidiaries": "All subsidiaries", "allDepartments": "All departments", "allEmployees": "All employees", "limitedScope": "Limited scope",
-      "steps": "Steps", "stepsDescription": "Ordered work copied into each new checklist.", "addStep": "Add step", "newStep": "New step", "editStep": "Edit step", "deleteStep": "Delete step", "stepTitle": "Step title", "stepDescription": "Description", "owner": "Owner", "namedOwner": "Named person", "dueOffset": "Due offset (days)", "evidence": "Evidence", "required": "Required",
-      "saveBeforeSteps": "Save the template details first, then add at least one step before using it for a checklist.", "noSteps": "This template is not ready. Add at least one step before it can be selected for a checklist.", "noneEligible": "No ready template covers this employee, kind, and date.", "loadFailed": "Templates could not be loaded.", "saveFailed": "The template could not be saved.", "stepSaveFailed": "The template step could not be saved.", "stepDeleteFailed": "The template step could not be deleted.",
-      "created": "Template created. Add its steps before opening a checklist.", "updated": "Template updated.", "stepCreated": "Step added.", "stepUpdated": "Step updated.", "stepDeleted": "Step deleted.", "confirmDeleteStep": "Delete the step “{title}”? Open checklists keep their existing snapshot.", "stepSummary": "{owner} · due {days} days from the effective date", "search": "Search templates", "empty": "No templates match this search.", "backToChecklists": "Back to checklists",
-      "kinds": { "onboarding": "Onboarding", "offboarding": "Offboarding", "transfer": "Transfer" },
-      "owners": { "manager": "Manager", "hr": "HR", "employee": "Employee", "named_party": "Named person" },
-      "evidenceKinds": { "none": "None", "acknowledgement": "Acknowledgement", "attachment": "Attachment" }
+      "title": "Checklisten-Vorlagen", "description": "Wiederverwendbare Einarbeitungs-, Austritts- und Versetzungs-Checklisten. Beim Öffnen einer Checkliste wird ihre Vorlage als Snapshot übernommen, sodass spätere Änderungen den Verlauf nie umschreiben.",
+      "newTemplate": "Neue Vorlage", "editTemplate": "Vorlage bearbeiten", "createTemplate": "Vorlage erstellen", "createDescription": "Legen Sie fest, für wen diese Checkliste gilt, und fügen Sie dann ihre Schritte in der richtigen Reihenfolge hinzu.", "editDescription": "Bearbeiten Sie die wiederverwendbare Definition. Bereits geöffnete Checklisten behalten ihren ursprünglichen Snapshot.",
+      "template": "Vorlage", "name": "Name", "kind": "Art", "scope": "Gilt für", "status": "Status", "active": "Aktiv", "retired": "Archiviert", "subsidiary": "Anstellende Gesellschaft", "department": "Abteilung", "allSubsidiaries": "Alle Tochtergesellschaften", "allDepartments": "Alle Abteilungen", "allEmployees": "Alle Mitarbeiter", "limitedScope": "Eingeschränkter Geltungsbereich",
+      "steps": "Schritte", "stepsDescription": "Geordnete Arbeitsschritte, die in jede neue Checkliste kopiert werden.", "addStep": "Schritt hinzufügen", "newStep": "Neuer Schritt", "editStep": "Schritt bearbeiten", "deleteStep": "Schritt löschen", "stepTitle": "Schritttitel", "stepDescription": "Beschreibung", "owner": "Verantwortlicher", "namedOwner": "Benannte Person", "dueOffset": "Fällig in (Tagen)", "evidence": "Nachweis", "required": "Erforderlich",
+      "saveBeforeSteps": "Speichern Sie zuerst die Vorlagendetails und fügen Sie dann mindestens einen Schritt hinzu, bevor Sie sie für eine Checkliste verwenden.", "noSteps": "Diese Vorlage ist nicht bereit. Fügen Sie mindestens einen Schritt hinzu, bevor sie für eine Checkliste ausgewählt werden kann.", "noneEligible": "Keine bereite Vorlage deckt diesen Mitarbeiter, diese Art und dieses Datum ab.", "loadFailed": "Vorlagen konnten nicht geladen werden.", "saveFailed": "Die Vorlage konnte nicht gespeichert werden.", "stepSaveFailed": "Der Vorlagenschritt konnte nicht gespeichert werden.", "stepDeleteFailed": "Der Vorlagenschritt konnte nicht gelöscht werden.",
+      "created": "Vorlage erstellt. Fügen Sie ihre Schritte hinzu, bevor Sie eine Checkliste öffnen.", "updated": "Vorlage aktualisiert.", "stepCreated": "Schritt hinzugefügt.", "stepUpdated": "Schritt aktualisiert.", "stepDeleted": "Schritt gelöscht.", "confirmDeleteStep": "Den Schritt „{title}“ löschen? Offene Checklisten behalten ihren bestehenden Snapshot.", "stepSummary": "{owner} · fällig {days} Tage ab dem Wirksamkeitsdatum", "search": "Vorlagen suchen", "empty": "Keine Vorlagen für diese Suche.", "backToChecklists": "Zurück zu den Checklisten",
+      "kinds": { "onboarding": "Einarbeitung", "offboarding": "Austritt", "transfer": "Versetzung" },
+      "owners": { "manager": "Vorgesetzte(r)", "hr": "Personal", "employee": "Mitarbeiter", "named_party": "Benannte Person" },
+      "evidenceKinds": { "none": "Keine", "acknowledgement": "Bestätigung", "attachment": "Anhang" }
     }
   },
   "leave": {
@@ -1853,7 +1853,7 @@
     "kind": {
       "engagement": "Mitarbeiterbindung",
       "pulse": "Puls",
-      "onboarding": "Onboarding",
+      "onboarding": "Einarbeitung",
       "exit": "Austritt",
       "custom": "Benutzerdefiniert"
     },
