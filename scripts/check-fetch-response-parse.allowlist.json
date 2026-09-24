@@ -105,11 +105,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/admin/setup/project-types/ProjectTypesWorkspace.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/budgets/BudgetDrawer.tsx",
     "fn": "BudgetDrawer",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
