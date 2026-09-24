@@ -558,7 +558,9 @@
       "saved": "Certificat enregistré",
       "save": "Enregistrer le certificat",
       "saving": "Enregistrement…",
-      "effectiveFrom": "Date d’effet"
+      "effectiveFrom": "Date d’effet",
+      "title": "Certificats fiscaux",
+      "loading": "Chargement des certificats…"
     }
   },
   "setupWizard": {

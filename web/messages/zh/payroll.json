@@ -558,7 +558,9 @@
       "saved": "证书已保存",
       "save": "保存证书",
       "saving": "保存中…",
-      "effectiveFrom": "生效日期"
+      "effectiveFrom": "生效日期",
+      "title": "税务证明",
+      "loading": "正在加载证明…"
     }
   },
   "setupWizard": {

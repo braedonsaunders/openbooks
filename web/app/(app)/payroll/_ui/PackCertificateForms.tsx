@@ -280,6 +280,7 @@ export function CertificateForm(props: {
 }
 
 export function PackCertificateForms(props: { partyId: string; country: string; readOnly?: boolean }) {
+  const tp = useTranslations('payroll.profiles.certificates')
   const { partyId, country, readOnly } = props
   const [state, setState] = useState<{
     status: 'loading' | 'ready' | 'error'
@@ -321,12 +322,12 @@ export function PackCertificateForms(props: { partyId: string; country: string; 
 
   if (!country) return null
   if (state.status === 'loading') {
-    return <p className="py-4 text-center text-sm text-slate-400">Loading certificates…</p>
+    return <p className="py-4 text-center text-sm text-slate-400">{tp('loading')}</p>
   }
   if (state.certificates.length === 0) return null
   return (
     <div className="mt-6 grid gap-4">
-      <h3 className="text-sm font-semibold">Tax certificates</h3>
+      <h3 className="text-sm font-semibold">{tp('title')}</h3>
       {state.certificates.map((certificate) => {
         const rows = state.stored.filter((row) => row.certificate_key === certificate.key)
         const latest = latestCertificateRow(rows, certificate.key)
