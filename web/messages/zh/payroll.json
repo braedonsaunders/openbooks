@@ -1348,6 +1348,8 @@
     "clearEmployee": "全部员工",
     "cleanNote": "每笔比较金额逐分钱一致,无容差、无未映射栏。",
     "noFindings": "本次比较没有任何发现。",
+    "findingsLoadFailed": "无法加载比较结果。",
+    "retryFindings": "重试",
     "noExceptions": "无异常——每个单元格完全匹配。",
     "loading": "加载中…",
     "saving": "保存中…",

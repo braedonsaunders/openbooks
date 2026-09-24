@@ -1348,6 +1348,8 @@
     "clearEmployee": "Alle Mitarbeiter",
     "cleanNote": "Jeder verglichene Betrag stimmte auf den Cent, ohne Toleranz und ohne nicht zugeordnete Spalte.",
     "noFindings": "Dieser Vergleich hat überhaupt keine Befunde.",
+    "findingsLoadFailed": "Vergleichsergebnisse konnten nicht geladen werden.",
+    "retryFindings": "Erneut versuchen",
     "noExceptions": "Keine Ausnahmen — jede Zelle stimmte exakt überein.",
     "loading": "Wird geladen…",
     "saving": "Wird gespeichert…",

@@ -1348,6 +1348,8 @@
     "clearEmployee": "全従業員",
     "cleanNote": "照合したすべての金額が1セント単位で一致し、許容差も未割当列もありません。",
     "noFindings": "この照合に所見はまったくありません。",
+    "findingsLoadFailed": "照合の所見を読み込めませんでした。",
+    "retryFindings": "再試行",
     "noExceptions": "例外なし — すべてのセルが完全に一致しました。",
     "loading": "読み込み中…",
     "saving": "保存中…",
