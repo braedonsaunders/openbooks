@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { Info } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
 import { useAnalyticsValue, GRADE_STYLE, GRADE_TINT, type ValueFormat } from './format'
@@ -32,8 +33,13 @@ export interface RatioDef {
  */
 export function RatioCard({ data, def }: { data: RatioCardData; def: RatioDef }) {
   const fmtValue = useAnalyticsValue()
+  const t = useTranslations('analytics')
   const [open, setOpen] = useState(false)
   const unavailable = data.noData || data.value === null
+  // The loader populates noDataMsg in the request locale (ratioNotes); the
+  // catalog default below covers ratios that are unavailable with no note —
+  // never a hardcoded English literal.
+  const unavailableMsg = data.noDataMsg ?? t('financialHealth.ratioNotes.unavailable')
   const displayValue = unavailable ? 'N/A' : fmtValue(data.value, data.format)
   const benchmarkDisplay = fmtValue(data.benchmark, data.format)
 
@@ -64,7 +70,7 @@ export function RatioCard({ data, def }: { data: RatioCardData; def: RatioDef })
       {unavailable ? (
         <div className="mt-0.5 flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
           <Info size={11} />
-          <span className="truncate">{data.noDataMsg ?? 'Data not available'}</span>
+          <span className="truncate">{unavailableMsg}</span>
         </div>
       ) : (
         <div className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">Benchmark: {benchmarkDisplay}</div>
