@@ -673,9 +673,6 @@
     },
     "drawer": {
       "title": "Requisition {number}",
-      "offerTitle": "Offer · {employer}",
-      "candidateTitle": "Candidate {name}",
-      "employer": "Employer",
       "pipeline": "Pipeline",
       "applications": "Applications",
       "noApplications": "No candidates attached yet.",
