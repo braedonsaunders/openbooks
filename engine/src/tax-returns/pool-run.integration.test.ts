@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { disposeAsset, reverseAssetLifecycleEvent } from "../assets/asset-lifecycle.ts";
 import { runTaxPool, TaxPoolError } from "./pool-run.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -25,9 +26,9 @@ async function seedTaxCategory(
   await db.execute(sql`
     insert into asset_categories
       (id, org_id, name, asset_account_id, accumulated_depreciation_account_id,
-       depreciation_expense_account_id, default_method, tax_attributes, is_active)
+       depreciation_expense_account_id, gain_loss_account_id, default_method, tax_attributes, is_active)
     values (${id}, ${org.orgId}, ${name}, ${org.accounts.invAsset},
-            ${org.accounts.adjustment}, ${org.accounts.freight}, 'straight_line',
+            ${org.accounts.adjustment}, ${org.accounts.freight}, ${org.accounts.adjustment}, 'straight_line',
             ${JSON.stringify(taxAttributes)}::jsonb, true)`);
   return id;
 }
@@ -464,6 +465,41 @@ test("the MACRS model runs under the same fence: atomic years, chaining, orderin
     assert.equal(rows[1]!.opening_balance, rows[0]!.closing_balance);
     const pools = await poolsFor(org.orgId);
     assert.equal(pools[0]!.opening_balance, rows[1]!.closing_balance);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("MACRS depreciation resumes after a disposal is reversed", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const categoryId = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    const assetId = await seedAsset(org, actorId, categoryId, "10000.00", "2023-03-15");
+    const scope: RunScope = org;
+
+    assert.equal((await runYear(scope, actorId, "us_macrs", 2023)).lines[0]!.allowance, "2000.00");
+    assert.equal((await runYear(scope, actorId, "us_macrs", 2024)).lines[0]!.allowance, "3200.00");
+    assert.equal((await runYear(scope, actorId, "us_macrs", 2025)).lines[0]!.allowance, "1920.00");
+
+    const disposal = await disposeAsset(org.orgId, assetId, {
+      writeOff: true,
+      date: org.date,
+      actorId,
+    });
+    const event = (await db.execute<{ id: string }>(sql`
+      select id from asset_events
+       where org_id = ${org.orgId} and asset_id = ${assetId}
+         and journal_entry_id = ${disposal.entryId}
+    `)).rows[0];
+    assert.ok(event, "the lifecycle service recorded the disposal event");
+    await reverseAssetLifecycleEvent(org.orgId, event.id, {
+      date: org.date,
+      actorId,
+      reason: "Correct the mistakenly recorded asset disposal",
+    });
+
+    const restored = await runYear(scope, actorId, "us_macrs", 2026);
+    assert.equal(restored.lines[0]!.allowance, "1152.00");
   } finally {
     await dropScratchOrg(org.orgId);
   }
