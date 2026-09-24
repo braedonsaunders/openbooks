@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
 import {
+  createStreamingXlsxExport,
   readSheet,
   reportResultToXlsx,
   SheetReadError,
@@ -92,6 +93,55 @@ test('report XLSX formats money as accounting but leaves counts and quantities a
   assert.equal(ws.getCell(5, 2).numFmt, undefined)
   assert.equal(ws.getCell(5, 3).value, 19.99)
   assert.equal(ws.getCell(5, 3).numFmt, '#,##0.00;(#,##0.00)')
+})
+
+test('report XLSX neutralises formula-looking strings with the CSV quote prefix', async () => {
+  // A memo like =HYPERLINK(...) must reach the sheet as inert text on both
+  // writers — the same leading-quote neutralization the CSV surface applies —
+  // while genuinely numeric text stays untouched. Literals, not the guard
+  // itself, are the oracle: without the fix the raw memo lands in the cell.
+  const risky = [
+    '=HYPERLINK("https://evil.example","x")',
+    '+1+1',
+    '-2+3',
+    '@SUM(A1:A2)',
+    '\t=1+1',
+  ]
+  const result = {
+    groups: [
+      {
+        kind: 'results' as const,
+        title: '=RISKY TITLE',
+        columns: ['=Memo', 'Amount'],
+        rows: [...risky.map((memo) => [memo, 1] as (string | number)[]), ['-12.5', 2], ['plain', 3]],
+      },
+    ],
+    summary: [],
+    rowCount: risky.length + 2,
+  }
+  const opts = { reportName: '=RISKY REPORT', generatedAt: new Date('2026-01-01T00:00:00Z') }
+
+  const buffered = await reportResultToXlsx(structuredClone(result), opts)
+  const writer = createStreamingXlsxExport({
+    reportName: opts.reportName,
+    generatedAt: opts.generatedAt,
+    groups: [{ title: '=RISKY TITLE', columns: ['=Memo', 'Amount'], widths: [12, 12] }],
+  })
+  writer.appendRows(0, result.groups[0]!.rows as (string | number | null | undefined)[][])
+  const streamed = await writer.finish()
+
+  for (const [name, buffer] of [['buffered', buffered], ['streamed', streamed]] as const) {
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+    const ws = workbook.worksheets[0]!
+    assert.equal(ws.getCell(1, 1).value, "'=RISKY REPORT", `${name} title`)
+    assert.equal(ws.getCell(4, 1).value, "'=Memo", `${name} header`)
+    risky.forEach((memo, i) => {
+      assert.equal(ws.getCell(5 + i, 1).value, `'${memo}`, `${name} row ${i}`)
+    })
+    assert.equal(ws.getCell(5 + risky.length, 1).value, '-12.5', `${name} numeric text untouched`)
+    assert.equal(ws.getCell(6 + risky.length, 1).value, 'plain', `${name} plain text untouched`)
+  }
 })
 
 test('statement XLSX keeps safely representable decimal strings numeric', async () => {
