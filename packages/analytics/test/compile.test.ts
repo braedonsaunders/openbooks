@@ -21,6 +21,7 @@ test('compileInsightQuery honors a sort ref naming a binned dimension field', ()
     'org-1',
     {},
     '2026-01-15',
+    null,
   )
   assert.match(compiled.sql, /order by 1 asc nulls last/)
 })
@@ -37,6 +38,9 @@ test('compileInsightQuery still prefers an explicit output alias for sorts', () 
       sort: [{ ref: 'revenue', dir: 'desc' }],
     },
     'org-1',
+    {},
+    '2026-09-18',
+    null,
   )
   assert.match(compiled.sql, /order by 2 desc nulls last/)
 })
@@ -67,6 +71,9 @@ test('compileInsightQuery emits valid SQL for not_in filters', () => {
       filters: [{ field: 'party_name', op: 'not_in', value: ['Excluded'] }],
     },
     'org-1',
+    {},
+    '2026-09-18',
+    null,
   )
 
   assert.match(compiled.sql, /p\.display_name <> all\(\$2\)/)
@@ -81,6 +88,9 @@ test('compileInsightQuery keeps an empty not_in filter as a no-op', () => {
       filters: [{ field: 'party_name', op: 'not_in', value: [] }],
     },
     'org-1',
+    {},
+    '2026-09-18',
+    null,
   )
 
   assert.match(compiled.sql, /where jl\.org_id = \$1 and true/)
@@ -130,7 +140,10 @@ test('a binned temporal dimension defaults to chronological order, not measure r
       sort: [],
       limit: null,
     },
-    { orgId: '00000000-0000-0000-0000-000000000001', asOf: '2026-09-18' },
+    '00000000-0000-0000-0000-000000000001',
+    {},
+    '2026-09-18',
+    null,
   )
   const order = /order by ([^\n]*)/.exec(compiled.sql)?.[1] ?? ''
   assert.match(order, /^1 asc/, `expected the month dimension first ascending, got: ${order}`)
@@ -152,7 +165,10 @@ test('an unbinned dimension still ranks by the measure', () => {
       sort: [],
       limit: null,
     },
-    { orgId: '00000000-0000-0000-0000-000000000001', asOf: '2026-09-18' },
+    '00000000-0000-0000-0000-000000000001',
+    {},
+    '2026-09-18',
+    null,
   )
   assert.match(/order by ([^\n]*)/.exec(compiled.sql)?.[1] ?? '', /desc/)
 })

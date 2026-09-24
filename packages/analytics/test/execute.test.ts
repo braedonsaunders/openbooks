@@ -25,6 +25,8 @@ test('runInsightQuery compiles and executes the migrated query', async () => {
     },
     'org-1',
     null,
+    undefined,
+    '2026-09-18',
   )
 
   const execution = calls.find(({ text }) => text.startsWith('select * from'))
@@ -60,6 +62,8 @@ test('runInsightQuery reports truncation when the inner query reaches its cap', 
     { source: 'ledger_lines', limit: 1 },
     'org-1',
     null,
+    undefined,
+    '2026-09-18',
   )
 
   const execution = calls.find(({ text }) => text.startsWith('select * from'))
@@ -86,9 +90,12 @@ test('Insights requires scope before connecting and releases the read transactio
     }
   } }
   // A JavaScript caller must not silently become unrestricted by omitting scope.
-  await assert.rejects(() => runInsightQuery(pool, { source: 'documents' }, 'org-1', undefined as unknown as null), /explicit subsidiary/)
+  await assert.rejects(
+    () => runInsightQuery(pool, { source: 'documents' }, 'org-1', undefined as unknown as null, undefined, '2026-09-18'),
+    /explicit subsidiary/,
+  )
   assert.equal(connected, false)
-  await assert.rejects(() => runInsightQuery(pool, { source: 'documents' }, 'org-1', ['sub-1']), /query interrupted/)
+  await assert.rejects(() => runInsightQuery(pool, { source: 'documents' }, 'org-1', ['sub-1'], undefined, '2026-09-18'), /query interrupted/)
   assert.equal(calls[0]?.text, 'begin transaction read only')
   assert.match(calls[1]!.text, /set_config\('app.current_org', \$1, true\).*set_config\('app.bypass_rls', 'off', true\)/)
   assert.deepEqual(calls[1]!.params, ['org-1'])

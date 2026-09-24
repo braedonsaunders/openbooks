@@ -91,6 +91,9 @@ test("an entity's implicit baseFilter is applied to insight queries too", () => 
   const compiled = compileInsightQuery(
     { source: entity.key, measures: [{ agg: 'count' }], dimensions: [{ field: 'employee' }] },
     'org-1',
+    {},
+    '2026-09-18',
+    null,
   )
   assert.match(compiled.sql, /t\.is_active IS TRUE/)
   assert.equal(compiled.params[0], 'org-1')
@@ -102,6 +105,7 @@ test('entitlement_balances as-of binds the org business day, never current_date'
     'org-1',
     {},
     '2026-08-22',
+    null,
   )
   assert.doesNotMatch(compiled.sql, /current_date/i)
   assert.doesNotMatch(compiled.sql, /__report_as_of__/)
@@ -121,6 +125,7 @@ test('relative date filters bind the org business day, never current_date', () =
     'org-1',
     {},
     '2026-08-21',
+    null,
   )
   assert.doesNotMatch(compiled.sql, /current_date/i)
   assert.ok(compiled.params.includes('2026-08-21'))
@@ -136,6 +141,9 @@ test('bound parameters stay numbered in order when a baseFilter binds values', (
       filters: [{ field: 'job_title', op: 'eq', value: 'Foreman' }],
     },
     'org-1',
+    {},
+    '2026-09-18',
+    null,
   )
   // $1 is always the org; every later placeholder maps to its own value.
   assert.equal(compiled.params.length, 2)
