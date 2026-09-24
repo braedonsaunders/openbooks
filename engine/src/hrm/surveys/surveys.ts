@@ -428,7 +428,7 @@ export async function openSurvey(input: {
   return withOrgTransaction(input.orgId, async () => {
     const allowed = await requireHrmSurveysManage(db, input.orgId, input.actorId);
     await assertSurveysFeature(db, input.orgId);
-    const survey = await loadSurvey(db, input.orgId, input.surveyId);
+    const survey = await loadSurvey(db, input.orgId, input.surveyId, true);
     // Opening attaches respondents — the survey's entity footprint from
     // here on. The already-attached roster and every newly invited party
     // must sit inside the lens; a B invitee reads to an A-scoped actor
@@ -512,11 +512,15 @@ export async function openSurvey(input: {
         "every invited party already holds an invitation — the survey is already open to this audience",
       );
     }
-    await db.execute(sql`
+    const transitioned = (await db.execute<{ id: string }>(sql`
       update hrm_surveys set status = 'open', opens_at = coalesce(opens_at, now()),
              updated_at = now(), updated_by = ${input.actorId}
-       where org_id = ${input.orgId} and id = ${survey.id}
-    `);
+       where org_id = ${input.orgId} and id = ${survey.id} and status = 'draft'
+      returning id
+    `)).rows[0];
+    if (!transitioned) {
+      throw new HrmSurveysError("REFUSED", "this survey stopped being a draft while opening — refresh before trying again");
+    }
     return { survey: await toDTO(db, input.orgId, await loadSurvey(db, input.orgId, survey.id)), deliveries };
   });
 }
