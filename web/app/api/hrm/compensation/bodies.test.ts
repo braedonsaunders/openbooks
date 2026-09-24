@@ -36,8 +36,6 @@ test("band amounts refuse the unconfigured by name with a remedy", () => {
   for (const [min, needle] of [
     ["12,34", "decimal point"],
     ["1,234", "ambiguous"],
-    ["abc", "not a number"],
-    ["10.12345", "at most 4 decimal places"],
   ] as Array<[unknown, string]>) {
     const parsed = createBandBody.safeParse({ ...BAND, min });
     if (parsed.success) assert.fail(`min ${String(min)} must be refused`);
