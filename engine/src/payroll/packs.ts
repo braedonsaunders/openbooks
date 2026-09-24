@@ -177,7 +177,8 @@ export type PayrollTaxBaseKey = "income" | "nonPeriodic" | "pensionable" | "insu
  * number, so each declaration names its legs.
  *
  * Convention, so combined-base arithmetic stays exact: a treatment that
- * reduces the income-tax base declares `reduces: ["income"]`. The generic
+ * reduces the income-tax base declares `reduces: ["income"]`; a recognized
+ * deduction with no statutory tax-base effect can declare an empty list. The generic
  * layer subtracts tagged lines from the income leg in full; an engine that
  * taxes bonuses jointly adds the raw `nonPeriodic` leg back (the IE
  * pattern: taxable pay is gross less pension, priced as reduced income plus

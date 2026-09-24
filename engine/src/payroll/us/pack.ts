@@ -239,7 +239,7 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     // minimum measured on gross wages after qualified deductions) because
     // state conformity differs by state; FICA/FUTA price their own legs.
     // The W-2 and Form 941 federal-wage queries (yearend.ts) subtract
-    // deduction lines carrying these treatments, so Box 1 and 941 line 2
+    // deduction lines that actually reduce federal wages, so Box 1 and 941 line 2
     // agree with the withholding. State boxes 16/18 still report taxable
     // earnings — state treatment is the state engines' own transcription.
     // Labels name the pack's own instruments: the shared catalog keys
@@ -253,9 +253,12 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
     },
     {
       key: "union_dues",
-      label: "Union dues (pre-tax)",
-      help: "Pre-tax union dues: reduce FIT-able wages where the state honors them, not Social Security or Medicare wages.",
-      reduces: ["income"],
+      label: "Union dues",
+      // IRS Pub. 525, "Union benefits and dues": employee-paid union dues
+      // withheld from wages cannot be excluded from federal gross income.
+      // https://www.irs.gov/publications/p525
+      help: "Employee-paid union dues are after-tax for federal income tax; state treatment depends on the applicable state law.",
+      reduces: [],
     },
     {
       key: "alimony",

@@ -74,19 +74,17 @@ test("a foreign factor is inert outside its own pack (no cross-pack leak)", () =
   }
 });
 
-test("every declared treatment reduces income and never a social-insurance leg", () => {
+test("declared treatments only reduce the bases their pack names", () => {
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
     for (const treatment of pack.deductionTreatments) {
-      assert.ok(
-        treatment.reduces.includes("income"),
-        `${country}.${treatment.key}: an income-tax treatment reduces the income leg`,
-      );
       assert.ok(
         !treatment.reduces.includes("pensionable") && !treatment.reduces.includes("insurable"),
         `${country}.${treatment.key}: no treatment in the fleet moves a social-insurance base`,
       );
     }
   }
+  const unionDues = US_PAYROLL_PACK.deductionTreatments.find(({ key }) => key === "union_dues");
+  assert.deepEqual(unionDues?.reduces, []);
 });
 
 test("the pack declaration is the authority on which treatments exist", () => {

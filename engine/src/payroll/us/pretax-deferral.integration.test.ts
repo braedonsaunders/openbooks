@@ -19,24 +19,18 @@ void PAYROLL_COUNTRY_PACKS;
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /**
- * US pre-tax deferrals: the wrong-money defect, proved fixed (DB partition).
+ * US income-base treatments: 401(k) deferrals reduce FIT, but union dues do
+ * not. IRS Pub. 525 says employee-paid union dues cannot be excluded from
+ * income; the same result must reach Pub. 15-T, W-2 box 1, and Form 941.
  *
- * The US pack declares three `reduces: ["income"]` treatments (401(k)
- * elective deferrals, pre-tax union dues, pre-2019 alimony) and its own help
- * text promises "reduce FIT-able wages" — but `computeUsStatutory` priced
- * federal income tax off the raw `income` leg and never read `reducedBases`,
- * so a $200 401(k) deferral left FIT exactly where it was. And the W-2 query
- * summed `kind = 'earning'` only, so Box 1 reported the unreduced wage too:
- * over-withheld AND a W-2 that overstates wages, which is why the
- * over-withholding never surfaced as a refund at filing.
- *
- * The pair below is two identical Texas employees on one run — same salary
- * ($52,000/year = $2,000 a period), same single filing status, no W-4
- * extras — differing only in Dan's $200 recurring 401(k) deferral. Before
- * the fix both stubs carried identical FIT; after it Dan's FIT prices $1,800
- * of FIT-able wages while Social Security and Medicare do not move (401(k)
- * reduces FIT-able wages but NOT FICA wages, IRC §125/401(k)), and Box 1
- * reports $1,800 for Dan against $2,000 for Carl.
+ * The US pack's `union_dues` treatment was incorrectly declared to reduce
+ * federal income-tax wages, and W-2 Box 1 and Form 941 line 2 subtracted it
+ * too. IRS Pub. 525 says employee-paid union dues cannot be excluded from
+ * income. A $200 deduction therefore changes net pay only: FIT, federal
+ * taxable wage factors, Box 1 and Form 941 wages must match an otherwise
+ * identical employee without dues. The 401(k) control proves that a genuine
+ * federal income-tax deduction still reduces FIT and Box 1 while leaving
+ * Social Security and Medicare wages unchanged.
  */
 
 const PERIOD_START = "2026-07-05";
@@ -153,6 +147,21 @@ async function assign401k(fx: Fixture, employeePartyId: string): Promise<void> {
             ${fx.actorId}, ${fx.actorId})`);
 }
 
+/** Union dues are withheld from net pay but stay in federal taxable wages. */
+async function assignUnionDues(fx: Fixture, employeePartyId: string): Promise<void> {
+  const componentId = randomUUID();
+  await db.execute(sql`
+    insert into pay_components (id, org_id, code, name, kind, country, tax_treatment,
+                                liability_account_id, is_active, created_by, updated_by)
+    values (${componentId}, ${fx.orgId}, 'UNION-DUES', 'Union dues', 'deduction',
+            'US', 'union_dues', ${fx.deferralPayable}, true, ${fx.actorId}, ${fx.actorId})`);
+  await db.execute(sql`
+    insert into employee_pay_components (org_id, employee_party_id, component_id, value,
+                                         effective_from, is_active, created_by, updated_by)
+    values (${fx.orgId}, ${employeePartyId}, ${componentId}, ${DEFERRAL}, '2026-01-01', true,
+            ${fx.actorId}, ${fx.actorId})`);
+}
+
 /** Pub 15-T called directly with the FIT-able wages — the agreement the stub must keep. */
 function expectedFit(fitWages: string): string {
   return calculatePub15T({
@@ -177,14 +186,16 @@ const stubFactors = async (fx: Fixture, documentId: string, employeePartyId: str
 };
 
 test(
-  "a $200 401(k) deferral reduces FIT but not FICA, and Box 1 reports the reduced wage",
+  "a 401(k) deferral reduces FIT but union dues remain in federal wages",
   { skip: !DB },
   async () => {
     const fx = await usPayrollOrg();
     try {
       const carl = await usEmployee(fx, "Control Carl");
       const dan = await usEmployee(fx, "Deferral Dan");
+      const ula = await usEmployee(fx, "Union Ula");
       await assign401k(fx, dan);
+      await assignUnionDues(fx, ula);
 
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
@@ -197,9 +208,11 @@ test(
 
       const carlFactors = (await stubFactors(fx, run.documentId, carl))!;
       const danFactors = (await stubFactors(fx, run.documentId, dan))!;
-      assert.ok(carlFactors && danFactors, "both Texans were paid");
+      const ulaFactors = (await stubFactors(fx, run.documentId, ula))!;
+      assert.ok(carlFactors && danFactors && ulaFactors, "all three Texans were paid");
 
-      // The withholding leg: Dan prices $1,800 of FIT-able wages, Carl $2,000.
+      // The withholding leg: Dan prices $1,800 of FIT-able wages, Carl and
+      // Ula each price $2,000.
       // Pinned literals: $2,000 biweekly single prices $156.15, $1,800 prices
       // $132.15 — the $24.00 difference is the $200 deferral at the 12%
       // marginal rate, and each figure agrees with Pub 15-T called directly.
@@ -207,6 +220,11 @@ test(
       assert.equal(danFactors.FIT, "132.1500");
       assert.equal(carlFactors.FIT, expectedFit(PERIOD_WAGES));
       assert.equal(danFactors.FIT, expectedFit("1800.0000"));
+      // IRS Pub. 525, "Union benefits and dues": employee-paid dues cannot be
+      // excluded from income. Published guidance: https://www.irs.gov/publications/p525
+      assert.equal(ulaFactors.FIT, "156.1500");
+      assert.equal(ulaFactors.FIT, carlFactors.FIT);
+      assert.equal(ulaFactors.I, PERIOD_WAGES);
       assert.notEqual(
         danFactors.FIT, carlFactors.FIT,
         "the deferral must move FIT — identical figures are the defect",
@@ -216,20 +234,25 @@ test(
       assert.equal(carlFactors.MED, "29.0000");
       assert.equal(danFactors.SS, carlFactors.SS);
       assert.equal(danFactors.MED, carlFactors.MED);
+      assert.equal(ulaFactors.SS, carlFactors.SS);
+      assert.equal(ulaFactors.MED, carlFactors.MED);
       // The trace factor moves with the base it prices (AU precedent).
       assert.equal(danFactors.I, "1800.0000");
       assert.equal(carlFactors.I, PERIOD_WAGES);
 
       await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
 
-      // The reporting leg: Box 1 reports the reduced wage; FICA boxes do not move.
+      // Box 1 reflects valid federal reductions only; union dues leave wages intact.
       const slips = await w2Slips(fx.orgId, 2026);
-      assert.equal(slips.length, 2);
+      assert.equal(slips.length, 3);
       const carlSlip = slips.find((slip) => slip.employeePartyId === carl)!;
       const danSlip = slips.find((slip) => slip.employeePartyId === dan)!;
-      assert.ok(carlSlip && danSlip, "both Texans have W-2 slips");
+      const ulaSlip = slips.find((slip) => slip.employeePartyId === ula)!;
+      assert.ok(carlSlip && danSlip && ulaSlip, "all three Texans have W-2 slips");
       assert.equal(carlSlip.box1Wages, "2000.0000");
       assert.equal(danSlip.box1Wages, "1800.0000");
+      assert.equal(ulaSlip.box1Wages, "2000.0000");
+      assert.equal(ulaSlip.box1Wages, carlSlip.box1Wages);
       assert.notEqual(
         danSlip.box1Wages, carlSlip.box1Wages,
         "Box 1 must reflect the deferral — identical figures are the defect",
@@ -238,10 +261,10 @@ test(
       assert.equal(danSlip.box5MedicareWages, carlSlip.box5MedicareWages);
 
       // Form 941 line 2 is the same federal-wage concept as Box 1: the
-      // quarter totals $2,000 + $1,800, never $4,000.
+      // quarter totals $2,000 + $1,800 + $2,000; dues do not lower line 2.
       const quarters = await form941Worksheet(fx.orgId, 2026);
       assert.equal(quarters.length, 1);
-      assert.equal(quarters[0]!.wages, "3800.0000");
+      assert.equal(quarters[0]!.wages, "5800.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
