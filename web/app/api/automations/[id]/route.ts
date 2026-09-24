@@ -54,6 +54,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       ...(body.conditions !== undefined ? { conditions: body.conditions } : {}),
       ...(body.actions !== undefined ? { actions: body.actions } : {}),
       ...(body.priority !== undefined ? { priority: body.priority } : {}),
+      ...(body.expectedVersion !== undefined ? { expectedVersion: body.expectedVersion } : {}),
     });
     return NextResponse.json({ automation });
   } catch (e) {
