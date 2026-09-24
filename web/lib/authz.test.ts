@@ -50,6 +50,14 @@ const mockSources = new Map<string, string>([
         state.gateCalls.push(permission);
         return state.gate;
       }
+      // Faithful to web/lib/authz.ts: only an unrestricted caller passes.
+      export function guardUnrestrictedScope(authz) {
+        if (authz?.allowedSubsidiaryIds == null) return null;
+        return new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
     `,
   ],
   [
