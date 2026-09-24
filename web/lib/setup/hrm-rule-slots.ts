@@ -17,6 +17,7 @@
  * slot and appends the folded jsonb columns present in the normalized body.
  */
 import type { Coerced } from './coerce'
+import { toSnake } from './registry'
 
 interface RuleSlotEntity {
   /** Generated slot columns: readable, never written. */
@@ -25,8 +26,17 @@ interface RuleSlotEntity {
    *  array (signer roles, merge keys); the default 'object' persists a
    *  JSON object (rules, scales). `slots` names the drawer field keys
    *  that fold into the object: readable prefills, never written, whose
-   *  requiredness the folded object satisfies once the normalizer runs. */
-  readonly folded: readonly { key: string; column: string; kind?: 'object' | 'array'; slots?: readonly string[] }[]
+   *  requiredness the folded object satisfies once the normalizer runs.
+   *  `members` names array-membership booleans (slot → stored element)
+   *  for array folds the drawer splits into checkboxes: readable
+   *  prefills, never written. */
+  readonly folded: readonly {
+    key: string
+    column: string
+    kind?: 'object' | 'array'
+    slots?: readonly string[]
+    members?: readonly { slot: string; value: string }[]
+  }[]
 }
 
 export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
@@ -64,7 +74,16 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
   'hrm-document-templates': {
     generated: [],
     folded: [
-      { key: 'signerRoles', column: 'signer_roles', kind: 'array' },
+      {
+        key: 'signerRoles',
+        column: 'signer_roles',
+        kind: 'array',
+        members: [
+          { slot: 'signEmployee', value: 'employee' },
+          { slot: 'signManager', value: 'manager' },
+          { slot: 'signHr', value: 'hr' },
+        ],
+      },
       { key: 'mergeFields', column: 'merge_fields', kind: 'array' },
     ],
   },
@@ -129,4 +148,54 @@ export function applyRuleSlotColumns(
     out.push({ column: entry.column, value })
   }
   return { cols: out }
+}
+
+function storedJson(value: unknown): unknown {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return undefined
+    }
+  }
+  return value
+}
+
+/**
+ * Read-side projection for rule-slot entities: unfold a stored rule jsonb
+ * back into the drawer slot fields so an edit drawer prefills what the
+ * write fold persists. Scalar-split objects expand through `slots` (a
+ * slot names its folded key as prefix: ratingScaleMin reads the `min`
+ * prop of the ratingScale fold); array-membership booleans expand through
+ * `members`. Real columns always win: a present snake slot key is never
+ * overwritten, and unknown entities pass through untouched. Whole-object
+ * and whole-array fields need no projection — their snake column already
+ * carries the value the drawer reads.
+ */
+export function projectRuleSlotPrefills(
+  entityKey: string,
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const spec = RULE_SLOT_ENTITIES[entityKey]
+  if (!spec) return row
+  const out = { ...row }
+  for (const entry of spec.folded) {
+    const stored = storedJson(out[entry.column])
+    for (const slot of entry.slots ?? []) {
+      const column = toSnake(slot)
+      if (out[column] !== undefined || !slot.startsWith(entry.key)) continue
+      const prop = slot.slice(entry.key.length)
+      const key = prop.slice(0, 1).toLowerCase() + prop.slice(1)
+      if (!key || stored === null || typeof stored !== 'object' || Array.isArray(stored)) continue
+      const value = (stored as Record<string, unknown>)[key]
+      if (value !== undefined) out[column] = value
+    }
+    if (Array.isArray(stored)) {
+      for (const member of entry.members ?? []) {
+        const column = toSnake(member.slot)
+        if (out[column] === undefined) out[column] = stored.includes(member.value)
+      }
+    }
+  }
+  return out
 }
