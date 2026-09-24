@@ -110,7 +110,7 @@ test("the certificate carries the 甲欄 inputs; absence means 乙欄", () => {
   // itself is unchanged, still first, still the only row-backed form.
   assert.deepEqual(
     JP_CERTIFICATES.certificates.map((certificate) => [certificate.key, certificate.storage]),
-    [["jp_fuyo", "certificate_rows"], ["jp_hyojun", "profile_columns"]],
+    [["jp_fuyo", "certificate_rows"], ["jp_hyojun", "profile_columns"], ["jp_employment_insurance", "certificate_rows"]],
   );
   const cert = JP_CERTIFICATES.certificates[0]!;
   assert.equal(cert.key, "jp_fuyo");
@@ -178,6 +178,7 @@ function fakeCtx(overrides: {
   region?: string;
   emp?: Record<string, string | null>;
   answers?: Record<string, string | null> | null;
+  employmentInsurance?: string | null;
 }): { ctx: PayrollStatutoryComputeContext; pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] } {
   const pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] = [];
   const answers = overrides.answers === undefined
@@ -221,8 +222,21 @@ function fakeCtx(overrides: {
       pushed.push({ systemKey, kind, amount, sequence });
     },
     storedCertificates: [],
-    certificateFor: (key) =>
-      key === "jp_fuyo" && answers !== null
+    certificateFor: (key) => {
+      if (key === "jp_employment_insurance") {
+        return {
+          certificate: JP_CERTIFICATES.certificates[2]!,
+          onFile: true,
+          effectiveFrom: null,
+          answers: {
+            coverage_status: overrides.employmentInsurance === undefined
+              ? "not_insured"
+              : overrides.employmentInsurance,
+          },
+          missing: [],
+        };
+      }
+      return key === "jp_fuyo" && answers !== null
         ? {
           certificate: JP_CERTIFICATES.certificates[0]!,
           onFile: true,
@@ -230,7 +244,8 @@ function fakeCtx(overrides: {
           answers,
           missing: [],
         }
-        : null,
+        : null;
+    },
     bool: (value) => value === "true",
     assertRegionSupported: () => {},
     employerLevies: {
@@ -328,6 +343,14 @@ test("adapter refusals name the missing channel", async () => {
   await assert.rejects(
     computeJpStatutoryWithRates(fakeCtx({ nonPeriodic: "50000.0000" }).ctx, TOKYO_RATE),
     /賞与/,
+  );
+  await assert.rejects(
+    computeJpStatutoryWithRates(fakeCtx({ employmentInsurance: null }).ctx, TOKYO_RATE),
+    /cannot calculate without 雇用保険 coverage status/,
+  );
+  await assert.rejects(
+    computeJpStatutoryWithRates(fakeCtx({ employmentInsurance: "insured" }).ctx, TOKYO_RATE),
+    /employee is covered by 雇用保険.*deduction before the 月額表 lookup are not implemented/s,
   );
   // No grade on file.
   await assert.rejects(

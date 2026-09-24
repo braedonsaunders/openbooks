@@ -42,6 +42,21 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
       required: true,
       producer: { kind: "profile_column", column: "jp_kaigo_dainigou" },
     },
+    {
+      key: "jp_employment_insurance_coverage",
+      kind: "choice",
+      choices: ["insured", "not_insured"],
+      label: "雇用保険 coverage status",
+      refusalReason:
+        "Employment-insurance eligibility determines the employee and employer premiums and the "
+        + "月額表 base; an unknown status must not be priced as uncovered.",
+      required: true,
+      producer: {
+        kind: "certificate",
+        certificate: "jp_employment_insurance",
+        field: "coverage_status",
+      },
+    },
 ];
 
 registerEmployeeFacts("JP", JP_EMPLOYEE_FACTS);

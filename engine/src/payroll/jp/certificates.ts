@@ -87,6 +87,35 @@ const JP_HYOJUN_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+const JP_EMPLOYMENT_INSURANCE_CERTIFICATE: PayrollCertificate = {
+  key: "jp_employment_insurance",
+  form: "雇用保険 enrollment record",
+  label: "Employment insurance enrollment status",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "MHLW 令和8年度雇用保険料率 (https://www.mhlw.go.jp/content/001672589.pdf)",
+  summary:
+    "Employer-recorded employment-insurance coverage status. Eligibility is determined from the "
+    + "employment facts and applicable MHLW rules; the payroll pack requires an explicit answer.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "coverage_status",
+      label: "Employment-insurance coverage status",
+      kind: "choice",
+      required: true,
+      choices: [
+        { value: "insured", label: "Covered by employment insurance" },
+        { value: "not_insured", label: "Not covered by employment insurance" },
+      ],
+      help:
+        "The employer establishes coverage from the applicable MHLW eligibility rules. Covered employees "
+        + "currently refuse because payroll does not yet calculate their contributions.",
+    },
+  ],
+};
+
 export const JP_CERTIFICATES: PayrollPackCertificates = {
   country: "JP",
   certificates: [
@@ -156,7 +185,8 @@ export const JP_CERTIFICATES: PayrollPackCertificates = {
         },
       ],
     },
-    // Second: the payer-held facts, never a fileable form (see above).
+    // Payer-held facts, never employee-filed declarations (see above).
     JP_HYOJUN_CERTIFICATE,
+    JP_EMPLOYMENT_INSURANCE_CERTIFICATE,
   ],
 };
