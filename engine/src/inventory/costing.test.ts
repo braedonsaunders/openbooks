@@ -21,6 +21,7 @@ import {
   sumOriginalCosts,
 } from "./original-cost.ts";
 import { unitCostPerQuantity } from "./costing.ts";
+import { InventoryError } from "./contracts.ts";
 import { getOnHand } from "./position.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
 import { buildAssembly } from "./assembly.ts";
@@ -256,8 +257,39 @@ test("consumeOriginalCost relieves weighted basis and the retained balance owns 
   assert.equal(toUnits(retained[0]!) + toUnits(retained[1]!), toUnits("10.0000"));
   assert.equal(sumOriginalCosts([retained[0]!, retained[1]!]), "10.0000");
   assert.equal(sumOriginalCosts(["1.0000", null]), null);
-  assert.throws(() => consumeOriginalCost("10.0000", "4", "3"), /invalid original-cost quantity/);
+  // An over-take is an inconsistent layer, not a 500: the refusal names the
+  // layer, the quantities, and the only safe remedy.
+  assert.throws(
+    () => consumeOriginalCost("10.0000", "4", "3", { itemId: "item-1", stockLocationId: "loc-1", layerId: "layer-9" }),
+    (error: unknown) => {
+      assert.ok(error instanceof InventoryError);
+      assert.match(error.message, /takes 4 from 3/);
+      assert.match(error.message, /layer-9/);
+      assert.match(error.message, /controlled reversal/);
+      return true;
+    },
+  );
 });
+
+test("forcing an inconsistent layer state refuses by name, never a bare failure", () => {
+  // Reachability note: every caller clamps its take by construction —
+  // consumeLayers takes at most the layer remainder, and the landed-cost
+  // split detaches one whole unit only after the exact-rate search (which
+  // always resolves a sub-unit layer, since sub-unit rate steps land on
+  // every integer) — so no current path creates take > total. This pins
+  // the defensive refusal itself: a forced over-take is an InventoryError
+  // (422 at the routes) naming the layer and the remedy.
+  assert.throws(
+    () => consumeOriginalCost("1.9998", "1", "0.9999", { layerId: "layer-sub" }),
+    (error: unknown) => {
+      assert.ok(error instanceof InventoryError);
+      assert.match(error.message, /layer-sub/);
+      assert.match(error.message, /controlled reversal/);
+      return true;
+    },
+  );
+});
+
 
 test("unitCostPerQuantity is half-up so 6 @ 10.0000 is 1.6667, not truncated 1.6666", () => {
   assert.equal(unitCostPerQuantity("10.0000", "6"), "1.6667");

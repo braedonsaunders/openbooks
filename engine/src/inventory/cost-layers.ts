@@ -1,4 +1,4 @@
-import { consumeOriginalCost, splitOriginalCost, sumOriginalCosts } from "./original-cost.ts";
+import { consumeOriginalCost, splitOriginalCost, sumOriginalCosts, type OriginalCostLocation } from "./original-cost.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { add, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "../money/money.ts";
@@ -160,7 +160,8 @@ export async function consumeLayers(
         // later re-pool cannot remove residual rounding needed by its reversal.
         const source = layers[0]!;
         const poolBasis = sumOriginalCosts(layers.map((layer) => layer.remaining_original_cost));
-        const drawnBasis = consumeOriginalCost(poolBasis, fromUnits(coveredUnits), fromUnits(availableUnits));
+        const poolLocation: OriginalCostLocation = { itemId, stockLocationId };
+        const drawnBasis = consumeOriginalCost(poolBasis, fromUnits(coveredUnits), fromUnits(availableUnits), poolLocation);
         const partitions = [
           { quantity: fromUnits(coveredUnits), value: weightedCost, consumed: true, basis: drawnBasis },
           { quantity: fromUnits(availableUnits - coveredUnits), value: add(poolValue, neg(weightedCost)), consumed: false,
@@ -174,7 +175,7 @@ export async function consumeLayers(
         for (const partition of partitions) {
           if (isZero(partition.quantity)) continue;
           const fragments = exactCostFragments(partition.quantity, partition.value);
-          const bases = splitOriginalCost(partition.basis, fragments.map((fragment) => fragment.quantity), fragments.map((fragment) => extendCost(fragment.quantity, fragment.unitCost)));
+          const bases = splitOriginalCost(partition.basis, fragments.map((fragment) => fragment.quantity), fragments.map((fragment) => extendCost(fragment.quantity, fragment.unitCost)), poolLocation);
           for (const [index, fragment] of fragments.entries()) {
             const id = randomUUID();
             await tx.execute(sql`insert into cost_layers
@@ -223,7 +224,11 @@ export async function consumeLayers(
     consumption.originalCost = layer.remaining_original_cost != null &&
       cmp(layer.remaining_original_cost, extendCost(layer.remaining, layer.unit_cost)) === 0
       ? consumption.cost
-      : consumeOriginalCost(layer.remaining_original_cost, consumption.quantity, layer.remaining);
+      : consumeOriginalCost(layer.remaining_original_cost, consumption.quantity, layer.remaining, {
+          itemId,
+          stockLocationId,
+          layerId: layer.id,
+        });
   }
   const unitCost = isZero(quantity)
     ? "0"
@@ -314,7 +319,7 @@ export async function addLayerAtCost(
     }
   }
   const createdFragments: { id: string; quantity: string; unitCost: string }[] = [];
-  const bases = splitOriginalCost(originalCost, fragments.map((fragment) => fragment.quantity), fragments.map((fragment) => extendCost(fragment.quantity, fragment.unitCost)));
+  const bases = splitOriginalCost(originalCost, fragments.map((fragment) => fragment.quantity), fragments.map((fragment) => extendCost(fragment.quantity, fragment.unitCost)), { itemId, stockLocationId });
   for (const [index, fragment] of fragments.entries()) {
     const id = randomUUID();
     await tx.execute(sql`
