@@ -1689,6 +1689,9 @@
       "pctLabel": "Raise %",
       "rateLabel": "New rate",
       "reasonLabel": "Reason",
+      "decideReasonLabel": "Decision reason",
+      "cancelReasonLabel": "Cancellation reason",
+      "cancelReasonRequired": "Cancelling needs a reason — record why the cycle is cancelled.",
       "failed": "The change was refused",
       "submit": "Save",
       "cancel": "Cancel",
@@ -1701,7 +1704,14 @@
       "reason": "Reason",
       "at": "At"
     },
-    "emptyHistory": "No events yet."
+    "emptyHistory": "No events yet.",
+    "settings": {
+      "rounding": {
+        "upToWhole": "Up to a whole number",
+        "nearestTenth": "Nearest tenth",
+        "nearestHundredth": "Nearest hundredth"
+      }
+    }
   },
   "equity": {
     "title": "Pay equity",

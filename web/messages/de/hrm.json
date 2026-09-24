@@ -1633,6 +1633,9 @@
       "pctLabel": "Erhöhung %",
       "rateLabel": "Neuer Satz",
       "reasonLabel": "Begründung",
+      "decideReasonLabel": "Entscheidungsgrund",
+      "cancelReasonLabel": "Grund für den Abbruch",
+      "cancelReasonRequired": "Zum Abbrechen ist eine Begründung erforderlich — halten Sie fest, warum die Runde abgebrochen wird.",
       "failed": "Die Änderung wurde abgelehnt",
       "submit": "Speichern",
       "cancel": "Abbrechen",
@@ -1645,7 +1648,14 @@
       "reason": "Begründung",
       "at": "Zeitpunkt"
     },
-    "emptyHistory": "Noch keine Ereignisse."
+    "emptyHistory": "Noch keine Ereignisse.",
+    "settings": {
+      "rounding": {
+        "upToWhole": "Auf ganze Zahl aufrunden",
+        "nearestTenth": "Nächstes Zehntel",
+        "nearestHundredth": "Nächstes Hundertstel"
+      }
+    }
   },
   "equity": {
     "title": "Entgeltgleichheit",

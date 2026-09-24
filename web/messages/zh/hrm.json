@@ -1633,6 +1633,9 @@
       "pctLabel": "涨幅 %",
       "rateLabel": "新标准",
       "reasonLabel": "原因",
+      "decideReasonLabel": "决策原因",
+      "cancelReasonLabel": "取消原因",
+      "cancelReasonRequired": "取消需要说明原因 — 请记录取消本轮周期的原因。",
       "failed": "变更被拒绝",
       "submit": "保存",
       "cancel": "取消",
@@ -1645,7 +1648,14 @@
       "reason": "原因",
       "at": "时间"
     },
-    "emptyHistory": "暂无事件。"
+    "emptyHistory": "暂无事件。",
+    "settings": {
+      "rounding": {
+        "upToWhole": "向上取整为整数",
+        "nearestTenth": "精确到小数点后一位",
+        "nearestHundredth": "精确到小数点后两位"
+      }
+    }
   },
   "equity": {
     "title": "薪酬公平",
