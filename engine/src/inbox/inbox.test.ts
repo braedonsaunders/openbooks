@@ -443,3 +443,48 @@ describe("inbox act by id (B-INB-2)", () => {
     }
   });
 });
+
+describe("inbox count (B-INB-3)", () => {
+  it("names a throwing source in notices instead of returning a silently low count", async () => {
+    const healthy: InboxAdapter = {
+      kind: "flows_approval",
+      async list() {
+        return [];
+      },
+      async count() {
+        return 2;
+      },
+      async act() {},
+    };
+    const failing: InboxAdapter = {
+      kind: "notification",
+      async list(): Promise<InboxItem[]> {
+        throw new Error("notices backend unavailable");
+      },
+      async act() {},
+    };
+    __testResetInboxAdapters([healthy, failing]);
+    try {
+      const notices: InboxSourceNotice[] = [];
+      const total = await countInbox(CTX, { notices });
+      assert.equal(total, 2);
+      assert.equal(notices.length, 1);
+      assert.equal(notices[0]!.kind, "notification");
+      assert.match(notices[0]!.message, /notices backend unavailable/);
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+
+  it("a healthy count leaves notices empty (no partial)", async () => {
+    __testResetInboxAdapters([fakeAdapter([item({ id: "flows_approval:g1" })])]);
+    try {
+      const notices: InboxSourceNotice[] = [];
+      const total = await countInbox(CTX, { notices });
+      assert.equal(total, 1);
+      assert.deepEqual(notices, []);
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+});

@@ -155,7 +155,7 @@ export async function listInbox(
 
 export async function countInbox(
   ctx: InboxListContext,
-  opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]> },
+  opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; notices?: InboxSourceNotice[] },
 ): Promise<number> {
   const kinds = opts?.kinds ?? inboxAdapterKinds();
   let total = 0;
@@ -171,8 +171,10 @@ export async function countInbox(
     // A real count never materializes rows: sources with a list window
     // report their full pending count, so the badge stops undercounting
     // past the window. Sources without one fall back to the list length.
-    // A failing source counts nothing rather than refusing the badge; the
-    // list read above names it, and unexpected failures log here too.
+    // A failing source counts nothing rather than refusing the badge, and
+    // names itself in the caller's notices collector (when supplied) so
+    // the badge can show a degraded state instead of a silently low
+    // count; unexpected failures log here too.
     try {
       if (adapter.count) {
         total += await adapter.count(ctx);
@@ -182,7 +184,7 @@ export async function countInbox(
       opts?.cache?.set(cacheKey, items);
       total += items.length;
     } catch (error) {
-      recordSourceFailure(kind, error);
+      recordSourceFailure(kind, error, opts?.notices);
     }
   }
   return total;

@@ -37,12 +37,23 @@ export async function GET(req: Request) {
   const ctx = await inboxContext(authz);
   try {
     if (sp.get("count") === "1") {
+      // A failing notice source names itself in notices while the healthy
+      // legs still count (OM-10) — the badge renders a degraded state
+      // beside the partial count instead of a silently low number.
+      const notices: InboxSourceNotice[] = [];
       const [union, unread] = await Promise.all([
         maySeeUnion(authz)
           ? approvalWorklistPageForAuthz(authz, { limit: 1, offset: 0 }).then((page) => page.total)
           : Promise.resolve(0),
-        countInbox(ctx, { kinds: ["notification"] }),
+        countInbox(ctx, { kinds: ["notification"], notices }),
       ]);
+      if (notices.length > 0) {
+        return NextResponse.json({
+          count: union + unread,
+          partial: true,
+          notices: notices.map((notice) => ({ source: notice.kind, reason: notice.message })),
+        });
+      }
       return NextResponse.json({ count: union + unread });
     }
     const kinds: InboxKind[] | undefined =
