@@ -3935,6 +3935,8 @@
         "dependents": "Désactivez d’abord la fonctionnalité dépendante : {features}."
       },
       "affectsNote": "Désactiver masque {items} — les données sont conservées et reviennent si vous réactivez.",
+      "requiresNote": "Requiert {names}.",
+      "recommendsNote": "Fonctionne mieux avec {names}.",
       "blockedReason": "Impossible de désactiver — {items}.",
       "childOptions": "{count, plural, one {# option une fois activé} other {# options une fois activé}}",
       "confirmDisable": "Désactiver {name} ?\n\nCela masque {items}. Les données sont conservées et reviennent si vous réactivez.",

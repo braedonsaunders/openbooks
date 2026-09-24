@@ -3934,6 +3934,8 @@
         "dependents": "先に従属する機能を無効にしてください: {features}。"
       },
       "affectsNote": "オフにすると{items}が非表示になります。データは保持され、再度有効化すると戻ります。",
+      "requiresNote": "{names}が必要です。",
+      "recommendsNote": "{names}との併用がおすすめです。",
       "blockedReason": "オフにできません — {items}。",
       "categories": {
         "accounting": "会計",

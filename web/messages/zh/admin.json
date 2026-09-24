@@ -3931,6 +3931,8 @@
       "childOptions": "{count, plural, one {启用后有 # 个选项} other {启用后有 # 个选项}}",
       "blockedReason": "无法关闭——{items}。",
       "affectsNote": "关闭将隐藏{items}——数据保留，重新启用即恢复。",
+      "requiresNote": "需要{names}。",
+      "recommendsNote": "与{names}搭配使用效果最佳。",
       "confirmDisable": "关闭{name}？\n\n这将隐藏{items}。数据保留，重新启用即恢复。",
       "impacts": {
         "subsidiaryTxns": "{count, plural, one {# 家子公司有} other {# 家子公司有}}已过账交易",

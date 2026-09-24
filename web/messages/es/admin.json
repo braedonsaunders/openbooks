@@ -3935,6 +3935,8 @@
         "dependents": "Desactive primero la función dependiente: {features}."
       },
       "affectsNote": "Desactivar oculta {items}: los datos se conservan y vuelven si reactiva.",
+      "requiresNote": "Requiere {names}.",
+      "recommendsNote": "Funciona mejor con {names}.",
       "blockedReason": "No se puede desactivar: {items}.",
       "childOptions": "{count, plural, one {# opción al activar} other {# opciones al activar}}",
       "confirmDisable": "¿Desactivar {name}?\n\nEsto oculta {items}. Los datos se conservan y vuelven si reactiva.",

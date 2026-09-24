@@ -3931,6 +3931,8 @@
         "dependents": "Deaktivieren Sie zuerst die abhängige Funktion: {features}."
       },
       "affectsNote": "Durch Ausschalten wird {items} ausgeblendet – die Daten bleiben erhalten und kehren zurück, wenn Sie erneut aktivieren.",
+      "requiresNote": "Erfordert {names}.",
+      "recommendsNote": "Funktioniert am besten mit {names}.",
       "blockedReason": "Kann nicht ausgeschaltet werden – {items}.",
       "categories": {
         "accounting": "Buchhaltung",
