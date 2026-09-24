@@ -12,6 +12,7 @@ const state = {
   voucherSubsidiary: null as string | null,
   reverseResult: null as unknown,
   reverseError: null as unknown,
+  ErrorClasses: null as Record<string, new (message?: string) => Error> | null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -65,7 +66,9 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.inventory-advanced-route-test')]
       export class InventoryError extends Error {}
+      export class InventoryOwnershipError extends InventoryError {}
       export class InventoryIdempotencyConflictError extends InventoryError {}
+      state.ErrorClasses = { InventoryError, InventoryOwnershipError, InventoryIdempotencyConflictError }
       export async function queryLotRecall(_orgId, filter) {
         state.recallFilters.push(filter)
         return []
@@ -326,4 +329,22 @@ test("createTransfer without a transit warehouse sends null for engine defaultin
   assert.equal(response.status, 201);
   const request = state.idempotencyCalls[0]!.request as Record<string, unknown>;
   assert.equal(request.transitStockLocationId, null);
+});
+
+test("an engine ownership refusal surfaces as 403, not a validation miss", async () => {
+  reset(null);
+  const OwnershipError = state.ErrorClasses!.InventoryOwnershipError!;
+  state.reverseError = new OwnershipError("cross-entity voucher reversal refused");
+  const response = await POST(
+    post({
+      action: "reverseLandedVoucher",
+      id: "00000000-0000-4000-8000-000000000010",
+      date: "2026-08-28",
+      memo: "Freight was billed to the wrong receipt",
+      idempotencyKey: "key-ownership",
+    }),
+  );
+  assert.equal(response.status, 403);
+  const body = (await response.json()) as Record<string, unknown>;
+  assert.match(String(body.error), /cross-entity voucher reversal refused/);
 });

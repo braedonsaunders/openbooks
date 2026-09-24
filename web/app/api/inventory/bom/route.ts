@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { isUuid } from '@/lib/list-params'
@@ -202,6 +203,6 @@ export async function PUT(req: Request) {
     return NextResponse.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Bill of materials save failed.'
-    return refusal(message, 500)
+    return refusal(message, inventoryErrorStatus(error))
   }
 }
