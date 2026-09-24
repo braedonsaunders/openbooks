@@ -16,8 +16,9 @@
  *   snapshot-before    version-tolerant ledger fingerprint
  *   preflight          candidate `bootstrap --check --json` over the populated
  *                      install (preflight.json); datasets with expectFindings
- *                      additionally prove refusal-without-change, remedies,
- *                      and a clean re-check before the upgrade runs
+ *                      prove the exact finding set, and when a finding
+ *                      refuses, additionally refusal-without-change,
+ *                      remedies, and a clean re-check before the upgrade runs
  *   upgrade            candidate bootstrap over the populated install, timed
  *                      per migration
  *   ledger-complete    every candidate migration is recorded as applied
@@ -320,12 +321,17 @@ async function appliedFilenames(dbUrl) {
  * operator path end to end:
  *
  *   1. --check reports exactly those codes (no more, no fewer);
- *   2. plain bootstrap refuses and leaves _applied_migrations and the
- *      ledger fingerprint untouched;
+ *   2. when a finding refuses, plain bootstrap refuses and leaves
+ *      _applied_migrations and the ledger fingerprint untouched;
  *   3. once the dataset's remedies (repo remedy files under
  *      schema/migrations/preflight/remedies/, the same files operators
  *      get) apply, --check reports no refuse finding;
  *   4. then the normal phases run.
+ *
+ * A notices-only expectation (no refuse finding) stops after step 1: there
+ * is no refusal to prove and no remedy to apply. A trial bootstrap here
+ * would be the opposite of read-only — it would UPGRADE the install early
+ * and leave the upgrade phase nothing to apply.
  */
 async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedger }) {
   // `--check` exits 1 whenever it reports a refuse finding, which is exactly
@@ -370,6 +376,10 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedg
   }
   summary.expected = true;
   summary.refuses = refuseFindings(first);
+  if (summary.refuses.length === 0) {
+    summary.notices = noticeFindings(first);
+    return summary;
+  }
 
   let refused = false;
   try {
