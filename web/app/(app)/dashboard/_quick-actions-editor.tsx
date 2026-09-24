@@ -29,6 +29,10 @@ function genId(): string {
   return globalThis.crypto.randomUUID()
 }
 
+function choiceLabel(value: string): string {
+  return value.split('-').map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' ')
+}
+
 export function QuickActionsEditor({
   open,
   value,
@@ -558,7 +562,7 @@ function EditView({
               <button
                 key={key}
                 type="button"
-                aria-label={key}
+                aria-label={`${t('quickActions.editor.icon')}: ${choiceLabel(key)}`}
                 onClick={() => onPatch({ iconKey: key })}
                 className={`flex aspect-square items-center justify-center rounded-lg border transition ${
                   active
@@ -584,7 +588,7 @@ function EditView({
               <button
                 key={tone}
                 type="button"
-                aria-label={TONES[tone].name}
+                aria-label={`${t('quickActions.editor.color')}: ${TONES[tone].name}`}
                 title={TONES[tone].name}
                 onClick={() => onPatch({ tone })}
                 className={`h-7 w-7 rounded-full ${TONES[tone].swatch} ring-2 ring-offset-2 transition dark:ring-offset-slate-900 ${
