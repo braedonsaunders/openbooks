@@ -218,3 +218,32 @@ test("a refused bulk names the server refusal instead of the generic failure", a
   assert.equal(errors.length, 1, `exactly one error toast must fire, saw ${JSON.stringify(toasts)}`);
   assert.match(errors[0]?.message ?? "", /nothing selected/, "the toast must carry the server refusal");
 });
+
+test("replace picker can be reopened after cancellation for the same file", async (t) => {
+  const { unmount } = await renderList();
+  t.after(unmount);
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement | null;
+  assert.ok(input, "the hidden replace picker must render");
+  const originalClick = window.HTMLInputElement.prototype.click;
+  let opens = 0;
+  window.HTMLInputElement.prototype.click = function () {
+    if (this === input) opens += 1;
+  };
+  t.after(() => {
+    window.HTMLInputElement.prototype.click = originalClick;
+  });
+
+  async function requestReplace() {
+    const more = [...document.querySelectorAll('button')].find((button) => button.getAttribute('aria-label') === 'More actions');
+    assert.ok(more, "the file row's action menu must render");
+    await click(more);
+    const replace = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Replace');
+    assert.ok(replace, 'the file menu must offer Replace');
+    await click(replace);
+  }
+
+  await requestReplace();
+  assert.equal(opens, 1, 'the first Replace action opens the native picker');
+  await requestReplace();
+  assert.equal(opens, 2, 'cancelling the picker leaves Replace available for another attempt');
+});
