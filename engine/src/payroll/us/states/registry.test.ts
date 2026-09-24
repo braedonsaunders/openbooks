@@ -277,6 +277,24 @@ test("South Carolina expires the exempt SC W-4 after February 15 and resumes zer
   assert.equal(ordinary.answers.allowances, "3");
 });
 
+test("Rhode Island EXEMPT and EXEMPT-MS elections expire after their calendar year", () => {
+  // RI W-4 2026: line 3 EXEMPT and EXEMPT-MS claims must be filed each year.
+  const certificate = payrollCertificate("US", "us_ri_riw4");
+  const exemptRow = {
+    certificateKey: certificate.key,
+    region: "RI",
+    effectiveFrom: "2026-01-01",
+    answers: { allowances: "7", exempt: "true" },
+  };
+  const current = resolveCertificate({ certificate, stored: [exemptRow], asOf: "2026-12-31" });
+  const expired = resolveCertificate({ certificate, stored: [exemptRow], asOf: "2027-01-01" });
+
+  assert.equal(current.answers.exempt, "true");
+  assert.equal(expired.onFile, false);
+  assert.equal(expired.answers.exempt, null);
+  assert.equal(expired.answers.allowances, "0");
+});
+
 /* --------------------------------------------------------------------- */
 /* Reciprocity, on the real declarations                                  */
 /* --------------------------------------------------------------------- */

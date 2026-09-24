@@ -265,9 +265,15 @@ export const RI_CERTIFICATE: PayrollCertificate = {
   label: "Rhode Island Employee's Withholding Allowance Certificate",
   scope: { level: "region", region: "RI" },
   purpose: "withholding",
+  // The RI W-4 requires a new certificate each year for EXEMPT or EXEMPT-MS.
+  validity: {
+    kind: "calendar_year_end",
+    appliesWhen: { field: "exempt", values: ["true"] },
+  },
   citation:
     "Rhode Island Division of Taxation, 2026 Employer's Income Tax Withholding "
-    + "Tables; Form RI W-4 (2026). Federal Form W-4 can no longer be used for "
+    + "Tables; Form RI W-4 (2026), https://tax.ri.gov/sites/g/files/xkgbur541/files/2026-01/RI%20W-4%202026.pdf. "
+    + "Federal Form W-4 can no longer be used for "
     + "Rhode Island withholding.",
   summary:
     "Sets Rhode Island allowances. A missing RI W-4 is withheld at zero "
