@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { cmp } from "../money/money.ts";
 import {
@@ -717,54 +716,6 @@ test("the self-check refuses a fabricated clean result", () => {
 
   const blockedButClean: ParallelComparison = { ...good, blockedReason: "nothing to compare" };
   assert.ok(auditComparison(blockedButClean).some((f) => f.invariant === "clean-is-not-blocked"));
-});
-
-/* ------------------------------------------------------------------ */
-/* Structural guard on the status expression itself                    */
-/* ------------------------------------------------------------------ */
-
-test("the status expression still contains every anti-vacuous guard", () => {
-  // The source-text half of the control, following
-  // engine/src/harness/replay/replay-safety.test.ts. Behavioural tests prove
-  // today's guards work; this one fails if a future edit removes a branch
-  // instead of changing its outcome, which is how a verification tool quietly
-  // becomes an affirmation.
-  const source = readFileSync("engine/src/payroll/parallel-run.ts", "utf8");
-
-  const gate =
-    source.match(/let blockedReason: string \| null = null;[\s\S]*?const unresolved =/)?.[0] ?? "";
-  assert.ok(gate, "the blocked-reason gate is no longer recognizable");
-  assert.match(gate, /prior\.size === 0 && ours\.size === 0/);
-  assert.match(gate, /prior\.size === 0/);
-  assert.match(gate, /ours\.size === 0/);
-  assert.match(gate, /comparedIds\.length === 0/);
-
-  const status = source.match(/const status: ParallelStatus =[\s\S]*?: "clean";/)?.[0] ?? "";
-  assert.ok(status, "the status expression is no longer recognizable");
-  assert.match(status, /blockedReason\s*\n?\s*\?\s*"no_comparable_data"/);
-  assert.match(status, /unresolved > 0 \|\| unmappedColumns\.length > 0/);
-  assert.match(status, /counts\.within_tolerance > 0/);
-
-  // Zero tolerance by default, expressed as a default in the code and not as a
-  // convention somebody has to remember.
-  assert.match(source, /export const EXACT = "0\.0000";/);
-  assert.match(source, /\?\.tolerance \?\? EXACT/);
-  // No floating point anywhere in the comparison.
-  assert.doesNotMatch(source, /parseFloat|Number\(|Math\.abs/);
-
-  const audit = source.match(/export function auditComparison[\s\S]*?\n}/)?.[0] ?? "";
-  assert.ok(audit, "auditComparison is no longer recognizable");
-  for (const invariant of [
-    "clean-compared-somebody",
-    "clean-had-a-prior-side",
-    "clean-had-our-side",
-    "clean-compared-something",
-    "clean-mapped-every-column",
-    "clean-attributes-every-total",
-    "tolerance-is-disclosed",
-  ]) {
-    assert.ok(audit.includes(invariant), `auditComparison no longer checks ${invariant}`);
-  }
 });
 
 test("the comparison is deterministic and reads no ambient state", () => {

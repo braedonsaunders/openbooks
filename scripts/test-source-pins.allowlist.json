@@ -10,7 +10,6 @@
     "engine/src/ledger/journal-writes.test.ts": 2,
     "engine/src/ledger/ledger-history-reporting.test.ts": 2,
     "engine/src/payments/operations.test.ts": 4,
-    "engine/src/payroll/parallel-run.test.ts": 1,
     "engine/src/payroll/rl1.test.ts": 1,
     "engine/src/payroll/tax-year-scaffold.test.ts": 3,
     "engine/src/platform/operations-config.test.ts": 2,
