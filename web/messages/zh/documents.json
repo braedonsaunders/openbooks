@@ -13,7 +13,8 @@
       "allTitle": "尚无文件",
       "allDescription": "上传您的第一个文件以填充文件柜。"
     },
-    "folderRow": "文件夹"
+    "folderRow": "文件夹",
+    "linkNotFound": "无法打开所请求的文件或文件夹。链接可能已过期，或共享时未授予访问权限。"
   },
   "systemFolders": {
     "apCapture": "应付采集"

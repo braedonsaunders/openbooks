@@ -13,7 +13,8 @@
       "allTitle": "Nenhum arquivo ainda",
       "allDescription": "Faça upload do seu primeiro arquivo para preencher o Arquivo."
     },
-    "folderRow": "Pasta"
+    "folderRow": "Pasta",
+    "linkNotFound": "Não foi possível abrir o arquivo ou a pasta solicitados. O link pode estar desatualizado ou ter sido compartilhado sem acesso."
   },
   "systemFolders": {
     "apCapture": "Captura de contas a pagar"

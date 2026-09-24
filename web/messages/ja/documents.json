@@ -13,7 +13,8 @@
       "allTitle": "まだファイルがありません",
       "allDescription": "最初のファイルをアップロードしてファイルキャビネットを埋めましょう。"
     },
-    "folderRow": "フォルダー"
+    "folderRow": "フォルダー",
+    "linkNotFound": "要求されたファイルまたはフォルダーを開けませんでした。リンクが古いか、アクセス権なしで共有された可能性があります。"
   },
   "systemFolders": {
     "apCapture": "AP取り込み"
