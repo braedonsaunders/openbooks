@@ -240,7 +240,11 @@ export async function processCloseDeliveryJobData(
       if (!row) throw new Error("close run / period or reporting package not found");
 
       const delivery = (row.delivery ?? {}) as Record<string, unknown>;
-      if (delivery.cadence === "manual") return { skipped: "manual cadence" };
+      // Manual cadence means "only when someone sends it": cadence-driven
+      // ticks skip, but an explicit Send now (manualTrigger) delivers.
+      if (delivery.cadence === "manual" && !data.manualTrigger) {
+        return { skipped: "manual cadence" };
+      }
 
       const recipients = (Array.isArray(row.recipients) ? row.recipients : []).filter(
         (value): value is string => typeof value === "string" && value.length > 0,

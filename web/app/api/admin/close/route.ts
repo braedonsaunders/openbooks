@@ -601,8 +601,10 @@ export async function POST(req: Request) {
         throw new CloseError("invalid send target");
       try {
         const { enqueueCloseDelivery } = await import("@openbooks/jobs");
-        // The sender travels as the render principal (see senderId).
-        await enqueueCloseDelivery({ orgId, packageId, periodId, bookId, senderId: actorId });
+        // The sender travels as the render principal (see senderId), and the
+        // manual trigger marks this as an explicit Send now so the worker
+        // delivers regardless of the package's cadence (see manualTrigger).
+        await enqueueCloseDelivery({ orgId, packageId, periodId, bookId, senderId: actorId, manualTrigger: true });
       } catch {
         throw new CloseError("the delivery queue is unavailable");
       }
