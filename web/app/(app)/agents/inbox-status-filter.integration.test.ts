@@ -75,10 +75,11 @@ test('F-t11-006: Status filter surfaces resolved and dismissed findings', { skip
       const defaultIds = data.rows.map((r) => r.id).sort();
       assert.deepEqual(defaultIds, [openId, reviewId].sort());
 
-      // …and the filter reaches it.
+      // …and the filter reaches each triaged state.
       const resolved = await loadAgents({ status: 'resolved' });
       assert.deepEqual(resolved.rows.map((r) => r.id), [resolvedId]);
-      void dismissedId;
+      const dismissed = await loadAgents({ status: 'dismissed' });
+      assert.deepEqual(dismissed.rows.map((r) => r.id), [dismissedId]);
     });
   } finally {
     await dropScratchOrg(org.orgId);
