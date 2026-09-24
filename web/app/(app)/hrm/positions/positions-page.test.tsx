@@ -37,10 +37,13 @@ declare global {
 const { registerHooks } = await import("node:module");
 registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, url: "data:text/javascript,export {}", format: "module" };
+    }
     if (specifier === "next/navigation") {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return { push(url){ globalThis.__positionPushes = [...(globalThis.__positionPushes || []), url] }, refresh(){} }}",
+        url: "data:text/javascript,export function useRouter(){return { push(url){ globalThis.__positionPushes = [...(globalThis.__positionPushes || []), url] }, refresh(){} }} export function redirect(url){ throw new Error('unexpected redirect: '+url) }",
       };
     }
     return next(specifier, context);
@@ -57,6 +60,7 @@ const messages = (await import("../../../../messages/en")).default;
 // Dynamic: the form resolves next/navigation through the stub above, so
 // it must load after the hook registers.
 const { PositionCreateForm } = await import("./PositionCreateForm");
+const { positionsSpec } = await import("./view");
 
 const ENTITY_ID = "d726d187-0000-0000-0000-000000000001";
 
@@ -215,6 +219,39 @@ test("a refused create pins the refusal, never a silent form", async (t) => {
   assert.ok(alert, "the refusal pins as an accessible alert");
   assert.ok((alert?.textContent ?? "").includes(refusal), "the refusal message renders intact");
   assert.deepEqual(globalThis.__positionPushes, [], "no drawer navigation beside a refusal");
+});
+
+test("the position table renders a vacancy refusal from each row", () => {
+  const refusal = "Funding exceeds the planned FTE; reduce funding before proceeding.";
+  const row = {
+    id: "position-1", code: "ENG-1", title: "Engineer", status: "planned",
+    statusLabel: "Planned", statusVariant: "default" as const, department: null,
+    plannedFte: "1.0000", fundedFte: "2.0000", filledFte: "0.0000",
+    vacantFte: "0.0000", holderLabel: "Vacant", refusal, href: "/hrm/positions?position=position-1",
+  };
+  const data = {
+    title: "Positions", description: "Position details", tabs: [], viewTabs: [],
+    canManage: false, addLabel: "Add position", addHref: "/hrm/positions?position=new",
+    basePath: "/hrm/positions", effectiveDate: "2026-09-22", segments: [],
+    segmentsLabel: "Show", allLabel: "All", asOfLabel: "As of", segmentOptions: [],
+    currentParams: {}, columns: {
+      code: "Code", title: "Title", status: "Status", department: "Department",
+      planned: "Planned", funded: "Funded", filled: "Filled", vacant: "Vacant",
+      refusal: "Vacancy refusal", holder: "Holder",
+    },
+    rows: [row], empty: "No positions", totalLabel: "Total",
+    totals: { plannedFte: "1.0000", fundedFte: "2.0000", filledFte: "0.0000", vacantFte: "0.0000" },
+    detail: null, missingDetail: null, create: null, drawerOpen: false, drawer: null,
+  } satisfies Parameters<typeof positionsSpec>[0];
+  const spec = positionsSpec(data);
+  const grid = spec.body.find((block) => block.kind === "grid");
+  assert.ok(grid && grid.kind === "grid");
+  const table = grid.blocks.find((block) => block.kind === "table");
+  assert.ok(table && table.kind === "table");
+  const refusalColumn = table.columns.find((column) => column.header === "Vacancy refusal");
+  assert.ok(refusalColumn, "the refusal has a visible table column");
+  assert.deepEqual(refusalColumn.cell, { kind: "text", field: { $: "refusal" }, fallback: "—" });
+  assert.equal(row.refusal, refusal, "the refusal value is preserved in row data consumed by the table");
 });
 
 test("the create copy ships in every locale", () => {

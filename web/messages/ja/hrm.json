@@ -65,6 +65,7 @@
       "funded": "財源付きFTE",
       "filled": "充足済みFTE",
       "vacant": "欠員FTE",
+      "refusal": "欠員の拒否理由",
       "unassignedDepartment": "部門なし",
       "empty": "{date} 時点で設定済みのポジションはありません。",
       "total": "合計"
