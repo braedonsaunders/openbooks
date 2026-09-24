@@ -44,7 +44,6 @@
     "web/components/document-drawer-subsidiary-save.test.ts": 3,
     "web/lib/apps/zip.test.ts": 2,
     "web/lib/assistant/result-compaction.test.ts": 1,
-    "web/lib/assistant/tools.test.ts": 4,
     "web/lib/cash/core.test.ts": 6,
     "web/lib/cash/open-items-current-projection.test.ts": 2,
     "web/lib/crm-status-display.test.ts": 2,
