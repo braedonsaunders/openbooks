@@ -484,14 +484,30 @@ export async function withOrg<T>(
  * authoritative boundary for API/MCP idempotency and other multi-step
  * financial commands.
  */
+export interface OrgTransactionOptions {
+  /**
+   * Snapshot isolation for the transaction. Must be requested up front: it is
+   * applied immediately after BEGIN, before any other statement. Snapshot
+   * reads fan out over many queries (inbox facets, registers, party bundles)
+   * and every one must see the same committed state, or a concurrent rehome
+   * moves a row between two reads of one response. Omitted means the default
+   * read-committed level, exactly as before.
+   */
+  isolationLevel?: "REPEATABLE READ" | "SERIALIZABLE";
+}
+
 export async function withOrgTransaction<T>(
   orgId: string,
   fn: () => Promise<T>,
+  opts: OrgTransactionOptions = {},
 ): Promise<T> {
   const active = orgContext.getStore();
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
       throw new Error("cannot change organization inside an active tenant transaction");
+    }
+    if (opts.isolationLevel !== undefined) {
+      throw new Error("cannot change isolation inside an active tenant transaction");
     }
     return fn();
   }
@@ -499,6 +515,12 @@ export async function withOrgTransaction<T>(
   const client = await rawConnect();
   try {
     await client.query("begin");
+    if (opts.isolationLevel !== undefined) {
+      if (opts.isolationLevel !== "REPEATABLE READ" && opts.isolationLevel !== "SERIALIZABLE") {
+        throw new Error(`unsupported tenant transaction isolation level: ${opts.isolationLevel}`);
+      }
+      await client.query(`SET TRANSACTION ISOLATION LEVEL ${opts.isolationLevel}`);
+    }
     await client.query(
       "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
       [orgId],
