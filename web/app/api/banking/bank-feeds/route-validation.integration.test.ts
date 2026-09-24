@@ -24,7 +24,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { POST } = await import('./route')
-const { PATCH } = await import('./[id]/route')
+const { PATCH, DELETE } = await import('./[id]/route')
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -37,7 +37,6 @@ async function fixture() {
   return { ...org, actorId }
 }
 
-const { DELETE } = await import('./[id]/route')
 const post = (body: Record<string, unknown>) =>
   POST(new Request('https://openbooks.test/api/banking/bank-feeds', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
@@ -171,5 +170,20 @@ test('bank-feed writes validate syncOverlapDays and store a custom overlap', { s
     const cleared = await patch(id, { syncOverlapDays: null })
     assert.equal(cleared.status, 200, JSON.stringify(await cleared.clone().json()))
     assert.equal(await overlapOf(id), null)
+  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
+})
+
+test('bank-feed PATCH refuses non-boolean isActive values', { skip: !enabled }, async () => {
+  const org = await fixture()
+  try {
+    const created = await post({ name: 'Flag feed', provider: 'manual', accountId: org.accounts.bank })
+    const { id } = (await created.json()) as { id: string }
+    for (const isActive of ['false', 1, null]) {
+      const refused = await patch(id, { isActive })
+      assert.equal(refused.status, 400)
+      assert.deepEqual(await refused.json(), { error: 'isActive must be a boolean' })
+    }
+    const row = await db.execute<{ is_active: boolean }>(sql`select is_active from bank_feed_connections where id=${id}`)
+    assert.equal(row.rows[0]!.is_active, true)
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })
