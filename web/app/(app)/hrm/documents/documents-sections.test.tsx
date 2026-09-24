@@ -272,14 +272,13 @@ test("the legacy bare ?row=new no longer fans out to every section", async () =>
 
 test("document generation keeps the named API refusal in the dialog", async () => {
   const previousFetch = globals.fetch;
-  globals.fetch = async () => ({
-    ok: false,
-    status: 409,
-    json: async () => ({
-      error: "The document cannot be generated for this employment.",
-      remedy: "Choose an active employment and try again.",
-    }),
-  });
+  let requests = 0;
+  let submitted: Record<string, unknown> = {};
+  globals.fetch = async (_url: unknown, init?: { body?: unknown }) => {
+    requests += 1;
+    submitted = JSON.parse(String(init?.body));
+    return { ok: false, status: 409, json: async () => ({ error: "The document cannot be generated for this employment.", remedy: "Choose an active employment and try again." }) };
+  };
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -320,11 +319,12 @@ test("document generation keeps the named API refusal in the dialog", async () =
       const submit = [...document.querySelectorAll("button")].find((button) => button.textContent === "Generate");
       assert.ok(submit, "the generation action renders");
       submit!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      submit!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
     });
+    assert.deepEqual([requests, typeof submitted.idempotencyKey === "string" && submitted.idempotencyKey.length >= 8], [1, true], "a rapid double-click sends one generate command with a durable retry key");
     const body = document.body.textContent ?? "";
-    assert.ok(body.includes("The document cannot be generated for this employment."), "the API refusal is shown inline");
-    assert.ok(body.includes("Choose an active employment and try again."), "the API remedy is shown inline");
+    assert.ok(body.includes("The document cannot be generated for this employment.") && body.includes("Choose an active employment and try again."), "the API refusal and remedy are shown inline");
     assert.ok(!body.includes("Generation failed."), "the named refusal does not collapse to the generic copy");
   } finally {
     await act(async () => root.unmount());

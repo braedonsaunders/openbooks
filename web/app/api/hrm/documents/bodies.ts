@@ -12,6 +12,7 @@ const uuid = z.string().refine(isUuid, "must be a valid id");
 const civilDate = civilDateInput();
 
 export const generateDocumentBody = z.object({
+  idempotencyKey: uuid,
   templateId: uuid,
   employmentId: uuid.nullable().optional(),
   partyId: uuid,

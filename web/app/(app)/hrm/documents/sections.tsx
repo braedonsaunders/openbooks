@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
@@ -228,6 +228,9 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
   const [title, setTitle] = useState('')
   const [preview, setPreview] = useState<Record<string, string> | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
+  const idempotencyKey = useRef<string | null>(null)
   if (!generate) return null
   const labels = generate.labels
   const template = generate.templates.find((t) => t.value === templateId) ?? null
@@ -248,16 +251,25 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
   }
 
   async function submit() {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    setSubmitting(true)
     setFailed(null)
-    const ok = await post(
-      '/api/hrm/documents?mode=generate',
-      { templateId, partyId, title },
-      msg(labels, 'failed'),
-      setFailed,
-    )
-    if (!ok) return
-    router.push('/hrm/documents')
-    router.refresh()
+    idempotencyKey.current ??= crypto.randomUUID()
+    try {
+      const ok = await post(
+        '/api/hrm/documents?mode=generate',
+        { idempotencyKey: idempotencyKey.current, templateId, partyId, title },
+        msg(labels, 'failed'),
+        setFailed,
+      )
+      if (!ok) return
+      router.push('/hrm/documents')
+      router.refresh()
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -269,7 +281,7 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
           <>
             <div>
               <Label id={`${fieldId}-template-label`}>{msg(labels, 'template')}</Label>
-              <Select id={`${fieldId}-template`} aria-labelledby={`${fieldId}-template-label`} aria-label={msg(labels, 'template')} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+              <Select id={`${fieldId}-template`} aria-labelledby={`${fieldId}-template-label`} aria-label={msg(labels, 'template')} value={templateId} onChange={(e) => { idempotencyKey.current = null; setTemplateId(e.target.value) }}>
                 {generate.templates.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label} — {t.category}
@@ -279,7 +291,7 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
             </div>
             <div>
               <Label id={`${fieldId}-person-label`}>{msg(labels, 'person')}</Label>
-              <Select id={`${fieldId}-person`} aria-labelledby={`${fieldId}-person-label`} aria-label={msg(labels, 'person')} value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+              <Select id={`${fieldId}-person`} aria-labelledby={`${fieldId}-person-label`} aria-label={msg(labels, 'person')} value={partyId} onChange={(e) => { idempotencyKey.current = null; setPartyId(e.target.value) }}>
                 {generate.people.map((p) => (
                   <option key={p.value} value={p.value}>
                     {p.label}
@@ -289,7 +301,7 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
             </div>
             <div>
               <Label id={`${fieldId}-title-label`} htmlFor={`${fieldId}-title`}>{msg(labels, 'docTitle')}</Label>
-              <Input id={`${fieldId}-title`} aria-labelledby={`${fieldId}-title-label`} aria-label={msg(labels, 'docTitle')} value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Input id={`${fieldId}-title`} aria-labelledby={`${fieldId}-title-label`} aria-label={msg(labels, 'docTitle')} value={title} onChange={(e) => { idempotencyKey.current = null; setTitle(e.target.value) }} />
             </div>
             {template && (
               <p className="text-xs text-slate-500">
@@ -300,7 +312,7 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
               <Button variant="outline" onClick={loadPreview} disabled={!partyId}>
                 {msg(labels, 'preview')}
               </Button>
-              <Button onClick={submit} disabled={!templateId || !partyId || !title.trim()}>
+              <Button onClick={submit} disabled={submitting || !templateId || !partyId || !title.trim()}>
                 {msg(labels, 'submit')}
               </Button>
             </div>

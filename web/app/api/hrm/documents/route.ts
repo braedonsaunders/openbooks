@@ -1,4 +1,5 @@
 import { parseJsonBody } from "@/lib/api/json";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   generateDocument,
@@ -9,6 +10,8 @@ import {
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
+import { applicationContextFromSession } from "../../../../lib/application/context";
+import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "./_lib";
 import { generateDocumentBody, previewMergeBody, uploadDocumentBody } from "./bodies";
@@ -112,18 +115,34 @@ export async function POST(req: Request) {
     const parsedBody = await parseJsonBody(req, generateDocumentBody);
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data;
-    const today = await businessToday(gate.user.orgId);
-    const { document } = await generateDocument({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      templateId: body.templateId,
-      employmentId: body.employmentId ?? null,
-      partyId: body.partyId,
-      title: body.title,
-      expiresAt: body.expiresAt ?? null,
-      today,
+    const outcome = await executeIdempotent({
+      context: applicationContextFromSession(gate, "api", req.headers.get("x-request-id") || randomUUID()),
+      operation: "hrm_document.generate",
+      idempotencyKey: body.idempotencyKey,
+      request: {
+        templateId: body.templateId,
+        employmentId: body.employmentId ?? null,
+        partyId: body.partyId,
+        title: body.title,
+        expiresAt: body.expiresAt ?? null,
+      },
+      successStatus: () => 201,
+      execute: async () => {
+        const today = await businessToday(gate.user.orgId);
+        const { document } = await generateDocument({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          templateId: body.templateId,
+          employmentId: body.employmentId ?? null,
+          partyId: body.partyId,
+          title: body.title,
+          expiresAt: body.expiresAt ?? null,
+          today,
+        });
+        return { document };
+      },
     });
-    return NextResponse.json({ document }, { status: 201 });
+    return NextResponse.json(outcome.value, { status: 201 });
   } catch (e) {
     return hrmDocumentsErrorResponse(e);
   }
