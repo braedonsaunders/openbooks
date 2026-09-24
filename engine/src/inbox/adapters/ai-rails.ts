@@ -14,6 +14,7 @@
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { listFlags } from "../../hrm/ai/anomalies.ts";
 import { overdueReviews } from "../../hrm/ai/governance.ts";
 import { loadAiRailsSettings } from "../../hrm/ai/settings.ts";
 import { db } from "../../platform/db.ts";
@@ -28,14 +29,6 @@ async function tableLanded(table: string): Promise<boolean> {
   `)).rows[0]?.exists;
   return found === true;
 }
-
-type BlockRow = {
-  id: string;
-  kind: string;
-  explanation: string;
-  payPeriodFrom: string;
-  payPeriodTo: string;
-};
 
 const KIND_LABELS: Record<string, string> = {
   terminated_with_pay: "Terminated with pay",
@@ -63,15 +56,14 @@ export const payrollAnomalyBlockAdapter: InboxAdapter = {
     if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "hrmPayrollAnomalies"))) return [];
     if (!(await tableLanded("payroll_anomaly_flags"))) return [];
     if (!(await actorHasPermission(db, ctx.orgId, ctx.actorId, "payroll.manage"))) return [];
-    const rows = (await db.execute<BlockRow>(sql`
-      select id::text as id, kind, explanation,
-             pay_period_from::text as "payPeriodFrom",
-             pay_period_to::text as "payPeriodTo"
-        from public.payroll_anomaly_flags
-       where org_id = ${ctx.orgId}::uuid
-         and severity = 'block' and status = 'open'
-       order by pay_period_from desc, id
-       limit 20`)).rows;
+    // The checks queue owns the read (and its legal-entity lens): the
+    // inbox projects the same open blocks the actor may open, never more.
+    const rows = (await listFlags(db, {
+      orgId: ctx.orgId,
+      actorId: ctx.actorId,
+      severity: "block",
+      status: "open",
+    })).slice(0, 20);
     return rows.map((row) => ({
       id: inboxItemId("payroll_anomaly_block", row.id),
       kind: "payroll_anomaly_block",
