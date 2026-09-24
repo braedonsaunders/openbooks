@@ -200,6 +200,34 @@ test(
 );
 
 test(
+  "a credit/debit-split CSV with a header previews with no skipped warning",
+  { skip: !DB },
+  async () => {
+    // Regression: text in both money columns refused as a transaction, so
+    // every split-column import with a header broke at the API boundary.
+    const { org } = await fixture();
+    try {
+      const { status, json } = await post({
+        accountId: org.accounts.bank,
+        source: "csv",
+        text: "Date,Description,Credit,Debit\n2026-07-01,salary,100.00,\n2026-07-02,coffee,,5.00\n",
+        mapping: { date: 0, description: 1, amount: 2, debitAmount: 3 },
+        mode: "preview",
+      });
+      assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
+      const body = json as {
+        imported: number;
+        skipped: unknown[];
+      };
+      assert.equal(body.imported, 2);
+      assert.deepEqual(body.skipped, []);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "a transaction-looking first row is refused by name with nothing written",
   { skip: !DB },
   async () => {

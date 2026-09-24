@@ -110,6 +110,69 @@ test("a metadata preamble before the header reports each disclaimer row", () => 
   ]);
 });
 
+test("a credit/debit header row is consumed silently", () => {
+  // Regression: text in BOTH money columns ("Credit","Debit") read as a
+  // transaction, so every credit/debit-mapped import with a header refused.
+  // The test is parsing, not non-emptiness — labels consume, numbers refuse.
+  const parsed = parseCsv(
+    "Date,Description,Credit,Debit\n2026-07-01,salary,100.00,\n2026-07-02,coffee,,5.00\n",
+    { date: 0, description: 1, amount: 2, debitAmount: 3 },
+  );
+  assert.deepEqual(
+    parsed.lines.map((line) => line.amount),
+    ["100.0000", "-5.0000"],
+  );
+  assert.deepEqual(parsed.skipped, []);
+});
+
+test("a credit/debit disclaimer row is reported", () => {
+  const parsed = parseCsv("Bank export\n2026-07-01,salary,100.00,\n", {
+    date: 0,
+    description: 1,
+    amount: 2,
+    debitAmount: 3,
+  });
+  assert.deepEqual(
+    parsed.lines.map((line) => line.amount),
+    ["100.0000"],
+  );
+  assert.deepEqual(parsed.skipped, [
+    { line: 1, code: "csv_metadata_row", dateCell: "Bank export" },
+  ]);
+});
+
+test("a debit-only transaction-looking first row refuses", () => {
+  assert.throws(
+    () =>
+      parseCsv("oops,salary,,5.00\n2026-07-01,coffee,,6.00\n", {
+        date: 0,
+        description: 1,
+        amount: 2,
+        debitAmount: 3,
+      }),
+    (error: unknown) =>
+      error instanceof BankingError &&
+      /CSV row 1 looks like a transaction/.test(error.message) &&
+      /remove the row|fix the date/.test(error.message),
+  );
+});
+
+test("a label in one money column and a number in the other refuses as a transaction", () => {
+  // Fail closed: the numeric leg could be real money beside junk, so the
+  // row refuses instead of classifying as a header.
+  assert.throws(
+    () =>
+      parseCsv("oops,salary,Total,100.00\n2026-07-01,coffee,,6.00\n", {
+        date: 0,
+        description: 1,
+        amount: 2,
+        debitAmount: 3,
+      }),
+    (error: unknown) =>
+      error instanceof BankingError && /CSV row 1 looks like a transaction/.test(error.message),
+  );
+});
+
 test("a transaction-looking row inside a preamble refuses by row number", () => {
   // A set-aside block must never swallow a real transaction: the row that
   // reads as one refuses with its number and the remedy, even mid-block.
