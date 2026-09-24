@@ -57,6 +57,7 @@ import type { PayrollReciprocityAgreement } from "../../reciprocity.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   refuseUntranscribedYear,
   type UsStateWithholdingEngine,
@@ -453,9 +454,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
+  if (certificateFlag(input.certificate, "military_spouse_exempt")) {
+    const militarySpouseCertificate = input.supportingCertificates?.us_md_mw507m;
+    requireMilitarySpouseEligibility(militarySpouseCertificate, "Maryland", [
+      { key: "employee_married_to_servicemember", description: "the employee is married to a servicemember" },
+      { key: "employee_domiciled_outside_md", description: "the employee is domiciled in a state other than Maryland" },
+      { key: "servicemember_duty_station_qualifies", description: "the spouse's permanent duty station is in Maryland, an immediate neighboring state, or the District of Columbia" },
+      { key: "employee_in_md_only_to_be_with_spouse", description: "the employee resides and works in Maryland only to be with the servicemember spouse" },
+      { key: "spousal_military_id_on_file", description: "a copy of the military ID card is attached" },
+    ]);
+    trace("MD_MILITARY_SPOUSE_EXEMPT", 1n);
+    return { state: "MD", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  }
+
   if (
     certificateFlag(input.certificate, "exempt")
-    || certificateFlag(input.certificate, "military_spouse_exempt")
     || certificateFlag(input.certificate, "reciprocal_exempt")
   ) {
     trace("MD_EXEMPT", 1n);
@@ -638,6 +651,7 @@ export const MD_WITHHOLDING: UsStateWithholdingEngine = {
   // conformance test). Daily constants are 365-day; a 260-day daily
   // payroll still annualizes rather than borrowing the 365-day box.
   printedPeriods: null,
+  supportingCertificateKeys: ["us_md_mw507m"],
   compute,
 };
 
@@ -777,6 +791,25 @@ export const MD_CERTIFICATE: PayrollCertificate = {
         + "here under orders and maintains a domicile in another state. Attach Form "
         + "MW507M and a copy of the spousal military identification card.",
     },
+  ],
+};
+
+/** Maryland Form MW507M — required with the line 8 MW507 election. */
+export const MD_MW507M: PayrollCertificate = {
+  key: "us_md_mw507m",
+  form: "MW507M",
+  label: "Exemption from Maryland Withholding — Qualified Spouse of a Servicemember",
+  scope: { level: "region", region: "MD" },
+  purpose: "exemption",
+  citation: "Maryland Form MW507M (COM/RAD-048 07/25), https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/forms/2026/mw507m.pdf",
+  summary: "File with MW507 line 8 and attach a copy of the military ID card. Each eligibility statement must be true.",
+  storage: "certificate_rows",
+  fields: [
+    { key: "employee_married_to_servicemember", label: "Employee is married to the servicemember", kind: "flag", required: true, help: "MW507M Part 1, item 1(a)." },
+    { key: "employee_domiciled_outside_md", label: "Employee is domiciled in a state other than Maryland", kind: "flag", required: true, help: "MW507M Part 1, item 1(b)." },
+    { key: "servicemember_duty_station_qualifies", label: "Spouse's permanent duty station is Maryland, a neighboring state, or DC", kind: "flag", required: true, help: "MW507M Part 1, item 1(c)." },
+    { key: "employee_in_md_only_to_be_with_spouse", label: "Employee resides and works in Maryland only to be with the spouse", kind: "flag", required: true, help: "MW507M Part 1, item 1(d)." },
+    { key: "spousal_military_id_on_file", label: "Copy of military ID card is attached", kind: "flag", required: true, help: "MW507M requires the employee to attach a copy of the military ID card." },
   ],
 };
 

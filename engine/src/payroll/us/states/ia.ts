@@ -37,6 +37,7 @@ import {
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   refuseUntranscribedYear,
@@ -157,10 +158,20 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
-  if (
-    certificateFlag(input.certificate, "exempt")
-    || certificateFlag(input.certificate, "military_spouse_exempt")
-  ) {
+  if (certificateFlag(input.certificate, "military_spouse_exempt")) {
+    requireMilitarySpouseEligibility(input.certificate, "Iowa", [
+      { key: "servicemember_present_under_orders", description: "the servicemember spouse is present in Iowa in compliance with military orders" },
+      { key: "spouse_present_solely_to_accompany", description: "the employee is present in Iowa solely to be with the spouse" },
+      { key: "spouse_domiciled_outside_ia", description: "the employee maintains or has elected a tax domicile outside Iowa" },
+      { key: "spousal_military_id_on_file", description: "a copy of the spousal military identification card is attached" },
+    ]);
+    return {
+      state: "IA", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+      factors: { IA_MILITARY_SPOUSE_EXEMPT: "1" },
+    };
+  }
+
+  if (certificateFlag(input.certificate, "exempt")) {
     return {
       state: "IA", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
       factors: { IA_EXEMPT: "1" },
@@ -330,6 +341,27 @@ export const IA_CERTIFICATE: PayrollCertificate = {
       label: "Military spouse (MSRRA / Veterans Benefits Acts)", kind: "flag",
       help: "Present in Iowa solely to be with a uniformed-services spouse. File with a copy "
         + "of the spousal military identification card.",
+    },
+    {
+      key: "servicemember_present_under_orders",
+      label: "Uniformed-services spouse is present in Iowa in compliance with military orders",
+      kind: "flag", help: "2026 IA W-4, military-spouse exemption condition (1).",
+    },
+    {
+      key: "spouse_present_solely_to_accompany",
+      label: "Employee is present in Iowa solely to be with the spouse",
+      kind: "flag", help: "2026 IA W-4, military-spouse exemption condition (2).",
+    },
+    {
+      key: "spouse_domiciled_outside_ia",
+      label: "Employee maintains or has elected a tax domicile outside Iowa",
+      kind: "flag",
+      help: "2026 IA W-4 allows an out-of-state domicile/residence, including the statutory election.",
+    },
+    {
+      key: "spousal_military_id_on_file",
+      label: "Copy of spouse's military identification card is attached",
+      kind: "flag", help: "2026 IA W-4 requires this supporting document.",
     },
     {
       key: "pre_2024", label: "Most recent IA W-4 is from 2023 or earlier", kind: "flag",

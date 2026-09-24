@@ -23,7 +23,7 @@ import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION, MD_COUNTIES_2026,
-  MD_RATES_2026, MD_WITHHOLDING, addPrintedPercents, mdAnneArundelLocal, mdAnnualCombinedTax,
+  MD_MW507M, MD_RATES_2026, MD_WITHHOLDING, addPrintedPercents, mdAnneArundelLocal, mdAnnualCombinedTax,
   mdCombinedRate, mdCounty, mdFrederickLocal, mdLumpSumBonus, mdScheduleFor,
 } from "./md.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
@@ -268,13 +268,45 @@ test("MD extra withholding is added AFTER the combined rate", () => {
   assert.equal(result.tax, money("79.41"));
 });
 
-test("MD MW507 lines 3, 4 and 8 stop withholding", () => {
-  for (const flag of ["exempt", "reciprocal_exempt", "military_spouse_exempt"] as const) {
+test("MD MW507 lines 3 and 4 stop withholding", () => {
+  for (const flag of ["exempt", "reciprocal_exempt"] as const) {
     assert.equal(MD_WITHHOLDING.compute({
       payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "resident",
       certificate: cert({ [flag]: "true", residence_county: "16" }),
     }).tax, money("0"));
   }
+});
+
+test("MD line 8 requires MW507M attestations and the attached military ID", () => {
+  const wages = {
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "resident" as const,
+  };
+  assert.throws(() => MD_WITHHOLDING.compute({
+    ...wages, certificate: cert({ military_spouse_exempt: "true", residence_county: "16" }),
+  }), /Maryland military-spouse withholding exemption requires the filed state exemption certificate/);
+
+  const incomplete = resolvedCertificate(MD_MW507M, {
+    employee_married_to_servicemember: "true",
+    employee_domiciled_outside_md: "true",
+  });
+  assert.throws(() => MD_WITHHOLDING.compute({
+    ...wages,
+    certificate: cert({ military_spouse_exempt: "true", residence_county: "16" }),
+    supportingCertificates: { us_md_mw507m: incomplete },
+  }), /Maryland military-spouse withholding exemption requires proof that .*duty station.*only to be with.*military ID/);
+
+  const complete = resolvedCertificate(MD_MW507M, Object.fromEntries([
+    "employee_married_to_servicemember", "employee_domiciled_outside_md",
+    "servicemember_duty_station_qualifies", "employee_in_md_only_to_be_with_spouse",
+    "spousal_military_id_on_file",
+  ].map((key) => [key, "true"])));
+  const result = MD_WITHHOLDING.compute({
+    ...wages,
+    certificate: cert({ military_spouse_exempt: "true", residence_county: "16" }),
+    supportingCertificates: { us_md_mw507m: complete },
+  });
+  assert.equal(result.tax, money("0"));
+  assert.equal(result.factors.MD_MILITARY_SPOUSE_EXEMPT, money("0.0001"));
 });
 
 test("MD MW507 line 5 withholds LOCAL only; lines 6 and 7 withhold nothing", () => {

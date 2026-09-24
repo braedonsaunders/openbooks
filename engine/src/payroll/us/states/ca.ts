@@ -54,6 +54,7 @@ import {
   certificateAmount, certificateChoice, certificateCount, certificateFlag,
 } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   payPeriodFor,
   refuseUnprintedPeriod,
@@ -468,8 +469,17 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const total = regular + estimated;
   if (legacyW4) trace("CA_LEGACY_W4", 1n);
 
-  if (certificateFlag(input.certificate, "exempt")
-    || certificateFlag(input.certificate, "military_spouse_exempt")) {
+  if (certificateFlag(input.certificate, "military_spouse_exempt")) {
+    requireMilitarySpouseEligibility(input.certificate, "California", [
+      { key: "servicemember_is_armed_forces_member", description: "the spouse is a member of the Armed Forces present in California in compliance with military orders" },
+      { key: "spouse_present_solely_to_accompany", description: "the employee is present in California solely to be with the spouse" },
+      { key: "spouse_domiciled_outside_ca", description: "the employee maintains domicile in another state" },
+    ]);
+    trace("CA_EXEMPT", 1n);
+    return { state: "CA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  }
+
+  if (certificateFlag(input.certificate, "exempt")) {
     trace("CA_EXEMPT", 1n);
     return { state: "CA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }

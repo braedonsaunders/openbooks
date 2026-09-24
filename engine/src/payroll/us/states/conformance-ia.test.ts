@@ -31,6 +31,26 @@ test("IA certificate and region declarations are well formed", () => {
   assert.equal(IA_REGION.certificateKey, "us_ia_iaw4");
 });
 
+test("IA military-spouse exemption requires W-4 facts and attached military ID", () => {
+  assert.throws(() => IA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 26, wages: "2100.00", basis: "resident",
+    certificate: cert({ military_spouse_exempt: "true" }),
+  }), /Iowa military-spouse withholding exemption requires proof that .*orders.*solely.*domicile.*identification card/);
+
+  const eligible = IA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 26, wages: "2100.00", basis: "resident",
+    certificate: cert({
+      military_spouse_exempt: "true",
+      servicemember_present_under_orders: "true",
+      spouse_present_solely_to_accompany: "true",
+      spouse_domiciled_outside_ia: "true",
+      spousal_military_id_on_file: "true",
+    }),
+  });
+  assert.equal(eligible.tax, money("0"));
+  assert.equal(eligible.factors.IA_MILITARY_SPOUSE_EXEMPT, "1");
+});
+
 test("IA Example 1 — biweekly $2,100, Other, $40 allowance: $59.26", () => {
   // T1 = $2,100.00 − $500.00 = $1,600.00
   // T2 = $1,600.00 × 3.80% = $60.80

@@ -16,11 +16,11 @@ export interface MilitarySpouseEligibilityFact {
  * form-specific facts while this guard owns the fail-closed behavior.
  */
 export function requireMilitarySpouseEligibility(
-  certificate: ResolvedCertificate,
+  certificate: ResolvedCertificate | undefined,
   jurisdiction: string,
   facts: readonly MilitarySpouseEligibilityFact[],
 ): void {
-  if (!certificate.onFile) {
+  if (!certificate?.onFile) {
     throw new PayrollError(
       `${jurisdiction} military-spouse withholding exemption requires the filed state exemption certificate`,
     );
