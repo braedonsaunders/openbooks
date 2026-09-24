@@ -319,7 +319,10 @@ async function providerDispatch(provider: HttpProvider, url: string, init: Reque
     return await fetch(url, { ...init, signal: AbortSignal.timeout(TRANSPORT_TIMEOUT_MS), redirect: 'error' })
   } catch (error) {
     const verdict = classifyNetworkFailure(error)
-    if (verdict.outcome === 'notSent') throw new Error(`${provider}: network request failed`)
+    // E09: the classification is the diagnosis — discarding it for a generic
+    // 'network request failed' hides whether this was a refused connection,
+    // a DNS failure, or a TLS fault. Surface the classified cause.
+    if (verdict.outcome === 'notSent') throw new Error(`${provider}: ${verdict.reason}`)
     throw new UncertainSend(`${provider}: ${verdict.reason}`)
   }
 }
