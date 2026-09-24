@@ -1,4 +1,4 @@
-import { scheduledReportAuthz, withReportAuthz, type ReportAuthorization } from '../../../../../lib/report-execution-context'
+import { closePackageReportAuthz, scheduledReportAuthz, withReportAuthz, type ReportAuthorization } from '../../../../../lib/report-execution-context'
 import { can } from '../../../../../lib/authz'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -20,7 +20,11 @@ export const runtime = 'nodejs'
  * import it). Not a user route: authenticated by a shared internal token and
  * given orgId + definitionId explicitly.
  *
- *   GET /api/internal/reports/render?orgId=&definitionId=&<report params>
+ * Every render rides a durable report_runs row (runId): scheduled renders
+ * authorize under the schedule principal, close-package renders under the
+ * close send principal (see closePackageReportAuthz).
+ *
+ *   GET /api/internal/reports/render?orgId=&definitionId=&runId=&<report params>
  */
 export async function GET(req: Request) {
   if (!internalTokenMatches(req.headers.get('x-internal-token'), process.env.OPENBOOKS_INTERNAL_TOKEN)) {
@@ -44,20 +48,33 @@ export async function GET(req: Request) {
     return await withOrg(orgId, async () => {
     const t = (await getTranslations('reports')) as unknown as Translator
     const runId = p.get('runId')
-    if (!runId) return NextResponse.json({ error: 'scheduled runId is required' }, { status: 422 })
+    if (!runId) return NextResponse.json({ error: 'report runId is required' }, { status: 422 })
     let authorization_snapshot: ReportAuthorization | null = null
     let extraFilters: ReportRuleGroup | null = null
+    let closePackage: { packageId: string; runId: string | null } | null = null
     if (runId) {
-      const run = (await db.execute<{ filters: Record<string, unknown> | null; authorization_snapshot: ReportAuthorization | null }>(sql`
-        select filters, authorization_snapshot from report_runs
-         where id=${runId} and org_id=${orgId} and definition_id=${definitionId} and trigger='scheduled'
+      const run = (await db.execute<{ trigger: string; filters: Record<string, unknown> | null; authorization_snapshot: ReportAuthorization | null }>(sql`
+        select trigger, filters, authorization_snapshot from report_runs
+         where id=${runId} and org_id=${orgId} and definition_id=${definitionId}
+           and trigger in ('scheduled', 'close-package')
       `))
-      if (!run.rows[0]) return NextResponse.json({ error: 'scheduled report run not found' }, { status: 404 })
+      if (!run.rows[0]) return NextResponse.json({ error: 'report run not found' }, { status: 404 })
       authorization_snapshot = run.rows[0].authorization_snapshot
       const stored = run.rows[0].filters
+      if (run.rows[0].trigger === 'close-package') {
+        // Close-package runs carry their send context beside the statement
+        // params; without it the run cannot name its authorizing send.
+        const ctx = (stored as { closePackage?: unknown } | null)?.closePackage
+        if (!ctx || typeof ctx !== 'object' || typeof (ctx as { packageId?: unknown }).packageId !== 'string') {
+          return NextResponse.json({ error: 'close package run is missing its send context — re-send the package' }, { status: 403 })
+        }
+        const ctxRunId = (ctx as { runId?: unknown }).runId
+        closePackage = { packageId: (ctx as { packageId: string }).packageId, runId: typeof ctxRunId === 'string' ? ctxRunId : null }
+      }
       // A schedule's filters carry either a query-report extra rule group
       // (legacy shape: the group itself) or a statement-params snapshot taken
-      // from the report screen at scheduling time.
+      // from the report screen at scheduling time. Close-package runs carry
+      // the statement-params shape only.
       if (stored && typeof stored === 'object') {
         const statementParams = (stored as { statementParams?: Record<string, string> }).statementParams
         if (statementParams && typeof statementParams === 'object') {
@@ -83,7 +100,9 @@ export async function GET(req: Request) {
     // and resolveDefinitionToExportData re-checks that the pinned principal
     // may still run that current definition — an edit that widens it beyond
     // the principal's grants fails the run rather than delivering.
-    const authz = await scheduledReportAuthz(orgId, authorization_snapshot)
+    const authz = closePackage
+      ? await closePackageReportAuthz(orgId, authorization_snapshot, closePackage)
+      : await scheduledReportAuthz(orgId, authorization_snapshot)
     if (p.get('authorizeOnly') === '1') return new NextResponse(null, { status: 204 })
     const data = await withReportAuthz(authz, () => resolveDefinitionToExportData(
       orgId,
@@ -101,11 +120,17 @@ export async function GET(req: Request) {
     if (!contentPermissions.every((permission) => can(authz, permission))) {
       throw new Error('Report execution permission was revoked')
     }
-    await db.execute(sql`
-      update report_runs
-         set authorization_snapshot = coalesce(authorization_snapshot, '{}'::jsonb) || ${JSON.stringify({ requiredPermissions: contentPermissions })}::jsonb
-       where id = ${runId} and org_id = ${orgId}
-    `)
+    // Close-package renders email their artifact and retain nothing for
+    // download, so there is no viewer left to gate: skip the stamp. (The
+    // run evidence trigger refuses ANY snapshot rewrite, and the stamp
+    // would trip it even when the content required nothing new.)
+    if (!closePackage) {
+      await db.execute(sql`
+        update report_runs
+           set authorization_snapshot = coalesce(authorization_snapshot, '{}'::jsonb) || ${JSON.stringify({ requiredPermissions: contentPermissions })}::jsonb
+         where id = ${runId} and org_id = ${orgId}
+      `)
+    }
     const stamp = await businessToday(orgId)
     if (p.get('format') === 'xlsx') {
       const xlsx = await exportDataToXlsx(data, {

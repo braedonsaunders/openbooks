@@ -82,9 +82,9 @@ export async function canAccessReportArtifact(authz: Authz, raw: unknown): Promi
   return (await reportArtifactAccessDetail(authz, raw)).ok
 }
 
-/** Re-resolve active membership and grants at execution, never trust a saved
- * permission set. Deactivation/revocation fails the run; grants cannot widen it. */
-export async function scheduledReportAuthz(orgId: string, snapshot: ReportAuthorization): Promise<Authz> {
+/** Load the durable principal behind a background render: the user the
+ * run was minted for, still active and still attached to this org. */
+async function loadReportPrincipal(orgId: string, snapshot: ReportAuthorization): Promise<SessionUser> {
   if (snapshot?.version !== 1 || !snapshot.userId) throw new Error('Report schedule requires reauthorization')
   const row = await withBypassContext(async () => (await db.execute<{
     id: string; email: string; name: string; org_id: string; is_super_admin: boolean
@@ -96,12 +96,49 @@ export async function scheduledReportAuthz(orgId: string, snapshot: ReportAuthor
        ))
   `)).rows[0])
   if (!row) throw new Error('Report execution principal is inactive or unavailable')
-  const user: SessionUser = { ...row, orgId, roles: [], envKind: 'production', productionOrgId: orgId,
+  return { ...row, orgId, roles: [], envKind: 'production', productionOrgId: orgId,
     homeUserId: row.id, homeOrgId: row.org_id, isSuperAdmin: row.is_super_admin }
+}
+
+/** Narrow a re-resolved principal to the run's pinned subsidiary scope. */
+function narrowToSnapshotScope(current: Authz, snapshot: ReportAuthorization): Authz {
+  return { ...current, allowedSubsidiaryIds: snapshot.allowedSubsidiaryIds === null
+    ? null : new Set(snapshot.allowedSubsidiaryIds) }
+}
+
+/** Re-resolve active membership and grants at execution, never trust a saved
+ * permission set. Deactivation/revocation fails the run; grants cannot widen it. */
+export async function scheduledReportAuthz(orgId: string, snapshot: ReportAuthorization): Promise<Authz> {
+  const user = await loadReportPrincipal(orgId, snapshot)
   const current = await resolveUserAuthz(user)
   if (!can(current, 'reports.schedule') || !(await canAccessReportArtifact(current, snapshot))) {
     throw new Error('Report execution permission was revoked')
   }
-  return { ...current, allowedSubsidiaryIds: snapshot.allowedSubsidiaryIds === null
-    ? null : new Set(snapshot.allowedSubsidiaryIds) }
+  return narrowToSnapshotScope(current, snapshot)
+}
+
+/**
+ * Authorize a close-package render minted by the close-delivery worker.
+ * Same shape as a scheduled render — a durable principal re-resolved at
+ * execution, never a saved permission set — but under close authority:
+ * the publish path needs the sender to still hold close.run, the manual
+ * send-now path needs periods.manage, and both need to still run the
+ * definition itself. Either half revoked fails the render with the
+ * remedy (re-send the package) instead of delivering.
+ */
+export async function closePackageReportAuthz(
+  orgId: string,
+  snapshot: ReportAuthorization,
+  closePackage: { runId: string | null },
+): Promise<Authz> {
+  const user = await loadReportPrincipal(orgId, snapshot)
+  const current = await resolveUserAuthz(user)
+  const sendPermission = closePackage.runId ? 'close.run' : 'periods.manage'
+  if (!can(current, sendPermission)) {
+    throw new Error(`Close package sender no longer holds ${sendPermission} — re-send the package`)
+  }
+  if (!(await canAccessReportArtifact(current, snapshot))) {
+    throw new Error('Report execution permission was revoked')
+  }
+  return narrowToSnapshotScope(current, snapshot)
 }
