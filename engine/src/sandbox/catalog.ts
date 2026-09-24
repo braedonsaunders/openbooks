@@ -67,6 +67,24 @@ const EXCLUDE = new Set([
   // Derived settlement-behaviour rollup — the applications trigger
   // repopulates it as the settlements are copied.
   "party_payment_stats",
+  // Executable scheduler work is never copied. scheduler_outbox carries a
+  // GLOBAL unique on (kind, occurrence_key), so copying an org-bound row
+  // verbatim collides with the source's own row (PG 23505 on
+  // scheduler_outbox_occurrence, deterministic for any template with
+  // scheduler rows, OM-13b) — and a sample or sandbox must never replay the
+  // source's side effects. The terminal audit hangs off the outbox rows and
+  // goes with them.
+  "scheduler_outbox",
+  "scheduler_outbox_terminal_audit",
+  // Bearer-equivalent tokens are never copied: like api_keys.key_hash, a
+  // verbatim copy either collides on a global unique (invitation token_hash,
+  // kiosk device_token_hash) or resolves a production credential to the
+  // sandbox. Invitation, payment-link, signature and kiosk flows are
+  // re-issued inside the sandbox, never carried over.
+  "payment_links",
+  "field_ticket_signature_requests",
+  "hrm_survey_invitations",
+  "time_kiosks",
 ]);
 
 /**

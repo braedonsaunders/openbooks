@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
+  cloneSampleCompanyTemplate,
   createSampleCompany,
   generateTemplate,
   SampleCompanyPreconditionError,
@@ -634,6 +635,40 @@ test(
         return result.rows[0]!.n;
       });
       assert.equal(stranded, 0, "the compensated partial must actually be gone");
+    } finally {
+      await dropFixture(fixture);
+    }
+  },
+);
+
+test(
+  "a clone failure leaves no shell org and reports Nothing was created truthfully",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedFixture();
+    try {
+      await assert.rejects(
+        createSampleCompany(fixture.input, {
+          ...stubTemplate(fixture),
+          cloneCompany: async (args) => {
+            // The clone commits its shell, then dies before reporting back —
+            // the OM-13b seam (e.g. a mid-clone 23505 after the fix's scope).
+            await cloneSampleCompanyTemplate(args);
+            throw new Error("simulated clone outage after shell commit");
+          },
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof SampleCompanyProvisioningError);
+          assert.equal(error.stage, "clone");
+          assert.equal(error.message, sampleCompanyStageMessage("clone"));
+          // Truthful only because the shell was compensated first: nothing
+          // with this member's marker may remain.
+          assert.match(error.message, /Nothing was created; you can retry/);
+          return true;
+        },
+      );
+      const after = await sampleOrgsFor(fixture.memberUserId);
+      assert.deepEqual(after, [], "the failed clone must leave no shell behind");
     } finally {
       await dropFixture(fixture);
     }
