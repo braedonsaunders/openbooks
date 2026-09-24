@@ -9,8 +9,11 @@ import { db } from "../platform/db.ts";
  * (defense in depth).
  */
 
-// Small cache — env_kind is immutable for an org's lifetime.
+// Small cache — env_kind is immutable for an org's lifetime. Unknown orgs
+// are never cached: every guarded egress re-proves them (and refuses).
 const envCache = new Map<string, "production" | "sandbox" | "preview">();
+
+const KNOWN_ENV_KINDS = ["production", "sandbox", "preview"] as const;
 
 export async function getEnvKind(
   orgId: string,
@@ -18,7 +21,20 @@ export async function getEnvKind(
   const hit = envCache.get(orgId);
   if (hit) return hit;
   const res = (await db.execute(sql`select env_kind from orgs where id = ${orgId}`));
-  const kind = (res.rows[0]?.env_kind ?? "production") as "production" | "sandbox" | "preview";
+  // B3-ORG-01: an UNKNOWN org (no row: deleted or forged id) must fail
+  // CLOSED with a named refusal. Defaulting it to 'production' let
+  // assertNotSandbox pass, so email, payment files, SFTP and webhooks
+  // proceeded for an org nobody can vouch for.
+  const raw = res.rows[0]?.env_kind as string | undefined;
+  if (raw == null) {
+    throw new Error(`refusing guarded egress for unknown organization ${orgId}: no org row exists`);
+  }
+  const kind = raw.toLowerCase() as "production" | "sandbox" | "preview";
+  if (!KNOWN_ENV_KINDS.includes(kind)) {
+    throw new Error(
+      `refusing guarded egress for organization ${orgId}: unknown env_kind ${JSON.stringify(raw)}`,
+    );
+  }
   envCache.set(orgId, kind);
   return kind;
 }
