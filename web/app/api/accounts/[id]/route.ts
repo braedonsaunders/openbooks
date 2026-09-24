@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { assetBankHygieneWarning } from '../../../../lib/accounts-hygiene'
@@ -52,9 +52,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const payload = await loadAccount(id, gate.user.orgId)
-  return payload
-    ? NextResponse.json(payload)
-    : NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!payload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  // Entity-owned accounts are visible only inside the caller's scope; the
+  // shared chart (null subsidiary) reads for everyone.
+  const denied = guardSubsidiaryScope(gate, payload.account.subsidiary_id as string | null, { orgWideNull: true })
+  if (denied) return denied
+  return NextResponse.json(payload)
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -66,6 +69,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const existingPayload = await loadAccount(id, gate.user.orgId)
   if (!existingPayload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const existing = (existingPayload.account)
+  // Reads hide out-of-scope entity accounts; the shared chart reads for all.
+  const readDenied = guardSubsidiaryScope(gate, existing.subsidiary_id as string | null, { orgWideNull: true })
+  if (readDenied) return readDenied
+  // The shared chart has no subsidiary lineage, so any write to it acts on
+  // every entity at once: restricted callers cannot write it.
+  if (existing.subsidiary_id == null) {
+    const orgWideDenied = guardUnrestrictedScope(gate)
+    if (orgWideDenied) return orgWideDenied
+  }
   const parsedBody = await parseJsonBody(request, patchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
@@ -103,11 +115,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   const effectiveParentId = parentId !== undefined ? parentId : (existing.parent_id as string | null)
   if (effectiveParentId && body.type !== undefined && body.parentId === undefined) {
-    const parent = (await db.execute<{ type: string }>(sql`
-      select type from accounts
+    const parent = (await db.execute<{ type: string; subsidiary_id: string | null }>(sql`
+      select type, subsidiary_id from accounts
        where id = ${effectiveParentId} and org_id = ${gate.user.orgId}
     `))
     if (!parent.rows[0] || parent.rows[0].type !== nextType) {
+      return bad('parent_type_mismatch', 'type')
+    }
+    // The hierarchy places the account: a parent the caller cannot see is the
+    // same as a missing one.
+    if (guardSubsidiaryScope(gate, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
       return bad('parent_type_mismatch', 'type')
     }
   }
@@ -146,6 +163,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (subsidiaryId && (!isUuid(subsidiaryId) || !(await belongsToOrg('subsidiaries', subsidiaryId, gate.user.orgId)))) {
       return bad('invalid_subsidiary', 'subsidiaryId')
     }
+    // A reassignment needs scope over the new subsidiary too (the old one was
+    // checked above); moving onto the shared chart is an org-wide write.
+    const targetDenied = subsidiaryId
+      ? guardSubsidiaryScope(gate, subsidiaryId)
+      : guardUnrestrictedScope(gate)
+    if (targetDenied) return targetDenied
   }
 
   let requiredDimensions: string[] | undefined
@@ -200,12 +223,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           select pg_advisory_xact_lock(hashtextextended(${`accounts-hierarchy:${gate.user.orgId}`}, 0))
         `)
         if (parentId) {
-          const parent = (await tx.execute<{ is_summary: boolean; type: string }>(sql`
-            select is_summary, type from accounts
+          const parent = (await tx.execute<{ is_summary: boolean; type: string; subsidiary_id: string | null }>(sql`
+            select is_summary, type, subsidiary_id from accounts
              where id = ${parentId} and org_id = ${gate.user.orgId}
           `))
           if (!parent.rows[0]?.is_summary) throw new PatchInvalid('parent_must_be_summary', 'parentId')
           if (parent.rows[0].type !== nextType) throw new PatchInvalid('parent_type_mismatch', 'parentId')
+          if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
+            throw new PatchInvalid('parent_must_be_summary', 'parentId')
+          }
           const cycle = (await tx.execute(sql`
             with recursive descendants as (
               select id from accounts where id = ${id} and org_id = ${gate.user.orgId}

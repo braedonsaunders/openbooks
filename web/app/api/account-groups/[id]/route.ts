@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -107,6 +107,10 @@ function unsafeNamePattern(pattern: string): boolean {
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  // Classification rules match every account org-wide with no subsidiary
+  // lineage of their own: a restricted caller must not rewrite them.
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const { id } = await params;
   // A malformed id names nothing: same answer as a group in another org,
   // never a PostgreSQL uuid cast error escaping as a 500.

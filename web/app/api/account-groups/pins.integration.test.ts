@@ -10,42 +10,51 @@ import { sql } from "drizzle-orm";
 // delete-then-insert requests to leave sibling pins behind.
 const stateKey = Symbol.for("openbooks.account-group-pins-route-test");
 interface RouteState {
-  authz: { user: { orgId: string; id: string } } | null;
+  authz: {
+    user: { orgId: string; id: string };
+    permissions?: Set<string>;
+    allowedSubsidiaryIds?: Set<string> | null;
+  } | null;
 }
 const routeState: RouteState = { authz: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.account-group-pins-route-test')]
-  export async function guardPermission(_permission) {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-`;
+const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
+  shortCircuit: true,
+  format: "module",
+  url: `data:text/javascript,${encodeURIComponent(source)}`,
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
+    // Re-export the REAL authz module and override only the session gate, so
+    // the account-subsidiary guards the route calls are the production
+    // functions. Gates without an explicit scope default to unrestricted.
     if (specifier === "../../../../../lib/authz") {
-      return { shortCircuit: true, format: "module", url: "mock:account-group-pins-authz" };
+      const real = nextResolve(specifier, context).url;
+      const nextServer = nextResolve("next/server", context).url;
+      return module_(`
+        export * from ${JSON.stringify(real)};
+        const state = globalThis[Symbol.for('openbooks.account-group-pins-route-test')];
+        const { NextResponse } = await import(${JSON.stringify(nextServer)});
+        export async function guardPermission(_permission) {
+          if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+          return { permissions: new Set(), allowedSubsidiaryIds: null, ...state.authz };
+        }
+      `);
     }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     }
     return nextResolve(specifier, context);
   },
-  load(url, context, nextLoad) {
-    if (url === "mock:account-group-pins-authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
-    return nextLoad(url, context);
-  },
 });
 
 const routeUrl = new URL("./[id]/pins/route.ts?account-group-pins-test", import.meta.url).href;
-const { POST } = (await import(routeUrl)) as typeof import("./[id]/pins/route.ts");
+const { POST, DELETE } = (await import(routeUrl)) as typeof import("./[id]/pins/route.ts");
 hooks.deregister();
 
 const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
@@ -163,6 +172,88 @@ test(
       }
     } finally {
       await dropScratchOrgReporting(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "account-group pins refuse out-of-scope and shared-chart accounts to restricted callers",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const groupId = randomUUID();
+    await db.execute(sql`
+      insert into account_groups (id, org_id, dimension, key, name, sort_order, match, is_catch_all, is_active, created_by)
+      values (${groupId}, ${org.orgId}, 'scope_dimension', 'scope_group', 'Scope Group', 1, '{}'::jsonb, false, true, ${actorId})`);
+    const entityB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${entityB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')`);
+    const seedAccount = async (number: string, subsidiaryId: string | null) => {
+      const id = randomUUID();
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, subsidiary_id)
+        values (${id}, ${org.orgId}, ${number}, ${`Pin scope ${number}`}, 'asset_other', ${subsidiaryId})`);
+      return id;
+    };
+    // The scratch subsidiary id is not exposed by this fixture file's seed;
+    // resolve the org root (the caller's own entity) directly.
+    const root = await db.execute<{ id: string }>(sql`
+      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`);
+    const entityA = root.rows[0]!.id;
+    const accountA = await seedAccount('9201', entityA);
+    const accountB = await seedAccount('9202', entityB);
+    const sharedAccount = await seedAccount('9203', null);
+    try {
+      const scopeA = new Set([entityA]);
+      const pin = (accountId: string, scope: Set<string> | null) => {
+        routeState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: scope };
+        return POST(
+          new Request(`http://openbooks.test/api/account-groups/${groupId}/pins`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ accountId }),
+          }),
+          { params: Promise.resolve({ id: groupId }) },
+        );
+      };
+      const unpin = (accountId: string, scope: Set<string> | null) => {
+        routeState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: scope };
+        return DELETE(
+          new Request(`http://openbooks.test/api/account-groups/${groupId}/pins?accountId=${accountId}`, {
+            method: 'DELETE',
+          }),
+          { params: Promise.resolve({ id: groupId }) },
+        );
+      };
+      const deniedB = await pin(accountB, scopeA);
+      assert.equal(deniedB.status, 404);
+      assert.deepEqual(await deniedB.json(), { error: 'not found' });
+      const deniedShared = await pin(sharedAccount, scopeA);
+      assert.equal(deniedShared.status, 403);
+      assert.deepEqual(await deniedShared.json(), { error: 'requires unrestricted subsidiary access' });
+      const allowed = await pin(accountA, scopeA);
+      assert.equal(allowed.status, 200);
+      const members = await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from account_group_members
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`);
+      assert.equal(members.rows[0]?.n ?? -1, 1, 'the in-scope pin persists');
+      const refused = await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from account_group_members
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id in (${accountB}, ${sharedAccount})`);
+      assert.equal(refused.rows[0]?.n ?? -1, 0, 'refused pins store nothing');
+      // Unpinning follows the same account-subsidiary rule on both verbs.
+      assert.equal((await unpin(accountB, scopeA)).status, 404);
+      assert.equal((await unpin(sharedAccount, scopeA)).status, 403);
+      assert.equal((await unpin(accountA, scopeA)).status, 200);
+      const remaining = await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from account_group_members
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`);
+      assert.equal(remaining.rows[0]?.n ?? -1, 0, 'the in-scope unpin removes the pin');
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );

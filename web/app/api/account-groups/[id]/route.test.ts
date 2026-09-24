@@ -11,27 +11,38 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.account-group-route-test')]
-  export async function guardPermission(_permission) {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-`;
+const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
+  shortCircuit: true,
+  format: "module",
+  url: `data:text/javascript,${encodeURIComponent(source)}`,
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
+    // Re-export the REAL authz module and override only the session gate, so
+    // the unrestricted-scope guard the route calls is the production
+    // function. Gates without an explicit scope default to unrestricted.
     if (specifier === "../../../../lib/authz") {
-      return { url: "mock:authz", shortCircuit: true };
+      const real = nextResolve(specifier, context).url;
+      const nextServer = nextResolve("next/server", context).url;
+      return module_(`
+        export * from ${JSON.stringify(real)};
+        const state = globalThis[Symbol.for('openbooks.account-group-route-test')];
+        const { NextResponse } = await import(${JSON.stringify(nextServer)});
+        export async function guardPermission(_permission) {
+          if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+          return { permissions: new Set(), allowedSubsidiaryIds: null, ...state.authz };
+        }
+      `);
     }
     if (specifier.startsWith("@/") && context.parentURL) {
       const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
@@ -40,12 +51,6 @@ const hooks = registerHooks({
       return nextResolve(new URL(parentDir.slice(0, webRoot + 5) + specifier.slice(2) + ".ts").href, context);
     }
     return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    if (url === "mock:authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
-    return nextLoad(url, context);
   },
 });
 
@@ -147,6 +152,45 @@ test("PATCH records immutable account-group before/after audit evidence", { skip
     assert.equal(audit.changes.after?.color, "#222222");
     assert.deepEqual(audit.changes.after?.match, { numberPrefixes: ["6"], namePattern: "new" });
     assert.notDeepEqual(audit.changes.before, audit.changes.after);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("PATCH refuses org-wide classification rewrites to restricted callers", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const groupId = randomUUID();
+  try {
+    await db.execute(sql`
+      insert into account_groups
+        (id, org_id, dimension, key, name, color, sort_order, match, is_catch_all,
+         is_active, custom, created_by, updated_by)
+      values
+        (${groupId}, ${org.orgId}, 'cost_pool', 'scope-key', 'Scope name', '#111111', 3,
+         '{}'::jsonb, false, true, '{}'::jsonb, ${actorId}, ${actorId})
+    `);
+    // A subsidiary-restricted setup caller cannot rewrite the org-wide rule:
+    // the denial is uniform with not-found and stores neither the edit nor
+    // audit evidence.
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: new Set([randomUUID()]),
+    };
+    const denied = await PATCH(patchRequest(groupId, { name: "Hijacked" }), call(groupId));
+    assert.equal(denied.status, 403);
+    assert.deepEqual(await denied.json(), { error: "requires unrestricted subsidiary access" });
+    const stored = await db.execute<{ name: string }>(sql`
+      select name from account_groups where id = ${groupId} and org_id = ${org.orgId}
+    `);
+    assert.equal(stored.rows[0]?.name, "Scope name");
+    const audits = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log
+       where org_id = ${org.orgId} and table_name = 'account_groups' and row_id = ${groupId}
+    `);
+    assert.equal(audits.rows[0]?.n ?? -1, 0, "a refused rewrite audits nothing");
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(org.orgId);

@@ -15,32 +15,42 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.reconcilable-currency-test')]
-  export async function guardPermission(_permission) {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-`;
+const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
+  shortCircuit: true,
+  format: "module",
+  url: `data:text/javascript,${encodeURIComponent(source)}`,
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    // The two routes import the session gate by different relative paths;
-    // stub both specifiers at one shared mock URL so they see one state.
+    // The two routes import the session gate by different relative paths.
+    // Re-export the REAL authz module and override only the session gate, so
+    // the subsidiary-scope guards under test are the production functions —
+    // a hand-copied guard double could only drift from the original.
     if (
       specifier === "../../../lib/authz" ||
       specifier === "../../../../lib/authz"
     ) {
-      return { url: "mock:authz", shortCircuit: true };
+      const real = nextResolve(specifier, context).url;
+      const nextServer = nextResolve("next/server", context).url;
+      return module_(`
+        export * from ${JSON.stringify(real)};
+        const state = globalThis[Symbol.for('openbooks.reconcilable-currency-test')];
+        const { NextResponse } = await import(${JSON.stringify(nextServer)});
+        export async function guardPermission(_permission) {
+          if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+          return { permissions: new Set(), allowedSubsidiaryIds: null, ...state.authz };
+        }
+      `);
     }
     if (specifier.startsWith("@/") && context.parentURL) {
       const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
@@ -50,18 +60,12 @@ const hooks = registerHooks({
     }
     return nextResolve(specifier, context);
   },
-  load(url, context, nextLoad) {
-    if (url === "mock:authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
-    return nextLoad(url, context);
-  },
 });
 
 const postRouteUrl = "./route.ts?reconcilable-currency-post";
 const patchRouteUrl = "./[id]/route.ts?reconcilable-currency-patch";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
-const { PATCH } = (await import(patchRouteUrl)) as typeof import("./[id]/route.ts");
+const { PATCH, GET } = (await import(patchRouteUrl)) as typeof import("./[id]/route.ts");
 hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
@@ -232,6 +236,76 @@ test(
         error: "reconcilable_currency_required",
         field: "currencyRestriction",
       });
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "accounts routes scope entity-owned accounts to the caller subsidiary",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { adminId } = await seedFlowActors(org.orgId);
+      const entityB = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${entityB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')
+      `);
+      const seed = async (number: string, subsidiaryId: string | null) =>
+        db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, subsidiary_id)
+          values (${randomUUID()}, ${org.orgId}, ${number}, ${`Scoped ${number}`}, 'asset_other', ${subsidiaryId})
+          returning id
+        `);
+      const accountA = (await seed('9101', org.subsidiaryId)).rows[0]!.id as string;
+      const accountB = (await seed('9102', entityB)).rows[0]!.id as string;
+      const sharedId = (await seed('9103', null)).rows[0]!.id as string;
+      const scoped = (subsidiaryId: string) => {
+        routeState.authz = {
+          user: { orgId: org.orgId, id: adminId },
+          permissions: new Set(),
+          allowedSubsidiaryIds: new Set([subsidiaryId]),
+        };
+      };
+
+      scoped(org.subsidiaryId);
+      // Reads: B's metadata is indistinguishable from missing; the shared
+      // chart reads for every caller.
+      assert.equal((await GET(new Request('http://localhost/'), { params: Promise.resolve({ id: accountB }) })).status, 404);
+      assert.equal((await GET(new Request('http://localhost/'), { params: Promise.resolve({ id: accountA }) })).status, 200);
+      assert.equal((await GET(new Request('http://localhost/'), { params: Promise.resolve({ id: sharedId }) })).status, 200);
+      // Writes: minting B's account or the shared chart refuses, and the
+      // refusal stores nothing.
+      const mintB = await POST(postRequest(randomUUID(), { name: 'B cash', type: 'asset_other', subsidiaryId: entityB }));
+      assert.equal(mintB.status, 404);
+      assert.deepEqual(await mintB.json(), { error: 'not found' });
+      // The shared chart is visible, so its refusal names the remedy (403)
+      // instead of hiding behind the record-level 404.
+      const mintShared = await POST(postRequest(randomUUID(), { name: 'Shared cash', type: 'asset_other' }));
+      assert.equal(mintShared.status, 403);
+      assert.deepEqual(await mintShared.json(), { error: 'requires unrestricted subsidiary access' });
+      const mintA = await POST(postRequest(randomUUID(), { name: 'A cash', type: 'asset_other', subsidiaryId: org.subsidiaryId }));
+      assert.equal(mintA.status, 201);
+      const stored = await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from accounts where org_id = ${org.orgId} and name in ('B cash', 'Shared cash')
+      `);
+      assert.equal(stored.rows[0]?.n ?? -1, 0, 'refused creates store nothing');
+      // PATCH: B's account is unreachable, A cannot move to B, and the shared
+      // chart refuses a restricted write.
+      assert.equal((await PATCH(patchRequest({ name: 'B renamed' }), { params: Promise.resolve({ id: accountB }) })).status, 404);
+      assert.equal((await PATCH(patchRequest({ subsidiaryId: entityB }), { params: Promise.resolve({ id: accountA }) })).status, 404);
+      const sharedPatch = await PATCH(patchRequest({ name: 'Shared renamed' }), { params: Promise.resolve({ id: sharedId }) });
+      assert.equal(sharedPatch.status, 403);
+      assert.deepEqual(await sharedPatch.json(), { error: 'requires unrestricted subsidiary access' });
+      const renamed = await PATCH(patchRequest({ name: 'A renamed' }), { params: Promise.resolve({ id: accountA }) });
+      assert.equal(renamed.status, 200);
+      // Control: the unrestricted caller still mints the shared chart.
+      routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+      assert.equal((await POST(postRequest(randomUUID(), { name: 'Control shared', type: 'asset_other' }))).status, 201);
     } finally {
       routeState.authz = null;
       await dropScratchOrg(org.orgId);

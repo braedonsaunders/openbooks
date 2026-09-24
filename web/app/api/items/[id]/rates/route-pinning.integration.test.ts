@@ -8,7 +8,9 @@ import { sql } from 'drizzle-orm'
 const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
 
 const stateKey = Symbol.for('openbooks.item-rates-pin-route-test')
-const routeState: { gate: { user: { orgId: string; id: string } } | null } = { gate: null }
+const routeState: {
+  gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds?: Set<string> | null } | null
+} = { gate: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const hooks = registerHooks({
@@ -28,7 +30,11 @@ const hooks = registerHooks({
         format: 'module',
         source: `
           export async function guardFeaturePermission() {
-            return globalThis[Symbol.for('openbooks.item-rates-pin-route-test')].gate
+            const gate = globalThis[Symbol.for('openbooks.item-rates-pin-route-test')].gate
+            if (!gate) return gate
+            // Gates without an explicit scope default to unrestricted,
+            // matching the pre-scope tests that never restricted the caller.
+            return { allowedSubsidiaryIds: null, ...gate }
           }
         `,
       }

@@ -10,37 +10,39 @@ import { sql } from "drizzle-orm";
 // same files. Only the session gate is stubbed; handlers and storage are real.
 const stateKey = Symbol.for("openbooks.account-custom-refs-test");
 const routeState: {
-  authz: { user: { orgId: string; id: string }; permissions: Set<string>; allowedSubsidiaryIds: null } | null;
+  authz: { user: { orgId: string; id: string }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null;
 } = { authz: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.account-custom-refs-test')]
-  export async function guardPermission(_permission) {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-  export async function getAuthz() { return state.authz }
-  export function can() { return true }
-  export function guardSubsidiaryScope() { return null }
-  export function subsidiariesInScope() { return true }
-`;
+const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
+  shortCircuit: true,
+  format: "module",
+  url: `data:text/javascript,${encodeURIComponent(source)}`,
+});
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
+    // Re-export the REAL authz module and override only the session gate, so
+    // the subsidiary-scope guards the routes call are the production
+    // functions — the previous allow-all guard double could not produce a
+    // refusal and made every scope boundary hollow.
     if (specifier === "../../../lib/authz" || specifier === "../../../../lib/authz") {
-      return { url: "mock:authz", shortCircuit: true };
+      const real = nextResolve(specifier, context).url;
+      const nextServer = nextResolve("next/server", context).url;
+      return module_(`
+        export * from ${JSON.stringify(real)};
+        const state = globalThis[Symbol.for('openbooks.account-custom-refs-test')];
+        const { NextResponse } = await import(${JSON.stringify(nextServer)});
+        export async function guardPermission(_permission) {
+          if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+          return { permissions: new Set(), allowedSubsidiaryIds: null, ...state.authz };
+        }
+      `);
     }
     return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    if (url === "mock:authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
-    return nextLoad(url, context);
   },
 });
 

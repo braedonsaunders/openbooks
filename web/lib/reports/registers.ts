@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
+import { subsidiaryScopeAllows } from "../authz";
 import { functionalReportReader } from "./currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
@@ -54,11 +55,18 @@ export async function accountRegister(
   // payroll lines collapse into one restricted line per entry per account.
   canSeePayroll?: boolean,
 ) {
-  const acct = (await db.execute<AccountRegisterAccount>(sql`
-    select id, number, name, type, is_summary from accounts
+  const acct = (await db.execute<AccountRegisterAccount & { subsidiary_id: string | null }>(sql`
+    select id, number, name, type, is_summary, subsidiary_id from accounts
      where id = ${accountId} and org_id = ${orgId}
   `));
   if (!acct.rows[0]) return { account: undefined, lines: [], total: 0, balance: '0' };
+  // The header carries the account's number, name and balance: an
+  // out-of-scope account is indistinguishable from a missing one, even when
+  // the line filter below would already return zero rows. The shared chart
+  // (null subsidiary) reads for every caller.
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds ?? null, acct.rows[0].subsidiary_id, { orgWideNull: true })) {
+    return { account: undefined, lines: [], total: 0, balance: '0' };
+  }
   const dateFilter =
     period?.from || period?.to
       ? sql` and e.posting_date >= ${period?.from ?? '0001-01-01'} and e.posting_date <= ${period?.to ?? '9999-12-31'}`

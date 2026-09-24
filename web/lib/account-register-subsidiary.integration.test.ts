@@ -55,3 +55,32 @@ test('account registers scope both lines and totals within a visible intercompan
     assert.equal(none.lines.length, 0)
   } finally { await withBypass(() => dropScratchOrg(scratch.orgId)) }
 })
+
+test('account registers hide the header of an out-of-scope account even with no visible lines', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const other = randomUUID()
+    const foreignAccount = randomUUID()
+    const sharedAccount = randomUUID()
+    await withBypass(async () => {
+      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${other}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Foreign entity', 'CAD', 'CA')`)
+      await db.execute(sql`insert into accounts (id, org_id, number, name, type, subsidiary_id)
+        values (${foreignAccount}, ${scratch.orgId}, '9301', 'Foreign scoped account', 'asset_other', ${other}),
+               (${sharedAccount}, ${scratch.orgId}, '9302', 'Shared chart account', 'asset_other', null)`)
+    })
+    const { hidden, visible, shared } = await withOrgContext(scratch.orgId, async () => {
+      const hidden = await accountRegister(scratch.orgId, foreignAccount, 100, 0, undefined, new Set([scratch.subsidiaryId]))
+      const visible = await accountRegister(scratch.orgId, foreignAccount, 100, 0, undefined, new Set([other]))
+      const shared = await accountRegister(scratch.orgId, sharedAccount, 100, 0, undefined, new Set([other]))
+      return { hidden, visible, shared }
+    })
+    // The header carries number, name and balance: without the header check
+    // the out-of-scope account metadata would leak on an empty line list.
+    assert.equal(hidden.account, undefined)
+    assert.equal(hidden.total, 0)
+    assert.deepEqual(hidden.lines, [])
+    assert.ok(visible.account, 'the owning entity still reads its own header')
+    assert.ok(shared.account, 'the shared chart header reads for every caller')
+  } finally { await withBypass(() => dropScratchOrg(scratch.orgId)) }
+})

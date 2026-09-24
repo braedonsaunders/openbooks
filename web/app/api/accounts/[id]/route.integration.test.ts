@@ -23,25 +23,17 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockAuthz = `
-  const state = globalThis[Symbol.for('openbooks.account-route-test')]
-  export async function guardPermission(_permission) {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
-  }
-  export async function getAuthz() {
-    return state.authz
-  }
-  export function can(_authz, permission) {
-    return state.authz?.permissions?.has(permission) ?? false
-  }
-`;
+const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
+  shortCircuit: true,
+  format: "module",
+  url: `data:text/javascript,${encodeURIComponent(source)}`,
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -50,10 +42,22 @@ const hooks = registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    // The route imports authz by relative path; stub it at that exact
-    // specifier so no real session machinery loads.
+    // The route imports authz by relative path. Re-export the REAL module and
+    // override only the session gate, so the subsidiary-scope guards under
+    // test are the production functions — a hand-copied guard double could
+    // only drift from the original.
     if (specifier === "../../../../lib/authz") {
-      return { url: "mock:authz", shortCircuit: true };
+      const real = nextResolve(specifier, context).url;
+      const nextServer = nextResolve("next/server", context).url;
+      return module_(`
+        export * from ${JSON.stringify(real)};
+        const state = globalThis[Symbol.for('openbooks.account-route-test')];
+        const { NextResponse } = await import(${JSON.stringify(nextServer)});
+        export async function guardPermission(_permission) {
+          if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+          return { permissions: new Set(), allowedSubsidiaryIds: null, ...state.authz };
+        }
+      `);
     }
     // Forward Next.js-style aliases to the real modules they point at.
     if (specifier.startsWith("@/") && context.parentURL) {
@@ -63,12 +67,6 @@ const hooks = registerHooks({
       return nextResolve(new URL(parentDir.slice(0, webRoot + 5) + specifier.slice(2) + ".ts").href, context);
     }
     return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    if (url === "mock:authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
-    return nextLoad(url, context);
   },
 });
 
