@@ -16,7 +16,8 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
-import { Users } from 'lucide-react'
+import { TriangleAlert, Users } from 'lucide-react'
+import { readApiErrorMessage } from '../lib/api-error'
 import { promptDialog } from '../lib/prompt'
 import type { RecordApprovalState } from '../app/api/flows/record-state/route'
 
@@ -31,23 +32,55 @@ export function refreshApprovalState() {
   for (const l of listeners) l()
 }
 
+export interface RecordApprovalLoad {
+  /** Last good record state; null while loading or when no load ever succeeded. */
+  state: RecordApprovalState | null
+  /**
+   * Named load failure (F1-11). Set when the fetch fails AND whenever a
+   * refresh fails — but a refresh failure keeps the last good state, so
+   * live controls never vanish under the operator. Cleared on success.
+   */
+  loadError: string | null
+  /** Re-run the load (the named remedy for loadError). */
+  reload: () => void
+}
+
 export function useRecordApprovalState(
   subjectKind: string,
   subjectId: string,
-): RecordApprovalState | null {
+): RecordApprovalLoad {
+  const t = useTranslations('common')
   const [state, setState] = useState<RecordApprovalState | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    const load = () => {
-      fetch(
-        `/api/flows/record-state?subjectKind=${encodeURIComponent(subjectKind)}&subjectId=${encodeURIComponent(subjectId)}`,
-      )
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (!cancelled && data) setState(data as RecordApprovalState)
-        })
-        .catch(() => {})
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `/api/flows/record-state?subjectKind=${encodeURIComponent(subjectKind)}&subjectId=${encodeURIComponent(subjectId)}`,
+        )
+        // Check the status BEFORE parsing (F1-11): the old shape mapped
+        // every refusal to null and swallowed the catch, so state stayed
+        // null and the approval UI vanished silently. A non-JSON error
+        // body surfaces the translated fallback with its status, never a
+        // SyntaxError; a JSON refusal surfaces the server's named message.
+        if (!res.ok) {
+          if (!cancelled) setLoadError(await readApiErrorMessage(res, t('feedback.loadFailed')))
+          return
+        }
+        const data = (await res.json().catch(() => null)) as RecordApprovalState | null
+        if (!cancelled) {
+          if (data) {
+            setState(data)
+            setLoadError(null)
+          } else {
+            setLoadError(t('feedback.loadFailed'))
+          }
+        }
+      } catch {
+        if (!cancelled) setLoadError(t('feedback.loadFailed'))
+      }
     }
     load()
     listeners.add(load)
@@ -55,9 +88,14 @@ export function useRecordApprovalState(
       cancelled = true
       listeners.delete(load)
     }
-  }, [subjectKind, subjectId])
+  }, [subjectKind, subjectId, t])
 
-  return state
+  const reload = useCallback(() => {
+    setLoadError(null)
+    refreshApprovalState()
+  }, [])
+
+  return { state, loadError, reload }
 }
 
 // --- header controls ----------------------------------------------------------
@@ -78,7 +116,7 @@ export function ApprovalActions({
 }) {
   const t = useTranslations('common')
   const router = useRouter()
-  const state = useRecordApprovalState(subjectKind, subjectId)
+  const { state, loadError, reload } = useRecordApprovalState(subjectKind, subjectId)
   const [busy, setBusy] = useState(false)
 
   const decide = useCallback(
@@ -191,6 +229,31 @@ export function ApprovalActions({
     !state.approvalState.myActions &&
     state.approvalState.pendingWith.length === 0 &&
     !state.failedRun
+  // A failed record-state load with nothing to show (F1-11): name the
+  // failure and offer the remedy inline instead of vanishing. A refresh
+  // failure over last-good state keeps the live controls above.
+  if (!state && loadError) {
+    return (
+      <span className="inline-flex max-w-72 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+        <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="truncate" title={loadError}>
+          {loadError}
+        </span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true)
+            reload()
+            setBusy(false)
+          }}
+          className="shrink-0 font-semibold underline underline-offset-2 hover:no-underline"
+        >
+          {t('actions.retry')}
+        </button>
+      </span>
+    )
+  }
   if (
     !state ||
     (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0 && !showRetry && !showSubmit)

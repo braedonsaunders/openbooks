@@ -101,11 +101,20 @@ export function ApprovalHistory({
 }) {
   const t = useTranslations('common')
   const locale = useLocale()
-  const state = useRecordApprovalState(subjectKind, subjectId)
+  const { state, loadError } = useRecordApprovalState(subjectKind, subjectId)
   const [open, setOpen] = useState(true)
 
   const history = state?.history ?? []
   if (history.length === 0) {
+    // A failed load is not an empty record (F1-11): name it instead of
+    // vanishing (inline) or spinning forever (tab loading state).
+    if (!state && loadError) {
+      return (
+        <p className="px-1 py-6 text-sm text-slate-600 dark:text-slate-300">
+          {loadError}
+        </p>
+      )
+    }
     if (!showEmptyState) return null
     const kind = approvalTabBody(state)
     if (kind === 'loading') {
