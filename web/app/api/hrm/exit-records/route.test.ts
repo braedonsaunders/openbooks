@@ -142,78 +142,87 @@ function postRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("exit records gate reads on retention and writes on manage", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.retention\.read"\)/);
-    assert.match(source, /guardPermission\("hrm\.performance\.manage"\)/);
-  });
-} else {
-  test("listing reads through the retention gate and narrows by employment", async () => {
-    reset();
-    const response = await collectionRoute!.GET(
-      new Request(`http://openbooks.test/api/hrm/exit-records?employmentId=${EMPLOYMENT_ID}`),
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "list", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID } },
-    ]);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal(
+    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/exit-records"))).status,
+    404,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("recording validates the body through the real parser before the service runs", async () => {
-    reset();
-    assert.equal((await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID }))).status, 400);
-    // Interview date without interviewer passes the boundary (the service
-    // refuses the unpaired interview by name); a bad reason does not.
-    assert.equal(
-      (
-        await collectionRoute!.POST(
-          postRequest({ employmentId: EMPLOYMENT_ID, reasonKind: "fired", isVoluntary: false }),
-        )
-      ).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  const response = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/exit-records"));
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("record routes refuse hostile payloads at the real boundary", async () => {
-    reset();
-    for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
-      const refused = await collectionRoute!.POST(
-        new Request("http://openbooks.test/api/hrm/exit-records", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body,
-        }),
-      );
-      assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
-    }
-    assert.deepEqual(routeState.calls, []);
-  });
+test("listing reads through the retention gate and narrows by employment", async () => {
+  reset();
+  const response = await collectionRoute!.GET(
+    new Request(`http://openbooks.test/api/hrm/exit-records?employmentId=${EMPLOYMENT_ID}`),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [
+    { fn: "list", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID } },
+  ]);
+});
 
-  test("record forwards org, actor, and body, then 201s", async () => {
-    reset();
-    const response = await collectionRoute!.POST(
-      postRequest({ employmentId: EMPLOYMENT_ID, reasonKind: "resignation", isVoluntary: true }),
-    );
-    assert.equal(response.status, 201);
-    assert.equal(routeState.calls[0]!.fn, "record");
-    const args = routeState.calls[0]!.args as Record<string, unknown>;
-    assert.equal(args.orgId, "org-1");
-    assert.equal(args.actorId, "user-1");
-    assert.equal(args.employmentId, EMPLOYMENT_ID);
-    assert.equal(args.reasonKind, "resignation");
-  });
+test("recording validates the body through the real parser before the service runs", async () => {
+  reset();
+  assert.equal((await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID }))).status, 400);
+  // Interview date without interviewer passes the boundary (the service
+  // refuses the unpaired interview by name); a bad reason does not.
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        postRequest({ employmentId: EMPLOYMENT_ID, reasonKind: "fired", isVoluntary: false }),
+      )
+    ).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("employment is active, not terminated");
-    routeState.serviceThrow = refusal;
-    const response = await collectionRoute!.POST(
-      postRequest({ employmentId: EMPLOYMENT_ID, reasonKind: "resignation", isVoluntary: true }),
+test("record routes refuse hostile payloads at the real boundary", async () => {
+  reset();
+  for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
+    const refused = await collectionRoute!.POST(
+      new Request("http://openbooks.test/api/hrm/exit-records", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      }),
     );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+    assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+  }
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("record forwards org, actor, and body, then 201s", async () => {
+  reset();
+  const response = await collectionRoute!.POST(
+    postRequest({ employmentId: EMPLOYMENT_ID, reasonKind: "resignation", isVoluntary: true }),
+  );
+  assert.equal(response.status, 201);
+  assert.equal(routeState.calls[0]!.fn, "record");
+  const args = routeState.calls[0]!.args as Record<string, unknown>;
+  assert.equal(args.orgId, "org-1");
+  assert.equal(args.actorId, "user-1");
+  assert.equal(args.employmentId, EMPLOYMENT_ID);
+  assert.equal(args.reasonKind, "resignation");
+});
+
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("employment is active, not terminated");
+  routeState.serviceThrow = refusal;
+  const response = await collectionRoute!.POST(
+    postRequest({ employmentId: EMPLOYMENT_ID, reasonKind: "resignation", isVoluntary: true }),
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
