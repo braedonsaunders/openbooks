@@ -332,6 +332,7 @@
       "noBalanceSheet": "No balance sheet data",
       "noHeadcount": "No active employee records",
       "noInterestExpense": "No interest expense",
+      "unavailable": "Data not available",
       "perEmployees": "{revenue} / {count, plural, one {# employee} other {# employees}}"
     }
   },
