@@ -416,11 +416,38 @@ test("turnover divides terminations by average headcount per period", { skip: !D
     assert.equal(row.regrettableShare, 1);
     assert.equal(row.medianTenureDays, 730);
     assert.equal(row.exitCoverage, 1);
+    const missingParty = await mkParty(h.org.orgId, "Named Missing Exit");
+    const missingEmployment = await mkEmployment(h.org.orgId, missingParty, h.org.subsidiaryId);
+    await mkVersion(h.org.orgId, missingEmployment, 1, "2024-01-01", "active", "2024-01-01T09:00:00Z");
+    await addLiveVersion(h.org.orgId, missingEmployment, {
+      status: "terminated",
+      from: "2026-04-01",
+      recordedAt: "2026-04-02T09:00:00Z",
+    });
+    const departmentId = (await db.execute<{ id: string }>(sql`
+      insert into departments (org_id, name, subsidiary_id)
+      values (${h.org.orgId}, 'Retention Department', ${h.org.subsidiaryId}) returning id
+    `)).rows[0]!.id;
+    const assignmentId = (await db.execute<{ id: string }>(sql`
+      insert into employment_assignments (org_id, employment_id, assignment_key)
+      values (${h.org.orgId}, ${missingEmployment}, 'primary') returning id
+    `)).rows[0]!.id;
+    await db.execute(sql`
+      insert into employment_assignment_versions
+        (org_id, assignment_id, employment_id, version_no, department_id, is_primary, effective_from)
+      values (${h.org.orgId}, ${assignmentId}, ${missingEmployment}, 1, ${departmentId}, true, '2020-01-01')
+    `);
     // Retention overview: trailing twelve months plus the gaps.
     const overview = await getRetentionOverview({ orgId: h.org.orgId, actorId: h.hrId });
     assert.equal(overview.regrettableLeavers, 1);
-    assert.equal(overview.trailingTwelveMonths!.terminations, 1);
-    assert.deepEqual(overview.missingExitRecords, []);
+    assert.equal(overview.trailingTwelveMonths!.terminations, 2);
+    assert.deepEqual(overview.missingExitRecords, [{
+      employmentId: missingEmployment,
+      workerPartyId: missingParty,
+      workerName: "Named Missing Exit",
+      departmentName: "Retention Department",
+      terminatedFrom: "2026-04-01",
+    }]);
     assert.deepEqual(overview.exitRecordsWithoutInterview.map((r) => r.employmentId), [leaverEmployment]);
   } finally {
     await dropScratchOrg(h.org.orgId);

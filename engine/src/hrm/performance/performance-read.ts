@@ -760,7 +760,13 @@ export interface RetentionOverviewDTO {
   readonly trailingTwelveMonths: TurnoverRowDTO | null;
   readonly regrettableLeavers: number;
   /** Terminated employments as of today with no exit record. */
-  readonly missingExitRecords: { employmentId: string; workerPartyId: string; terminatedFrom: string }[];
+  readonly missingExitRecords: {
+    employmentId: string;
+    workerPartyId: string;
+    workerName: string;
+    departmentName: string | null;
+    terminatedFrom: string;
+  }[];
   /** Exit records with no interview held. */
   readonly exitRecordsWithoutInterview: { exitId: string; employmentId: string }[];
 }
@@ -818,12 +824,17 @@ export async function getRetentionOverview(args: {
       : (await db.execute<{
           employmentId: string;
           workerPartyId: string;
+          workerName: string;
+          departmentName: string | null;
           terminatedFrom: string;
         }>(sql`
       select e.id as "employmentId",
              e.worker_party_id as "workerPartyId",
+             coalesce(p.display_name, '—') as "workerName",
+             dept.name as "departmentName",
              v.effective_from::text as "terminatedFrom"
         from worker_employments e
+        left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
         join worker_employment_versions v
           on v.org_id = e.org_id and v.employment_id = e.id
          and v.recorded_until is null
@@ -832,6 +843,17 @@ export async function getRetentionOverview(args: {
          and (v.effective_to is null or v.effective_to > ${today}::date)
         left join hrm_exit_records x
           on x.org_id = e.org_id and x.employment_id = e.id
+        left join lateral (
+          select d.name
+            from employment_assignment_versions av
+            join departments d on d.org_id = av.org_id and d.id = av.department_id
+           where av.org_id = e.org_id and av.employment_id = e.id and av.is_primary
+             and av.recorded_until is null
+             and av.effective_from <= v.effective_from
+             and (av.effective_to is null or av.effective_to > v.effective_from)
+           order by av.version_no desc
+           limit 1
+        ) dept on true
        where e.org_id = ${orgId} and x.id is null
          ${retentionScopeCondition(allowed)}
        order by v.effective_from desc
