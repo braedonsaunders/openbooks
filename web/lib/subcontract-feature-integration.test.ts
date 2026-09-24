@@ -163,9 +163,11 @@ test("subcontract API persists money through canonicalDecimal and normalizeMoney
   assert.match(route, /normalizeMoney/);
   assert.match(route, /originalCommitment/);
   assert.match(route, /scheduledValue/);
-  // Draw-amount refusals name the offending line (position plus SOV id),
-  // never a bare label: a malformed draw must 422 naming its line.
-  assert.match(route, /draw amount must be an exact decimal/);
+  // Draw-amount refusals name the offending line (position plus SOV id) and
+  // the offending field, with the house classifier's remedy — never a bare
+  // label or a generic shape error: a malformed draw must 422 naming both.
+  assert.match(route, /moneyRefusal/);
   assert.match(route, /line \$\{index \+ 1\}/);
+  assert.match(route, /sovLineId/);
   assert.doesNotMatch(route, /createSubcontract\(\{ \.\.\.body, orgId, userId \}/);
 });

@@ -164,10 +164,10 @@ export async function POST(request: Request) {
   }
 
   const cost = moneyOrNull(body.acquisitionCost) ?? "0";
-  if (cost === "invalid") return bad("acquisition_cost_invalid", "acquisitionCost");
+  if (cost === "unreadable" || cost === "too-wide") return bad("acquisition_cost_invalid", "acquisitionCost");
   if (cmp(cost, "0") < 0) return bad("acquisition_cost_negative", "acquisitionCost");
   const salvage = moneyOrNull(body.salvageValue) ?? "0";
-  if (salvage === "invalid") return bad("salvage_value_invalid", "salvageValue");
+  if (salvage === "unreadable" || salvage === "too-wide") return bad("salvage_value_invalid", "salvageValue");
   if (cmp(salvage, "0") < 0) return bad("salvage_value_negative", "salvageValue");
   if (cmp(salvage, cost) > 0) return bad("salvage_exceeds_cost", "salvageValue");
 

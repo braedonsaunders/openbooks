@@ -19,6 +19,7 @@ import {
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { bankingErrorResponse } from '../util'
 
 export const runtime = 'nodejs'
@@ -153,11 +154,11 @@ export async function POST(req: Request) {
 
     const openingBalance = persistMoney(body.openingBalance)
     if (openingBalance === 'invalid') {
-      return NextResponse.json({ error: 'Opening balance must be an exact decimal' }, { status: 422 })
+      return NextResponse.json({ error: moneyRefusal('Opening balance', body.openingBalance) }, { status: 422 })
     }
     const closingFromRequest = persistMoney(body.closingBalance)
     if (closingFromRequest === 'invalid') {
-      return NextResponse.json({ error: 'Closing balance must be an exact decimal' }, { status: 422 })
+      return NextResponse.json({ error: moneyRefusal('Closing balance', body.closingBalance) }, { status: 422 })
     }
 
     const result = await importStatement(

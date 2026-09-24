@@ -17,6 +17,7 @@ import {
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { isFeatureEnabled } from "../../../../lib/features";
 
 export const runtime = "nodejs";
@@ -32,8 +33,8 @@ function exactMoney(value: unknown): string | null {
   }
 }
 
-function invalidDecimal(label: string) {
-  return NextResponse.json({ error: `${label} must be an exact decimal` }, { status: 422 });
+function invalidDecimal(label: string, raw: unknown, noun = "an amount") {
+  return NextResponse.json({ error: moneyRefusal(label, raw, noun) }, { status: 422 });
 }
 
 async function gate(permission: "ar.read" | "ar.create") {
@@ -101,8 +102,8 @@ export async function POST(req: Request) {
               return NextResponse.json({ error: `components[${index}] unit price is required — send an explicit "0" for a free component` }, { status: 422 });
             }
             const unitPrice = exactMoney(component.unitPrice);
-            if (quantity === null) return invalidDecimal("quantity");
-            if (unitPrice === null) return NextResponse.json({ error: `components[${index}] unit price must be an exact decimal` }, { status: 422 });
+            if (quantity === null) return invalidDecimal("quantity", component.quantity ?? "1", "a quantity");
+            if (unitPrice === null) return NextResponse.json({ error: moneyRefusal(`components[${index}] unit price`, component.unitPrice) }, { status: 422 });
             components.push({
               componentKey: String(component.componentKey ?? ""),
               name: String(component.name ?? ""),
@@ -197,12 +198,12 @@ export async function POST(req: Request) {
         };
         if (body.quantity != null && body.quantity !== "") {
           const quantity = exactMoney(body.quantity);
-          if (quantity === null) return invalidDecimal("quantity");
+          if (quantity === null) return invalidDecimal("quantity", body.quantity, "a quantity");
           amendment.quantity = quantity;
         }
         if (body.unitPrice != null && body.unitPrice !== "") {
           const unitPrice = exactMoney(body.unitPrice);
-          if (unitPrice === null) return invalidDecimal("unit price");
+          if (unitPrice === null) return invalidDecimal("unit price", body.unitPrice);
           amendment.unitPrice = unitPrice;
         }
         const result = await applyAmendment(authz.user.orgId, authz.user.id, amendment, { allowedSubsidiaryIds: authz.allowedSubsidiaryIds });

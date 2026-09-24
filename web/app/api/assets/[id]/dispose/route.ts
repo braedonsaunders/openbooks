@@ -12,6 +12,7 @@ import {
   canonicalDecimal,
   compareDecimal,
 } from "../../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,12 @@ export async function POST(
   // this route silently coercing {writeOff: true, proceeds: 500} into a
   // zero-proceeds write-off reported as success.
   const proceedsRaw = canonicalDecimal(body.proceeds ?? "0", 4);
+  if (proceedsRaw === null && body.proceeds !== undefined && body.proceeds !== null && body.proceeds !== "") {
+    return NextResponse.json(
+      { error: moneyRefusal("Proceeds", body.proceeds) },
+      { status: 422 },
+    );
+  }
   if (proceedsRaw === null || compareDecimal(proceedsRaw, "0") < 0) {
     return NextResponse.json(
       { error: "proceeds must be a non-negative amount" },

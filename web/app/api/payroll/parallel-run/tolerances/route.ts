@@ -8,6 +8,7 @@ import {
   saveParallelTolerance,
 } from '@openbooks/engine/src/payroll/parallel-run-store.ts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 
@@ -74,13 +75,13 @@ export async function POST(req: Request) {
 
   const toleranceRaw = canonicalDecimal(body.tolerance ?? '0', 4)
   if (toleranceRaw === null) {
-    return NextResponse.json({ error: 'Tolerance must be an exact decimal' }, { status: 422 })
+    return NextResponse.json({ error: moneyRefusal('Tolerance', body.tolerance ?? '0') }, { status: 422 })
   }
   let tolerance: string
   try {
     tolerance = normalizeMoney(toleranceRaw)
   } catch {
-    return NextResponse.json({ error: 'Tolerance must be an exact decimal' }, { status: 422 })
+    return NextResponse.json({ error: 'Tolerance is out of range for the ledger' }, { status: 422 })
   }
 
   try {

@@ -13,6 +13,7 @@ import {
   type ChargeLineInput,
 } from '../../../lib/project-charges'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isFeatureEnabled } from '../../../lib/features'
 import { guardProjectsFeature } from '../../../lib/projects-gate'
 
@@ -102,11 +103,11 @@ export async function POST(req: Request) {
     }
     const costRate = moneyOrNull(line.costRate)
     if (costRate === 'invalid') {
-      return NextResponse.json({ error: 'Cost rate must be an exact decimal' }, { status: 422 })
+      return NextResponse.json({ error: moneyRefusal('Cost rate', line.costRate, 'a rate') }, { status: 422 })
     }
     const billRate = moneyOrNull(line.billRate)
     if (billRate === 'invalid') {
-      return NextResponse.json({ error: 'Bill rate must be an exact decimal' }, { status: 422 })
+      return NextResponse.json({ error: moneyRefusal('Bill rate', line.billRate, 'a rate') }, { status: 422 })
     }
     lines.push({ ...line, quantity, costRate, billRate })
   }

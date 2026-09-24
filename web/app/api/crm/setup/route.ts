@@ -11,6 +11,7 @@ import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 
 export const runtime = "nodejs";
 
@@ -317,7 +318,12 @@ export async function POST(req: NextRequest) {
           { status: 422 },
         );
       const amountRaw = canonicalDecimal(body.amount, 4);
-      if (amountRaw === null || compareDecimal(amountRaw, "0") < 0)
+      if (amountRaw === null)
+        return NextResponse.json(
+          { error: moneyRefusal("Quota amount", body.amount) },
+          { status: 422 },
+        );
+      if (compareDecimal(amountRaw, "0") < 0)
         return NextResponse.json(
           {
             error:

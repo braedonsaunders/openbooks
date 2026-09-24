@@ -9,6 +9,7 @@ import { guardComplianceFeature } from '@/lib/compliance'
 import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/compliance.ts'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
+import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
 
@@ -93,10 +94,10 @@ export async function POST(req: Request) {
   const coverageAmount = optionalCoverageMoney(body.coverageAmount)
   const aggregateAmount = optionalCoverageMoney(body.aggregateAmount)
   if (coverageAmount === 'invalid') {
-    return NextResponse.json({ error: 'coverage amount must be a number with no more than four decimal places' }, { status: 422 })
+    return NextResponse.json({ error: moneyRefusal('Coverage amount', body.coverageAmount) }, { status: 422 })
   }
   if (aggregateAmount === 'invalid') {
-    return NextResponse.json({ error: 'aggregate amount must be a number with no more than four decimal places' }, { status: 422 })
+    return NextResponse.json({ error: moneyRefusal('Aggregate amount', body.aggregateAmount) }, { status: 422 })
   }
   // Both columns are numeric(19,4): a wider figure would die in Postgres,
   // surfacing the full INSERT through the catch below. Refuse it named.

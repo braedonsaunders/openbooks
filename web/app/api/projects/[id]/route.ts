@@ -9,6 +9,7 @@ import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from
 import { loadProject } from '../_lib'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
@@ -229,7 +230,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const contractValue = body.contractValue === undefined ? undefined : moneyOrNull(body.contractValue)
-  if (contractValue === 'invalid') return bad('Contract value must be a number')
+  if (contractValue === 'invalid') return bad(moneyRefusal('Contract value', body.contractValue))
 
   // Project type governs the billing classifier (its own billing_method column);
   // the project only stores the type reference.

@@ -230,7 +230,7 @@ const validPlan = {
 test("subscription API rejects invalid money, cadence, quantity, and periods before writes", async () => {
   const cases: Array<{ body: Record<string, unknown>; message: RegExp }> = [
     { body: { ...validPlan, amount: "-0.0001" }, message: /amount must be nonnegative/ },
-    { body: { ...validPlan, amount: "1.00001" }, message: /amount must be an exact decimal/ },
+    { body: { ...validPlan, amount: "1.00001" }, message: /amount allows at most 4 decimal places/ },
     { body: { ...validPlan, amount: "1000000000000000" }, message: /supported money range/ },
     { body: { ...validPlan, intervalCount: 0 }, message: /positive integer/ },
     { body: { ...validPlan, interval: "sometimes" }, message: /interval must be/ },

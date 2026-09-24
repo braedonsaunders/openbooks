@@ -55,15 +55,16 @@ export function wholeDigits(canonical: string): number {
   return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
 }
 
-/** Exact numeric(19,4) money string, null when absent, or 'invalid'. */
-export function moneyOrNull(v: unknown): string | null | "invalid" {
+/** Exact numeric(19,4) money string, null when absent, or the refusal cause. */
+export function moneyOrNull(v: unknown): string | null | "unreadable" | "too-wide" {
   if (v === null || v === undefined || v === "") return null;
   const exact = canonicalDecimal(v, 4);
-  if (exact === null || wholeDigits(exact) > 15) return "invalid";
+  if (exact === null) return "unreadable";
+  if (wholeDigits(exact) > 15) return "too-wide";
   try {
     return normalizeMoney(exact);
   } catch {
-    return "invalid";
+    return "too-wide";
   }
 }
 

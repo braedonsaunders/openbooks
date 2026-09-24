@@ -6,6 +6,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, isPositiveDecimal } from '../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 
@@ -34,10 +35,10 @@ function wholeDigits(canonical: string): number {
   return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
-function money(value: unknown): string | null | 'range' {
+function money(value: unknown): string | null | 'range' | 'unreadable' {
   if (value === null || value === undefined || String(value).trim() === '') return null
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) return null
+  if (exact === null) return 'unreadable'
   if (wholeDigits(exact) > 15) return 'range'
   return normalizeMoney(exact)
 }
@@ -76,11 +77,14 @@ function parseBody(body: Record<string, unknown>): { error: string } | {
   if (!/^[A-Z]{3}$/.test(currency)) return { error: 'Currency must be a three-letter code' }
   const unitPrice = money(body.unitPrice)
   if (unitPrice === 'range') return { error: 'Unit price is out of range — at most 15 whole digits fit the ledger' }
+  if (unitPrice === 'unreadable') return { error: moneyRefusal('Unit price', body.unitPrice) }
   if (unitPrice === null || !isPositiveDecimal(unitPrice)) return { error: 'Enter a unit price greater than zero' }
   const lowValue = money(body.lowValue)
   if (lowValue === 'range') return { error: 'Low value is out of range — at most 15 whole digits fit the ledger' }
+  if (lowValue === 'unreadable') return { error: moneyRefusal('Low value', body.lowValue) }
   const highValue = money(body.highValue)
   if (highValue === 'range') return { error: 'High value is out of range — at most 15 whole digits fit the ledger' }
+  if (highValue === 'unreadable') return { error: moneyRefusal('High value', body.highValue) }
   const effectiveFrom = dateOrNull(body.effectiveFrom)
   const effectiveTo = dateOrNull(body.effectiveTo)
   if (effectiveFrom === 'invalid' || effectiveTo === 'invalid') {

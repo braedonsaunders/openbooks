@@ -99,6 +99,30 @@ test("lien-waiver creation refuses an amount wider than numeric(19,4) without wr
   }
 });
 
+test("lien-waiver creation refuses a decimal-comma amount with the dotted rewrite", { skip: !DB }, async () => {
+  // B3-SAL-01: '12,34' is twelve-thirty-four written correctly in seven
+  // installed locales — stripping the comma would release 1234, a 100x error.
+  const { org, partyId, projectId } = await fixture();
+  try {
+    const refused = await post({
+      partyId, projectId, waiverType: "conditional_progress",
+      throughDate: "2026-03-31", amount: "12,34", currency: "CAD",
+    });
+    const refusedJson = (await refused.json().catch(() => null)) as { error?: string } | null;
+    assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refusedJson)}`);
+    assert.match(refusedJson?.error ?? "", /must use "\." as the decimal point/);
+    assert.equal(await waiverCount(org.orgId), 0);
+    const filed = await post({
+      partyId, projectId, waiverType: "conditional_progress",
+      throughDate: "2026-03-31", amount: "12.34", currency: "CAD",
+    });
+    assert.equal(filed.status, 200, JSON.stringify(await filed.json().catch(() => null)));
+    assert.equal(await waiverCount(org.orgId), 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("lien-waiver creation still files an ordinary waiver", { skip: !DB }, async () => {
   const { org, partyId, projectId } = await fixture();
   try {

@@ -8,6 +8,7 @@ import {
   listBillingRequests,
 } from "../../../lib/billing-requests";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
 
 export const runtime = "nodejs";
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
     const exact = canonicalDecimal(body.drawAmount, 4);
     if (exact === null) {
       return NextResponse.json(
-        { error: "Draw amount must be an exact decimal" },
+        { error: moneyRefusal("Draw amount", body.drawAmount) },
         { status: 422 },
       );
     }
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
       drawAmount = normalizeMoney(exact);
     } catch {
       return NextResponse.json(
-        { error: "Draw amount must be an exact decimal" },
+        { error: moneyRefusal("Draw amount", body.drawAmount) },
         { status: 422 },
       );
     }

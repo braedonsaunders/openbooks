@@ -7,6 +7,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { bankingErrorResponse } from '../util'
 
 export const runtime = 'nodejs'
@@ -60,13 +61,13 @@ export async function POST(req: Request) {
   }
   const statementBalanceRaw = canonicalDecimal(body.statementBalance, 4)
   if (statementBalanceRaw === null) {
-    return NextResponse.json({ error: 'Statement balance must be an exact decimal' }, { status: 422 })
+    return NextResponse.json({ error: moneyRefusal('Statement balance', body.statementBalance) }, { status: 422 })
   }
   let statementBalance: string
   try {
     statementBalance = normalizeMoney(statementBalanceRaw)
   } catch {
-    return NextResponse.json({ error: 'Statement balance must be an exact decimal' }, { status: 422 })
+    return NextResponse.json({ error: 'Statement balance is out of range for the ledger' }, { status: 422 })
   }
   try {
     const { id } = await startReconciliation(

@@ -9,6 +9,7 @@ import { isUuid, pickString } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
+import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
 function wholeDigits(canonical: string): number {
@@ -122,7 +123,7 @@ export async function POST(req: Request) {
   // the money it releases cannot drift apart through a typo.
   let amount = body.amount == null || body.amount === '' ? null : canonicalDecimal(body.amount, 4)
   if (body.amount != null && body.amount !== '' && amount === null) {
-    return NextResponse.json({ error: 'invalid amount' }, { status: 422 })
+    return NextResponse.json({ error: moneyRefusal('Amount', body.amount) }, { status: 422 })
   }
   // amount is numeric(19,4): a wider figure would die in Postgres, surfacing
   // the full INSERT through the catch below. Refuse it with a named 422.

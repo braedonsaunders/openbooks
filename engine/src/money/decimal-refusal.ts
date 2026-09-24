@@ -12,6 +12,7 @@
  * once, never beside a caller. This module lives in `money` (no database, no
  * floats) so engine code can import it without an upward edge.
  */
+import { canonicalDecimal } from "./exact-decimal.ts";
 
 /**
  * What the operator supplied, safe to put in a refusal. The body is arbitrary
@@ -120,6 +121,36 @@ export function decimalNullCause(raw: unknown): DecimalNullCause {
  * Names which of the seven causes fired, the value received, and the remedy —
  * the same discipline the outer three-way split follows.
  */
+/**
+ * The single composer for operator-typed money refusals at write boundaries:
+ * unreadable input gets the seven-cause classifier above, while a canonical
+ * figure wider than its column gets the ledger bound named. Both halves are
+ * needed because canonicalDecimal bounds scale, not magnitude — routing a
+ * pasted 20-digit figure through the classifier alone blames scale ("got 2
+ * decimals"), sending the operator to round a value that is too wide, not
+ * too precise. Not a second classifier: the unreadable branch delegates
+ * here, and the width branch re-derives from the raw value with the same
+ * whole-digit rule every money route already applies.
+ */
+export function moneyRefusal(
+  field: string,
+  raw: unknown,
+  noun = 'an amount',
+  maxScale = 4,
+  maxWholeDigits = 15,
+): string {
+  const exact = canonicalDecimal(raw, maxScale);
+  if (exact !== null && wholeDigits(exact) > maxWholeDigits) {
+    return `${field} must fit the ledger (at most ${maxWholeDigits} whole digits)`;
+  }
+  return decimalNullRefusal(field, noun, raw, maxScale);
+}
+
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length;
+}
+
 export function decimalNullRefusal(field: string, noun: string, raw: unknown, maxScale: number): string {
   const shown = `"${suppliedValue(raw)}"`
   const cause = decimalNullCause(raw)

@@ -9,6 +9,7 @@ import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from
 import { isUuid } from '../../../../lib/list-params'
 import { loadItem } from '../_lib'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
 
@@ -202,7 +203,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (raw === null) defaultRate = null
     else {
       const exact = canonicalDecimal(raw, 4)
-      if (exact === null) return bad('Default rate must be a number with no more than four decimal places')
+      if (exact === null) return bad(moneyRefusal('Default rate', raw, 'a rate'))
       if (wholeDigits(exact) > 15) return bad('Default rate is out of range — at most 15 whole digits fit the ledger')
       defaultRate = fixedDecimal(exact, 4)
     }
@@ -214,7 +215,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (raw === null) defaultCost = null
     else {
       const exact = canonicalDecimal(raw, 4)
-      if (exact === null || compareDecimal(exact, '0') < 0) return bad('Default cost must be a non-negative number')
+      if (exact === null) return bad(moneyRefusal('Default cost', raw))
+      if (compareDecimal(exact, '0') < 0) return bad('Default cost must be a non-negative number')
       if (wholeDigits(exact) > 15) return bad('Default cost is out of range — at most 15 whole digits fit the ledger')
       defaultCost = fixedDecimal(exact, 4)
     }
@@ -290,7 +292,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (raw === null) standaloneSellingPrice = null
     else {
       const exact = canonicalDecimal(raw, 4)
-      if (exact === null) return bad('Standalone selling price must be a number with no more than four decimal places')
+      if (exact === null) return bad(moneyRefusal('Standalone selling price', raw))
       if (wholeDigits(exact) > 15) return bad('Standalone selling price is out of range — at most 15 whole digits fit the ledger')
       standaloneSellingPrice = fixedDecimal(exact, 4)
     }

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import {
   PropertyManagementError,
@@ -176,9 +177,7 @@ function persistMoney(value: unknown): string | null {
   if (value == null || value === "") return null;
   const exact = canonicalDecimal(value, 4);
   if (exact === null) {
-    throw new PropertyManagementError(
-      "Amount must be a number with no more than four decimal places",
-    );
+    throw new PropertyManagementError(moneyRefusal("Amount", value));
   }
   return normalizeMoney(exact);
 }
