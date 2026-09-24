@@ -116,14 +116,16 @@ async function mountDrawer(
   t: TestContext,
   actionsResponder: () => Response,
   deleteResponder: () => Response,
-): Promise<{ host: HTMLElement }> {
+): Promise<{ host: HTMLElement; requests: { url: string; method: string; body?: unknown }[] }> {
   script.errors = []
   script.pushed = []
+  const requests: { url: string; method: string; body?: unknown }[] = []
   ;(globalThis as Record<string, unknown>).__expenseErrorToasts = script.errors
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
+    requests.push({ url, method, ...(typeof init?.body === 'string' ? { body: JSON.parse(init.body) as unknown } : {}) })
     if (url.startsWith('/api/flows/manual')) return Response.json({ buttons: [] })
     if (url.startsWith('/api/flows/record-state')) {
       return Response.json({ approvalState: { status: 'draft', pendingWith: [], myActions: null }, history: [] })
@@ -176,7 +178,7 @@ async function mountDrawer(
     await tick()
     await tick()
   })
-  return { host }
+  return { host, requests }
 }
 
 function findButton(text: string): HTMLButtonElement | undefined {
@@ -226,7 +228,7 @@ test('a named 422 refusal on submit surfaces the server message', async (t) => {
 })
 
 test('a named delete refusal toasts the reason, keeps the drawer open, and releases the button', async (t) => {
-  await mountDrawer(
+  const { requests } = await mountDrawer(
     t,
     () => Response.json({ ok: true }),
     () => Response.json({ error: 'report is locked by an active approval run' }, { status: 423 }),
@@ -235,6 +237,11 @@ test('a named delete refusal toasts the reason, keeps the drawer open, and relea
   const del = findButton('Delete')
   assert.ok(del, 'a draft must offer Delete')
   await click(del)
+  assert.deepEqual(
+    requests.find((request) => request.url === `/api/expenses/${REPORT_ID}` && request.method === 'DELETE')?.body,
+    { expectedUpdatedAt: UPDATED_AT },
+    'delete must carry the exact loaded revision to the server fence',
+  )
   assert.deepEqual(script.errors, ['report is locked by an active approval run'])
   assert.deepEqual(script.pushed, [], 'a refused delete must not navigate away')
   const again = findButton('Delete')
