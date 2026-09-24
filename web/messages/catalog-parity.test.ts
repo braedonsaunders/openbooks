@@ -241,12 +241,15 @@ const COGNATES = new Set<string>([
   'de:admin.setup.agents.overview.columns.pack|Pack',
   'de:admin.setup.agents.overview.columns.status|Status',
   'es:admin.features.scripts.title|Scripts',
+  'es:banking.bankFeeds.operational.providers.manual|Manual',
+  'es:banking.bankFeeds.operational.statuses.error|Error',
   'fr:admin.features.scripts.title|Scripts',
   'fr:admin.setup.wizard.payroll.packs.ca.title|Canada',
   'ja:admin.features.apiAccess.title|REST API',
   'pt-BR:admin.features.scripts.title|Scripts',
   'pt-BR:admin.setup.agents.activity.statusColumn|Status',
   'pt-BR:admin.setup.agents.activity.triggers.manual|Manual',
+  'pt-BR:banking.bankFeeds.operational.providers.manual|Manual',
   'pt-BR:admin.setup.agents.overview.columns.status|Status',
   'zh:admin.features.apiAccess.title|REST API',
   // Per-area reviewed identical terms (the local identicalByFact sets across the area backfills).
@@ -3102,7 +3105,12 @@ const COGNATES = new Set<string>([
   'de:assets.leases.colStatus|Status',
   'pt-BR:assets.leases.colStatus|Status',
 ])
-
+// Official payment provider names and SFTP keep their shared spelling across locales.
+for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+  for (const [provider, term] of [['plaid', 'Plaid'], ['gocardless', 'GoCardless'], ['truelayer', 'TrueLayer'], ['sftp', 'SFTP']] as const) {
+    COGNATES.add(`${locale}:banking.bankFeeds.operational.providers.${provider}|${term}`)
+  }
+}
 function cognateScope(entry: string): string {
   return entry.slice(0, entry.indexOf('|'))
 }

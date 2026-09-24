@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 // UX-08b: with no reconcilable account /banking/imports showed a bare
@@ -67,18 +66,9 @@ const messages = (await import('../../../../messages/en')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { EmptyState } = await import('@openbooks/ui')
 const { BANKING_WIDGETS } = await import('../../../../components/viewspec/widgets-banking')
+const { BankFeedPanel } = await import('./sections')
 
-// The actual loader-resolved copy, read from the real catalog — the test
-// fails if the guidance ever stops naming the prerequisite or the path.
-const banking = JSON.parse(
-  readFileSync(new URL('../../../../messages/en/banking.json', import.meta.url), 'utf8'),
-) as {
-  imports: {
-    noAccountsTitle: string
-    noAccountsDescription: string
-    noAccountsLink: string
-  }
-}
+const banking = messages.banking
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
@@ -147,7 +137,8 @@ test('the configured state still offers the import picker beside the import acti
     selectLabel: 'Account',
     placeholder: 'Select an account…',
   })
-  const { host, root } = await mount(<>{picker}</>)
+  const feed = { name: 'Operating', provider: 'plaid', accountNumber: null, accountName: 'Operating', status: 'connected', statusConnected: true, showPaused: true, lastSyncAt: null, lastAttemptAt: null, lastError: null }
+  const { host, root } = await mount(<>{picker}<BankFeedPanel title="Bank feeds" manageLabel="Manage" emptyMessage="None" lastSyncLabel="Last sync" lastAttemptLabel="Last attempt" neverLabel="Never" feeds={[feed]} /></>)
   try {
     const options = [...host.querySelectorAll('select option')].map((o) => o.textContent?.trim())
     assert.deepEqual(options, ['1000 · Operating Cash'])
@@ -155,6 +146,7 @@ test('the configured state still offers the import picker beside the import acti
       (b.textContent ?? '').includes('Import statement'),
     )
     assert.ok(importButton, 'the canonical import dialog trigger must render once an account is configured')
+    assert.ok(['Plaid', 'Connected', '(paused)'].every((label) => host.textContent?.includes(label)) && !host.textContent?.includes('plaid') && !host.textContent?.includes('connected'))
   } finally {
     await act(async () => root.unmount())
     host.remove()

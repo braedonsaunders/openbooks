@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { useViewerFormat } from '@/lib/viewer-format'
+import { useTranslations } from 'next-intl'
 import { Badge } from '@openbooks/ui'
 
 /**
@@ -73,6 +74,23 @@ export function BankFeedPanel({
   feeds,
 }: BankFeedPanelProps) {
   const { date } = useViewerFormat()
+  const t = useTranslations('banking')
+  const providerLabel = (provider: string) => {
+    switch (provider) {
+      case 'plaid': case 'gocardless': case 'truelayer': case 'manual': case 'sftp':
+        return t(`bankFeeds.operational.providers.${provider}`)
+      default:
+        return t('bankFeeds.operational.providers.unknown')
+    }
+  }
+  const statusLabel = (status: string) => {
+    switch (status) {
+      case 'pending': case 'connected': case 'error': case 'disconnected':
+        return t(`bankFeeds.operational.statuses.${status}`)
+      default:
+        return t('bankFeeds.operational.statuses.unknown')
+    }
+  }
   return (
     <section className="mb-4 rounded-lg border border-slate-200 dark:border-slate-800">
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
@@ -88,12 +106,12 @@ export function BankFeedPanel({
           {feeds.map((feed, index) => (
             <li key={index} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
               <span className="font-medium text-slate-900 dark:text-slate-100">{feed.name}</span>
-              <Badge variant="outline">{feed.provider}</Badge>
+              <Badge variant="outline">{providerLabel(feed.provider)}</Badge>
               <span className="text-slate-500 dark:text-slate-400">
                 <span className="font-mono text-[13px] font-semibold">{feed.accountNumber}</span> {feed.accountName}
               </span>
-              <Badge variant={feed.statusConnected ? 'default' : 'secondary'}>{feed.status}</Badge>
-              {feed.showPaused ? <span className="text-xs text-slate-400">(paused)</span> : null}
+              <Badge variant={feed.statusConnected ? 'default' : 'secondary'}>{statusLabel(feed.status)}</Badge>
+              {feed.showPaused ? <span className="text-xs text-slate-400">({t('bankFeeds.operational.paused')})</span> : null}
               <span className="ml-auto text-slate-500 dark:text-slate-400">
                 {lastSyncLabel}:{' '}
                 {feed.lastSyncAt ? date(new Date(feed.lastSyncAt), { dateStyle: 'medium' }) : neverLabel}

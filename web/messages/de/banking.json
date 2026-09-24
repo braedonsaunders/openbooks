@@ -22,6 +22,16 @@
     "statement": "Kontoauszug",
     "sourceFrom": "Aus {connector} abgestimmt"
   },
+  "statementSources": {
+    "manual": "Manueller Upload",
+    "ofx": "OFX-Datei",
+    "csv": "CSV-Datei",
+    "camt053": "CAMT.053-Datei",
+    "bai2": "BAI2-Datei",
+    "mt940": "MT940-Datei",
+    "feed_api": "Bankanbindung",
+    "unknown": "Andere Quelle"
+  },
   "sourceSystem": {
     "other": "Quellsystem"
   },
@@ -759,7 +769,10 @@
       "none": "Keine aktiven Bankfeed-Verbindungen. Richten Sie eine unter Einrichtung → Bankfeeds ein.",
       "lastSync": "Letzte Synchronisierung",
       "lastAttempt": "Letzter Versuch",
-      "never": "Nie"
+      "never": "Nie",
+      "paused": "pausiert",
+      "providers": {"plaid":"Plaid","gocardless":"GoCardless","truelayer":"TrueLayer","manual":"Manuell","sftp":"SFTP","unknown":"Anderer Anbieter"},
+      "statuses": {"pending":"Ausstehend","connected":"Verbunden","error":"Fehler","disconnected":"Getrennt","unknown":"Unbekannter Status"}
     },
     "client": {
       "configure": {

@@ -22,6 +22,16 @@
     "statement": "明細",
     "sourceFrom": "{connector} から消込"
   },
+  "statementSources": {
+    "manual": "手動アップロード",
+    "ofx": "OFX ファイル",
+    "csv": "CSV ファイル",
+    "camt053": "CAMT.053 ファイル",
+    "bai2": "BAI2 ファイル",
+    "mt940": "MT940 ファイル",
+    "feed_api": "銀行フィード",
+    "unknown": "その他のソース"
+  },
   "sourceSystem": {
     "other": "ソースシステム"
   },
@@ -759,7 +769,10 @@
       "none": "有効な銀行フィード接続がありません。セットアップ → 銀行フィード で設定してください。",
       "lastSync": "最終同期",
       "lastAttempt": "最終試行",
-      "never": "なし"
+      "never": "なし",
+      "paused": "一時停止中",
+      "providers": {"plaid":"Plaid","gocardless":"GoCardless","truelayer":"TrueLayer","manual":"手動","sftp":"SFTP","unknown":"その他のプロバイダー"},
+      "statuses": {"pending":"保留中","connected":"接続済み","error":"エラー","disconnected":"未接続","unknown":"不明な状態"}
     },
     "client": {
       "configure": {

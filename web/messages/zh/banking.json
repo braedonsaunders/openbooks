@@ -22,6 +22,16 @@
     "statement": "对账单",
     "sourceFrom": "已从{connector}对账"
   },
+  "statementSources": {
+    "manual": "手动上传",
+    "ofx": "OFX 文件",
+    "csv": "CSV 文件",
+    "camt053": "CAMT.053 文件",
+    "bai2": "BAI2 文件",
+    "mt940": "MT940 文件",
+    "feed_api": "银行数据连接",
+    "unknown": "其他来源"
+  },
   "sourceSystem": {
     "other": "源系统"
   },
@@ -759,7 +769,10 @@
       "none": "没有启用的银行数据连接。请前往 设置 → 银行数据 配置。",
       "lastSync": "上次同步",
       "lastAttempt": "上次尝试",
-      "never": "从未"
+      "never": "从未",
+      "paused": "已暂停",
+      "providers": {"plaid":"Plaid","gocardless":"GoCardless","truelayer":"TrueLayer","manual":"手动","sftp":"SFTP","unknown":"其他提供方"},
+      "statuses": {"pending":"待处理","connected":"已连接","error":"错误","disconnected":"已断开","unknown":"未知状态"}
     },
     "client": {
       "configure": {
