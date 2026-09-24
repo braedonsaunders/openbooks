@@ -63,6 +63,39 @@ test("project revenue sync preserves contracts and schedules while Projects is d
   } finally { await dropScratchOrg(org.orgId); }
 });
 
+test("project revenue sync writes no contract while Revenue Recognition is off and names the skip", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const projectId = randomUUID(), typeId = randomUUID();
+    await db.execute(sql`update orgs set settings=settings || ${JSON.stringify({
+      features: { projects: true, revenueRecognition: false },
+      controlAccounts: { unbilledReceivable: org.accounts.ar, projectRevenue: org.accounts.revenue },
+    })}::jsonb where id=${org.orgId}`);
+    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values(${typeId},${org.orgId},'gate-rr','Gate RR','fixed_price',
+        '{"recognition":"percent_complete_cost","billingProcedure":"standard"}'::jsonb,'{}'::jsonb)`);
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,starts_on,contract_value,custom)
+      values(${projectId},${org.orgId},${org.subsidiaryId},'GATE-RR','Gate RR project',${org.customerId},${typeId},'active',true,
+        ${org.date},1000,'{"percentCompleteOverride":"40"}'::jsonb)`);
+    const sync = () => syncProjectRevenueContracts(org.orgId, actorId, org.date, projectId);
+    assert.deepEqual(await sync(), {
+      synced: [],
+      problems: [],
+      skipped:
+        "project revenue sync skipped: revenue recognition is off — turn it on in Company Settings → Features to recognize project progress",
+    });
+    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts
+      where org_id=${org.orgId} and project_id=${projectId}`)).rows[0]!.n;
+    assert.equal(count, 0, "disabled Revenue Recognition cannot create revenue contracts");
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,revenueRecognition}','true'::jsonb) where id=${org.orgId}`);
+    const enabled = await sync();
+    assert.equal(enabled.skipped, null);
+    assert.equal(enabled.synced.length, 1);
+    assert.equal(enabled.synced[0]!.percentComplete, "40.0000");
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
 test("sync with unmapped project accounts names the missing accounts and creates nothing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {

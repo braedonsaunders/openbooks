@@ -1382,11 +1382,6 @@ test('the surfaces this test was written for are covered', () => {
     'recognition posting must refuse when Revenue Recognition is off — existing journals stay',
   )
   assert.match(
-    read('../engine/src/projects/revenue.ts'),
-    /export async function syncProjectRevenueContracts[\s\S]{0,400}revenueRecognitionFeatureEnabled\(db, orgId\)/,
-    'percent-complete sync must not write revenue contracts when Revenue Recognition is off',
-  )
-  assert.match(
     read('../engine/src/ledger/posting-accounts.ts'),
     /async function resolveDeferralAccounts[\s\S]{0,350}revenueRecognitionFeatureEnabled\(runner, orgId\)/,
     'invoice posting must credit income, not deferred, when Revenue Recognition is off',
