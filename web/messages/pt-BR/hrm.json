@@ -591,6 +591,8 @@
     "emptyDescription": "Registre sua primeira solicitação.",
     "balancesTitle": "Saldos",
     "balancesEmpty": "Sem tipos de licença ativos.",
+    "balanceEmployment": "{employer} · Vínculo {employment}",
+    "balancePerson": "No nível da pessoa",
     "timeKind": "tempo",
     "valueKind": "valor",
     "unlimited": "Ilimitado"

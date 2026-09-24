@@ -591,6 +591,8 @@
     "emptyDescription": "Registre su primera solicitud.",
     "balancesTitle": "Saldos",
     "balancesEmpty": "Sin tipos de ausencia activos.",
+    "balanceEmployment": "{employer} · Empleo {employment}",
+    "balancePerson": "A nivel de persona",
     "timeKind": "tiempo",
     "valueKind": "valor",
     "unlimited": "Ilimitado"

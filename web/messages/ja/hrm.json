@@ -591,6 +591,8 @@
     "emptyDescription": "最初の申請を登録してください。",
     "balancesTitle": "残高",
     "balancesEmpty": "有効な休暇種別がありません。",
+    "balanceEmployment": "{employer} · 雇用 {employment}",
+    "balancePerson": "個人単位",
     "timeKind": "時間",
     "valueKind": "金額",
     "unlimited": "無制限"

@@ -591,6 +591,8 @@
     "emptyDescription": "Stellen Sie Ihren ersten Antrag.",
     "balancesTitle": "Salden",
     "balancesEmpty": "Keine aktiven Urlaubsarten.",
+    "balanceEmployment": "{employer} · Beschäftigung {employment}",
+    "balancePerson": "Auf Personenebene",
     "timeKind": "Zeit",
     "valueKind": "Geldwert",
     "unlimited": "Unbegrenzt"

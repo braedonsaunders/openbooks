@@ -13,7 +13,7 @@ export function LeaveBalances({
   unlimitedLabel,
   empty,
 }: {
-  balances: { leaveTypeCode: string; kind: 'time' | 'value'; balance: string | null; unlimited: boolean }[]
+  balances: { leaveTypeCode: string; kind: 'time' | 'value'; employmentId: string | null; scopeLabel: string; balance: string | null; unlimited: boolean }[]
   timeKindLabel: string
   valueKindLabel: string
   unlimitedLabel: string
@@ -26,7 +26,7 @@ export function LeaveBalances({
     <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
       {balances.map((row) => (
         <li
-          key={`${row.kind}-${row.leaveTypeCode}`}
+          key={`${row.kind}-${row.employmentId ?? 'party'}-${row.leaveTypeCode}`}
           className="flex items-baseline justify-between gap-3 px-4 py-2.5 text-sm"
         >
           <span className="font-medium text-slate-700 dark:text-slate-200">
@@ -34,6 +34,7 @@ export function LeaveBalances({
             <span className="ml-2 text-xs font-normal text-slate-400 dark:text-slate-500">
               {row.kind === 'time' ? timeKindLabel : valueKindLabel}
             </span>
+            <span className="block text-xs font-normal text-slate-400 dark:text-slate-500">{row.scopeLabel}</span>
           </span>
           <span className="tabular-nums text-slate-500 dark:text-slate-400">
             {row.unlimited ? unlimitedLabel : (row.balance ?? '—')}

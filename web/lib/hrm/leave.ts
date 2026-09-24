@@ -348,6 +348,8 @@ export async function loadLeaveQueue(
 export interface MyLeaveBalance {
   leaveTypeCode: string
   kind: 'time' | 'value'
+  employmentId: string | null
+  scopeLabel: string
   balance: string | null
   unlimited: boolean
 }
@@ -362,6 +364,8 @@ export interface MyLeaveData {
   balancesTitle: string
   balances: MyLeaveBalance[]
   balancesEmpty: string
+  balanceEmployment: string
+  balancePerson: string
   timeKindLabel: string
   valueKindLabel: string
   unlimitedLabel: string
@@ -402,6 +406,8 @@ export async function loadMyLeave(
     fileTitle: t('leave.fileTitle'),
     balancesTitle: t('myLeave.balancesTitle'),
     balancesEmpty: t('myLeave.balancesEmpty'),
+    balanceEmployment: t('myLeave.balanceEmployment'),
+    balancePerson: t('myLeave.balancePerson'),
     timeKindLabel: t('myLeave.timeKind'),
     valueKindLabel: t('myLeave.valueKind'),
     unlimitedLabel: t('myLeave.unlimited'),
@@ -448,24 +454,46 @@ export async function loadMyLeave(
   const asOf = await businessToday(orgId)
   const balances: MyLeaveBalance[] = []
   const own = await loadOwnEmploymentIds(db, orgId, authz.user.id)
-  const employmentId = own[0]
-  if (employmentId) {
-    const types = await listLeaveTypes(db, orgId)
-    for (const type of types) {
-      if (!type.isActive) continue
-      const read = await timeBalanceAsOf(db, orgId, employmentId, type.id, asOf)
-      balances.push({ leaveTypeCode: type.code, kind: 'time', balance: read.balance, unlimited: read.unlimited })
-    }
-    // VALUE beside TIME, each labelled: the worker's payroll banks as of today.
-    const partyRows = (await db.execute<{ party: string }>(sql`
-      select worker_party_id::text as party from worker_employments
-       where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
+  if (own.length > 0) {
+    const ids = own.map((id) => sql`${id}::uuid`)
+    const employments = (await db.execute<{
+      employmentId: string
+      employmentNumber: string | null
+      employerName: string
+      partyId: string
+    }>(sql`
+      select w.id::text as "employmentId",
+             w.employment_number as "employmentNumber",
+             s.name as "employerName",
+             w.worker_party_id::text as "partyId"
+        from worker_employments w
+        join subsidiaries s on s.org_id = w.org_id and s.id = w.employer_subsidiary_id
+       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})
+       order by s.name, w.employment_number nulls last, w.id
     `)).rows
-    const party = partyRows[0]?.party
+    const types = await listLeaveTypes(db, orgId)
+    for (const employment of employments) {
+      const employmentReference = employment.employmentNumber?.trim() || employment.employmentId.slice(0, 8)
+      for (const type of types) {
+        if (!type.isActive) continue
+        const read = await timeBalanceAsOf(db, orgId, employment.employmentId, type.id, asOf)
+        balances.push({
+          leaveTypeCode: type.code,
+          kind: 'time',
+          employmentId: employment.employmentId,
+          scopeLabel: t('myLeave.balanceEmployment', { employer: employment.employerName, employment: employmentReference }),
+          balance: read.balance,
+          unlimited: read.unlimited,
+        })
+      }
+    }
+    // Payroll banks belong to the person, not an employment. Resolve once so
+    // multiple employments cannot duplicate a party-level bank.
+    const party = employments[0]?.partyId
     if (party) {
       const banks = await payrollBankBalances(orgId, party, { asOf })
       for (const bank of banks) {
-        balances.push({ leaveTypeCode: bank.planCode, kind: 'value', balance: bank.balance, unlimited: false })
+        balances.push({ leaveTypeCode: bank.planCode, kind: 'value', employmentId: null, scopeLabel: t('myLeave.balancePerson'), balance: bank.balance, unlimited: false })
       }
     }
   }

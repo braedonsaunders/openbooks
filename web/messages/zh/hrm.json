@@ -591,6 +591,8 @@
     "emptyDescription": "提交第一条申请吧。",
     "balancesTitle": "余额",
     "balancesEmpty": "没有启用的休假类型。",
+    "balanceEmployment": "{employer} · 雇佣关系 {employment}",
+    "balancePerson": "个人级别",
     "timeKind": "时间",
     "valueKind": "金额",
     "unlimited": "无限制"
