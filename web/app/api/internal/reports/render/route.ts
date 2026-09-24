@@ -120,17 +120,15 @@ export async function GET(req: Request) {
     if (!contentPermissions.every((permission) => can(authz, permission))) {
       throw new Error('Report execution permission was revoked')
     }
-    // Close-package renders email their artifact and retain nothing for
-    // download, so there is no viewer left to gate: skip the stamp. (The
-    // run evidence trigger refuses ANY snapshot rewrite, and the stamp
-    // would trip it even when the content required nothing new.)
-    if (!closePackage) {
-      await db.execute(sql`
-        update report_runs
-           set authorization_snapshot = coalesce(authorization_snapshot, '{}'::jsonb) || ${JSON.stringify({ requiredPermissions: contentPermissions })}::jsonb
-         where id = ${runId} and org_id = ${orgId}
-      `)
-    }
+    // The stamp is the single write-once transition the run evidence
+    // trigger admits (0340): recording the content-derived key on a run
+    // whose snapshot predates recording. Close-package runs stamp the
+    // same way — their emailed artifacts carry the same evidence.
+    await db.execute(sql`
+      update report_runs
+         set authorization_snapshot = coalesce(authorization_snapshot, '{}'::jsonb) || ${JSON.stringify({ requiredPermissions: contentPermissions })}::jsonb
+       where id = ${runId} and org_id = ${orgId}
+    `)
     const stamp = await businessToday(orgId)
     if (p.get('format') === 'xlsx') {
       const xlsx = await exportDataToXlsx(data, {

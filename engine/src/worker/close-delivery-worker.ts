@@ -165,13 +165,10 @@ async function mintCloseReportRun(
               version: 1,
               userId: principal,
               allowedSubsidiaryIds: allowed === null ? null : [...allowed].sort(),
-              // Content permissions stay empty at mint: the render route
-              // re-checks the principal's grants against the rendered
-              // content before delivering, and close artifacts are emailed,
-              // never retained for download — so there is nothing for a
-              // post-render stamp to record, and the run evidence trigger
-              // refuses any snapshot rewrite.
-              requiredPermissions: [],
+              // No requiredPermissions at mint: the render route records
+              // the content-derived key once at render (the single
+              // transition the evidence trigger admits), after re-checking
+              // the principal's grants against the rendered content.
               definition: {
                 report_type: definition.reportType,
                 query: definition.query,
