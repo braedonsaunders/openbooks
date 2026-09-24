@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
@@ -64,7 +66,11 @@ export interface LogDecisionInput {
   readonly input: string;
   /** Raw output — hashed before storage, never stored. */
   readonly output: string;
-  /** One line, no PII: what was produced and from which records. */
+  /**
+   * One line, no PII and no confidential VALUES (amounts, rates, pay
+   * figures): what was produced and from which records. Values live
+   * behind each subject's own read gate; the ledger keeps references.
+   */
   readonly outputSummary: string;
   /** The record ids the output cited. */
   readonly sources: readonly { kind: string; id: string }[];
@@ -253,31 +259,64 @@ export type DecisionRow = {
 /**
  * List decision rows for the ledger. Digests are never selected — they
  * are tamper-evidence for auditors, not UI content.
+ *
+ * Employment-linked rows are fenced by subject scope AND the underlying
+ * capability, mirroring each subject's own read gate: pay-trace rows
+ * (subjectKind employment) need the payroll reader (payroll.manage or
+ * hrm.employment.read) plus the employment's employer scope; anomaly-flag
+ * rows need a flag reader (payroll.manage, time.approve or
+ * hrm.employment.read) plus the flag employment's employer scope, with
+ * unattributable flags failing closed. Aggregate and configuration rows
+ * (scans, baselines, capabilities, drafts) carry no personal values by
+ * construction and stay visible to every ledger reader.
  */
 export async function listDecisions(
   exec: SqlExecutor,
   input: {
     readonly orgId: string;
+    readonly actorId: string;
     readonly capabilityKey?: string;
     readonly outcome?: string;
     readonly limit?: number;
   },
 ): Promise<DecisionRow[]> {
   const limit = Math.min(input.limit ?? 50, 200);
+  const canPay = (await actorHasPermission(exec, input.orgId, input.actorId, "payroll.manage"))
+    || (await actorHasPermission(exec, input.orgId, input.actorId, "hrm.employment.read"));
+  const canFlag = canPay
+    || (await actorHasPermission(exec, input.orgId, input.actorId, "time.approve"));
+  const allowed = await actorAllowedSubsidiaryIds(exec, input.orgId, input.actorId);
   const rows = (await exec.execute<DecisionRow>(sql`
-    select id::text as id, capability_key as "capabilityKey",
-           actor_user_id::text as "actorUserId", subject_kind as "subjectKind",
-           subject_id::text as "subjectId", output_summary as "outputSummary",
-           sources, outcome, human_reviewer::text as "humanReviewer",
-           reviewed_at::text as "reviewedAt", model,
-           recorded_at::text as "recordedAt"
-      from ai_decisions
-     where org_id = ${input.orgId}::uuid
+    select d.id::text as id, d.capability_key as "capabilityKey",
+           d.actor_user_id::text as "actorUserId", d.subject_kind as "subjectKind",
+           d.subject_id::text as "subjectId", d.output_summary as "outputSummary",
+           d.sources, d.outcome, d.human_reviewer::text as "humanReviewer",
+           d.reviewed_at::text as "reviewedAt", d.model,
+           d.recorded_at::text as "recordedAt"
+      from ai_decisions d
+      left join worker_employments e
+        on d.subject_kind = 'employment' and e.org_id = d.org_id and e.id = d.subject_id
+      left join payroll_anomaly_flags f
+        on d.subject_kind = 'payroll_anomaly_flag' and f.org_id = d.org_id and f.id = d.subject_id
+      left join worker_employments fe
+        on fe.org_id = f.org_id and fe.id = f.employment_id
+     where d.org_id = ${input.orgId}::uuid
        -- Cast: an untyped null parameter makes PostgreSQL refuse the
        -- statement outright, so an unfiltered ledger read threw.
-       and (${input.capabilityKey ?? null}::text is null or capability_key = ${input.capabilityKey ?? null}::text)
-       and (${input.outcome ?? null}::text is null or outcome = ${input.outcome ?? null}::text)
-     order by recorded_at desc, id desc
+       and (${input.capabilityKey ?? null}::text is null or d.capability_key = ${input.capabilityKey ?? null}::text)
+       and (${input.outcome ?? null}::text is null or d.outcome = ${input.outcome ?? null}::text)
+       and (
+         d.subject_kind not in ('employment', 'payroll_anomaly_flag')
+         ${canPay
+           ? sql`or (d.subject_kind = 'employment' and d.subject_id is not null and e.id is not null
+                      ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)})`
+           : sql``}
+         ${canFlag
+           ? sql`or (d.subject_kind = 'payroll_anomaly_flag' and d.subject_id is not null and f.id is not null
+                      ${subsidiaryVisibleFilter(sql`fe.employer_subsidiary_id`, allowed)})`
+           : sql``}
+       )
+     order by d.recorded_at desc, d.id desc
      limit ${limit}`)).rows;
   return rows;
 }

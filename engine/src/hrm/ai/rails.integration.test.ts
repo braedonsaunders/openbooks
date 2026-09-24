@@ -9,7 +9,7 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
-import { logDecision, syncCapabilities, updateCapability } from "./governance.ts";
+import { listDecisions, logDecision, syncCapabilities, updateCapability } from "./governance.ts";
 import {
   checkPayrollFinalizeAllowed,
   flagsForEmployment,
@@ -568,6 +568,138 @@ test("flag reads and transitions see only the flag employment's employer", { ski
       (await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollB))).map((item) => item.source),
       [{ kind: "payroll_anomaly_flag", id: flagB }],
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("ai ledger fences employment subjects and carries no pay values", { skip: !DB }, async () => {
+  const { org, adminId } = await setup();
+  try {
+    // Two legal entities, one employment each.
+    const subB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    const seedEmployment = async (subsidiary: string, name: string): Promise<string> => {
+      const partyId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${partyId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+      const rows = (await db.execute<{ id: string }>(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${randomUUID()}, ${org.orgId}, ${partyId}, ${subsidiary}, 1)
+        returning id::text as id`)).rows;
+      return rows[0]!.id;
+    };
+    const empA = await seedEmployment(org.subsidiaryId, "Entity A Worker");
+    const empB = await seedEmployment(subB, "Entity B Worker");
+    const seedFlag = async (employmentId: string | null): Promise<string> => {
+      const rows = (await db.execute<{ id: string }>(sql`
+        insert into payroll_anomaly_flags
+          (org_id, pay_period_from, pay_period_to, employment_id, kind, severity,
+           detail, explanation, status, created_by)
+        values (${org.orgId}, '2026-09-01', '2026-09-30', ${employmentId},
+                'terminated_with_pay', 'block', '{"key":"ledger-probe"}'::jsonb,
+                'ledger probe flag', 'open', ${adminId})
+        returning id::text as id`)).rows;
+      return rows[0]!.id;
+    };
+    const flagA = await seedFlag(empA);
+    const flagB = await seedFlag(empB);
+    const flagNull = await seedFlag(null);
+    const log = (capabilityKey: string, subjectKind: string, subjectId: string | null, summary: string) =>
+      logDecision(db, {
+        orgId: org.orgId, actorId: adminId, capabilityKey, subjectKind, subjectId,
+        input: "ledger probe", output: "ledger probe", outputSummary: summary,
+        sources: [], outcome: "shown", model: "test",
+      });
+    await log("hrmExplainPay", "employment", empA, "pay trace reference A");
+    await log("hrmExplainPay", "employment", empB, "pay trace reference B");
+    await log("hrmPayrollAnomalies", "payroll_anomaly_flag", flagA, "flag reference A");
+    await log("hrmPayrollAnomalies", "payroll_anomaly_flag", flagB, "flag reference B");
+    await log("hrmPayrollAnomalies", "payroll_anomaly_flag", flagNull, "flag reference null");
+    await log("hrmPayrollAnomalies", "pay_period", null, "anomaly scan 2026-09-01 to 2026-09-30: 1 new, 0 already open");
+    await log("aiGovernanceLedger", "ai_capability", null, "capability hrmExplainPay updated (autonomy propose)");
+
+    const mkReader = async (name: string, roleKey: string, grants: string[], scope: string[] | null) => {
+      const actorId = await createScratchUser(org.orgId, name, roleKey);
+      for (const permission of grants) await grant(org.orgId, actorId, permission);
+      if (scope !== null) {
+        await db.execute(sql`
+          update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: scope })}::jsonb
+           where org_id = ${org.orgId} and key = ${roleKey}`);
+      }
+      return actorId;
+    };
+    const kindsOf = async (actorId: string): Promise<string[]> =>
+      (await listDecisions(db, { orgId: org.orgId, actorId })).map((d) => `${d.subjectKind}:${d.subjectId ?? "-"}`).sort();
+
+    // Setup-only admin: aggregates stay visible, every employment-linked
+    // row is fenced by the missing payroll/HR grant.
+    const setupOnly = await mkReader("Setup only", "setup_only", ["admin.setup.manage"], null);
+    assert.deepEqual(await kindsOf(setupOnly), ["ai_capability:-", "pay_period:-"]);
+
+    // HR reader scoped to A: A's employment and flag rows plus aggregates —
+    // never B's decisions, never the unattributable flag.
+    const hrScopedA = await mkReader("Scoped HR ledger", "ledger_hr_a",
+      ["admin.setup.manage", "hrm.employment.read"], [org.subsidiaryId]);
+    assert.deepEqual(await kindsOf(hrScopedA), [
+      "ai_capability:-",
+      `employment:${empA}`,
+      "pay_period:-",
+      `payroll_anomaly_flag:${flagA}`,
+    ]);
+
+    // Unrestricted payroll manager: the whole ledger.
+    const payrollFull = await mkReader("Payroll ledger", "ledger_payroll",
+      ["admin.setup.manage", "payroll.manage"], null);
+    assert.deepEqual(await kindsOf(payrollFull), [
+      "ai_capability:-",
+      `employment:${empA}`,
+      `employment:${empB}`,
+      "pay_period:-",
+      `payroll_anomaly_flag:${flagA}`,
+      `payroll_anomaly_flag:${flagB}`,
+      `payroll_anomaly_flag:${flagNull}`,
+    ].sort());
+
+    // A real pay trace logs a REFERENCE ledger row: employment and stub
+    // ids, line count — never the gross, net, or line amounts.
+    const partyA = (await db.execute<{ partyId: string }>(sql`
+      select worker_party_id::text as "partyId" from worker_employments
+       where org_id = ${org.orgId} and id = ${empA}`)).rows[0]?.partyId;
+    const scheduleId = randomUUID();
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                 pay_date_offset_days, is_active)
+      values (${scheduleId}, ${org.orgId}, 'Ledger probe sched', 'biweekly', 26, '2026-09-30', 3, true)`);
+    const runId = randomUUID();
+    await db.execute(sql`
+      insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
+                             currency, status, created_by, updated_by)
+      values (${org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
+              ${org.subsidiaryId}, '2026-09-30', 'CAD', 'draft', ${adminId}, ${adminId})`);
+    await db.execute(sql`
+      insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
+                            pay_date, tax_year, run_status)
+      values (${runId}, ${org.orgId}, ${scheduleId}, '2026-09-01', '2026-09-30', '2026-09-30', 2026, 'committed')`);
+    const stubId = randomUUID();
+    await db.execute(sql`
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
+        province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
+      values (${stubId}, ${org.orgId}, ${runId}, ${partyA}, ${empA},
+        'ON', 26, '2026-09-30', 2026, 'CAD', 7123.45, 5401.67, 800)`);
+    const trace = await explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId: empA });
+    assert.equal(trace.gross, "7123.4500");
+    const summaries = (await listDecisions(db, {
+      orgId: org.orgId, actorId: adminId, capabilityKey: "hrmExplainPay",
+    })).filter((d) => d.subjectId === empA).map((d) => d.outputSummary);
+    const logged = summaries.find((s) => s.includes(stubId));
+    assert.ok(logged, "the trace must log a reference row for its stub");
+    assert.ok(logged.includes(empA), "the reference names the employment");
+    assert.ok(!logged.includes("7123") && !logged.includes("5401"),
+      "gross and net must never appear in the ledger summary");
   } finally {
     await dropScratchOrg(org.orgId);
   }

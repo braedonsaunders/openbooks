@@ -292,6 +292,10 @@ export async function explainPay(
     sources,
   };
 
+  // The ledger summary is a REFERENCE, never values: gross, net and line
+  // amounts are readable only through the trace itself, which carries
+  // the scope gate above. A restricted ledger reader must learn that a
+  // trace exists for this employment and stub — never what it paid.
   await logDecision(exec, {
     orgId,
     actorId,
@@ -300,7 +304,7 @@ export async function explainPay(
     subjectId: employmentId,
     input: `explainPay employment=${employmentId} stub=${stub.id}`,
     output: `trace stub=${stub.id} gross=${stub.gross} net=${stub.netPay}`,
-    outputSummary: `pay trace for one employment (gross ${stub.gross}, net ${stub.netPay}, ${lines.length} lines)`,
+    outputSummary: `pay trace for employment ${employmentId} (stub ${stub.id}, ${lines.length} lines)`,
     sources,
     outcome: "shown",
     model: "explain-pay-service",
