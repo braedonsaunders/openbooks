@@ -557,6 +557,26 @@ export function BlockView({
         />
       )
     }
+
+    default: {
+      // Exhaustiveness enforcement for the closed Block union: every member
+      // has a case above, so `block` narrows to `never` here and a kind added
+      // without a case fails typecheck on this line. At runtime an unknown
+      // kind still lands here (a spec that bypassed schema validation) and
+      // renders a visible refusal instead of a silent hole.
+      const _exhaustive: never = block
+      void _exhaustive
+      const kind = (block as { kind?: unknown }).kind
+      const label = typeof kind === 'string' && kind.length > 0 ? kind : 'unknown'
+      return (
+        <p
+          role="alert"
+          className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+        >
+          Unsupported block &ldquo;{label}&rdquo; — update the renderer to handle this kind.
+        </p>
+      )
+    }
   }
 }
 
