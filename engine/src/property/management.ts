@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withBypass, withOrg, withOrgTransaction } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
-import { add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "../money/money.ts";
+import { add, cmp, fitsLedgerRange, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { apportion } from "../revenue/recognition.ts";
 import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
@@ -27,18 +27,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 /** Cash and control classes never serve as the offset for deposit interest or adjustments. */
 const DEPOSIT_OFFSET_EXCLUDED_TYPES = new Set(["asset_bank", "asset_receivable", "liability_payable", "liability_card"]);
 
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
-}
-
 function exactMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) throw new PropertyManagementError(`${label} must be an exact decimal`);
   // Every property money column is numeric(19,4): a wider figure would die in
   // Postgres as a raw storage failure (generic 500 at the route), so refuse
-  // it here with a named error before any write — one funnel for all callers.
-  if (wholeDigits(exact) > 15) throw new PropertyManagementError(`${label} is out of range — at most 15 whole digits fit the ledger`);
+  // it here with a named error before any write — one funnel for all callers,
+  // through the one shared ledger bound every amount gate uses.
+  if (!fitsLedgerRange(exact)) throw new PropertyManagementError(`${label} is out of range — at most 15 whole digits fit the ledger`);
   try {
     return normalizeMoney(exact);
   } catch {

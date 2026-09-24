@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { fromUnits, mulPercent, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import { fitsLedgerRange, fromUnits, mulPercent, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import type { ComputedTaxComponent } from "./tax.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
@@ -18,11 +18,6 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 export type TaxRateProviderKey = "avalara" | "taxjar" | "custom_http" | "manual";
 
 export class TaxRateProviderError extends Error {}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
-}
 
 export interface Address {
   line1?: string | null;
@@ -1726,7 +1721,9 @@ export async function persistTaxQuote(
   if (taxableExact === null || taxExact === null) {
     throw new TaxRateProviderError("quote amounts must be exact decimals");
   }
-  if (wholeDigits(taxableExact) > 15 || wholeDigits(taxExact) > 15) {
+  // One shared ledger bound (money.ts MAX_LEDGER_WHOLE_DIGITS): every amount
+  // gate refuses the same figures, so a quote that fits here fits the ledger.
+  if (!fitsLedgerRange(taxableExact) || !fitsLedgerRange(taxExact)) {
     throw new TaxRateProviderError("quote amounts must fit the ledger (at most 15 whole digits)");
   }
   const inserted = await runner.execute<{ id: string }>(sql`

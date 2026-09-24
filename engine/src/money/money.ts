@@ -225,6 +225,24 @@ export function normalizeMoney(value: string | number): string {
 }
 
 /**
+ * Whole-digit width of the ledger's numeric(19,4) money columns: fifteen
+ * whole digits. Every amount gate derives from this instead of hand-coding
+ * a magnitude, so script journals, custom GL lines, and UI drafts refuse
+ * the same figures with the same message.
+ */
+export const MAX_LEDGER_WHOLE_DIGITS = 15;
+
+/** Whole-digit width of a canonical decimal (leading zeros collapsed). */
+export function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
+}
+
+/** True when a canonical money string fits the ledger's numeric(19,4). */
+export function fitsLedgerRange(canonical: string): boolean {
+  return wholeDigits(canonical) <= MAX_LEDGER_WHOLE_DIGITS;
+}
+
+/**
  * Canonicalize a non-money decimal without crossing the IEEE-754 boundary.
  * Quantities and commercial rates legitimately carry more precision than
  * posted money, so callers choose an explicit scale (up to 10 places).

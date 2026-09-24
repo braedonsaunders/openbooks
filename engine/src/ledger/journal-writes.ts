@@ -3,7 +3,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, orgContext, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
-import { abs, cmp, isZero, normalizeMoney, sum } from "../money/money.ts";
+import { cmp, fitsLedgerRange, isZero, normalizeMoney, sum } from "../money/money.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { postDocument } from "./posting-document.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
@@ -184,7 +184,12 @@ export function validateJournalInput(input: ScriptJournalInput): {
   const lines = input.lines.map((l, i) => {
     const amount = persistJournalLineAmount(l.amount, i + 1);
     if (isZero(amount)) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
-    if (cmp(abs(amount), "10000000000000.0000") > 0) throw new JournalWriteError(`line ${i + 1}: amount out of range`);
+    // One shared ledger bound (money.ts MAX_LEDGER_WHOLE_DIGITS): the UI
+    // draft refuses the same figures with the same message, so a line that
+    // saves in the editor never dies here and vice versa.
+    if (!fitsLedgerRange(amount)) {
+      throw new JournalWriteError(`line ${i + 1}: amount is out of range — at most 15 whole digits fit the ledger`);
+    }
     if (!l.accountId && !l.accountCode) throw new JournalWriteError(`line ${i + 1}: accountId or accountCode required`);
     if (l.accountId && !UUID_RE.test(l.accountId)) throw new JournalWriteError(`line ${i + 1}: invalid accountId`);
     // Dimensions are fail-closed like accountId: a malformed id must never

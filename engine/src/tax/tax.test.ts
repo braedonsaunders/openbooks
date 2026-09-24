@@ -8,6 +8,7 @@ import {
   taxVaries,
 } from "./tax.ts";
 import { requireEffectiveRateRow } from "./persist.ts";
+import { persistTaxQuote, TaxRateProviderError } from "./rate-providers.ts";
 
 const code = (
   overrides: Partial<Parameters<typeof computeLineTaxes>[1][number]> = {},
@@ -436,4 +437,27 @@ test("a line with no tax profile passes its amount through untouched", () => {
   assert.equal(r.total, "100.0000");
   assert.deepEqual(r.components, []);
   assert.equal(r.overridden, false);
+});
+
+test("oversize quote amounts refuse before any write", async () => {
+  // The evidence columns are numeric(19,4): a 16-digit quote is refused with
+  // the named bound instead of dying in Postgres. The runner throws when
+  // called, so a bound regression that lets the quote through fails loudly
+  // instead of writing an unpostable row.
+  const unreachable = {
+    execute: (() => {
+      throw new Error("quote storage must not be reached");
+    }) as never,
+  };
+  await assert.rejects(
+    persistTaxQuote(
+      "org-1",
+      "config-1",
+      { taxableAmount: "1000000000000000", shipFrom: {}, shipTo: {}, quotedOn: "2026-01-15" },
+      { taxAmount: "1.0000", components: [], externalRef: null, raw: null, provider: "manual" },
+      null,
+      unreachable,
+    ),
+    (error: unknown) => error instanceof TaxRateProviderError && /must fit the ledger/.test(error.message),
+  );
 });

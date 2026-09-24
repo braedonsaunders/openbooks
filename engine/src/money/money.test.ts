@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, allocateLargestRemainder, cmp, div, divRate, formatMoney, isZero, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+import { abs, allocateLargestRemainder, cmp, div, divRate, fitsLedgerRange, formatMoney, isZero, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -429,4 +429,14 @@ test("allocateLargestRemainder always cross-foots to the rounded total", () => {
     );
     assert.equal(allocated.length, exact.length);
   }
+});
+
+test("the shared ledger bound holds fifteen whole digits, no more", () => {
+  // numeric(19,4): every amount gate derives from this, so a figure refused
+  // on one path is refused on all of them.
+  assert.equal(fitsLedgerRange("999999999999999.9999"), true);
+  assert.equal(fitsLedgerRange("20000000000000"), true);
+  assert.equal(fitsLedgerRange("1000000000000000"), false);
+  assert.equal(fitsLedgerRange("-1000000000000000"), false);
+  assert.equal(fitsLedgerRange("0.0000"), true);
 });

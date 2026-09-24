@@ -371,6 +371,26 @@ test("lease termination requires an explicit date before touching storage", asyn
   );
 });
 
+test("lease money wider than the ledger refuses by name before any proration", () => {
+  // numeric(19,4) holds fifteen whole digits on every path: a 16-digit
+  // charge is refused with the shared ledger message instead of dying in
+  // Postgres, while the 15-digit column maximum still prices.
+  assert.throws(
+    () => prorateLeaseCharge("1000000000000000", "2026-01-01", "2026-01-31", "2026-01-01", "2026-01-31"),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /at most 15 whole digits fit the ledger/.test(error.message),
+  );
+  assert.throws(
+    () => escalatedRent("1000000000000000", "fixed", "0"),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /at most 15 whole digits fit the ledger/.test(error.message),
+  );
+  assert.equal(
+    prorateLeaseCharge("999999999999999", "2026-01-01", "2026-01-31", "2026-01-01", "2026-01-31"),
+    "999999999999999.0000",
+  );
+});
+
 test("the generic lease-charge API refuses base_rent before touching storage", async () => {
   // Lease creation and controlled escalations are the only valid paths to a
   // base-rent row; the storage constraint (0057) backs this up for direct

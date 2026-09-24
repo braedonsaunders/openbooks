@@ -322,6 +322,85 @@ test("unbalanced script lines refuse posting with no journal write", { skip: !DB
   }
 });
 
+test("ledger-scale script lines share the journal bound", { skip: !DB }, async () => {
+  // numeric(19,4) holds fifteen whole digits on every path: a 14-digit
+  // script line posts like the same figure through script journals and UI
+  // drafts, and a 16-digit one is refused with the shared message.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+    const creditCode = await withOrgContext(org.orgId, () => accountNumber(org.accounts.clearing));
+    await withOrgContext(org.orgId, async () => {
+      await enableAllocScripting(org.orgId);
+      await db.execute(sql`
+        update app_roles set permissions = '["gl.post"]'::jsonb
+         where org_id = ${org.orgId} and key = 'poster'`);
+      await seedCustomGlScript(
+        org.orgId,
+        `function main(ctx) { return { lines: [
+          { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "20000000000000" },
+          { accountCode: ${JSON.stringify(creditCode)}, amount: "-20000000000000" },
+        ] }; }`,
+      );
+    });
+    const documentId = await withOrgContext(org.orgId, () =>
+      seedBalancedDraftJournal(org, "JE-CGL-HUGE", actorId),
+    );
+    const entryId = await postJournal(org, documentId, actorId);
+    const posted = await withOrgContext(org.orgId, () =>
+      db.execute<{ amount: string }>(sql`
+        select amount::text as amount from journal_lines
+         where org_id = ${org.orgId} and entry_id = ${entryId} and contributor_kind = 'script'
+         order by line_number`),
+    );
+    assert.deepEqual(posted.rows.map((l) => l.amount), ["20000000000000.0000", "-20000000000000.0000"]);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("oversize script lines are refused with the shared bound message", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+    await withOrgContext(org.orgId, async () => {
+      await enableAllocScripting(org.orgId);
+      await db.execute(sql`
+        update app_roles set permissions = '["gl.post"]'::jsonb
+         where org_id = ${org.orgId} and key = 'poster'`);
+      await seedCustomGlScript(
+        org.orgId,
+        `function main(ctx) { return { lines: [
+          { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "1000000000000000" },
+          { accountId: ${JSON.stringify(org.accounts.clearing)}, amount: "-1000000000000000" },
+        ] }; }`,
+      );
+    });
+    const documentId = await withOrgContext(org.orgId, () =>
+      seedBalancedDraftJournal(org, "JE-CGL-OVER", actorId),
+    );
+    await withOrgContext(org.orgId, () =>
+      submitAndReleaseIfUngated("journal", documentId, actorId),
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        postDocument(documentId, postingControlDeps(org), {
+          deferEffects: true,
+          audit: { actorId, source: "test" },
+        }),
+      ),
+      /at most 15 whole digits fit the ledger/,
+    );
+    const entries = await withOrgContext(org.orgId, () =>
+      db.execute<{ n: number }>(sql`
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`),
+    );
+    assert.equal(entries.rows[0]!.n, 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("unknown accountCode is refused with no write", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {

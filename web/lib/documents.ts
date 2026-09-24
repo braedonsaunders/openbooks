@@ -20,7 +20,7 @@ import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.
 import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { assertReturnSourceSelectable, type ReturnSide } from '@openbooks/engine/src/inventory/returnable-sources.ts'
 import { InventoryError } from '@openbooks/engine/src/inventory/contracts.ts'
-import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp, fitsLedgerRange, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
@@ -452,11 +452,11 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
         `Line ${n}: "${l.amount}" is not a valid amount — enter an exact decimal of at most 4 decimal places`,
       )
     }
-    // document_lines.amount is numeric(19,4): fifteen whole digits. The
-    // format check above admits any magnitude, so a pasted 16-digit figure
-    // died in Postgres with a storage error (a 500). Refuse it here with
-    // the line number.
-    if (wholeDigits(exactAmount) > 15) {
+    // document_lines.amount is numeric(19,4): the format check above admits
+    // any magnitude, so a pasted 16-digit figure died in Postgres with a
+    // storage error (a 500). Refuse it here with the line number, through
+    // the one shared ledger bound the script paths use.
+    if (!fitsLedgerRange(exactAmount)) {
       throw new DocumentEditError(
         422,
         `Line ${n}: amount is out of range — at most 15 whole digits fit the ledger`,
