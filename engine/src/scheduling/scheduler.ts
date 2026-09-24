@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { recordOutboxAttempt } from "../platform/telemetry.ts";
 import { WEB_TICK_LOCK_KEY, withTickClaim } from "./lock.ts";
 import {
   publishSchedulerTickHealth,
@@ -224,7 +225,20 @@ export async function claimDueScriptOccurrence(s: DueScript): Promise<ClaimedOcc
  * the BullMQ jobId; recovery retries use a suffixed key because a superseded
  * failed job with the original id would otherwise dedup the retry away. When
  * Redis is down the run happens inline in this process under the same
- * identity. A terminal outcome (or a final-attempt host failure) is mirrored
+ * identity.
+ *
+ * E07 decision — the inline fallback stays, explicitly. A deferred retry
+ * would rely on the bounded recovery pass; stamping an occurrence "lost"
+ * whose script never ran, just because Redis was down for two ticks, lies
+ * about what happened. Inline runs the script under the SAME occurrence
+ * identity (same journal idempotency namespace, same ledger row), so
+ * exactly-once holds with or without Redis. What was missing was any signal
+ * that the fallback fired: the catch below logs it, counts it, and writes a
+ * dispatch_failed ledger event BEFORE attempting inline, so a Redis outage
+ * is visible even if the inline run then hangs or crashes the process.
+ * Queue health itself is already surfaced by the /v1/health redis check.
+ *
+ * A terminal outcome (or a final-attempt host failure) is mirrored
  * onto the ledger row; an earlier host failure stays open for recovery.
  */
 async function dispatchScriptOccurrence(
@@ -246,8 +260,17 @@ async function dispatchScriptOccurrence(
       { jobId },
     );
     enqueued = true;
-  } catch {
-    /* Redis unavailable — fall through to inline */
+  } catch (enqueueError) {
+    const message = (enqueueError instanceof Error ? enqueueError.message : String(enqueueError)).slice(0, 1000);
+    console.error(
+      `[scheduler] script ${occ.scriptId} queue unavailable (${message}) — running occurrence inline under the same identity`,
+    );
+    recordOutboxAttempt("scheduler_outbox", "scheduled", "failed", 0);
+    if (!(await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "dispatch_failed", error: message, attempt }]))) {
+      console.warn(
+        `[scheduler] script ${occ.scriptId} occurrence ${occ.occurrenceKey} left its ledger row before the dispatch-failure event landed`,
+      );
+    }
   }
   if (enqueued) {
     // A false return means the ledger row moved on concurrently (recovered
