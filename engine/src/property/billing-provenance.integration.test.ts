@@ -249,7 +249,7 @@ test(
           select id::text as id from lease_schedule_lines
            where org_id = ${orgId} and lease_id = ${unauthoredLeaseId}`)).rows.map((r) => r.id),
       );
-      const manual = await scheduleLeaseCharges(orgId, operatorId, unauthoredLeaseId, "2028-12-31");
+      const manual = await scheduleLeaseCharges(orgId, operatorId, null, unauthoredLeaseId, "2028-12-31");
       assert.ok(manual.created > 0, "interactive scheduling extends beyond the scheduler horizon");
       const freshB = (await db.execute<{ id: string; createdBy: string | null; updatedBy: string | null }>(sql`
         select id::text as id, created_by::text as "createdBy", updated_by::text as "updatedBy"
@@ -276,7 +276,7 @@ test(
 
       // The deepest engine boundary bills a null-author lease with a NULL actor:
       // no fallback to lease authorship and no throw.
-      const sysBill = await billDueLeaseCharges(orgId, null, "2026-09-30", unauthoredLeaseId);
+      const sysBill = await billDueLeaseCharges(orgId, null, null, "2026-09-30", unauthoredLeaseId);
       assert.ok(sysBill.invoices.length >= 1, "null-author lease bills under a null actor");
       const sysDoc = (await db.execute<{ docActor: string | null; runSource: string | null }>(sql`
         select d.created_by::text as "docActor",
@@ -287,7 +287,7 @@ test(
 
       // Interactive billing attributes documents, lines, claimed schedule rows,
       // and posting evidence to gate.user.id.
-      const userBill = await billDueLeaseCharges(orgId, operatorId, "2026-10-31", unauthoredLeaseId);
+      const userBill = await billDueLeaseCharges(orgId, operatorId, null, "2026-10-31", unauthoredLeaseId);
       assert.ok(userBill.invoices.length >= 1);
       const userDocId = userBill.invoices.at(-1)!;
       const userDoc = (await db.execute<{
@@ -319,7 +319,7 @@ test(
       assert.equal(userDoc.staleScheduleRows, 0);
 
       // Interactive late fees carry the calling user and stay per-lease.
-      const assessed = await assessLeaseLateFees(orgId, operatorId, "2027-06-30");
+      const assessed = await assessLeaseLateFees(orgId, operatorId, null, "2027-06-30");
       assert.ok(assessed.created > 0, "interactive assessment creates overdue fees");
       const interactiveFees = (await db.execute<{
         total: number; foreignActor: number; foreignAuthor: number; detached: number;
@@ -532,14 +532,14 @@ test(
       // the day before June begins, June bills at the escalated amount.
       const escalation = await addLeaseEscalation({
         orgId,
-        actorId: operatorId,
+        actorId: operatorId, allowedSubsidiaryIds: null,
         leaseId,
         effectiveOn: "2026-06-01",
         method: "fixed",
         value: "100",
         requestId: `escalation-${randomUUID()}`,
       });
-      const applied = await applyLeaseEscalation(orgId, operatorId, escalation.id);
+      const applied = await applyLeaseEscalation(orgId, operatorId, null, escalation.id);
       assert.equal(applied.newAmount, "1100.0000");
 
       // Scheduler ticks over two months under system provenance.
@@ -609,6 +609,7 @@ test(
       const lease = await createPropertyLease({
         orgId,
         actorId,
+        allowedSubsidiaryIds: null,
         propertyId: fx.propertyId,
         tenantId: fx.org.customerId,
         leaseNumber: "L-AUDIT-1",
@@ -652,6 +653,7 @@ test(
       await updatePropertyLease({
         orgId,
         actorId,
+        allowedSubsidiaryIds: null,
         leaseId: lease.id,
         propertyId: fx.propertyId,
         tenantId: fx.org.customerId,
@@ -699,6 +701,7 @@ test(
       const charge = await addLeaseCharge({
         orgId,
         actorId,
+        allowedSubsidiaryIds: null,
         leaseId: lease.id,
         chargeType: "parking",
         description: "Reserved stall",
@@ -724,6 +727,7 @@ test(
       const escalation = await addLeaseEscalation({
         orgId,
         actorId,
+        allowedSubsidiaryIds: null,
         leaseId: lease.id,
         effectiveOn: "2027-01-01",
         method: "percent",
@@ -771,6 +775,7 @@ test(
           addLeaseCharge({
             orgId,
             actorId,
+            allowedSubsidiaryIds: null,
             leaseId: lease.id,
             chargeType: "storage",
             description: "Cage unit",
@@ -790,6 +795,7 @@ test(
       const retried = await addLeaseCharge({
         orgId,
         actorId,
+        allowedSubsidiaryIds: null,
         leaseId: lease.id,
         chargeType: "storage",
         description: "Cage unit",

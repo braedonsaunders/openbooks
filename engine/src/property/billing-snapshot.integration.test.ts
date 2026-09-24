@@ -37,7 +37,7 @@ for(const change of ['proration','charge','lease'] as const){
    if(change==='lease')await client.query('select id from property_leases where id=$1 for update',[lease]);
    if(change==='charge')await client.query('select id from lease_charges where id=$1 for update',[charge]);
    await client.query('select id from lease_schedule_lines where id=$1 for update',[schedule]);
-   pending=billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease);
+   pending=billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease);
    await blockedBy(pid);
    if(change==='proration')await client.query("update lease_schedule_lines set amount=500,period_ends_on='2026-07-15' where id=$1",[schedule]);
    if(change==='charge')await client.query("update lease_charges set description='Reviewed rent' where id=$1",[charge]);
@@ -52,14 +52,14 @@ for(const change of ['proration','charge','lease'] as const){
     assert.equal(result.invoiced,result.scheduled,'invoice must match the locked schedule amount');
     assert.ok(result.description.endsWith(result.through_date),'invoice period must match the locked schedule');
     if(change==='charge')assert.ok(result.description.startsWith('Reviewed rent'));
-    assert.deepEqual(await billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease),{billed:0,invoices:[]},'a replay cannot rebill the schedule');
+    assert.deepEqual(await billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease),{billed:0,invoices:[]},'a replay cannot rebill the schedule');
    }
   } finally {await client.query('rollback');client.release();await pending?.catch(()=>{});}
  }));
 }
 
 test('billing and a real rent escalation serialize without blocking replacement-charge references',{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,lease,charge,schedule)=>{
- const escalation=await addLeaseEscalation({orgId:org.orgId,actorId:actor,leaseId:lease,effectiveOn:'2026-07-16',method:'new_amount',value:'2000'});
+ const escalation=await addLeaseEscalation({orgId:org.orgId,actorId:actor,allowedSubsidiaryIds: null,leaseId:lease,effectiveOn:'2026-07-16',method:'new_amount',value:'2000'});
  let ready!:(pid:number)=>void;
  let proceed!:()=>void;
  const locked=new Promise<number>(resolve=>{ready=resolve;});
@@ -71,11 +71,11 @@ test('billing and a real rent escalation serialize without blocking replacement-
   await db.execute(sql`select id from lease_charges where id=${charge} and org_id=${org.orgId} for update`);
   ready(pid);
   await resume;
-  return applyLeaseEscalation(org.orgId,actor,escalation.id);
+  return applyLeaseEscalation(org.orgId, actor, null,escalation.id);
  });
  try {
   const pid=await locked;
-  pending=billDueLeaseCharges(org.orgId,actor,'2026-07-31',lease);
+  pending=billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease);
   await blockedBy(pid);
   proceed();
   const applied=await holder;

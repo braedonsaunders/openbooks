@@ -22,7 +22,7 @@ test('deposit reversal and refund cannot spend the same tenant balance', { skip:
       values (${propertyId},${org.orgId},${org.subsidiaryId},${org.locationId},'DEPOSIT','Deposit concurrency','commercial','active','CAD',${org.accounts.revenue},${org.accounts.deferred},${org.accounts.bank})`);
     await db.execute(sql`insert into property_leases (id,org_id,property_id,tenant_id,lease_number,status,starts_on)
       values (${leaseId},${org.orgId},${propertyId},${org.customerId},'DEPOSIT','active',${org.date})`);
-    const input = { orgId: org.orgId, actorId, leaseId, occurredOn: org.date };
+    const input = { orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date };
     const first = await recordSecurityDeposit({ ...input, kind: 'received', amount: '100' });
     await recordSecurityDeposit({ ...input, kind: 'received', amount: '100' });
     let staged!: () => void;

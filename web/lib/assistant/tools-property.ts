@@ -44,49 +44,11 @@ type OverdueLeaseRow = Workspace["overdueByLease"][number];
 type OverdueInvoiceRow = Workspace["overdueInvoices"][number];
 
 async function visibleWorkspace(orgId: string, allowed: ReadonlySet<string> | null, asOf?: string): Promise<Workspace> {
-  // Same narrowing as GET /api/property-management: restricted callers see
-  // only their subsidiaries' properties, and every child collection follows
-  // the visible properties and leases. The past-due aggregate is computed for
-  // the caller's date and re-aggregated over the visible documents only.
-  const workspace = await propertyManagementWorkspace(orgId, asOf);
-  if (allowed === null) return workspace;
-  const properties = workspace.properties.filter((row) => allowed.has(String(row.subsidiaryId)));
-  const propertyIds = new Set(properties.map((row) => String(row.id)));
-  const leases = workspace.leases.filter((row) => propertyIds.has(String(row.propertyId)));
-  const leaseIds = new Set(leases.map((row) => String(row.id)));
-  const camPools = workspace.camPools.filter((row) => propertyIds.has(String(row.propertyId)));
-  const poolIds = new Set(camPools.map((row) => String(row.id)));
-  const schedules = workspace.schedules.filter((row) => leaseIds.has(String(row.leaseId)));
-  const scheduleCountsByLease = workspace.scheduleCountsByLease.filter((row) => leaseIds.has(String(row.leaseId)));
-  const scheduleTotal = scheduleCountsByLease.reduce((acc, row) => acc + row.total, 0);
-  const overdueByLease = workspace.overdueByLease.filter((row) => leaseIds.has(String(row.leaseId)));
-  const overdueInvoices = workspace.overdueInvoices.filter((row) => leaseIds.has(String(row.leaseId)));
-  const overdueDocumentBalance = new Map<string, string>();
-  for (const line of overdueInvoices) {
-    if (!overdueDocumentBalance.has(String(line.documentId))) {
-      overdueDocumentBalance.set(String(line.documentId), String(line.openBalance ?? "0"));
-    }
-  }
-  return {
-    properties,
-    units: workspace.units.filter((row) => propertyIds.has(String(row.propertyId))),
-    leases,
-    charges: workspace.charges.filter((row) => leaseIds.has(String(row.leaseId))),
-    escalations: workspace.escalations.filter((row) => leaseIds.has(String(row.leaseId))),
-    schedules,
-    scheduleTotal,
-    schedulesTruncated: scheduleTotal > schedules.length,
-    scheduleCountsByLease,
-    overdueAsOf: workspace.overdueAsOf,
-    overdueTotal: sum([...overdueDocumentBalance.values()]),
-    overdueByLease,
-    overdueInvoices,
-    deposits: workspace.deposits.filter((row) => leaseIds.has(String(row.leaseId))),
-    camPools,
-    camAllocations: workspace.camAllocations.filter(
-      (row) => poolIds.has(String(row.poolId)) && leaseIds.has(String(row.leaseId)),
-    ),
-  };
+  // Same loader as GET /api/property-management: the engine scopes every
+  // query to the caller inside one repeatable-read snapshot, so the
+  // narrowing below is unnecessary — and filtering an org-wide read
+  // afterwards would tear across a concurrent rehome.
+  return propertyManagementWorkspace(orgId, allowed, asOf);
 }
 
 /** Rent-roll screen predicate: monthly charges in effect on the date. */
@@ -487,15 +449,14 @@ const propertyDeposits: AssistantToolDef = {
     let reconciliation: Awaited<ReturnType<typeof securityDepositReconciliation>>;
     try {
       // securityDepositReconciliation is the route's loader: it validates the
-      // date and re-checks the feature itself.
-      reconciliation = await securityDepositReconciliation(authz.user.orgId, a.asOf);
+      // date, re-checks the feature itself, and scopes every query to the
+      // caller inside one snapshot (with scoped totals), so no narrowing
+      // afterwards — filtering org-wide totals would tear across a rehome.
+      reconciliation = await securityDepositReconciliation(authz.user.orgId, authz.allowedSubsidiaryIds, a.asOf);
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "reconciliation failed" };
     }
-    // Same subsidiary narrowing and totals as the route.
-    const rows = authz.allowedSubsidiaryIds === null
-      ? reconciliation.rows
-      : reconciliation.rows.filter((row) => authz.allowedSubsidiaryIds!.has(String(row.subsidiaryId)));
+    const rows = reconciliation.rows;
     return {
       ok: true,
       data: {

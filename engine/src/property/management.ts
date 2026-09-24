@@ -10,6 +10,7 @@ import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import type { AdvancedBillingLine } from "../billing/advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
@@ -20,6 +21,62 @@ export class PropertyManagementError extends Error {
     super(message);
     this.name = "PropertyManagementError";
   }
+}
+
+/**
+ * Rehome-safe subsidiary gate for property writes, on the canonical
+ * lock-then-assert order: lock the property row FIRST (FOR UPDATE) so a
+ * concurrent subsidiary move either commits before this lock is taken (and
+ * is then observed) or waits behind it — then assert the caller may touch
+ * the freshly-read subsidiary. A missing row and an out-of-scope row are
+ * the same uniform not-found, so a restricted caller cannot probe another
+ * entity's records by id.
+ */
+async function lockPropertyInScope(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  propertyId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<string> {
+  const row = (await tx.execute<{ subsidiary_id: string }>(sql`
+    select subsidiary_id from managed_properties where org_id=${orgId} and id=${propertyId} for update`)).rows[0];
+  if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, String(row.subsidiary_id))) {
+    throw new ScopeNotFoundError();
+  }
+  return String(row.subsidiary_id);
+}
+
+/**
+ * Lease-anchored variant: locks the lease AND its property (lease first,
+ * matching the termination/lease-edit lock order) and asserts the caller
+ * may touch the property's freshly-read subsidiary.
+ */
+async function lockLeasePropertyInScope(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  leaseId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ propertyId: string; subsidiaryId: string }> {
+  const row = (await tx.execute<{ property_id: string; subsidiary_id: string }>(sql`
+    select p.id as property_id, p.subsidiary_id
+      from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+     where l.org_id=${orgId} and l.id=${leaseId} for update of l, p`)).rows[0];
+  if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, String(row.subsidiary_id))) {
+    throw new ScopeNotFoundError();
+  }
+  return { propertyId: String(row.property_id), subsidiaryId: String(row.subsidiary_id) };
+}
+
+/**
+ * Scope recheck for writes that already hold the parent lock through their
+ * own locked read: the subsidiary below was read under the lock, so the
+ * uniform denial closes the rehome window.
+ */
+function assertLockedSubsidiaryInScope(
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  subsidiaryId: string,
+): void {
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId)) throw new ScopeNotFoundError();
 }
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
@@ -295,7 +352,7 @@ async function audit(tx: Pick<typeof db, "execute">, orgId: string, table: strin
 }
 
 export async function createManagedProperty(input: {
-  orgId: string; actorId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null;
+  orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null;
   code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>;
   rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null;
   custom?: Record<string, unknown>;
@@ -346,6 +403,10 @@ export async function createManagedProperty(input: {
     `));
     const row = scope.rows[0];
     if (!row) throw new PropertyManagementError("Subsidiary not found");
+    // The target entity is fixed before the write: a restricted caller may
+    // only create into a subsidiary they can see, checked inside the same
+    // transaction that validates and inserts.
+    assertLockedSubsidiaryInScope(input.allowedSubsidiaryIds, input.subsidiaryId);
     if (!row.subsidiary_active) throw new PropertyManagementError("Subsidiary is inactive");
     if (!row.location_ok || !row.asset_ok) throw new PropertyManagementError("Property dimensions do not belong to this organization");
     if (!row.rent_account_ok || !row.cam_account_ok || !row.deposit_account_ok || !row.bank_account_ok) throw new PropertyManagementError("Property control accounts have incompatible account types");
@@ -371,6 +432,7 @@ export async function createManagedProperty(input: {
 export async function updateManagedProperty(input: {
   orgId: string;
   actorId: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   propertyId: string;
   subsidiaryId: string;
   locationId?: string | null;
@@ -476,6 +538,11 @@ export async function updateManagedProperty(input: {
     `));
     const row = scope.rows[0];
     if (!row) throw new PropertyManagementError("Property not found");
+    // The row is locked FOR UPDATE above: both the current and the target
+    // subsidiary are rechecked inside the transaction, so a concurrent
+    // rehome cannot slip a restricted edit onto another entity's property.
+    assertLockedSubsidiaryInScope(input.allowedSubsidiaryIds, row.currentSubsidiaryId);
+    assertLockedSubsidiaryInScope(input.allowedSubsidiaryIds, input.subsidiaryId);
     if (!row.subsidiary_ok) throw new PropertyManagementError("Subsidiary not found");
     if (!row.subsidiary_active) throw new PropertyManagementError("Subsidiary is inactive");
     const currentAssetId = row.currentFixedAssetId ? String(row.currentFixedAssetId) : null;
@@ -569,9 +636,10 @@ export async function updateManagedProperty(input: {
   });
 }
 
-export async function deleteManagedProperty(orgId: string, actorId: string, propertyId: string): Promise<void> {
+export async function deleteManagedProperty(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, propertyId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
+    await lockPropertyInScope(tx, orgId, propertyId, allowedSubsidiaryIds);
     const record = (await tx.execute<{ code: string; name: string; has_units: boolean; has_leases: boolean; has_cam: boolean }>(sql`
       select p.code,p.name,
         exists(select 1 from property_units where org_id=p.org_id and property_id=p.id) as has_units,
@@ -589,7 +657,7 @@ export async function deleteManagedProperty(orgId: string, actorId: string, prop
   });
 }
 
-export async function createPropertyUnit(input: { orgId: string; actorId: string; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null }): Promise<{ id: string }> {
+export async function createPropertyUnit(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null }): Promise<{ id: string }> {
   if (!input.code.trim()) throw new PropertyManagementError("Unit code is required");
   const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : exactMoney(input.rentableArea, "Rentable area");
   if (rentableArea != null && cmp(rentableArea, "0") <= 0) throw new PropertyManagementError("Rentable area must be positive");
@@ -598,6 +666,9 @@ export async function createPropertyUnit(input: { orgId: string; actorId: string
   }
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    // Lock the property before inserting: a concurrent rehome must not move
+    // the unit's entity out from under a restricted creator.
+    await lockPropertyInScope(tx, input.orgId, input.propertyId, input.allowedSubsidiaryIds);
     const result = (await tx.execute<{ id: string }>(sql`
       insert into property_units(org_id,property_id,code,name,unit_type,rentable_area,bedrooms,created_by,updated_by)
       select ${input.orgId},id,${input.code.trim()},${input.name ?? null},${input.unitType ?? null},${rentableArea},${input.bedrooms ?? null},${input.actorId},${input.actorId}
@@ -610,7 +681,7 @@ export async function createPropertyUnit(input: { orgId: string; actorId: string
 }
 
 export async function updatePropertyUnit(input: {
-  orgId: string; actorId: string; unitId: string; code: string; name?: string | null;
+  orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; unitId: string; code: string; name?: string | null;
   unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string;
   reason?: string | null;
 }): Promise<{ id: string }> {
@@ -627,13 +698,15 @@ export async function updatePropertyUnit(input: {
     const currentResult = (await tx.execute<{
       status: string; has_active_lease: boolean; code: string; name: string | null;
       unit_type: string | null; rentable_area: string | null; bedrooms: number | null;
+      property_id: string;
     }>(sql`
-      select u.status,u.code,u.name,u.unit_type,u.rentable_area::text as rentable_area,u.bedrooms,
+      select u.status,u.code,u.name,u.unit_type,u.rentable_area::text as rentable_area,u.bedrooms,u.property_id,
         exists(select 1 from property_leases l where l.org_id=u.org_id and l.unit_id=u.id and l.status in ('active','notice')) as has_active_lease
       from property_units u where u.org_id=${input.orgId} and u.id=${input.unitId} for update
     `));
     const current = currentResult.rows[0];
     if (!current) throw new PropertyManagementError("Unit not found");
+    await lockPropertyInScope(tx, input.orgId, String(current.property_id), input.allowedSubsidiaryIds);
     const status = input.status ?? current.status;
     if (!["vacant", "occupied", "notice", "offline"].includes(status)) throw new PropertyManagementError("Invalid unit status");
     if (current.has_active_lease && status !== current.status) throw new PropertyManagementError("End the active lease before changing unit availability");
@@ -669,7 +742,7 @@ export async function updatePropertyUnit(input: {
   });
 }
 
-export async function deletePropertyUnit(orgId: string, actorId: string, unitId: string): Promise<void> {
+export async function deletePropertyUnit(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, unitId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
     const record = (await tx.execute<{ code: string; propertyId: string; has_leases: boolean }>(sql`
@@ -679,6 +752,7 @@ export async function deletePropertyUnit(orgId: string, actorId: string, unitId:
     `));
     const row = record.rows[0];
     if (!row) throw new PropertyManagementError("Unit not found");
+    await lockPropertyInScope(tx, orgId, String(row.propertyId), allowedSubsidiaryIds);
     if (row.has_leases) throw new PropertyManagementError("A unit with lease history cannot be deleted; take it offline instead");
     await tx.execute(sql`delete from property_units where org_id=${orgId} and id=${unitId}`);
     await audit(tx, orgId, "property_units", unitId, "delete", actorId, { before: { code: row.code, propertyId: row.propertyId } });
@@ -686,7 +760,7 @@ export async function deletePropertyUnit(orgId: string, actorId: string, unitId:
 }
 
 export async function createPropertyLease(input: {
-  orgId: string; actorId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string;
+  orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string;
   startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number;
   securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null;
   lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean;
@@ -718,6 +792,7 @@ export async function createPropertyLease(input: {
   if (lateFeeType === "percent" && cmp(lateFeeValue, "100") > 0) throw new PropertyManagementError("Late-fee percent cannot exceed 100");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    await lockPropertyInScope(tx, input.orgId, input.propertyId, input.allowedSubsidiaryIds);
     const scope = (await tx.execute<{ id: string; rent_income_account_id: string | null; tenant_ok: boolean; unit_ok: boolean }>(sql`
       select p.id,p.rent_income_account_id,
         exists(select 1 from customer_roles cr where cr.org_id=p.org_id and cr.party_id=${input.tenantId} and cr.is_active) as tenant_ok,
@@ -755,7 +830,7 @@ export async function createPropertyLease(input: {
 }
 
 export async function updatePropertyLease(input: {
-  orgId: string; actorId: string; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string;
+  orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string;
   startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number;
   securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null;
   lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean;
@@ -798,6 +873,11 @@ export async function updatePropertyLease(input: {
     `));
     const current = currentResult.rows[0];
     if (!current || !["draft", "active", "notice"].includes(current.status)) throw new PropertyManagementError("Editable lease not found");
+    // Both the lease's current property and the move target are locked and
+    // rechecked: a draft lease may move properties, and the target check in
+    // the route runs outside this transaction.
+    await lockPropertyInScope(tx, input.orgId, String(current.propertyId), input.allowedSubsidiaryIds);
+    await lockPropertyInScope(tx, input.orgId, input.propertyId, input.allowedSubsidiaryIds);
     const duplicateNumber = (await tx.execute(sql`select 1 from property_leases
       where org_id=${input.orgId} and lease_number=${leaseNumber} and id<>${input.leaseId} limit 1`));
     if (duplicateNumber.rows.length) throw new PropertyManagementError("Lease number already exists");
@@ -888,9 +968,10 @@ export async function updatePropertyLease(input: {
   });
 }
 
-export async function cancelPropertyLease(orgId: string, actorId: string, leaseId: string): Promise<void> {
+export async function cancelPropertyLease(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, leaseId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
+    await lockLeasePropertyInScope(tx, orgId, leaseId, allowedSubsidiaryIds);
     const result = (await tx.execute<{ leaseNumber: string }>(sql`
       update property_leases set status='cancelled',updated_at=now(),updated_by=${actorId}
       where org_id=${orgId} and id=${leaseId} and status='draft' returning lease_number as "leaseNumber"
@@ -905,7 +986,7 @@ export function emptyRefToNull(value: string | null | undefined): string | null 
   return value == null || value.trim() === "" ? null : value;
 }
 
-export async function addLeaseCharge(input: { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; requestId?: string | null }): Promise<{ id: string }> {
+export async function addLeaseCharge(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; requestId?: string | null }): Promise<{ id: string }> {
   // Base rent versions exclusively through the lease term and its controlled
   // escalations; a caller-supplied second base_rent beside the canonical row
   // would double-bill every covered period (storage constraint 0060 refuses
@@ -927,6 +1008,7 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
   if (effectiveTo && effectiveTo < effectiveFrom) throw new PropertyManagementError("Charge end cannot precede start");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    await lockLeasePropertyInScope(tx, input.orgId, input.leaseId, input.allowedSubsidiaryIds);
     if (input.incomeAccountId != null) {
       if (!UUID_RE.test(input.incomeAccountId)) throw new PropertyManagementError("Charge income account is invalid");
       const income = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from accounts
@@ -1031,15 +1113,19 @@ async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: 
   return created;
 }
 
-export async function scheduleLeaseCharges(orgId: string, actorId: string | null, leaseId: string, throughOn?: string): Promise<{ created: number }> {
+export async function scheduleLeaseCharges(orgId: string, actorId: string | null, allowedSubsidiaryIds: ReadonlySet<string> | null, leaseId: string, throughOn?: string): Promise<{ created: number }> {
   await assertEnabled(db, orgId);
-  const created = await db.transaction((tx) => generateLeaseSchedule(tx, orgId, actorId, leaseId, throughOn));
+  const created = await db.transaction(async (tx) => {
+    await lockLeasePropertyInScope(tx, orgId, leaseId, allowedSubsidiaryIds);
+    return generateLeaseSchedule(tx, orgId, actorId, leaseId, throughOn);
+  });
   return { created };
 }
 
-export async function activatePropertyLease(orgId: string, actorId: string, leaseId: string): Promise<{ scheduled: number }> {
+export async function activatePropertyLease(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, leaseId: string): Promise<{ scheduled: number }> {
   return db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
+    await lockLeasePropertyInScope(tx, orgId, leaseId, allowedSubsidiaryIds);
     const lease = (await tx.execute(sql`select * from property_leases where org_id=${orgId} and id=${leaseId} for update`));
     const row = lease.rows[0]; if (!row || row.status !== "draft") throw new PropertyManagementError("Draft lease not found");
     if (row.unit_id) {
@@ -1054,12 +1140,13 @@ export async function activatePropertyLease(orgId: string, actorId: string, leas
   });
 }
 
-export async function terminatePropertyLease(orgId: string, actorId: string, leaseId: string, terminatedOn: string, reason: string): Promise<void> {
+export async function terminatePropertyLease(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, leaseId: string, terminatedOn: string, reason: string): Promise<void> {
   if (!reason.trim()) throw new PropertyManagementError("Termination reason is required");
   const effectiveOn = validDate(terminatedOn, "Termination date");
   if (!effectiveOn) throw new PropertyManagementError("Termination date is required");
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
+    await lockLeasePropertyInScope(tx, orgId, leaseId, allowedSubsidiaryIds);
     const lease = (await tx.execute<{ starts_on: string; unit_id: string | null }>(sql`select starts_on,unit_id from property_leases where org_id=${orgId} and id=${leaseId} and status in ('active','notice') for update`));
     const row = lease.rows[0];
     if (!row) throw new PropertyManagementError("Active lease not found");
@@ -1077,7 +1164,7 @@ export async function terminatePropertyLease(orgId: string, actorId: string, lea
   });
 }
 
-export async function addLeaseEscalation(input: { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; requestId?: string | null }): Promise<{ id: string }> {
+export async function addLeaseEscalation(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; requestId?: string | null }): Promise<{ id: string }> {
   const effectiveOn = validDate(input.effectiveOn, "Escalation date");
   if (!effectiveOn) throw new PropertyManagementError("Escalation date is required");
   const value = exactMoney(input.value, "Escalation value");
@@ -1085,6 +1172,7 @@ export async function addLeaseEscalation(input: { orgId: string; actorId: string
   if (!["percent", "fixed", "new_amount"].includes(input.method)) throw new PropertyManagementError("Invalid escalation method");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    await lockLeasePropertyInScope(tx, input.orgId, input.leaseId, input.allowedSubsidiaryIds);
     const duplicateDate = (await tx.execute(sql`select 1 from lease_escalations
       where org_id=${input.orgId} and lease_id=${input.leaseId} and effective_on=${effectiveOn} limit 1`));
     if (duplicateDate.rows.length) throw new PropertyManagementError("An escalation already exists for this date");
@@ -1104,11 +1192,12 @@ export async function addLeaseEscalation(input: { orgId: string; actorId: string
   });
 }
 
-export async function applyLeaseEscalation(orgId: string, actorId: string, escalationId: string): Promise<{ chargeId: string; newAmount: string }> {
+export async function applyLeaseEscalation(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, escalationId: string): Promise<{ chargeId: string; newAmount: string }> {
   const applied = await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
     const escalation = (await tx.execute<LeaseEscalationDbRow>(sql`select * from lease_escalations where org_id=${orgId} and id=${escalationId} for update`));
     const e = escalation.rows[0]; if (!e || e.status !== "scheduled") throw new PropertyManagementError("Scheduled escalation not found");
+    await lockLeasePropertyInScope(tx, orgId, String(e.lease_id), allowedSubsidiaryIds);
     // Escalations compound: each one is computed from the rent in force on its
     // effective date, so they must be applied in effective-date order. An
     // earlier scheduled one must go first, and a later one already applied
@@ -1227,15 +1316,22 @@ export interface LeaseLevellingResult {
 export async function levelLeaseRentStraightLine(
   orgId: string,
   actorId: string | null,
-  opts: { asOf: string; onlyLeaseId?: string },
+  opts: { asOf: string; onlyLeaseId?: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<LeaseLevellingResult[]> {
   await assertEnabled(db, orgId);
   const asOf = validDate(opts.asOf, "Levelling date")!;
+  // Levelling posts accrual journals per lease: without a lease pin the run
+  // is portfolio-wide, which a subsidiary-restricted caller may never run.
+  if (opts.allowedSubsidiaryIds !== null && !opts.onlyLeaseId) {
+    throw new PropertyManagementError("Bulk portfolio billing requires unrestricted subsidiary access", 403);
+  }
 
   const candidates = (await db.execute<{ id: string }>(sql`
-    select id from property_leases where org_id=${orgId} and status in ('active','notice') and ends_on is not null
-      and (${opts.onlyLeaseId ?? null}::uuid is null or id=${opts.onlyLeaseId ?? null})
-    order by lease_number,id`)).rows;
+    select l.id from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+    where l.org_id=${orgId} and l.status in ('active','notice') and l.ends_on is not null
+      and (${opts.onlyLeaseId ?? null}::uuid is null or l.id=${opts.onlyLeaseId ?? null})
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, opts.allowedSubsidiaryIds)}
+    order by l.lease_number,l.id`)).rows;
   const results: LeaseLevellingResult[] = [];
   for (const candidate of candidates) {
     const result = await withOrgTransaction(orgId, async () => {
@@ -1266,6 +1362,10 @@ export async function levelLeaseRentStraightLine(
          for share of p`));
       const lease = leaseRows.rows[0];
       if (!lease) return null;
+      // The lease row is claimed FOR UPDATE above and the property FOR
+      // SHARE: a concurrent rehome waits on the share lock, so this
+      // subsidiary is current and the uniform denial closes the race.
+      assertLockedSubsidiaryInScope(opts.allowedSubsidiaryIds, lease.subsidiaryId);
       // All contract, property and account inputs are read after claiming the
       // lease. An edit that committed while we waited must shape this accrual.
       const charges = (await db.execute<{ amount: string; frequency: "monthly" | "quarterly" | "annually" | "one_time"; effectiveFrom: string; effectiveTo: string | null }>(sql`
@@ -1432,9 +1532,15 @@ export async function levelLeaseRentStraightLine(
  * provenance instead of throwing or impersonating its historical author, and a
  * real user's id never leaks onto another actor's artifacts.
  */
-export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
+export async function billDueLeaseCharges(orgId: string, actorId: string | null, allowedSubsidiaryIds: ReadonlySet<string> | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
   const through = validDate(asOf, "Billing date") ?? await businessToday(orgId);
   await assertEnabled(db, orgId);
+  // Portfolio-wide billing without a lease or property pin touches every
+  // entity at once: a subsidiary-restricted caller may never run it, whether
+  // from the route or by calling the service directly.
+  if (allowedSubsidiaryIds !== null && !onlyLeaseId && !onlyPropertyId) {
+    throw new PropertyManagementError("Bulk portfolio billing requires unrestricted subsidiary access", 403);
+  }
   // Discovery only chooses candidates. It is not the financial snapshot used
   // for invoicing: lease controls and schedule proration may change while we wait.
   // Termination stops future rent, but its already-prorated earned schedules
@@ -1443,29 +1549,39 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
     select s.id,s.lease_id as "leaseId"
     from lease_schedule_lines s
     join property_leases l on l.id=s.lease_id and l.org_id=s.org_id
+    join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
     where s.org_id=${orgId} and s.status='scheduled' and s.due_on<=${through}
       and (l.status in ('active','notice') or (l.status='terminated' and s.period_ends_on<=least(l.ends_on,l.move_out_on)))
       and l.auto_invoice and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null})
-      and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null}) order by l.id,s.due_on,s.id
+      and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null})
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by l.id,s.due_on,s.id
   `));
   const groups = new Map<string, string[]>();
   for (const row of due.rows) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row.id]);
   const invoices: string[] = [];
   for (const [leaseId, candidateIds] of groups) {
     await withOrgTransaction(orgId, async () => {
-      // Lease before schedule matches termination/lease-edit lock order. A
-      // non-key lock still permits foreign-key checks when an escalation
-      // inserts its replacement charge before releasing the old charge lock.
+      // Escalations lock a charge before its schedules, so this loop takes
+      // the charge share lock FIRST — parked on a competing charge lock it
+      // holds nothing, and a concurrent escalation apply holding the charge
+      // can always run to commit. Lease before schedule still matches the
+      // termination/lease-edit lock order: a non-key lock still permits
+      // foreign-key checks when an escalation inserts its replacement charge
+      // before releasing the old charge lock.
+      await db.execute(sql`select id from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by id for share`);
       const lease = (await db.execute<{ property_id: string }>(sql`
         select property_id from property_leases where org_id=${orgId} and id=${leaseId}
           and status in ('active','notice','terminated') and auto_invoice
           and (${onlyPropertyId ?? null}::uuid is null or property_id=${onlyPropertyId ?? null})
         for no key update`)).rows[0];
       if (!lease) return;
+      // The property lock below serializes a concurrent rehome; the
+      // subsidiary is rechecked inside this same transaction, so a lease
+      // discovered in-scope cannot bill after its property moved away.
+      await lockPropertyInScope(db, orgId, String(lease.property_id), allowedSubsidiaryIds);
       await db.execute(sql`select id from managed_properties where org_id=${orgId} and id=${lease.property_id} for share`);
-      // Escalations lock a charge before its schedules. Freeze charge policy
-      // in that same order, then read the full invoice inputs under row locks.
-      await db.execute(sql`select id from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by id for share`);
+      // Charge policy was frozen above; read the full invoice inputs under
+      // row locks.
       await assertEnabled(db, orgId);
       const locked = (await db.execute<DueLeaseChargeRow>(sql`
         select s.id,s.lease_id as "leaseId",s.due_on as "dueOn",s.amount,s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",
@@ -1537,9 +1653,12 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
  * attributed at its own source line (never an org-wide stand-in) and commits
  * with its audit evidence inside one transaction.
  */
-export async function assessLeaseLateFees(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ created: number }> {
+export async function assessLeaseLateFees(orgId: string, actorId: string | null, allowedSubsidiaryIds: ReadonlySet<string> | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ created: number }> {
   const date = validDate(asOf ?? await businessToday(orgId), "Late-fee date")!;
   await assertEnabled(db, orgId);
+  if (allowedSubsidiaryIds !== null && !onlyLeaseId && !onlyPropertyId) {
+    throw new PropertyManagementError("Bulk portfolio billing requires unrestricted subsidiary access", 403);
+  }
   const overdue = (await db.execute<LateFeeRow>(sql`
     select (array_agg(s.id order by s.id))[1] as source_schedule_id,s.lease_id,
       l.late_fee_type,l.late_fee_value,p.rent_income_account_id,oi.transaction_open
@@ -1554,6 +1673,7 @@ export async function assessLeaseLateFees(orgId: string, actorId: string | null,
     where s.org_id=${orgId} and s.status='invoiced' and l.status in ('active','notice') and l.late_fee_type<>'none'
       and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null})
       and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null})
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
       and d.kind='customer_invoice' and d.status='posted' and d.due_date is not null and d.due_date + l.grace_days < ${date}
       and oi.transaction_open::numeric>0
     group by d.id,s.lease_id,l.late_fee_type,l.late_fee_value,p.rent_income_account_id,oi.transaction_open
@@ -1565,6 +1685,7 @@ export async function assessLeaseLateFees(orgId: string, actorId: string | null,
     // The fee pair and its audit evidence commit as one unit: a failed audit
     // insert rolls the fee back so the next run re-assesses cleanly.
     await withOrgTransaction(orgId, async () => {
+      await lockLeasePropertyInScope(db, orgId, String(row.lease_id), allowedSubsidiaryIds);
       const result = (await db.execute<{ id: string }>(sql`
         with charge as (insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,created_by,updated_by)
           select ${orgId},${row.lease_id},'late_fee','Late fee',${amount},'one_time',${date},${date},${row.rent_income_account_id},${actorId},${actorId}
@@ -1586,7 +1707,7 @@ export async function assessLeaseLateFees(orgId: string, actorId: string | null,
   return { created };
 }
 
-export async function recordSecurityDeposit(input: { orgId: string; actorId: string; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null }): Promise<{ id: string; entryId: string; balance: string }> {
+export async function recordSecurityDeposit(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null }): Promise<{ id: string; entryId: string; balance: string }> {
   const shape = depositPostingShape(input.kind);
   const occurredOn = validDate(input.occurredOn, "Deposit date")!;
   const amount = exactMoney(input.amount, "Deposit amount");
@@ -1609,18 +1730,22 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     const depositPeriod = await resolveCoveringPeriod(tx, input.orgId, occurredOn);
     if (!depositPeriod) throw new PropertyManagementError("An open GL period is required");
     const depositPeriodId: string = depositPeriod.id;
-    // The lease lock serializes balance-changing deposit activity. Journal,
-    // application, and append-only subledger evidence commit as one unit.
+    // The lease lock serializes balance-changing deposit activity. The
+    // property lock (exclusive, like the rehome path's own) serializes a
+    // concurrent subsidiary move, so the subsidiary below is read current
+    // and rechecked in the same statement window. Journal, application, and
+    // append-only subledger evidence commit as one unit.
     const ctx = (await tx.execute<DepositContextRow>(sql`
       select l.tenant_id,p.subsidiary_id,p.location_id,p.currency,s.base_currency,p.deposit_liability_account_id,p.default_bank_account_id,
         (select id from accounting_books where org_id=l.org_id and is_primary and is_active and posts_gl order by id limit 1 for share) as book_id
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
       join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       where l.org_id=${input.orgId} and l.id=${input.leaseId}
-      for update of l for share of p, s
+      for update of l, p for share of s
     `));
     const row = ctx.rows[0];
     if (!row) throw new PropertyManagementError("Lease not found");
+    assertLockedSubsidiaryInScope(input.allowedSubsidiaryIds, row.subsidiary_id);
     const liability = (await tx.execute<{ type: string }>(sql`select type from accounts
       where org_id=${input.orgId} and id=${row.deposit_liability_account_id} for share`)).rows[0];
     if (!row.deposit_liability_account_id || !liability || !["liability_current_other", "liability_long_term"].includes(liability.type)) {
@@ -1764,7 +1889,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
 }
 
 export async function reverseSecurityDepositTransaction(input: {
-  orgId: string; actorId: string; transactionId: string; occurredOn: string; reason: string;
+  orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; transactionId: string; occurredOn: string; reason: string;
 }): Promise<{ id: string; entryId: string; balance: string }> {
   const occurredOn = validDate(input.occurredOn, "Reversal date")!;
   const reason = input.reason.trim();
@@ -1795,10 +1920,13 @@ export async function reverseSecurityDepositTransaction(input: {
       join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
       join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       join journal_entries je on je.id=t.journal_entry_id and je.org_id=t.org_id
-      where t.org_id=${input.orgId} and t.id=${input.transactionId} for update of t
+      where t.org_id=${input.orgId} and t.id=${input.transactionId} for update of t, p
     `));
     const row = context.rows[0];
     if (!row) throw new PropertyManagementError("Deposit transaction not found");
+    // The property lock above serializes a concurrent rehome with the
+    // lease lock taken at the top: the subsidiary is current here.
+    assertLockedSubsidiaryInScope(input.allowedSubsidiaryIds, row.subsidiary_id);
     if (row.reversal_of_id || row.already_reversed) throw new PropertyManagementError("Deposit transaction is already a reversal or has already been reversed");
     // One period gate: the shared GL check replaces the raw
     // period_module_is_closed finder predicate. A reversal is new local
@@ -1913,7 +2041,7 @@ function camPoolSourceFingerprint(definition: {
   })).digest("hex");
 }
 
-export async function createCamPool(input: { orgId: string; actorId: string; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
+export async function createCamPool(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
   const name = input.name.trim();
   const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
   const endsOn = validDate(input.periodEndsOn, "CAM period end")!;
@@ -1924,6 +2052,7 @@ export async function createCamPool(input: { orgId: string; actorId: string; pro
   if (!expenseAccountIds.length) throw new PropertyManagementError("Select at least one CAM expense account");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    await lockPropertyInScope(tx, input.orgId, input.propertyId, input.allowedSubsidiaryIds);
     const accounts = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from accounts where org_id=${input.orgId} and id::text in
       (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`));
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
@@ -1943,7 +2072,7 @@ export async function createCamPool(input: { orgId: string; actorId: string; pro
   });
 }
 
-export async function updateCamPool(input: { orgId: string; actorId: string; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
+export async function updateCamPool(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
   const name = input.name.trim();
   const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
   const endsOn = validDate(input.periodEndsOn, "CAM period end")!;
@@ -1967,6 +2096,7 @@ export async function updateCamPool(input: { orgId: string; actorId: string; poo
     const before = editable.rows[0];
     if (!before) throw new PropertyManagementError("Editable CAM pool not found");
     const { propertyId: poolPropertyId, ...beforeSnapshot } = before;
+    await lockPropertyInScope(tx, input.orgId, String(poolPropertyId), input.allowedSubsidiaryIds);
     await assertNoSharedSourceOverlap(tx, input.orgId, poolPropertyId, startsOn, endsOn, expenseAccountIds, input.poolId);
     await tx.execute(sql`
       update cam_pools set name=${name},fiscal_year=${input.fiscalYear},period_starts_on=${startsOn},period_ends_on=${endsOn},
@@ -1985,9 +2115,13 @@ export async function updateCamPool(input: { orgId: string; actorId: string; poo
   });
 }
 
-export async function cancelCamPool(orgId: string, actorId: string, poolId: string): Promise<void> {
+export async function cancelCamPool(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, poolId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
+    const anchor = (await tx.execute<{ property_id: string }>(sql`
+      select property_id from cam_pools where org_id=${orgId} and id=${poolId} for update`)).rows[0];
+    if (!anchor) throw new PropertyManagementError("Open CAM pool not found");
+    await lockPropertyInScope(tx, orgId, String(anchor.property_id), allowedSubsidiaryIds);
     const result = (await tx.execute<{ name: string }>(sql`
       update cam_pools set status='cancelled',updated_at=now(),updated_by=${actorId}
       where org_id=${orgId} and id=${poolId} and status in ('draft','open') returning name
@@ -1997,17 +2131,18 @@ export async function cancelCamPool(orgId: string, actorId: string, poolId: stri
   });
 }
 
-export async function reopenFinalizedCamPool(orgId: string, actorId: string, poolId: string, reason: string): Promise<void> {
+export async function reopenFinalizedCamPool(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, poolId: string, reason: string): Promise<void> {
   const correctionReason = reason.trim();
   if (!correctionReason) throw new PropertyManagementError("CAM correction reason is required");
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const result = (await tx.execute<{ name: string; status: string }>(sql`
-      select cp.name,cp.status
+    const result = (await tx.execute<{ name: string; status: string; property_id: string }>(sql`
+      select cp.name,cp.status,cp.property_id
       from cam_pools cp where cp.org_id=${orgId} and cp.id=${poolId} for update
     `));
     const pool = result.rows[0];
     if (!pool || pool.status !== "finalized") throw new PropertyManagementError("Finalized CAM pool not found");
+    await lockPropertyInScope(tx, orgId, String(pool.property_id), allowedSubsidiaryIds);
     // A subquery evaluated before the pool lock wait can miss the biller that
     // just committed. Read dependencies in a new statement after owning the lock.
     const billed = (await tx.execute(sql`select id from cam_allocations
@@ -2019,11 +2154,14 @@ export async function reopenFinalizedCamPool(orgId: string, actorId: string, poo
   });
 }
 
-export async function finalizeCamPool(orgId: string, actorId: string, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
+export async function finalizeCamPool(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
   return db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
     const poolResult = (await tx.execute<CamPoolDbRow>(sql`select cp.*,p.location_id,p.subsidiary_id,p.currency from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
     const pool = poolResult.rows[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
+    // The pool+property join above locks both rows: the subsidiary read is
+    // current, so the scope recheck closes the rehome window.
+    assertLockedSubsidiaryInScope(allowedSubsidiaryIds, pool.subsidiary_id);
     if (!pool.location_id) throw new PropertyManagementError("Property needs a location dimension before CAM actuals can be calculated");
 
     // A tenant recovers one economic cost, irrespective of its parallel book
@@ -2235,15 +2373,17 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
   });
 }
 
-export async function billCamReconciliation(orgId: string, actorId: string, poolId: string, invoiceDate?: string): Promise<{ documents: string[] }> {
+export async function billCamReconciliation(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, poolId: string, invoiceDate?: string): Promise<{ documents: string[] }> {
   const date = validDate(invoiceDate ?? await businessToday(orgId), "CAM invoice date")!;
   await assertEnabled(db, orgId);
   // Discovery supplies identities only. Pool reopening and billing share the
   // pool lock, and complete invoice inputs are read under source/config locks.
   const allocations = (await db.execute<{ id: string }>(sql`
     select a.id from cam_allocations a join cam_pools cp on cp.id=a.pool_id and cp.org_id=a.org_id
+    join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id
     where a.org_id=${orgId} and a.pool_id=${poolId} and cp.status in ('finalized','invoiced')
-      and a.invoice_document_id is null and a.reconciliation_amount<>0 order by a.id`));
+      and a.invoice_document_id is null and a.reconciliation_amount<>0
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by a.id`));
   const documents: string[] = [];
   for (const candidate of allocations.rows) {
     await withOrgTransaction(orgId, async () => {
@@ -2262,6 +2402,10 @@ export async function billCamReconciliation(orgId: string, actorId: string, pool
         for update of a for share of l,p`));
       const row = locked.rows[0];
       if (!row) return;
+      // The allocation read holds the pool FOR UPDATE and the lease and
+      // property FOR SHARE: a concurrent rehome waits on the share lock,
+      // so this subsidiary is current and the recheck closes the race.
+      assertLockedSubsidiaryInScope(allowedSubsidiaryIds, row.subsidiary_id);
       if (!row.cam_income_account_id) throw new PropertyManagementError("Configure the property CAM income account first");
       const credit = cmp(row.amount, "0") < 0; const amount = credit ? neg(row.amount) : row.amount; const key = `cam:${poolId}:${row.id}`;
       const generation = await propertyBillingGeneration(orgId, key, credit ? "customer_credit" : "customer_invoice");
@@ -2286,6 +2430,12 @@ export async function billCamReconciliation(orgId: string, actorId: string, pool
     });
   }
   await db.transaction(async (tx) => {
+    // A missing pool stamps nothing (the update below affects zero rows);
+    // a present one is locked and rechecked so a restricted caller cannot
+    // flip another entity's pool after a rehome.
+    const anchor = (await tx.execute<{ property_id: string }>(sql`
+      select property_id from cam_pools where org_id=${orgId} and id=${poolId}`)).rows[0];
+    if (anchor) await lockPropertyInScope(tx, orgId, String(anchor.property_id), allowedSubsidiaryIds);
     const stamped = (await tx.execute<{ id: string }>(sql`
       update cam_pools cp set status='invoiced',updated_at=now(),updated_by=${actorId}
       where cp.org_id=${orgId} and cp.id=${poolId} and cp.status='finalized'
@@ -2301,9 +2451,14 @@ export async function billCamReconciliation(orgId: string, actorId: string, pool
   return { documents };
 }
 
-export async function securityDepositReconciliation(orgId: string, asOf?: string) {
+export async function securityDepositReconciliation(orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, asOf?: string) {
   const throughOn = validDate(asOf ?? await businessToday(orgId), "Reconciliation date")!;
   await assertEnabled(db, orgId);
+  // One repeatable-read snapshot, scoped before aggregating: org-wide
+  // totals computed first and filtered after would mix a stale header with
+  // fresh lines across a concurrent rehome, so the scope predicate sits on
+  // the property read and every subordinate follows those ids.
+  return withScopeSnapshot(orgId, async () => {
   const properties = (await db.execute<DepositPropertyRow>(sql`
     select p.id as "propertyId",p.code as "propertyCode",p.name as "propertyName",p.subsidiary_id as "subsidiaryId",p.location_id as "locationId",p.currency,
       p.deposit_liability_account_id as "liabilityAccountId",concat_ws(' · ',la.number,la.name) as "liabilityAccountName",
@@ -2328,14 +2483,17 @@ export async function securityDepositReconciliation(orgId: string, asOf?: string
     from managed_properties p
     left join accounts la on la.id=p.deposit_liability_account_id and la.org_id=p.org_id
     left join accounts ba on ba.id=p.default_bank_account_id and ba.org_id=p.org_id
-    where p.org_id=${orgId} order by p.name
+    where p.org_id=${orgId}
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by p.name
   `));
+  const scopedPropertyIds = uuidArray(properties.rows.map((row) => String(row.propertyId)));
   const banks = (await db.execute<DepositBankRow>(sql`
     select l.property_id as "propertyId",d.bank_account_id as "bankAccountId",concat_ws(' · ',a.number,a.name) as "bankAccountName",
       sum(case when d.kind='received' then d.amount when d.kind='refunded' then -d.amount else 0 end)::text as "cashActivity"
     from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id
     join accounts a on a.id=d.bank_account_id and a.org_id=d.org_id
     where d.org_id=${orgId} and d.occurred_on<=${throughOn} and d.bank_account_id is not null
+      and l.property_id = any(${scopedPropertyIds}::uuid[])
     group by l.property_id,d.bank_account_id,a.number,a.name order by a.number,a.name
   `));
   const leases = (await db.execute<DepositLeaseRow>(sql`
@@ -2345,7 +2503,8 @@ export async function securityDepositReconciliation(orgId: string, asOf?: string
     from property_leases l join parties t on t.id=l.tenant_id and t.org_id=l.org_id
     left join property_units u on u.id=l.unit_id and u.org_id=l.org_id
     left join security_deposit_transactions d on d.lease_id=l.id and d.org_id=l.org_id and d.occurred_on<=${throughOn}
-    where l.org_id=${orgId} group by l.id,t.display_name,u.code order by l.lease_number
+    where l.org_id=${orgId} and l.property_id = any(${scopedPropertyIds}::uuid[])
+    group by l.id,t.display_name,u.code order by l.lease_number
   `));
   // The location control balance is keyed by (liability account, location)
   // only, so every property sharing both reads the SAME combined GL balance.
@@ -2424,6 +2583,7 @@ export async function securityDepositReconciliation(orgId: string, asOf?: string
       configurationRequired: rows.filter((row) => row.status === "configuration_required").length,
     },
   };
+  });
 }
 
 export type ManagedPropertyRow = {
@@ -2588,49 +2748,57 @@ export type OverdueInvoiceRow = {
 /** Schedule-list preview depth. Totals and money never come from the preview. */
 export const SCHEDULE_PREVIEW_LIMIT = 2000;
 
-export async function propertyManagementWorkspace(orgId: string, asOf?: string) {
+export async function propertyManagementWorkspace(orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, asOf?: string) {
   const overdueOn = validDate(asOf, "Overdue date") ?? await businessToday(orgId);
-  const [properties, units, leases, charges, escalations, schedules, scheduleTotal, scheduleCounts, overdue, deposits, pools, allocations] = await Promise.all([
-    db.execute<ManagedPropertyRow>(sql`select p.id,p.code,p.name,p.property_type as "propertyType",p.status,p.currency,p.address,p.custom,p.subsidiary_id as "subsidiaryId",s.name as "subsidiaryName",p.location_id as "locationId",l.name as "locationName",p.fixed_asset_id as "fixedAssetId",
+  // One repeatable-read snapshot for all twelve reads, every one scoped to
+  // the caller: a property rehomed mid-read can neither leak another
+  // entity's leases, charges and deposits into this workspace nor tear it
+  // (stale A header with fresh B lines). Subordinates follow the in-scope
+  // property ids read first in this same snapshot.
+  return withScopeSnapshot(orgId, async () => {
+  const properties = await db.execute<ManagedPropertyRow>(sql`select p.id,p.code,p.name,p.property_type as "propertyType",p.status,p.currency,p.address,p.custom,p.subsidiary_id as "subsidiaryId",s.name as "subsidiaryName",p.location_id as "locationId",l.name as "locationName",p.fixed_asset_id as "fixedAssetId",
       p.rent_income_account_id as "rentIncomeAccountId",p.cam_income_account_id as "camIncomeAccountId",p.deposit_liability_account_id as "depositLiabilityAccountId",p.default_bank_account_id as "defaultBankAccountId",
       count(u.id)::int as "unitCount",count(u.id) filter(where u.status='occupied')::int as "occupiedUnits" from managed_properties p join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
-      left join locations l on l.id=p.location_id and l.org_id=p.org_id left join property_units u on u.property_id=p.id and u.org_id=p.org_id where p.org_id=${orgId} group by p.id,s.name,l.name order by p.name`),
-    db.execute<PropertyUnitRow>(sql`select id,property_id as "propertyId",code,name,unit_type as "unitType",rentable_area as "rentableArea",bedrooms,status from property_units where org_id=${orgId} order by property_id,code`),
-    db.execute<PropertyLeaseRow>(sql`select l.id,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.status,l.starts_on as "startsOn",l.ends_on as "endsOn",
+      left join locations l on l.id=p.location_id and l.org_id=p.org_id left join property_units u on u.property_id=p.id and u.org_id=p.org_id where p.org_id=${orgId}
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} group by p.id,s.name,l.name order by p.name`);
+  const propertyIds = uuidArray(properties.rows.map((row) => String(row.id)));
+  const leases = await db.execute<PropertyLeaseRow>(sql`select l.id,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.status,l.starts_on as "startsOn",l.ends_on as "endsOn",
       l.billing_day as "billingDay",l.payment_terms_days as "paymentTermsDays",l.security_deposit_required as "securityDepositRequired",l.cam_method as "camMethod",l.cam_share_percent as "camSharePercent",
       l.late_fee_type as "lateFeeType",l.late_fee_value as "lateFeeValue",l.grace_days as "graceDays",l.auto_invoice as "autoInvoice",l.auto_post as "autoPost",l.notes,
       (select c.amount from lease_charges c where c.org_id=l.org_id and c.lease_id=l.id and c.charge_type='base_rent' order by c.effective_from desc limit 1) as "baseRent",
       p.name as "propertyName",u.code as "unitCode",t.display_name as "tenantName",p.currency,
       coalesce((select sum(case when d.kind in ('received','interest','adjustment_increase') then d.amount else -d.amount end) from security_deposit_transactions d where d.org_id=l.org_id and d.lease_id=l.id),0)::text as "depositBalance"
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id left join property_units u on u.id=l.unit_id and u.org_id=l.org_id
-      join parties t on t.id=l.tenant_id and t.org_id=l.org_id where l.org_id=${orgId} order by case l.status when 'active' then 0 when 'notice' then 1 when 'draft' then 2 else 3 end,l.lease_number`),
-    db.execute<LeaseChargeRow>(sql`select id,lease_id as "leaseId",charge_type as "chargeType",description,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} order by effective_from`),
-    db.execute<LeaseEscalationRow>(sql`select id,lease_id as "leaseId",effective_on as "effectiveOn",method,value,previous_amount as "previousAmount",new_amount as "newAmount",status from lease_escalations where org_id=${orgId} order by effective_on,id`),
-    db.execute<LeaseScheduleRow>(sql`select s.id,s.lease_id as "leaseId",s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",s.due_on as "dueOn",s.amount,s.status,s.invoice_document_id as "invoiceDocumentId",d.document_number as "invoiceNumber",
+      join parties t on t.id=l.tenant_id and t.org_id=l.org_id where l.org_id=${orgId} and l.property_id = any(${propertyIds}::uuid[])
+      order by case l.status when 'active' then 0 when 'notice' then 1 when 'draft' then 2 else 3 end,l.lease_number`);
+  const leaseIds = uuidArray(leases.rows.map((row) => String(row.id)));
+  const units = await db.execute<PropertyUnitRow>(sql`select id,property_id as "propertyId",code,name,unit_type as "unitType",rentable_area as "rentableArea",bedrooms,status from property_units where org_id=${orgId} and property_id = any(${propertyIds}::uuid[]) order by property_id,code`);
+  const charges = await db.execute<LeaseChargeRow>(sql`select id,lease_id as "leaseId",charge_type as "chargeType",description,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id = any(${leaseIds}::uuid[]) order by effective_from`);
+  const escalations = await db.execute<LeaseEscalationRow>(sql`select id,lease_id as "leaseId",effective_on as "effectiveOn",method,value,previous_amount as "previousAmount",new_amount as "newAmount",status from lease_escalations where org_id=${orgId} and lease_id = any(${leaseIds}::uuid[]) order by effective_on,id`);
+  const schedules = await db.execute<LeaseScheduleRow>(sql`select s.id,s.lease_id as "leaseId",s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",s.due_on as "dueOn",s.amount,s.status,s.invoice_document_id as "invoiceDocumentId",d.document_number as "invoiceNumber",
       d.status as "invoiceStatus",d.due_date as "invoiceDueOn",d.open_balance as "invoiceOpenBalance",c.charge_type as "chargeType",c.description
       from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
-      left join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.org_id=${orgId} order by s.due_on desc limit ${SCHEDULE_PREVIEW_LIMIT}`),
+      left join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.org_id=${orgId} and s.lease_id = any(${leaseIds}::uuid[]) order by s.due_on desc limit ${SCHEDULE_PREVIEW_LIMIT}`);
     // Completeness evidence for the capped preview above: the full line
     // count overall and per lease, so lists render an explicit
     // "showing N of M" instead of silently dropping older lines.
-    db.execute<{ total: number }>(sql`select count(*)::int as total from lease_schedule_lines where org_id=${orgId}`),
-    db.execute<ScheduleCountRow>(sql`select lease_id as "leaseId",count(*)::int as total from lease_schedule_lines where org_id=${orgId} group by lease_id`),
+  const scheduleTotal = await db.execute<{ total: number }>(sql`select count(*)::int as total from lease_schedule_lines where org_id=${orgId} and lease_id = any(${leaseIds}::uuid[])`);
+  const scheduleCounts = await db.execute<ScheduleCountRow>(sql`select lease_id as "leaseId",count(*)::int as total from lease_schedule_lines where org_id=${orgId} and lease_id = any(${leaseIds}::uuid[]) group by lease_id`);
     // Past-due balances age the native posted document's remaining balance
     // once per document, over the COMPLETE set of schedule lines — never the
     // capped preview, which drops older lines first. One rent invoice covers
     // one lease (billing groups lines by lease), so the per-lease balance is
     // exact and the portfolio total de-duplicates by document.
-    db.execute<OverdueInvoiceRow>(sql`select s.lease_id as "leaseId",d.id as "documentId",d.document_number as "documentNumber",
+  const overdue = await db.execute<OverdueInvoiceRow>(sql`select s.lease_id as "leaseId",d.id as "documentId",d.document_number as "documentNumber",
       d.due_date as "dueOn",d.open_balance as "openBalance"
       from lease_schedule_lines s join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id
-      where s.org_id=${orgId} and d.status='posted' and d.due_date<${overdueOn}
-      group by s.lease_id,d.id,d.document_number,d.due_date,d.open_balance`),
-    db.execute<SecurityDepositRow>(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.bank_account_id as "bankAccountId",d.offset_account_id as "offsetAccountId",d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.reversal_of_id as "reversalOfId",d.memo,
+      where s.org_id=${orgId} and s.lease_id = any(${leaseIds}::uuid[]) and d.status='posted' and d.due_date<${overdueOn}
+      group by s.lease_id,d.id,d.document_number,d.due_date,d.open_balance`);
+  const deposits = await db.execute<SecurityDepositRow>(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.bank_account_id as "bankAccountId",d.offset_account_id as "offsetAccountId",d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.reversal_of_id as "reversalOfId",d.memo,
       exists(select 1 from security_deposit_transactions r where r.org_id=d.org_id and r.reversal_of_id=d.id) as reversed
-      from security_deposit_transactions d where d.org_id=${orgId} order by d.occurred_on desc,d.created_at desc`),
-    db.execute<CamPoolRow>(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} order by fiscal_year desc,name`),
-    db.execute<CamAllocationRow>(sql`select id,pool_id as "poolId",lease_id as "leaseId",share_percent as "sharePercent",budget_allocation as "budgetAllocation",actual_allocation as "actualAllocation",billed_estimate as "billedEstimate",reconciliation_amount as "reconciliationAmount",invoice_document_id as "invoiceDocumentId" from cam_allocations where org_id=${orgId} order by created_at`),
-  ]);
+      from security_deposit_transactions d where d.org_id=${orgId} and d.lease_id = any(${leaseIds}::uuid[]) order by d.occurred_on desc,d.created_at desc`);
+  const pools = await db.execute<CamPoolRow>(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} and property_id = any(${propertyIds}::uuid[]) order by fiscal_year desc,name`);
+  const allocations = await db.execute<CamAllocationRow>(sql`select id,pool_id as "poolId",lease_id as "leaseId",share_percent as "sharePercent",budget_allocation as "budgetAllocation",actual_allocation as "actualAllocation",billed_estimate as "billedEstimate",reconciliation_amount as "reconciliationAmount",invoice_document_id as "invoiceDocumentId" from cam_allocations where org_id=${orgId} and lease_id = any(${leaseIds}::uuid[]) order by created_at`);
   const overdueDocumentBalance = new Map<string, string>();
   const overdueByLeaseBalance = new Map<string, string>();
   for (const line of overdue.rows) {
@@ -2651,6 +2819,7 @@ export async function propertyManagementWorkspace(orgId: string, asOf?: string) 
     overdueInvoices: overdue.rows.map((line) => ({ ...line, openBalance: normalizeMoney(line.openBalance ?? "0") })),
     deposits: deposits.rows, camPools: pools.rows, camAllocations: allocations.rows,
   };
+  });
 }
 
 /**
@@ -2678,10 +2847,12 @@ export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: nu
         const leases = (await db.execute<{ id: string }>(sql`select id from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`));
         for (const lease of leases.rows) {
           // Null-author leases are ordinary scheduler work; no actor is consulted.
-          await scheduleLeaseCharges(org.id, null, lease.id);
+          // The scope sentinel is an explicit null: the engine-initiated tick
+          // is organization-wide by design, never by omission.
+          await scheduleLeaseCharges(org.id, null, null, lease.id);
         }
-        const fees = await assessLeaseLateFees(org.id, null, date);
-        const billed = await billDueLeaseCharges(org.id, null, date);
+        const fees = await assessLeaseLateFees(org.id, null, null, date);
+        const billed = await billDueLeaseCharges(org.id, null, null, date);
         result.billed += billed.billed; result.invoices += billed.invoices.length; result.lateFees += fees.created;
         // Level escalating operating leases after billing, like every other
         // scheduler step: the true-up is idempotent per lease per period, and a
@@ -2689,7 +2860,7 @@ export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: nu
         // closed period) fails this org's run visibly (recorded in orgErrors)
         // instead of silently skipping the accrual. Flat and open-ended leases
         // return a zero delta and post nothing.
-        const levelling = await levelLeaseRentStraightLine(org.id, null, { asOf: date });
+        const levelling = await levelLeaseRentStraightLine(org.id, null, { asOf: date, allowedSubsidiaryIds: null });
         result.levelled += levelling.filter((row) => row.entryId !== null).length;
       });
     } catch (e) {

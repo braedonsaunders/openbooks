@@ -44,7 +44,7 @@ test("cross-currency deposit application refuses by name", { skip: !DB }, async 
 
     // Tenant holds a CAD 100 deposit.
     await recordSecurityDeposit({
-      orgId: org.orgId, actorId: actor, leaseId,
+      orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, leaseId,
       kind: "received", occurredOn: org.date, amount: "100",
     });
 
@@ -70,7 +70,7 @@ test("cross-currency deposit application refuses by name", { skip: !DB }, async 
 
     await assert.rejects(
       recordSecurityDeposit({
-        orgId: org.orgId, actorId: actor, leaseId,
+        orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, leaseId,
         kind: "applied", occurredOn: org.date, amount: "50", appliedDocumentId: usdInvoiceId,
       }),
       (error: unknown) => {
@@ -92,10 +92,10 @@ test("cross-currency deposit application refuses by name", { skip: !DB }, async 
 
     // Same-currency control: billing the lease cuts a posted CAD invoice and
     // the deposit applies exactly as before (same_currency, rate 1, CAD legs).
-    const billed = await billDueLeaseCharges(org.orgId, actor, "2026-07-31", leaseId);
+    const billed = await billDueLeaseCharges(org.orgId, actor, null, "2026-07-31", leaseId);
     assert.equal(billed.billed, 1);
     const applied = await recordSecurityDeposit({
-      orgId: org.orgId, actorId: actor, leaseId,
+      orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null, leaseId,
       kind: "applied", occurredOn: org.date, amount: "50", appliedDocumentId: billed.invoices[0]!,
     });
     assert.equal(applied.balance, "50.0000");

@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
@@ -36,6 +36,7 @@ import {
   terminatePropertyLease,
   updateCamPool,
 } from "@openbooks/engine/src/property/management.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { guardPermission } from "../../../lib/authz";
 import type { Authz } from "../../../lib/authz";
 import {
@@ -72,71 +73,14 @@ export async function GET() {
   if (authz instanceof NextResponse) return authz;
   const feature = await guardPropertyManagementFeature(authz.user.orgId);
   if (feature) return feature;
-  const workspace = await propertyManagementWorkspace(authz.user.orgId);
-  if (!authz.allowedSubsidiaryIds) return NextResponse.json(workspace);
-  const properties = workspace.properties.filter((row) =>
-    authz.allowedSubsidiaryIds!.has(String(row.subsidiaryId)),
+  // The workspace loader scopes every query to the caller inside one
+  // repeatable-read snapshot: filtering an org-wide read afterwards would
+  // mix a stale header with fresh lines across a concurrent rehome.
+  const workspace = await propertyManagementWorkspace(
+    authz.user.orgId,
+    authz.allowedSubsidiaryIds,
   );
-  const propertyIds = new Set(properties.map((row) => String(row.id)));
-  const units = workspace.units.filter((row) =>
-    propertyIds.has(String(row.propertyId)),
-  );
-  const leases = workspace.leases.filter((row) =>
-    propertyIds.has(String(row.propertyId)),
-  );
-  const leaseIds = new Set(leases.map((row) => String(row.id)));
-  const camPools = workspace.camPools.filter((row) =>
-    propertyIds.has(String(row.propertyId)),
-  );
-  const poolIds = new Set(camPools.map((row) => String(row.id)));
-  const schedules = workspace.schedules.filter((row) =>
-    leaseIds.has(String(row.leaseId)),
-  );
-  const scheduleCountsByLease = workspace.scheduleCountsByLease.filter((row) =>
-    leaseIds.has(String(row.leaseId)),
-  );
-  const scheduleTotal = scheduleCountsByLease.reduce((acc, row) => acc + row.total, 0);
-  const overdueByLease = workspace.overdueByLease.filter((row) =>
-    leaseIds.has(String(row.leaseId)),
-  );
-  const overdueInvoices = workspace.overdueInvoices.filter((row) =>
-    leaseIds.has(String(row.leaseId)),
-  );
-  // The scoped past-due total re-aggregates over the visible documents only,
-  // de-duplicated by document exactly like the engine aggregate.
-  const overdueDocumentBalance = new Map<string, string>();
-  for (const line of overdueInvoices) {
-    if (!overdueDocumentBalance.has(String(line.documentId))) {
-      overdueDocumentBalance.set(String(line.documentId), line.openBalance ?? "0");
-    }
-  }
-  return NextResponse.json({
-    properties,
-    units,
-    leases,
-    charges: workspace.charges.filter((row) =>
-      leaseIds.has(String(row.leaseId)),
-    ),
-    escalations: workspace.escalations.filter((row) =>
-      leaseIds.has(String(row.leaseId)),
-    ),
-    schedules,
-    scheduleTotal,
-    schedulesTruncated: scheduleTotal > schedules.length,
-    scheduleCountsByLease,
-    overdueAsOf: workspace.overdueAsOf,
-    overdueTotal: sum([...overdueDocumentBalance.values()]),
-    overdueByLease,
-    overdueInvoices,
-    deposits: workspace.deposits.filter((row) =>
-      leaseIds.has(String(row.leaseId)),
-    ),
-    camPools,
-    camAllocations: workspace.camAllocations.filter(
-      (row) =>
-        poolIds.has(String(row.poolId)) && leaseIds.has(String(row.leaseId)),
-    ),
-  });
+  return NextResponse.json(workspace);
 }
 
 const glActions = new Set(["recordDeposit", "reverseDeposit", "finalizeCam", "levelRent"]);
@@ -428,7 +372,10 @@ export async function POST(request: Request) {
     body,
   );
   if (inventoryGate) return inventoryGate;
-  const common = { orgId: authz.user.orgId, actorId: authz.user.id };
+  // The caller's subsidiary fence rides every engine call: each service
+  // locks the parent row and rechecks scope inside its own transaction, so
+  // the unlocked precheck above cannot be raced by a concurrent rehome.
+  const common = { orgId: authz.user.orgId, actorId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
   // Audit correlation for financial-term writes (createLease, updateLease,
   // addCharge, addEscalation): a caller-supplied correlation id lands in
   // audit_log.request_id next to its actor.
@@ -460,7 +407,7 @@ export async function POST(request: Request) {
             { status: 404 },
           );
         }
-        result = await createManagedProperty({ ...body, custom: createValidation.cleaned, ...common } as unknown as { orgId: string; actorId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; });
+        result = await createManagedProperty({ ...body, custom: createValidation.cleaned, ...common } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; });
         break;
       }
       case "updateProperty": {
@@ -493,13 +440,14 @@ export async function POST(request: Request) {
           ...body,
           custom: validation.cleaned,
           ...common,
-        } as unknown as { orgId: string; actorId: string; propertyId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; status: string; currency?: string; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; reason?: string | null; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; status: string; currency?: string; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; reason?: string | null; });
         break;
       }
       case "deleteProperty":
         result = await deleteManagedProperty(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.propertyId),
         );
         break;
@@ -508,19 +456,20 @@ export async function POST(request: Request) {
           ...body,
           ...common,
           rentableArea: persistMoney(body.rentableArea),
-        } as unknown as { orgId: string; actorId: string; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; });
         break;
       case "updateUnit":
         result = await updatePropertyUnit({
           ...body,
           ...common,
           rentableArea: persistMoney(body.rentableArea),
-        } as unknown as { orgId: string; actorId: string; unitId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string; reason?: string | null; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; unitId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string; reason?: string | null; });
         break;
       case "deleteUnit":
         result = await deletePropertyUnit(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.unitId),
         );
         break;
@@ -533,7 +482,7 @@ export async function POST(request: Request) {
           securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
           camSharePercent: persistMoney(body.camSharePercent),
           lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
-        } as unknown as { orgId: string; actorId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number; securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number; securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean; });
         break;
       case "updateLease":
         result = await updatePropertyLease({
@@ -544,12 +493,13 @@ export async function POST(request: Request) {
           securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
           camSharePercent: persistMoney(body.camSharePercent),
           lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
-        } as unknown as { orgId: string; actorId: string; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number; securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number; securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean; });
         break;
       case "cancelLease":
         result = await cancelPropertyLease(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.leaseId),
         );
         break;
@@ -557,6 +507,7 @@ export async function POST(request: Request) {
         result = await activatePropertyLease(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.leaseId),
         );
         break;
@@ -564,6 +515,7 @@ export async function POST(request: Request) {
         result = await terminatePropertyLease(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.leaseId),
           String(body.terminatedOn),
           String(body.reason ?? ""),
@@ -575,7 +527,7 @@ export async function POST(request: Request) {
           ...common,
           ...requestCorrelation,
           amount: requireMoney(body.amount),
-        } as unknown as { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; });
         break;
       case "addEscalation":
         result = await addLeaseEscalation({
@@ -583,12 +535,13 @@ export async function POST(request: Request) {
           ...common,
           ...requestCorrelation,
           value: requireMoney(body.value),
-        } as unknown as { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; });
         break;
       case "applyEscalation":
         result = await applyLeaseEscalation(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.escalationId),
         );
         break;
@@ -596,6 +549,7 @@ export async function POST(request: Request) {
         result = await scheduleLeaseCharges(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.leaseId),
           dateOrUndefined(body.throughOn),
         );
@@ -604,6 +558,7 @@ export async function POST(request: Request) {
         result = await billDueLeaseCharges(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           dateOrUndefined(body.asOf),
           body.leaseId == null ? undefined : String(body.leaseId),
           body.propertyId == null ? undefined : String(body.propertyId),
@@ -613,6 +568,7 @@ export async function POST(request: Request) {
         result = await assessLeaseLateFees(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           dateOrUndefined(body.asOf),
           body.leaseId == null ? undefined : String(body.leaseId),
           body.propertyId == null ? undefined : String(body.propertyId),
@@ -632,6 +588,7 @@ export async function POST(request: Request) {
           {
             asOf: dateOrUndefined(body.asOf) ?? (await businessToday(common.orgId)),
             ...(body.leaseId == null ? {} : { onlyLeaseId: String(body.leaseId) }),
+            allowedSubsidiaryIds: common.allowedSubsidiaryIds,
           },
         );
         break;
@@ -641,35 +598,36 @@ export async function POST(request: Request) {
           ...body,
           ...common,
           amount: requireMoney(body.amount),
-        } as unknown as { orgId: string; actorId: string; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null; });
         break;
       case "reverseDeposit":
         result = await reverseSecurityDepositTransaction({
           ...body,
           ...common,
-        } as unknown as { orgId: string; actorId: string; transactionId: string; occurredOn: string; reason: string; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; transactionId: string; occurredOn: string; reason: string; });
         break;
       case "createCamPool":
         result = await createCamPool({
           ...body,
           ...common,
           budgetAmount: requireMoney(body.budgetAmount),
-        } as unknown as { orgId: string; actorId: string; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
         break;
       case "updateCamPool":
         result = await updateCamPool({
           ...body,
           ...common,
           budgetAmount: requireMoney(body.budgetAmount),
-        } as unknown as { orgId: string; actorId: string; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
+        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
         break;
       case "cancelCamPool":
-        await cancelCamPool(common.orgId, common.actorId, String(body.poolId));
+        await cancelCamPool(common.orgId, common.actorId, common.allowedSubsidiaryIds, String(body.poolId));
         break;
       case "reopenCamPool":
         await reopenFinalizedCamPool(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.poolId),
           String(body.reason ?? ""),
         );
@@ -678,6 +636,7 @@ export async function POST(request: Request) {
         result = await finalizeCamPool(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.poolId),
         );
         break;
@@ -685,6 +644,7 @@ export async function POST(request: Request) {
         result = await billCamReconciliation(
           common.orgId,
           common.actorId,
+          common.allowedSubsidiaryIds,
           String(body.poolId),
           dateOrUndefined(body.invoiceDate),
         );
@@ -701,6 +661,10 @@ export async function POST(request: Request) {
           : 200,
     });
   } catch (error) {
+    // A subsidiary refusal inside an engine transaction is the uniform
+    // not-found: the rehome-race denial must not reveal the record exists.
+    if (error instanceof ScopeNotFoundError)
+      return NextResponse.json({ error: "not found" }, { status: 404 });
     if (error instanceof PropertyManagementError)
       return NextResponse.json(
         { error: error.message },

@@ -61,10 +61,10 @@ const leaseTerms = {
 
 async function activeLease(fx: Fixture, leaseNumber: string, startsOn: string, endsOn: string | null): Promise<string> {
   const lease = await createPropertyLease({
-    orgId: fx.org.orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+    orgId: fx.org.orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
     leaseNumber, startsOn, endsOn, baseRent: "1000", ...leaseTerms,
   });
-  await activatePropertyLease(fx.org.orgId, fx.actorId, lease.id);
+  await activatePropertyLease(fx.org.orgId, fx.actorId, null, lease.id);
   return lease.id;
 }
 
@@ -84,7 +84,7 @@ test("R2: extending an active lease term extends its base-rent window and the ex
     assert.equal(await scheduleCount(orgId, leaseId, "2027-01-01"), 0);
 
     await updatePropertyLease({
-      orgId, actorId: fx.actorId, leaseId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
       leaseNumber: "L-EXT", startsOn: "2026-01-01", endsOn: "2027-12-31", baseRent: "1000", ...leaseTerms,
       requestId: `extend-${randomUUID()}`,
     });
@@ -103,13 +103,13 @@ test("R2: extending an active lease term extends its base-rent window and the ex
     assert.equal(chargeAudit[0]!.changes.before?.effectiveTo, "2026-12-31");
     assert.equal(chargeAudit[0]!.changes.after?.effectiveTo, "2027-12-31");
 
-    const scheduled = await scheduleLeaseCharges(orgId, fx.actorId, leaseId, "2027-12-31");
+    const scheduled = await scheduleLeaseCharges(orgId, fx.actorId, null, leaseId, "2027-12-31");
     assert.equal(scheduled.created, 12, "twelve new monthly periods for the extended year");
     assert.equal(await scheduleCount(orgId, leaseId, "2027-01-01"), 12);
 
     // A rent escalation inside the extended term now finds its effective charge.
-    const escalation = await addLeaseEscalation({ orgId, actorId: fx.actorId, leaseId, effectiveOn: "2027-01-01", method: "percent", value: "10" });
-    const applied = await applyLeaseEscalation(orgId, fx.actorId, escalation.id);
+    const escalation = await addLeaseEscalation({ orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, effectiveOn: "2027-01-01", method: "percent", value: "10" });
+    const applied = await applyLeaseEscalation(orgId, fx.actorId, null, escalation.id);
     assert.equal(applied.newAmount, "1100.0000");
   } finally {
     await dropScratchOrg(fx.org.orgId);
@@ -121,19 +121,19 @@ test("R3: escalations apply strictly in effective-date order so rent compounds c
   try {
     const orgId = fx.org.orgId;
     const leaseId = await activeLease(fx, "L-ESC", "2026-01-01", null);
-    const input = { orgId, actorId: fx.actorId, leaseId, method: "percent" as const, value: "10" };
+    const input = { orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, method: "percent" as const, value: "10" };
     const a = await addLeaseEscalation({ ...input, effectiveOn: "2026-07-01" });
     const b = await addLeaseEscalation({ ...input, effectiveOn: "2027-01-01" });
 
     // Out of order: the later one cannot jump the earlier scheduled one.
-    await assert.rejects(() => applyLeaseEscalation(orgId, fx.actorId, b.id), isDomainError(/2026-07-01/));
+    await assert.rejects(() => applyLeaseEscalation(orgId, fx.actorId, null, b.id), isDomainError(/2026-07-01/));
     const untouched = (await db.execute<{ status: string; new_amount: string | null }>(sql`
       select status, new_amount::text from lease_escalations where org_id = ${orgId} and id = ${b.id}`)).rows[0]!;
     assert.deepEqual(untouched, { status: "scheduled", new_amount: null });
 
     // In order: 1000 -> 1100 -> 1210.
-    assert.equal((await applyLeaseEscalation(orgId, fx.actorId, a.id)).newAmount, "1100.0000");
-    assert.equal((await applyLeaseEscalation(orgId, fx.actorId, b.id)).newAmount, "1210.0000");
+    assert.equal((await applyLeaseEscalation(orgId, fx.actorId, null, a.id)).newAmount, "1100.0000");
+    assert.equal((await applyLeaseEscalation(orgId, fx.actorId, null, b.id)).newAmount, "1210.0000");
     const windows = (await db.execute<{ effective_from: string; amount: string }>(sql`
       select effective_from::text, amount::text from lease_charges
        where org_id = ${orgId} and lease_id = ${leaseId} and charge_type = 'base_rent' order by effective_from`)).rows;
@@ -148,7 +148,7 @@ test("R3: escalations apply strictly in effective-date order so rent compounds c
     const c = await addLeaseEscalation({ ...input, effectiveOn: "2028-01-01" });
     await db.execute(sql`update lease_escalations set status='applied', applied_at=now() where org_id = ${orgId} and id = ${c.id}`);
     const d = await addLeaseEscalation({ ...input, effectiveOn: "2027-06-01" });
-    await assert.rejects(() => applyLeaseEscalation(orgId, fx.actorId, d.id), isDomainError(/2028-01-01/));
+    await assert.rejects(() => applyLeaseEscalation(orgId, fx.actorId, null, d.id), isDomainError(/2028-01-01/));
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }
@@ -161,13 +161,13 @@ test("R5: schedule horizon and billing date are validated and bounded", { skip: 
     const leaseId = await activeLease(fx, "L-HOR", "2026-01-01", null);
     const before = await scheduleCount(orgId, leaseId, "0001-01-01");
 
-    await assert.rejects(() => scheduleLeaseCharges(orgId, fx.actorId, leaseId, "2200-12-31"), isDomainError(/horizon/i));
-    await assert.rejects(() => scheduleLeaseCharges(orgId, fx.actorId, leaseId, "1999-13-45"), isDomainError(/invalid/i));
-    await assert.rejects(() => scheduleLeaseCharges(orgId, fx.actorId, leaseId, "2026-2-1"), isDomainError(/invalid/i));
+    await assert.rejects(() => scheduleLeaseCharges(orgId, fx.actorId, null, leaseId, "2200-12-31"), isDomainError(/horizon/i));
+    await assert.rejects(() => scheduleLeaseCharges(orgId, fx.actorId, null, leaseId, "1999-13-45"), isDomainError(/invalid/i));
+    await assert.rejects(() => scheduleLeaseCharges(orgId, fx.actorId, null, leaseId, "2026-2-1"), isDomainError(/invalid/i));
     assert.equal(await scheduleCount(orgId, leaseId, "0001-01-01"), before, "refused horizons create nothing");
 
-    await assert.rejects(() => billDueLeaseCharges(orgId, fx.actorId, "not-a-date"), isDomainError(/invalid/i));
-    await assert.rejects(() => billDueLeaseCharges(orgId, fx.actorId, "2026-02-30"), isDomainError(/invalid/i));
+    await assert.rejects(() => billDueLeaseCharges(orgId, fx.actorId, null, "not-a-date"), isDomainError(/invalid/i));
+    await assert.rejects(() => billDueLeaseCharges(orgId, fx.actorId, null, "2026-02-30"), isDomainError(/invalid/i));
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }
@@ -178,7 +178,7 @@ test("R6: security-deposit offset accounts are validated against the liability, 
   try {
     const orgId = fx.org.orgId;
     const leaseId = await activeLease(fx, "L-DEP", "2026-01-01", null);
-    const base = { orgId, actorId: fx.actorId, leaseId, occurredOn: fx.org.date };
+    const base = { orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: fx.org.date };
     await recordSecurityDeposit({ ...base, kind: "received", amount: "5000" });
 
     const inactive = randomUUID();
@@ -243,7 +243,7 @@ test("R7: CAM allocation residual and fingerprint are deterministic across physi
       insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by, reason, created_by, updated_by)
       values (${orgId}, ${fx.org.periodId}, ${fx.org.bookId}, ${fx.org.subsidiaryId}, 'gl', 'closed', now(), ${fx.actorId}, 'CAM', ${fx.actorId}, ${fx.actorId})`);
     const pool = await createCamPool({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, name: "FY26 THIRDS", fiscalYear: 2026,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, name: "FY26 THIRDS", fiscalYear: 2026,
       periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31", allocationBasis: "equal", budgetAmount: "10000",
       expenseAccountIds: [fx.org.accounts.adjustment],
     });
@@ -259,7 +259,7 @@ test("R7: CAM allocation residual and fingerprint are deterministic across physi
       return { rows, fingerprint };
     };
 
-    await finalizeCamPool(orgId, fx.actorId, pool.id);
+    await finalizeCamPool(orgId, fx.actorId, null, pool.id);
     const first = await snapshot();
     assert.equal(first.rows.length, 3);
     const residualHolder = first.rows.find((row) => row.actual_allocation === "3333.3400");
@@ -268,12 +268,12 @@ test("R7: CAM allocation residual and fingerprint are deterministic across physi
     // Relocate the two lower-id leases physically (what a restore, repack, or
     // VACUUM FULL does): identical sources, different heap/TID order. A
     // physical-order-dependent allocation would now move the residual.
-    await reopenFinalizedCamPool(orgId, fx.actorId, pool.id, "determinism check");
+    await reopenFinalizedCamPool(orgId, fx.actorId, null, pool.id, "determinism check");
     for (const id of leaseIds.slice(0, 2)) {
       await db.execute(sql`delete from property_leases where org_id = ${orgId} and id = ${id}`);
       await insertLease(id);
     }
-    await finalizeCamPool(orgId, fx.actorId, pool.id);
+    await finalizeCamPool(orgId, fx.actorId, null, pool.id);
     const second = await snapshot();
     assert.deepEqual(second.rows, first.rows, "allocations are a pure function of the sources");
     assert.equal(second.fingerprint, first.fingerprint, "fingerprint is independent of row order");
@@ -299,27 +299,27 @@ test("R8: lease, charge, and escalation creation refuse invalid policy as domain
     // unknown enums, a miscomputed posting); each must now fail closed
     // before writing.
     await assert.rejects(() => createPropertyLease({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
       leaseNumber: "L-R8-BAD", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
       billingDay: 99, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
       lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
     }), domain, "billing day 99 is refused");
     await assert.rejects(() => addLeaseCharge({
-      orgId, actorId: fx.actorId, leaseId, chargeType: "other", description: "Extra",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, chargeType: "other", description: "Extra",
       amount: "10", frequency: "monthly", effectiveFrom: "not-a-date",
     }), domain, "an invalid charge date is refused");
     await assert.rejects(() => addLeaseCharge({
-      orgId, actorId: fx.actorId, leaseId, chargeType: "other", description: "Extra",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, chargeType: "other", description: "Extra",
       amount: "10", frequency: "monthly", effectiveFrom: "2026-05-01", effectiveTo: "2026-04-01",
     }), domain, "an inverted charge window is refused");
     await assert.rejects(() => addLeaseEscalation({
-      orgId, actorId: fx.actorId, leaseId, effectiveOn: "2026-07-01", method: "bogus" as never, value: "50",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, effectiveOn: "2026-07-01", method: "bogus" as never, value: "50",
     }), domain, "an unknown escalation method is refused");
     assert.deepEqual(await counts(), before, "no refused creation persisted a row");
     // A none late fee carries no value: creation coerces it exactly like an
     // update instead of tripping the storage guard.
     const coerced = await createPropertyLease({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
       leaseNumber: "L-R8-NONE", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
       billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
       lateFeeType: "none", lateFeeValue: "50", graceDays: 0, autoInvoice: true, autoPost: false,
@@ -341,13 +341,13 @@ test("R9: a retried deposit import key is refused as a domain error without post
       select count(*)::int as n from journal_entries where org_id = ${orgId}`)).rows[0]!.n;
     const journalsBefore = await entries();
     const first = await recordSecurityDeposit({
-      orgId, actorId: fx.actorId, leaseId, kind: "received",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, kind: "received",
       occurredOn: fx.org.date, amount: "500", importKey: "imp-dup-1",
     });
     assert.equal(first.balance, "500.0000");
     await assert.rejects(
       () => recordSecurityDeposit({
-        orgId, actorId: fx.actorId, leaseId, kind: "received",
+        orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, kind: "received",
         occurredOn: fx.org.date, amount: "500", importKey: "imp-dup-1",
       }),
       (error: unknown) => error instanceof PropertyManagementError && /already imported/.test(error.message),
@@ -386,7 +386,7 @@ test("R10: concurrent duplicate deposit imports on different leases map to a dom
     );
     const writerPid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
     pending = recordSecurityDeposit({
-      orgId, actorId: fx.actorId, leaseId: leaseB, kind: "received",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId: leaseB, kind: "received",
       occurredOn: fx.org.date, amount: "500", importKey: "race-dup-1",
     }).then(
       (value) => ({ status: "fulfilled" as const, value: { id: value.id } }),
@@ -427,28 +427,28 @@ test("R11: duplicate lease/escalation identities and invalid charge references f
     const domain = (error: unknown) => error instanceof PropertyManagementError;
     // Duplicate identities used to arrive as raw unique violations.
     await assert.rejects(() => createPropertyLease({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
       leaseNumber: "L-R11", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
       billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
       lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
     }), domain, "a duplicate lease number is refused");
     const draft = await createPropertyLease({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
       leaseNumber: "L-R11-DRAFT", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
       billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
       lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
     });
     await assert.rejects(() => updatePropertyLease({
-      orgId, actorId: fx.actorId, leaseId: draft.id, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId: draft.id, propertyId: fx.propertyId, tenantId: fx.org.customerId,
       leaseNumber: "L-R11", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
       billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
       lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
     }), domain, "renaming onto a duplicate lease number is refused");
     await addLeaseEscalation({
-      orgId, actorId: fx.actorId, leaseId, effectiveOn: "2026-07-01", method: "percent", value: "5",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, effectiveOn: "2026-07-01", method: "percent", value: "5",
     });
     await assert.rejects(() => addLeaseEscalation({
-      orgId, actorId: fx.actorId, leaseId, effectiveOn: "2026-07-01", method: "fixed", value: "10",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, effectiveOn: "2026-07-01", method: "fixed", value: "10",
     }), domain, "a duplicate escalation date is refused");
     // Charge references used to arrive as raw foreign-key or invalid-text
     // errors at commit; the deferrable FKs stay as the race backstop.
@@ -461,13 +461,13 @@ test("R11: duplicate lease/escalation identities and invalid charge references f
       ["an unknown tax code", { taxCodeId: bogus }],
     ] as const) {
       await assert.rejects(() => addLeaseCharge({
-        orgId, actorId: fx.actorId, leaseId, chargeType: "other", description: "Extra",
+        orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, chargeType: "other", description: "Extra",
         amount: "10", frequency: "monthly", effectiveFrom: "2026-05-01", ...ref,
       }), domain, `a charge with ${label} is refused`);
     }
     // The guards must not over-reject: a fully-referenced charge commits.
     const valid = await addLeaseCharge({
-      orgId, actorId: fx.actorId, leaseId, chargeType: "other", description: "Valid extra",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, chargeType: "other", description: "Valid extra",
       amount: "10", frequency: "monthly", effectiveFrom: "2026-05-01",
       incomeAccountId: fx.org.accounts.revenue, itemId: fx.org.items.service,
     });
@@ -510,14 +510,14 @@ test("R13: CAM finalization refuses an overlapping lease with no rentable area i
       insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by, reason, created_by, updated_by)
       values (${orgId}, ${fx.org.periodId}, ${fx.org.bookId}, ${fx.org.subsidiaryId}, 'gl', 'closed', now(), ${fx.actorId}, 'CAM', ${fx.actorId}, ${fx.actorId})`);
     const pool = await createCamPool({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, name: "FY26 AREA", fiscalYear: 2026,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, name: "FY26 AREA", fiscalYear: 2026,
       periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31", allocationBasis: "rentable_area", budgetAmount: "10000",
       expenseAccountIds: [fx.org.accounts.adjustment],
     });
     // The area-less lease used to vanish from the weights, billing lease A
     // 100% of the pool. Finalization must refuse and name it instead.
     await assert.rejects(
-      finalizeCamPool(orgId, fx.actorId, pool.id),
+      finalizeCamPool(orgId, fx.actorId, null, pool.id),
       (error: unknown) => error instanceof PropertyManagementError
         && /LSE-CAM-NOAREA/.test(error.message)
         && /rentable area/.test(error.message),
@@ -534,7 +534,7 @@ test("R13: CAM finalization refuses an overlapping lease with no rentable area i
       insert into property_units (id, org_id, property_id, code, rentable_area, status)
       values (${unitB}, ${orgId}, ${fx.propertyId}, 'UB', 300, 'occupied')`);
     await db.execute(sql`update property_leases set unit_id = ${unitB} where org_id = ${orgId} and id = ${leaseB}`);
-    const finalized = await finalizeCamPool(orgId, fx.actorId, pool.id);
+    const finalized = await finalizeCamPool(orgId, fx.actorId, null, pool.id);
     assert.equal(finalized.allocations, 2);
     const shares = (await db.execute<{ lease_number: string; share_percent: string; actual_allocation: string }>(sql`
       select l.lease_number, a.share_percent::text, a.actual_allocation::text
@@ -580,7 +580,7 @@ test("R14: CAM finalization waits for a concurrent lease-weight edit and seals t
       insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by, reason, created_by, updated_by)
       values (${orgId}, ${fx.org.periodId}, ${fx.org.bookId}, ${fx.org.subsidiaryId}, 'gl', 'closed', now(), ${fx.actorId}, 'CAM', ${fx.actorId}, ${fx.actorId})`);
     const camPool = await createCamPool({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, name: "FY26 FENCE", fiscalYear: 2026,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, name: "FY26 FENCE", fiscalYear: 2026,
       periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31", allocationBasis: "rentable_area", budgetAmount: "10000",
       expenseAccountIds: [fx.org.accounts.adjustment],
     });
@@ -597,7 +597,7 @@ test("R14: CAM finalization waits for a concurrent lease-weight edit and seals t
     assert.equal(held.rowCount, 1, "the holder edit must own the unit row for the whole probe");
     let settled = false;
     let failed: unknown = null;
-    outcome = finalizeCamPool(orgId, fx.actorId, camPool.id);
+    outcome = finalizeCamPool(orgId, fx.actorId, null, camPool.id);
     void outcome.then(() => { settled = true; }, (error: unknown) => { settled = true; failed = error; });
     const deadline = Date.now() + 10_000;
     let blocked = false;
@@ -644,11 +644,11 @@ test("R15: unit and property edits leave before/after audit evidence with actor,
   try {
     const orgId = fx.org.orgId;
     const unit = await createPropertyUnit({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId,
       code: "U-AUDIT", name: "Audit flat", rentableArea: "100", bedrooms: 2,
     });
     await updatePropertyUnit({
-      orgId, actorId: fx.actorId, unitId: unit.id, code: "U-AUDIT", name: "Audit flat, remeasured",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, unitId: unit.id, code: "U-AUDIT", name: "Audit flat, remeasured",
       rentableArea: "150", bedrooms: 3, reason: "remeasured after renovation",
     });
     const unitAudit = (await db.execute<{
@@ -675,7 +675,7 @@ test("R15: unit and property edits leave before/after audit evidence with actor,
     assert.equal(unitAudit.changes.after!.rentableArea, "150.0000");
 
     await updateManagedProperty({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, subsidiaryId: fx.org.subsidiaryId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, subsidiaryId: fx.org.subsidiaryId,
       locationId: fx.org.locationId, code: "PRP-HARD", name: "Hardening Tower II",
       propertyType: "commercial", status: "active",
       rentIncomeAccountId: fx.org.accounts.revenue, camIncomeAccountId: fx.org.accounts.revenue,
@@ -708,7 +708,7 @@ test("R12: a blank termination date is refused without mutating the lease", { sk
     const leaseId = await activeLease(fx, "L-R12", "2026-01-01", "2026-12-31");
     // A blank date previously terminated the lease with a null move-out date.
     await assert.rejects(
-      () => terminatePropertyLease(orgId, fx.actorId, leaseId, "", "Tenant left"),
+      () => terminatePropertyLease(orgId, fx.actorId, null, leaseId, "", "Tenant left"),
       (error: unknown) => error instanceof PropertyManagementError && /Termination date is required/.test(error.message),
     );
     const row = (await db.execute<{ status: string; endsOn: string | null; moveOutOn: string | null; scheduled: number }>(sql`

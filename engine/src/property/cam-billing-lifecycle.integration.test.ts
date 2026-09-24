@@ -33,14 +33,14 @@ async function fixture(action:(org:Awaited<ReturnType<typeof createScratchOrg>>,
 for(const kind of ['invoice','credit'] as const){
  test(`CAM ${kind} draft deletion releases a replacement without reopening finalized financial facts`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,_lease,_charge,_schedule,cam,allocation)=>{
   if(kind==='credit') await db.execute(sql`update cam_allocations set reconciliation_amount=-100 where org_id=${org.orgId} and id=${allocation}`);
-  const first=await billCamReconciliation(org.orgId,actor,cam,'2026-07-31');
+  const first=await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31');
   assert.equal(first.documents.length,1);
   await withOrgTransaction(org.orgId,()=>deleteDocument(first.documents[0]!,actor,org.orgId,{reason:'Discard CAM draft for correction',allowedSubsidiaryIds:null}));
   const released=(await db.execute<{invoice_document_id:string|null;reconciliation_amount:string}>(sql`select invoice_document_id,reconciliation_amount::text from cam_allocations where org_id=${org.orgId} and id=${allocation}`)).rows[0]!;
   assert.equal(released.invoice_document_id,null);
   assert.equal(released.reconciliation_amount,kind==='credit'?'-100.0000':'100.0000');
-  await assert.rejects(withOrgTransaction(org.orgId,()=>reopenFinalizedCamPool(org.orgId,actor,cam,'Cannot reinterpret an invoiced pool')));
-  const again=await Promise.all([billCamReconciliation(org.orgId,actor,cam,'2026-07-31'),billCamReconciliation(org.orgId,actor,cam,'2026-07-31')]);
+  await assert.rejects(withOrgTransaction(org.orgId,()=>reopenFinalizedCamPool(org.orgId, actor, null,cam,'Cannot reinterpret an invoiced pool')));
+  const again=await Promise.all([billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31'),billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31')]);
   assert.equal(again.flatMap(r=>r.documents).length,1);
   const id=again.flatMap(r=>r.documents)[0]!;
   assert.notEqual(id,first.documents[0]);
@@ -67,12 +67,12 @@ test('CAM billing waits for reopening and refuses its now-open pool',{skip:!proc
   await db.execute(sql`select id from cam_pools where id=${cam} and org_id=${org.orgId} for update`);
   ready((await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid);
   await resume;
-  await reopenFinalizedCamPool(org.orgId,actor,cam,'Correct source configuration');
+  await reopenFinalizedCamPool(org.orgId, actor, null,cam,'Correct source configuration');
  });
  let billing:ReturnType<typeof billCamReconciliation>|undefined;
  try{
   const pid=await locked;
-  billing=billCamReconciliation(org.orgId,actor,cam,'2026-07-31');
+  billing=billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31');
   await waitForLock(pid);
   proceed();await reopen;
   assert.deepEqual(await billing,{documents:[]});
@@ -83,7 +83,7 @@ test('CAM billing waits for reopening and refuses its now-open pool',{skip:!proc
 for(const kind of ['customer_invoice','customer_credit'] as const){
  test(`posted CAM ${kind} reversal preserves history and permits one replacement`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,_lease,_charge,_schedule,cam,allocation)=>{
   if(kind==='customer_credit') await db.execute(sql`update cam_allocations set reconciliation_amount=-100 where org_id=${org.orgId} and id=${allocation}`);
-  const first=await billCamReconciliation(org.orgId,actor,cam,'2026-07-31');
+  const first=await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31');
   const invoice=first.documents[0]!;
   await withOrgTransaction(org.orgId,async()=>{
    const submitted=await submitAndReleaseIfUngated(kind,invoice,actor);
@@ -92,11 +92,11 @@ for(const kind of ['customer_invoice','customer_credit'] as const){
   });
   const voided=await requestDocumentVoid({orgId:org.orgId,actorId:actor,documentId:invoice,reason:'Correct posted CAM reconciliation',reversalDate:'2026-07-31'});
   assert.equal(voided.status,'voided');assert.ok(voided.reversalEntryId);
-  const again=await billCamReconciliation(org.orgId,actor,cam,'2026-07-31');
+  const again=await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31');
   assert.equal(again.documents.length,1);assert.notEqual(again.documents[0],invoice);
   const history=(await db.execute<{custom:{propertyManagement:{predecessorInvoiceId:string}}}>(sql`select custom from documents where id=${again.documents[0]} and org_id=${org.orgId}`)).rows[0]!;
   assert.equal(history.custom.propertyManagement.predecessorInvoiceId,invoice);
-  assert.deepEqual(await billCamReconciliation(org.orgId,actor,cam,'2026-07-31'),{documents:[]});
+  assert.deepEqual(await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31'),{documents:[]});
  }));
 }
 
@@ -108,9 +108,9 @@ test('reopening rechecks billed dependencies after waiting for the billing pool 
   await client.query('begin');
   await client.query('select id from cam_allocations where id=$1 for update',[allocation]);
   const pid=(await client.query('select pg_backend_pid() as pid')).rows[0].pid as number;
-  billing=billCamReconciliation(org.orgId,actor,cam,'2026-07-31');
+  billing=billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31');
   await waitForLock(pid);
-  reopening=withOrgTransaction(org.orgId,()=>reopenFinalizedCamPool(org.orgId,actor,cam,'Concurrent pool correction'));
+  reopening=withOrgTransaction(org.orgId,()=>reopenFinalizedCamPool(org.orgId, actor, null,cam,'Concurrent pool correction'));
   const settled=Promise.allSettled([billing,reopening]);
   let waiting=false;
   for(let i=0;i<250;i++){
@@ -129,7 +129,7 @@ test('reopening rechecks billed dependencies after waiting for the billing pool 
 }));
 
 test('CAM reservation release is tenant-scoped and rolls back with its audit evidence',{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,_lease,_charge,_schedule,cam,allocation)=>{
- const invoice=(await billCamReconciliation(org.orgId,actor,cam,'2026-07-31')).documents[0]!;
+ const invoice=(await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31')).documents[0]!;
  await assert.rejects(withOrgTransaction(org.orgId,async()=>{
   await releaseCamBillingProvenance(db,org.orgId,invoice,{actorId:actor,reason:'Aborted correction'});
   assert.equal((await db.execute<{invoice_document_id:string|null}>(sql`select invoice_document_id from cam_allocations where org_id=${org.orgId} and id=${allocation}`)).rows[0]!.invoice_document_id,null);

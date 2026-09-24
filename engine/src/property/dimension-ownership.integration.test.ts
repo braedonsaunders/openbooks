@@ -51,7 +51,7 @@ test("property creation rejects a location owned by another subsidiary", { skip:
     await assert.rejects(
       createManagedProperty({
         orgId: org.orgId,
-        actorId,
+        actorId, allowedSubsidiaryIds: null,
         subsidiaryId: org.subsidiaryId,
         locationId,
         code: "PROP-CROSS-SUB",
@@ -73,7 +73,7 @@ test("property updates reject moving a location across subsidiaries", { skip: !p
     const locationId = await seedBranchLocation(org.orgId, org.subsidiaryId);
     const property = await createManagedProperty({
       orgId: org.orgId,
-      actorId,
+      actorId, allowedSubsidiaryIds: null,
       subsidiaryId: org.subsidiaryId,
       code: "PROP-DIMENSION",
       name: "Dimension property",
@@ -82,7 +82,7 @@ test("property updates reject moving a location across subsidiaries", { skip: !p
     await assert.rejects(
       updateManagedProperty({
         orgId: org.orgId,
-        actorId,
+        actorId, allowedSubsidiaryIds: null,
         propertyId: property.id,
         subsidiaryId: org.subsidiaryId,
         locationId,
@@ -107,7 +107,7 @@ test("property creation rejects an inactive subsidiary", { skip: !process.env.OP
     await assert.rejects(
       createManagedProperty({
         orgId: org.orgId,
-        actorId,
+        actorId, allowedSubsidiaryIds: null,
         subsidiaryId,
         code: "PROP-INACTIVE-SUB",
         name: "Inactive subsidiary property",
@@ -128,7 +128,7 @@ test("property updates reject assigning an inactive subsidiary", { skip: !proces
     const subsidiaryId = await seedInactiveSubsidiary(org.orgId, org.subsidiaryId);
     const property = await createManagedProperty({
       orgId: org.orgId,
-      actorId,
+      actorId, allowedSubsidiaryIds: null,
       subsidiaryId: org.subsidiaryId,
       code: "PROP-INACTIVE-UPDATE",
       name: "Inactive update property",
@@ -137,7 +137,7 @@ test("property updates reject assigning an inactive subsidiary", { skip: !proces
     await assert.rejects(
       updateManagedProperty({
         orgId: org.orgId,
-        actorId,
+        actorId, allowedSubsidiaryIds: null,
         propertyId: property.id,
         subsidiaryId,
         code: "PROP-INACTIVE-UPDATE",
@@ -170,7 +170,7 @@ test("property creation rejects a control account restricted to another subsidia
     await assert.rejects(
       createManagedProperty({
         orgId: org.orgId,
-        actorId,
+        actorId, allowedSubsidiaryIds: null,
         subsidiaryId: org.subsidiaryId,
         rentIncomeAccountId: org.accounts.revenue,
         code: "PROP-CROSS-ACCOUNT",
@@ -191,7 +191,7 @@ test("property updates reject a control account after its subsidiary restriction
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const property = await createManagedProperty({
       orgId: org.orgId,
-      actorId,
+      actorId, allowedSubsidiaryIds: null,
       subsidiaryId: org.subsidiaryId,
       rentIncomeAccountId: org.accounts.revenue,
       code: "PROP-ACCOUNT-UPDATE",
@@ -211,7 +211,7 @@ test("property updates reject a control account after its subsidiary restriction
     await assert.rejects(
       updateManagedProperty({
         orgId: org.orgId,
-        actorId,
+        actorId, allowedSubsidiaryIds: null,
         propertyId: property.id,
         subsidiaryId: org.subsidiaryId,
         rentIncomeAccountId: org.accounts.revenue,

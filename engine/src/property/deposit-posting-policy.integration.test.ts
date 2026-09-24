@@ -32,7 +32,7 @@ for (const policy of ["bank", "location", "inactive subsidiary", "inactive book"
         where org_id=${org.orgId} and id=${org.bookId}`);
       if (policy === "non-posting book") await db.execute(sql`update accounting_books set posts_gl=false
         where org_id=${org.orgId} and id=${org.bookId}`);
-      const run = () => recordSecurityDeposit({orgId:org.orgId,actorId,leaseId,occurredOn:org.date,kind:"received",amount:"100"});
+      const run = () => recordSecurityDeposit({orgId:org.orgId,actorId, allowedSubsidiaryIds: null,leaseId,occurredOn:org.date,kind:"received",amount:"100"});
       await assert.rejects(run(), (error: unknown) => {
         assert.ok(error instanceof PropertyManagementError);
         assert.match(error.message, policy === "bank" || policy === "location" ? /restricted to another subsidiary/

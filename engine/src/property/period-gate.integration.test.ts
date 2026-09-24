@@ -120,7 +120,7 @@ test("open period: rent levelling still posts (setup can post, refusal is load-b
   const org = await createScratchOrg();
   try {
     const leaseId = await seedLevellingLease(org);
-    const results = await levelLeaseRentStraightLine(org.orgId, null, { asOf: "2026-07-15", onlyLeaseId: leaseId });
+    const results = await levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId });
     assert.equal(results.length, 1);
     assert.equal(results[0]!.delta, "2000.0000");
     assert.ok(results[0]!.entryId, "expected the accrual to post");
@@ -137,7 +137,7 @@ test("rent levelling refuses a user-closed period", { skip: !DB }, async () => {
     await closeGlForUser(org, actorId);
     const before = await journalCount(org.orgId);
     await assert.rejects(
-      levelLeaseRentStraightLine(org.orgId, null, { asOf: "2026-07-15", onlyLeaseId: leaseId }),
+      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId }),
       /The GL period covering .* is closed; straight-line rent cannot post into it/,
       "levelling into a user-closed period must be refused",
     );
@@ -154,7 +154,7 @@ test("rent levelling refuses a source-owned imported lock", { skip: !DB }, async
     await closeAllImported(org);
     const before = await journalCount(org.orgId);
     await assert.rejects(
-      levelLeaseRentStraightLine(org.orgId, null, { asOf: "2026-07-15", onlyLeaseId: leaseId }),
+      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId }),
       /The GL period covering .* is closed; straight-line rent cannot post into it/,
       "levelling into an imported lock must be refused: the accrual is new activity, not replay",
     );
@@ -183,7 +183,7 @@ test("open period: a deposit still records (setup can post, refusal is load-bear
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const leaseId = await seedDepositLease(org, "open");
     const recorded = await recordSecurityDeposit({
-      orgId: org.orgId, actorId, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
     });
     assert.equal(recorded.balance, "100.0000");
   } finally {
@@ -199,7 +199,7 @@ test("deposit recording refuses a user-closed period", { skip: !DB }, async () =
     await closeGlForUser(org, actorId);
     await assert.rejects(
       recordSecurityDeposit({
-        orgId: org.orgId, actorId, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
       }),
       /An open GL period is required/,
       "a deposit into a user-closed period must be refused",
@@ -217,7 +217,7 @@ test("deposit recording refuses a source-owned imported lock", { skip: !DB }, as
     await closeAllImported(org);
     await assert.rejects(
       recordSecurityDeposit({
-        orgId: org.orgId, actorId, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
       }),
       /An open GL period is required/,
       "a deposit into an imported lock must be refused: it is new activity, not replay",
@@ -233,12 +233,12 @@ test("deposit reversal refuses a user-closed period", { skip: !DB }, async () =>
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const leaseId = await seedDepositLease(org, "rev-user");
     const recorded = await recordSecurityDeposit({
-      orgId: org.orgId, actorId, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
     });
     await closeGlForUser(org, actorId);
     await assert.rejects(
       reverseSecurityDepositTransaction({
-        orgId: org.orgId, actorId, transactionId: recorded.id,
+        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, transactionId: recorded.id,
         occurredOn: org.date, reason: "Gate probe reversal of a closed-period deposit",
       }),
       /An open GL period is required for the reversal date/,
@@ -255,12 +255,12 @@ test("deposit reversal refuses a source-owned imported lock", { skip: !DB }, asy
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const leaseId = await seedDepositLease(org, "rev-imported");
     const recorded = await recordSecurityDeposit({
-      orgId: org.orgId, actorId, leaseId, occurredOn: org.date, kind: "received", amount: "100",
+      orgId: org.orgId, actorId, allowedSubsidiaryIds: null, leaseId, occurredOn: org.date, kind: "received", amount: "100",
     });
     await closeAllImported(org);
     await assert.rejects(
       reverseSecurityDepositTransaction({
-        orgId: org.orgId, actorId, transactionId: recorded.id,
+        orgId: org.orgId, actorId, allowedSubsidiaryIds: null, transactionId: recorded.id,
         occurredOn: org.date, reason: "Gate probe reversal into an imported lock",
       }),
       /An open GL period is required for the reversal date/,
@@ -319,7 +319,7 @@ async function postCamExpense(fixture: CamGateFixture, amount: string): Promise<
 
 async function createJulyPool(fixture: CamGateFixture, actorId: string, tag: string): Promise<string> {
   const created = await createCamPool({
-    orgId: fixture.org.orgId, actorId, propertyId: fixture.propertyId,
+    orgId: fixture.org.orgId, actorId, allowedSubsidiaryIds: null, propertyId: fixture.propertyId,
     name: `CAM gate ${tag}`, fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
     allocationBasis: "equal", budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
   });
@@ -333,7 +333,7 @@ test("CAM finalization refuses while the period is still open", { skip: !DB }, a
     await postCamExpense(fixture, "1000");
     const poolId = await createJulyPool(fixture, actorId, "open");
     await assert.rejects(
-      finalizeCamPool(fixture.org.orgId, actorId, poolId),
+      finalizeCamPool(fixture.org.orgId, actorId, null, poolId),
       /Close the GL module for .* before finalizing CAM actuals/,
       "finalizing over an open period must be refused",
     );
@@ -349,7 +349,7 @@ test("CAM finalization proceeds once a user closes the period", { skip: !DB }, a
     await postCamExpense(fixture, "1000");
     const poolId = await createJulyPool(fixture, actorId, "user");
     await closeGlForUser(fixture.org, actorId);
-    const result = await finalizeCamPool(fixture.org.orgId, actorId, poolId);
+    const result = await finalizeCamPool(fixture.org.orgId, actorId, null, poolId);
     assert.equal(result.actualAmount, "1000.0000");
   } finally {
     await dropScratchOrg(fixture.org.orgId);
@@ -365,7 +365,7 @@ test("CAM finalization treats a source-owned imported lock as closed", { skip: !
     await closeAllImported(fixture.org);
     // The inverted gate only observes closure — it never posts into the
     // period — so an imported lock satisfies it exactly like a user lock.
-    const result = await finalizeCamPool(fixture.org.orgId, actorId, poolId);
+    const result = await finalizeCamPool(fixture.org.orgId, actorId, null, poolId);
     assert.equal(result.actualAmount, "1000.0000");
   } finally {
     await dropScratchOrg(fixture.org.orgId);

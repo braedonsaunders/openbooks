@@ -77,7 +77,7 @@ test("escalating rent levels to straight-line income and the accrual posts once"
     const leaseId = await seedLease(org, slAccountId);
 
     // Year one complete (period ends 2026-06-30; asOf inside the open month).
-    const results = await levelLeaseRentStraightLine(org.orgId, null, {
+    const results = await levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,
       asOf: "2026-07-15",
       onlyLeaseId: leaseId,
     });
@@ -94,7 +94,7 @@ test("escalating rent levels to straight-line income and the accrual posts once"
     assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
 
     // Idempotent: a rerun as of the same date posts nothing further.
-    const rerun = await levelLeaseRentStraightLine(org.orgId, null, {
+    const rerun = await levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,
       asOf: "2026-07-15",
       onlyLeaseId: leaseId,
     });
@@ -118,8 +118,8 @@ test("concurrent levelling runs serialize on the lease and post one accrual", { 
     const leaseId = await seedLease(org, slAccountId);
 
     const runs = await Promise.all([
-      levelLeaseRentStraightLine(org.orgId, null, { asOf: "2026-07-15", onlyLeaseId: leaseId }),
-      levelLeaseRentStraightLine(org.orgId, null, { asOf: "2026-07-15", onlyLeaseId: leaseId }),
+      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId }),
+      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: "2026-07-15", onlyLeaseId: leaseId }),
     ]);
     const results = runs.map((run) => run[0]!);
     assert.deepEqual(results.map((result) => result.delta).sort(), ["0.0000", "2000.0000"]);
@@ -166,7 +166,7 @@ for (const policy of ["account", "location", "inactive subsidiary", "inactive bo
       if (policy === "non-posting book") await db.execute(sql`update accounting_books set posts_gl=false
         where org_id=${org.orgId} and id=${org.bookId}`);
       if (policy === "foreign currency") await db.execute(sql`update managed_properties set currency='USD' where org_id=${org.orgId}`);
-      const run = () => levelLeaseRentStraightLine(org.orgId,null,{asOf:org.date,onlyLeaseId:leaseId});
+      const run = () => levelLeaseRentStraightLine(org.orgId,null,{ allowedSubsidiaryIds: null, asOf:org.date,onlyLeaseId:leaseId});
       await assert.rejects(run(), policy === "account" || policy === "location" ? /restricted to another subsidiary/
         : policy === "inactive subsidiary" ? /inactive/ : policy === "foreign currency" ? /functional currency/ : /active primary posting book/);
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n,0);
@@ -201,7 +201,7 @@ test("rent levelling refuses a GL-closed target period before posting", { skip: 
     // storage error from the close fence; it must fail closed as a domain
     // error with nothing written.
     await assert.rejects(
-      levelLeaseRentStraightLine(org.orgId, null, { asOf: org.date, onlyLeaseId: leaseId }),
+      levelLeaseRentStraightLine(org.orgId, null, { allowedSubsidiaryIds: null,  asOf: org.date, onlyLeaseId: leaseId }),
       (error: unknown) => error instanceof PropertyManagementError
         && /GL period covering .* is closed/.test(error.message),
     );
@@ -225,7 +225,7 @@ test("rent levelling rechecks contractual amounts after waiting for a lease edit
     await writer.query("select set_config('app.bypass_rls','on',true)");
     await writer.query("select id from property_leases where org_id=$1 and id=$2 for update",[org.orgId,leaseId]);
     const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-    pending = levelLeaseRentStraightLine(org.orgId,null,{asOf:org.date,onlyLeaseId:leaseId})
+    pending = levelLeaseRentStraightLine(org.orgId,null,{ allowedSubsidiaryIds: null, asOf:org.date,onlyLeaseId:leaseId})
       .then((value) => ({status:"fulfilled",value}),(reason: unknown) => ({status:"rejected",reason}));
     let blocked = false;
     for (let attempt=0;attempt<400;attempt++) {

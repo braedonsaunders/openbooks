@@ -50,12 +50,12 @@ test("PM2: past-due and lease detail survive the schedule preview cap", { skip: 
     // org's open July-2026 period; the workspace reads as of 2026-07-20 so
     // the test never depends on the ambient business date.
     const leaseA = await createPropertyLease({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
       leaseNumber: "L-OLD", startsOn: "2026-04-01", endsOn: "2026-06-30",
       baseRent: "1000", autoInvoice: true, ...leaseTerms,
     });
-    await activatePropertyLease(orgId, fx.actorId, leaseA.id);
-    const billed = await billDueLeaseCharges(orgId, fx.actorId, "2026-07-01", leaseA.id);
+    await activatePropertyLease(orgId, fx.actorId, null, leaseA.id);
+    const billed = await billDueLeaseCharges(orgId, fx.actorId, null, "2026-07-01", leaseA.id);
     assert.equal(billed.invoices.length, 1, "the old periods bill into one invoice");
     const invoiceId = billed.invoices[0]!;
 
@@ -63,23 +63,23 @@ test("PM2: past-due and lease detail survive the schedule preview cap", { skip: 
     // cap: every filler line is newer, so the preview keeps filler only and
     // the old invoiced lines fall out first.
     const leaseB = await createPropertyLease({
-      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
       leaseNumber: "L-NEW", startsOn: "2026-07-01", endsOn: null,
       baseRent: "100", autoInvoice: false, ...leaseTerms,
     });
-    await activatePropertyLease(orgId, fx.actorId, leaseB.id);
+    await activatePropertyLease(orgId, fx.actorId, null, leaseB.id);
     // Filler rides a second charge with no generated lines, so its daily
     // periods cannot collide with the monthly base-rent schedule under the
     // (org, charge, period-starts-on) uniqueness rule.
     const fillerCharge = await addLeaseCharge({
-      orgId, actorId: fx.actorId, leaseId: leaseB.id, chargeType: "parking",
+      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId: leaseB.id, chargeType: "parking",
       description: "Bulk filler", amount: "100", frequency: "monthly", effectiveFrom: "2026-07-02",
     });
     await db.execute(sql`insert into lease_schedule_lines (org_id, lease_id, charge_id, period_starts_on, period_ends_on, due_on, amount, status)
       select ${orgId}, ${leaseB.id}, ${fillerCharge.id}, d::date, (d + interval '1 month' - interval '1 day')::date, d::date, '100', 'scheduled'
       from generate_series('2026-07-02'::date, '2026-07-02'::date + 2009, '1 day') as d`);
 
-    const workspace = await propertyManagementWorkspace(orgId, "2026-07-20");
+    const workspace = await propertyManagementWorkspace(orgId, null, "2026-07-20");
 
     // The preview is capped while the completeness evidence is not.
     assert.ok(workspace.scheduleTotal > 2000, `expected more than 2000 lines, got ${workspace.scheduleTotal}`);

@@ -192,6 +192,7 @@ test("the import-conflict mapper only recognises the known deposit backstop", ()
 const CREATE_IDS = {
   orgId: "00000000-0000-0000-0000-000000000000",
   actorId: "00000000-0000-0000-0000-000000000001",
+  allowedSubsidiaryIds: null,
   propertyId: "00000000-0000-0000-0000-000000000002",
   tenantId: "00000000-0000-0000-0000-000000000003",
   leaseId: "00000000-0000-0000-0000-000000000004",
@@ -309,7 +310,7 @@ test("property, unit, charge, escalation, and CAM creation validate enums, dates
 test("lease termination requires an explicit date before touching storage", async () => {
   // A blank date previously terminated the lease with a null move-out date.
   await assert.rejects(
-    () => terminatePropertyLease(CREATE_IDS.orgId, CREATE_IDS.actorId, CREATE_IDS.leaseId, "", "Tenant left"),
+    () => terminatePropertyLease(CREATE_IDS.orgId, CREATE_IDS.actorId, CREATE_IDS.allowedSubsidiaryIds, CREATE_IDS.leaseId, "", "Tenant left"),
     (error: unknown) => error instanceof PropertyManagementError && /Termination date is required/.test(error.message),
   );
 });
@@ -342,6 +343,7 @@ test("the generic lease-charge API refuses base_rent before touching storage", a
     addLeaseCharge({
       orgId: "00000000-0000-0000-0000-000000000000",
       actorId: "00000000-0000-0000-0000-000000000001",
+      allowedSubsidiaryIds: null,
       leaseId: "00000000-0000-0000-0000-000000000002",
       chargeType: "base_rent",
       description: "Second rent",
