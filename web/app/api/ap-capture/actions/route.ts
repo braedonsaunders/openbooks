@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { enqueueApCapture } from '@openbooks/jobs'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { materializeCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
+import { materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   }
   const body = { action: parsed.action }
   const ids = parsed.ids
-  const results: Array<{ id: string; ok: boolean; error?: string; documentId?: string }> = []
+  const results: Array<{ id: string; ok: boolean; error?: string; documentId?: string; rulesActivated?: ActivatedCaptureRule[] }> = []
   for (const id of ids) {
     try {
       if (body.action === 'reject') {
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
           actorId: gate.user.id,
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         })
-        results.push({ id, ok: true, documentId: created.documentId })
+        results.push({ id, ok: true, documentId: created.documentId, rulesActivated: created.rulesActivated })
       }
     } catch (error) {
       results.push({ id, ok: false, error: error instanceof Error ? error.message : 'failed' })

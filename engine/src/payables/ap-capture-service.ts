@@ -634,6 +634,57 @@ async function assertLockedCaptureAssociationsVisible(
   }
 }
 
+export interface ActivatedCaptureRule {
+  ruleKind: string;
+  ruleId: string;
+  match: unknown;
+  output: unknown;
+}
+
+interface ConfirmedCaptureRule extends Record<string, unknown> {
+  id: string;
+  confirmationCount: number;
+  isActive: boolean;
+  match: unknown;
+  output: unknown;
+}
+
+/**
+ * Audit a rule auto-activation atomically with the confirmation that caused
+ * it. Rules start at one confirmation and gain exactly one per materialize
+ * (no other writer exists), so the confirmer that lands on three with the
+ * rule active is the activator — it writes the retrievable trail (rule,
+ * alias, vendor/account, triggering capture, actor) as an ap_capture_events
+ * row in the same transaction, and reports the activation for the caller to
+ * surface. Runs inside the materialize transaction: a rollback wipes the
+ * activation and its audit together, never one without the other.
+ */
+async function recordRuleActivation(
+  tx: SqlExecutor,
+  orgId: string,
+  captureItemId: string,
+  actorId: string | null,
+  ruleKind: string,
+  confirmed: ConfirmedCaptureRule,
+  activated: ActivatedCaptureRule[],
+): Promise<void> {
+  if (!confirmed.isActive || confirmed.confirmationCount !== 3) return;
+  const detail = {
+    ruleId: confirmed.id,
+    ruleKind,
+    match: confirmed.match,
+    output: confirmed.output,
+    confirmationCount: confirmed.confirmationCount,
+    confirmingCaptureItemId: captureItemId,
+  };
+  await tx.execute(sql`
+    insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+    values (${orgId}, ${captureItemId}, 'rule_activated',
+            ${JSON.stringify(detail)}::jsonb, ${actorId})
+  `);
+  activated.push({ ruleKind, ruleId: confirmed.id, match: confirmed.match, output: confirmed.output });
+}
+
 export async function materializeCapture(input: {
   orgId: string;
   captureItemId: string;
@@ -642,7 +693,7 @@ export async function materializeCapture(input: {
   priceOverride?: boolean;
   /** Null/omitted = unrestricted. Restricted callers must pass their set. */
   allowedSubsidiaryIds?: ReadonlySet<string> | null;
-}): Promise<{ documentId: string; documentNumber: string }> {
+}): Promise<{ documentId: string; documentNumber: string; rulesActivated: ActivatedCaptureRule[] }> {
   const result = await db.transaction(async (tx) => {
     const loaded = (await tx.execute<CaptureRow>(sql`
       select * from ap_capture_items where org_id = ${input.orgId} and id = ${input.captureItemId} for update
@@ -650,9 +701,12 @@ export async function materializeCapture(input: {
     const item = loaded.rows[0];
     if (!item) throw new CaptureMaterializationError("Capture item not found");
     await assertLockedCaptureAssociationsVisible(tx, input.orgId, item, input.allowedSubsidiaryIds);
+    // Rules this materialize auto-activates (third confirmation), reported so
+    // the caller can surface what future bills will auto-code to.
+    const rulesActivated: ActivatedCaptureRule[] = [];
     if (item.document_id) {
       const existing = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${item.document_id} and org_id = ${input.orgId}`));
-      return { documentId: item.document_id, documentNumber: existing.rows[0]?.document_number ?? "" };
+      return { documentId: item.document_id, documentNumber: existing.rows[0]?.document_number ?? "", rulesActivated };
     }
     if (!['ready', 'needs_review'].includes(item.status)) {
       throw new CaptureMaterializationError("Capture item is not ready to create a draft");
@@ -1034,18 +1088,21 @@ export async function materializeCapture(input: {
           and match->>'alias' = ${alias} and output->>'partyId' = ${vendorId} for update
       `));
       if (existing.rows[0]) {
-        await tx.execute(sql`
+        const confirmed = (await tx.execute<ConfirmedCaptureRule>(sql`
           update ap_capture_rules set confirmation_count = confirmation_count + 1,
                  is_active = confirmation_count + 1 >= 3, updated_at = now(), updated_by = ${input.actorId}
            where id = ${existing.rows[0].id} and org_id = ${input.orgId}
-        `);
+          returning id, confirmation_count as "confirmationCount", is_active as "isActive",
+                    match, output
+        `)).rows[0]!;
+        await recordRuleActivation(tx, input.orgId, item.id, input.actorId, "vendor_alias", confirmed, rulesActivated);
       } else {
         // A concurrent capture of the same alias can win the insert race —
         // the select FOR UPDATE above matched nothing, so no lock is held —
         // and a dropped conflict silently stalled the confirmation count
         // that gates auto-activation. The upsert mirrors the update branch
         // exactly, so the confirmation always counts.
-        await tx.execute(sql`
+        const confirmed = (await tx.execute<ConfirmedCaptureRule>(sql`
           insert into ap_capture_rules (org_id, rule_kind, match, output, created_by, updated_by)
           values (${input.orgId}, 'vendor_alias', ${JSON.stringify({ alias })}::jsonb,
                   ${JSON.stringify({ partyId: vendorId })}::jsonb, ${input.actorId}, ${input.actorId})
@@ -1054,7 +1111,10 @@ export async function materializeCapture(input: {
                 is_active = ap_capture_rules.confirmation_count + 1 >= 3,
                 updated_at = now(),
                 updated_by = ${input.actorId}
-        `);
+          returning id, confirmation_count as "confirmationCount", is_active as "isActive",
+                    match, output
+        `)).rows[0]!;
+        await recordRuleActivation(tx, input.orgId, item.id, input.actorId, "vendor_alias", confirmed, rulesActivated);
       }
     }
     if (!item.purchase_order_id) {
@@ -1067,15 +1127,18 @@ export async function materializeCapture(input: {
             and output->>'accountId' = ${line.accountId} for update
         `));
         if (existing.rows[0]) {
-          await tx.execute(sql`
+          const confirmed = (await tx.execute<ConfirmedCaptureRule>(sql`
             update ap_capture_rules set confirmation_count = confirmation_count + 1,
                    is_active = confirmation_count + 1 >= 3, updated_at = now(), updated_by = ${input.actorId}
              where id = ${existing.rows[0].id} and org_id = ${input.orgId}
-          `);
+            returning id, confirmation_count as "confirmationCount", is_active as "isActive",
+                      match, output
+          `)).rows[0]!;
+          await recordRuleActivation(tx, input.orgId, item.id, input.actorId, "vendor_account", confirmed, rulesActivated);
         } else {
           // Same race and same remedy as the vendor_alias upsert above: the
           // concurrent winner's confirmation must still count.
-          await tx.execute(sql`
+          const confirmed = (await tx.execute<ConfirmedCaptureRule>(sql`
             insert into ap_capture_rules (org_id, rule_kind, match, output, created_by, updated_by)
             values (${input.orgId}, 'vendor_account',
                     ${JSON.stringify({ partyId: vendorId, description })}::jsonb,
@@ -1086,11 +1149,14 @@ export async function materializeCapture(input: {
                   is_active = ap_capture_rules.confirmation_count + 1 >= 3,
                   updated_at = now(),
                   updated_by = ${input.actorId}
-          `);
+            returning id, confirmation_count as "confirmationCount", is_active as "isActive",
+                      match, output
+          `)).rows[0]!;
+          await recordRuleActivation(tx, input.orgId, item.id, input.actorId, "vendor_account", confirmed, rulesActivated);
         }
       }
     }
-    return { documentId, documentNumber };
+    return { documentId, documentNumber, rulesActivated };
   });
   const kind = (await db.execute<{ kind: string }>(sql`select kind from documents where id = ${result.documentId} and org_id = ${input.orgId}`));
   await runRecordFlows(
