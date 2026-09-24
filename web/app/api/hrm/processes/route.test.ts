@@ -195,18 +195,12 @@ async function loadRoute(path: string): Promise<RouteModule> {
   }
 }
 
-let collectionRoute: RouteModule | undefined;
-let recordRoute: RouteModule | undefined;
-let completeRoute: RouteModule | undefined;
-let cancelRoute: RouteModule | undefined;
-let stepCompleteRoute: RouteModule | undefined;
-let stepSkipRoute: RouteModule | undefined;
-collectionRoute = await loadRoute("./route.ts?hrm-processes-collection");
-recordRoute = await loadRoute("./[id]/route.ts?hrm-processes-record");
-completeRoute = await loadRoute("./[id]/complete/route.ts?hrm-processes-complete");
-cancelRoute = await loadRoute("./[id]/cancel/route.ts?hrm-processes-cancel");
-stepCompleteRoute = await loadRoute("./steps/[stepId]/complete/route.ts?hrm-processes-step-complete");
-stepSkipRoute = await loadRoute("./steps/[stepId]/skip/route.ts?hrm-processes-step-skip");
+const collectionRoute: RouteModule | undefined = await loadRoute("./route.ts?hrm-processes-collection");
+const recordRoute: RouteModule | undefined = await loadRoute("./[id]/route.ts?hrm-processes-record");
+const completeRoute: RouteModule | undefined = await loadRoute("./[id]/complete/route.ts?hrm-processes-complete");
+const cancelRoute: RouteModule | undefined = await loadRoute("./[id]/cancel/route.ts?hrm-processes-cancel");
+const stepCompleteRoute: RouteModule | undefined = await loadRoute("./steps/[stepId]/complete/route.ts?hrm-processes-step-complete");
+const stepSkipRoute: RouteModule | undefined = await loadRoute("./steps/[stepId]/skip/route.ts?hrm-processes-step-skip");
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 const PROCESS_ID = "00000000-0000-4000-8000-000000000022";

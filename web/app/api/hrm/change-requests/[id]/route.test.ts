@@ -129,9 +129,6 @@ const mockUrls = new Map<string, string>([
   ["../../_lib", "mock:lib"],
 ]);
 
-let idRoute: typeof import("./route.ts") | undefined;
-let submitRoute: typeof import("./submit/route.ts") | undefined;
-let withdrawRoute: typeof import("./withdraw/route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs as-is;
@@ -152,9 +149,9 @@ let withdrawRoute: typeof import("./withdraw/route.ts") | undefined;
   const idUrl = "./route.ts?hrm-changerequest-id";
   const submitUrl = "./submit/route.ts?hrm-changerequest-submit";
   const withdrawUrl = "./withdraw/route.ts?hrm-changerequest-withdraw";
-  idRoute = (await import(idUrl)) as typeof import("./route.ts");
-  submitRoute = (await import(submitUrl)) as typeof import("./submit/route.ts");
-  withdrawRoute = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
+  const idRoute: typeof import("./route.ts") | undefined = (await import(idUrl)) as typeof import("./route.ts");
+  const submitRoute: typeof import("./submit/route.ts") | undefined = (await import(submitUrl)) as typeof import("./submit/route.ts");
+  const withdrawRoute: typeof import("./withdraw/route.ts") | undefined = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
   hooks.deregister();
 
 

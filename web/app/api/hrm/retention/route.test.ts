@@ -107,7 +107,6 @@ const mockUrls = new Map<string, string>([
   ["../review-cycles/_lib", "mock:lib"],
 ]);
 
-let retentionRoute: typeof import("./route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -124,7 +123,7 @@ let retentionRoute: typeof import("./route.ts") | undefined;
     },
   });
   const routeUrl = "./route.ts?hrm-retention";
-  retentionRoute = (await import(routeUrl)) as typeof import("./route.ts");
+  const retentionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
 
 

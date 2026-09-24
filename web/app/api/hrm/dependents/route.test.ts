@@ -90,7 +90,6 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:read"],
 ]);
 
-let collectionRoute: typeof import("./route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -107,7 +106,7 @@ let collectionRoute: typeof import("./route.ts") | undefined;
     },
   });
   const routeUrl = "./route.ts?hrm-benefits-dependents-collection";
-  collectionRoute = (await import(routeUrl)) as typeof import("./route.ts");
+  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
 
 

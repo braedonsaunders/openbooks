@@ -108,11 +108,6 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/self-service/profile-changes.ts", "mock:profile-changes"],
 ]);
 
-let profileRoute: typeof import("./profile/route.ts") | undefined;
-let stepsRoute: typeof import("./steps/route.ts") | undefined;
-let requestsRoute: typeof import("./requests/route.ts") | undefined;
-let teamRoute: typeof import("./team/route.ts") | undefined;
-let fileRoute: typeof import("./profile-changes/route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs
@@ -133,15 +128,15 @@ let fileRoute: typeof import("./profile-changes/route.ts") | undefined;
     },
   });
   const profileRouteUrl = "./profile/route.ts?hrm-me-profile";
-  profileRoute = (await import(profileRouteUrl)) as typeof import("./profile/route.ts");
+  const profileRoute: typeof import("./profile/route.ts") | undefined = (await import(profileRouteUrl)) as typeof import("./profile/route.ts");
   const stepsRouteUrl = "./steps/route.ts?hrm-me-steps";
-  stepsRoute = (await import(stepsRouteUrl)) as typeof import("./steps/route.ts");
+  const stepsRoute: typeof import("./steps/route.ts") | undefined = (await import(stepsRouteUrl)) as typeof import("./steps/route.ts");
   const requestsRouteUrl = "./requests/route.ts?hrm-me-requests";
-  requestsRoute = (await import(requestsRouteUrl)) as typeof import("./requests/route.ts");
+  const requestsRoute: typeof import("./requests/route.ts") | undefined = (await import(requestsRouteUrl)) as typeof import("./requests/route.ts");
   const teamRouteUrl = "./team/route.ts?hrm-me-team";
-  teamRoute = (await import(teamRouteUrl)) as typeof import("./team/route.ts");
+  const teamRoute: typeof import("./team/route.ts") | undefined = (await import(teamRouteUrl)) as typeof import("./team/route.ts");
   const fileRouteUrl = "./profile-changes/route.ts?hrm-me-file";
-  fileRoute = (await import(fileRouteUrl)) as typeof import("./profile-changes/route.ts");
+  const fileRoute: typeof import("./profile-changes/route.ts") | undefined = (await import(fileRouteUrl)) as typeof import("./profile-changes/route.ts");
   hooks.deregister();
 
 

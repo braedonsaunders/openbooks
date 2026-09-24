@@ -98,7 +98,6 @@ const mockUrls = new Map<string, string>([
   ["./_lib", "mock:lib"],
 ]);
 
-let collectionRoute: typeof import("./route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs as-is;
@@ -117,7 +116,7 @@ let collectionRoute: typeof import("./route.ts") | undefined;
     },
   });
   const routeUrl = "./route.ts?hrm-positions-collection";
-  collectionRoute = (await import(routeUrl)) as typeof import("./route.ts");
+  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
 
 

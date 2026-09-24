@@ -74,7 +74,6 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/benefits/windows.ts", "mock:service"],
 ]);
 
-let closeRoute: typeof import("./route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -91,7 +90,7 @@ let closeRoute: typeof import("./route.ts") | undefined;
     },
   });
   const routeUrl = "./route.ts?hrm-benefits-window-close";
-  closeRoute = (await import(routeUrl)) as typeof import("./route.ts");
+  const closeRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
 
 

@@ -79,7 +79,6 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/benefits/enrollments.ts", "mock:service"],
 ]);
 
-let idRoute: typeof import("./route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -96,7 +95,7 @@ let idRoute: typeof import("./route.ts") | undefined;
     },
   });
   const routeUrl = "./route.ts?hrm-benefits-enrollment-id";
-  idRoute = (await import(routeUrl)) as typeof import("./route.ts");
+  const idRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
 
 

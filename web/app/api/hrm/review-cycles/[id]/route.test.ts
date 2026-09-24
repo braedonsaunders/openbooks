@@ -117,7 +117,6 @@ const mockUrls = new Map<string, string>([
   ["../_lib", "mock:lib"],
 ]);
 
-let itemRoute: typeof import("./route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -134,7 +133,7 @@ let itemRoute: typeof import("./route.ts") | undefined;
     },
   });
   const routeUrl = "./route.ts?hrm-review-cycle-item";
-  itemRoute = (await import(routeUrl)) as typeof import("./route.ts");
+  const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
 
 
