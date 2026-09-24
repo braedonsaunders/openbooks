@@ -1026,30 +1026,6 @@ export function normalizeFingerprintText(value: string | null | undefined): stri
   return (value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
 }
 
-/**
- * Proven-replay predicate for ID-less lines. A content tuple (date, amount,
- * normalized description) is evidence of POSSIBLE overlap, not identity, so
- * it proves a replay only inside a stored statement whose line window
- * overlaps the incoming window AND whose opening or closing balance matches
- * the incoming one. Amounts compare as exact units; balances must both be
- * present — a file without balance evidence can never prove a replay.
- */
-export function isProvenReplay(
-  incoming: { fromDate: string; toDate: string; openingBalance: string | null; closingBalance: string | null },
-  stored: { fromDate: string; toDate: string; openingBalance: string | null; closingBalance: string | null },
-): boolean {
-  if (stored.toDate < incoming.fromDate || stored.fromDate > incoming.toDate) return false;
-  const openingProven =
-    incoming.openingBalance !== null &&
-    stored.openingBalance !== null &&
-    toUnits(incoming.openingBalance) === toUnits(stored.openingBalance);
-  const closingProven =
-    incoming.closingBalance !== null &&
-    stored.closingBalance !== null &&
-    toUnits(incoming.closingBalance) === toUnits(stored.closingBalance);
-  return openingProven || closingProven;
-}
-
 /** An imported (or previewed) line with its possible-duplicate flag state. */
 export type FlaggedStatementLine = ParsedStatementLine & { possibleDuplicateOf: string | null };
 
@@ -1058,8 +1034,8 @@ export type FlaggedStatementLine = ParsedStatementLine & { possibleDuplicateOf: 
  * lines. An exact retry of source bytes is the same import, and a
  * source-provided ID (OFX FITID) already on the account — or already seen in
  * this batch — marks the line a duplicate. ID-less lines bypass this
- * filter: without proven replay scope a content tuple is possible overlap,
- * not identity (see importStatement), so they are partitioned there.
+ * filter: no content tuple may auto-skip (see importStatement), so they are
+ * partitioned there.
  */
 export function filterDuplicateStatementLines(
   lines: ParsedStatementLine[],
@@ -1082,14 +1058,15 @@ export function filterDuplicateStatementLines(
   return { lines: fresh, duplicates };
 }
 
-type StoredContentCandidate = { id: string; statementId: string; amountUnits: bigint };
+type StoredContentCandidate = { id: string; amountUnits: bigint };
 
 /**
  * Partition validated lines into fresh imports. Source-identified lines go
  * through the ID filter; ID-less lines match stored content on this account:
- * a tuple consumed inside proven replay scope skips as a replayed line,
- * while a tuple colliding outside that scope imports flagged with the
- * earliest stored line as its possible-duplicate evidence. Batch order is
+ * a tuple colliding with an already-imported line imports flagged with the
+ * earliest stored line as its possible-duplicate evidence, because a tuple
+ * alone cannot tell a re-export from a genuine twin — only an exact
+ * source-byte replay or a bank-provided ID may auto-skip. Batch order is
  * preserved so the dry-run preview reads file order.
  */
 async function partitionIdlessLines(
@@ -1099,7 +1076,6 @@ async function partitionIdlessLines(
   lines: (ParsedStatementLine & { bankTransactionId: string | null })[],
   existingIds: ReadonlySet<string>,
   exactSourceRetry: boolean,
-  incoming: { fromDate: string; toDate: string; openingBalance: string | null; closingBalance: string | null },
 ): Promise<{ lines: FlaggedStatementLine[]; duplicates: number; possibleDuplicates: number }> {
   const identified = filterDuplicateStatementLines(lines, existingIds, exactSourceRetry);
   if (exactSourceRetry) {
@@ -1108,36 +1084,6 @@ async function partitionIdlessLines(
       duplicates: identified.duplicates,
       possibleDuplicates: 0,
     };
-  }
-  // Proven replay scope: stored statements overlapping the incoming window
-  // with a matching opening or closing balance.
-  const proven = new Set<string>();
-  const statements = (await tx.execute<{
-    id: string; from_date: string; to_date: string;
-    opening_balance: string | null; closing_balance: string | null;
-  }>(sql`
-    select s.id,
-           min(l.posted_on)::text as from_date,
-           max(l.posted_on)::text as to_date,
-           s.opening_balance::text as opening_balance,
-           s.closing_balance::text as closing_balance
-      from bank_statements s
-      join bank_statement_lines l
-        on l.statement_id = s.id and l.org_id = s.org_id
-     where s.org_id = ${orgId} and s.account_id = ${accountId}
-     group by s.id
-  `));
-  for (const st of statements.rows) {
-    if (
-      isProvenReplay(incoming, {
-        fromDate: st.from_date,
-        toDate: st.to_date,
-        openingBalance: st.opening_balance,
-        closingBalance: st.closing_balance,
-      })
-    ) {
-      proven.add(st.id);
-    }
   }
   // Stored content candidates for the incoming lines' tuples, earliest
   // first: uuid v7 orders chronologically, so the first row per tuple is
@@ -1150,9 +1096,9 @@ async function partitionIdlessLines(
   ];
   if (idlessDates.length > 0) {
     const stored = (await tx.execute<{
-      id: string; statement_id: string; posted_on: string; amount: string; description: string | null;
+      id: string; posted_on: string; amount: string; description: string | null;
     }>(sql`
-      select l.id, l.statement_id, l.posted_on::text as posted_on, l.amount::text as amount, l.description
+      select l.id, l.posted_on::text as posted_on, l.amount::text as amount, l.description
         from bank_statement_lines l
        where l.org_id = ${orgId} and l.account_id = ${accountId}
          and l.posted_on in (${sql.join(idlessDates.map((d) => sql`${d}`), sql`, `)})
@@ -1161,28 +1107,12 @@ async function partitionIdlessLines(
     for (const row of stored.rows) {
       const key = `${row.posted_on}\0${normalizeFingerprintText(row.description)}`;
       const list = storedByTuple.get(key) ?? [];
-      list.push({
-        id: row.id,
-        statementId: row.statement_id,
-        amountUnits: toUnits(row.amount),
-      });
+      list.push({ id: row.id, amountUnits: toUnits(row.amount) });
       storedByTuple.set(key, list);
     }
   }
-  // Remaining proven-scope matches per tuple: a re-exported file resolves
-  // to the same multiset in any row order; excess over the stored count is
-  // unproven-new and flags.
-  const scopeRemainder = new Map<string, number>();
-  const scopeKey = (tupleKey: string, amountUnits: bigint) => `${tupleKey}\0${amountUnits.toString()}`;
-  for (const [tupleKey, candidates] of storedByTuple) {
-    for (const candidate of candidates) {
-      if (!proven.has(candidate.statementId)) continue;
-      const key = scopeKey(tupleKey, candidate.amountUnits);
-      scopeRemainder.set(key, (scopeRemainder.get(key) ?? 0) + 1);
-    }
-  }
   const fresh: FlaggedStatementLine[] = [];
-  let duplicates = identified.duplicates;
+  const duplicates = identified.duplicates;
   let possibleDuplicates = 0;
   for (const line of identified.lines) {
     if (line.bankTransactionId) {
@@ -1191,13 +1121,6 @@ async function partitionIdlessLines(
     }
     const tupleKey = `${line.postedOn}\0${normalizeFingerprintText(line.description)}`;
     const amountUnits = toUnits(line.amount);
-    const key = scopeKey(tupleKey, amountUnits);
-    const remaining = scopeRemainder.get(key) ?? 0;
-    if (remaining > 0) {
-      scopeRemainder.set(key, remaining - 1);
-      duplicates += 1;
-      continue;
-    }
     const colliding = (storedByTuple.get(tupleKey) ?? []).filter(
       (candidate) => candidate.amountUnits === amountUnits,
     );
@@ -1344,11 +1267,10 @@ function sourceEvidence(
  * Import normalized statement lines for a reconcilable account. Lines whose
  * source-provided `bankTransactionId` already exists on the account are
  * skipped, as is an exact retry of source bytes for the same account.
- * ID-less lines skip only inside proven replay scope (an overlapping
- * statement window with a matching opening/closing balance); a content
- * tuple colliding outside that scope imports flagged as a possible
- * duplicate of the earlier line for review, since the tuple alone cannot
- * tell a re-export from a genuine twin. With `dryRun` nothing is
+ * Nothing else auto-skips: a matching balance or a matching content tuple
+ * is possible overlap, not identity, so an ID-less line colliding with
+ * stored content imports flagged as a possible duplicate of the earlier
+ * line for review. With `dryRun` nothing is
  * written — used for preview.
  * Committed imports retain their exact source bytes in the append-only audit
  * log and point `rawFileRef` to that evidence. Engine callers without an
@@ -1400,10 +1322,9 @@ export async function importStatement(
       bankTransactionId,
     };
   });
-  // ID-less lines keep a null bankTransactionId: without proven replay
-  // scope their content is possible overlap, not identity, so no synthetic
-  // ID may stand in for a bank key. The account-scoped unique index still
-  // guards source-provided IDs.
+  // ID-less lines keep a null bankTransactionId: their content is possible
+  // overlap, never identity, so no synthetic ID may stand in for a bank
+  // key. The account-scoped unique index still guards source-provided IDs.
   const openingBalance = opts.openingBalance
     ? normalizeAmount(opts.openingBalance, "Opening balance")
     : null;
@@ -1454,17 +1375,11 @@ export async function importStatement(
       for (const row of existing.rows) existingIds.add(row.id);
     }
     // ID-less lines partition by content against stored lines on this
-    // account. A tuple matching inside proven replay scope is a replayed
-    // line and skips; a tuple matching outside that scope is possible
-    // overlap — both lines import, the new one flagged with the earlier
-    // line as its evidence for review. Genuinely new content imports clean.
+    // account. A tuple matching a stored line is possible overlap — both
+    // lines import, the new one flagged with the earlier line as its
+    // evidence for review. Genuinely new content imports clean.
     const { lines: fresh, duplicates, possibleDuplicates } =
-      await partitionIdlessLines(tx, ctx.orgId, account.id, validated, existingIds, sourceAlreadyImported, {
-        fromDate: validated.reduce((a, b) => (a.postedOn < b.postedOn ? a : b)).postedOn,
-        toDate: validated.reduce((a, b) => (a.postedOn > b.postedOn ? a : b)).postedOn,
-        openingBalance,
-        closingBalance,
-      });
+      await partitionIdlessLines(tx, ctx.orgId, account.id, validated, existingIds, sourceAlreadyImported);
     // Serialize with sign-off through the shared reconciliation lock. No
     // other path takes the import lock, so acquiring it first here cannot
     // deadlock; holding both through the insert closes the race with a

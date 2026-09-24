@@ -271,8 +271,8 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         source,
         ...sourcePayload,
         mode: 'preview',
-        // Balances already typed by the operator feed the same proven-replay
-        // scope as the import, so the preview agrees with what import writes.
+        // Balances already typed by the operator feed the same dedupe
+        // partition as the import, so the preview agrees with what import writes.
         openingBalance: openingBalance || null,
         closingBalance: closingBalance || null,
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
