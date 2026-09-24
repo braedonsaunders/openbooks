@@ -27,6 +27,7 @@
   "costSource": "Fonte do custo real",
   "costDimension": "Grupo de contas de custo",
   "laborSource": "Fonte do custo de mão de obra",
+  "laborDimension": "Grupo de contas de mão de obra",
   "overheadSource": "Fonte dos custos indiretos",
   "overheadDimension": "Grupo de contas de custos indiretos",
   "budgetSource": "Fonte do orçamento de custo",

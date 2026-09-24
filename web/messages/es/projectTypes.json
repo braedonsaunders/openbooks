@@ -27,6 +27,7 @@
   "costSource": "Origen del costo real",
   "costDimension": "Grupo de cuentas de costo",
   "laborSource": "Origen del costo de mano de obra",
+  "laborDimension": "Grupo de cuentas de mano de obra",
   "budgetSource": "Origen del presupuesto de costos",
   "committedKinds": "Costo comprometido de",
   "committedStatuses": "Estados del ciclo de vida del costo comprometido",

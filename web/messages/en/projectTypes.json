@@ -27,6 +27,7 @@
   "costSource": "Actual cost source",
   "costDimension": "Cost account group",
   "laborSource": "Labor cost source",
+  "laborDimension": "Labor account group",
   "budgetSource": "Cost budget source",
   "committedKinds": "Committed cost from",
   "committedStatuses": "Committed cost lifecycle states",

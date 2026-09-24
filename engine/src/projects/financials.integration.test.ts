@@ -365,3 +365,34 @@ test("an unknown labor source refuses instead of pricing labor as zero", { skip:
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a deactivated labor group refuses by name instead of pricing zero", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const groupId = randomUUID();
+    await db.execute(sql`
+      insert into account_groups (id, org_id, dimension, key, name, is_catch_all, is_active)
+      values (${groupId}, ${org.orgId}, 'labor_pool', 'field_labor', 'Field labor', false, true)`);
+    await db.execute(sql`
+      insert into account_group_members (id, org_id, group_id, account_id, dimension)
+      values (${randomUUID()}, ${org.orgId}, ${groupId}, ${org.accounts.cogs}, 'labor_pool')`);
+    const projectId = await seedProjectWithPostedCost(db, org, "LABOR-DEAD-1", "500");
+    const grouped: FinancialProfile = {
+      ...structuredClone(profile),
+      totalPrice: { ...structuredClone(profile).totalPrice, method: "cost_plus" },
+      laborCost: { source: "account_group", dimension: "labor_pool", groupKeys: ["field_labor"] },
+    };
+    // With the group active the wage resolves; the price path is cost-plus
+    // so any silent zero would flow straight into the price.
+    assert.equal((await resolveProjectFinancials(org.orgId, projectId, grouped)).measures.labor_cost, "500.0000");
+    await db.execute(sql`update account_groups set is_active=false where org_id=${org.orgId} and id=${groupId}`);
+    // Deactivated after configuration: the report AND the cost-plus price
+    // refuse naming the unresolved keys instead of reporting $0 labor.
+    await assert.rejects(
+      resolveProjectFinancials(org.orgId, projectId, grouped),
+      /laborCost\.source 'account_group' is unresolved: groupKeys \[field_labor\] resolve to no active accounts/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
