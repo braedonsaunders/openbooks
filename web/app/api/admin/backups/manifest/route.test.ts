@@ -17,6 +17,7 @@ interface ManifestState {
   run: Record<string, unknown> | null;
   queries: number;
   audits: unknown[];
+  auditGate?: Promise<void>;
 }
 
 const stateKey = Symbol.for("openbooks.backup-manifest-route-test");
@@ -50,6 +51,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.backup-manifest-route-test')]
       export async function auditBackupEvent(event) {
         state.audits.push(event)
+        if (state.auditGate) await state.auditGate
       }
     `,
   ],
@@ -94,6 +96,7 @@ function reset(run: Record<string, unknown> | null): void {
   routeState.run = run;
   routeState.queries = 0;
   routeState.audits = [];
+  routeState.auditGate = undefined;
 }
 
 function completedRun(): Record<string, unknown> {
@@ -142,6 +145,28 @@ test("manifest downloads use a distinct JSON sidecar filename", async () => {
       changes: { event: "backup_manifest_download", sha256: "abc123" },
     },
   ]);
+});
+
+test("manifest waits for disclosure evidence before returning the response body", async () => {
+  reset(completedRun());
+  let releaseAudit!: () => void;
+  routeState.auditGate = new Promise<void>((resolve) => { releaseAudit = resolve; });
+  const { req, ctx } = getRequest(RUN_ID);
+  let settled = false;
+  const responsePromise = GET(req, ctx).then((response) => {
+    settled = true;
+    return response;
+  });
+  try {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(routeState.audits.length, 1, "the disclosure event is attempted before the handler resolves");
+    assert.equal(settled, false, "the manifest must not be disclosed while its evidence write is pending");
+  } finally {
+    releaseAudit();
+  }
+  const response = await responsePromise;
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).file, "acme-backup.json.gz");
 });
 
 test("manifest refuses a malformed backup id without touching the database", async () => {
