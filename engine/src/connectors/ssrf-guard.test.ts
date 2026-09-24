@@ -15,12 +15,14 @@ import {
   connectorUrlRefusal,
   guardedFetch,
   isPublicUnicastAddress,
+  IPV4_SPECIAL_PURPOSE,
+  IPV6_SPECIAL_PURPOSE,
   resolveVerifiedAddresses,
   type AddressLookup,
 } from "./ssrf-guard.ts";
 
 const PUBLIC_V4 = ["8.8.8.8", "1.1.1.1", "93.184.216.34", "192.0.0.9", "192.0.0.10"];
-const PUBLIC_V6 = ["2606:4700:4700::1111", "2001:4860:4860::8888", "2001:1::1", "2001:1::2", "2001:1::3", "2001:4:112::1"];
+const PUBLIC_V6 = ["2606:4700:4700::1111", "2001:4860:4860::8888", "64:ff9b::808:808", "2001:1::1", "2001:1::2", "2001:1::3", "2001:4:112::1"];
 const PRIVATE = [
   "10.0.0.1",
   "172.16.0.1",
@@ -52,6 +54,7 @@ const PRIVATE = [
   "3fff::1",
   "5f00::1",
   "64:ff9b:1::1",
+  "64:ff9b::a00:1",
   "100::1",
   "100:0:0:1::1",
   "::ffff:808:808",
@@ -69,6 +72,32 @@ test("public unicast passes, every special range fails", () => {
   }
   assert.equal(isPublicUnicastAddress("not-an-ip"), false);
   assert.equal(isPublicUnicastAddress(""), false);
+});
+
+test("every IANA special-purpose registry entry has an explicit address decision", () => {
+  const registryEntries = [...IPV4_SPECIAL_PURPOSE, ...IPV6_SPECIAL_PURPOSE]
+    .filter((entry) => entry.registry.startsWith("IPv"));
+  assert.equal(registryEntries.length, 51, "conformance set must cover every published IANA registry row");
+  for (const entry of registryEntries) {
+    // The globally reachable NAT64 prefix translates the embedded IPv4
+    // destination, so use a public translated address for its conformance row.
+    const networkAddress = entry.cidr === "64:ff9b::/96"
+      ? "64:ff9b::808:808"
+      : entry.cidr.slice(0, entry.cidr.indexOf("/"));
+    assert.equal(
+      isPublicUnicastAddress(networkAddress),
+      entry.globallyReachable,
+      `${entry.registry} ${entry.cidr} must have its explicit IANA reachability decision`,
+    );
+  }
+  for (const [address, reason] of [
+    ["192.31.196.1", "AS112-v4"],
+    ["192.52.193.1", "AMT"],
+    ["192.175.48.1", "AS112 service"],
+    ["2620:4f:8000::1", "AS112-v6"],
+  ] as const) {
+    assert.equal(isPublicUnicastAddress(address), true, `${reason} is explicitly globally reachable`);
+  }
 });
 
 test("literal private URLs are refused without any DNS", async () => {
