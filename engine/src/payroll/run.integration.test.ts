@@ -12,7 +12,8 @@ import { payRunBankFileEntitlement } from "./bank-file-artifact.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
+import { seedPayrollComponents } from "./run-setup.ts";
+import { seedCanadianPayrollComponentsForTest } from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";
@@ -57,7 +58,7 @@ test(
           },
         })}::jsonb where id = ${org.orgId}`);
 
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       // Employee: person party + hourly wage + biweekly schedule + TD1 profile
       const employeeId = randomUUID();
@@ -221,7 +222,7 @@ test(
             vacationPayableAccountId: craPayable, wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const agreementId = randomUUID();
       await db.execute(sql`
@@ -384,7 +385,7 @@ test(
             vacationPayableAccountId: craPayable, wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const agreementId = randomUUID();
       await db.execute(sql`
@@ -677,7 +678,7 @@ test(
       // A pack with no dependents uninstalls cleanly: CA was never used here.
       // 13 statutory components: TAX, QCTAX, CPP, CPP2, CPP-ER, EI, EI-ER,
       // QPIP, QPIP-ER, VAC, WCB, EHT, HSF.
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
       const removed = await uninstallPayrollPack(org.orgId, actorId, "CA");
       assert.equal(removed.componentsRemoved, 13);
       const caLeft = (await db.execute<{ n: number }>(sql`
@@ -738,7 +739,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
       // Both packs: the US entity's employee needs the US pack's components.
       await seedPayrollComponents(org.orgId, actorId, "US");
       await db.execute(sql`
@@ -863,7 +864,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
           features: { payroll: true },
@@ -994,7 +995,7 @@ test(
             wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const employeeId = randomUUID();
       await db.execute(sql`
@@ -1140,7 +1141,7 @@ test(
             wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const employeeId = randomUUID();
       await db.execute(sql`
@@ -1451,7 +1452,7 @@ async function seedFencedRaceOrg(): Promise<{
         wagesTo: "expense",
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedPayrollComponents(org.orgId, actorId, "CA");
+  await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
   const employeeId = randomUUID();
   await db.execute(sql`

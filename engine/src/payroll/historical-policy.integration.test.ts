@@ -9,8 +9,7 @@ import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
+import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 interface AdoptionFixture {
@@ -81,8 +80,7 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
         wagesTo: "expense",
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedPayrollComponents(org.orgId, actorId, "CA");
-  await seedOntarioEhtFixture(org.orgId, actorId);
+  await seedPayrollComponents(org.orgId, actorId);
   // A QC employer always owes the HSF at its own rate: a live-but-
   // unconfigured slot refuses by name at calculate, so the shared fixture
   // carries a rate and a mapping (inert for every ON test). HSF routing is

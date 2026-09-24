@@ -495,7 +495,7 @@ async function cleanComparisonFixture() {
         wagesTo: "expense",
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedPayrollComponents(org.orgId, actorId, "CA");
+  await seedPayrollComponents(org.orgId, actorId);
 
   const projectId = randomUUID();
   await db.execute(sql`

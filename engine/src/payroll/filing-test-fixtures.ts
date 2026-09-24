@@ -28,10 +28,10 @@ export async function seedOntarioEhtFixture(orgId: string, actorId: string, annu
 }
 
 export async function seedCanadianPayrollComponentsForTest(
-  orgId: string, actorId: string | null, country: string,
+  orgId: string, actorId: string,
 ): Promise<void> {
-  await seedPayrollComponents(orgId, actorId, country);
-  if (country === "CA" && actorId) await seedOntarioEhtFixture(orgId, actorId);
+  await seedPayrollComponents(orgId, actorId, "CA");
+  await seedOntarioEhtFixture(orgId, actorId);
 }
 
 async function seedEmployee(
