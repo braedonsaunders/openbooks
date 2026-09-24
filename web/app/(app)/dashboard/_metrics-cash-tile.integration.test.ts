@@ -160,7 +160,7 @@ test("dashboard cash tile agrees with the legacy reader on a simple org", { skip
     const actor = await withBypass(() => createScratchUser(org.orgId, "Cash Reader", "admin"));
     await pinClock(TODAY, async () => {
       await withOrgContext(org.orgId, async () => {
-        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null));
+        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), ["kpi-cash-balance"]);
         assert.equal(metrics.asOfDate, TODAY, "tile is cut at the pinned business day");
         assert.equal(metrics.baseCurrency, "CAD", "tile stays denominated in the org base");
         assert.equal(toUnits(metrics.cashBalance), toUnits("1000.0000"), "tile reads the bank balance");
@@ -239,11 +239,11 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
         // in raw and counts the dormant account. Asserting the exact wrong
         // total pins WHAT the tile no longer equals.
         assert.equal(toUnits(await legacyCash(org.orgId)), toUnits("1800.0000"), "legacy reader sums raw mixed units plus dormant");
-        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null));
+        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), ["kpi-cash-balance"]);
         assert.equal(metrics.asOfDate, TODAY, "tile is cut at the pinned business day");
         // 500 + 1000 + 100×1.35: dormant/summary excluded, USD translated.
         assert.equal(toUnits(metrics.cashBalance), toUnits("1635.0000"), "tile ties the cockpit: scoped population, translated");
-        const restricted = await loadDashboardMetrics(authzFor(org.orgId, actor, new Set([org.subsidiaryId])));
+        const restricted = await loadDashboardMetrics(authzFor(org.orgId, actor, new Set([org.subsidiaryId])), ["kpi-cash-balance"]);
         // The USD leg sits outside the caller's subsidiary view: same figure
         // the /banking cockpit shows that caller.
         assert.equal(toUnits(restricted.cashBalance), toUnits("1500.0000"), "tile honors the caller subsidiary scope");

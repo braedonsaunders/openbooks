@@ -76,13 +76,13 @@ test("dashboard recon tile counts unmatched statement lines through the cockpit 
     await withBypass(() => seedStatement(org, 2, 1));
     const actor = await withBypass(() => createScratchUser(org.orgId, "Recon Reader", "admin"));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["banking.read"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["banking.read"]), ["kpi-items-to-reconcile"]),
     );
     assert.equal(metrics.unreconciledItems, 2, "matched lines do not count");
     // A caller without banking.read sees zero — and loadReconSummary proves
     // separately (no-DB unit test) that the reader is never called for them.
     const blind = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["gl.read"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["gl.read"]), ["kpi-items-to-reconcile"]),
     );
     assert.equal(blind.unreconciledItems, 0);
   } finally {
@@ -95,7 +95,7 @@ test("dashboard recon tile is honest on empty: zero items, not a missing tile", 
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Recon Reader", "admin"));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["banking.read"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["banking.read"]), ["kpi-items-to-reconcile"]),
     );
     assert.equal(metrics.unreconciledItems, 0);
   } finally {

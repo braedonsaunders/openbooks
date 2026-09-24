@@ -63,11 +63,11 @@ test("dashboard expenses tile counts pending_approval reports through the cockpi
     await withBypass(() => seedReport(org, "draft"));
     const actor = await withBypass(() => createScratchUser(org.orgId, "Expense Reader", "admin"));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["expenses.read"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["expenses.read"]), ["kpi-expenses-awaiting-approval"]),
     );
     assert.equal(metrics.pendingExpenses, 2, "approved and draft reports do not count");
     const blind = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["gl.read"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["gl.read"]), ["kpi-expenses-awaiting-approval"]),
     );
     assert.equal(blind.pendingExpenses, 0);
   } finally {
@@ -80,7 +80,7 @@ test("dashboard expenses tile is honest on empty", { skip: !DB }, async () => {
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Expense Reader", "admin"));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["expenses.read"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["expenses.read"]), ["kpi-expenses-awaiting-approval"]),
     );
     assert.equal(metrics.pendingExpenses, 0);
   } finally {
