@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectsCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectsCommand, HeadBucketCommand, type DeleteObjectsCommandOutput } from "@aws-sdk/client-s3";
 import { env } from "./db.ts";
 
 /** Shared file-cabinet blob driver used by both web requests and workers. */
@@ -11,7 +11,20 @@ export function activeStorageKind(): "db" | "s3" {
 }
 
 let client: S3Client | null = null;
+let s3ClientOverride: S3Client | null = null;
+
+/**
+ * Test seam: replace the S3 network client behind the file-cabinet blob
+ * driver (mirrors setSftpS3ClientForTests). setFileBlobStoreForTests swaps
+ * the whole driver; this swaps only the transport, so tests exercise the
+ * real chunking and failure mapping in s3Store.
+ */
+export function setFileBlobS3ClientForTests(replacement: S3Client | null): void {
+  s3ClientOverride = replacement;
+}
+
 function s3(): S3Client {
+  if (s3ClientOverride) return s3ClientOverride;
   client ??= new S3Client({
     endpoint: env.S3_ENDPOINT,
     region: env.S3_REGION || "us-east-1",
@@ -75,6 +88,27 @@ export interface FileBlobStore {
   deleteObjects(versionIds: string[]): Promise<void>;
 }
 
+/**
+ * Named refusal for an incomplete blob delete. S3's DeleteObjects reports
+ * per-key failures inside a 200 response (the Errors array) and transport
+ * failures raise — either way the bytes named here were NOT confirmed
+ * deleted, so the retry set is exactly this list. The detail carries the
+ * service's cause for the log; the remedy is always the same retry.
+ */
+export class FileBlobDeleteError extends Error {
+  readonly name = "FileBlobDeleteError";
+  readonly code = "blob_delete_incomplete";
+  readonly versionIds: readonly string[];
+
+  constructor(versionIds: readonly string[], detail: string) {
+    super(
+      `blob cleanup incomplete: ${versionIds.length} object(s) were not deleted (${detail}) — ` +
+        `the bytes remain in the bucket; retry the delete for these versions`,
+    );
+    this.versionIds = [...versionIds];
+  }
+}
+
 const s3Store: FileBlobStore = {
   async putObject(versionId, bytes, contentType) {
     await s3().send(new PutObjectCommand({
@@ -106,16 +140,40 @@ const s3Store: FileBlobStore = {
     }));
   },
   async deleteObjects(versionIds) {
+    // Fail LOUD: every key not confirmed deleted is collected and refused.
+    // S3 answers per-key failures inside a 200 (the Errors array — Quiet is
+    // off on purpose so Deleted confirms the rest), and a transport failure
+    // stops the sweep at this chunk: later chunks are unattempted, never
+    // silently skipped. Resolving success here orphaned bytes while rows
+    // vanished, so this throws instead.
+    const unconfirmed = new Set(versionIds);
+    let detail = "no confirmation received";
     for (let index = 0; index < versionIds.length; index += 1_000) {
       const chunk = versionIds.slice(index, index + 1_000);
+      let result: DeleteObjectsCommandOutput;
       try {
-        await s3().send(new DeleteObjectsCommand({
+        result = await s3().send(new DeleteObjectsCommand({
           Bucket: env.S3_BUCKET!,
-          Delete: { Objects: chunk.map((id) => ({ Key: objectKey(id) })), Quiet: true },
+          Delete: { Objects: chunk.map((id) => ({ Key: objectKey(id) })) },
         }));
       } catch (error) {
-        console.error("[file-storage] S3 blob cleanup failed (objects orphaned):", (error as Error).message);
+        detail = error instanceof Error ? error.message : String(error);
+        break;
       }
+      for (const entry of result.Deleted ?? []) {
+        if (typeof entry.Key === "string" && entry.Key.startsWith("file-cabinet/")) {
+          unconfirmed.delete(entry.Key.slice("file-cabinet/".length));
+        }
+      }
+      const failures = result.Errors ?? [];
+      if (failures.length > 0) {
+        const first = failures[0]!;
+        const cause = [first.Code, first.Message].filter(Boolean).join(" ") || "unknown";
+        detail = `${failures.length} key(s) refused (first: ${first.Key ?? "?"}: ${cause})`;
+      }
+    }
+    if (unconfirmed.size > 0) {
+      throw new FileBlobDeleteError([...unconfirmed], detail);
     }
   },
 };

@@ -1,6 +1,7 @@
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
@@ -40,6 +41,15 @@ export interface FakeS3 {
   client: S3Client;
 }
 
+/**
+ * Failure injection for DeleteObjectsCommand: keys in `refuseDeleteKeys`
+ * are answered with per-key errors (and left stored) exactly like the
+ * service answers AccessDenied — the batch itself still returns 200.
+ */
+export interface FakeS3Options {
+  refuseDeleteKeys?: Set<string>;
+}
+
 /** The middleware-stack input of an SDK command (what the backend constructed). */
 export function commandInput(command: unknown): Record<string, unknown> {
   return (command as unknown as { input: Record<string, unknown> }).input;
@@ -58,7 +68,7 @@ function noSuchKey(key: string): Error {
   return error;
 }
 
-export function createFakeS3(): FakeS3 {
+export function createFakeS3(options?: FakeS3Options): FakeS3 {
   const objects = new Map<string, StoredObject>();
   const sent: unknown[] = [];
 
@@ -83,6 +93,26 @@ export function createFakeS3(): FakeS3 {
     if (command instanceof DeleteObjectCommand) {
       objects.delete(commandInput(command)["Key"] as string);
       return {};
+    }
+    if (command instanceof DeleteObjectsCommand) {
+      // Multi-object delete answers per key: refused keys come back in
+      // Errors (the batch still returns 200), deleted keys in Deleted —
+      // unless the caller passed Quiet, which suppresses Deleted only.
+      const input = commandInput(command);
+      const keys = ((input["Delete"] as { Objects?: { Key?: string }[] } | undefined)?.Objects ?? [])
+        .map((entry) => entry.Key)
+        .filter((key): key is string => typeof key === "string");
+      const deleted: { Key: string }[] = [];
+      const errors: { Key: string; Code: string; Message: string }[] = [];
+      for (const key of keys) {
+        if (options?.refuseDeleteKeys?.has(key)) {
+          errors.push({ Key: key, Code: "AccessDenied", Message: "refused by fake S3" });
+        } else {
+          objects.delete(key);
+          deleted.push({ Key: key });
+        }
+      }
+      return input["Quiet"] ? { Errors: errors } : { Deleted: deleted, Errors: errors };
     }
     if (command instanceof ListObjectsV2Command) {
       const input = commandInput(command);
@@ -165,5 +195,18 @@ export function sentCopies(fake: FakeS3): { CopySource: string; Key: string }[] 
     .map((command) => {
       const input = commandInput(command);
       return { CopySource: input["CopySource"] as string, Key: input["Key"] as string };
+    });
+}
+
+/** Every DeleteObjectsCommand the fake has seen, in send order. */
+export function sentDeletes(fake: FakeS3): string[][] {
+  return fake.sent
+    .filter((command): command is DeleteObjectsCommand => command instanceof DeleteObjectsCommand)
+    .map((command) => {
+      const input = commandInput(command);
+      const objects = (input["Delete"] as { Objects?: { Key?: string }[] } | undefined)?.Objects ?? [];
+      return objects
+        .map((entry) => entry.Key)
+        .filter((key): key is string => typeof key === "string");
     });
 }

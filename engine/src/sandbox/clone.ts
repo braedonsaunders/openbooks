@@ -532,6 +532,8 @@ export async function copyClonedFileObjects(opts: {
       copied.push(pair.sandboxVersionId);
     }
   } catch (err) {
+    // Compensating cleanup during unwind: best-effort on purpose — a cleanup
+    // failure here must never mask the original copy error being rethrown.
     await deleteS3Blobs(copied).catch(() => undefined);
     throw err;
   }
