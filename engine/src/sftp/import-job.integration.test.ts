@@ -20,8 +20,8 @@ const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-import-job-"))
 const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
-const { runDueSftpImports, sftpImportAuditSource } = await import("./import-job.ts");
-const { db } = await import("../platform/db.ts");
+const { recordScheduleRunOutcome, runDueSftpImports, sftpImportAuditSource } = await import("./import-job.ts");
+const { db, withOrgContext } = await import("../platform/db.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -470,6 +470,56 @@ test(
       // The failure stays in the folder for a later retry; the import moves on.
       assert.ok(listFolder(f.rootPrefix, "inbound").includes("a-broken.ofx"));
       assert.ok(!listFolder(f.rootPrefix, "inbound").includes("z-good.ofx"));
+    } finally {
+      await dropScratchOrgReporting(f.org.orgId);
+      rmSync(scratchDataDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "a schedule deleted mid-scan keeps its run evidence in audit and names it in the result",
+  { skip: !DB },
+  async () => {
+    const f = await seedSftpFixture();
+    try {
+      const run = {
+        scheduleId: f.authoredScheduleId,
+        filesSeen: 1,
+        imported: 2,
+        duplicates: 0,
+        errors: [] as string[],
+        files: [{
+          file: "acct.ofx",
+          imported: 2,
+          duplicates: 0,
+          statementIds: ["00000000-0000-4000-8000-000000000010"],
+        }],
+      };
+      // The schedule row still exists: the outcome lands on last_result,
+      // the returned run is untouched, and no audit row is written.
+      const recorded = await withOrgContext(f.org.orgId, () =>
+        recordScheduleRunOutcome({ id: f.authoredScheduleId, org_id: f.org.orgId }, run));
+      assert.deepEqual(recorded.errors, []);
+      assert.equal((await loadSchedule(f.authoredScheduleId)).lastResult?.imported, 2);
+
+      // Deleted mid-scan: zero matched rows. The evidence must survive in
+      // audit and the returned run must say so by name — never a phantom
+      // clean scan while the evidence is silently dropped.
+      await db.execute(sql`delete from sftp_import_schedules where id = ${f.authoredScheduleId}`);
+      const orphaned = await withOrgContext(f.org.orgId, () =>
+        recordScheduleRunOutcome({ id: f.authoredScheduleId, org_id: f.org.orgId }, run));
+      assert.equal(orphaned.errors.length, 1);
+      assert.match(orphaned.errors[0]!, /was deleted during the scan/);
+      assert.match(orphaned.errors[0]!, /last_result was not recorded/);
+      const audit = (await db.execute<{ action: string; changes: typeof run; request: string | null }>(sql`
+        select action, changes, request_id as request from audit_log
+         where org_id = ${f.org.orgId} and table_name = 'sftp_import_schedules' and row_id = ${f.authoredScheduleId}
+      `)).rows;
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0]!.action, "scan_outcome_unrecorded");
+      assert.deepEqual(audit[0]!.changes, run);
+      assert.equal(audit[0]!.request, sftpImportAuditSource(f.authoredScheduleId));
     } finally {
       await dropScratchOrgReporting(f.org.orgId);
       rmSync(scratchDataDir, { recursive: true, force: true });
