@@ -10,6 +10,11 @@ const ACTUAL_UPDATED_AT = '2026-08-31T12:34:56.789123Z'
 
 interface RouteState {
   operation: 'patch' | 'delete'
+  allowedSubsidiaryIds: Set<string> | null
+  partySubsidiary: string | null
+  rehomeAfterPreflight: boolean
+  inFlightPayment: boolean
+  liveMandate: boolean
   updatedAt: string
   queries: string[]
   updateParams: unknown[][]
@@ -21,6 +26,11 @@ interface RouteState {
 const stateKey = Symbol.for('openbooks.bank-accounts-route-test')
 const state: RouteState = {
   operation: 'patch',
+  allowedSubsidiaryIds: null,
+  partySubsidiary: null,
+  rehomeAfterPreflight: false,
+  inFlightPayment: false,
+  liveMandate: false,
   updatedAt: ACTUAL_UPDATED_AT,
   queries: [],
   updateParams: [],
@@ -46,9 +56,16 @@ const mockSources = new Map<string, string>([
     `
       const NextResponse = globalThis.openbooksBankAccountsNextResponse
       export async function guardPermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+        const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
-      export function guardSubsidiaryScope() { return null }
+      export function guardSubsidiaryScope(gate, subsidiaryId, options = {}) {
+        if (gate.allowedSubsidiaryIds === null) return null
+        if (subsidiaryId === null && options.orgWideNull) return null
+        return subsidiaryId && gate.allowedSubsidiaryIds.has(subsidiaryId)
+          ? null
+          : NextResponse.json({ error: 'party not found' }, { status: 404 })
+      }
     `,
   ],
   [
@@ -126,7 +143,15 @@ const mockSources = new Map<string, string>([
         async execute(query) {
           const text = queryText(query)
           state.queries.push(text)
-          if (text.includes('from parties')) return { rows: [{ subsidiaryId: null }] }
+          if (text.includes('from parties')) {
+            const locked = /for update/i.test(text)
+            const subsidiaryId = state.partySubsidiary
+            if (!locked && state.rehomeAfterPreflight) state.partySubsidiary = 'sub-B'
+            if (locked && state.allowedSubsidiaryIds && subsidiaryId && !state.allowedSubsidiaryIds.has(subsidiaryId)) {
+              return { rows: [] }
+            }
+            return { rows: [{ id: 'party-1', subsidiaryId }] }
+          }
           if (text.includes('select approval_status') && text.includes('from party_bank_accounts')) {
             return { rows: [{ approvalStatus: 'approved', updatedAt: state.updatedAt }] }
           }
@@ -134,9 +159,9 @@ const mockSources = new Map<string, string>([
             return { rows: [{ updatedAt: state.updatedAt }] }
           }
           if (text.includes('from payment_instructions') && text.includes('payment_mandates')) {
-            return { rows: [{ in_flight_payment: false, live_mandate: false }] }
+            return { rows: [{ in_flight_payment: state.inFlightPayment, live_mandate: state.liveMandate }] }
           }
-          if (text.includes('from payment_instructions')) return { rows: [{ inFlightPayment: false }] }
+          if (text.includes('from payment_instructions')) return { rows: [{ inFlightPayment: state.inFlightPayment }] }
           if (text.includes('update party_bank_accounts')) {
             state.updateParams.push(queryParams(query))
             if (state.operation === 'delete') {
@@ -215,6 +240,11 @@ hooks.deregister()
 
 function reset(operation: RouteState['operation']): void {
   state.operation = operation
+  state.allowedSubsidiaryIds = null
+  state.partySubsidiary = null
+  state.rehomeAfterPreflight = false
+  state.inFlightPayment = false
+  state.liveMandate = false
   state.updatedAt = ACTUAL_UPDATED_AT
   state.queries = []
   state.updateParams = []
@@ -319,3 +349,65 @@ test('DELETE requires the same canonical revision format as PATCH', async () => 
   assert.equal(response.status, 409)
   assert.equal(state.updateParams.length, 0)
 })
+
+// This table is the complete set of bank-account mutations that refuse on
+// payment dependencies. Exercising every row keeps a new PATCH/DELETE refusal
+// from reintroducing the scope-check-before-lock ordering bug.
+const dependencyRefusalPaths = [
+  {
+    method: 'PATCH' as const,
+    operation: 'patch' as const,
+    requestBody: {
+      bankName: 'Updated bank',
+      changeReason: 'replace account',
+      expectedUpdatedAt: ACTUAL_UPDATED_AT,
+    },
+    dependencyQuery: 'from payment_instructions',
+    refusalBody: { error: 'cancel in-flight payment instructions referencing these bank details before editing them' },
+    blockDependency() { state.inFlightPayment = true },
+  },
+  {
+    method: 'DELETE' as const,
+    operation: 'delete' as const,
+    requestBody: {
+      retirementReason: 'account retired',
+      expectedUpdatedAt: ACTUAL_UPDATED_AT,
+    },
+    dependencyQuery: 'from payment_mandates',
+    refusalBody: { error: 'cancel in-flight payment instructions and revoke live mandates before retiring these bank details' },
+    blockDependency() { state.liveMandate = true },
+  },
+]
+
+for (const path of dependencyRefusalPaths) {
+  test(`${path.method} hides dependency refusal after the party is rehomed out of scope`, async () => {
+    reset(path.operation)
+    state.allowedSubsidiaryIds = new Set(['sub-A'])
+    state.partySubsidiary = 'sub-A'
+    state.rehomeAfterPreflight = true
+    path.blockDependency()
+
+    const response = await request(path.method, path.requestBody)
+
+    assert.equal(response.status, 404)
+    assert.deepEqual(await response.json(), { error: 'party not found' })
+    assert.equal(state.queries.some((query) => query.includes(path.dependencyQuery)), false)
+    assert.equal(state.updateParams.length, 0)
+  })
+
+  test(`${path.method} returns its dependency remedy after locking the in-scope party`, async () => {
+    reset(path.operation)
+    state.allowedSubsidiaryIds = new Set(['sub-A'])
+    state.partySubsidiary = 'sub-A'
+    path.blockDependency()
+
+    const response = await request(path.method, path.requestBody)
+
+    assert.equal(response.status, 422)
+    assert.deepEqual(await response.json(), path.refusalBody)
+    const lockIndex = state.queries.findIndex((query) => /from parties/i.test(query) && /for update/i.test(query))
+    const dependencyIndex = state.queries.findIndex((query) => query.includes(path.dependencyQuery))
+    assert.ok(lockIndex >= 0 && dependencyIndex > lockIndex)
+    assert.equal(state.updateParams.length, 0)
+  })
+}
