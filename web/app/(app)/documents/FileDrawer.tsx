@@ -168,7 +168,7 @@ export function FileDrawer({
       title={file.name}
       description={file.folderName ?? undefined}
       size="2xl"
-      subtabs={<DrawerTabs tabs={tabs} active={tab} onSelect={setTab} />}
+      subtabs={<DrawerTabs tabs={tabs} active={tab} onSelect={setTab} ariaLabel={tc('auditTrail.ariaLabel')} />}
       headerActions={
         mode === 'edit' ? (
           <div className="flex items-center gap-2">

@@ -21,11 +21,11 @@ test('the strip renders every tab with the active one selected', () => {
     />,
   )
   assert.match(html, /<nav[^>]*aria-label="Payroll sections"/)
-  assert.match(html, /role="tab"/)
+  assert.match(html, /aria-pressed="true"/)
   assert.match(html, />General</)
   assert.match(html, />Tax and withholding</)
-  assert.match(html, /aria-selected="true"[^>]*>Tax and withholding</)
-  assert.match(html, /aria-selected="false"[^>]*>General</)
+  assert.match(html, /aria-pressed="true"[^>]*>Tax and withholding</)
+  assert.match(html, /aria-pressed="false"[^>]*>General</)
 })
 
 // The behavioural contract, exercised for real: clicking a tab notifies the
@@ -57,7 +57,7 @@ test('selecting a tab notifies the parent with the tab key', async () => {
         />,
       )
     })
-    const tabs = [...dom.window.document.querySelectorAll('button[role="tab"]')]
+    const tabs = [...dom.window.document.querySelectorAll('button[aria-pressed]')]
     assert.equal(tabs.length, 2)
     // jsdom's window is typed as the bare DOM `Window`, and constructors live on
     // `typeof globalThis` rather than on that interface — so `dom.window.MouseEvent`
@@ -82,4 +82,3 @@ test('selecting a tab notifies the parent with the tab key', async () => {
     dom.window.close()
   }
 })
-

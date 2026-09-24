@@ -143,7 +143,7 @@ async function mountHost(t: TestContext): Promise<void> {
 }
 
 function findTab(label: string): HTMLButtonElement | undefined {
-  return [...document.querySelectorAll('button[role="tab"]')].find(
+  return [...document.querySelectorAll('button[aria-pressed]')].find(
     (b) => (b.textContent ?? '').trim() === label,
   ) as HTMLButtonElement | undefined
 }
