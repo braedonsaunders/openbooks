@@ -1832,6 +1832,7 @@
       "type": "资质类型",
       "employmentPlaceholder": "选择一名员工…",
       "employmentsFailed": "无法加载员工。",
+      "typesFailed": "无法加载资质类型。",
       "recordFailed": "无法记录该资格。",
       "issuedOn": "签发日期",
       "expiresOn": "到期日期",
