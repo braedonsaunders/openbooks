@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
   BANK_STATEMENT_PARSER_VERSION,
   SYSTEM_ACTOR_ID,
@@ -163,6 +163,8 @@ export interface ScheduleRun {
   duplicates: number;
   errors: string[];
   files: ScheduleFileOutcome[];
+  /** Another live scan owns the schedule's shared advisory lock. */
+  alreadyRunning?: true;
 }
 type ScheduleRow = {
   id: string; org_id: string; account_id: string; format: Fmt; folder: string; csv_mapping: CsvMapping | null;
@@ -349,6 +351,96 @@ export async function recordScheduleRunOutcome(
   return { ...run, errors: [...run.errors, message] };
 }
 
+/** Stable advisory-lock identity shared by scheduler ticks and manual runs. */
+export function sftpImportScheduleRunLockKey(orgId: string, scheduleId: string): string {
+  return `sftp-import-schedule:${orgId}:${scheduleId}`;
+}
+
+/**
+ * Claim and run one schedule. The session advisory lock serializes every
+ * entrypoint for the full external-file lifetime and releases automatically
+ * if the worker dies. The row token is durable evidence of the active attempt;
+ * after a process death, the next lock owner replaces that stale token and
+ * resumes from the still-unarchived source files.
+ */
+async function runClaimedSchedule(s: ScheduleRow): Promise<ScheduleRun> {
+  const lockConnection = await pool.connect();
+  const lockKey = sftpImportScheduleRunLockKey(s.org_id, s.id);
+  let acquired = false;
+  try {
+    acquired = (await lockConnection.query<{ acquired: boolean }>(
+      "select pg_try_advisory_lock(hashtextextended($1, 0)) as acquired",
+      [lockKey],
+    )).rows[0]?.acquired === true;
+    if (!acquired) {
+      return {
+        scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0,
+        errors: ["this SFTP import schedule is already running; wait for the active scan to finish"],
+        files: [], alreadyRunning: true,
+      };
+    }
+
+    const claimToken = randomUUID();
+    const claimed = await withOrgContext(s.org_id, () => db.execute(sql`
+      update sftp_import_schedules
+         set run_claim_token = ${claimToken}, run_claimed_at = now()
+       where id = ${s.id} and org_id = ${s.org_id} and is_active
+       returning id
+    `));
+    if (!claimed.rows[0]) {
+      return {
+        scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0,
+        errors: ["this SFTP import schedule is no longer active; activate it before running"],
+        files: [],
+      };
+    }
+
+    let run: ScheduleRun;
+    try {
+      run = await withOrgContext(s.org_id, () => runSchedule(s));
+    } catch (e) {
+      run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] };
+    }
+    const saved = await withOrgContext(s.org_id, () => db.execute(sql`
+      update sftp_import_schedules
+         set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb,
+             run_claim_token = null, run_claimed_at = null
+       where id = ${s.id} and org_id = ${s.org_id} and run_claim_token = ${claimToken}
+       returning id
+    `));
+    if (!saved.rows[0]) {
+      const message = `SFTP schedule '${s.id}' disappeared or its run claim changed before the outcome could be saved`;
+      await withOrgContext(s.org_id, () => db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (${s.org_id}, 'sftp_import_schedules', ${s.id}, 'scan_outcome_unrecorded', ${JSON.stringify(run)}::jsonb,
+                ${SYSTEM_ACTOR_ID}, ${sftpImportAuditSource(s.id)})
+      `));
+      return { ...run, errors: [...run.errors, message] };
+    }
+
+    // The unbound schedule notice is part of the claimant's outcome work too;
+    // another invocation that loses the lock never writes schedule evidence.
+    if (s.format !== "csv" && !normalizeExternalAccountId(s.expected_external_account_id)) {
+      await withOrgContext(s.org_id, () => ensureUnboundScheduleNotice(s));
+    }
+    return run;
+  } finally {
+    let releaseError: Error | undefined;
+    if (acquired) {
+      try {
+        const unlocked = await lockConnection.query<{ unlocked: boolean }>(
+          "select pg_advisory_unlock(hashtextextended($1, 0)) as unlocked",
+          [lockKey],
+        );
+        if (!unlocked.rows[0]?.unlocked) releaseError = new Error("SFTP schedule advisory lock could not be released");
+      } catch (error) {
+        releaseError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    lockConnection.release(releaseError);
+  }
+}
+
 /** Run every active import schedule due for a scan (called from the scheduler tick). */
 export async function runDueSftpImports(orgId?: string, scheduleId?: string): Promise<ScheduleRun[]> {
   // Discovering due schedules spans organizations (the scheduler tick passes no
@@ -374,22 +466,9 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
   const runs: ScheduleRun[] = [];
   for (const s of rows.rows) {
     let run: ScheduleRun;
-    try { run = await withOrgContext(s.org_id, () => runSchedule(s)); }
+    try { run = await runClaimedSchedule(s); }
     catch (e) { run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] }; }
     runs.push(run);
-    await withOrgContext(s.org_id, async () => {
-      // The recorded outcome (including a mid-scan deletion refusal) is the
-      // run the caller reports — never the pre-recorded silent version.
-      run = await recordScheduleRunOutcome(s, run);
-      runs[runs.length - 1] = run;
-      // A schedule that cannot accept identified statements must not fail
-      // silently into an empty watch folder: raise (or keep) the one named
-      // house notice until the binding lands. Runs after the scan so a
-      // notice never blocks or renames the import outcome itself.
-      if (s.format !== "csv" && !normalizeExternalAccountId(s.expected_external_account_id)) {
-        await ensureUnboundScheduleNotice(s);
-      }
-    });
   }
   return runs;
 }

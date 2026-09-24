@@ -21,7 +21,8 @@ const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
 const { recordScheduleRunOutcome, runDueSftpImports, sftpImportAuditSource } = await import("./import-job.ts");
-const { db, withOrgContext } = await import("../platform/db.ts");
+const { db, pool, withOrgContext } = await import("../platform/db.ts");
+const { sftpImportScheduleRunLockKey } = await import("./import-job.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -325,6 +326,50 @@ test(
       await dropScratchOrgReporting(f.org.orgId);
       rmSync(scratchDataDir, { recursive: true, force: true });
     }
+  },
+);
+
+test(
+  "a scheduler/manual contender reports already-running without reading, importing, archiving, or saving evidence",
+  { skip: !DB },
+  async () => {
+    const f = await seedSftpFixture();
+    const blocker = await pool.connect();
+    let lockHeld = false;
+    try {
+      const lockKey = sftpImportScheduleRunLockKey(f.org.orgId, f.authoredScheduleId);
+      await blocker.query("select pg_advisory_lock(hashtextextended($1, 0))", [lockKey]);
+      lockHeld = true;
+      const before = (await db.execute<{ last_result: unknown; run_claim_token: string | null }>(sql`
+        select last_result, run_claim_token from sftp_import_schedules
+         where id = ${f.authoredScheduleId} and org_id = ${f.org.orgId}
+      `)).rows[0]!;
+
+      const skipped = (await runDueSftpImports(f.org.orgId, f.authoredScheduleId))[0]!;
+      assert.equal(skipped.alreadyRunning, true);
+      assert.match(skipped.errors.join("\n"), /already running; wait for the active scan to finish/);
+      assert.equal(skipped.filesSeen, 0);
+      assert.ok(listFolder(f.rootPrefix, "inbound").includes("acct.ofx"), "a losing invocation leaves the source file untouched");
+      const after = (await db.execute<{ last_result: unknown; run_claim_token: string | null }>(sql`
+        select last_result, run_claim_token from sftp_import_schedules
+         where id = ${f.authoredScheduleId} and org_id = ${f.org.orgId}
+      `)).rows[0]!;
+      assert.deepEqual(after, before, "a losing invocation does not persist schedule evidence or a claim");
+
+      await blocker.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
+      lockHeld = false;
+      const claimed = (await runDueSftpImports(f.org.orgId, f.authoredScheduleId))[0]!;
+      assert.equal(claimed.alreadyRunning, undefined);
+      assert.equal(claimed.imported, 2);
+      assert.deepEqual(claimed.errors, []);
+      assert.ok(!listFolder(f.rootPrefix, "inbound").includes("acct.ofx"), "the lock owner archives the imported source");
+    } finally {
+      if (lockHeld) await blocker.query("select pg_advisory_unlock(hashtextextended($1, 0))", [sftpImportScheduleRunLockKey(f.org.orgId, f.authoredScheduleId)]).catch(() => undefined);
+      blocker.release();
+      await dropScratchOrgReporting(f.org.orgId);
+      rmSync(scratchDataDir, { recursive: true, force: true });
+    }
+
   },
 );
 

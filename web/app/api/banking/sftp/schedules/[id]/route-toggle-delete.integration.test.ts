@@ -29,12 +29,14 @@ interface RouteState {
   } | null;
   identity: RouteState["authz"];
   runCalls: Array<{ orgId: string; scheduleId: string }>;
+  runAlreadyRunning: boolean;
   deny(permission: string | null): NextResponse;
 }
 const routeState: RouteState = {
   authz: null,
   identity: null,
   runCalls: [],
+  runAlreadyRunning: false,
   deny(permission) {
     return permission
       ? NextResponse.json(
@@ -65,6 +67,7 @@ const mockImportJob = `
   const state = globalThis[Symbol.for('openbooks.sftp-schedule-toggle-delete-test')]
   export async function runDueSftpImports(orgId, scheduleId) {
     state.runCalls.push({ orgId, scheduleId })
+    if (state.runAlreadyRunning) return [{ scheduleId, filesSeen: 0, imported: 0, duplicates: 0, errors: ['this SFTP import schedule is already running; wait for the active scan to finish'], files: [], alreadyRunning: true }]
     return [{ scheduleId, filesSeen: 0, imported: 0, duplicates: 0, errors: [], files: [] }]
   }
 `;
@@ -382,7 +385,16 @@ test(
       assert.deepEqual(routeState.runCalls, [
         { orgId: fixture.orgId, scheduleId },
       ]);
+
+      routeState.runAlreadyRunning = true;
+      const collision = await patchStatus(fixture, scheduleId, { action: "run" });
+      assert.equal(collision.status, 409);
+      assert.deepEqual(collision.body, {
+        error: "this SFTP import schedule is already running; wait for the active scan to finish",
+        code: "SFTP_IMPORT_ALREADY_RUNNING",
+      });
     } finally {
+      routeState.runAlreadyRunning = false;
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }
   },

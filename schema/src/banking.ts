@@ -403,6 +403,9 @@ export const sftpImportSchedules = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     lastResult: jsonb("last_result"),
+    /** Durable visibility/recovery marker for the session-locked active scan. */
+    runClaimToken: uuid("run_claim_token"),
+    runClaimedAt: timestamp("run_claimed_at", { withTimezone: true }),
     ...auditColumns,
   },
   (t): PgTableExtraConfigValue[] => [

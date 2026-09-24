@@ -153,6 +153,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // it does not turn this operator into the statements' importer.
     const runs = await runDueSftpImports(user.orgId, id)
     const mine = runs.find((r) => r.scheduleId === id)
+    if (mine?.alreadyRunning) {
+      return NextResponse.json(
+        { error: mine.errors[0], code: 'SFTP_IMPORT_ALREADY_RUNNING' },
+        { status: 409 },
+      )
+    }
     if (mine) return NextResponse.json({ ok: true, result: mine })
     // No scan executed for this schedule: the engine deliberately excludes
     // inactive schedules, inactive servers, non-production orgs, and orgs
