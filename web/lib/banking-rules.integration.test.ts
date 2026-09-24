@@ -282,6 +282,114 @@ test(
 );
 
 test(
+  "bulk apply does not use a rule snapshot for lines after deactivation commits",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runIntegrationSource(`
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db, withOrgTransaction } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./engine/src/testing/fixtures.ts";
+      import { importStatement } from "./engine/src/banking/banking.ts";
+      import { applyRulesToAccount } from "./web/lib/banking-rules.ts";
+
+      installTrustedTestDatabaseBypass();
+      const org = await createScratchOrg();
+      let unlockLine;
+      let lineLockPromise;
+      try {
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        await db.execute(sql\`update accounts set reconcilable = true, currency_restriction = 'CAD'
+          where id = \${org.accounts.bank} and org_id = \${org.orgId}\`);
+        await importStatement({
+          accountId: org.accounts.bank,
+          source: "manual",
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "30.0000",
+          currency: "CAD",
+          lines: [
+            { postedOn: org.date, amount: "10.0000", description: "Bulk disable race one", bankTransactionId: "bulk-disable-1" },
+            { postedOn: org.date, amount: "20.0000", description: "Bulk disable race two", bankTransactionId: "bulk-disable-2" },
+          ],
+        }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null });
+        const lines = (await db.execute(sql\`
+          select id, match_status from bank_statement_lines
+           where org_id = \${org.orgId} and bank_transaction_id = any(ARRAY['bulk-disable-1','bulk-disable-2'])
+           order by line_number
+        \`)).rows;
+        assert.equal(lines.length, 2);
+        const ruleId = randomUUID();
+        await db.execute(sql\`
+          insert into bank_match_rules
+            (id, org_id, name, criteria, outcome, priority, is_active, created_by)
+          values (\${ruleId}, \${org.orgId}, 'Bulk disable rule',
+            \${JSON.stringify({
+              version: 2,
+              match: { combinator: "and", rules: [{ field: "description", op: "contains", value: "Bulk disable race" }] },
+              accountScope: [org.accounts.bank],
+            })}::jsonb,
+            '{"action":"exclude"}'::jsonb, 1, true, \${actorId})
+        \`);
+
+        let signalLineLocked;
+        const lineLocked = new Promise((resolve) => { signalLineLocked = resolve; });
+        const lineLockReleased = new Promise((resolve) => { unlockLine = resolve; });
+        lineLockPromise = withOrgTransaction(org.orgId, async () => {
+          await db.execute(sql\`select id from bank_statement_lines where id = \${lines[0].id} for update\`);
+          signalLineLocked();
+          await lineLockReleased;
+        });
+        await lineLocked;
+
+        const applying = applyRulesToAccount(org.orgId, actorId, org.accounts.bank, null);
+        const waitForBlockedLine = async () => {
+          for (let attempt = 0; attempt < 200; attempt++) {
+            const blocked = await db.execute(sql\`
+              select 1 from pg_stat_activity
+               where datname = current_database() and pid <> pg_backend_pid()
+                 and wait_event_type = 'Lock' and query ilike '%update bank_statement_lines%'
+            \`);
+            if (blocked.rows.length) return;
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+          throw new Error("bulk apply never reached the locked first line");
+        };
+        await waitForBlockedLine();
+
+        let deactivationFinished = false;
+        const deactivation = withOrgTransaction(org.orgId, async () => {
+          await db.execute(sql\`update bank_match_rules set is_active = false where id = \${ruleId} and org_id = \${org.orgId}\`);
+          deactivationFinished = true;
+        });
+        // Let the UPDATE reach PostgreSQL before releasing the first line. In
+        // the fixed path it waits on the active-rule lock; in the old path it
+        // commits and exposes the stale-snapshot bug on the second line.
+        for (let attempt = 0; attempt < 200 && !deactivationFinished; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        unlockLine();
+        unlockLine = null;
+        await Promise.all([applying, deactivation]);
+
+        const statuses = (await db.execute(sql\`
+          select match_status from bank_statement_lines
+           where org_id = \${org.orgId} and bank_transaction_id = any(ARRAY['bulk-disable-1','bulk-disable-2'])
+           order by line_number
+        \`)).rows.map((row) => row.match_status);
+        assert.deepEqual(statuses, ["excluded", "unmatched"]);
+      } finally {
+        if (unlockLine) unlockLine();
+        if (lineLockPromise) await lineLockPromise;
+        await dropScratchOrg(org.orgId);
+      }
+    `);
+  },
+);
+
+test(
   "rule preview flags an equal-priority saved rule as the winner",
   { skip: !env.OPENBOOKS_DB_URL },
   () => {
