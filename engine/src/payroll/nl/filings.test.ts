@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { isFilingRowUuid } from "../filing-registry.ts";
+import { isValidBsn } from "./bsn.ts";
 import { NL_PAYROLL_PACK } from "./pack.ts";
 
 /**
@@ -12,6 +13,14 @@ import { NL_PAYROLL_PACK } from "./pack.ts";
  * someone's employee.
  */
 const jaaropgaaf = () => NL_PAYROLL_PACK.filings().yearEnd.find((filing) => filing.key === "jaaropgaaf")!;
+
+test("BSNs require nine digits and the 11-proef", () => {
+  assert.equal(isValidBsn("111222333"), true);
+  assert.equal(isValidBsn("123456782"), true);
+  assert.equal(isValidBsn("123456789"), false);
+  assert.equal(isValidBsn("12345678"), false);
+  assert.equal(isValidBsn(null), false);
+});
 
 test("a jaaropgaaf row id parses to the employee that owns it", () => {
   const employee = randomUUID();

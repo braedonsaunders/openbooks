@@ -18,6 +18,7 @@ import type {
 } from "../filing-registry.ts";
 import { storedTaxCertificates } from "../run-calculation-support.ts";
 import { NL_CERTIFICATES } from "./certificates.ts";
+import { isValidBsn } from "./bsn.ts";
 import { nlRatesForTaxYear } from "./loonheffing.ts";
 import type { NlAgeClass } from "./rates.ts";
 
@@ -176,8 +177,9 @@ function ageClassLabel(ageClass: NlAgeClass): string {
 /**
  * The sealed BSN, unsealed at render time — never stored on a filing row, a
  * log line or an error message. §15.3 requires the BSN on the statement with
- * no "(if known)" escape, so a missing or malformed value is a NAMED gap
- * with its remedy on the slip's face, never a blank box.
+ * no "(if known)" escape, so a missing or malformed value refuses the
+ * statement as a named PayrollError; an instruction is never placed in its
+ * mandatory identifier field.
  */
 async function bsnForSlip(orgId: string, employeePartyId: string): Promise<string> {
   const rows = (await db.execute<{ sin_encrypted: string | null }>(sql`
@@ -187,14 +189,16 @@ async function bsnForSlip(orgId: string, employeePartyId: string): Promise<strin
   `));
   const sealed = rows.rows[0]?.sin_encrypted ?? null;
   const bsn = unsealSecret(sealed);
-  // The pack's own identifier shape (9 digits; the elfproef is real but
-  // unsourced, so it is NOT enforced — see the pack declaration).
-  if (bsn && /^\d{9}$/.test(bsn)) return bsn;
-  const remedy = "add the BSN on the employee payroll profile before issuing";
+  const citation = "Handboek Loonheffingen 2026, hoofdstuk 15, §15.3 requires the BSN on the statement";
+  const remedy = "add or correct the BSN on the employee payroll profile before issuing";
   if (!bsn) {
-    return `Not on file — ${remedy} (Handboek Loonheffingen 2026, hoofdstuk 15, §15.3 requires the BSN on the statement)`;
+    throw new PayrollError(`cannot issue the NL jaaropgaaf because the employee BSN is missing — ${remedy} (${citation})`);
   }
-  return `Invalid — ${remedy} (the stored identifier is not 9 digits)`;
+  if (isValidBsn(bsn)) return bsn;
+  throw new PayrollError(
+    `cannot issue the NL jaaropgaaf because the employee BSN is invalid — ${remedy} `
+    + `(the stored identifier must contain 9 digits and pass the 11-proef; ${citation})`,
+  );
 }
 
 async function employerName(orgId: string): Promise<string> {
