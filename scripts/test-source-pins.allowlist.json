@@ -56,7 +56,6 @@
     "web/app/(app)/tax/provisions/view.test.ts": 1,
     "web/app/(app)/tax/tax-filing-notice.test.ts": 1,
     "web/app/(app)/timesheets/view-subsidiary-scope.test.ts": 2,
-    "web/app/api/insights/_lib.test.ts": 2,
     "web/app/api/payroll/settings/picker-vendors.test.ts": 2,
     "web/app/api/recruiting/apply/route.test.ts": 1,
     "web/app/api/scripts/client/sandbox-contract.test.ts": 1,
