@@ -1424,6 +1424,8 @@ const COGNATES = new Set<string>([
   'fr:hrm.surveys.kind.engagement|Engagement',
   'fr:hrm.surveys.questionKind.enps|eNPS 0–10',
   // Spanish HRM cognates: identical spellings (Total, Plan, No, Error) and notations (1:1, eNPS).
+  // Spanish yes/no choices retain the genuine cognate "No".
+  'es:payroll.holidayAttestations.no|No',
   'es:hrm.benefits.columns.plan|Plan',
   'es:hrm.employment.changeRequests.primaryNo|No',
   'es:hrm.home.groups.total|Total',

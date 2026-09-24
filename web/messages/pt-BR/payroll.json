@@ -1573,5 +1573,26 @@
       "unrounded": "Ponto sem arredondar",
       "custom": "Personalizado"
     }
+  },
+  "holidayAttestations": {
+    "loadFailed": "Não foi possível carregar as pessoas empregadas que precisam responder a estas exceções. Tente novamente em vez de responder sem as informações necessárias.",
+    "retry": "Tentar novamente",
+    "commissionTitle": "situação de remuneração por comissão",
+    "standingUnanswered": "Sem resposta. Este é um dado permanente do vínculo de trabalho. Responda uma vez para que os próximos períodos não perguntem novamente.",
+    "currentlyAnswered": "Resposta atual: {answer}. Responda novamente para corrigir.",
+    "paidOnCommission": "Recebe remuneração por comissão",
+    "choose": "Escolher…",
+    "no": "Não",
+    "yesWholePart": "Sim, total ou parcialmente",
+    "saveRecalculate": "Salvar e recalcular",
+    "absenceTitle": "declaração de ausência antes e depois do feriado",
+    "absenceExplanation": "A pessoa empregada faltou sem o consentimento da empresa no último turno previsto antes do feriado ou no primeiro depois dele? Uma lacuna no registro de horas não permite concluir isso, pois pode ser uma licença aprovada. Esta resposta vale somente para esta folha de pagamento.",
+    "holidayDate": "{holiday} — {date}",
+    "filedStatus": "(registrado: {answer})",
+    "absentWithoutConsent": "ausente sem consentimento",
+    "notAbsent": "não esteve ausente",
+    "absenceNo": "Não — não esteve ausente sem consentimento",
+    "absenceYes": "Sim — esteve ausente sem consentimento",
+    "answerFiled": "Resposta registrada — recalculando"
   }
 }

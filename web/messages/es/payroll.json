@@ -1573,5 +1573,26 @@
       "unrounded": "Fichaje sin redondear",
       "custom": "Personalizado"
     }
+  },
+  "holidayAttestations": {
+    "loadFailed": "No se pudieron cargar las personas empleadas que requieren estas excepciones. Vuelve a intentarlo en lugar de responder sin la información necesaria.",
+    "retry": "Reintentar",
+    "commissionTitle": "situación de remuneración por comisión",
+    "standingUnanswered": "Sin responder. Este es un dato laboral permanente; respóndelo una vez para que no vuelva a solicitarse en periodos posteriores.",
+    "currentlyAnswered": "Respuesta actual: {answer}. Responde de nuevo para corregirla.",
+    "paidOnCommission": "Remuneración por comisión",
+    "choose": "Elegir…",
+    "no": "No",
+    "yesWholePart": "Sí, total o parcialmente",
+    "saveRecalculate": "Guardar y recalcular",
+    "absenceTitle": "declaración de ausencia alrededor del festivo",
+    "absenceExplanation": "¿La persona empleada faltó sin el consentimiento de la empresa al último turno programado antes del festivo o al primero después? Un hueco en el registro horario no permite saberlo: podría ser una ausencia aprobada. Esta respuesta solo se registra para esta nómina.",
+    "holidayDate": "{holiday} — {date}",
+    "filedStatus": "(registrado: {answer})",
+    "absentWithoutConsent": "ausente sin consentimiento",
+    "notAbsent": "no estuvo ausente",
+    "absenceNo": "No — no estuvo ausente sin consentimiento",
+    "absenceYes": "Sí — estuvo ausente sin consentimiento",
+    "answerFiled": "Respuesta registrada — recalculando"
   }
 }

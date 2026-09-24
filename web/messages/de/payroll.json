@@ -1573,5 +1573,26 @@
       "unrounded": "Ungerundete Stempelung",
       "custom": "Eigene"
     }
+  },
+  "holidayAttestations": {
+    "loadFailed": "Die Mitarbeitenden für diese Ausnahmen konnten nicht geladen werden. Bitte erneut versuchen, statt ohne ausreichende Informationen zu antworten.",
+    "retry": "Erneut versuchen",
+    "commissionTitle": "Status der provisionsbasierten Vergütung",
+    "standingUnanswered": "Noch unbeantwortet. Diese Beschäftigungsangabe gilt dauerhaft. Beantworten Sie sie einmal, damit spätere Zeiträume nicht erneut danach fragen.",
+    "currentlyAnswered": "Derzeit beantwortet: {answer}. Erneut beantworten, um die Angabe zu korrigieren.",
+    "paidOnCommission": "Provisionsbasierte Vergütung",
+    "choose": "Auswählen…",
+    "no": "Nein",
+    "yesWholePart": "Ja, ganz oder teilweise",
+    "saveRecalculate": "Speichern und neu berechnen",
+    "absenceTitle": "Angabe zur Abwesenheit vor und nach dem Feiertag",
+    "absenceExplanation": "War die beschäftigte Person bei der letzten geplanten Schicht vor oder der ersten nach dem Feiertag ohne Zustimmung des Arbeitgebers abwesend? Eine Lücke im Stundenzettel reicht als Nachweis nicht aus, da es sich um genehmigten Urlaub handeln kann. Diese Angabe gilt nur für diesen Abrechnungslauf.",
+    "holidayDate": "{holiday} am {date}",
+    "filedStatus": "(erfasst: {answer})",
+    "absentWithoutConsent": "ohne Zustimmung abwesend",
+    "notAbsent": "nicht abwesend",
+    "absenceNo": "Nein — nicht ohne Zustimmung abwesend",
+    "absenceYes": "Ja — ohne Zustimmung abwesend",
+    "answerFiled": "Antwort gespeichert — Neuberechnung läuft"
   }
 }

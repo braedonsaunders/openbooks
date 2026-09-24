@@ -1573,5 +1573,26 @@
       "unrounded": "Pointage non arrondi",
       "custom": "Personnalisé"
     }
+  },
+  "holidayAttestations": {
+    "loadFailed": "Impossible de charger les employés concernés par ces exceptions. Réessayez plutôt que de répondre sans les informations nécessaires.",
+    "retry": "Réessayer",
+    "commissionTitle": "rémunération à la commission",
+    "standingUnanswered": "Sans réponse. Il s’agit d’une donnée permanente sur l’emploi : répondez une fois pour ne plus être interrogé lors des périodes suivantes.",
+    "currentlyAnswered": "Réponse actuelle : {answer}. Répondez de nouveau pour la corriger.",
+    "paidOnCommission": "Rémunération à la commission",
+    "choose": "Choisir…",
+    "no": "Non",
+    "yesWholePart": "Oui, en tout ou en partie",
+    "saveRecalculate": "Enregistrer et recalculer",
+    "absenceTitle": "déclaration d’absence autour du jour férié",
+    "absenceExplanation": "L’employé était-il absent sans le consentement de l’employeur lors du dernier quart prévu avant le jour férié ou du premier quart après celui-ci ? Une absence dans la feuille de temps ne permet pas de le savoir : il peut s’agir d’un congé approuvé. Cette réponse ne s’applique qu’à cette période de paie.",
+    "holidayDate": "{holiday} — {date}",
+    "filedStatus": "(déclaré : {answer})",
+    "absentWithoutConsent": "absent sans consentement",
+    "notAbsent": "pas absent",
+    "absenceNo": "Non — pas absent sans consentement",
+    "absenceYes": "Oui — absent sans consentement",
+    "answerFiled": "Réponse enregistrée — recalcul en cours"
   }
 }

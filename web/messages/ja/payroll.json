@@ -1573,5 +1573,26 @@
       "unrounded": "丸めなし打刻",
       "custom": "カスタム"
     }
+  },
+  "holidayAttestations": {
+    "loadFailed": "この例外への回答が必要な従業員を読み込めませんでした。必要な情報を確認するため、推測で回答せず再試行してください。",
+    "retry": "再試行",
+    "commissionTitle": "歩合給の状況",
+    "standingUnanswered": "未回答です。これは雇用に関する継続的な情報です。一度回答すると、以後の期間では再度確認されません。",
+    "currentlyAnswered": "現在の回答：{answer}。修正するには再回答してください。",
+    "paidOnCommission": "歩合給を受け取っている",
+    "choose": "選択…",
+    "no": "いいえ",
+    "yesWholePart": "はい（全額または一部）",
+    "saveRecalculate": "保存して再計算",
+    "absenceTitle": "祝日の前後の勤務欠勤に関する申告",
+    "absenceExplanation": "祝日の前の最終予定シフト、または後の最初の予定シフトを、雇用主の同意なく欠勤しましたか？勤怠表の空欄だけでは承認済み休暇の可能性があるため判断できません。この回答は今回の給与計算にのみ記録されます。",
+    "holidayDate": "{date}の{holiday}",
+    "filedStatus": "（記録済み：{answer}）",
+    "absentWithoutConsent": "同意なく欠勤",
+    "notAbsent": "欠勤なし",
+    "absenceNo": "いいえ — 同意なく欠勤していない",
+    "absenceYes": "はい — 同意なく欠勤した",
+    "answerFiled": "回答を保存しました — 再計算中"
   }
 }
