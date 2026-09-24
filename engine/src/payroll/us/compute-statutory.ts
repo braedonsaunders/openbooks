@@ -22,6 +22,7 @@ import { usPayrollConfig } from "./config.ts";
 import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
+import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 
 export type UsYtdRow = {
   fica: string;
@@ -162,6 +163,8 @@ export async function computeUsStatutory(
   const sui = config.sui(region, filingAccountId);
   const suiWagesYtd = sui ? resolveUsSuiYtd(region, ytd) : "0";
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
+  const federalAlienStatus = certificateFor("us_w4_tax_residency")?.answers.alien_status;
+  const nonresidentAlien = requireUsFederalAlienStatus(federalAlienStatus);
   const statutory = calculatePub15T({
     payDate: run.pay_date!, periodsPerYear: P,
     wages: fitWages, supplemental: nonPeriodic,
@@ -176,6 +179,7 @@ export async function computeUsStatutory(
       ? { allowances: Number(empFact("US", emp, "w4_allowances") ?? 0), married: filingStatus === "married_joint" }
       : undefined,
     fitExempt: bool(empFact("US", emp, "tax_exempt")),
+    nonresidentAlien,
     ficaExempt: bool(empFact("US", emp, "fica_exempt")),
     futaExempt: bool(empFact("US", emp, "futa_exempt")),
     futaEffectiveRate: config.futaRate(region) ?? undefined,

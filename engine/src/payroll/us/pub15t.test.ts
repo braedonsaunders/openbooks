@@ -10,6 +10,9 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { payrollCertificate, resolveCertificate } from "../certificates.ts";
+import { PAYROLL_COUNTRY_PACKS } from "../packs.ts";
+import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { NO_WITHHOLDING_STATES, RATES_2026, ratesForPayDate, US_STATES } from "./rates.ts";
 
@@ -23,6 +26,35 @@ const money = (value: string) => {
   const [whole, fraction = ""] = value.split(".");
   return `${whole}.${(fraction + "0000").slice(0, 4)}`;
 };
+
+test("federal payroll requires a recorded W-4 alien status and refuses NRA calculations by name", () => {
+  void PAYROLL_COUNTRY_PACKS;
+  const certificate = payrollCertificate("US", "us_w4_tax_residency");
+  const resolveStatus = (alienStatus?: string) => resolveCertificate({
+    certificate,
+    stored: alienStatus == null ? [] : [{
+      certificateKey: certificate.key,
+      effectiveFrom: "2026-01-01",
+      answers: { alien_status: alienStatus },
+    }],
+    asOf: "2026-12-15",
+  }).answers.alien_status;
+
+  assert.throws(
+    () => requireUsFederalAlienStatus(resolveStatus()),
+    /US federal payroll cannot calculate without the employee's federal tax-residency status.*refused by name/,
+  );
+  assert.equal(requireUsFederalAlienStatus(resolveStatus("us_person_or_resident_alien")), false);
+  assert.equal(requireUsFederalAlienStatus(resolveStatus("nonresident_alien")), true);
+
+  assert.throws(
+    () => calculatePub15T({
+      payDate: "2026-12-15", periodsPerYear: 26, wages: "2000.00",
+      filingStatus: "single", nonresidentAlien: true,
+    }),
+    /Federal withholding for a nonresident-alien employee requires the Pub\. 15-T Table 1 or Table 2.*refused by name/,
+  );
+});
 
 test("edition resolution: 2026, 2025 and 2024, refuses unknown years", () => {
   assert.equal(ratesForPayDate("2026-01-01").year, 2026);
