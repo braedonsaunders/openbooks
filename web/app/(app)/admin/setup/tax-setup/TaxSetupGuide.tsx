@@ -16,6 +16,7 @@ import {
   Input,
 } from '@openbooks/ui'
 import { countryOptions } from '../../../../../lib/countries'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 export interface SupportedSubJurisdiction {
   packCode: string
@@ -128,7 +129,7 @@ export function TaxSetupGuide({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ packs: toProvision }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
       const data = (await res.json()) as { jurisdictionsCreated: number; taxCodesCreated: number; taxGroupsCreated: number; registrationsCreated: number }
       setInstalled((cur) => new Set([...cur, ...toProvision]))
       setSelected(new Set())
@@ -139,8 +140,8 @@ export function TaxSetupGuide({
         nexus: data.registrationsCreated,
       }))
       router.refresh()
-    } catch {
-      toast.error(tCommon('feedback.saveFailed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : tCommon('feedback.saveFailed'))
     } finally {
       setBusy(false)
     }
