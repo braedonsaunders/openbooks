@@ -312,6 +312,45 @@ async function assertEmploymentLockHeld(
   assert.equal(failure, undefined);
 }
 
+async function revokePartyLinkWhileOperationWaits(
+  orgId: string,
+  actorId: string,
+  partyId: string,
+  operation: () => Promise<unknown>,
+  surfaceName: string,
+): Promise<unknown> {
+  let settled = false;
+  let result: unknown;
+  let failure: unknown;
+  let startOperation!: () => void;
+  const start = new Promise<void>((resolve) => { startOperation = resolve; });
+  const observed = (async () => {
+    await start;
+    try {
+      result = await operation();
+    } catch (error) {
+      failure = error;
+    } finally {
+      settled = true;
+    }
+  })();
+  await withOrgTransaction(orgId, async () => {
+    await db.execute(sql`
+      select id from users where org_id = ${orgId} and id = ${actorId} for update`);
+    startOperation();
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    assert.equal(settled, false, `${surfaceName} must wait for the actor identity-link lock`);
+    await db.execute(sql`
+      update users set party_id = null where org_id = ${orgId} and id = ${actorId}`);
+  });
+  await observed;
+  // Restore the fixture for the next derived surface case.
+  await db.execute(sql`
+    update users set party_id = ${partyId} where org_id = ${orgId} and id = ${actorId}`);
+  if (failure !== undefined) throw failure;
+  return result;
+}
+
 test("I1-refix-152 statement generation holds the employment lock through payload and insert", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const before = await countRows(h.org.orgId, "hrm_comp_statements");
@@ -320,6 +359,44 @@ test("I1-refix-152 statement generation holds the employment lock through payloa
       periodFrom: "2025-01-01", periodTo: "2025-12-31",
     }));
     assert.equal(await countRows(h.org.orgId, "hrm_comp_statements"), before + 1);
+  });
+});
+
+test("I1-refix-151/152 self-service statement surfaces recheck identity after a link change", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const surfaces: Array<{ name: string; run: () => Promise<unknown> }> = [
+      {
+        name: "list",
+        run: () => refusalOf(listStatements({
+          orgId: h.org.orgId, actorId: h.ownerBId, employmentId: h.ownB.employmentId,
+        })),
+      },
+      {
+        name: "generate",
+        run: () => refusalOf(generateStatement({
+          orgId: h.org.orgId, actorId: h.ownerBId, employmentId: h.ownB.employmentId,
+          periodFrom: "2025-01-01", periodTo: "2025-12-31",
+        })),
+      },
+      {
+        name: "render",
+        run: () => refusalOf(renderStatementPdf({
+          orgId: h.org.orgId, actorId: h.ownerBId, statementId: h.statementBId, orgName: "Scratch",
+        })),
+      },
+    ];
+    const statementCount = await countRows(h.org.orgId, "hrm_comp_statements");
+    for (const surface of surfaces) {
+      const outcome = await revokePartyLinkWhileOperationWaits(
+        h.org.orgId, h.ownerBId, h.ownB.workerPartyId, surface.run, surface.name,
+      );
+      if (surface.name === "list") {
+        assert.equal((outcome as { code?: string }).code, "REFUSED", "a revoked self-service link cannot list employee statements");
+      } else {
+        assert.equal((outcome as { code?: string }).code, "NOT_FOUND", `${surface.name} refuses uniformly after unlink`);
+      }
+    }
+    assert.equal(await countRows(h.org.orgId, "hrm_comp_statements"), statementCount);
   });
 });
 

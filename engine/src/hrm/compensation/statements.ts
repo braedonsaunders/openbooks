@@ -10,7 +10,6 @@ import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.
 import { mul } from "../../money/money.ts";
 import {
   HrmAuthorizationError,
-  loadOwnEmploymentIds,
   requireHrmCompensationManage,
   requireHrmCompensationManageOnEmployment,
   requireHrmCompensationReadOnEmployment,
@@ -34,8 +33,8 @@ import { requireActorId, requireId, requireOrgId } from "../recruiting/input.ts"
  * the actor's employer-subsidiary lens (an out-of-scope employment
  * refuses exactly like an unknown one, never salary content); HR writes
  * through hrm.compensation.manage with the same lens. The person reads
- * and generates their own statements through hrm.self.read plus identity
- * (loadOwnEmploymentIds resolves identity only — never a grant).
+ * and generates their own statements through hrm.self.read plus the party
+ * identity pinned under a user-row lock for the whole operation.
  * No caller-supplied scope at any boundary.
  */
 
@@ -91,14 +90,36 @@ function statementNotVisible(): CompensationError {
 }
 
 /**
- * Own-employment self-service: the hrm.self.read grant plus identity.
- * Explicit booleans, never a caught permission refusal treated as a
- * fallback — a database failure must propagate, never read as a grant.
+ * Pin the actor's identity link before checking self-service ownership. The
+ * admin link writer takes FOR UPDATE on this same users row; readers take
+ * FOR SHARE, always before the employment row, so an unlink waits until the
+ * statement operation completes and a waiter rechecks the committed link.
  */
-async function isOwnEmployment(orgId: string, actorId: string, employmentId: string): Promise<boolean> {
+async function lockActorParty(orgId: string, actorId: string): Promise<string | null> {
+  const row = (await db.execute<{ partyId: string | null }>(sql`
+    select party_id::text as "partyId" from users
+     where org_id = ${orgId}::uuid and id = ${actorId}::uuid
+     for share
+  `)).rows[0];
+  return row?.partyId ?? null;
+}
+
+/** Explicit permission plus the identity observed under lock; no stale identity lookup may authorize pay access. */
+async function isOwnEmployment(
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  actorPartyId: string | null,
+): Promise<boolean> {
   if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) return false;
-  const own = await loadOwnEmploymentIds(db, orgId, actorId);
-  return own.includes(employmentId);
+  if (!actorPartyId) return false;
+  return (await db.execute<{ visible: boolean }>(sql`
+    select exists (
+      select 1 from worker_employments
+       where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
+         and worker_party_id = ${actorPartyId}::uuid
+    ) as visible
+  `)).rows[0]?.visible === true;
 }
 
 /** HR write leg over one employment: the grant was verified by the caller, so an HrmAuthorizationError here is the subject/scope denial and reports uniform not-found. Non-authorization failures propagate. */
@@ -267,6 +288,7 @@ export async function generateStatement(query: {
   const actorId = requireActorId(query.actorId);
   const employmentId = requireId(query.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
+    const actorPartyId = await lockActorParty(orgId, actorId);
     let workerPartyId: string | undefined;
     // HR's manage path (grant plus employer-subsidiary scope), with a
     // fallback to the person's own employment through hrm.self.read so a
@@ -276,7 +298,7 @@ export async function generateStatement(query: {
     // The gate runs before the payload build and the insert, so a
     // refused generate writes no statement row.
     const manageGrant = await actorHasPermission(db, orgId, actorId, "hrm.compensation.manage");
-    const own = await isOwnEmployment(orgId, actorId, employmentId);
+    const own = await isOwnEmployment(orgId, actorId, employmentId, actorPartyId);
     if (manageGrant) {
       try {
         const [subject] = await lockEmploymentsForScope(db, [employmentId], { orgId, actorId });
@@ -360,6 +382,7 @@ export async function renderStatementPdf(query: {
   const actorId = requireActorId(query.actorId);
   const statementId = requireId(query.statementId, "statementId");
   return withOrgTransaction(orgId, async () => {
+    const actorPartyId = await lockActorParty(orgId, actorId);
     const row = (await db.execute<StatementRow>(sql`
       select s.id, s.employment_id, s.cycle_id, s.period_from::text as period_from,
              s.period_to::text as period_to, s.payload, s.file_id, s.generated_at::text as generated_at
@@ -377,14 +400,14 @@ export async function renderStatementPdf(query: {
         // employment through hrm.self.read can still proceed. The denial
         // names the statement exactly like a missing row, never the
         // employment or its pay.
-        if (await isOwnEmployment(orgId, actorId, row.employment_id)) {
+        if (await isOwnEmployment(orgId, actorId, row.employment_id, actorPartyId)) {
           await lockScopeRow(db, orgId, "employment", row.employment_id, null, "update");
           return renderRowToPdf(row, query.orgName);
         }
         throw statementNotVisible();
       }
     }
-    if (await isOwnEmployment(orgId, actorId, row.employment_id)) {
+    if (await isOwnEmployment(orgId, actorId, row.employment_id, actorPartyId)) {
       await lockScopeRow(db, orgId, "employment", row.employment_id, null, "update");
       return renderRowToPdf(row, query.orgName);
     }
@@ -473,6 +496,7 @@ export async function listStatements(query: {
   const actorId = requireActorId(query.actorId);
   const employmentId = requireId(query.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
+    const actorPartyId = await lockActorParty(orgId, actorId);
     if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
       const subjects = await lockEmploymentsForScope(db, [employmentId], { orgId, actorId, outOfScope: "filter" });
       if (subjects.length > 0) {
@@ -483,13 +507,13 @@ export async function listStatements(query: {
       // employment may be the actor's own outside a restricted HR lens. A
       // restricted grant never widens here — the self leg demands
       // hrm.self.read plus identity.
-      if (await isOwnEmployment(orgId, actorId, employmentId)) {
+      if (await isOwnEmployment(orgId, actorId, employmentId, actorPartyId)) {
         await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
         return (await fetchStatements(orgId, employmentId, null)).map(toStatementDTO);
       }
       return [];
     }
-    if (await isOwnEmployment(orgId, actorId, employmentId)) {
+    if (await isOwnEmployment(orgId, actorId, employmentId, actorPartyId)) {
       await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
       return (await fetchStatements(orgId, employmentId, null)).map(toStatementDTO);
     }
