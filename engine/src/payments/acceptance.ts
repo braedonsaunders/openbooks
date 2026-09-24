@@ -1328,18 +1328,19 @@ async function loadLinkByToken(token: string): Promise<LinkWithContext | null> {
   return r.rows[0] ?? null;
 }
 
-export interface PublicPaymentPage {
+interface PublicPaymentPageBase {
   orgName: string;
   documentNumber: string;
   partyName: string;
-  invoiceAmount: string;
-  surchargeAmount: string;
-  totalAmount: string;
   currency: string;
-  status: string;
   provider: AcceptanceProvider;
   publishableKey: string | null;
 }
+
+export type PublicPaymentPage = PublicPaymentPageBase & (
+  | { status: "outdated" }
+  | { status: "paid" | "active"; invoiceAmount: string; surchargeAmount: string; totalAmount: string }
+);
 
 /** Load the public, token-scoped view of a payment link (fee as quoted). */
 export async function publicPaymentPage(token: string): Promise<PublicPaymentPage | null> {
@@ -1362,6 +1363,17 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
     const row = ctx.rows[0];
     if (!row) return null;
     const config = await loadProviderConfig(link.orgId, link.provider);
+    if (cmp(row.openBalance, "0") > 0 && link.amount !== null && cmp(link.amount, row.openBalance) !== 0) {
+      return {
+        orgName: row.orgName,
+        documentNumber: row.documentNumber,
+        partyName: row.partyName,
+        currency: link.currency,
+        status: "outdated",
+        provider: link.provider,
+        publishableKey: config?.publishable_key ?? null,
+      };
+    }
     // The fee the customer was quoted is frozen on the link at creation;
     // surcharge rules changing (or expiring) afterwards must not move what
     // the pay page shows, or checkout would charge a different total than

@@ -1225,7 +1225,7 @@ test("pay page shows the stored link surcharge even after surcharge rules change
     `);
 
     const page = await publicPaymentPage(fx.link.token);
-    assert.ok(page);
+    assert.ok(page?.status === "active");
     assert.equal(page.surchargeAmount, "3.0000", "pay page must show the stored quoted fee");
     assert.equal(page.totalAmount, "103.0000");
     assert.equal(page.invoiceAmount, "100.0000");
@@ -1268,9 +1268,10 @@ test("checkout refuses a frozen link quote after a partial payment", { skip: !DB
 
     const page = await publicPaymentPage(fx.link.token);
     assert.ok(page);
-    assert.equal(page.invoiceAmount, "100.0000");
-    assert.equal(page.surchargeAmount, "3.0000");
-    assert.equal(page.totalAmount, "103.0000");
+    assert.equal(page.status, "outdated");
+    assert.equal("invoiceAmount" in page, false, "a stale quote must not expose its old principal");
+    assert.equal("surchargeAmount" in page, false, "a stale quote must not expose its old fee");
+    assert.equal("totalAmount" in page, false, "a stale quote must not be presented as current amount due");
 
     let providerCalled = false;
     await assert.rejects(
@@ -1534,7 +1535,7 @@ test("surcharge resolution honors the payment method across card and bank-debit 
       "live resolution genuinely follows the churned landscape",
     );
     const frozenPage = await publicPaymentPage(stripeLink.token);
-    assert.ok(frozenPage);
+    assert.ok(frozenPage?.status === "active");
     assert.equal(frozenPage.surchargeAmount, "3.0000", "pay page must keep showing the quoted fee");
     assert.equal(frozenPage.totalAmount, "103.0000");
     const frozenLink = (await db.execute<{ surcharge_amount: string }>(sql`

@@ -31,7 +31,11 @@ export default async function PayPage({ params }: { params: Promise<{ token: str
           </p>
         </div>
 
-        {view.status === "paid" ? (
+        {view.status === "outdated" ? (
+          <div className="rounded-xl bg-amber-50 p-4 text-center text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            This payment link is out of date because the amount due changed. Request a new link from the sender.
+          </div>
+        ) : view.status === "paid" ? (
           <div className="rounded-xl bg-teal-50 p-4 text-center text-sm font-medium text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">
             This invoice has been paid. Thank you.
           </div>
