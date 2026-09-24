@@ -34,6 +34,7 @@ import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, getAuthz } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { continuousBlocks, continuousTabChips, loadContinuousTab, type ContinuousData } from './continuous-view'
+import { performanceHref } from '../../../../lib/hrm/workspace-href'
 
 /**
  * Performance tab: review cycles as loader-resolved rows, the cycle drawer
@@ -420,6 +421,20 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
   const canManage = can(authz, 'hrm.performance.manage')
   const canRetain = can(authz, 'hrm.retention.read')
 
+  // HR-17: the continuous tabs resolve first. Retention is one of them now,
+  // so the cycles list, the calibration grid, the talent grid, the feedback
+  // settings and the retention figures each get the page to themselves.
+  // Loaded here (not beside the retention panel) so every drawer href below
+  // preserves the continuous tab through the shared helper (F3-57).
+  const continuous = await loadContinuousTab(authz, sp, canManage, canRetain)
+  const cyclesTab = continuous.tab === 'cycles'
+  // F3-57: drawer hrefs preserve the segment and the continuous tab — a
+  // drawer opened from Retention closes back onto Retention, not Cycles.
+  const preservedParams = {
+    ...(rawStatus ? { status: rawStatus } : {}),
+    ...(cyclesTab ? {} : { tab: continuous.tab }),
+  }
+
   const cycles = await listCycleProgress({
     orgId: authz.user.orgId,
     actorId: authz.user.id,
@@ -453,7 +468,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
     status: c.status,
     statusLabel: statusLabel(c.status),
     statusVariant: statusVariant(c.status),
-    href: hrefFor(rawStatus, c.id, null),
+    href: performanceHref(preservedParams, { status: rawStatus, cycle: c.id }),
   }))
 
   const counts = new Map<string, number>()
@@ -498,7 +513,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
           status: r.status,
           statusLabel: reviewStatusLabel(t, r.status),
           rating: r.calibratedRating ?? r.overallRating,
-          href: hrefFor(rawStatus, cycleId, r.id),
+          href: performanceHref(preservedParams, { status: rawStatus, cycle: cycleId, review: r.id }),
         })),
         reviewsTitle: t('performance.reviewsTitle'),
         reviewsEmpty: t('performance.reviewsEmpty'),
@@ -519,7 +534,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
           gapNote: full.managerGapCount > 0 ? t('performance.gapNote', { count: full.managerGapCount }) : null,
           failed: t('performance.actionFailed'),
         },
-        closeHref: hrefFor(rawStatus, null, null),
+        closeHref: performanceHref(preservedParams, { status: rawStatus }),
       }
     } catch {
       missingDetail = t('performance.cycleNotFound')
@@ -589,7 +604,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
         requiredLabel: t('performance.answerRequired'),
         failed: t('performance.actionFailed'),
         cycleId: full.review.cycleId,
-        closeHref: hrefFor(rawStatus, cycleId, null),
+        closeHref: performanceHref(preservedParams, { status: rawStatus, cycle: cycleId }),
         draft: null,
       }
       // HR-21: "Draft from evidence" on the answer form. Manager and self
@@ -605,7 +620,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
           : null
       const firstText = full.answers.find((a) => a.answerKind === 'text' || a.answerKind === 'rating_and_text')
       const draftLabel = draftKind && firstText ? await loadAiDraftButton(authz.user.orgId) : null
-      const reviewHref = hrefFor(rawStatus, full.review.cycleId, full.review.id)
+      const reviewHref = performanceHref(preservedParams, { status: rawStatus, cycle: full.review.cycleId, review: full.review.id })
       if (review && draftKind && firstText && draftLabel) {
         review.draft = {
           href: `${reviewHref}&draft=${draftKind}:${full.review.id}`,
@@ -630,7 +645,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
     })
     create = {
       title: t('performance.newCycle'),
-      closeHref: hrefFor(rawStatus, null, null),
+      closeHref: performanceHref(preservedParams, { status: rawStatus }),
       templates: templates.filter((tpl) => tpl.isActive).map((tpl) => ({ value: tpl.id, label: tpl.name })),
       templateLabel: t('performance.templateLabel'),
       nameLabel: t('performance.newCycleName'),
@@ -675,7 +690,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
             : null,
           canRecord: canManage,
           title: t('performance.exitTitle'),
-          closeHref: hrefFor(rawStatus, cycleId, reviewId),
+          closeHref: performanceHref(preservedParams, { status: rawStatus, cycle: cycleId, review: reviewId }),
         }
       } catch {
         missingExit = t('performance.exitNotFound')
@@ -684,12 +699,6 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
       missingExit = t('performance.exitNotFound')
     }
   }
-
-  // HR-17: the continuous tabs resolve first. Retention is one of them now,
-  // so the cycles list, the calibration grid, the talent grid, the feedback
-  // settings and the retention figures each get the page to themselves.
-  const continuous = await loadContinuousTab(authz, sp, canManage, canRetain)
-  const cyclesTab = continuous.tab === 'cycles'
 
   let retention: PerformancePageData['retention'] = null
   if (canRetain && continuous.tab === 'retention') {
@@ -708,7 +717,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
       gapsTitle: t('retention.missingExits'),
       gapsEmpty: t('retention.noMissingExits'),
       gaps: overview.missingExitRecords.map((g) => ({
-        employmentHref: `/hrm/performance?exit=${g.employmentId}`,
+        employmentHref: performanceHref(preservedParams, { status: rawStatus, exit: g.employmentId }),
         employmentLabel: g.workerPartyId.slice(0, 8),
         terminatedFrom: g.terminatedFrom,
       })),
@@ -724,15 +733,12 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
     canManage,
     canRetain,
     addLabel: t('performance.newCycle'),
-    addHref: hrefFor(rawStatus, 'new', null),
+    addHref: performanceHref(preservedParams, { status: rawStatus, cycle: 'new' }),
     basePath: '/hrm/performance',
     segmentsLabel: t('performance.segmentsLabel'),
     allLabel: t('performance.allCycles'),
     segmentOptions,
-    currentParams: {
-      ...(rawStatus ? { status: rawStatus } : {}),
-      ...(cyclesTab ? {} : { tab: continuous.tab }),
-    },
+    currentParams: preservedParams,
     columns: {
       name: t('performance.colName'),
       period: t('performance.colPeriod'),
@@ -773,11 +779,4 @@ function reviewStatusLabel(t: (key: string) => string, status: string): string {
           : t('performance.reviewAcknowledged')
 }
 
-function hrefFor(status: string | null, cycleId: string | null, reviewId: string | null): string {
-  const params = new URLSearchParams()
-  if (status) params.set('status', status)
-  if (cycleId) params.set('cycle', cycleId)
-  if (reviewId) params.set('review', reviewId)
-  const qs = params.toString()
-  return `/hrm/performance${qs ? `?${qs}` : ''}`
-}
+
