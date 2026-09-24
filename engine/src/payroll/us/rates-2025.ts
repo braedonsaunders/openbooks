@@ -130,7 +130,7 @@ export const RATES_2025: YearRates = {
   futa: {
     wageBase: "7000",
     grossRate: "0.06",
-    defaultEffectiveRate: "0.006",
+    fullCreditEffectiveRate: "0.006",
   },
   supplemental: {
     flatRate: "0.22",

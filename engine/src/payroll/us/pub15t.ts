@@ -19,7 +19,7 @@
  */
 import { PayrollError } from "../error.ts";
 import { bmin, D, divIntCents, max0, mulInt, mulRateCents, U } from "../canada/decimal";
-import { type FilingStatus, ratesForPayDate, type WithholdingRow, type YearRates } from "./rates";
+import { type FilingStatus, ratesForPayDate, type WithholdingRow, type YearRates, US_STATES } from "./rates";
 
 export interface Pub15TYtd {
   /** Social Security (OASDI) taxable wages before this period, this employer. */
@@ -74,8 +74,10 @@ export interface Pub15TInput {
   ficaExempt?: boolean;
   futaExempt?: boolean;
 
-  /** Effective FUTA rate override (credit-reduction states). Default 0.6%. */
+  /** Employer-configured effective FUTA rate for this state/account. */
   futaEffectiveRate?: string;
+  /** State unemployment jurisdiction whose Form 940 Schedule A reduction applies. */
+  futaRegion?: string;
   /** Org-configured SUI for the employee's state; omit to skip SUTA. */
   sui?: { rate: string; wageBase: string };
 
@@ -141,6 +143,36 @@ function rowFor(schedule: WithholdingRow[], adjusted: bigint): WithholdingRow {
 /** Wages already under the cap tax the incremental slice: min(wages, cap − ytd), floor 0. */
 function cappedSlice(wages: bigint, cap: bigint, ytd: bigint): bigint {
   return max0(bmin(wages, cap - ytd));
+}
+
+/**
+ * Form 940 Schedule A rates, keyed by the wage tax year. The schedules list
+ * every state and DC; a missing state entry in a transcribed year means the
+ * published table lists no credit reduction for that jurisdiction.
+ *
+ * Official sources:
+ * - IRS 2024 Schedule A: https://www.irs.gov/pub/irs-prior/f940sa--2024.pdf
+ * - IRS 2025 Schedule A: https://www.irs.gov/pub/irs-prior/f940sa--2025.pdf
+ * FUTA net rate is the ordinary 0.6% plus the Schedule A credit reduction.
+ */
+const FUTA_CREDIT_REDUCTION: Readonly<Record<number, Readonly<Record<string, string>>>> = {
+  2024: { CA: "0.009", NY: "0.009" },
+  2025: { CA: "0.012" },
+};
+
+function effectiveFutaRate(year: number, region: string, fullCreditRate: string): string {
+  const reductions = FUTA_CREDIT_REDUCTION[year];
+  if (!reductions) {
+    throw new PayrollError(
+      `FUTA credit-reduction rates for ${year} are not transcribed from Form 940 Schedule A; configure the effective rate from the official schedule or update the pack — refused by name`,
+    );
+  }
+  if (!US_STATES.includes(region as (typeof US_STATES)[number])) {
+    throw new PayrollError(
+      `FUTA credit-reduction rate cannot be resolved for jurisdiction ${region} in ${year}; configure a verified effective rate for the Schedule A jurisdiction — refused by name`,
+    );
+  }
+  return D(U(fullCreditRate) + U(reductions[region] ?? "0"));
 }
 
 export function calculatePub15T(input: Pub15TInput): Pub15TResult {
@@ -227,7 +259,12 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   let suta = ZERO;
   if (!input.futaExempt) {
     const futaTaxable = cappedSlice(futaWages, U(rates.futa.wageBase), opt(ytd.futaWages));
-    futa = mulRateCents(futaTaxable, input.futaEffectiveRate ?? rates.futa.defaultEffectiveRate);
+    if (futaTaxable > ZERO) {
+      const rate = input.futaEffectiveRate === undefined
+        ? effectiveFutaRate(rates.year, input.futaRegion ?? "", rates.futa.fullCreditEffectiveRate)
+        : input.futaEffectiveRate;
+      futa = mulRateCents(futaTaxable, rate);
+    }
     if (input.sui) {
       const suiTaxable = cappedSlice(futaWages, U(input.sui.wageBase), opt(ytd.suiWages));
       suta = mulRateCents(suiTaxable, input.sui.rate);

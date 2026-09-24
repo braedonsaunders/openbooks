@@ -23,6 +23,11 @@ import { calculatePub15T } from "./pub15t.ts";
 import { ratesForPayDate } from "./rates.ts";
 import { RATES_2024 } from "./rates-2024.ts";
 
+function calculateWithConfiguredFuta(input: Parameters<typeof calculatePub15T>[0]) {
+  // Other conformance goldens set the ordinary full-credit FUTA rate explicitly.
+  return calculatePub15T({ futaEffectiveRate: "0.006", ...input });
+}
+
 const money = (value: string) => {
   const [whole, fraction = ""] = value.split(".");
   return `${whole}.${(fraction + "0000").slice(0, 4)}`;
@@ -65,7 +70,7 @@ test("2024 published Pub 15-T goldens", () => {
   for (const golden of PUBLISHED) {
     // Annual pay period (P = 1) so the schedule is exercised directly, with no
     // annualization or rounding of a periodic amount in the way.
-    const result = calculatePub15T({
+    const result = calculateWithConfiguredFuta({
       payDate: "2024-06-15",
       periodsPerYear: 1,
       wages: golden.annualWages,
@@ -118,11 +123,11 @@ test("2024 FICA/FUTA statutory constants (FR 2023-23317, IRC §3301)", () => {
   assert.equal(RATES_2024.fica.ssRate, "0.062");
   assert.equal(RATES_2024.fica.medicareRate, "0.0145");
   assert.equal(RATES_2024.futa.wageBase, "7000");
-  assert.equal(RATES_2024.futa.defaultEffectiveRate, "0.006");
+  assert.equal(RATES_2024.futa.fullCreditEffectiveRate, "0.006");
 });
 
 test("2024 single, biweekly $2,000, default W-4 — full hand-worked stub", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2024-02-16", periodsPerYear: 26, wages: "2000.00", filingStatus: "single",
   });
   // 1b = 52,000; 1i = 52,000 − 8,600 = 43,400
@@ -142,10 +147,10 @@ test("2024 pre-tax deferral consistency: FIT prices the reduced base", () => {
   // feeds the post-deferral wage into these same 2024 tables: $2,000 less a
   // $200 401(k) deferral withholds as $1,800 of FIT-able wages while Social
   // Security and Medicare do not move.
-  const full = calculatePub15T({
+  const full = calculateWithConfiguredFuta({
     payDate: "2024-02-16", periodsPerYear: 26, wages: "2000.00", filingStatus: "single",
   });
-  const reduced = calculatePub15T({
+  const reduced = calculateWithConfiguredFuta({
     payDate: "2024-02-16", periodsPerYear: 26, wages: "1800.00", filingStatus: "single",
   });
   // 1i = 46,800 − 8,600 = 38,200
@@ -158,7 +163,7 @@ test("2024 pre-tax deferral consistency: FIT prices the reduced base", () => {
 });
 
 test("2024 married filing jointly, semi-monthly $4,000, Step 3 credits $4,400", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2024-03-15", periodsPerYear: 24, wages: "4000.00",
     filingStatus: "married_joint", dependentCredits: "4400.00",
   });
@@ -169,7 +174,7 @@ test("2024 married filing jointly, semi-monthly $4,000, Step 3 credits $4,400", 
 });
 
 test("2024 single with the Step 2 checkbox, weekly $1,500 — checkbox schedule", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2024-01-12", periodsPerYear: 52, wages: "1500.00",
     filingStatus: "single", multipleJobs: true,
   });
@@ -180,7 +185,7 @@ test("2024 single with the Step 2 checkbox, weekly $1,500 — checkbox schedule"
 });
 
 test("2024 Social Security wage-base crossing and Additional Medicare trigger", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2024-11-15", periodsPerYear: 24, wages: "3000.00", filingStatus: "single",
     ytd: { ssWages: "167000.00", medicareWages: "199000.00" },
   });

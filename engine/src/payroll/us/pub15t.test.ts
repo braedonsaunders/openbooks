@@ -13,6 +13,12 @@ import test from "node:test";
 import { calculatePub15T } from "./pub15t.ts";
 import { NO_WITHHOLDING_STATES, RATES_2026, ratesForPayDate, US_STATES } from "./rates.ts";
 
+function calculateWithConfiguredFuta(input: Parameters<typeof calculatePub15T>[0]) {
+  // These cases cover other Pub 15-T behavior; state/year rate selection has
+  // its own source-backed tests below. Set an explicit standard-rate override.
+  return calculatePub15T({ futaEffectiveRate: "0.006", ...input });
+}
+
 const money = (value: string) => {
   const [whole, fraction = ""] = value.split(".");
   return `${whole}.${(fraction + "0000").slice(0, 4)}`;
@@ -68,11 +74,11 @@ test("FICA/FUTA statutory constants (SSA 2026 announcement, IRC §3301)", () => 
   assert.equal(RATES_2026.fica.ssRate, "0.062");
   assert.equal(RATES_2026.fica.medicareRate, "0.0145");
   assert.equal(RATES_2026.futa.wageBase, "7000");
-  assert.equal(RATES_2026.futa.defaultEffectiveRate, "0.006");
+  assert.equal(RATES_2026.futa.fullCreditEffectiveRate, "0.006");
 });
 
 test("single, biweekly $2,000, default W-4 — full hand-worked stub", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-02-13", periodsPerYear: 26, wages: "2000.00", filingStatus: "single",
   });
   // 1b = 52,000; 1i = 52,000 − 8,600 = 43,400
@@ -88,7 +94,7 @@ test("single, biweekly $2,000, default W-4 — full hand-worked stub", () => {
 });
 
 test("married filing jointly, semi-monthly $4,000, Step 3 credits $4,400", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-03-15", periodsPerYear: 24, wages: "4000.00",
     filingStatus: "married_joint", dependentCredits: "4400.00",
   });
@@ -99,7 +105,7 @@ test("married filing jointly, semi-monthly $4,000, Step 3 credits $4,400", () =>
 });
 
 test("single with the Step 2 checkbox, weekly $1,500 — checkbox schedule", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-01-09", periodsPerYear: 52, wages: "1500.00",
     filingStatus: "single", multipleJobs: true,
   });
@@ -110,7 +116,7 @@ test("single with the Step 2 checkbox, weekly $1,500 — checkbox schedule", () 
 });
 
 test("head of household, biweekly $3,000, 4(a) 10,000 / 4(b) 5,000 / 4(c) 50", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-05-08", periodsPerYear: 26, wages: "3000.00",
     filingStatus: "head_household",
     otherIncomeAnnual: "10000.00", deductionsAnnual: "5000.00", extraPerPeriod: "50.00",
@@ -122,7 +128,7 @@ test("head of household, biweekly $3,000, 4(a) 10,000 / 4(b) 5,000 / 4(c) 50", (
 });
 
 test("2019-or-earlier W-4: married, 3 allowances, monthly $5,000", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-06-30", periodsPerYear: 12, wages: "5000.00",
     filingStatus: "single", // ignored — pre-2020 marital status wins
     pre2020: { allowances: 3, married: true },
@@ -134,7 +140,7 @@ test("2019-or-earlier W-4: married, 3 allowances, monthly $5,000", () => {
 });
 
 test("Social Security wage-base crossing and Additional Medicare trigger", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-11-15", periodsPerYear: 24, wages: "3000.00", filingStatus: "single",
     ytd: { ssWages: "183000.00", medicareWages: "199000.00" },
   });
@@ -148,7 +154,7 @@ test("Social Security wage-base crossing and Additional Medicare trigger", () =>
 });
 
 test("FUTA cap and configured SUI", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-04-15", periodsPerYear: 26, wages: "1000.00", filingStatus: "single",
     sui: { rate: "0.027", wageBase: "9000" },
     ytd: { futaWages: "6500.00", suiWages: "8500.00" },
@@ -160,15 +166,50 @@ test("FUTA cap and configured SUI", () => {
 });
 
 test("credit-reduction state: configurable effective FUTA rate", () => {
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-04-15", periodsPerYear: 26, wages: "1000.00", filingStatus: "single",
     futaEffectiveRate: "0.012",
   });
   assert.equal(result.futa, money("12.00"));
 });
 
+test("FUTA uses the effective 2025 Schedule A rate for California without an override", () => {
+  // IRS 2025 Schedule A (Form 940) lists California's 1.2% credit reduction;
+  // add it to the ordinary 0.6% net rate: $7,000 × 1.8% = $126.
+  // https://www.irs.gov/pub/irs-prior/f940sa--2025.pdf
+  for (const state of US_STATES) {
+    const result = calculatePub15T({
+      payDate: "2025-12-31", periodsPerYear: 26, wages: "7000.00",
+      filingStatus: "single", futaRegion: state,
+    });
+    assert.equal(result.futa, money(state === "CA" ? "126.00" : "42.00"), state);
+  }
+});
+
+test("FUTA Schedule A resolution keeps the 2024 reductions effective for their own year", () => {
+  // IRS 2024 Schedule A lists CA and NY at 0.9%; 0.6% + 0.9% = 1.5%.
+  // https://www.irs.gov/pub/irs-prior/f940sa--2024.pdf
+  for (const state of US_STATES) {
+    const result = calculatePub15T({
+      payDate: "2024-12-31", periodsPerYear: 26, wages: "7000.00",
+      filingStatus: "single", futaRegion: state,
+    });
+    assert.equal(result.futa, money(state === "CA" || state === "NY" ? "105.00" : "42.00"), state);
+  }
+});
+
+test("FUTA refuses a year without a transcribed Schedule A instead of using 0.6%", () => {
+  assert.throws(
+    () => calculatePub15T({
+      payDate: "2026-12-31", periodsPerYear: 26, wages: "7000.00",
+      filingStatus: "single", futaRegion: "CA",
+    }),
+    /FUTA credit-reduction rates for 2026 are not transcribed from Form 940 Schedule A.*refused by name/,
+  );
+});
+
 test("supplemental wages: 22% flat rate, 37% past $1,000,000 YTD", () => {
-  const flat = calculatePub15T({
+  const flat = calculateWithConfiguredFuta({
     payDate: "2026-12-15", periodsPerYear: 26, wages: "2000.00",
     supplemental: "5000.00", filingStatus: "single",
   });
@@ -179,7 +220,7 @@ test("supplemental wages: 22% flat rate, 37% past $1,000,000 YTD", () => {
   assert.equal(flat.ss, money("434.00")); // 7,000 × 6.2%
   assert.equal(flat.futa, money("42.00")); // 7,000 × 0.6%
 
-  const high = calculatePub15T({
+  const high = calculateWithConfiguredFuta({
     payDate: "2026-12-15", periodsPerYear: 26, wages: "0.00",
     supplemental: "10000.00", filingStatus: "single",
     ytd: { supplemental: "998000.00" },
@@ -189,7 +230,7 @@ test("supplemental wages: 22% flat rate, 37% past $1,000,000 YTD", () => {
 });
 
 test("exemptions: FIT-exempt keeps FICA; FICA-exempt keeps FIT; FUTA-exempt", () => {
-  const fitExempt = calculatePub15T({
+  const fitExempt = calculateWithConfiguredFuta({
     payDate: "2026-02-13", periodsPerYear: 26, wages: "2000.00",
     filingStatus: "single", fitExempt: true, extraPerPeriod: "25.00",
   });
@@ -197,7 +238,7 @@ test("exemptions: FIT-exempt keeps FICA; FICA-exempt keeps FIT; FUTA-exempt", ()
   assert.equal(fitExempt.ss, money("124.00"));
   assert.equal(fitExempt.medicare, money("29.00"));
 
-  const ficaExempt = calculatePub15T({
+  const ficaExempt = calculateWithConfiguredFuta({
     payDate: "2026-02-13", periodsPerYear: 26, wages: "2000.00",
     filingStatus: "single", ficaExempt: true,
   });
@@ -206,7 +247,7 @@ test("exemptions: FIT-exempt keeps FICA; FICA-exempt keeps FIT; FUTA-exempt", ()
   assert.equal(ficaExempt.medicare, money("0"));
   assert.equal(ficaExempt.additionalMedicare, money("0"));
 
-  const futaExempt = calculatePub15T({
+  const futaExempt = calculateWithConfiguredFuta({
     payDate: "2026-02-13", periodsPerYear: 26, wages: "2000.00",
     filingStatus: "single", futaExempt: true, sui: { rate: "0.027", wageBase: "9000" },
   });
@@ -220,7 +261,7 @@ test("Additional Medicare when YTD wages already exceed $200,000", () => {
   // taxed — max0(204,000 − 200,000) − max0(201,000 − 200,000) = 3,000, so
   // 3,000 × 0.9% = 27.00. Adding the already-taxed slice instead of
   // subtracting it withholds $45.00 on this cheque, every cheque, all year.
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-11-15", periodsPerYear: 24, wages: "3000.00", filingStatus: "single",
     ytd: { medicareWages: "201000.00" },
   });
@@ -231,23 +272,23 @@ test("Additional Medicare when YTD wages already exceed $200,000", () => {
 test("period-frequency boundaries: annual pay and P=2000 calculate, 0 and 2001 refuse", () => {
   // Annual payroll exercises the schedule with no annualization in the way;
   // P = 2000 is the highest documented frequency (daily + leap adjustments).
-  const annual = calculatePub15T({
+  const annual = calculateWithConfiguredFuta({
     payDate: "2026-06-15", periodsPerYear: 1, wages: "60000.00", filingStatus: "single",
   });
   // 1i = 60,000 − 8,600 = 51,400; 2g = 1,240 + 12% × 31,500 = 5,020
   assert.equal(annual.factors.AAWA, money("51400"));
   assert.equal(annual.fit, money("5020.00"));
 
-  const frequent = calculatePub15T({
+  const frequent = calculateWithConfiguredFuta({
     payDate: "2026-06-15", periodsPerYear: 2000, wages: "30.00", filingStatus: "single",
   });
   // Same annualized figures, de-annualized: 5,020 ÷ 2,000 = 2.51.
   assert.equal(frequent.fit, money("2.51"));
 
-  assert.throws(() => calculatePub15T({
+  assert.throws(() => calculateWithConfiguredFuta({
     payDate: "2026-06-15", periodsPerYear: 0, wages: "30.00", filingStatus: "single",
   }), /invalid pay periods per year/);
-  assert.throws(() => calculatePub15T({
+  assert.throws(() => calculateWithConfiguredFuta({
     payDate: "2026-06-15", periodsPerYear: 2001, wages: "30.00", filingStatus: "single",
   }), /invalid pay periods per year/);
 });
@@ -255,7 +296,7 @@ test("period-frequency boundaries: annual pay and P=2000 calculate, 0 and 2001 r
 test("2019-or-earlier W-4 with zero allowances withholds from dollar one", () => {
   // Zero allowances is valid (no $4,300 subtractions) — refusing it blocks
   // every legacy W-4 that claims no allowances.
-  const result = calculatePub15T({
+  const result = calculateWithConfiguredFuta({
     payDate: "2026-06-30", periodsPerYear: 12, wages: "5000.00",
     filingStatus: "single",
     pre2020: { allowances: 0, married: false },
