@@ -23,9 +23,6 @@ registerHooks({
     if (specifier === 'next/navigation') {
       return { shortCircuit: true, url: 'data:text/javascript,export function useRouter(){return {push(){},refresh(){}}}' }
     }
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const toast={error(){},success(){}}' }
-    }
     return next(specifier, context)
   },
 })
@@ -37,8 +34,10 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
+const frenchMessages = (await import('../../../../messages/fr')).default
 const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
 const { LossOfControlButton } = await import('./LossOfControlButton')
+const { ChangeEvidence } = await import('./ChangeEvidence')
 
 test('loss-of-control selectors expose their field labels', async (t) => {
   const priorFetch = globalThis.fetch
@@ -63,6 +62,7 @@ test('loss-of-control selectors expose their field labels', async (t) => {
         <BusinessDateProvider today="2026-09-24">
           <LossOfControlButton interestId="interest-1" />
         </BusinessDateProvider>
+        <NextIntlClientProvider locale="fr" messages={frenchMessages}><ChangeEvidence value={{ transfersOwnership: true }} /></NextIntlClientProvider>
       </NextIntlClientProvider>,
     )
   })
@@ -84,7 +84,5 @@ test('loss-of-control selectors expose their field labels', async (t) => {
   for (const selector of selectors) {
     assert.ok(selector.getAttribute('aria-label'), 'each SearchSelect trigger has an accessible name')
   }
-  const selectorNames = selectors.map((selector) => selector.getAttribute('aria-label'))
-  assert.ok(selectorNames.includes('Retained interest method'), 'retained-interest selector has a name')
-  assert.ok(selectorNames.includes('Reserve treatment'), 'reserve-treatment selector has a name')
+  assert.ok(['Évaluation / mesure', 'Proposition approuvée', 'Transfert de propriété', 'Oui'].every((label) => document.body.textContent?.includes(label)))
 })

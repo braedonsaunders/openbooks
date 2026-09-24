@@ -14,7 +14,7 @@ import { can, getAuthz } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { financialChangeSubjectExpr } from "@/lib/customization/entity-list-query/accounting-lifecycles";
-import { ChangeEvidence } from "./ChangeEvidence";
+import { ChangeEvidence, ChangeFacts } from "./ChangeEvidence";
 import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
 export const dynamic = "force-dynamic";
@@ -22,76 +22,6 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata() {
   const t = await getTranslations("accounting");
   return { title: t("lifecycle.pageTitle") };
-}
-const fieldNames: Record<string, string> = {
-  groupCarryingBefore: "Group carrying amount before valuation",
-  groupCarryingAfter: "Group carrying amount after valuation",
-  groupValuationDelta: "Group valuation adjustment",
-  netAssets: "Consolidated net assets removed",
-  nci: "Non-controlling interests removed",
-  parentGain: "Separate-book gain or loss",
-  groupGain: "Group disposal gain or loss",
-  recycledOci: "OCI reclassified to profit or loss",
-  transferredOci: "OCI transferred to retained earnings",
-  totalGroupGain: "Total group gain or loss",
-  retainedFairValue: "Retained interest fair value",
-  carryingLiability: "Liability before change",
-  carryingRou: "ROU before change",
-  stubInterest: "Elapsed-period interest",
-  stubRou: "Elapsed-period ROU expense",
-  prepaidCarrying: "Prepaid expense carried forward",
-  newLiability: "Revised unpaid liability",
-  newRou: "Revised ROU carrying amount",
-  liabilityDelta: "Liability adjustment",
-  rouDelta: "ROU adjustment",
-  removedLiability: "Liability removed",
-  removedRou: "ROU removed",
-  gain: "Gain (negative = loss)",
-  settlement: "Settlement payment",
-  scopeReductionPercent: "Scope reduction (%)",
-  settlementPayment: "Settlement payment",
-  payment: "Revised payment",
-  periods: "Remaining periods",
-  annualRatePercent: "Annual discount rate (%)",
-  paymentTiming: "Contractual timing",
-  paymentFrequency: "Payment frequency",
-  assessment: "Accounting assessment",
-  dayCountPolicy: "Accrual basis",
-  transfersOwnership: "Ownership transfers",
-  purchaseOptionReasonablyCertain: "Purchase option reasonably certain",
-  specializedAsset: "Specialized asset with no alternative use",
-  economicLifeMonths: "Remaining economic life (months)",
-  leaseTermMonths: "Remaining lease term (months)",
-  termThresholdPercent: "Major part threshold (%)",
-  pvOfPayments: "Assessed present value of payments",
-  fairValue: "Asset fair value",
-  pvThresholdPercent: "Substantially all threshold (%)",
-};
-function Facts({ value }: { value: Record<string, unknown> }) {
-  return (
-    <dl className="grid grid-cols-2 gap-2">
-      {Object.entries(value)
-        .filter(
-          ([key, v]) =>
-            fieldNames[key] &&
-            (typeof v === "string" ||
-              typeof v === "number" ||
-              typeof v === "boolean"),
-        )
-        .map(([key, v]) => (
-          <div key={key}>
-            <dt className="text-sm text-slate-500">{fieldNames[key]}</dt>
-            <dd>
-              {typeof v === "boolean"
-                ? v
-                  ? "Yes"
-                  : "No"
-                : String(v).replaceAll("_", " ")}
-            </dd>
-          </div>
-        ))}
-    </dl>
-  );
 }
 export default async function AccountingEvents({
   searchParams,
@@ -223,7 +153,7 @@ export default async function AccountingEvents({
                     <h3 className="font-semibold">
                       {t("lifecycle.proposedImpact")}
                     </h3>
-                    <Facts
+                    <ChangeFacts
                       value={
                         row.before_state.preview as Record<string, unknown>
                       }
@@ -254,7 +184,7 @@ export default async function AccountingEvents({
                     <h3 className="font-semibold">
                       {t("lifecycle.appliedResult")}
                     </h3>
-                    <Facts value={row.result} />
+                    <ChangeFacts value={row.result} />
                     {Array.isArray(row.result.entryIds)
                       ? row.result.entryIds.map((entry) => (
                           <p key={String(entry)}>
