@@ -330,6 +330,13 @@ function recordScopeFilePredicate(
   ))`
 }
 
+/** The shared file-row fence used by lists and every folder file-count projection. */
+function visibleFileRowPredicate(orgId: string, viewer: FileViewer, scope: ReadScope): SQL {
+  return sql`fi.org_id = ${orgId} and not fi.is_inactive
+    and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
+    and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}`
+}
+
 /**
  * Folder-level record fence for record-leaf folders. An explicit folder grant
  * re-opens its folder, matching the file-level rule.
@@ -797,10 +804,11 @@ export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<
          group by parent_folder_id
       ) cc on cc.parent_folder_id = f.id
       left join (
-        select folder_id, count(*)::int as n
-          from files
-         where org_id = ${orgId} and not is_inactive
-         group by folder_id
+        select fi.folder_id, count(*)::int as n
+          from files fi
+          left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
+         where ${visibleFileRowPredicate(orgId, viewer, scope)}
+         group by fi.folder_id
       ) fc on fc.folder_id = f.id
      where f.org_id = ${orgId} and not f.is_inactive
        and f.record_id is null
@@ -861,6 +869,9 @@ export async function getFolder(
   const recordVisible = viewer
     ? recordScopeFolderPredicate(orgId, viewer, sql`f.id`, sql`f.record_table`, sql`f.record_id`)
     : sql`true`
+  const fileCountVisible = viewer && scope
+    ? visibleFileRowPredicate(orgId, viewer, scope)
+    : sql`fi.org_id = ${orgId} and not fi.is_inactive`
   const r = (await db.execute<FolderNode & { ownerId: string | null }>(sql`
     select f.id, f.name,
            case when ${parentVisible} then f.parent_folder_id end as "parentId",
@@ -870,7 +881,9 @@ export async function getFolder(
            f.record_id as "recordId", f.owner_id as "ownerId",
            (select count(*)::int from folders c
              where c.parent_folder_id = f.id and c.org_id = ${orgId} and ${childVisible}) as "childCount",
-           (select count(*)::int from files fi where fi.folder_id = f.id and fi.org_id = ${orgId} and not fi.is_inactive) as "fileCount"
+           (select count(*)::int from files fi
+             left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
+            where fi.folder_id = f.id and ${fileCountVisible}) as "fileCount"
       from folders f
      where f.id = ${id} and f.org_id = ${orgId} and ${selfVisible}
        and ${recordVisible}
@@ -1523,12 +1536,7 @@ export async function listFiles(
   const dir = opts.dir === 'asc' ? sql`asc` : sql`desc`
 
   const scope = await resolveReadScope(orgId, viewer)
-  const whereParts = [
-    sql`fi.org_id = ${orgId}`,
-    sql`not fi.is_inactive`,
-    visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`),
-    recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`),
-  ]
+  const whereParts = [visibleFileRowPredicate(orgId, viewer, scope)]
   if (opts.folderId) whereParts.push(sql`fi.folder_id = ${opts.folderId}`)
   if (opts.q) whereParts.push(sql`fi.name ilike ${'%' + opts.q + '%'}`)
   const where = sql.join(whereParts, sql` and `)
@@ -1616,6 +1624,7 @@ export async function listFolderContents(
   // leak through parentId, and childCount stays within the viewer's scope.
   const rowParentVisible = visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)
   const childVisible = visibleFolderPredicate(scope.hiddenFolderIds, sql`c.id`)
+  const fileVisible = visibleFileRowPredicate(orgId, viewer, scope)
 
   // Folder count first — it anchors the combined pagination math.
   const folderCount = (await db.execute<{ n: number }>(sql`
@@ -1640,7 +1649,8 @@ export async function listFolderContents(
                    where c.parent_folder_id = f.id and c.org_id = ${orgId} and not c.is_inactive
                      and ${childVisible}) as "childCount",
                  (select count(*)::int from files fi
-                   where fi.folder_id = f.id and fi.org_id = ${orgId} and not fi.is_inactive) as "fileCount"
+                   left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
+                   where fi.folder_id = f.id and ${fileVisible}) as "fileCount"
             from folders f
            where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
              and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
