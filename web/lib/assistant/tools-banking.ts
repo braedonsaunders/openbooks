@@ -199,8 +199,9 @@ const listBankFeeds: AssistantToolDef = {
              (c.credentials is not null) as has_credentials,
              a.number as account_number, a.name as account_name
         from bank_feed_connections c
-        join accounts a on a.id = c.account_id and a.org_id = c.org_id
+       join accounts a on a.id = c.account_id and a.org_id = c.org_id
        where c.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by c.created_at desc
        limit 200
     `));

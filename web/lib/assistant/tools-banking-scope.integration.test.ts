@@ -31,6 +31,7 @@ test('banking assistant reads hide reconciliation data outside the caller subsid
   const statementId = randomUUID();
   const statementLineId = randomUUID();
   const reconciliationId = randomUUID();
+  const feedId = randomUUID();
   const userId = randomUUID();
   const user: SessionUser = {
     id: userId,
@@ -46,6 +47,10 @@ test('banking assistant reads hide reconciliation data outside the caller subsid
   };
   try {
     await withBypassContext(async () => {
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', 'true'::jsonb)
+        where id = ${org.orgId}
+      `);
       await db.execute(sql`
         insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
         values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden bank entity','CAD','CA',true,false)
@@ -72,10 +77,14 @@ test('banking assistant reads hide reconciliation data outside the caller subsid
           ${reconciliationId},${org.orgId},${hiddenAccount},'2026-07-31','1250','in_progress','CAD'
         )
       `);
+      await db.execute(sql`
+        insert into bank_feed_connections(id, org_id, name, provider, account_id)
+        values (${feedId}, ${org.orgId}, 'Hidden feed', 'manual', ${hiddenAccount})
+      `);
     });
     const authz = {
       user,
-      permissions: new Set(['assistant.use', 'banking.read', 'banking.reconcile']),
+      permissions: new Set(['assistant.use', 'banking.read', 'banking.reconcile', 'admin.setup.manage']),
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
     };
     await withOrgContext(org.orgId, async () => {
@@ -91,6 +100,11 @@ test('banking assistant reads hide reconciliation data outside the caller subsid
       assert.equal(unmatched.ok, true, JSON.stringify(unmatched));
       assert.ok(unmatched.ok);
       assert.deepEqual((unmatched.data as { lines: unknown[] }).lines, []);
+
+      const bankFeeds = await executeAssistantTool(authz, 'list_bank_feeds', {});
+      assert.equal(bankFeeds.ok, true, JSON.stringify(bankFeeds));
+      assert.ok(bankFeeds.ok);
+      assert.deepEqual((bankFeeds.data as { connections: unknown[] }).connections, []);
     });
   } finally {
     await dropScratchOrg(org.orgId);
