@@ -131,6 +131,23 @@ function clickButton(text: string) {
   return btn
 }
 
+test('statement import controls are associated with their visible labels', async (t) => {
+  const { host, root } = await mount()
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    clickButton('Import statement').click()
+    await tick()
+  })
+  for (const name of ['Format', 'File', 'Statement text']) {
+    const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === name)
+    assert.ok(label, `${name} label renders`)
+    assert.ok(label.control, `${name} label controls an input`)
+  }
+})
+
 /** Drive the dialog to a mapped junk-CSV CSV state with Preview enabled. */
 async function mapJunkCsv() {
   await act(async () => {

@@ -204,6 +204,7 @@ const mockSources = new Map<string, string>([
     'mock:react',
     `
       const harness = globalThis[Symbol.for('openbooks.bank-statement-upload-react-harness')]
+      export function useId() { return 'statement-upload-test' }
       export function useRef(initial) { return harness.useRef(initial) }
       export function useState(initial) { return harness.useState(initial) }
     `,
