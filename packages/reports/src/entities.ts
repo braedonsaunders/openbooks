@@ -91,6 +91,16 @@ export type ReportEntityColumn = {
    * from `currency`: that is the transaction currency, not the base.
    */
   baseMoney?: boolean
+  /**
+   * True when each row carries a running/cumulative value rather than its own
+   * movement (e.g. a year-to-date total on every pay stub). Summing such a
+   * column across rows counts every underlying movement many times over, so
+   * `sum` refuses it at compile time — the honest aggregates are `latest`
+   * (the end value) or a sum of the underlying additive column. Semi-additive
+   * figures (additive across rows at one point in time, meaningless summed
+   * across time) carry the same flag: a snapshot never sums.
+   */
+  snapshot?: boolean
 }
 
 /** One catalog-authored native link on a displayed rows-mode cell. Metadata
@@ -833,6 +843,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'amount', label: 'Amount', kind: 'money', expr: 'l.amount' },
       {
         key: 'ytd_amount', label: 'YTD amount', kind: 'money',
+        snapshot: true,
         expr: `(select coalesce(sum(l2.amount), 0)
         from pay_stub_lines l2
         join pay_stubs s2 on s2.id = l2.stub_id and s2.org_id = l2.org_id
