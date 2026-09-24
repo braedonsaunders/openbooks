@@ -47,7 +47,6 @@
     "engine/src/sync/readme-accuracy.test.ts": 1,
     "engine/src/sync/source-deletions.test.ts": 7,
     "engine/src/tax/pack-provisioning.test.ts": 1,
-    "engine/src/validation/gl-reconcile.test.ts": 3,
     "engine/src/validation/import-field-tickets.test.ts": 1,
     "engine/src/worker/backup-scheduler.test.ts": 14,
     "engine/src/worker/overhead-scheduler.test.ts": 1,
