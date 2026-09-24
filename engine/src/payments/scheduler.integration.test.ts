@@ -6,6 +6,7 @@ import { db, withBypass, withBypassContext, withOrgContext } from "../platform/d
 import { decidePaymentRun, runDuePaymentSchedules, submitPaymentRun } from "./operations.ts";
 import { createPaymentRun } from "./run-creation.ts";
 import { PaymentError } from "./payment-errors.ts";
+import { cancelPaymentRun } from "./run-cancellation.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,
@@ -192,12 +193,13 @@ type OccurrenceRow = {
   status: string;
   payment_run_id: string | null;
   attempt_count: number;
+  result: Record<string, unknown> | null;
 };
 
 async function occurrences(orgId: string, scheduleId: string): Promise<OccurrenceRow[]> {
   return withBypassContext(async () =>
     (await db.execute<OccurrenceRow>(sql`
-      select id::text as id, status, payment_run_id::text as payment_run_id, attempt_count
+      select id::text as id, status, payment_run_id::text as payment_run_id, attempt_count, result
         from payment_schedule_occurrences
        where org_id = ${orgId} and schedule_id = ${scheduleId}
        order by occurrence_at
@@ -592,6 +594,62 @@ test(
       assert.equal(await instructionCount(org.orgId, runId), 1);
     } finally {
       await dropFailureTrigger();
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "recovery records a cancelled linked run as a visible terminal occurrence failure",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const fixture = await seedScheduleFixture(org);
+      const run = await withOrgContext(org.orgId, () => createPaymentRun({
+        orgId: org.orgId,
+        createdBy: null,
+        paymentBankProfileId: fixture.profileId,
+        billDocumentIds: [fixture.billId],
+        scheduledFor: org.date,
+        sourceScheduleId: fixture.scheduleId,
+        selectionCriteria: { dueThroughDays: 30 },
+        sourceOccurrence: {
+          scheduleId: fixture.scheduleId,
+          occurrenceAt: fixture.dueAt,
+          status: "awaiting_submit",
+        },
+      }));
+      const runId = run.id;
+      await withOrgContext(org.orgId, () =>
+        cancelPaymentRun(runId, org.orgId, fixture.operatorId, "operator cancelled scheduled run"));
+      // Model an interrupted scheduler retry against an already cancelled
+      // linked run. The run lifecycle above creates the real terminal state;
+      // this restores the durable retry marker recovery must reconcile.
+      await withBypassContext(() => db.execute(sql`
+        update payment_schedule_occurrences
+           set status = 'submit_failed', attempt_count = 1
+         where org_id = ${org.orgId} and schedule_id = ${fixture.scheduleId}
+           and payment_run_id = ${runId}
+      `));
+      await withBypassContext(() => db.execute(sql`
+        update payment_schedules set next_run_at = now() + interval '1 day'
+         where org_id = ${org.orgId} and id = ${fixture.scheduleId}
+      `));
+
+      await runDuePaymentSchedules();
+      const occurrence = (await occurrences(org.orgId, fixture.scheduleId))[0]!;
+      assert.equal(occurrence.status, "failed");
+      assert.equal(occurrence.payment_run_id, runId);
+      assert.deepEqual(occurrence.result, {
+        scheduleId: fixture.scheduleId,
+        runId,
+        runStatus: "cancelled",
+        error: "linked payment run is cancelled; scheduled submission cannot continue",
+      });
+      const schedule = await scheduleRow(org.orgId, fixture.scheduleId);
+      assert.equal((schedule!.last_result as { runStatus?: string }).runStatus, "cancelled");
+    } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
