@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import {
+  checkoutSessionLockKey,
   createCheckoutSession,
   createPaymentLink,
   handleProviderWebhook,
@@ -16,6 +17,7 @@ import {
   publicPaymentPage,
   resolveSurcharge,
   toMinorUnits,
+  voidPaymentLink,
 } from "./acceptance.ts";
 import { add } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -1064,6 +1066,57 @@ test("concurrent hosted-checkout requests share one provider session for one inv
         redirectUrl: "https://checkout.stripe.test/cs_checkout_race_1",
       },
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("checkout rechecks a link voided while it waits for its per-link lock", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-VOID-CHECKOUT-RACE");
+    const lockKey = checkoutSessionLockKey(org.orgId, fx.link.id);
+    let providerCalls = 0;
+    let checkout: Promise<{ redirectUrl: string }> | undefined;
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+      `);
+      checkout = createCheckoutSession(
+        fx.link.token,
+        `https://app.test/pay/${fx.link.token}`,
+        async () => {
+          providerCalls += 1;
+          return { status: 200, json: async () => ({ id: "cs_voided", url: "https://checkout.stripe.test/cs_voided" }) };
+        },
+      );
+
+      const deadline = Date.now() + 5_000;
+      let waiting = false;
+      while (Date.now() < deadline) {
+        const locks = await db.execute<{ waiting: number }>(sql`
+          select count(*)::int as waiting from pg_locks
+           where locktype = 'advisory' and not granted
+        `);
+        if (locks.rows[0]!.waiting > 0) {
+          waiting = true;
+          break;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      }
+      assert.ok(waiting, "checkout must reach the held lock before the admin voids the link");
+      await voidPaymentLink(org.orgId, fx.userId, fx.link.id, null);
+    });
+
+    await assert.rejects(
+      checkout!,
+      (error: unknown) => error instanceof PaymentAcceptanceError && error.message === "payment link is void",
+    );
+    assert.equal(providerCalls, 0, "a voided link must be refused before contacting the provider");
+    const attempts = (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
+    `)).rows[0]!;
+    assert.equal(attempts.count, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }

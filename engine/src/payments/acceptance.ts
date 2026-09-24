@@ -1418,30 +1418,56 @@ export async function createCheckoutSession(
   returnUrl: string,
   fetchFn?: FetchFn,
 ): Promise<{ redirectUrl: string }> {
-  const link = await loadLinkByToken(token);
-  if (!link) throw new PaymentAcceptanceError("payment link not found");
-  if (!(await onlinePaymentsFeatureEnabled(link.orgId))) {
+  const initialLink = await loadLinkByToken(token);
+  if (!initialLink) throw new PaymentAcceptanceError("payment link not found");
+  if (!(await onlinePaymentsFeatureEnabled(initialLink.orgId))) {
     throw new PaymentAcceptanceError("Online Payments is disabled");
   }
-  if (link.status !== "active") throw new PaymentAcceptanceError(`payment link is ${link.status}`);
+  if (initialLink.status !== "active") throw new PaymentAcceptanceError(`payment link is ${initialLink.status}`);
   // Expiry is enforced here, not just on the pay page: the page flips an
   // expired link on view, but a direct session POST would otherwise mint
   // provider checkouts against a dead quote indefinitely. The flip commits
   // in its own transaction because the refusal below must not roll it back.
-  if (link.expiresOn && link.expiresOn < (await businessToday(link.orgId))) {
-    await withOrg(link.orgId, async () => {
+  if (initialLink.expiresOn && initialLink.expiresOn < (await businessToday(initialLink.orgId))) {
+    await withOrg(initialLink.orgId, async () => {
       await db.execute(sql`
         update payment_links set status = 'expired', updated_at = now()
-         where id = ${link.id} and org_id = ${link.orgId} and status = 'active'
+         where id = ${initialLink.id} and org_id = ${initialLink.orgId} and status = 'active'
       `);
     });
     throw new PaymentAcceptanceError("payment link is expired");
   }
-  return await withOrg(link.orgId, async () => {
+  return await withOrg(initialLink.orgId, async () => {
     // Serialize creators for this link BEFORE any read or write below.
     await db.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${checkoutSessionLockKey(link.orgId, link.id)}, 0))
+      select pg_advisory_xact_lock(hashtextextended(${checkoutSessionLockKey(initialLink.orgId, initialLink.id)}, 0))
     `);
+
+    // The initial token lookup only routes the request. Admin actions use the
+    // payment-link row lock, so reload after the per-link lock and recheck
+    // lifecycle state before any provider side effect can occur.
+    const lockedLink = (await db.execute<{
+      documentId: string;
+      provider: AcceptanceProvider;
+      bankAccountId: string;
+      amount: string | null;
+      surchargeAmount: string | null;
+      currency: string;
+      status: string;
+      expiresOn: string | null;
+    }>(sql`
+      select document_id as "documentId", provider, bank_account_id as "bankAccountId",
+             amount, surcharge_amount as "surchargeAmount", currency, status,
+             expires_on::text as "expiresOn"
+        from payment_links where id = ${initialLink.id} and org_id = ${initialLink.orgId}
+       for update
+    `)).rows[0];
+    if (!lockedLink) throw new PaymentAcceptanceError("payment link not found");
+    if (lockedLink.status !== "active") throw new PaymentAcceptanceError(`payment link is ${lockedLink.status}`);
+    if (lockedLink.expiresOn && lockedLink.expiresOn < await businessToday(initialLink.orgId)) {
+      throw new PaymentAcceptanceError("payment link is expired");
+    }
+    const link: LinkWithContext = { ...initialLink, ...lockedLink };
 
     const doc = (await db.execute<{ document_number: string; open_balance: string }>(sql`
       select document_number, open_balance from documents where id = ${link.documentId} and org_id = ${link.orgId}
