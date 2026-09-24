@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   authRequestContext,
+  networkAddressEvidenceHash,
   hasExpectedOrigin,
   nextLockoutState,
   normalizeLoginEmail,
@@ -40,11 +41,15 @@ test("forwarded client addresses require explicit trusted-proxy configuration", 
   const request = new Request("https://example.test", {
     headers: { "x-forwarded-for": "203.0.113.7, 10.0.0.2", "user-agent": "test-agent" },
   });
-  assert.equal(authRequestContext(request, {}).networkAddress, null);
+  const untrusted = authRequestContext(request, {});
+  assert.equal(untrusted.networkAddress, null);
+  assert.equal(networkAddressEvidenceHash(untrusted), "unknown");
+  const trusted = authRequestContext(request, { OPENBOOKS_TRUST_PROXY: "1" });
   assert.equal(
-    authRequestContext(request, { OPENBOOKS_TRUST_PROXY: "1" }).networkAddress,
+    trusted.networkAddress,
     "203.0.113.7",
   );
+  assert.notEqual(networkAddressEvidenceHash(trusted), "unknown");
 });
 
 test("lockout escalates and resets after a quiet hour", () => {

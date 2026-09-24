@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { createHash } from "node:crypto";
 import { isNamedNonProductionEnvironment } from "./auth-secret-policy";
 import { isSameLoopbackOrigin } from "./csrf";
 
@@ -91,6 +92,12 @@ export function authRequestContext(
     networkAddress,
     userAgent: userAgentValue ? userAgentValue.slice(0, 1024) : null,
   };
+}
+
+/** Hash only an address already accepted by the configured proxy policy. */
+export function networkAddressEvidenceHash(context: AuthRequestContext): string {
+  if (context.networkAddress === null) return "unknown";
+  return createHash("sha256").update(context.networkAddress).digest("hex").slice(0, 32);
 }
 
 /**
