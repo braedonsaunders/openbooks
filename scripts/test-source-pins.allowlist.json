@@ -159,7 +159,6 @@
     "web/app/api/timesheets/reject/route.integration.test.ts": 2,
     "web/app/api/views/view-id-scope.integration.test.ts": 1,
     "web/app/login/page.test.tsx": 2,
-    "web/app/login/reset/page.test.ts": 1,
     "web/components/account-menu.test.tsx": 1,
     "web/components/allocations/SplitLinesEditor.targets.test.ts": 1,
     "web/components/client-hook-boundary.test.ts": 1,
