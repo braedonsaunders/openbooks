@@ -328,7 +328,6 @@
     "web/lib/auth-route-contract.test.ts": 10,
     "web/lib/backup-run-concurrency.test.ts": 1,
     "web/lib/budget-export-calendar.test.ts": 1,
-    "web/lib/budgets.test.ts": 1,
     "web/lib/cash/cash-open-items-precision.test.ts": 1,
     "web/lib/cash/core.test.ts": 6,
     "web/lib/cash/net-convention.test.ts": 1,
