@@ -101,7 +101,7 @@ export async function accountRegister(
       union select child.id from accounts child join account_scope parent on child.parent_id = parent.id where child.org_id = ${orgId}
     ) select id from account_scope
   ) ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}`);
-  const r = (await reportDb.execute<AccountRegisterSelectRow>(sql`
+  const r = (await reportDb.execute<AccountRegisterSelectRow>(canSeePayroll === true ? sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -120,6 +120,36 @@ export async function accountRegister(
      where l.account_id in (select id from account_scope)
        and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
      order by e.posting_date desc, e.entry_number desc, l.line_number
+     limit ${limit} offset ${offset}
+  ` : sql`
+    with recursive account_scope as (
+      select id from accounts where id = ${accountId} and org_id = ${orgId}
+      union
+      select child.id from accounts child join account_scope parent on child.parent_id = parent.id where child.org_id = ${orgId}
+    ), all_lines as (
+      select ${reportDb.censusColumn}, e.id as entry_id, e.entry_number, e.posting_date::text as posting_date,
+             e.memo as entry_memo, l.line_number, l.amount, l.memo, p.display_name as party, l.party_id,
+             l.account_id, d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
+             e.origin as entry_origin, coalesce(d.kind = 'pay_run' or e.origin = 'payroll', false) as payroll_origin
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+        left join parties p on p.id = l.party_id and p.org_id = l.org_id
+        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
+       where l.account_id in (select id from account_scope)
+         and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
+    ), visible_lines as (
+      select max(__functional_currency_count) as __functional_currency_count, entry_id, entry_number,
+             posting_date, entry_memo, min(line_number) as line_number, sum(amount) as amount,
+             null::text as memo, ${PAYROLL_RESTRICTED_PARTY_LABEL}::text as party, null::uuid as party_id,
+             account_id, doc_id, doc_kind, doc_number, entry_origin
+        from all_lines where payroll_origin and party_id is not null
+       group by entry_id, entry_number, posting_date, entry_memo, account_id, doc_id, doc_kind, doc_number, entry_origin
+      union all
+      select __functional_currency_count, entry_id, entry_number, posting_date, entry_memo, line_number,
+             amount, memo, party, party_id, account_id, doc_id, doc_kind, doc_number, entry_origin
+        from all_lines where not (payroll_origin and party_id is not null)
+    )
+    select * from visible_lines order by posting_date desc, entry_number desc, entry_id, line_number
      limit ${limit} offset ${offset}
   `));
   // Confidentiality collapses BEFORE shaping below; the balance above is over

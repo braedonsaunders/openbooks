@@ -184,13 +184,13 @@ test('account register masks payroll lines with an unchanged balance', { skip: !
   const fx = await seed()
   try {
     const { masked, full } = await withOrgContext(fx.orgId, async () => ({
-      masked: await accountRegister(fx.orgId, fx.accounts.ap, 100, 0),
+      masked: await accountRegister(fx.orgId, fx.accounts.ap, 1, 0),
       full: await accountRegister(fx.orgId, fx.accounts.ap, 100, 0, undefined, null, undefined, true),
     }))
     assert.equal(masked.balance, '-300.0000')
     assert.equal(masked.balance, full.balance)
     assert.ok(!JSON.stringify(masked).includes(ALICE) && !JSON.stringify(masked).includes('cheque'))
-    assert.ok(masked.lines.some((l) => l.party === PAYROLL_RESTRICTED_PARTY_LABEL))
+    assert.deepEqual([masked.lines[0]?.party, masked.lines[0]?.amount], [PAYROLL_RESTRICTED_PARTY_LABEL, '-4000.0000'])
     assert.ok(JSON.stringify(full).includes(ALICE))
     // No party ids leak through the collapsed rows.
     assert.ok(!JSON.stringify(masked).includes(fx.alice) && !JSON.stringify(masked).includes(fx.bob))
