@@ -68,6 +68,26 @@ export function taxPoolRunLockKey(orgId: string, bookId: string, subsidiaryId: s
   return `tax-pool-run:${orgId}:${bookId}:${subsidiaryId}:${regime}`;
 }
 
+/** Shared as-of predicate for lifecycle events that have not been reversed
+ * by the reporting date. Tax-basis blockers, pooled regimes and per-asset
+ * MACRS all read this event population, so later corrections restore the
+ * asset consistently. */
+function effectiveLifecycleEventsAsOf(yearEnd: string) {
+  return sql`WITH effective_lifecycle_events AS (
+    SELECT event.org_id, event.asset_id, event.id, event.occurred_on, event.amount,
+           event.financial_change_id, event.kind
+      FROM asset_events event
+     WHERE event.kind IN ('disposed', 'written_off', 'partially_disposed', 'transferred')
+       AND event.occurred_on <= ${yearEnd}
+       AND NOT EXISTS (
+         SELECT 1 FROM asset_events reversal
+          WHERE reversal.org_id = event.org_id
+            AND reversal.reverses_event_id = event.id
+            AND reversal.occurred_on <= ${yearEnd}
+       )
+  )`;
+}
+
 /** Effective first-year rule (fraction + enhanced multiplier) for a class on a
  *  date — a tenant config row if one matches, else the regime class default. */
 async function firstYearRule(
@@ -187,17 +207,16 @@ export async function runTaxPool(
     // is not necessarily the transferee's depreciable tax basis. Until native
     // tax treatment is joined here, do not emit an apparently complete return.
     // This is an explicit delivery dependency, not completed tax support.
-    const unpricedLifecycle = (await tx.execute<{ asset_number: string }>(sql`
+    const unpricedLifecycle = (await tx.execute<{ asset_number: string }>(sql`${effectiveLifecycleEventsAsOf(opts.yearEnd)}
       select a.asset_number from fixed_assets a
       join asset_categories c on c.org_id=a.org_id and c.id=a.category_id
       where a.org_id=${orgId} and a.subsidiary_id=${subsidiaryId}
         and coalesce(a.custom->'taxDepreciation'->${regime}->>'classCode',c.tax_attributes->>${attr},'')<>''
         and (
-          exists(select 1 from asset_events e where e.org_id=a.org_id and e.asset_id=a.id
+          exists(select 1 from effective_lifecycle_events e where e.org_id=a.org_id and e.asset_id=a.id
             and e.financial_change_id is not null
             and e.kind in('disposed','written_off','partially_disposed','transferred')
-            and e.occurred_on<=${opts.yearEnd}
-            and not exists(select 1 from asset_events r where r.org_id=e.org_id and r.reverses_event_id=e.id and r.occurred_on<=${opts.yearEnd}))
+          )
           or exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id
             and t.effective_on<=${opts.yearEnd} and (t.reversed_on is null or t.reversed_on>${opts.yearEnd}))
         ) order by a.asset_number limit 1`)).rows[0];
@@ -287,7 +306,7 @@ async function runPools(
     placed_on: string | null;
     class_code: string;
     held_at_year_end: boolean;
-  }>(sql`
+  }>(sql`${effectiveLifecycleEventsAsOf(run.yearEnd)}
     select a.acquisition_cost::text, a.acquired_on::text as acquired_on,
            coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
            c.tax_attributes->>${attr} as class_code,
@@ -295,18 +314,9 @@ async function runPools(
              coalesce(a.in_service_on, a.acquired_on) is not null
              and coalesce(a.in_service_on, a.acquired_on) <= ${run.yearEnd}
              and not exists (
-               select 1
-                 from asset_events disposal
+               select 1 from effective_lifecycle_events disposal
                 where disposal.org_id = a.org_id and disposal.asset_id = a.id
                   and disposal.kind in ('disposed', 'written_off')
-                  and disposal.occurred_on <= ${run.yearEnd}
-                  and not exists (
-                    select 1
-                      from asset_events reversal
-                     where reversal.org_id = disposal.org_id
-                       and reversal.reverses_event_id = disposal.id
-                       and reversal.occurred_on <= ${run.yearEnd}
-                  )
              )
            ) as held_at_year_end
       from fixed_assets a
@@ -364,23 +374,17 @@ async function runPools(
     acquisition_cost: string;
     acquired_on: string;
     class_code: string;
-  }>(sql`
+  }>(sql`${effectiveLifecycleEventsAsOf(run.yearEnd)}
     select e.amount::text, a.acquisition_cost::text, a.acquired_on::text as acquired_on,
            c.tax_attributes->>${attr} as class_code
-      from asset_events e
+      from effective_lifecycle_events e
       join fixed_assets a on a.id = e.asset_id and a.org_id = e.org_id
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where e.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
        and e.kind in ('disposed', 'written_off')
        and e.occurred_on between ${run.yearStart} and ${run.yearEnd}
        and coalesce(c.tax_attributes->>${attr}, '') <> ''
-       and not exists (
-         select 1
-           from asset_events reversal
-          where reversal.org_id = e.org_id
-            and reversal.reverses_event_id = e.id
-            and reversal.occurred_on <= ${run.yearEnd}
-       )`));
+       `));
   for (const row of dispRows.rows) {
     const classDef = classes.get(row.class_code)!;
     const aggregate = addAggregate(row.class_code);
@@ -493,7 +497,7 @@ async function runMacrs(
       `short tax year factor ${run.shortYearFactor} is not supported for the MACRS model; no result was produced. Native short-year MACRS computation must be implemented for this reporting period; do not replace a genuine short tax year with a full year`,
     );
   }
-  const assets = (await tx.execute<MacrsAssetRow>(sql`
+  const assets = (await tx.execute<MacrsAssetRow>(sql`${effectiveLifecycleEventsAsOf(run.yearEnd)}
     select a.id,
            coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}) as class_code,
            a.acquisition_cost::text, coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
@@ -501,8 +505,8 @@ async function runMacrs(
       from fixed_assets a
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
       left join lateral (
-        select e.occurred_on, e.amount from asset_events e
-         where e.asset_id = a.id and e.org_id = a.org_id and e.org_id = ${orgId}
+        select e.occurred_on, e.amount from effective_lifecycle_events e
+         where e.asset_id = a.id and e.org_id = a.org_id
            and e.kind in ('disposed', 'written_off')
          order by e.occurred_on limit 1
       ) d on true
