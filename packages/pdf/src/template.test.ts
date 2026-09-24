@@ -217,6 +217,24 @@ test('tokenized header/footer fragments drop network resource URLs and keep inli
   assert.doesNotMatch(escaped, /<img/i)
 })
 
+test('meta refresh navigation cannot survive template sanitization', () => {
+  // http-equiv refresh is a navigation primitive: the print page blocks
+  // document navigations at render time, and the sanitizer refuses the tag
+  // class outright rather than relying on attribute stripping.
+  for (const authored of [
+    '<meta http-equiv="refresh" content="0;url=https://evil.example/">',
+    '<META HTTP-EQUIV="Refresh" CONTENT="0;URL=https://evil.example/">',
+    '<meta http-equiv="refresh" content="0; url = https://evil.example/">',
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width">',
+  ]) {
+    const sanitized = sanitizeTemplateHtml(`<div>Acme</div>${authored}`)
+    assert.match(sanitized, /Acme/)
+    assert.doesNotMatch(sanitized, /<meta/i)
+    assert.doesNotMatch(sanitized, /evil\.example/i)
+  }
+})
+
 test('the field-ticket conditional sections compile to live conditionals', () => {
   // Mirrors the shipped starter shapes: section wrappers guarded by data-if.
   const { compiledHtml } = compileTemplateHtml(

@@ -880,7 +880,13 @@ export function htmlToPlainText(html: string): string {
  * parsing — so they are allow-listed here and expanded afterwards.
  */
 const SANITIZE_TEMPLATE_OPTIONS = {
-  ADD_TAGS: ['style', 'meta', 'link', 'title', 'head', 'body', 'html', 'center'],
+  // No `meta`: a bare meta element is inert in a print body, while an
+  // http-equiv refresh is a navigation primitive — DOMPurify strips the
+  // attributes today, but the tag class has no print use, so it is refused
+  // the allowlist rather than relying on attribute stripping alone. The
+  // print path sets its own charset (see html.ts); viewport meta does
+  // nothing on paper.
+  ADD_TAGS: ['style', 'link', 'title', 'head', 'body', 'html', 'center'],
   ADD_ATTR: [
     'style',
     'class',
