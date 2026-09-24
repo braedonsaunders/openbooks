@@ -1,6 +1,7 @@
 'use client'
 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 
@@ -18,6 +19,7 @@ import { cn } from '@openbooks/ui'
  */
 export function WizardShell(props: {
   testId: string
+  dialogLabel: string
   /** Key of the current step — drives the AnimatePresence transition. */
   stepKey: string
   /** Segmented progress bar; null hides it (welcome / applying / done). */
@@ -32,15 +34,25 @@ export function WizardShell(props: {
   children: React.ReactNode
 }) {
   const reduceMotion = useReducedMotion()
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog || dialog.open) return
+    dialog.showModal()
+    return () => { if (dialog.open) dialog.close() }
+  }, [])
   return (
     <AnimatePresence>
-      <motion.div
+      <motion.dialog
+        ref={dialogRef}
         initial={reduceMotion ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={reduceMotion ? undefined : { opacity: 0 }}
         transition={{ duration: 0.2 }}
         data-testid={props.testId}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
+        aria-label={props.dialogLabel}
+        onCancel={(event) => { event.preventDefault(); props.skip?.onClick() }}
+        className="fixed inset-0 z-50 m-0 flex h-dvh w-screen max-h-none max-w-none items-center justify-center border-0 bg-transparent p-0 text-inherit backdrop:bg-slate-950/80 backdrop:backdrop-blur-sm"
       >
         {props.skip && (
           <button
@@ -114,7 +126,7 @@ export function WizardShell(props: {
             </div>
           )}
         </motion.div>
-      </motion.div>
+      </motion.dialog>
     </AnimatePresence>
   )
 }

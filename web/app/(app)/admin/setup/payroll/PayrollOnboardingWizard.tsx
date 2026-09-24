@@ -417,6 +417,7 @@ export function PayrollOnboardingWizard(props: {
   return (
     <WizardShell
       testId="payroll-setup-wizard"
+      dialogLabel={t('cta.title')}
       stepKey={data ? step : 'loading'}
       progress={
         data && stepIdx < steps.indexOf('applying')
