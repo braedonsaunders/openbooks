@@ -318,6 +318,11 @@ export async function renderOfferVersion(query: {
   const renderedFileId = query.renderedFileId == null ? null : requireId(query.renderedFileId, "renderedFileId");
   return withOrgTransaction(orgId, async () => {
     await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    const locked = (await db.execute<{ version: number; signatureStatus: string | null }>(sql`
+      select version, signature_status as "signatureStatus"
+        from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
+    `)).rows[0];
+    if (!locked) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const offer = await loadOffer(db, orgId, offerId);
     if (!offer) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const application = await loadApplication(db, orgId, offer.applicationId);
@@ -328,6 +333,9 @@ export async function renderOfferVersion(query: {
         "REFUSED",
         `a ${offer.status} offer is terminal and immutable — draft new terms instead of re-rendering this one`,
       );
+    }
+    if (locked.signatureStatus === "signed") {
+      throw new RecruitingError("REFUSED", "a signed offer is immutable — draft new terms as a new offer instead of replacing the signed version");
     }
     const template = await loadOfferTemplate(db, orgId, templateId);
     if (!template) {
@@ -378,6 +386,7 @@ export async function renderOfferVersion(query: {
              signature_status = 'unsigned', signing_token_hash = null,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
+         and version = ${locked.version}
       returning 1 as one
     `)).rows[0];
     if (!bumped) {
@@ -721,19 +730,24 @@ export async function readOfferForSigning(signingToken: string): Promise<{
   readonly documentHash: string;
 }> {
   const { orgId, offerId } = await offerScopeForToken(signingToken);
+  const tokenHash = hashRecruitingToken(signingToken);
   return withOrgTransaction(orgId, async () => {
-    const offer = await loadOffer(db, orgId, offerId);
-    if (!offer) throw new RecruitingError("NOT_FOUND", "this offer no longer exists — ask the recruiter for the current terms");
     const full = (await db.execute<{
       signatureStatus: string | null;
       version: number;
       applicationId: string;
+      signingTokenHash: string | null;
     }>(sql`
       select signature_status as "signatureStatus", version,
-             application_id as "applicationId"
-        from hrm_offers where org_id = ${orgId} and id = ${offerId}
+             application_id as "applicationId", signing_token_hash as "signingTokenHash"
+        from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
     `)).rows[0];
     if (!full) throw new RecruitingError("NOT_FOUND", "this offer no longer exists — ask the recruiter for the current terms");
+    if (full.signingTokenHash !== tokenHash) {
+      throw new RecruitingError("REFUSED", "this signing link is no longer the current one — ask the recruiter to resend your offer and use the newest link");
+    }
+    const offer = await loadOffer(db, orgId, offerId);
+    if (!offer) throw new RecruitingError("NOT_FOUND", "this offer no longer exists — ask the recruiter for the current terms");
     if (full.signatureStatus === "sent") {
       await db.execute(sql`
         update hrm_offers set signature_status = 'viewed', updated_at = now()
@@ -801,6 +815,7 @@ export async function signOffer(query: {
   // Bind narrowed locals before the transaction closure (parameter
   // narrowing does not survive into the closure).
   const signerName: string = query.signerName;
+  const tokenHash = hashRecruitingToken(query.signingToken);
   const documentHash: unknown = query.documentHash;
   const renderedFileId = query.renderedFileId == null ? null : requireId(query.renderedFileId, "renderedFileId");
   return withOrgTransaction(orgId, async () => {
@@ -809,12 +824,16 @@ export async function signOffer(query: {
       version: number;
       status: string;
       expiresOn: string | null;
+      signingTokenHash: string | null;
     }>(sql`
       select signature_status as "signatureStatus", version, status,
-             expires_on::text as "expiresOn"
-        from hrm_offers where org_id = ${orgId} and id = ${offerId}
+             expires_on::text as "expiresOn", signing_token_hash as "signingTokenHash"
+        from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
     `)).rows[0];
     if (!current) throw new RecruitingError("NOT_FOUND", "this offer no longer exists — ask the recruiter for the current terms");
+    if (current.signingTokenHash !== tokenHash) {
+      throw new RecruitingError("REFUSED", "this signing link is no longer the current one — ask the recruiter to resend your offer and use the newest link");
+    }
     // The signature lifecycle rides beside the commercial status 0195 owns:
     // a terminal offer (withdrawn, expired, declined, accepted) is never
     // signable, whatever the signature column still says. A past-due sent
@@ -876,6 +895,7 @@ export async function signOffer(query: {
              rendered_file_id = coalesce(${renderedFileId}, rendered_file_id),
              updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
+         and version = ${current.version} and signing_token_hash = ${tokenHash}
          and (signature_status is null or signature_status in ('unsigned', 'sent', 'viewed'))
       returning 1 as one
     `)).rows[0];
@@ -895,12 +915,24 @@ export async function declineOfferSigning(query: {
   if (typeof query.reason !== "string" || query.reason.trim().length === 0) {
     throw new RecruitingError("INVALID_INPUT", "a decline needs a reason — say why the terms are refused");
   }
+  const tokenHash = hashRecruitingToken(query.signingToken);
   return withOrgTransaction(orgId, async () => {
+    const locked = (await db.execute<{ signatureStatus: string | null; signingTokenHash: string | null }>(sql`
+      select signature_status as "signatureStatus", signing_token_hash as "signingTokenHash"
+        from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
+    `)).rows[0];
+    if (!locked || locked.signingTokenHash !== tokenHash) {
+      throw new RecruitingError("REFUSED", "this signing link is no longer the current one — ask the recruiter for the newest link");
+    }
+    if (["signed", "declined", "voided"].includes(locked.signatureStatus ?? "")) {
+      throw new RecruitingError("REFUSED", "this offer's signature is already closed — the recorded state stands");
+    }
     const declined = (await db.execute<{ one: number }>(sql`
       update hrm_offers
          set signature_status = 'declined', signing_token_hash = null,
              decline_reason = ${query.reason}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
+         and signing_token_hash = ${tokenHash}
          and (signature_status is null or signature_status in ('unsigned', 'sent', 'viewed'))
       returning 1 as one
     `)).rows[0];

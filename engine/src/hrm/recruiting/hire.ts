@@ -63,6 +63,10 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     );
   }
   return withOrgTransaction(orgId, async () => {
+    const locked = (await db.execute<{ id: string }>(sql`
+      select id from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
+    `)).rows[0];
+    if (!locked) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const offer = await loadOfferForHire(db, orgId, offerId);
     const application = await loadApplication(db, orgId, offer.applicationId);
     if (!application) {
