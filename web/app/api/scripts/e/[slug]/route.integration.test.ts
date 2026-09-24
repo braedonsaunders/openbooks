@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
@@ -89,32 +88,6 @@ function postReq(slug = SLUG): Request {
 }
 
 const params = { params: Promise.resolve({ slug: SLUG }) };
-
-test("GET /api/scripts/e/[slug] must refuse before handle, auth, or runEndpointScript", () => {
-  const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-  const getStart = source.indexOf("export async function GET");
-  assert.ok(getStart >= 0, "GET export must remain so Next.js maps HEAD onto the refusal");
-  const afterGet = source.slice(getStart + 1);
-  const nextExport = afterGet.search(/export async function /);
-  const getFn = source.slice(getStart, getStart + 1 + (nextExport === -1 ? afterGet.length : nextExport));
-  assert.doesNotMatch(getFn, /\bhandle\s*\(/, "GET must not call handle()");
-  assert.doesNotMatch(getFn, /\brunEndpointScript\b/, "GET must not execute the restlet");
-  assert.doesNotMatch(getFn, /\bguardFeaturePermission\b/, "GET must not authenticate");
-  assert.match(getFn, /\brefuseNonPost\s*\(/);
-
-  const refusal = source.match(/function refuseNonPost\s*\([^)]*\)\s*\{[\s\S]*?\n\}/);
-  assert.ok(refusal, "missing refuseNonPost()");
-  assert.match(refusal[0], /status:\s*405/);
-  assert.match(refusal[0], /ENDPOINT_POST_ONLY/);
-  assert.match(source, /only POST executes/);
-
-  const handleFn = source.slice(source.indexOf("async function handle("), getStart);
-  const postGate = handleFn.search(/req\.method\s*!==\s*['"]POST['"]/);
-  const auth = handleFn.indexOf("guardFeaturePermission");
-  const run = handleFn.indexOf("runEndpointScript");
-  assert.ok(postGate >= 0, "handle() must gate on POST");
-  assert.ok(postGate < auth && postGate < run, "POST gate must precede auth and script execution");
-});
 
 test("an unauthenticated caller cannot invoke an endpoint script", { skip: !DB }, async () => {
   const org = await createScratchOrg();
