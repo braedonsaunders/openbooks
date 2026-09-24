@@ -59,6 +59,20 @@ const OUTPUT_BUDGET_BYTES = 24 * 1024;
 
 const DB_ONLY = { skip: !process.env.OPENBOOKS_DB_URL };
 
+test("restricted assistant report tools refuse an empty subsidiary scope", async () => {
+  const authz = { ...readerAuthz(randomUUID()), allowedSubsidiaryIds: new Set<string>() };
+  const partyId = randomUUID();
+  for (const [name, input] of [
+    ["general_ledger", { period: "this_fiscal_year_to_date" }],
+    ["aging_detail", { side: "ar", period: "this_fiscal_year_to_date" }],
+    ["cash_flow_indirect", { period: "this_fiscal_year_to_date" }],
+    ["partner_statement", { side: "ar", partyId, period: "this_fiscal_year_to_date" }],
+    ["run_report", { definitionId: randomUUID() }],
+  ] as const) {
+    assert.deepEqual(await executeAssistantTool(authz, name, input), { ok: false, error: "forbidden" }, name);
+  }
+});
+
 /** A fully-permissioned reader: every gate a read tool declares. A
  *  `forbidden` for this actor is a harness failure, never an expectation. */
 const READER_PERMS = [
