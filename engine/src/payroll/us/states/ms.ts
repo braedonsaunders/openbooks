@@ -27,6 +27,7 @@ import {
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   payPeriodFor,
   roundUsFinalWithholding,
@@ -115,6 +116,13 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
   if (certificateFlag(input.certificate, "exempt")) {
+    requireMilitarySpouseEligibility(input.certificate, "Mississippi", [
+      { key: "servicemember_stationed_under_orders_ms", description: "the servicemember spouse is assigned to Mississippi under military orders" },
+      { key: "employee_present_to_accompany", description: "the employee is in Mississippi solely to be with the servicemember spouse" },
+      { key: "employee_domiciled_outside_ms", description: "the employee maintains domicile outside Mississippi" },
+      { key: "servicemember_dd2058_on_file", description: "a copy of the servicemember's federal Form DD-2058 is attached" },
+      { key: "military_spouse_id_on_file", description: "a copy of the employee's Military Spouse ID card is attached" },
+    ]);
     trace("MS_EXEMPT", 1n);
     return { state: "MS", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
@@ -257,6 +265,31 @@ export const MS_CERTIFICATE: PayrollCertificate = {
       help:
         "A current Exempt on line 8, with the supporting military-spouse "
         + "documents Pub. 89-700 requires, withholds zero.",
+    },
+    {
+      key: "servicemember_stationed_under_orders_ms",
+      label: "Servicemember spouse is assigned to Mississippi under military orders",
+      kind: "flag", help: "Pub. 89-700 military-spouse line 8 eligibility statement.",
+    },
+    {
+      key: "employee_present_to_accompany",
+      label: "Employee is in Mississippi solely to be with the servicemember spouse",
+      kind: "flag", help: "MSRRA presence condition for the Pub. 89-700 line 8 claim.",
+    },
+    {
+      key: "employee_domiciled_outside_ms",
+      label: "Employee maintains domicile outside Mississippi",
+      kind: "flag", help: "MSRRA nonresident-domicile condition for the Pub. 89-700 line 8 claim.",
+    },
+    {
+      key: "servicemember_dd2058_on_file",
+      label: "Copy of servicemember's federal Form DD-2058 is attached",
+      kind: "flag", help: "Pub. 89-700 explicitly requires DD-2058 to validate the exemption claim.",
+    },
+    {
+      key: "military_spouse_id_on_file",
+      label: "Copy of employee's Military Spouse ID card is attached",
+      kind: "flag", help: "Pub. 89-700 explicitly requires the Military Spouse ID card.",
     },
   ],
 };
