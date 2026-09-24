@@ -382,7 +382,7 @@ export const IT_2026_SURTAX_MODEL = "tenant-declared-rate" as const;
  * and the 200k sterilizzazione recording.
  */
 export const IT_REFUSED_2026: readonly string[] = [
-  "art. 12 TUIR family detrazioni (coniuge/figli/ascendenti: needs ages, disability status and ripartizione the pack does not carry)",
+  "art. 12 TUIR family detrazioni (needs dependent relationship, income, age/disability status and deduction allocation facts the pack does not carry)",
   "trattamento integrativo for reddito complessivo 15.001–28.000 (needs art. 12/15 detrazioni to verify detrazioni > imposta lorda; see D.L. 3/2020 art. 1 c. 1 secondo periodo)",
   "D.L. 3/2020 art. 2 detrazione (not in force for 2026: absent from the live reliefs, which the 2026 Budget leaves untouched)",
   "INPS columns other than IVS (CUAF, NASpI/DS, CIG/CIGS ordinaria, Fondo garanzia TFR, maternità/malattia tutela, indennità economica di malattia)",

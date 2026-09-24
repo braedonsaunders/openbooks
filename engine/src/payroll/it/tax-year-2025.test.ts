@@ -252,10 +252,10 @@ test("refusals name the gap: pensioner, region, comune, rates, family TI", () =>
   assert.throws(() => calculateIt2025({ ...ok, comuneCode: "ROMA" }), /codice catastale/);
   assert.throws(() => calculateIt2025({ ...ok, regionalRate: null }), /it_addizionale_regionale/);
   assert.throws(() => calculateIt2025({ ...ok, municipalSurtax: null }), /it_addizionale_comunale/);
-  // Family charges in the 15.001–28.000 band: TI unverifiable.
+  // Family deductions are unpriced at every income, including this TI band.
   assert.throws(
     () => calculateIt2025({ ...ok, annualGrossEmployment: "25000", annualPensionable: "25000", hasFamilyCharges: true }),
-    /15\.001–28\.000/,
+    /art\. 12 TUIR.*IT_REFUSED_2025/,
   );
   // Same income without family: TI 0, computed.
   const noFam = calculateIt2025({

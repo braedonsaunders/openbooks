@@ -203,12 +203,28 @@ test("missing rates refuse naming the 2026 scope point", () => {
     () => calculateIt2026({ ...ok, municipalSurtax: null }),
     /it_addizionale_comunale.*H501.*in 2026/,
   );
-  // Family charges in the 15.001–28.000 band: TI unverifiable, 2026 list named.
+  // Family deductions are unpriced at every income, including this TI band.
   assert.throws(
     () => calculateIt2026({
       ...ok, annualGrossEmployment: "25000", annualPensionable: "25000", hasFamilyCharges: true,
     }),
     /IT_REFUSED_2026/,
+  );
+});
+
+test("declared family deductions refuse outside the treatment-integrativo band too", () => {
+  // TUIR art. 12 deductions depend on family identity, age, disability,
+  // income and allocation facts; the declaration currently carries only a
+  // coarse family-charge signal. Those deductions therefore cannot be
+  // silently omitted at €35,000 either. TUIR art. 12 as amended by L.
+  // 207/2024 and D.Lgs. 192/2025.
+  // https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.del.presidente.della.repubblica:1986-12-22;917~art12
+  // https://www.normattiva.it/atto/caricaDettaglioAtto?atto.codiceRedazionale=25G00202&atto.dataPubblicazioneGazzetta=2025-12-19&qId=&tipoDettaglio=originario
+  assert.throws(
+    () => calculateIt2026({
+      ...BASE, annualGrossEmployment: "35000", annualPensionable: "35000", hasFamilyCharges: true,
+    }),
+    /art\. 12 TUIR.*IT_REFUSED_2026/,
   );
 });
 
