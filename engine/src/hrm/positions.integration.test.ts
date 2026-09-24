@@ -651,6 +651,65 @@ test("a second organization sees nothing of the first (RLS)", { skip: !DB }, asy
   }
 });
 
+test("position as-of reads authorize the resolved version's employer scope", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const orgId = h.org.orgId;
+    const subsidiaryB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${subsidiaryB}, ${orgId}, ${h.org.subsidiaryId}, 'Historical B', 'USD', 'US')
+    `);
+    const position = await createPosition({
+      orgId,
+      actorId: h.managerId,
+      positionCode: "HIST-ENTITY",
+      title: "Historical A role",
+      employerSubsidiaryId: h.org.subsidiaryId,
+      effectiveFrom: "2026-07-01",
+      reason: "open in A",
+    });
+    const beforeChange = (await db.execute<{ knownAt: string }>(sql`
+      select to_char(recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "knownAt"
+        from position_versions where org_id = ${orgId} and position_id = ${position.id}
+    `)).rows[0]!.knownAt;
+    await revisePosition({
+      orgId,
+      actorId: h.managerId,
+      positionId: position.id,
+      employerSubsidiaryId: subsidiaryB,
+      title: "Current B role",
+      reason: "rehome the establishment to B",
+    });
+
+    const readerA = await createScratchUser(orgId, "A position reader", "position_a_reader");
+    const readerB = await createScratchUser(orgId, "B position reader", "position_b_reader");
+    await grantPermissions(orgId, readerA, ["hrm.position.read"]);
+    await grantPermissions(orgId, readerB, ["hrm.position.read"]);
+    for (const [roleKey, subsidiaryId] of [["position_a_reader", h.org.subsidiaryId], ["position_b_reader", subsidiaryB]] as const) {
+      await db.execute(sql`
+        update app_roles
+           set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subsidiaryId] })}::jsonb
+         where org_id = ${orgId} and key = ${roleKey}
+      `);
+    }
+
+    const query = { orgId, positionId: position.id, effectiveDate: "2026-07-15", knownAt: beforeChange };
+    await assert.rejects(
+      getPositionAsOf({ ...query, actorId: readerB }),
+      (error: unknown) => error instanceof HrmPositionError && error.code === "NOT_FOUND",
+      "the current B reader cannot receive the historical A version or its funding",
+    );
+    const historicalA = await getPositionAsOf({ ...query, actorId: readerA });
+    assert.equal(historicalA.version.title, "Historical A role", "A can read the historical version resolved in its scope");
+    const currentB = await getPositionAsOf({
+      ...query,
+      actorId: readerB,
+      knownAt: new Date(Date.now() + 1000).toISOString(),
+    });
+    assert.equal(currentB.version.title, "Current B role", "B retains access to the current version in its scope");
+  });
+});
+
 test("position_assignment rides the change-request path with warnings in both ledgers", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;

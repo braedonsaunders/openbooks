@@ -1,8 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
-import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { requireAggregatePositionRead, requireHrmPositionRead } from "./authorization.ts";
+import { requireAggregatePositionRead } from "./authorization.ts";
 import { HRM_FEATURE_KEY, likeEscape } from "./employment-read.ts";
 import {
   computeVacancy,
@@ -763,7 +762,18 @@ export async function getPositionAsOf(query: PositionAsOfQuery): Promise<Positio
   }
   return withOrgTransaction(orgId, async () => {
     await assertPositionFeature(db, orgId);
-    const subject = await requireHrmPositionRead(db, orgId, query.actorId, query.positionId);
+    // A point-in-time read is scoped by the version it resolves, not by the
+    // position's current employer. The aggregate gate checks the permission
+    // and returns the actor's lens without prematurely authorizing the live
+    // version.
+    const allowed = await requireAggregatePositionRead(db, orgId, query.actorId);
+    const subject = (await db.execute<{ positionCode: string; revision: number }>(sql`
+      select position_code as "positionCode", revision
+        from positions where org_id = ${orgId}::uuid and id = ${query.positionId}::uuid
+    `)).rows[0];
+    if (!subject) {
+      throw new HrmPositionError("NOT_FOUND", "position is not visible in this organization and legal-entity scope");
+    }
     validateVacancyQuery(query);
     const versions = (await loadAllVersions(db, orgId, [query.positionId])).get(query.positionId) ?? [];
     let resolved;
@@ -781,11 +791,12 @@ export async function getPositionAsOf(query: PositionAsOfQuery): Promise<Positio
       }
       throw error;
     }
+    if (allowed !== null && !allowed.has(resolved.payload.employer_subsidiary_id)) {
+      throw new HrmPositionError("NOT_FOUND", "position is not visible in this organization and legal-entity scope");
+    }
     const funding = (await loadFundingRows(db, orgId, [query.positionId])).get(query.positionId) ?? [];
     const holderRows = (await loadHolderVersions(db, orgId, [query.positionId])).get(query.positionId) ?? [];
-    // The per-record gate above owns position visibility; holders are
-    // additionally filtered to the reader's legal-entity scope here.
-    const allowed = await actorAllowedSubsidiaryIds(db, orgId, query.actorId);
+    // Holders are independently filtered to the reader's legal-entity scope.
     const row = buildRow({
       id: query.positionId,
       positionCode: subject.positionCode,
