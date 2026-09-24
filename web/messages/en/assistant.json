@@ -66,6 +66,22 @@
     "open": "Open",
     "failed": "The draft could not be applied."
   },
+  "applicationCommand": {
+    "reviewRequired": "Review required",
+    "proposed": "The assistant proposed this command. Nothing changes until you apply it.",
+    "apply": "Apply command",
+    "applying": "Applying…",
+    "discard": "Discard",
+    "discarded": "Command discarded. No changes were made.",
+    "applied": "Command applied.",
+    "failed": "The command could not be applied.",
+    "commandFailed": "Command failed",
+    "confirmDestructive": "Apply the destructive command “{title}”? This action remains subject to OpenBooks controls."
+  },
+  "entities": {
+    "dueOn": "Due {date}",
+    "reference": "Ref {ref}"
+  },
   "launcher": {
     "open": "Ask the assistant",
     "label": "Ask the assistant",

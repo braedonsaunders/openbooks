@@ -60,6 +60,22 @@
     "open": "開く",
     "failed": "下書きを適用できませんでした。"
   },
+  "applicationCommand": {
+    "reviewRequired": "確認が必要です",
+    "proposed": "アシスタントがこのコマンドを提案しました。適用するまで何も変更されません。",
+    "apply": "コマンドを適用",
+    "applying": "適用中…",
+    "discard": "破棄",
+    "discarded": "コマンドを破棄しました。変更はありませんでした。",
+    "applied": "コマンドを適用しました。",
+    "failed": "コマンドを適用できませんでした。",
+    "commandFailed": "コマンドに失敗しました",
+    "confirmDestructive": "破壊的なコマンド「{title}」を適用しますか？この操作は引き続きOpenBooksの統制の対象となります。"
+  },
+  "entities": {
+    "dueOn": "期限 {date}",
+    "reference": "参照 {ref}"
+  },
   "launcher": {
     "open": "アシスタントに質問",
     "label": "アシスタントに質問",

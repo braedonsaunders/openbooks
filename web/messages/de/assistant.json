@@ -60,6 +60,22 @@
     "open": "Öffnen",
     "failed": "Der Entwurf konnte nicht angewendet werden."
   },
+  "applicationCommand": {
+    "reviewRequired": "Prüfung erforderlich",
+    "proposed": "Der Assistent hat diesen Befehl vorgeschlagen. Bis zum Anwenden ändert sich nichts.",
+    "apply": "Befehl anwenden",
+    "applying": "Wird angewendet…",
+    "discard": "Verwerfen",
+    "discarded": "Befehl verworfen. Es wurden keine Änderungen vorgenommen.",
+    "applied": "Befehl angewendet.",
+    "failed": "Der Befehl konnte nicht angewendet werden.",
+    "commandFailed": "Befehl fehlgeschlagen",
+    "confirmDestructive": "Den destruktiven Befehl „{title}“ anwenden? Die Aktion unterliegt weiterhin den OpenBooks-Kontrollen."
+  },
+  "entities": {
+    "dueOn": "Fällig {date}",
+    "reference": "Ref. {ref}"
+  },
   "launcher": {
     "open": "Assistent fragen",
     "label": "Assistent fragen",

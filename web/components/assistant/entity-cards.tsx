@@ -1,10 +1,11 @@
 'use client'
 
 import { ArrowUpRight, Building2, CalendarDays, FileText } from 'lucide-react'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { cn } from '@openbooks/ui'
 import { TxnLink } from '@/app/(app)/reports/TxnLink'
 import { RelatedPartyLink } from '@/components/related-party-link'
+import { docTypeMeta } from '../doc-type-badge'
 import { createMoneyFormatter } from '@/lib/money-format'
 import {
   assistantEntitiesFromToolOutput,
@@ -14,26 +15,28 @@ import {
 
 const DISPLAY_LIMIT = 6
 
-const KIND_LABELS: Record<string, string> = {
-  vendor_bill: 'Vendor bill',
-  vendor_payment: 'Vendor payment',
-  vendor_credit: 'Vendor credit',
-  purchase_order: 'Purchase order',
-  check: 'Check',
-  card_charge: 'Card charge',
-  card_refund: 'Card refund',
-  customer_invoice: 'Customer invoice',
-  customer_payment: 'Customer payment',
-  customer_credit: 'Customer credit',
-  sales_order: 'Sales order',
-  estimate: 'Estimate',
-  expense_report: 'Expense report',
-  journal: 'Journal',
-  transfer: 'Transfer',
+/**
+ * Assistant tool outputs predate the canonical `quote` kind: an estimate
+ * arrives as `estimate`. Alias it onto the shared primitive's entry so the
+ * card resolves the translated estimate label instead of English fallback.
+ */
+const KIND_ALIASES: Record<string, string> = { estimate: 'quote' }
+
+function translatedKind(
+  kind: string,
+  has: (key: string) => boolean,
+  get: (key: string) => string,
+): string {
+  const meta = docTypeMeta(KIND_ALIASES[kind] ?? kind)
+  return has(meta.labelKey) ? get(meta.labelKey) : meta.labelKey
 }
 
-function kindLabel(kind: string): string {
-  return KIND_LABELS[kind] ?? kind.replaceAll('_', ' ')
+function translatedStatus(
+  status: string,
+  has: (key: string) => boolean,
+  get: (key: string) => string,
+): string {
+  return has(status) ? get(status) : status.replaceAll('_', ' ')
 }
 
 function statusClass(status: string | undefined): string {
@@ -60,6 +63,13 @@ function formattedDate(value: string | undefined, locale: string): string | null
 
 function DocumentCard({ document }: { document: AssistantDocumentEntity }) {
   const locale = useLocale()
+  const tTypes = useTranslations('common.transactionTypes')
+  const tStatus = useTranslations('common.status')
+  const tEntities = useTranslations('assistant.entities')
+  const hasType = tTypes.has as (key: string) => boolean
+  const getType = (key: string): string => tTypes(key as never)
+  const hasStatus = tStatus.has as (key: string) => boolean
+  const getStatus = (key: string): string => tStatus(key as never)
   const date = formattedDate(document.documentDate, locale)
   const dueDate = formattedDate(document.dueDate, locale)
   const amount =
@@ -93,13 +103,13 @@ function DocumentCard({ document }: { document: AssistantDocumentEntity }) {
                   statusClass(document.status),
                 )}
               >
-                {document.status.replaceAll('_', ' ')}
+                {translatedStatus(document.status, hasStatus, getStatus)}
               </span>
             ) : null}
           </div>
           <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            {kindLabel(document.kind)}
-            {document.referenceNumber ? ` · Ref ${document.referenceNumber}` : ''}
+            {translatedKind(document.kind, hasType, getType)}
+            {document.referenceNumber ? ` · ${tEntities('reference', { ref: document.referenceNumber })}` : ''}
           </div>
         </div>
         {amount ? (
@@ -134,7 +144,7 @@ function DocumentCard({ document }: { document: AssistantDocumentEntity }) {
             </span>
           ) : null}
           {dueDate ? (
-            <span className="text-slate-400 dark:text-slate-500">Due {dueDate}</span>
+            <span className="text-slate-400 dark:text-slate-500">{tEntities('dueOn', { date: dueDate })}</span>
           ) : null}
         </div>
       ) : null}
