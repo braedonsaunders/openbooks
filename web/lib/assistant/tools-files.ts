@@ -32,7 +32,7 @@ function assistantFileViewer(authz: Authz): FileViewer {
     : can(authz, "documents.read")
       ? "viewer"
       : "none";
-  return { userId: authz.user.id, isAdmin: can(authz, "*"), baseline, allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
+  return { userId: authz.user.id, isAdmin: can(authz, "*"), baseline, canReadApCapture: can(authz, "ap.read"), allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
 }
 
 const listFilesTool: AssistantToolDef = {
