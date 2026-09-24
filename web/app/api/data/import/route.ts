@@ -82,6 +82,12 @@ export async function POST(req: Request) {
   if (!resource.descriptor.supportsImport) {
     return NextResponse.json({ error: 'resource is read-only' }, { status: 400 })
   }
+  if (body.post === true && !resource.descriptor.canPost) {
+    return NextResponse.json(
+      { error: `posting is not supported for resource ${resource.descriptor.key}` },
+      { status: 400 },
+    )
+  }
   if (!can(authz, resource.descriptor.writePermission)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }

@@ -471,6 +471,38 @@ test('route rejects a non-boolean posting flag instead of treating it as true', 
   assert.equal(importState.historyInsertCalls, 0)
 })
 
+test('route refuses posting when the selected resource does not support it', async () => {
+  resetImportState()
+  const originalResource = importState.resource
+  assert.ok(originalResource)
+  importState.resource = {
+    ...originalResource,
+    descriptor: { ...originalResource.descriptor, canPost: false },
+  }
+
+  try {
+    const response = await POST(new Request('http://openbooks.test/api/data/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'preview',
+        resource: 'txn:card_charge',
+        rows: [],
+        mapping: {},
+        post: true,
+      }),
+    }))
+
+    assert.equal(response.status, 400)
+    const payload = await response.json()
+    assert.match(payload.error, /posting is not supported for resource/)
+    assert.equal(importState.resourceWriteCalls, 0)
+    assert.equal(importState.withOrgTransactionCalls, 0)
+  } finally {
+    importState.resource = originalResource
+  }
+})
+
 function commitRequest(overrides: Record<string, unknown> = {}): Request {
   return new Request('http://openbooks.test/api/data/import', {
     method: 'POST',
