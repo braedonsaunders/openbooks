@@ -311,3 +311,38 @@ test("posted INSERT computes open_balance and the backfill heals NULL caches", {
     assert.deepEqual(nulls.rows, []);
   });
 });
+
+test("amend-path line edits recompute open_balance like a from-scratch rebuild", { skip: !DB }, async () => {
+  // G10: the amend branch of the line guard fenced only the period, with
+  // no column allowlist, so flipping is_open_item on a posted line left
+  // the cached projection stale. Proven in both states: without the
+  // trigger the amend leaves the cache behind the rebuild; with the
+  // shipped file applied the same amend keeps them equal.
+  await fixture(async (org, actor) => {
+    const inv = await invoice(org, actor);
+    assert.equal(await balance(inv.id), "100.0000");
+    const rebuild = async () => {
+      const doc = (await db.execute<{ currency: string; status: string }>(sql`
+        select currency, status from documents where id = ${inv.id}`)).rows[0]!;
+      return (await db.execute<{ amount: string | null }>(sql`
+        select public.document_open_balance_amount(${org.orgId}, ${inv.entry}, ${doc.currency}, ${doc.status}) as amount`)).rows[0]!.amount;
+    };
+    const amendFlip = (open: boolean) =>
+      db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+        await tx.execute(sql`update journal_lines set is_open_item = ${open} where id = ${inv.line}`);
+      });
+    // Defect state: no line trigger, the amend leaves the cache stale.
+    await db.execute(sql`drop trigger if exists journal_line_open_balance on public.journal_lines`);
+    await amendFlip(false);
+    assert.notEqual(await balance(inv.id), await rebuild());
+    // Guard installed: the shipped file heals forward and the amend
+    // re-ties the cache to the rebuild.
+    const shipped = sql.raw(readFileSync("schema/migrations/generated/0338_posting_guards_and_summary_heals.sql", "utf8"));
+    await db.transaction(async (tx) => {
+      await tx.execute(shipped);
+    });
+    await amendFlip(true);
+    assert.equal(await balance(inv.id), await rebuild());
+  });
+});
