@@ -4,12 +4,35 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { PNL_TYPES } from './account-types'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 export const BUDGET_KINDS = ['budget', 'forecast'] as const
 export const BUDGET_STATUSES = ['draft', 'pending_approval', 'approved', 'archived'] as const
 
 export type BudgetKind = (typeof BUDGET_KINDS)[number]
 export type BudgetStatus = (typeof BUDGET_STATUSES)[number]
+
+/** Source scenarios with at least one line visible in the caller's scope. */
+export async function listBudgetSourceOptions(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ id: string; name: string; fiscal_year: number }[]> {
+  const result = await db.execute<{ id: string; name: string; fiscal_year: number }>(sql`
+    select s.id, s.name, s.fiscal_year
+      from budget_scenarios s
+     where s.org_id = ${orgId} and s.status <> 'archived'
+       and (
+         ${allowedSubsidiaryIds === null ? sql`true` : sql`exists (
+           select 1 from budget_lines bl
+            where bl.org_id = s.org_id and bl.scenario_id = s.id
+              ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+         )`}
+       )
+     order by s.updated_at desc
+     limit 50
+  `)
+  return result.rows
+}
 
 export type BudgetDimensions = {
   /** Legal-entity slice. Null resolves to the tenant root (the default entity
