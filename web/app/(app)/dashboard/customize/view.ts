@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '../../../../lib/authz'
 import { loadDashboardLayout } from '../_load-layout'
-import { ROLE_TIER_LABELS } from '../_role-tier'
+import { ROLE_TIER_LABEL_KEYS } from '../_role-tier'
 
 /**
  * The dashboard customise page, split into a loader and a spec.
@@ -40,7 +40,7 @@ export async function loadCustomizeDashboard(): Promise<CustomizeDashboardData |
     backHref: '/dashboard',
     backLabel: t('customize.back'),
     title: t('customize.title'),
-    roleLabel: t('customize.roleLabel', { role: ROLE_TIER_LABELS[role] }),
+    roleLabel: t('customize.roleLabel', { role: t(ROLE_TIER_LABEL_KEYS[role]) }),
   }
 }
 

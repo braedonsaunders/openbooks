@@ -234,5 +234,12 @@
     "joinsOn": "arrivée le {date}",
     "overdueSteps": "{overdue, plural, one {# étape de liste de contrôle} other {# étapes de liste de contrôle}} en retard dans votre équipe",
     "newJoiners": "{joiners, plural, one {# nouvel arrivant} other {# nouveaux arrivants}} ces 30 derniers jours — planifiez le premier entretien individuel"
+  },
+  "roleNames": {
+    "admin": "Administrateur",
+    "controller": "Contrôleur financier",
+    "accountant": "Comptable",
+    "approver": "Approbateur",
+    "viewer": "Lecteur"
   }
 }
