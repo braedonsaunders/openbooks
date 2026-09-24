@@ -150,6 +150,43 @@ test('certificate rows validate purely from the pack declaration', { skip: !DB }
   }
 })
 
+test('concurrent first filings serialize on the employee payroll profile', { skip: !DB }, async () => {
+  const { org, scheduleId } = await setup()
+  try {
+    const hire = await employee(org.orgId, scheduleId, 'Concurrent GB Hire', 'GB', 'ENG')
+    const filing = {
+      employeePartyId: hire,
+      country: 'GB',
+      certificateKey: 'gb_tax_code_notice',
+      answers: { tax_code: '1257L' },
+      effectiveFrom: '2026-04-06',
+    }
+
+    const responses = await Promise.all([post(filing), post(filing)])
+    for (const response of responses) {
+      assert.equal(response.status, 200, await response.clone().text())
+      assert.deepEqual(await response.json(), {
+        ok: true,
+        certificateKey: 'gb_tax_code_notice',
+        effectiveFrom: '2026-04-06',
+      })
+    }
+
+    const rows = await withOrgContext(org.orgId, () => db.execute<{
+      total: string
+      current: string
+    }>(sql`
+      select count(*)::text as total,
+             count(*) filter (where superseded_on is null)::text as current
+        from employee_tax_certificates
+       where org_id = ${org.orgId} and employee_party_id = ${hire}
+         and certificate_key = 'gb_tax_code_notice'`))
+    assert.deepEqual(rows.rows[0], { total: '2', current: '1' })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test('count and amount answers hold their declared bands and scale', { skip: !DB }, async () => {
   // California's DE 4 exercises the count and amount kinds end to end.
   const { org, scheduleId } = await setup()
