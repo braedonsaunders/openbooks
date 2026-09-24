@@ -10,6 +10,7 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
+import { HrmOrgChartError } from "./documents/errors.ts";
 import { loadDirectory, loadOrgChart } from "./org-chart.ts";
 
 /**
@@ -170,5 +171,115 @@ test("tree, vacancy, as-of manager change, and directory", { skip: !DB }, async 
     );
   } finally {
     await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("chart and directory are fenced by employer scope and the self-service team", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    for (const feature of ["hrm", "hrmOrgChart"]) {
+      await db.execute(sql`
+        update orgs
+           set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
+         where id = ${org.orgId}
+      `);
+    }
+    // Second legal entity under the single root.
+    const subB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    const ceo = await seedEmployment(org.orgId, org.subsidiaryId, "Cora Ceo", "Chief Executive");
+    const manager = await seedEmployment(org.orgId, org.subsidiaryId, "Mira Manager", "Manager");
+    // Cross-entity direct report: Eddie works for Second Co, managed by Mira.
+    const employee = await seedEmployment(org.orgId, subB, "Eddie Employee", "Associate");
+    await seedReport(org.orgId, manager.employmentId, ceo.employmentId, "2020-01-01");
+    await seedReport(org.orgId, employee.employmentId, manager.employmentId, "2020-01-01");
+    const seedVacancy = async (subsidiary: string, code: string, title: string): Promise<void> => {
+      const positionId = randomUUID();
+      await db.execute(sql`
+        insert into positions (id, org_id, position_code) values (${positionId}, ${org.orgId}, ${code})
+      `);
+      await db.execute(sql`
+        insert into position_versions
+          (org_id, position_id, version_no, title, employer_subsidiary_id, planned_fte, status, effective_from, recorded_at)
+        values (${org.orgId}, ${positionId}, 1, ${title}, ${subsidiary}, 1.0000, 'open', '2020-01-01'::date, now())
+      `);
+    };
+    await seedVacancy(org.subsidiaryId, "ENG-A", "Engineer A");
+    await seedVacancy(subB, "ENG-B", "Engineer B");
+
+    const linkParty = async (userId: string, partyId: string): Promise<void> => {
+      await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${org.orgId}`);
+    };
+    const grantRead = async (userId: string, permission: string): Promise<void> => {
+      await db.execute(sql`
+        insert into user_permission_overrides (org_id, user_id, permission, effect)
+        values (${org.orgId}, ${userId}, ${permission}, 'grant')
+        on conflict (user_id, permission) do update set effect = 'grant'
+      `);
+    };
+    const restrict = async (roleKey: string, subsidiaryIds: string[]): Promise<void> => {
+      await db.execute(sql`
+        update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
+         where org_id = ${org.orgId} and key = ${roleKey}`);
+    };
+    const partyOf = async (employmentId: string): Promise<string> => {
+      const row = (await db.execute<{ partyId: string }>(sql`
+        select worker_party_id::text as "partyId" from worker_employments
+         where org_id = ${org.orgId} and id = ${employmentId}`)).rows[0];
+      return row!.partyId;
+    };
+
+    // HR reader restricted to the root entity.
+    const hrA = await createScratchUser(org.orgId, "Scoped HR", "scoped_hr");
+    await grantRead(hrA, "hrm.employment.read");
+    await restrict("scoped_hr", [org.subsidiaryId]);
+    // Self-service actors linked to their parties.
+    const miraSelf = await createScratchUser(org.orgId, "Mira", "mira_self");
+    await grantRead(miraSelf, "hrm.self.read");
+    await linkParty(miraSelf, await partyOf(manager.employmentId));
+    const eddieSelf = await createScratchUser(org.orgId, "Eddie", "eddie_self");
+    await grantRead(eddieSelf, "hrm.self.read");
+    await linkParty(eddieSelf, await partyOf(employee.employmentId));
+
+    // Restricted HR sees the root entity only: no Eddie, no Second Co vacancy.
+    const hrChart = await loadOrgChart({ orgId: org.orgId, actorId: hrA, asOf: "2026-09-21" });
+    assert.equal(hrChart.headcount, 2);
+    assert.equal(hrChart.vacancies, 1);
+    const hrNames = [hrChart.roots.flatMap((r) => [r.name, ...r.children.map((c) => c.name)])].flat();
+    assert.ok(hrNames.includes("Cora Ceo") && hrNames.includes("Mira Manager"));
+    assert.ok(!hrNames.includes("Eddie Employee"));
+    assert.ok(hrChart.roots.some((r) => r.vacant && r.name.includes("Engineer A")));
+    assert.ok(!hrChart.roots.some((r) => r.vacant && r.name.includes("Engineer B")));
+    const hrDirectory = await loadDirectory({ orgId: org.orgId, actorId: hrA });
+    assert.deepEqual(hrDirectory.map((d) => d.name).sort(), ["Cora Ceo", "Mira Manager"]);
+    assert.ok(hrDirectory.every((d) => d.email?.includes("@scratch.test")));
+
+    // Mira's self-service chart is herself plus her direct report — never
+    // the whole org, never vacancies, and her invisible manager hangs
+    // nothing above her.
+    const miraChart = await loadOrgChart({ orgId: org.orgId, actorId: miraSelf, asOf: "2026-09-21" });
+    assert.equal(miraChart.headcount, 2);
+    assert.equal(miraChart.vacancies, 0);
+    assert.equal(miraChart.roots.length, 1);
+    assert.equal(miraChart.roots[0]!.name, "Mira Manager");
+    assert.deepEqual(miraChart.roots[0]!.children.map((c) => c.name), ["Eddie Employee"]);
+    // Focusing an out-of-view root answers not-found, never the row.
+    await assert.rejects(
+      loadOrgChart({ orgId: org.orgId, actorId: miraSelf, asOf: "2026-09-21", rootEmploymentId: ceo.employmentId }),
+      (e: unknown) => e instanceof HrmOrgChartError,
+    );
+
+    // Eddie sees only himself in both surfaces, with his work email.
+    const eddieChart = await loadOrgChart({ orgId: org.orgId, actorId: eddieSelf, asOf: "2026-09-21" });
+    assert.equal(eddieChart.headcount, 1);
+    assert.equal(eddieChart.roots[0]!.name, "Eddie Employee");
+    const eddieDirectory = await loadDirectory({ orgId: org.orgId, actorId: eddieSelf });
+    assert.equal(eddieDirectory.length, 1);
+    assert.equal(eddieDirectory[0]!.name, "Eddie Employee");
+    assert.equal(eddieDirectory[0]!.email, "eddie.employee@scratch.test");
+  } finally {
+    await dropScratchOrg(org.orgId);
   }
 });

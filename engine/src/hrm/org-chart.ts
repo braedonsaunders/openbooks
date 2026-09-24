@@ -1,6 +1,14 @@
 import { sql } from "drizzle-orm";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
-import { requireOrgChartRead } from "./authorization.ts";
+import {
+  loadOwnEmploymentIds,
+  loadTeamEmploymentIdsForManager,
+  requireOrgChartRead,
+} from "./authorization.ts";
 import { HrmOrgChartError } from "./documents/errors.ts";
 
 /**
@@ -17,9 +25,12 @@ import { HrmOrgChartError } from "./documents/errors.ts";
  * change reads through automatically: only edges covering asOf join.
  *
  * Privacy: names, titles, departments and managers only — never pay or
- * private fields. Anyone with hrm.employment.read OR hrm.self.read may
- * read (self-service sees the same shape, narrowed by nothing because
- * the shape itself is public-inside-the-org).
+ * private fields. Readers holding hrm.employment.read see every
+ * in-scope employment (their subsidiary allowlist filters rows, exactly
+ * like every other employment list). Self-service (hrm.self.read alone)
+ * sees only its own employments plus one level of direct reports as of
+ * the query date — the same team boundary team-read.ts enforces — and
+ * no vacancy nodes. Nobody enumerates the org through this surface.
  */
 
 export interface OrgChartNode {
@@ -70,6 +81,36 @@ function assertCivilDate(asOf: string): void {
   }
 }
 
+type OrgChartScope =
+  | { kind: "hr"; allowed: Set<string> | null }
+  | { kind: "self"; allowed: Set<string> | null; employmentIds: string[] };
+
+/**
+ * Visibility for one chart/directory read. HR readers (hrm.employment.read)
+ * filter by their subsidiary allowlist; self-service readers are fenced to
+ * their own employments plus one level of direct reports as of the query
+ * date, still intersected with their allowlist. The grant gate runs first
+ * (requireOrgChartRead refuses grant-less callers by name); rows outside
+ * the scope simply never appear, so no denial can confirm they exist.
+ */
+async function resolveOrgChartScope(
+  orgId: string,
+  actorId: string,
+  asOf: string,
+): Promise<OrgChartScope> {
+  if (await actorHasPermission(db, orgId, actorId, "hrm.employment.read")) {
+    return { kind: "hr", allowed: await actorAllowedSubsidiaryIds(db, orgId, actorId) };
+  }
+  await requireOrgChartRead(db, orgId, actorId);
+  const own = await loadOwnEmploymentIds(db, orgId, actorId);
+  const team = await loadTeamEmploymentIdsForManager(db, orgId, own, asOf);
+  return {
+    kind: "self",
+    allowed: await actorAllowedSubsidiaryIds(db, orgId, actorId),
+    employmentIds: [...new Set([...own, ...team])],
+  };
+}
+
 export async function loadOrgChart(query: {
   orgId: string;
   actorId: string;
@@ -77,7 +118,10 @@ export async function loadOrgChart(query: {
   rootEmploymentId?: string;
 }): Promise<OrgChart> {
   assertCivilDate(query.asOf);
-  await requireOrgChartRead(db, query.orgId, query.actorId);
+  const scope = await resolveOrgChartScope(query.orgId, query.actorId, query.asOf);
+  const selfFilter = scope.kind === "self"
+    ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
+    : sql``;
   const incumbents = (await db.execute<IncumbentRow>(sql`
     with live_emp as (
       select distinct on (v.employment_id) v.employment_id
@@ -110,14 +154,18 @@ export async function loadOrgChart(query: {
            and (a.effective_to is null or a.effective_to > ${query.asOf}::date)
       left join departments d on d.org_id = a.org_id and d.id = a.department_id
      where e.org_id = ${query.orgId}
+       ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, scope.allowed)}
+       ${selfFilter}
      order by name
   `)).rows;
 
   // Funded-but-empty slots: positions open as of the date with no live
   // incumbent assignment. They hang at root level — positions carry no
   // manager edge of their own, so parenting one under a manager would be
-  // invented lineage, and invented lineage is refused here.
-  const vacant = (await db.execute<{
+  // invented lineage, and invented lineage is refused here. Vacancies are
+  // HR eyes only (scoped like employments): self-service sees no vacancy
+  // nodes.
+  const vacant = scope.kind === "self" ? [] : (await db.execute<{
     position_id: string;
     position_code: string;
     title: string;
@@ -131,6 +179,7 @@ export async function loadOrgChart(query: {
            and (v.effective_to is null or v.effective_to > ${query.asOf}::date)
       left join departments d on d.org_id = v.org_id and d.id = v.department_id
      where p.org_id = ${query.orgId} and v.status = 'open'
+       ${subsidiaryVisibleFilter(sql`v.employer_subsidiary_id`, scope.allowed)}
        and not exists (
          select 1 from employment_assignment_versions a
           where a.org_id = p.org_id and a.position_id = p.id and a.recorded_until is null
@@ -230,7 +279,12 @@ export async function loadDirectory(query: {
   search?: string;
   limit?: number;
 }): Promise<DirectoryEntry[]> {
-  await requireOrgChartRead(db, query.orgId, query.actorId);
+  // Directory rows are live (current_date windows), so the team boundary
+  // resolves against the org's business today, like team-read.ts.
+  const scope = await resolveOrgChartScope(query.orgId, query.actorId, await businessToday(query.orgId));
+  const selfFilter = scope.kind === "self"
+    ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
+    : sql``;
   const q = query.search?.trim() ?? "";
   const rows = (await db.execute<{
     employment_id: string;
@@ -268,6 +322,8 @@ export async function loadDirectory(query: {
            and (a.effective_to is null or a.effective_to > current_date)
       left join departments d on d.org_id = a.org_id and d.id = a.department_id
      where e.org_id = ${query.orgId}
+       ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, scope.allowed)}
+       ${selfFilter}
        ${q ? sql`and (p.display_name ilike ${"%" + q + "%"} or coalesce(a.job_title, '') ilike ${"%" + q + "%"})` : sql``}
      order by name
      limit ${Math.min(Math.max(query.limit ?? 50, 1), 200)}
