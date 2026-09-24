@@ -120,6 +120,13 @@ async function regimeClassAttribute(tx: SqlExecutor, orgId: string, regime: stri
   return r.rows[0]?.class_attribute ?? TAX_DEPRECIATION_REGIMES[regime]?.classAttribute ?? "tax_pool_class";
 }
 
+/** Per-asset regime elections take precedence over the category assignment in
+ *  every depreciation model, including pooled additions, dispositions and
+ *  held-asset membership. */
+function effectiveAssetClassExpression(regime: string, attribute: string) {
+  return sql`coalesce(a.custom->'taxDepreciation'->${regime}->>'classCode', c.tax_attributes->>${attribute})`;
+}
+
 async function regimeModel(tx: SqlExecutor, orgId: string, regime: string): Promise<"pool" | "macrs"> {
   const r = (await tx.execute<{ calculation_model: "pool" | "macrs" }>(sql`
     select calculation_model from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`));
@@ -293,6 +300,7 @@ async function runPools(
   classes: Map<string, PoolClassDef>,
 ): Promise<TaxPoolRunResult> {
   const { orgId, taxYear } = run;
+  const assetClass = effectiveAssetClassExpression(run.regime, attr);
 
   // Read every classified asset before doing any computation.  We resolve the
   // class in code (rather than joining only tenant rows) because built-in
@@ -309,7 +317,7 @@ async function runPools(
   }>(sql`${effectiveLifecycleEventsAsOf(run.yearEnd)}
     select a.acquisition_cost::text, a.acquired_on::text as acquired_on,
            coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
-           c.tax_attributes->>${attr} as class_code,
+           ${assetClass} as class_code,
            (
              coalesce(a.in_service_on, a.acquired_on) is not null
              and coalesce(a.in_service_on, a.acquired_on) <= ${run.yearEnd}
@@ -323,7 +331,7 @@ async function runPools(
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
        and not exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id and t.reversed_on<=${run.yearEnd})
-       and coalesce(c.tax_attributes->>${attr}, '') <> ''
+       and coalesce(${assetClass}, '') <> ''
      order by class_code, a.id`));
 
   const unknownClasses = [...new Set(assetRows.rows
@@ -376,14 +384,14 @@ async function runPools(
     class_code: string;
   }>(sql`${effectiveLifecycleEventsAsOf(run.yearEnd)}
     select e.amount::text, a.acquisition_cost::text, a.acquired_on::text as acquired_on,
-           c.tax_attributes->>${attr} as class_code
+           ${assetClass} as class_code
       from effective_lifecycle_events e
       join fixed_assets a on a.id = e.asset_id and a.org_id = e.org_id
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where e.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
        and e.kind in ('disposed', 'written_off')
        and e.occurred_on between ${run.yearStart} and ${run.yearEnd}
-       and coalesce(c.tax_attributes->>${attr}, '') <> ''
+       and coalesce(${assetClass}, '') <> ''
        `));
   for (const row of dispRows.rows) {
     const classDef = classes.get(row.class_code)!;

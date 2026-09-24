@@ -192,6 +192,29 @@ test("Canadian vehicle cost caps apply to additions and disposition capital cost
   }
 });
 
+test("pooled depreciation uses the asset's regime-specific class override for additions and dispositions", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const categoryId = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
+    const assetId = await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01", {
+      taxDepreciation: { ca_cca: { classCode: "10" } },
+    });
+
+    const first = await runYear(org, actorId, "ca_cca", 2023);
+    assert.deepEqual(first.lines.map((line) => [line.classCode, line.additions, line.allowance]), [
+      ["10", "10000.00", "1500.00"],
+    ]);
+
+    await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "10000.00");
+    const second = await runYear(org, actorId, "ca_cca", 2024);
+    assert.deepEqual(second.lines.map((line) => [line.classCode, line.dispositions, line.recapture]), [
+      ["10", "10000.00", "1500.00"],
+    ]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("Canadian vehicle dispositions retain the cap effective on their acquisition date", { skip: !DB }, async () => {
   const { org, actorId } = await seededOrg();
   try {
