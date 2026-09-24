@@ -170,7 +170,10 @@ export class DynamicsClient {
     environment: string,
     private companyId: string,
     tokens: DynamicsTokens,
-    private onRefresh?: (t: DynamicsTokens) => Promise<void> | void,
+    private onRefresh?: (
+      consumed: DynamicsTokens,
+      refresh: (refreshToken: string) => Promise<DynamicsTokens>,
+    ) => Promise<DynamicsTokens>,
     private transport: typeof fetch = guardedFetch,
   ) {
     this.tokens = tokens;
@@ -186,8 +189,11 @@ export class DynamicsClient {
       throw new Error("Dynamics connection has no delegated refresh token — reconnect to grant access");
     }
     if (!this.tokens.accessToken || new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
-      this.tokens = await refreshTokens(this.app, this.tokens.refreshToken, this.transport);
-      await this.onRefresh?.(this.tokens);
+      const consumed = this.tokens;
+      const refresh = (refreshToken: string) => refreshTokens(this.app, refreshToken, this.transport);
+      this.tokens = this.onRefresh
+        ? await this.onRefresh(consumed, refresh)
+        : await refresh(consumed.refreshToken);
     }
     return this.tokens.accessToken;
   }

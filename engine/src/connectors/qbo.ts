@@ -113,7 +113,10 @@ export class QboClient {
     private app: QboApp,
     private realmId: string,
     tokens: QboTokens,
-    private onRefresh?: (t: QboTokens) => Promise<void> | void,
+    private onRefresh?: (
+      consumed: QboTokens,
+      refresh: (refreshToken: string) => Promise<QboTokens>,
+    ) => Promise<QboTokens>,
     private transport: typeof fetch = guardedFetch,
   ) {
     this.tokens = tokens;
@@ -121,8 +124,11 @@ export class QboClient {
 
   private async accessToken(): Promise<string> {
     if (new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
-      this.tokens = await refreshTokens(this.app, this.tokens.refreshToken, this.transport);
-      await this.onRefresh?.(this.tokens);
+      const consumed = this.tokens;
+      const refresh = (refreshToken: string) => refreshTokens(this.app, refreshToken, this.transport);
+      this.tokens = this.onRefresh
+        ? await this.onRefresh(consumed, refresh)
+        : await refresh(consumed.refreshToken);
     }
     return this.tokens.accessToken;
   }

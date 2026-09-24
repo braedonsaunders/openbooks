@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { SUPPORTED_CURRENCIES } from "../fx/currencies.ts";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import type { NetSuiteCreds } from "../connectors/netsuite.ts";
 import { NetSuiteSource, parseNetSuiteMappings } from "./netsuite-source.ts";
@@ -395,6 +395,74 @@ interface DynamicsSecrets extends Partial<DynamicsTokens> {
   clientSecret: string;
 }
 
+type RefreshableTokens = {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+};
+
+/**
+ * Refresh one stored connection under its row lock. The lock spans the
+ * provider call so a second worker reloads the newly persisted generation
+ * instead of consuming the same rotating refresh token. Only token fields
+ * are patched onto the CURRENT sealed blob, preserving concurrently changed
+ * app credentials and other connection secrets.
+ */
+export async function refreshConnectionTokens<T extends RefreshableTokens>(
+  connection: Pick<ConnectionRow, "id" | "orgId">,
+  consumed: T,
+  refresh: (refreshToken: string) => Promise<T>,
+): Promise<T> {
+  return withOrgTransaction(connection.orgId, async () => {
+    const selected = await db.execute<{ secrets: string | null }>(sql`
+      select secrets from connections
+       where id = ${connection.id} and org_id = ${connection.orgId}
+       for update`);
+    const sealed = selected.rows[0]?.secrets;
+    if (typeof sealed !== "string" || sealed === "") {
+      throw new Error("Connection was removed or its credentials are unavailable during token refresh");
+    }
+    const current = unsealJson<Record<string, unknown>>(sealed);
+    const currentTokens = {
+      accessToken: current?.accessToken,
+      refreshToken: current?.refreshToken,
+      expiresAt: current?.expiresAt,
+    };
+    if (
+      typeof currentTokens.accessToken !== "string" || currentTokens.accessToken === "" ||
+      typeof currentTokens.refreshToken !== "string" || currentTokens.refreshToken === "" ||
+      typeof currentTokens.expiresAt !== "string" || !Number.isFinite(Date.parse(currentTokens.expiresAt))
+    ) {
+      throw new Error("Connection token credentials are incomplete — reconnect this source before syncing");
+    }
+
+    const consumedSameGeneration =
+      consumed.accessToken === currentTokens.accessToken &&
+      consumed.refreshToken === currentTokens.refreshToken &&
+      consumed.expiresAt === currentTokens.expiresAt;
+    if (!consumedSameGeneration && Date.parse(currentTokens.expiresAt) > Date.now()) {
+      return currentTokens as T;
+    }
+
+    const next = await refresh(currentTokens.refreshToken);
+    const updatedSecrets = sealJson({
+      ...current,
+      accessToken: next.accessToken,
+      refreshToken: next.refreshToken,
+      expiresAt: next.expiresAt,
+    });
+    const updated = await db.execute<{ id: string }>(sql`
+      update connections
+         set secrets = ${updatedSecrets}, updated_at = now()
+       where id = ${connection.id} and org_id = ${connection.orgId} and secrets = ${sealed}
+       returning id`);
+    if (updated.rows.length !== 1) {
+      throw new Error("Connection credentials changed during token refresh — retry the sync");
+    }
+    return next;
+  });
+}
+
 /** Build a live adapter from a stored connection (credentials unsealed here). */
 export function buildSource(conn: ConnectionRow): MigrationSource {
   if (conn.source === "qbd") {
@@ -512,11 +580,8 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       refreshToken: secret.refreshToken,
       expiresAt: secret.expiresAt,
     };
-    // Refreshed tokens re-seal onto the connection, preserving the app creds.
-    const onRefresh = async (t: QboTokens) => {
-      const merged: QboSecrets = { clientId: secret.clientId, clientSecret: secret.clientSecret, ...t };
-      await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id} and org_id = ${conn.orgId}`);
-    };
+    const onRefresh = (consumed: QboTokens, refresh: (token: string) => Promise<QboTokens>) =>
+      refreshConnectionTokens(conn, consumed, refresh);
     return new QboSource(new QboClient(app, String(cfg.realmId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: cfg.baseCurrency });
   }
 
@@ -535,11 +600,9 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       refreshToken: secret.refreshToken,
       expiresAt: secret.expiresAt,
     };
-    // Xero refresh tokens ROTATE — re-sealing on refresh is load-bearing.
-    const onRefresh = async (t: XeroTokens) => {
-      const merged: XeroSecrets = { clientId: secret.clientId, clientSecret: secret.clientSecret, ...t };
-      await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id} and org_id = ${conn.orgId}`);
-    };
+    // Xero rotates refresh tokens, so refresh and persistence share a row lock.
+    const onRefresh = (consumed: XeroTokens, refresh: (token: string) => Promise<XeroTokens>) =>
+      refreshConnectionTokens(conn, consumed, refresh);
     return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: cfg.baseCurrency });
   }
 
@@ -566,10 +629,8 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       refreshToken: secret.refreshToken,
       expiresAt: secret.expiresAt,
     };
-    const onRefresh = async (t: DynamicsTokens) => {
-      const merged: DynamicsSecrets = { clientId: secret.clientId, clientSecret: secret.clientSecret, ...t };
-      await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id} and org_id = ${conn.orgId}`);
-    };
+    const onRefresh = (consumed: DynamicsTokens, refresh: (token: string) => Promise<DynamicsTokens>) =>
+      refreshConnectionTokens(conn, consumed, refresh);
     return new DynamicsSource(new DynamicsClient(app, String(cfg.environment), String(cfg.companyId), tokens, onRefresh), {
       orgId: conn.orgId,
       baseCurrency: cfg.baseCurrency,
