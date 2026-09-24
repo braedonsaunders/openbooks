@@ -19,6 +19,8 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { setupFieldOptions, setupFieldVisible, setupOptionLabel, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
+import { SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
+import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string }
@@ -189,6 +191,15 @@ export function SetupDrawer({
     const timer = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS)
     try {
       const body: Record<string, unknown> = { ...form, ...fixedValues }
+      // Decimal inputs arrive as raw operator text; canonicalize them through
+      // the same exact-decimal grammar the server coerces with (F3-39), so a
+      // band min typed as ".5" posts as "0.5" instead of round-tripping raw.
+      // Unparseable text posts untouched for the server to refuse by name.
+      for (const field of entity.fields) {
+        if ((field.kind === 'decimal' || field.kind === 'percent') && typeof body[field.key] === 'string') {
+          body[field.key] = canonicalDecimal(body[field.key], SETUP_DECIMAL_SCALE) ?? body[field.key]
+        }
+      }
       // A field the form stopped showing must not persist behind the UI: a pay
       // component switched from a deduction to an earning gives its protection
       // settings back to their defaults, exactly as the CHECK constraint expects.

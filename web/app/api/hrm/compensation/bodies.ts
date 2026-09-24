@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { canonicalDecimal, isPositiveDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { isUuid } from "../../../../lib/list-params";
+import { decimalNullRefusal, suppliedValue } from "../../../../lib/payroll-decimal-refusal";
 
 /**
  * Typed request bodies for /api/hrm/compensation/* (financial-boundary
@@ -8,7 +10,31 @@ import { isUuid } from "../../../../lib/list-params";
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
 const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
-const money4 = z.string().regex(/^\d+(\.\d{1,4})?$/, "must be a positive amount with at most 4 decimals");
+// A band/cycle/line amount accepts what a typed client serializes — a JSON
+// number or a numeric string — and canonicalizes it through the exact-decimal
+// grammar (F3-39: the naive string-only regex rejected JSON numbers and
+// canonical spellings like ".5" before the money parser ever saw them). The
+// output is the canonical string the engine persists. Anything else is
+// refused with the per-cause remedy, never coerced.
+const money4 = (field: string) =>
+  z.union([z.string(), z.number()]).transform((raw, ctx) => {
+    const exact = canonicalDecimal(raw, 4);
+    if (exact === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: decimalNullRefusal(field, "a positive amount with at most 4 decimals", raw, 4),
+      });
+      return z.NEVER;
+    }
+    if (!isPositiveDecimal(exact)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${field} must be greater than zero — got "${suppliedValue(raw)}"`,
+      });
+      return z.NEVER;
+    }
+    return exact;
+  });
 const currency = z.string().regex(/^[A-Z]{3}$/, "must be an ISO 4217 code");
 
 export const createFamilyBody = z.object({
@@ -53,9 +79,9 @@ export const createBandBody = z.object({
   locationId: uuid.nullable().optional(),
   currency,
   basis: z.enum(["annual", "hourly"]),
-  min: money4,
-  target: money4,
-  max: money4,
+  min: money4("Band min"),
+  target: money4("Band target"),
+  max: money4("Band max"),
   effectiveFrom: civilDate,
   reason: z.string().trim().min(1).max(2000),
 });
@@ -65,7 +91,7 @@ export const createCycleBody = z.object({
   kind: z.enum(["merit", "promotion", "adjustment", "cola"]),
   effectiveOn: civilDate,
   budgetBasis: z.enum(["top_down", "bottom_up", "combined"]).optional(),
-  budgetTotal: money4.nullable().optional(),
+  budgetTotal: money4("Budget total").nullable().optional(),
   currency,
   guidelineKind: z.enum(["matrix", "formula"]),
   guideline: z.record(z.string(), z.unknown()),
@@ -80,14 +106,14 @@ export const setBudgetsBody = z.object({
       departmentId: uuid.nullable().optional(),
       managerPartyId: uuid.nullable().optional(),
       currency,
-      amount: money4,
+      amount: money4("Budget amount"),
     }),
   ),
 });
 
 export const proposeLineBody = z.object({
   proposedPct: z.number().nonnegative().nullable().optional(),
-  proposedRate: money4.nullable().optional(),
+  proposedRate: money4("Proposed rate").nullable().optional(),
   reason: z.string().trim().max(2000).nullable().optional(),
 });
 
