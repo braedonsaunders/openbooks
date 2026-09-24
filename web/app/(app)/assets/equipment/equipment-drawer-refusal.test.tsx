@@ -114,7 +114,7 @@ function freshGlobals() {
 
 const UNIT_ID = randomUUID();
 
-function payload(revision = 0) {
+function payload(revision = 0, options: { purchasePrice?: string; metrics?: Record<string, string> } = {}) {
   return {
     unit: {
       id: UNIT_ID,
@@ -130,7 +130,7 @@ function payload(revision = 0) {
       fixed_asset_cost: null,
       rate_book_id: null,
       rate_book_name: null,
-      purchase_price: "120000",
+      purchase_price: options.purchasePrice ?? "120000",
       acquired_on: null,
       in_service_on: null,
       serial_number: "",
@@ -138,11 +138,15 @@ function payload(revision = 0) {
       capacity_unit: null,
       revision,
     },
-    metrics: { recovery: "0", billed_revenue: "0", direct_costs: "0", depreciation: "0", usage: "0", billable: "0" },
+    metrics: { recovery: "0", billed_revenue: "0", direct_costs: "0", depreciation: "0", usage: "0", billable: "0", ...options.metrics },
   };
 }
 
-async function mountDrawer(extraProps: Record<string, unknown> = {}, revision = 0) {
+async function mountDrawer(
+  extraProps: Record<string, unknown> = {},
+  revision = 0,
+  options: { purchasePrice?: string; metrics?: Record<string, string> } = {},
+) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -151,7 +155,7 @@ async function mountDrawer(extraProps: Record<string, unknown> = {}, revision = 
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <EquipmentDrawer
-          payload={payload(revision)}
+          payload={payload(revision, options)}
             items={[]}
             assets={[]}
             books={[]}
@@ -174,6 +178,16 @@ async function mountDrawer(extraProps: Record<string, unknown> = {}, revision = 
     },
   };
 }
+
+test("the equipment ROI displays exact half-up decimal percentages", async (t) => {
+  freshGlobals();
+  const { unmount } = await mountDrawer({}, 0, {
+    purchasePrice: "100",
+    metrics: { billed_revenue: "0.15" },
+  });
+  t.after(unmount);
+  assert.match(document.body.textContent ?? "", /0\.2%/, "0.15% rounds from its exact decimal value, not a binary float");
+});
 
 async function openEditAndSave() {
   const edit = buttonsNamed("Edit")[0];
