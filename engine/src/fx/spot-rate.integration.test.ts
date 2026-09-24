@@ -71,6 +71,26 @@ test("lookup translates a currency to itself at par without coverage", { skip: !
   }
 });
 
+test("the database refuses non-positive FX observations", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await assert.rejects(
+      seedQuote(org.orgId, "USD", "CAD", "2026-07-15", "0"),
+      (error: unknown) => {
+        let current: unknown = error;
+        for (let depth = 0; depth < 6 && current && typeof current === "object"; depth += 1) {
+          const candidate = current as { cause?: unknown; constraint?: string };
+          if (candidate.constraint === "fx_rates_positive_rate") return true;
+          current = candidate.cause;
+        }
+        return false;
+      },
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("average mixes direct and inverse quotes across the window", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
