@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Check, ChevronRight, Landmark, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { countryOptions } from '../../../../../lib/countries'
 
 type Pack = {
@@ -69,10 +70,14 @@ export function TaxDepreciationSetup({
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ categoryId, regime, classCode: classCode || null }),
       })
-      if (!response.ok) throw new Error()
-    } catch {
+      // The status is checked before the body is parsed: a 422 names the
+      // refusal (regime not installed, invalid class) and the toast carries
+      // it — never an empty Error() swallowed into the generic fallback.
+      // The optimistic select still rolls back on every failure.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('assignmentFailed')))
+    } catch (error) {
       setAssignments((current) => ({ ...current, [key]: previous }))
-      toast.error(t('assignmentFailed'))
+      toast.error(error instanceof Error && error.message ? error.message : t('assignmentFailed'))
     }
   }
 
