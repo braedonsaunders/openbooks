@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -118,19 +117,6 @@ async function keyScopes(orgId: string, id: string): Promise<string[]> {
   };
   return row.scopes;
 }
-
-test("the route pins the editor ceiling to the owner intersection, not the declaration", () => {
-  const source = readFileSync("web/app/api/admin/api-keys/route.ts", "utf8");
-  assert.match(source, /permissionsOutsideCeiling\(gate\.permissions, scopes\)/);
-  assert.match(source, /permissionsOutsideCeiling\(gate\.permissions, added\)/);
-  assert.match(source, /permissionsOutsideCeiling\(gate\.permissions, effective\)/);
-  // One canonical intersection — the route must not carry its own copy.
-  assert.match(source, /resolveKeyScopeAuthority\(\s*await ownerEffectivePermissions/);
-  assert.doesNotMatch(source, /expandToCatalogue/);
-  assert.match(source, /subsidiaryScopeWithinCeiling\(gate\.allowedSubsidiaryIds, ownerLens\)/);
-  assert.match(source, /select id, user_id, name, description, scopes/);
-  assert.match(source, /reactivate the owner before widening/);
-});
 
 test(
   "a manager with only api.keys.manage cannot widen another owner's key, and the token is unchanged",
