@@ -2,7 +2,11 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
-import { requireHrmDocumentsManage, requireHrmDocumentsRead } from "../authorization.ts";
+import {
+  requireHrmDocumentsManage,
+  requireHrmDocumentsRead,
+  requireUnrestrictedHrmScope,
+} from "../authorization.ts";
 import { HrmDocumentsError } from "./errors.ts";
 import { assertCategoryDeclared } from "./categories.ts";
 import { HRM_DOCUMENTS_FEATURE_KEY } from "./documents.ts";
@@ -124,6 +128,10 @@ export async function saveSchedule(input: {
   }
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
+    // Retention schedules are org-wide policy (they purge every legal
+    // entity's documents): a subsidiary-restricted manager gets the
+    // canonical 403, not a cross-entity policy write.
+    await requireUnrestrictedHrmScope(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
     // Membership, not shape: a schedule for an undeclared category would
     // never match a document, so the save is refused against the Setup
