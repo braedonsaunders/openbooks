@@ -6,7 +6,6 @@ import test from "node:test";
 // hitting a tenant layout that fails validation must read the panel chrome
 // in their own locale (the validator diagnostics below stay English by
 // construction).
-//
 // The panel is a client component fed by the server ModuleView, so it
 // renders here under the REAL German catalog: the hardcoded title fails
 // every assertion below.

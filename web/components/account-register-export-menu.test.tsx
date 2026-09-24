@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// UX-16b (register half): the account register export menu was the same bare
+// (register half): the account register export menu was the same bare
 // `<a href>` shape as ExportMenu — silent on success, an error-body download
 // on refusal. It shares the fetch-download-announce helper, so it gets the
 // same coverage: completion naming the real file only after the bytes arrive,

@@ -58,7 +58,7 @@ const { UrlDrawer } = await import("../../packages/ui/src/drawer");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-test("F-t11-009: drawer banner stacks instead of squeezing at 390px", async () => {
+test("drawer banner stacks instead of squeezing at 390px", async () => {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);

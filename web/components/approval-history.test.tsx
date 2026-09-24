@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import { approvalTabBody } from './approval-history'
 
-// F-t02-003: the receipt Approvals tab rendered a completely blank panel —
+// the receipt Approvals tab rendered a completely blank panel —
 // no spinner, no content, no empty state. The tab body is a four-state
 // machine; the component must render something visible for every state.
 test('approval tab body states: loading, history, pending, empty', () => {
@@ -85,7 +85,7 @@ test('shared history component renders its empty body for a bank account subject
   assert.equal(host.textContent, 'No approvals required for this record.')
 })
 
-// F-t04-004 residual: a record whose status claims it awaits approval, but
+// residual: a record whose status claims it awaits approval, but
 // which no flow run ever fired for, is neither history nor genuinely empty —
 // the tab must name the stale state instead of "No approvals required".
 test('a pending record never sent to any flow resolves its own tab body', () => {

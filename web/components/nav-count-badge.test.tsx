@@ -4,7 +4,6 @@ import test from "node:test";
 // F5-9: NavCountBadge hardcoded its English aria-label ("N items waiting"),
 // so a non-en screen-reader user heard English on shared shell chrome that
 // renders on every page. The label must pluralize through the catalog.
-//
 // Only the count route is doubled. React, next-intl and the REAL French
 // catalog run, so the hardcoded template fails every assertion below.
 const { JSDOM } = await import("jsdom");

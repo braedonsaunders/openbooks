@@ -9,12 +9,12 @@ declare global {
   var __confirmVerdict: boolean | undefined;
 }
 
-// Document saves on the shared action path (F-t03-002 lives here: a bill
+// Document saves on the shared action path (lives here: a bill
 // save 422 once toasted and moved on). A refused save pins the typed reason
 // as a record-level alert until the next action AND toasts; a dead network
 // used to throw past the busy reset (wedged Save, unhandled rejection) and
 // now pins the localized fallback the same way, always releasing busy.
-// (The Post-refusal pin, F-t03-004, is covered by
+// (The Post-refusal pin, , is covered by
 // document-drawer-post-refusal.test.tsx and must keep passing unchanged.)
 
 // jsdom first: the drawer reads browser globals at render.
@@ -202,7 +202,7 @@ function freshGlobals() {
   globalThis.__confirmVerdict = true;
 }
 
-// OM-09: the invoice as Sara left it — one booked line and her added line
+// the invoice as Sara left it — one booked line and her added line
 // (OPS-W01 x2 @100, account empty, amount derived to 200.0000).
 async function mountInvoiceWithAccountlessLine() {
   const host = document.createElement("div");
@@ -268,7 +268,7 @@ async function mountInvoiceWithAccountlessLine() {
   };
 }
 
-test("a refused save pins the typed reason, not only a toast (F-t03-002)", async (t) => {
+test("a refused save pins the typed reason, not only a toast", async (t) => {
   freshGlobals();
   const restoreFetch = scriptFetch((url, init) => {
     if (url.startsWith("/api/documents/") && init?.method && init.method !== "GET") {
@@ -314,7 +314,7 @@ test("a dead network on save pins the fallback and releases Save", async (t) => 
   assert.equal(save.disabled, false, "busy must release after a transport failure so the user can retry");
 });
 
-test("OM-09: saving with a contentful account-less line refuses by line name and keeps the row", async (t) => {
+test("saving with a contentful account-less line refuses by line name and keeps the row", async (t) => {
   freshGlobals();
   const writes: string[] = [];
   const restoreFetch = scriptFetch((url, init) => {

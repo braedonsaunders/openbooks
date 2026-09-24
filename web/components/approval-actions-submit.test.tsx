@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F-t04-004 residual (bank accounts stranded with NO flow run at all): the
+// residual (bank accounts stranded with NO flow run at all): the
 // row claims "Pending approval" while the engine never saw the record, so
 // the drawer must offer to submit it into the current flow. Record state
 // reports neverSubmitted for that case; the row renders a Submit button
@@ -105,7 +105,7 @@ async function mount() {
   return { host, root }
 }
 
-test('a never-submitted record offers a row-level submit into the flow (F-t04-004 residual)', async (t) => {
+test('a never-submitted record offers a row-level submit into the flow', async (t) => {
   script.submitHref = '/api/parties/party-1/bank-accounts/submit?accountId=acc-9'
   const { host, root } = await mount()
   t.after(async () => {
@@ -130,7 +130,7 @@ test('a never-submitted record offers a row-level submit into the flow (F-t04-00
   )
 })
 
-test('no submit affordance without an explicit submit href (F-t04-004 residual)', async (t) => {
+test('no submit affordance without an explicit submit href', async (t) => {
   script.submitHref = undefined
   const { host, root } = await mount()
   t.after(async () => {

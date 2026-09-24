@@ -65,7 +65,7 @@ test('only a truly blank placeholder row is blank', () => {
   assert.equal(isBlankDrawerLine({ ...blankGridRow(), description: '   ' }), true)
 })
 
-test('any user-entered content makes the row non-blank — even without an account (OM-09)', () => {
+test('any user-entered content makes the row non-blank — even without an account', () => {
   // Sara's vanished line: item + qty/price + derived amount, account empty.
   assert.equal(
     isBlankDrawerLine({ ...blankGridRow(), itemId: 'OPS-W01', quantity: '2', unitPrice: '100', amount: '200.0000' }),
@@ -95,7 +95,7 @@ test('any user-entered content makes the row non-blank — even without an accou
 test('the missing-account probe names the first contentful account-less grid row', () => {
   assert.equal(findMissingAccountLine([blankGridRow()]), null)
   assert.equal(findMissingAccountLine([row('a', '100'), blankGridRow()]), null)
-  // OM-09 shape: booked line 1, Sara's account-less line 2, trailing blank.
+  // shape: booked line 1, Sara's account-less line 2, trailing blank.
   const missing = findMissingAccountLine([
     row('a', '1480'),
     { ...blankGridRow(), itemId: 'OPS-W01', quantity: '2', unitPrice: '100', amount: '200.0000' },
@@ -106,7 +106,7 @@ test('the missing-account probe names the first contentful account-less grid row
   assert.equal(hasDrawerLineAccount({ accountId: 'a' }), true)
 })
 
-test('a contentful account-less row survives to the save payload, where the server names it (OM-09 guard)', () => {
+test('a contentful account-less row survives to the save payload, where the server names it', () => {
   // The save payload keeps every non-blank row. If anyone reintroduces an
   // account-gated drop here, this row vanishes before any line-named
   // refusal can reach it — exactly the production defect.
@@ -160,7 +160,7 @@ test('the reviewed footer total is the booked total: save keeps every row the fo
     row('a', '-20'),
     row('a', '0'),
     row('a', ''),
-    // OM-09: a contentful row missing its account is priced in the footer
+    // a contentful row missing its account is priced in the footer
     // instead of silently excluded — the save refuses it by line name, so
     // the operator sees the $50 and fixes the line rather than losing it.
     row('', '50'),
@@ -178,7 +178,7 @@ test('the reviewed footer total is the booked total: save keeps every row the fo
   assert.equal(booked.total, reviewed.total)
 })
 
-// F-t02-004: Quantity × Unit price drives the line Amount. Exact decimal
+// Quantity × Unit price drives the line Amount. Exact decimal
 // math, ledger scale, no Number hop.
 test('line amount derives exactly from quantity times unit price', () => {
   assert.equal(lineAmountFromQtyPrice('1', '1000'), '1000.0000')
@@ -198,7 +198,7 @@ test('line amount derivation refuses to guess: blank or junk keeps the manual am
 
 const qtyRow = (quantity: string, unitPrice: string, amount: string) => ({ quantity, unitPrice, amount })
 
-test('a fresh qty+price prices the line: the F-t02-004 invoice flow', () => {
+test('a fresh qty+price prices the line: the invoice flow', () => {
   const prev = [qtyRow('', '', '')]
   const next = [qtyRow('1', '1000', '')]
   assert.deepEqual(applyQtyPriceToRows(prev, next), [qtyRow('1', '1000', '1000.0000')])
@@ -236,7 +236,7 @@ test('a hand-typed amount that diverges from qty x price is never overwritten', 
   assert.deepEqual(applyQtyPriceToRows(same, same.map((r) => ({ ...r }))), same)
 })
 
-// F-t04-006 follow-up: the drawer Post read res.json() unguarded — a
+// follow-up: the drawer Post read res.json() unguarded — a
 // non-JSON error body threw out as an unhandled rejection (zero toast, and
 // the Post button wedged busy). The read must never throw; the caller falls
 // back to the localized message when no typed reason arrives.
@@ -268,7 +268,7 @@ test('drawer action result read passes approvals through', async () => {
   assert.deepEqual(result, { ok: true, message: null, pendingApproval: true })
 })
 
-// F-t06-002: the form refuses a currency-mismatched account up front instead
+// the form refuses a currency-mismatched account up front instead
 // of saving a document the ledger is certain to reject at post.
 test('currency proof names the first restricted account outside the doc currency', () => {
   const restrictions = new Map([

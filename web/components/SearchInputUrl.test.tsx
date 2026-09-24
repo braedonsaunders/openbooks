@@ -68,9 +68,9 @@ const { SearchInput } = await import("./search-input");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-// Regression pin for F-t11-005 (search half): a URL-loaded q must be visible
+// Regression pin for (search half): a URL-loaded q must be visible
 // in the box (with its clear control) rather than applied invisibly.
-test("F-t11-005: search box reflects the URL q on fresh load", async () => {
+test("search box reflects the URL q on fresh load", async () => {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);

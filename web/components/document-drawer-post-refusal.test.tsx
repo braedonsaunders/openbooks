@@ -9,7 +9,7 @@ declare global {
   var __confirmVerdict: boolean | undefined;
 }
 
-// F-t03-004: posting a bill into a closed AP period refuses 422
+// posting a bill into a closed AP period refuses 422
 // {"error":"AP is closed for this period and accounting book"} — correct, the
 // period is closed — but the drawer showed nothing and the bill just stayed
 // Approved. The refusal must pin as a record-level alert (and toast) until
@@ -116,7 +116,7 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-test("a closed-period Post refusal pins as a record alert and toasts (F-t03-004)", async (t) => {
+test("a closed-period Post refusal pins as a record alert and toasts", async (t) => {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
   globalThis.__confirmCalls = [];

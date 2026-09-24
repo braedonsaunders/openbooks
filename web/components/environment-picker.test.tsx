@@ -5,7 +5,6 @@ import test from "node:test";
 // Production/Sample company, Manage environments) while the hosting
 // account menu translates through shell.accountMenu. A non-en user opening
 // the workspace switcher must read the same language as the menu around it.
-//
 // Only routing and the workspace-switch action are doubled. React, next-intl
 // and the REAL German catalog run, so hardcoded English fails every
 // assertion below.

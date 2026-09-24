@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F-t04-004 (bank accounts stuck Pending on a failed flow run): the row
+// (bank accounts stuck Pending on a failed flow run): the row
 // offers Approve/Reject only while a live gate exists — a run that failed
 // (gate resolved to zero assignees) leaves zero actions and no path to
 // re-drive the gate. Record state must surface the latest failed run and
@@ -108,7 +108,7 @@ async function mount() {
   return { host, root }
 }
 
-test('a failed run surfaces a row-level retry that re-drives it (F-t04-004)', async (t) => {
+test('a failed run surfaces a row-level retry that re-drives it', async (t) => {
   script.canRetry = true
   const { host, root } = await mount()
   t.after(async () => {
@@ -133,7 +133,7 @@ test('a failed run surfaces a row-level retry that re-drives it (F-t04-004)', as
   )
 })
 
-test('no retry without the flows-manage capability (F-t04-004)', async (t) => {
+test('no retry without the flows-manage capability', async (t) => {
   script.canRetry = false
   const { host, root } = await mount()
   t.after(async () => {

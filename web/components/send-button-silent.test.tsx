@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// F-t02-004: Actions > Send on a payable invoice silently failed — the dialog
+// Actions > Send on a payable invoice silently failed — the dialog
 // closed with no toast on the 422 (email delivery not configured). The send
 // dialog must stay open and surface the server error.
 
@@ -131,7 +131,7 @@ test("a failed invoice send keeps the dialog open and toasts the error", async (
       "the send dialog must stay open on failure",
     );
     // The failure must also persist inside the dialog: a 4s toast alone is
-    // what the tester missed. F-t02-004 RED half.
+    // what the tester missed. RED half.
     const alert = document.querySelector('[role="alert"]');
     assert.ok(alert, "the send dialog must show the failure inline");
     assert.match(

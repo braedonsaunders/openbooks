@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-// F-t06-002: the drawer's up-front currency refusal names the account and
+// the drawer's up-front currency refusal names the account and
 // its allowed currency. The drawer serves the ap, ar, and banking
 // namespaces; catalog parity owns translation completeness across locales.
 const messagesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'messages')

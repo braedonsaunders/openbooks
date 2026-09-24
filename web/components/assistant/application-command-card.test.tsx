@@ -5,7 +5,6 @@ import test from "node:test";
 // sibling cards translate through the assistant namespace. A non-en user
 // facing a proposed (possibly destructive) command must read the confirm
 // prompt, the review chrome and the outcome in their own locale.
-//
 // Only the network and the confirm modal are doubled. React, next-intl and
 // the REAL French catalog run, so English copy fails every assertion below.
 const { JSDOM } = await import("jsdom");

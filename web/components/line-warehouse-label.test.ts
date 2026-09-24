@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import messages from '../messages/en'
 
-// F-t07-003 pickers: both drawers label the warehouse column through
+// pickers: both drawers label the warehouse column through
 // common.labels.warehouse — a missing key leaks a raw key into the grid
-// (the F-t07-004 class of defect). Catalog parity checks its translations.
+// (the class of defect). Catalog parity checks its translations.
 test('the line warehouse picker has human-readable English copy', () => {
   const label = messages.common.labels.warehouse
   assert.ok(label?.trim(), 'English common.labels.warehouse must be present')
