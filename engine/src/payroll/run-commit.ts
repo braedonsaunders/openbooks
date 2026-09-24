@@ -414,11 +414,15 @@ export async function commitPayRun(input: {
         );
       }
     }
-    // Money must not move before the run is approved. Dynamic import keeps the
-    // module cycle out of the engine's load order (same idiom as
-    // flows/documents-adapter.ts → document-void.ts).
+    // Money must not move before the run is approved. Asked ON THIS
+    // TRANSACTION, under the run row lock taken above: the old call ran on
+    // the default executor OUTSIDE the commit, so an approval withdrawn
+    // between the pre-check and the terminal write committed without a live
+    // approval. Dynamic import keeps the module cycle out of the engine's
+    // load order (same idiom as flows/documents-adapter.ts →
+    // document-void.ts).
     const { assertPayRunApprovalReleased } = await import("./approval.ts");
-    await assertPayRunApprovalReleased(orgId, documentId);
+    await assertPayRunApprovalReleased(orgId, documentId, tx);
 
     // Recompute and lock the canonical source population before producing a
     // single GL line. Legacy calculated rows have no evidence and therefore
@@ -571,6 +575,11 @@ export async function commitPayRun(input: {
     // writes committing after this statement stay outside it, exactly as the
     // time claim above leaves them unclaimed for the next calculation.
     await assertPayRunNotStale(orgId, documentId, tx, input.allowedSubsidiaryIds);
+    // The approval gate again, at the LAST moment beside the staleness
+    // recheck: withdrawing the approval between the pre-check above and the
+    // terminal write must refuse by name, not ride under a release answer
+    // that was true when it was taken.
+    await assertPayRunApprovalReleased(orgId, documentId, tx);
     await tx.execute(sql`
       update pay_runs set run_status = 'committed', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}
