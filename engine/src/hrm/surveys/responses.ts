@@ -249,6 +249,7 @@ export async function submitResponse(input: {
     }>(sql`
       select id, anonymity, status, opens_at::text as opens_at, closes_at::text as closes_at, min_group_size
         from hrm_surveys where org_id = ${claims.orgId} and id = ${invitation.survey_id}
+       for update
     `)).rows[0];
     if (!survey || survey.status !== "open") {
       throw new HrmSurveysError("REFUSED", "this survey is not open for responses — ask HR whether it was closed");

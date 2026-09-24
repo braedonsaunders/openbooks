@@ -311,3 +311,48 @@ test("survey lifecycle and answer refusals fire by name", { skip: !DB }, async (
     );
   });
 });
+
+test("a response waits for the close transition and refuses after it commits", { skip: !DB }, async () => {
+  await withHarness(1, async (h: Harness) => {
+    const survey = await makeSurvey(h, "anonymous", 2);
+    const opened = await openSurvey({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      surveyId: survey.id,
+      partyIds: h.parties,
+    });
+    const scaleId = survey.questions.find((question) => question.kind === "scale")!.id;
+    let settled = false;
+    let submission: Promise<unknown> | undefined;
+    let wasBlockedBySurveyLock = false;
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select id from hrm_surveys where org_id = ${h.org.orgId} and id = ${survey.id} for update
+      `);
+      submission = submitResponse({
+        token: opened.deliveries[0]!.token,
+        today: "2026-09-21",
+        answers: [{ questionId: scaleId, value: 4 }],
+      }).then(
+        () => { settled = true; return "submitted"; },
+        (error: unknown) => { settled = true; return error; },
+      );
+      // Let the submission reach its survey-state read while this transaction owns the row.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      wasBlockedBySurveyLock = !settled;
+      await tx.execute(sql`
+        update hrm_surveys set status = 'closed', closes_at = now()
+         where org_id = ${h.org.orgId} and id = ${survey.id}
+      `);
+    });
+    const outcome = await submission!;
+    assert.equal(wasBlockedBySurveyLock, true);
+    assert.ok(outcome instanceof HrmSurveysError);
+    assert.match(outcome.message, /not open for responses/);
+    const responses = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_survey_responses
+       where org_id = ${h.org.orgId} and survey_id = ${survey.id}
+    `)).rows[0]!.count;
+    assert.equal(responses, "0");
+  });
+});
