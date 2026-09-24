@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import nodeTest from 'node:test'
-import { fileURLToPath } from 'node:url'
 import { allocationPortionFromInput } from './SplitLinesEditor.tsx'
-
-const ruleDrawerSource = readFileSync(
-  fileURLToPath(new URL('../../app/(app)/banking/rules/RuleDrawer.tsx', import.meta.url)),
-  'utf8',
-)
+import { canSaveBankRule, serializeLines } from '../../app/(app)/banking/rules/RuleDrawer'
 
 // The repository's normal suite uses node:test, while the focused scheduler
 // check invokes Vitest. Select the active runner without making Vitest a
@@ -28,16 +22,24 @@ runTest('fixed input preserves exact decimal text while percent input remains nu
   )
 })
 
-runTest('rule split serialization retains project coding and the portion object', () => {
-  // The consumer must pass the editor's exact portion object through
-  // unchanged; source-level assertions keep this focused without booting the
-  // Next client.
-  assert.match(ruleDrawerSource, /projectId: l\.projectId \?\? undefined/)
-  assert.match(ruleDrawerSource, /portion: l\.portion/)
+runTest('bank-rule serialization preserves project coding and exact portion values', () => {
+  const lines = serializeLines([
+    { accountId: 'acct-1', projectId: 'project-9', portion: { kind: 'weight', value: '0.1250' } },
+  ])
+
+  assert.equal(lines.length, 1)
+  assert.equal(lines[0]!.accountId, 'acct-1')
+  assert.equal(lines[0]!.projectId, 'project-9')
+  assert.deepEqual(lines[0]!.portion, { kind: 'weight', value: '0.1250' })
 })
 
 runTest('limited bank-rule scope needs an account before save', () => {
-  assert.match(ruleDrawerSource, /accountScope: scopeOpen \? scope : undefined/)
-  assert.match(ruleDrawerSource, /!scopeOpen \|\| scope\.length > 0/)
-  assert.match(ruleDrawerSource, /if \(!canSave\) return/)
+  const draft = {
+    name: 'Card charges',
+    conditionCount: 1,
+    action: 'categorize' as const,
+    lines: [{ accountId: 'revenue', portion: { kind: 'remainder' as const } }],
+  }
+  assert.equal(canSaveBankRule({ ...draft, scopeOpen: true, scope: [] }), false)
+  assert.equal(canSaveBankRule({ ...draft, scopeOpen: true, scope: ['cash-1'] }), true)
 })

@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { NextIntlClientProvider } from 'next-intl'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import messages from '../../messages/en'
+import { SplitLinesEditor } from './SplitLinesEditor.tsx'
 import {
   allocationPortionFromInput,
   allocationTargetBasisFromLine,
   type AllocationLine,
 } from './split-lines-model.ts'
 
-const editorSource = readFileSync(fileURLToPath(new URL('./SplitLinesEditor.tsx', import.meta.url)), 'utf8')
+Object.assign(globalThis, { React })
 
 test('weight input preserves exact decimal text', () => {
   assert.deepEqual(
@@ -62,16 +65,23 @@ test('empty account means same account; missing label stays null', () => {
   )
 })
 
-test('editor exposes the allocation affordances the rule drawer needs', () => {
-  // Weight is a first-class portion kind driven by the consumer's list.
-  assert.match(editorSource, /weight: 'weight'/)
-  assert.match(editorSource, /portionKinds\.map\(\(kind\)/)
-  // Optional target account renders clearable with a "same account" empty state.
-  assert.match(editorSource, /clearable=\{allowEmptyAccount\}/)
-  assert.match(editorSource, /emptyLabel=\{allowEmptyAccount \? labels\.sameAccount/)
-  // Per-target label input is gated behind showLabel.
-  assert.match(editorSource, /\{showLabel \? \(/)
-  assert.match(editorSource, /placeholder=\{labels\.labelPlaceholder\}/)
-  // Legacy consumers keep the exact three historical kinds by default.
-  assert.match(editorSource, /\['remainder', 'percent', 'fixed'\]/)
+test('allocation target editor renders its allowed portions and same-account label', () => {
+  const markup = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <SplitLinesEditor
+        lines={[{ accountId: '', portion: { kind: 'remainder' }, label: '' }]}
+        onChange={() => {}}
+        accountOptions={[{ value: 'acct-1', label: 'Operating cash' }]}
+        portionKinds={['remainder', 'percent', 'weight']}
+        allowEmptyAccount
+        showLabel
+        labels={{ sameAccount: 'Same account', labelPlaceholder: 'Target label', remainder: 'Remainder', percent: 'Percent', weight: 'Weight' }}
+      />
+    </NextIntlClientProvider>,
+  )
+
+  assert.match(markup, /Same account/, 'an unset target account is identified as the source account')
+  assert.match(markup, /Remainder/, 'the configured remainder portion is available')
+  assert.match(markup, /Target label/, 'target labels are shown to editors')
+  assert.doesNotMatch(markup, />Fixed</, 'allocation targets do not offer fixed-amount portions')
 })
