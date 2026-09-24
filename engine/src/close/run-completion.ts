@@ -289,7 +289,9 @@ export async function publishCloseRun(
       // controlled reopen would silently never deliver. Double publication
       // needs no idempotence key: the status guard above admits exactly one
       // publish per close, and concurrent publishers serialize on the run row.
-      await enqueueCloseDelivery({ orgId, runId, packageId });
+      // The publisher travels as the send principal the render route
+      // re-authorizes (see CloseDeliveryJobData.senderId).
+      await enqueueCloseDelivery({ orgId, runId, packageId, senderId: actorId });
     } catch (error) {
       console.error("[close] failed to enqueue package delivery:", error);
     }

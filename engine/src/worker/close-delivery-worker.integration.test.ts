@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { startCloseRun } from "../close/run-start.ts";
 import { db } from "../platform/db.ts";
 import { processCloseDeliveryJobData } from "./close-delivery-worker.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -34,6 +35,161 @@ test("close delivery refuses a malformed recipient before any render work", { sk
     await assert.rejects(
       processCloseDeliveryJobData({ orgId: org.orgId, packageId, periodId, bookId }),
       /invalid recipient/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+async function seedReportablePackage(orgId: string, senderId: string): Promise<{
+  packageId: string; definitionId: string; runId: string;
+}> {
+  const definitionId = randomUUID();
+  await db.execute(sql`
+    insert into report_definitions (id, org_id, kind, report_type, slug, name, query, statement, created_by)
+    values (${definitionId}, ${orgId}, 'custom', 'query', 'close-probe', 'Close probe',
+            '{"entity":"trial_balance","columns":["account"]}'::jsonb, null, ${senderId})`);
+  const packageId = randomUUID();
+  await db.execute(sql`
+    insert into close_reporting_packages (id, org_id, name, reports, recipients, delivery, created_by)
+    values (${packageId}, ${orgId}, 'close probe package', '[{"slug":"close-probe"}]'::jsonb,
+            '["ops@scratch.test"]'::jsonb, '{}'::jsonb, ${senderId})`);
+  const period = (await db.execute<{ id: string }>(sql`
+    select id from accounting_periods where org_id = ${orgId} order by starts_on limit 1
+  `)).rows[0]!;
+  const book = (await db.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} limit 1
+  `)).rows[0]!;
+  assert.ok(period?.id && book?.id, "scratch org must carry a period and a book");
+  const runId = await startCloseRun({
+    orgId, periodId: period.id, bookId: book.id, actorId: senderId, reportingPackageId: packageId,
+  });
+  await db.execute(sql`
+    update close_runs set status = 'closed', reporting_package_id = ${packageId}
+     where id = ${runId} and org_id = ${orgId}`);
+  return { packageId, definitionId, runId };
+}
+
+test("close package renders through a minted report run and delivers", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const sender = await createScratchUser(org.orgId, "Sender", "sender");
+    const { packageId, definitionId, runId } = await seedReportablePackage(org.orgId, sender);
+    // The renderer and the mail queue are injected: no app server or Redis
+    // in this partition. The worker must still drive the real path —
+    // context, run minting, staging, enqueue, delivered event.
+    const renderedParams: Array<Record<string, string>> = [];
+    const enqueued: Array<{ data: unknown; options: unknown }> = [];
+    const result = await processCloseDeliveryJobData(
+      { orgId: org.orgId, packageId, runId, senderId: sender },
+      {
+        renderReport: async (renderOrgId, renderDefinitionId, params) => {
+          assert.equal(renderOrgId, org.orgId);
+          assert.equal(renderDefinitionId, definitionId);
+          renderedParams.push(params);
+          return Buffer.from("%PDF-1.4 close-probe\n%%EOF");
+        },
+        enqueueEmail: async (data, options) => {
+          enqueued.push({ data, options });
+          return [{ id: "email-job-1" }];
+        },
+      },
+    ) as { reports: number; files: number; recipients: number };
+    assert.equal(result.reports, 1);
+    assert.equal(result.files, 1);
+    assert.equal(result.recipients, 1);
+
+    // The render rode a durable close-package run, not a bare definition.
+    assert.equal(renderedParams.length, 1);
+    const reportRunId = renderedParams[0]!.runId;
+    assert.match(reportRunId ?? "", UUID_RE, "the render must carry its report run id");
+    const runs = (await db.execute<{
+      trigger: string; status: string; definition_id: string;
+      snapshotUser: string | null; closePackageId: string | null; closeRunId: string | null;
+    }>(sql`
+      select trigger, status, definition_id::text as definition_id,
+             authorization_snapshot->>'userId' as "snapshotUser",
+             filters->'closePackage'->>'packageId' as "closePackageId",
+             filters->'closePackage'->>'runId' as "closeRunId"
+        from report_runs where id = ${reportRunId} and org_id = ${org.orgId}`)).rows;
+    assert.equal(runs.length, 1, "the render must mint its run row");
+    assert.equal(runs[0]!.trigger, "close-package");
+    assert.equal(runs[0]!.status, "succeeded");
+    assert.equal(runs[0]!.definition_id, definitionId);
+    assert.equal(runs[0]!.snapshotUser, sender);
+    assert.equal(runs[0]!.closePackageId, packageId);
+    assert.equal(runs[0]!.closeRunId, runId);
+
+    // The bundle was handed to mail and the delivery recorded.
+    assert.equal(enqueued.length, 1);
+    assert.deepEqual((enqueued[0]!.data as { to: string[] }).to, ["ops@scratch.test"]);
+    const events = (await db.execute<{ event_type: string; payload: unknown }>(sql`
+      select event_type, payload from close_events
+       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`)).rows;
+    assert.equal(events.length, 1, "delivery must record its event");
+    assert.equal((events[0]!.payload as { reports: number }).reports, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("close delivery without a sender falls back to the package author", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const author = await createScratchUser(org.orgId, "Author", "author");
+    const { packageId, runId } = await seedReportablePackage(org.orgId, author);
+    const seen: Array<Record<string, string>> = [];
+    await processCloseDeliveryJobData(
+      // No senderId: a job enqueued before the principal travelled.
+      { orgId: org.orgId, packageId, runId },
+      {
+        renderReport: async (_orgId, _definitionId, params) => {
+          seen.push(params);
+          return Buffer.from("%PDF-1.4 close-probe\n%%EOF");
+        },
+        enqueueEmail: async () => [{ id: "email-job-1" }],
+      },
+    );
+    const reportRunId = seen[0]!.runId ?? "";
+    assert.match(reportRunId, UUID_RE);
+    const rows = (await db.execute<{ snapshotUser: string | null }>(sql`
+      select authorization_snapshot->>'userId' as "snapshotUser"
+        from report_runs where id = ${reportRunId} and org_id = ${org.orgId}`)).rows;
+    assert.equal(rows[0]?.snapshotUser, author);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("close delivery without any principal refuses by name", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const nobody = await createScratchUser(org.orgId, "Nobody", "nobody");
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, report_type, slug, name, query, statement, created_by)
+      values (${definitionId}, ${org.orgId}, 'custom', 'query', 'close-probe', 'Close probe',
+              '{"entity":"trial_balance","columns":["account"]}'::jsonb, null, ${nobody})`);
+    // created_by intentionally null: no sender, no author.
+    const packageId = randomUUID();
+    await db.execute(sql`
+      insert into close_reporting_packages (id, org_id, name, reports, recipients, delivery, created_by)
+      values (${packageId}, ${org.orgId}, 'authorless package', '[{"slug":"close-probe"}]'::jsonb,
+              '["ops@scratch.test"]'::jsonb, '{}'::jsonb, null)`);
+    const period = (await db.execute<{ id: string }>(sql`
+      select id from accounting_periods where org_id = ${org.orgId} order by starts_on limit 1
+    `)).rows[0]!;
+    const book = (await db.execute<{ id: string }>(sql`
+      select id from accounting_books where org_id = ${org.orgId} limit 1
+    `)).rows[0]!;
+    await assert.rejects(
+      processCloseDeliveryJobData(
+        { orgId: org.orgId, packageId, periodId: period.id, bookId: book.id },
+        { enqueueEmail: async () => [{ id: "email-job-1" }] },
+      ),
+      /no recorded sender/,
     );
   } finally {
     await dropScratchOrg(org.orgId);

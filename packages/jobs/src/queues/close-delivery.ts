@@ -16,6 +16,15 @@ export type CloseDeliveryJobData = {
   runId?: string
   periodId?: string
   bookId?: string
+  /**
+   * The user who authorized this send (publish actor, or the manual
+   * "Send now" actor). The worker mints each report render under this
+   * principal and the render route re-resolves their grants — a send
+   * whose authorizer lost close/report authority fails named instead
+   * of rendering. Older jobs omit it and fall back to the package
+   * author recorded on close_reporting_packages.created_by.
+   */
+  senderId?: string
 }
 
 let closeDeliveryQueue: Queue<CloseDeliveryJobData> | undefined

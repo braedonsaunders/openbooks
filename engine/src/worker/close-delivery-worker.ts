@@ -6,6 +6,8 @@ import {
   getBlockingConnection,
   newEmailIntentKey,
   type CloseDeliveryJobData,
+  type EnqueueEmailData,
+  type EnqueueEmailOptions,
 } from "@openbooks/jobs";
 import { isValidEmailAddress } from "@openbooks/emails";
 import { storeEmailAttachments } from "../delivery/email-attachments.ts";
@@ -13,9 +15,34 @@ import {
   settleStagedAttachmentsAfterEnqueueError,
   type EmailQueuedJobProbe,
 } from "../delivery/email-enqueue-settlement.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db, withOrgContext } from "../platform/db.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
+
+/**
+ * One attached report's render, injectable for tests; production renders
+ * through the web app's internal render endpoint (rendering lives in
+ * web/lib, which the engine cannot import). Same seam shape as the
+ * report worker's renderer and the flow-email enqueuer: callers that
+ * drive the worker without HTTP or Redis inject fakes.
+ */
+export type CloseReportRenderer = (
+  orgId: string,
+  definitionId: string,
+  params: Record<string, string>,
+) => Promise<Buffer>;
+
+export type CloseEmailEnqueuer = (
+  data: EnqueueEmailData,
+  options: EnqueueEmailOptions,
+) => Promise<unknown>;
+
+export type CloseDeliveryDeps = {
+  probeQueuedJob?: EmailQueuedJobProbe;
+  renderReport?: CloseReportRenderer;
+  enqueueEmail?: CloseEmailEnqueuer;
+};
 
 /** Per-report override captured on the package (mirrors the UI attachment). */
 type Attachment = {
@@ -96,8 +123,73 @@ type PackageContext = {
   reports: unknown;
   recipients: unknown;
   delivery: Record<string, unknown> | null;
+  package_author: string | null;
   org_name: string;
 };
+
+type ReportDefinitionForRun = {
+  slug: string;
+  id: string;
+  name: string;
+  reportType: string;
+  query: unknown;
+  statement: unknown;
+  kind: string;
+};
+
+/**
+ * Mint one close-package report run row per attached report and return its
+ * id for the render call. The internal render route refuses renders without
+ * a run id (it authorizes every background render against a durable run),
+ * so rendering straight at a definition id 422s and no close package ever
+ * delivered. The row pins the send principal (the publish or send-now
+ * actor, falling back to the package author) with their current subsidiary
+ * scope and the definition as it stands; the route re-resolves that
+ * principal's grants at render time, exactly like a scheduled run.
+ */
+async function mintCloseReportRun(
+  orgId: string,
+  definition: ReportDefinitionForRun,
+  params: Record<string, string>,
+  closePackage: { packageId: string; runId: string | null },
+  principal: string,
+): Promise<string> {
+  const allowed = await actorAllowedSubsidiaryIds(db, orgId, principal);
+  const rows = (await db.execute<{ id: string }>(sql`
+    insert into report_runs
+      (org_id, definition_id, trigger, status, recipient_emails, filters,
+       authorization_snapshot, created_by)
+    values (${orgId}, ${definition.id}, 'close-package', 'running', '[]'::jsonb,
+            ${JSON.stringify({ statementParams: params, closePackage })}::jsonb,
+            ${JSON.stringify({
+              version: 1,
+              userId: principal,
+              allowedSubsidiaryIds: allowed === null ? null : [...allowed].sort(),
+              // Content permissions stay empty at mint: the render route
+              // re-checks the principal's grants against the rendered
+              // content before delivering, and close artifacts are emailed,
+              // never retained for download — so there is nothing for a
+              // post-render stamp to record, and the run evidence trigger
+              // refuses any snapshot rewrite.
+              requiredPermissions: [],
+              definition: {
+                report_type: definition.reportType,
+                query: definition.query,
+                statement: definition.statement,
+                name: definition.name,
+                slug: definition.slug,
+                kind: definition.kind,
+              },
+            })}::jsonb, ${principal})
+    returning id::text as id`)).rows;
+  // A write matching zero rows is a failure, not a success.
+  if (!rows[0]) {
+    throw new Error(
+      `close package report run was not recorded for ${definition.slug} — nothing was rendered; retry the delivery`,
+    );
+  }
+  return rows[0].id;
+}
 
 /** Load the period/book/package context from either a published close run or an
  * explicit period + book (manual "Send now"). */
@@ -110,7 +202,8 @@ async function loadContext(data: {
 }): Promise<PackageContext | undefined> {
   const { orgId, packageId, runId, periodId, bookId } = data;
   const select = sql`p.name as period_name, p.starts_on, p.ends_on, b.name as book_name,
-           pkg.name as package_name, pkg.reports, pkg.recipients, pkg.delivery, o.name as org_name`;
+           pkg.name as package_name, pkg.reports, pkg.recipients, pkg.delivery,
+           pkg.created_by as package_author, o.name as org_name`;
   const rows = runId
     ? ((await db.execute<PackageContext>(sql`
         select ${select}
@@ -137,9 +230,12 @@ async function loadContext(data: {
  */
 export async function processCloseDeliveryJobData(
   data: CloseDeliveryJobData,
-  deps: { probeQueuedJob?: EmailQueuedJobProbe } = {},
+  deps: CloseDeliveryDeps = {},
 ): Promise<unknown> {
       const { orgId, runId } = data;
+      const renderReport: CloseReportRenderer = deps.renderReport
+        ?? ((renderOrgId, definitionId, params) => renderReportPdf(renderOrgId, definitionId, params));
+      const enqueue: CloseEmailEnqueuer = deps.enqueueEmail ?? enqueueEmail;
       // Queue callbacks carry no request store; the package's tenant is the
       // only legal scope for the context load, catalog ensure, and close event.
       return await withOrgContext(orgId, async () => {
@@ -168,10 +264,21 @@ export async function processCloseDeliveryJobData(
       const truncated = attachmentsSpec.length > MAX_REPORTS;
       const specs = attachmentsSpec.slice(0, MAX_REPORTS);
 
+      // The send principal authorizes every render: the publish or
+      // send-now actor, falling back to the package author for sends
+      // enqueued before the principal travelled on the job.
+      const principal = data.senderId ?? row.package_author;
+      if (!principal) {
+        throw new Error(
+          `reporting package ${data.packageId} has no recorded sender — re-save the package or re-send it so delivery carries its authorizing principal`,
+        );
+      }
+
       // Guarantee every catalog slug (statements + built-ins) resolves to an id.
       await ensureReportDefinitions(orgId);
-      const defs = (await db.execute<{ slug: string; id: string; name: string }>(sql`
-        select slug, id, name from report_definitions
+      const defs = (await db.execute<ReportDefinitionForRun>(sql`
+        select slug, id::text as id, name, report_type as "reportType", query, statement, kind
+          from report_definitions
          where org_id = ${orgId} and slug in (${sql.join(specs.map((spec) => sql`${spec.slug}`), sql`, `)})`));
       const defBySlug = new Map(defs.rows.map((def) => [def.slug, def]));
 
@@ -186,12 +293,26 @@ export async function processCloseDeliveryJobData(
           failures.push(spec.slug);
           continue;
         }
+        const params = renderParams(spec, String(row.starts_on), String(row.ends_on), format);
+        const reportRunId = await mintCloseReportRun(
+          orgId, def, params,
+          { packageId: data.packageId, runId: runId ?? null },
+          principal,
+        );
         try {
-          const bytes = await renderReportPdf(orgId, def.id, renderParams(spec, String(row.starts_on), String(row.ends_on), format));
+          const bytes = await renderReport(orgId, def.id, { ...params, runId: reportRunId });
           rendered.push({ name: def.name, bytes });
+          await db.execute(sql`
+            update report_runs set status = 'succeeded', finished_at = now(), updated_at = now()
+             where id = ${reportRunId} and org_id = ${orgId}`);
         } catch (error) {
           failures.push(spec.slug);
-          console.error(`[close-delivery] render failed for ${spec.slug}:`, error instanceof Error ? error.message : error);
+          const message = error instanceof Error ? error.message : String(error);
+          await db.execute(sql`
+            update report_runs set status = 'failed', error = ${message.slice(0, 1000)},
+                   finished_at = now(), updated_at = now()
+             where id = ${reportRunId} and org_id = ${orgId}`);
+          console.error(`[close-delivery] render failed for ${spec.slug}:`, message);
         }
       }
       if (rendered.length === 0) throw new Error(`no reports rendered for package (${failures.join(", ") || "unknown"})`);
@@ -247,7 +368,7 @@ export async function processCloseDeliveryJobData(
       // worker fetches the bytes at send time instead of Redis holding
       // report contents for days.
       const attachments = await storeEmailAttachments(files);
-      const emailData = {
+      const emailData: EnqueueEmailData = {
         orgId,
         to: recipients,
         subject,
@@ -257,7 +378,7 @@ export async function processCloseDeliveryJobData(
         meta: { category: "close-package" },
       };
       try {
-        await enqueueEmail(emailData, { jobId: emailIntentKey });
+        await enqueue(emailData, { jobId: emailIntentKey });
       } catch (error) {
         // A Redis/BullMQ add can accept the job and then lose its reply:
         // the job exists while this throw fires, and deleting the staged
