@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
+import { accountingFindings } from "../agents/accounting.ts";
 import {
   nextContinuousCloseRunAt,
   registerContinuousCloseEnricher,
@@ -24,6 +26,47 @@ import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fi
  */
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+
+test(
+  "unmatched bank aging follows the organization's business date",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    const statementId = randomUUID();
+    try {
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          update orgs
+             set settings = settings || ${JSON.stringify({ timeZone: "Pacific/Auckland" })}::jsonb
+           where id = ${org.orgId}
+        `);
+        await db.execute(sql`
+          insert into bank_statements
+            (id, org_id, account_id, source, statement_date, opening_balance, closing_balance, raw_file_ref)
+          values (${statementId}, ${org.orgId}, ${org.accounts.bank}, 'test', '2026-06-16', '0', '1', 'business-date-test')
+        `);
+        await db.execute(sql`
+          insert into bank_statement_lines
+            (org_id, statement_id, account_id, line_number, posted_on, amount, currency, description)
+          values (${org.orgId}, ${statementId}, ${org.accounts.bank}, 1, '2026-06-16', '1.00', 'CAD', 'One unmatched deposit')
+        `);
+      });
+
+      const detectors = defaultContinuousCloseDetectors("accounting").map((detector) => ({
+        ...detector,
+        enabled: detector.detectorKey === "unmatched_bank_activity",
+      }));
+      const findings = await withSimClock("2026-06-15T13:00:00Z", () =>
+        withBypassContext(() => accountingFindings(org.orgId, "1000.0000", detectors)),
+      );
+      assert.equal(findings.length, 1);
+      assert.equal(findings[0]!.severity, "warning", "June 16 is the org's current day at 01:00 in Auckland");
+      assert.equal(findings[0]!.summary.oldestDate, "2026-06-16");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 type RunRow = {
   id: string;
