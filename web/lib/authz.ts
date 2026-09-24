@@ -7,7 +7,6 @@ import {
   UNRESTRICTED_SCOPE_REQUIRED,
   UnrestrictedScopeError,
 } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -140,9 +139,13 @@ export function assertCan(authz: Authz, perm: string): void {
  *   const authz = await requirePermission("admin.users.manage");
  */
 export async function requirePermission(perm: string): Promise<Authz> {
+  // next/navigation loads React's client context; importing it lazily keeps
+  // this module usable from the non-page code paths (banking rules, workers)
+  // that only need can() and resolveAuthzByUserId().
+  const { redirect } = await import("next/navigation");
   const authz = await getAuthz();
-  if (!authz) redirect("/login");
-  if (!can(authz, perm)) redirect(accessDeniedHref({ permission: perm }));
+  if (!authz) return redirect("/login");
+  if (!can(authz, perm)) return redirect(accessDeniedHref({ permission: perm }));
   return authz;
 }
 
