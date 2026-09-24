@@ -25,7 +25,10 @@ const sources = {
   `,
   '../delivery/report-delivery.ts': `
     export const markReportDeliveryFailed = async (...args) => globalThis.__reportEmailTest.events.push({failure:args});
-    ${['markReportDeliverySent', 'markReportDeliveryStarted', 'markReportDeliverySuppressed'].map((name) => `export const ${name} = async () => {};`).join('\n')}
+    ${['markReportDeliverySent', 'markReportDeliverySuppressed'].map((name) => `export const ${name} = async () => {};`).join('\n')}
+    // The start mark is a lease: a falsy answer means another worker holds
+    // the delivery and this job stands down (0c06c2e63).
+    export const markReportDeliveryStarted = async () => true;
   `,
 }
 const hooks = registerHooks({ resolve(specifier, context, next) {
