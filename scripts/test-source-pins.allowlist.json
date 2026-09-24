@@ -127,7 +127,6 @@
     "web/app/(app)/reports/cash-flow-indirect/view.test.ts": 2,
     "web/app/(app)/reports/cash-flow/view.test.ts": 2,
     "web/app/(app)/reports/general-ledger/view.banner.test.ts": 2,
-    "web/app/(app)/reports/hub-catalog.test.ts": 5,
     "web/app/(app)/reports/journal/view.banner.test.ts": 2,
     "web/app/(app)/reports/orders/view.test.ts": 1,
     "web/app/(app)/reports/pnl/view.test.ts": 2,
