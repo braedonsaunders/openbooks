@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { add, cmp } from "../../money/money.ts";
 import { PayrollError } from "../error.ts";
+import { resolveCertificate } from "../certificates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";
@@ -147,6 +148,29 @@ test("the certificate carries the engine's employee inputs", () => {
     assert.deepEqual(field.storage ?? { kind: "row" }, { kind: "row" }, field.key);
   }
   assert.equal(IT_PAYROLL_PACK.certificates(), IT_CERTIFICATES);
+});
+
+test("missing post-1995 seniority stays unknown and refuses when it changes IVS pricing", async () => {
+  // L. 335/1995 art. 2 c. 18 and INPS Circ. 14/2026 make the €122,295
+  // massimale status-dependent; an unanswered certificate must not assert
+  // pre-1996 status. Sources:
+  // https://www.normattiva.it/uri/N2Ls?urn:nir:stato:legge:1995-08-08;335
+  // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2026/02/Circolare_15162/Allegati/16561_Circolare-numero-14-del-09-02-2026.pdf
+  const certificate = resolveCertificate({ certificate: IT_CERTIFICATES.certificates[0]! });
+  assert.equal(certificate.answers["anzianita_post_1995"], null);
+  const { ctx: base } = fakeCtx({ taxYear: 2026 });
+  const highBase = {
+    ...base,
+    income: "10833.3333",
+    pensionable: "10833.3333",
+    certificateFor: () => certificate,
+  } as PayrollStatutoryComputeContext;
+  await assert.rejects(
+    () => computeItStatutoryWithRates(highBase, {
+      regionalRate: "1.23", municipalRate: "0.8", municipalExemption: null,
+    }),
+    /IVS base.*122295.*anzianita_post_1995/,
+  );
 });
 
 test("2025 and 2026 are published; later years are refused by name", () => {

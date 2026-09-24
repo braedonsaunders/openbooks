@@ -55,10 +55,10 @@ export const IT_CERTIFICATES: PayrollPackCertificates = {
           key: "anzianita_post_1995",
           label: "Iscritto dopo il 31 dicembre 1995 (o opzione contributivo)",
           kind: "flag",
-          default: "false",
           help: "Workers first insured after 31 December 1995 (or on the contributivo option) fall "
             + "under the L. 335/1995 massimale for the tax year. Not part of the detrazioni "
-            + "form; recorded here as the pack's only employee-filed input channel.",
+            + "form; recorded here as the pack's only employee-filed input channel. Leave unanswered "
+            + "when unknown: above the annual massimale, payroll refuses rather than assuming pre-1996 status.",
         },
         {
           key: "domicilio_comune",
