@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { useAppAction } from '../../../../lib/use-app-action'
@@ -36,6 +36,8 @@ interface Detail {
     hours: string
     reason: string | null
     status: string
+    attachmentId: string | null
+    requiresAttachment: boolean
     decidedBy: string | null
     decisionReason: string | null
   }
@@ -175,9 +177,36 @@ export function LeaveDrawer({
           ) : null}
           <div className="flex flex-wrap gap-2">
             {detail.request.status === 'draft' ? (
-              <Button size="sm" onClick={() => void runAction('submit')}>
-                {t('leave.submitButton')}
-              </Button>
+              <div className="w-full space-y-2">
+                {detail.request.requiresAttachment ? (
+                  <>
+                    <p className="text-sm text-amber-700 dark:text-amber-300">{t('leave.evidenceRequired')}</p>
+                    <LeaveAttachmentPicker
+                      value={detail.request.attachmentId ?? ''}
+                      onChange={async (attachmentId) => {
+                        if (!attachmentId) return
+                        const res = await fetch(`/api/hrm/leave-requests/${requestId}/attachment`, {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({ attachmentId }),
+                        })
+                        if (!res.ok) {
+                          setStatus(await readApiErrorMessage(res, t('leave.attachmentFailed')))
+                          return
+                        }
+                        const payload = (await res.json().catch(() => null)) as { request?: Detail['request'] } | null
+                        if (payload?.request) setDetail((current) => current ? { ...current, request: { ...current.request, ...payload.request } } : current)
+                        setStatus(undefined)
+                      }}
+                      label={t('leave.evidenceLabel')}
+                      disabled={false}
+                    />
+                  </>
+                ) : null}
+                <Button size="sm" disabled={detail.request.requiresAttachment && !detail.request.attachmentId} onClick={() => void runAction('submit')}>
+                  {t('leave.submitButton')}
+                </Button>
+              </div>
             ) : null}
             {canWithdrawCancel && (detail.request.status === 'draft' || detail.request.status === 'submitted') ? (
               <Button
@@ -239,7 +268,9 @@ function LeaveFileForm({
   const router = useRouter()
   const [employmentId, setEmploymentId] = useState('')
   const [leaveTypeId, setLeaveTypeId] = useState('')
-  const [typeOptions, setTypeOptions] = useState<{ value: string; label: string }[]>([])
+  const [typeOptions, setTypeOptions] = useState<{ value: string; label: string; requiresAttachment: boolean }[]>([])
+  const [attachmentId, setAttachmentId] = useState('')
+  const [draftId, setDraftId] = useState<string | null>(null)
   const [startsOn, setStartsOn] = useState('')
   const [endsOn, setEndsOn] = useState('')
   const [hours, setHours] = useState('')
@@ -275,14 +306,14 @@ function LeaveFileForm({
           return
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: { id?: unknown; label?: unknown }[]
+          options?: { id?: unknown; label?: unknown; requiresAttachment?: unknown }[]
         }
         if (!live) return
         const page = Array.isArray(payload.options) ? payload.options : []
         setTypeOptions(
           page.flatMap((row) =>
             typeof row.id === 'string' && typeof row.label === 'string'
-              ? [{ value: row.id, label: row.label }]
+              ? [{ value: row.id, label: row.label, requiresAttachment: row.requiresAttachment === true }]
               : [],
           ),
         )
@@ -375,6 +406,11 @@ function LeaveFileForm({
   }, [t])
 
   const save = async (): Promise<void> => {
+    const selectedType = typeOptions.find((option) => option.value === leaveTypeId)
+    if (selectedType?.requiresAttachment && !attachmentId && !draftId) {
+      setStatus(t('leave.evidenceRequired'))
+      return
+    }
     if (onBehalf && !onBehalfEmploymentId) {
       setStatus(t('leave.onBehalfEmploymentRequired'))
       return
@@ -388,29 +424,50 @@ function LeaveFileForm({
     try {
       await execute(async () => {
       try {
-        const res = await fetch('/api/hrm/leave-requests', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: onBehalf
-            ? JSON.stringify({
-                employmentId: onBehalfEmploymentId,
-                leaveTypeId,
-                startsOn,
-                endsOn,
-                hours,
-                reason: reason || null,
-                onBehalf: true,
-              })
-            : JSON.stringify({ employmentId, leaveTypeId, startsOn, endsOn, hours, reason: reason || null }),
-        })
-        if (!res.ok) {
-          setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
-          return { ok: true as const, status: res.status, data: null }
+        let currentDraftId = draftId
+        if (!currentDraftId) {
+          const res = await fetch('/api/hrm/leave-requests', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: onBehalf
+              ? JSON.stringify({
+                  employmentId: onBehalfEmploymentId,
+                  leaveTypeId,
+                  startsOn,
+                  endsOn,
+                  hours,
+                  reason: reason || null,
+                  onBehalf: true,
+                })
+              : JSON.stringify({ employmentId, leaveTypeId, startsOn, endsOn, hours, reason: reason || null }),
+          })
+          if (!res.ok) {
+            setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
+            return { ok: true as const, status: res.status, data: null }
+          }
+          const payload = (await res.json().catch(() => null)) as { request?: { id?: unknown } } | null
+          if (typeof payload?.request?.id !== 'string') {
+            setStatus(t('leave.fileFailed'))
+            return { ok: true as const, status: res.status, data: null }
+          }
+          currentDraftId = payload.request.id
+          setDraftId(currentDraftId)
+        }
+        if (selectedType?.requiresAttachment && attachmentId) {
+          const attachmentRes = await fetch(`/api/hrm/leave-requests/${currentDraftId}/attachment`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ attachmentId }),
+          })
+          if (!attachmentRes.ok) {
+            setStatus(await readApiErrorMessage(attachmentRes, t('leave.attachmentFailed')))
+            return { ok: true as const, status: attachmentRes.status, data: null }
+          }
         }
         router.refresh()
         onDirtyChange(false)
         onSaved()
-        return { ok: true as const, status: res.status, data: null }
+        return { ok: true as const, status: 200, data: null }
       } catch {
         return {
           ok: false as const,
@@ -505,6 +562,12 @@ function LeaveFileForm({
           ))}
         </Select>
       </div>
+      {typeOptions.find((option) => option.value === leaveTypeId)?.requiresAttachment ? (
+        <div className="space-y-1">
+          <p className="text-sm text-amber-700 dark:text-amber-300">{t('leave.evidenceRequired')}</p>
+          <LeaveAttachmentPicker value={attachmentId} onChange={setAttachmentId} label={t('leave.evidenceLabel')} disabled={saving} />
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label htmlFor="leave-starts">{t('leave.calendarFromLabel')}</Label>
@@ -536,6 +599,55 @@ function LeaveFileForm({
           {t('leave.fileButton')}
         </Button>
       </div>
+    </div>
+  )
+}
+
+function LeaveAttachmentPicker({
+  value,
+  onChange,
+  label,
+  disabled,
+}: {
+  value: string
+  onChange: (value: string) => void
+  label: string
+  disabled: boolean
+}) {
+  const t = useTranslations('hrm')
+  const [query, setQuery] = useState('')
+  const [options, setOptions] = useState<{ value: string; label: string }[]>([])
+  useEffect(() => {
+    if (query.length < 2) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      const res = await fetch(`/api/file-cabinet/files?q=${encodeURIComponent(query)}&perPage=20`)
+      if (!res.ok || cancelled) return
+      const data = (await res.json().catch(() => ({}))) as { files?: { id: string; name?: string }[] }
+      if (!cancelled && Array.isArray(data.files)) setOptions(data.files.map((file) => ({ value: file.id, label: file.name ?? file.id })))
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [query])
+  return (
+    <div>
+      <Label htmlFor="leave-attachment">{label}</Label>
+      <SearchSelect
+        id="leave-attachment"
+        value={value}
+        onChange={onChange}
+        options={query.length < 2 ? [] : options}
+        ariaLabel={label}
+        sheetTitle={label}
+        clearable
+        searchable
+        remote
+        emptyLabel={t('processes.attachmentUnset')}
+        disabled={disabled}
+        onSearchChange={setQuery}
+      />
     </div>
   )
 }

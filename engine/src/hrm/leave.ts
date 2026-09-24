@@ -105,6 +105,7 @@ export interface LeaveRequestDTO {
   readonly decidedAt: string | null;
   readonly decisionReason: string | null;
   readonly flowInstanceId: string | null;
+  readonly attachmentId: string | null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -495,6 +496,7 @@ function toRequestDTO(row: RequestRow): LeaveRequestDTO {
     decidedAt: row.decided_at ? String(row.decided_at) : null,
     decisionReason: row.decision_reason,
     flowInstanceId: row.flow_instance_id,
+    attachmentId: row.attachment_id,
   };
 }
 
@@ -508,6 +510,22 @@ async function loadRequestForUpdate(exec: SqlExecutor, orgId: string, requestId:
   // which of the two, so existence cannot be probed across tenants).
   if (!row) throw new LeaveError("NOT_FOUND", "leave request not found in this organization — check the request id");
   return row;
+}
+
+async function assertLeaveAttachmentInOrg(
+  exec: SqlExecutor,
+  orgId: string,
+  attachmentId: string,
+): Promise<void> {
+  const rows = (await exec.execute<{ id: string }>(sql`
+    select id from files where org_id = ${orgId}::uuid and id = ${attachmentId}::uuid
+  `)).rows;
+  if (!rows[0]) {
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "the evidence file is not available in this organization — choose an existing file from this organization's File Cabinet",
+    );
+  }
 }
 
 /**
@@ -784,6 +802,7 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
     if (type.requires_attachment && !current.attachment_id) {
       throw new LeaveError("REFUSED", `leave type ${type.code} requires an attachment — attach the evidence before submitting`);
     }
+    if (current.attachment_id) await assertLeaveAttachmentInOrg(db, orgId, current.attachment_id);
     const startsOn = String(current.starts_on).slice(0, 10);
     const endsOn = String(current.ends_on).slice(0, 10);
     await assertLiveEmploymentRange(db, orgId, current.employment_id, startsOn, endsOn);
@@ -848,6 +867,7 @@ export async function recordLeaveAttachment(query: { orgId: string; actorId: str
     if (current.status !== "draft") {
       throw new LeaveError("BAD_STATE", `a ${current.status} request is frozen — file a new request for a revised proposal instead`);
     }
+    await assertLeaveAttachmentInOrg(db, orgId, attachmentId);
     const updated = (await db.execute<RequestRow>(sql`
       update hrm_leave_requests
          set attachment_id = ${attachmentId}, updated_by = ${actorId}, updated_at = now()

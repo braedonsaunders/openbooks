@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 import { parties } from "./parties";
+import { files } from "./file-cabinet";
 
 export const HRM_LEAVE_STATUSES = [
   "draft",
@@ -172,6 +173,11 @@ export const hrmLeaveRequests = pgTable(
       columns: [t.orgId, t.leaveTypeId],
       foreignColumns: [hrmLeaveTypes.orgId, hrmLeaveTypes.id],
     }),
+    foreignKey({
+      name: "hrm_leave_requests_attachment_tenant_fkey",
+      columns: [t.orgId, t.attachmentId],
+      foreignColumns: [files.orgId, files.id],
+    }).onDelete("restrict"),
     uniqueIndex("hrm_leave_requests_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_leave_requests_employment").on(t.orgId, t.employmentId),
     check("hrm_leave_requests_range", sql`${t.endsOn} >= ${t.startsOn}`),
