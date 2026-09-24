@@ -56,11 +56,9 @@ async function seedTenants(): Promise<{ ids: string[]; cleanup: () => Promise<vo
     db.execute<{ id: string; name: string }>(sql`select id, name from orgs where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`),
   )) as { rows: { id: string; name: string }[] }
   const original = new Map(before.rows.map((row) => [row.id, row.name]))
-  await withBypass(() =>
-    Promise.all(
-      ids.map((id, i) => db.execute(sql`update orgs set name = ${orgName(i)} where id = ${id}`)),
-    ),
-  )
+  await withBypass(async () => {
+    for (const [i, id] of ids.entries()) await db.execute(sql`update orgs set name = ${orgName(i)} where id = ${id}`)
+  })
   return {
     ids,
     cleanup: async () => {
