@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 
 export type ProjectTimeDimension = 'employee' | 'item' | 'task'
@@ -71,22 +71,30 @@ export async function loadProjectTimeEntryPage(args: {
     : args.allowedSubsidiaryIds.size > 0
       ? sql` and subsidiary_id = any(${`{${[...args.allowedSubsidiaryIds].join(',')}}`}::uuid[])`
       : sql` and false`
-  const project = await db.execute(sql`
-    select 1 from projects
-     where id = ${args.projectId}
-       and org_id = ${args.orgId}
-       ${subsidiaryFilter}
-  `)
-  if (!project.rows[0]) throw new ProjectTimeDetailError('Project not found')
+  // One transaction for the scope gate and both time reads, locking the
+  // project row first (READ COMMITTED, like loadAsset): a concurrent project
+  // rehome blocks on the lock instead of authorizing the summary and then
+  // moving the project before the detail rows (or vice versa) inside one
+  // response. (A REPEATABLE READ snapshot cannot take the lock: a locking
+  // read that meets a concurrent update errors with 40001 instead of
+  // waiting.)
+  const [summaryResult, entryResult] = await withOrgTransaction(args.orgId, async () => {
+    const project = await db.execute(sql`
+      select 1 from projects
+       where id = ${args.projectId}
+         and org_id = ${args.orgId}
+         ${subsidiaryFilter}
+         for share
+    `)
+    if (!project.rows[0]) throw new ProjectTimeDetailError('Project not found')
 
-  const dimensionFilter = args.dimension === 'employee'
-    ? (args.dimensionId ? sql`te.employee_party_id = ${args.dimensionId}` : sql`te.employee_party_id is null`)
-    : args.dimension === 'item'
-      ? (args.dimensionId ? sql`te.item_id = ${args.dimensionId}` : sql`te.item_id is null`)
-      : (args.dimensionId ? sql`te.project_task_id = ${args.dimensionId}` : sql`te.project_task_id is null`)
+    const dimensionFilter = args.dimension === 'employee'
+      ? (args.dimensionId ? sql`te.employee_party_id = ${args.dimensionId}` : sql`te.employee_party_id is null`)
+      : args.dimension === 'item'
+        ? (args.dimensionId ? sql`te.item_id = ${args.dimensionId}` : sql`te.item_id is null`)
+        : (args.dimensionId ? sql`te.project_task_id = ${args.dimensionId}` : sql`te.project_task_id is null`)
 
-  const [summaryResult, entryResult] = await Promise.all([
-    db.execute(sql`
+    const summary = await db.execute(sql`
       select count(*)::int as entries,
              coalesce(sum(te.hours), 0)::text as hours,
              coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0)::text as cost,
@@ -96,8 +104,8 @@ export async function loadProjectTimeEntryPage(args: {
          and te.project_id = ${args.projectId}
          and te.status = 'approved'
          and ${dimensionFilter}
-    `),
-    db.execute(sql`
+    `)
+    const entries = await db.execute(sql`
       select te.id,
              te.worked_on::text as worked_on,
              coalesce(employee.display_name, '') as employee_name,
@@ -129,8 +137,9 @@ export async function loadProjectTimeEntryPage(args: {
          and ${dimensionFilter}
        order by te.worked_on desc, te.id
        limit ${pageSize} offset ${offset}
-    `),
-  ])
+    `)
+    return [summary, entries] as const
+  })
 
   const totals = summaryResult.rows[0] ?? {}
   const totalEntries = Number(totals.entries ?? 0)

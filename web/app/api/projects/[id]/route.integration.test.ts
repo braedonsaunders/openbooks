@@ -73,7 +73,14 @@ const mockSources = new Map<string, string>([
     'mock:project-loader',
     `
       const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
-      export async function loadProject() { return state.payload }
+      // Mirrors the real loader: scope is enforced inside loadProject, so an
+      // out-of-scope project answers like a missing one.
+      export async function loadProject(id, orgId, allowed) {
+        const payload = state.payload
+        if (!payload) return null
+        if (allowed && !allowed.has(payload.project.subsidiary_id)) return null
+        return payload
+      }
     `,
   ],
   [

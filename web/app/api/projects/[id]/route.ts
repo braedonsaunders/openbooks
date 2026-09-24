@@ -90,10 +90,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (feature) return feature
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const payload = await loadProject(id, gate.user.orgId)
+  // The loader enforces the caller scope on the header and every
+  // subordinate read inside one snapshot, so an out-of-scope project answers
+  // exactly like a missing one with no post-hoc check to race.
+  const payload = await loadProject(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const denied = guardSubsidiaryScope(gate, payload.project.subsidiary_id as string | null | undefined)
-  if (denied) return denied
   return NextResponse.json(payload)
 }
 
@@ -378,9 +379,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (scopeRefused) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (txRefused) return txRefused
 
-  const payload = await loadProject(id, user.orgId)
+  const payload = await loadProject(id, user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const payloadDenied = guardSubsidiaryScope(gate, payload.project.subsidiary_id as string | null | undefined)
-  if (payloadDenied) return payloadDenied
   return NextResponse.json(payload)
 }
