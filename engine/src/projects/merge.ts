@@ -437,6 +437,18 @@ async function planMerge(
       `change order number ${orderCollision.map((row) => row.number).join(", ")} exists on both projects`,
     );
   }
+  // One primary baseline per project in storage: moving the duplicate's
+  // primary onto a survivor that already holds one would violate the
+  // partial unique index instead of merging. Refuse with the remedy.
+  const baselineCollision = (await runner.execute<{ n: string }>(sql`
+    select count(*)::text as n
+      from schedule_baselines d
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId} and d.is_primary
+       and exists (select 1 from schedule_baselines s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId} and s.is_primary)`)).rows[0]?.n;
+  if (baselineCollision !== "0") {
+    throw new ProjectMergeError("both projects hold a primary schedule baseline; reconcile baselines first");
+  }
   const moved: MergePreview["moved"] = [];
   for (const [table, column] of PROJECT_REFS) {
     const count = (await runner.execute<{ n: string }>(sql`

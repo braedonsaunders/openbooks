@@ -517,3 +517,41 @@ test("project merge refuses cycles, collisions, and spent duplicates", { skip: !
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("project merge refuses a second primary baseline and moves schedule rows", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-SB-A", "Baseline Alpha");
+    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-SB-B", "Baseline Beta");
+    await db.execute(sql`
+      insert into schedule_baselines (org_id, project_id, name, is_primary)
+      values (${org.orgId}, ${a}, 'Primary A', true), (${org.orgId}, ${b}, 'Primary B', true)`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+      /both projects hold a primary schedule baseline/,
+    );
+    // A non-primary baseline is no conflict: it follows the merge, and the
+    // survivor keeps its own primary.
+    await db.execute(sql`
+      update schedule_baselines set is_primary = false
+       where org_id = ${org.orgId} and project_id = ${b}`);
+    await db.execute(sql`
+      insert into schedule_calendars (org_id, project_id, name)
+      values (${org.orgId}, ${b}, 'Crew calendar')`);
+    const result = await mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor });
+    assert.equal(result.alreadyMerged, false);
+    for (const table of ["schedule_baselines", "schedule_calendars"]) {
+      const left = await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from ${sql.identifier(table)}
+         where org_id = ${org.orgId} and project_id = ${b}`);
+      assert.equal(left.rows[0]?.n, "0", table);
+    }
+    const kept = await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from schedule_baselines
+       where org_id = ${org.orgId} and project_id = ${a} and is_primary`);
+    assert.equal(kept.rows[0]?.n, "1");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
