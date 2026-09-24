@@ -29,6 +29,9 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
     emp: { pl_rok_urodzenia: "1990" },
     filingAccountId: null,
     periodsPerYear: 12,
+    resolveStatutoryRates: async () => ({
+      values: (key: string) => key === "pl_wypadkowe" ? { stopa: "1.67" } : null,
+    }),
     income: "8000.00",
     nonPeriodic: "0",
     pensionable: "8000.00",
@@ -239,6 +242,7 @@ test("PL tenant-declared rate: wypadkowe rides the org", () => {
   assert.equal(slot?.scope, "org");
   assert.deepEqual(slot?.regions, ["PL"]);
   assert.deepEqual(slot?.systemKeys, ["wypadkowe_er"]);
+  assert.equal(slot?.whenUnconfigured, "refuse");
 });
 
 test("PL employment calendar: 12 statutory days off, no pay computation", () => {

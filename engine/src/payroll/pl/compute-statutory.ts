@@ -54,9 +54,9 @@
  *   name — year granularity cannot tell which month the exemption starts.
  * - Ulga dla młodych: anyone turning 26 or less in the tax year is refused
  *   by name (the under-26 exemption needs its claim channel plus YTD).
- * - Wypadkowe: priced by the pure function when a tenant rate is declared,
- *   but the adapter passes none — no pack channel carries the payer's
- *   PKD/ZUS rate — so the line is not pushed (FR AT/MP precedent).
+ * - Wypadkowe: payer-specific ZUS-notified rate is resolved from the
+ *   employer's effective-dated statutory-rate configuration; without it the
+ *   adapter refuses instead of omitting an owed contribution.
  *
  * What this pass does NOT do (named refusals, stated): non-monthly
  * periodicity, uneven-pay threshold crossings, the FP age band, PUP-hire
@@ -723,6 +723,7 @@ export const PL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ZALICZKA: "Zaliczka na PIT",
   EMERYT_ER: "Składka emerytalna (pracodawca)",
   RENT_ER: "Składka rentowa (pracodawca)",
+  WYP_ER: "Składka wypadkowa (pracodawca)",
   FP: "Fundusz Pracy (pracodawca)",
   FS: "Fundusz Solidarnościowy (pracodawca)",
   FGSP: "FGŚP (pracodawca)",
@@ -788,15 +789,22 @@ export async function computePlStatutory(
     );
   }
 
+  const rateResolution = await ctx.resolveStatutoryRates?.();
+  const wypadkowePct = rateResolution?.values("pl_wypadkowe", { region: "PL" })?.stopa;
+  if (!wypadkowePct) {
+    throw new PayrollPackError(
+      "PL wypadkowe refuses this payroll: the employer's ZUS-notified rate is missing. "
+      + "Configure the effective rate in Payroll Setup before calculating the run.",
+    );
+  }
+
   const base = D(U(income) + U(nonPeriodic === "" ? "0" : nonPeriodic));
   const zus = calculatePlZusWithTables({
     brut: base,
     payDate,
     periodsPerYear,
     rokUrodzenia: yob,
-    // No pack channel carries the payer's PKD/ZUS wypadkowe rate: the pure
-    // function prices it when declared, but the adapter never declares one.
-    wypadkowePct: null,
+    wypadkowePct,
   }, tables);
   const pit = calculatePlPitWithTables({
     brut: base,
@@ -817,6 +825,7 @@ export async function computePlStatutory(
   pushStatutory("fp_er", "employer_contribution", "Fundusz Pracy (pracodawca)", zus.fp, 212);
   pushStatutory("fs_er", "employer_contribution", "Fundusz Solidarnościowy (pracodawca)", zus.fs, 213);
   pushStatutory("fgsp_er", "employer_contribution", "FGŚP (pracodawca)", zus.fgsp, 214);
+  pushStatutory("wypadkowe_er", "employer_contribution", "Składka wypadkowa (pracodawca)", zus.wypadkoweEr, 215);
   return {
     BRUTTO: base,
     PODSTAWA_SP: zus.podstawaSpoleczne,
@@ -834,6 +843,7 @@ export async function computePlStatutory(
     ZALICZKA: pit.zaliczka,
     EMERYT_ER: zus.emerytEr,
     RENT_ER: zus.rentEr,
+    WYP_ER: zus.wypadkoweEr,
     FP: zus.fp,
     FS: zus.fs,
     FGSP: zus.fgsp,
