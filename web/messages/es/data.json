@@ -54,6 +54,8 @@
     "toFail": "Errores",
     "commit": "Importar {n} filas",
     "committing": "Importando…",
+    "commitFailed": "No se pudo completar la importación.",
+    "commitConflict": "Esta importación entra en conflicto con un intento anterior. Comprueba primero el historial de importaciones. Si cambiaste el archivo o el mapeo, vuelve a previsualizar y enviar la importación actualizada; al recargar con los mismos datos se reintenta de forma segura la solicitud anterior.",
     "row": "Fila",
     "status": "Estado",
     "message": "Mensaje",
