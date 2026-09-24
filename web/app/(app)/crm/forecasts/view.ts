@@ -252,6 +252,13 @@ export async function loadForecasts(
   const canManageForecasts = authz.allowedSubsidiaryIds === null && can(authz, 'crm.forecasts.manage')
   const canConfigureQuotas = can(authz, 'crm.setup.manage')
 
+  // The undated board must show the same population this forecast excluded:
+  // carry the active owner/team scope, or the link widens to the whole org.
+  // Owner wins over team, mirroring the loader's exclusivity above.
+  const undatedQuery = new URLSearchParams({ view: 'board', undated: '1' })
+  if (ownerUserId) undatedQuery.set('owner', ownerUserId)
+  else if (salesTeamId) undatedQuery.set('team', salesTeamId)
+
   const pipelineLabel = t('forecasts.pipeline')
   const weightedLabel = t('forecasts.weighted')
   const mostLikelyLabel = t('forecasts.mostLikely')
@@ -319,7 +326,7 @@ export async function loadForecasts(
     emptyForecastDescription: t('forecasts.emptyForecastDescription'),
     hasExcludedUndated: excludedUndated > 0,
     excludedUndatedNote: t('forecasts.excludedUndated', { count: excludedUndated }),
-    excludedUndatedHref: '/crm/opportunities?view=board&undated=1',
+    excludedUndatedHref: `/crm/opportunities?${undatedQuery}`,
     excludedUndatedLinkLabel: t('forecasts.viewUndated'),
     hasQuotas: quotas.length > 0,
     noQuotas: quotas.length === 0,

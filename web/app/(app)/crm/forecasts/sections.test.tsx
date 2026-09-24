@@ -50,12 +50,25 @@ test('UX-03: excluded-undated count mirrors the forecast population', () => {
   assert.match(forecastsViewSource, /hasExcludedUndated: excludedUndated > 0/)
   assert.match(forecastsViewSource, /widgetBlock\('forecast-excluded-note'/)
   assert.match(forecastsViewSource, /when: f\('hasExcludedUndated'\)/)
-  assert.match(forecastsViewSource, /excludedUndatedHref: '\/crm\/opportunities\?view=board&undated=1'/)
+  // F3-88: the link carries the active owner/team scope — a bare
+  // view=board&undated=1 href widens to the whole org while the count
+  // beside it stays scoped. The behaviour is loader-proved in
+  // view-undated-scope.test.ts; this pins the wiring it drives through.
+  assert.match(forecastsViewSource, /const undatedQuery = new URLSearchParams\(\{ view: 'board', undated: '1' \}\)/)
+  assert.match(forecastsViewSource, /undatedQuery\.set\('owner', ownerUserId\)/)
+  assert.match(forecastsViewSource, /undatedQuery\.set\('team', salesTeamId\)/)
+  assert.match(forecastsViewSource, /excludedUndatedHref: `\/crm\/opportunities\?\$\{undatedQuery\}`/)
 })
 
 test('UX-03: undated board filter selects exactly the excluded population', () => {
   assert.match(opportunitiesViewSource, /pickString\(sp\.undated\) === '1'/)
   assert.match(opportunitiesViewSource, /and o\.expected_close_date is null/)
+  // F3-88: the board honours the owner/team scope the forecast link carries
+  // (owner wins over team, non-uuid values ignored). Behaviour loader-proved
+  // in view-undated-scope.test.ts.
+  assert.match(opportunitiesViewSource, /boardOwnerUserId = requestedOwner && isUuid\(requestedOwner\)/)
+  assert.match(opportunitiesViewSource, /and o\.owner_user_id = /)
+  assert.match(opportunitiesViewSource, /and o\.sales_team_id = /)
 })
 
 test('UX-03: exclusion note renders the count with a link to filter them', () => {
