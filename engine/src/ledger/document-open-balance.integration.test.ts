@@ -256,3 +256,58 @@ test("ambiguous currency projection fails with actionable organization and entry
   });
   assert.equal(await balance(inv.id), "100.0000");
 }));
+
+test("posted INSERT computes open_balance and the backfill heals NULL caches", { skip: !DB }, async () => {
+  // G8: the trigger watched UPDATE OF posted_entry_id, status only, so a
+  // direct INSERT of a posted document left open_balance NULL. 0338
+  // computes it on INSERT too and heals NULL caches on posted open-item
+  // documents. Proven on a populated row: post a real invoice, NULL its
+  // cache (the defect state), apply the shipped file, watch the exact
+  // balance come back — then insert a second posted row directly and watch
+  // the INSERT trigger compute it.
+  await fixture(async (org, actorId) => {
+    const first = await invoice(org, actorId);
+    assert.equal(await balance(first.id), "100.0000");
+    // The defect state: a posted open-item document with a NULL cache.
+    await db.execute(sql`update documents set open_balance = null where id = ${first.id}`);
+    assert.equal(await balance(first.id), null);
+    // Apply the shipped migration: the backfill heals the cache through
+    // the same guards every write passes (no suspension needed — the heal
+    // touches open_balance only, outside every guard's column list).
+    const migration = sql.raw(readFileSync("schema/migrations/generated/0338_posting_guards_and_summary_heals.sql", "utf8"));
+    await db.transaction(async (tx) => {
+      await tx.execute(migration);
+    });
+    assert.equal(await balance(first.id), "100.0000");
+    // The INSERT path: a directly inserted posted row computes its balance.
+    // Document row first (the line tenant guard needs its parent), lines
+    // second, in one transaction so the deferred totals tieout sees both.
+    const secondId = randomUUID();
+    await db.transaction(async (tx) => {
+      // A backfill inserts history under the paired trusted-replay
+      // authority (migration + amend together; either alone stays
+      // blocked) — the same authority clone and historical replay use.
+      await tx.execute(sql`set local openbooks.migration = 'on'`);
+      await tx.execute(sql`set local openbooks.amend = 'on'`);
+      await tx.execute(sql`insert into documents
+          (id, org_id, kind, document_number, subsidiary_id, document_date, posting_date, posting_period_id, currency,
+           status, subtotal, tax_total, total, posted_entry_id, created_by)
+        select ${secondId}, org_id, kind, 'G8-BACKFILL-2', subsidiary_id, document_date, posting_date, posting_period_id, currency,
+           'posted', subtotal, tax_total, total, posted_entry_id, ${actorId}
+          from documents where id = ${first.id}`);
+      await tx.execute(sql`insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+        select org_id, ${secondId}, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount
+          from document_lines where document_id = ${first.id}`);
+    });
+    assert.equal(await balance(secondId), "100.0000");
+    // Catalog check: no posted open-item document keeps a NULL cache.
+    const nulls = await db.execute<{ id: string }>(sql`
+      select d.id from documents d
+       where d.org_id = ${org.orgId} and d.status = 'posted' and d.posted_entry_id is not null
+         and d.open_balance is null
+         and exists (select 1 from journal_lines jl
+                      where jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id and jl.is_open_item)`);
+    assert.deepEqual(nulls.rows, []);
+  });
+});
