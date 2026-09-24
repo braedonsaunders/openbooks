@@ -1121,12 +1121,15 @@ async function loadReconcilableAccount(
   orgId: string,
   accountId: string,
   scope: ReadonlySet<string> | null,
+  executor: SqlExecutor = db,
+  lock = false,
 ): Promise<ReconcilableAccount> {
-  const r = (await db.execute<ReconcilableAccount & { subsidiary_id: string | null }>(sql`
+  const r = (await executor.execute<ReconcilableAccount & { subsidiary_id: string | null }>(sql`
     select a.id, a.name, a.number, a.currency_restriction as currency, a.subsidiary_id
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId}
        and a.reconcilable and a.is_active and not a.is_summary
+       ${lock ? sql`for update` : sql``}
   `));
   const account = r.rows[0];
   if (!account) throw new BankingError("Account not found or not reconcilable");
@@ -1444,8 +1447,8 @@ export async function importStatement(
   // ctx.userId, so a no-actor placeholder arriving here would sink into all
   // three evidence surfaces. Fail closed before any write.
   requireActorId(ctx.userId);
-  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds);
-  const currency = (opts.currency ?? account.currency).trim().toUpperCase();
+  let account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds);
+  let currency = (opts.currency ?? account.currency).trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) {
     throw new BankingError("Statement currency must be a three-letter ISO currency code");
   }
@@ -1494,6 +1497,20 @@ export async function importStatement(
         hashtextextended(${`bank-statement-import:${ctx.orgId}:${account.id}`}, 0)
       )
     `);
+    // The preflight above routes and validates the request only. Re-read the
+    // bank account under a row lock inside the write transaction so a
+    // concurrent subsidiary rehome cannot authorize statement rows in the
+    // account's new scope using the caller's stale permission snapshot.
+    account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds, tx, true);
+    currency = (opts.currency ?? account.currency).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw new BankingError("Statement currency must be a three-letter ISO currency code");
+    }
+    if (currency !== account.currency) {
+      throw new BankingError(
+        `Statement currency ${currency} does not match account currency ${account.currency}`,
+      );
+    }
     const sourceAlreadyImported = Boolean((await tx.execute<{ imported: boolean }>(sql`
       select exists (
         select 1
@@ -1777,9 +1794,13 @@ export async function startReconciliation(
   return db.transaction(async (tx) => {
     await reconciliationBookId(tx, ctx.orgId);
     await lockReconciliationAccount(tx, ctx.orgId, account.id);
+    // The unlocked lookup above is only a preflight. The account can be
+    // rehomed while this request waits for the reconciliation fence, so lock
+    // and revalidate its current owner before creating account-owned state.
+    const lockedAccount = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds, tx, true);
     const open = (await tx.execute<{ id: string }>(sql`
       select id from reconciliations
-       where org_id = ${ctx.orgId} and account_id = ${account.id} and status <> 'signed_off'
+       where org_id = ${ctx.orgId} and account_id = ${lockedAccount.id} and status <> 'signed_off'
        limit 1
     `));
     if (open.rows[0]) {
@@ -1787,14 +1808,14 @@ export async function startReconciliation(
         "This account already has an open reconciliation — finish or discard it first",
       );
     }
-    await requireCutoffAfterSignedHistory(tx, ctx.orgId, account.id, opts.throughDate);
+    await requireCutoffAfterSignedHistory(tx, ctx.orgId, lockedAccount.id, opts.throughDate);
     const [recon] = await tx
       .insert(schema.reconciliations)
       .values({
         orgId: ctx.orgId,
-        accountId: account.id,
+        accountId: lockedAccount.id,
         throughDate: opts.throughDate,
-        currency: account.currency,
+        currency: lockedAccount.currency,
         statementBalance,
         status: "in_progress",
         createdBy: ctx.userId,

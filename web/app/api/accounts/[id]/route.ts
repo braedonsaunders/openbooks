@@ -33,6 +33,8 @@ class PatchInvalid extends Error {
   }
 }
 
+class PatchNotFound extends Error {}
+
 function textOrNull(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -212,16 +214,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     await db.transaction(async (tx) => {
+      // Keep hierarchy serialization before any per-account row lock. Two
+      // concurrent reparents otherwise hold their own row and can deadlock
+      // when the hierarchy loser tries to inspect the winner's row.
       if (parentId !== undefined) {
-        // Serialize the org's chart-of-accounts hierarchy edits. The cycle walk
-        // below is only sound against every competing reparent's committed
-        // effect: two cross-reparents deciding on stale snapshots would both
-        // pass and commit a cycle (A.parent=B beside B.parent=A). The lock is
-        // transaction-scoped, so the loser waits here, then re-walks against
-        // the winner's committed parent before its own update may decide.
         await tx.execute(sql`
           select pg_advisory_xact_lock(hashtextextended(${`accounts-hierarchy:${gate.user.orgId}`}, 0))
         `)
+      }
+      // Account-owned writes use the account row as their scope fence. Bank
+      // statement import/reconciliation holds this same row lock while it
+      // rechecks subsidiary ownership, so a rehome and account-scoped work
+      // have one deterministic order.
+      const locked = (await tx.execute<{
+        subsidiary_id: string | null;
+        unchanged: boolean;
+      }>(sql`
+        select subsidiary_id,
+               updated_at = ${existing.updated_at} as unchanged
+          from accounts
+         where id = ${id} and org_id = ${gate.user.orgId}
+         for update
+      `)).rows[0]
+      if (!locked || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, locked.subsidiary_id, { orgWideNull: true })) {
+        throw new PatchNotFound()
+      }
+      if (!locked.unchanged) throw new Error('account_changed')
+      if (parentId !== undefined) {
         if (parentId) {
           const parent = (await tx.execute<{ is_summary: boolean; type: string; subsidiary_id: string | null }>(sql`
             select is_summary, type, subsidiary_id from accounts
@@ -278,6 +297,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       `)
     })
   } catch (error) {
+    if (error instanceof PatchNotFound) return NextResponse.json({ error: 'not_found' }, { status: 404 })
     if (error instanceof PatchInvalid) return bad(error.code, error.field)
     const cause = error && typeof error === 'object' ? (error as { cause?: unknown }).cause : undefined
     const constraint = cause && typeof cause === 'object'
