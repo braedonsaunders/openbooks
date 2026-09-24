@@ -145,139 +145,129 @@ function postRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("collection route gates on the hrm feature and the position permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.position\.manage"\)/);
-    assert.match(source, /guardPermission\("hrm\.position\.read"\)/);
-    assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-  });
-} else {
-  test("a missing feature flag 404s before the service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    const get = await collectionRoute!.GET(
-      new Request("http://openbooks.test/api/hrm/positions"),
-    );
-    assert.equal(get.status, 404);
-    assert.deepEqual(routeState.calls, []);
-    const post = await collectionRoute!.POST(postRequest({ positionCode: "X" }));
-    assert.equal(post.status, 404);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  const get = await collectionRoute!.GET(
+    new Request("http://openbooks.test/api/hrm/positions"),
+  );
+  assert.equal(get.status, 404);
+  assert.deepEqual(routeState.calls, []);
+  const post = await collectionRoute!.POST(postRequest({ positionCode: "X" }));
+  assert.equal(post.status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("an unauthenticated caller never reaches the service", async () => {
-    reset();
-    routeState.gate = { status: 401 };
-    const response = await collectionRoute!.POST(postRequest({ positionCode: "X" }));
-    assert.equal(response.status, 401);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  const response = await collectionRoute!.POST(postRequest({ positionCode: "X" }));
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create validates the body through the real parser before the service runs", async () => {
-    reset();
-    assert.equal((await collectionRoute!.POST(postRequest({ title: "T" }))).status, 400);
-    assert.equal(
-      (await collectionRoute!.POST(postRequest({ positionCode: "X", title: "T" }))).status,
-      400,
-    );
-    assert.equal(
-      (
-        await collectionRoute!.POST(
-          postRequest({
-            positionCode: "ENG-1042",
-            title: "Engineer",
-            employerSubsidiaryId: "nope",
-            effectiveFrom: "2026-07-01",
-            reason: "open",
-          }),
-        )
-      ).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("create validates the body through the real parser before the service runs", async () => {
+  reset();
+  assert.equal((await collectionRoute!.POST(postRequest({ title: "T" }))).status, 400);
+  assert.equal(
+    (await collectionRoute!.POST(postRequest({ positionCode: "X", title: "T" }))).status,
+    400,
+  );
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        postRequest({
+          positionCode: "ENG-1042",
+          title: "Engineer",
+          employerSubsidiaryId: "nope",
+          effectiveFrom: "2026-07-01",
+          reason: "open",
+        }),
+      )
+    ).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create forwards org, actor, and body, then 201s", async () => {
-    reset();
-    const body = {
+test("create forwards org, actor, and body, then 201s", async () => {
+  reset();
+  const body = {
+    positionCode: "ENG-1042",
+    title: "Engineer",
+    employerSubsidiaryId: SUBSIDIARY_ID,
+    effectiveFrom: "2026-07-01",
+    reason: "open the establishment",
+  };
+  const response = await collectionRoute!.POST(postRequest(body));
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { position: { id: "position-1", positionCode: "ENG-1042" } });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "create",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        positionCode: "ENG-1042",
+        title: "Engineer",
+        departmentId: undefined,
+        locationId: undefined,
+        employerSubsidiaryId: SUBSIDIARY_ID,
+        jobGrade: undefined,
+        plannedFte: undefined,
+        status: undefined,
+        effectiveFrom: "2026-07-01",
+        effectiveTo: undefined,
+        reason: "open the establishment",
+      },
+    },
+  ]);
+});
+
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("position ENG-1042 is still held — unassign first");
+  routeState.serviceThrow = refusal;
+  const response = await collectionRoute!.POST(
+    postRequest({
       positionCode: "ENG-1042",
       title: "Engineer",
       employerSubsidiaryId: SUBSIDIARY_ID,
       effectiveFrom: "2026-07-01",
-      reason: "open the establishment",
-    };
-    const response = await collectionRoute!.POST(postRequest(body));
-    assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { position: { id: "position-1", positionCode: "ENG-1042" } });
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "create",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          positionCode: "ENG-1042",
-          title: "Engineer",
-          departmentId: undefined,
-          locationId: undefined,
-          employerSubsidiaryId: SUBSIDIARY_ID,
-          jobGrade: undefined,
-          plannedFte: undefined,
-          status: undefined,
-          effectiveFrom: "2026-07-01",
-          effectiveTo: undefined,
-          reason: "open the establishment",
-        },
-      },
-    ]);
-  });
+      reason: "open",
+    }),
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped.length, 1);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("position ENG-1042 is still held — unassign first");
-    routeState.serviceThrow = refusal;
-    const response = await collectionRoute!.POST(
-      postRequest({
-        positionCode: "ENG-1042",
-        title: "Engineer",
-        employerSubsidiaryId: SUBSIDIARY_ID,
-        effectiveFrom: "2026-07-01",
-        reason: "open",
-      }),
-    );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped.length, 1);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
+test("vacancy rejects bad dates and unknown statuses before the service runs", async () => {
+  reset();
+  assert.equal(
+    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions?effectiveDate=nope"))).status,
+    400,
+  );
+  assert.equal(
+    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions?effectiveDate=2026-07-15&status=draft"))).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("vacancy rejects bad dates and unknown statuses before the service runs", async () => {
-    reset();
-    assert.equal(
-      (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions?effectiveDate=nope"))).status,
-      400,
-    );
-    assert.equal(
-      (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions?effectiveDate=2026-07-15&status=draft"))).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
-
-  test("vacancy forwards org, actor, date, and status to the read service", async () => {
-    reset();
-    const response = await collectionRoute!.GET(
-      new Request("http://openbooks.test/api/hrm/positions?effectiveDate=2026-07-15&status=open"),
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { vacancy: { totals: { positions: 0 } } });
-    assert.equal(routeState.calls.length, 1);
-    assert.equal(routeState.calls[0]!.fn, "vacancy");
-    const args = routeState.calls[0]!.args as Record<string, unknown>;
-    assert.equal(args.orgId, "org-1");
-    assert.equal(args.actorId, "user-1");
-    assert.equal(args.effectiveDate, "2026-07-15");
-    assert.equal(args.status, "open");
-    assert.match(args.knownAt as string, /^\d{4}-\d{2}-\d{2}T/);
-  });
-}
+test("vacancy forwards org, actor, date, and status to the read service", async () => {
+  reset();
+  const response = await collectionRoute!.GET(
+    new Request("http://openbooks.test/api/hrm/positions?effectiveDate=2026-07-15&status=open"),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { vacancy: { totals: { positions: 0 } } });
+  assert.equal(routeState.calls.length, 1);
+  assert.equal(routeState.calls[0]!.fn, "vacancy");
+  const args = routeState.calls[0]!.args as Record<string, unknown>;
+  assert.equal(args.orgId, "org-1");
+  assert.equal(args.actorId, "user-1");
+  assert.equal(args.effectiveDate, "2026-07-15");
+  assert.equal(args.status, "open");
+  assert.match(args.knownAt as string, /^\d{4}-\d{2}-\d{2}T/);
+});
