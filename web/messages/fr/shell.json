@@ -51,7 +51,9 @@
   "topNav": {
     "ariaLabel": "Principal",
     "more": "Plus",
-    "itemsWaiting": "{count, plural, one {# élément en attente} other {# éléments en attente}}"
+    "itemsWaiting": "{count, plural, one {# élément en attente} other {# éléments en attente}}",
+    "itemsWaitingPartial": "{count, plural, one {# élément en attente – certaines sources n''ont pas pu être chargées} other {# éléments en attente – certaines sources n''ont pas pu être chargées}}",
+    "partialSourcesTitle": "Certaines sources n''ont pas pu être chargées – le nombre affiché peut être incomplet"
   },
   "apps": {
     "ariaLabel": "Ouvrir les applications",

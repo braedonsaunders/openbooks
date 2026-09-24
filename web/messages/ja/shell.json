@@ -51,7 +51,9 @@
   "topNav": {
     "ariaLabel": "プライマリ",
     "more": "その他",
-    "itemsWaiting": "{count, plural, one {待機中 # 件} other {待機中 # 件}}"
+    "itemsWaiting": "{count, plural, one {待機中 # 件} other {待機中 # 件}}",
+    "itemsWaitingPartial": "{count, plural, one {待機中 # 件（一部のソースを読み込めませんでした）} other {待機中 # 件（一部のソースを読み込めませんでした）}}",
+    "partialSourcesTitle": "一部のソースを読み込めませんでした – 件数が実際より少ない場合があります"
   },
   "apps": {
     "ariaLabel": "アプリを開く",
