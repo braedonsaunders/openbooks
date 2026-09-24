@@ -62,7 +62,7 @@ test("draft vendor retainage release bill deletes with complete evidence and per
   // Database-side snapshot equality: the audit before-image must equal the
   // row's own to_jsonb exactly — every column, exact numeric, no conversion.
   const snapshot = (await db.execute<{ row: Record<string, unknown> }>(sql`select to_jsonb(vrr) as row from vendor_retainage_releases vrr where org_id=${org.orgId} and vendor_bill_document_id=${first.vendorBillDocumentId}`)).rows[0]!.row;
-  await withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Correct release amount" }));
+  await withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Correct release amount", allowedSubsidiaryIds: null }));
   assert.equal((await db.execute(sql`select id from documents where org_id=${org.orgId} and id=${first.vendorBillDocumentId}`)).rows.length, 0);
   assert.equal((await db.execute(sql`select id from vendor_retainage_releases where org_id=${org.orgId} and id=${snapshot.id as string}`)).rows.length, 0);
   const evidence = (await db.execute<{ changes: { before: Record<string, unknown>; after: null; reason: string }; actor_id: string }>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and table_name='vendor_retainage_releases' and row_id=${snapshot.id as string} and action='billing_released'`)).rows;
@@ -90,7 +90,7 @@ test("ordinary vendor application bills still regenerate after draft deletion", 
   await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
   await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
   const first = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
-  await withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Correct application bill" }));
+  await withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Correct application bill", allowedSubsidiaryIds: null }));
   const reopened = (await db.execute<{ status: string; vendor_bill_document_id: string | null }>(sql`select status, vendor_bill_document_id from vendor_pay_applications where org_id=${org.orgId} and id=${app.id}`)).rows[0]!;
   assert.deepEqual(reopened, { status: "approved", vendor_bill_document_id: null });
   const replacement = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
@@ -108,7 +108,7 @@ test("posted vendor retainage release bills refuse direct reservation release an
     /only be released for a draft vendor bill/,
   );
   await assert.rejects(
-    withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Posted attempt" })),
+    withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Posted attempt", allowedSubsidiaryIds: null })),
     /cannot be deleted/,
   );
   assert.equal((await db.execute(sql`select id from vendor_retainage_releases where org_id=${org.orgId} and vendor_bill_document_id=${first.vendorBillDocumentId}`)).rows.length, 1);
@@ -142,7 +142,7 @@ test("vendor retainage release audit rolls back with the delete transaction", en
   // An invalid audit actor forces a database error in the audit INSERT.
   // The full delete command must leave both the reservation and bill intact.
   await assert.rejects(withOrgTransaction(org.orgId, () =>
-    deleteDocument(first.vendorBillDocumentId, "not-a-uuid", org.orgId, { reason: "Corrupt audit" }),
+    deleteDocument(first.vendorBillDocumentId, "not-a-uuid", org.orgId, { reason: "Corrupt audit", allowedSubsidiaryIds: null }),
   ), (error: unknown) => {
     assert.ok(error instanceof Error);
     assert.match(error.message, /insert into audit_log/);
@@ -152,6 +152,6 @@ test("vendor retainage release audit rolls back with the delete transaction", en
   assert.equal((await db.execute(sql`select id from vendor_retainage_releases where org_id=${org.orgId} and vendor_bill_document_id=${first.vendorBillDocumentId}`)).rows.length, 1);
   assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='vendor_retainage_releases' and action='billing_released'`)).rows.length, 0);
   assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${first.vendorBillDocumentId}`)).rows[0]!.status, "draft");
-  await withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Correct release amount" }));
+  await withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Correct release amount", allowedSubsidiaryIds: null }));
   assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='vendor_retainage_releases' and action='billing_released'`)).rows.length, 1);
 }));

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -221,9 +222,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       source: 'ui',
       reason: body.reason,
       expectedUpdatedAt: body.expectedUpdatedAt,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     })
     return NextResponse.json({ ok: true })
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: e.status })
     throw e
   }

@@ -14,6 +14,7 @@ import {
   deleteDocument,
   DeleteError,
 } from "@openbooks/engine/src/ledger/document-delete.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import {
   resolveDefaultValue,
   type FieldValueMap,
@@ -1336,9 +1337,13 @@ async function deleteDocumentWriter(
   if (!(await isDocKindEnabled(user.orgId, docKind)))
     return err(404, "not found");
   try {
-    await deleteDocument(id, user.id, user.orgId);
+    // `allowed` is rechecked under the document lock inside deleteDocument:
+    // the unlocked probe above can authorize entity A while a concurrent
+    // A→B rehome lands before this delete commits.
+    await deleteDocument(id, user.id, user.orgId, { allowedSubsidiaryIds: allowed });
     return { status: 200, body: { ok: true } };
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return err(404, "not found");
     if (e instanceof DeleteError) return err(422, (e as Error).message);
     throw e;
   }

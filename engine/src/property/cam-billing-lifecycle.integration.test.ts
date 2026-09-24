@@ -35,7 +35,7 @@ for(const kind of ['invoice','credit'] as const){
   if(kind==='credit') await db.execute(sql`update cam_allocations set reconciliation_amount=-100 where org_id=${org.orgId} and id=${allocation}`);
   const first=await billCamReconciliation(org.orgId,actor,cam,'2026-07-31');
   assert.equal(first.documents.length,1);
-  await withOrgTransaction(org.orgId,()=>deleteDocument(first.documents[0]!,actor,org.orgId,{reason:'Discard CAM draft for correction'}));
+  await withOrgTransaction(org.orgId,()=>deleteDocument(first.documents[0]!,actor,org.orgId,{reason:'Discard CAM draft for correction',allowedSubsidiaryIds:null}));
   const released=(await db.execute<{invoice_document_id:string|null;reconciliation_amount:string}>(sql`select invoice_document_id,reconciliation_amount::text from cam_allocations where org_id=${org.orgId} and id=${allocation}`)).rows[0]!;
   assert.equal(released.invoice_document_id,null);
   assert.equal(released.reconciliation_amount,kind==='credit'?'-100.0000':'100.0000');

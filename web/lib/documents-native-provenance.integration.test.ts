@@ -560,6 +560,7 @@ test("quantity change and line removal are refused; delete and reconvert is the 
       deleteDocument(billId, userId, org.orgId, {
         reason: "rebill at the received quantity",
         source: "ui",
+        allowedSubsidiaryIds: null,
       }),
     );
     const released = (
