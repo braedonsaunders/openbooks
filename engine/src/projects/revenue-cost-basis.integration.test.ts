@@ -179,7 +179,7 @@ test("legacy owner resolves the unique root; authorized scope and manual progres
     assert.deepEqual(legacy.problems, []);
     assert.equal(legacy.synced[0]?.percentComplete, "25.0000");
     const before = await snapshot(org.orgId);
-    assert.deepEqual(await syncProjectRevenueContracts(org.orgId, null, org.date, projectId, []), { synced: [], problems: [] });
+    assert.deepEqual(await syncProjectRevenueContracts(org.orgId, null, org.date, projectId, []), { synced: [], problems: [], skipped: null });
     assert.deepEqual(await snapshot(org.orgId), before);
     await db.execute(sql`update projects set custom='{"percentCompleteOverride":"40"}'::jsonb where id=${projectId}`);
     const manual = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);

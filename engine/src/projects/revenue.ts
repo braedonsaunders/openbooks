@@ -53,6 +53,13 @@ export interface ProjectContractStatus {
 export interface ProjectRevenueSyncResult {
   synced: ProjectContractStatus[];
   problems: string[];
+  /**
+   * Why the sync measured nothing: the Projects or revenue-recognition
+   * feature is off, or the project control accounts are unmapped — while
+   * qualifying fixed-price projects exist. Null when the sync ran (or when
+   * no project qualifies, which is an empty sync, not a skip).
+   */
+  skipped: string | null;
 }
 
 /** Cost-to-cost completion fraction (0..1), exact and clamped. */
@@ -108,9 +115,10 @@ export async function syncProjectRevenueContracts(
   projectId?: string,
   allowedSubsidiaryIds?: readonly string[],
 ): Promise<ProjectRevenueSyncResult> {
-  if (!(await revenueRecognitionFeatureEnabled(db, orgId))) {
-    return { synced: [], problems: [] };
-  }
+  // No fast path around the transaction: whether the sync is skipped depends
+  // on whether qualifying projects exist, which only the core knows. The
+  // core returns the skip named, so the run can warn instead of posting a
+  // zero-progress total in silence.
   return db.transaction(async (tx) =>
     syncProjectRevenueContractsInTransaction(
       tx,
@@ -141,15 +149,11 @@ export async function syncProjectRevenueContractsInTransaction(
   projectId?: string,
   allowedSubsidiaryIds?: readonly string[],
 ): Promise<ProjectRevenueSyncResult> {
-  const result: ProjectRevenueSyncResult = { synced: [], problems: [] };
-  if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) return result;
-  if (!(await revenueRecognitionFeatureEnabled(tx, orgId))) return result;
-
-  const accts = await recognitionAccounts(orgId, tx);
-  if (!accts.unbilledReceivable || !accts.projectRevenue) {
-    // Inert until mapped — same contract as the rest of project GL recognition.
-    return result;
-  }
+  const result: ProjectRevenueSyncResult = { synced: [], problems: [], skipped: null };
+  // Read the gates but report them only when project work actually waits:
+  // an org that never uses Projects must not warn on every recognition run.
+  const projectsOn = await lockAndCheckOrgFeature(tx, orgId, "projects");
+  const recognitionOn = await revenueRecognitionFeatureEnabled(tx, orgId);
 
   // `undefined` is the unrestricted policy; a present (including empty) list
   // is a restricted policy. Keep the empty case fail-closed rather than
@@ -175,6 +179,39 @@ export async function syncProjectRevenueContractsInTransaction(
        ${subsidiaryScope}
      order by p.code, p.id
      for update of p`));
+
+  // No qualifying project: an empty sync, not a skip — the run posts its
+  // non-project lines with nothing to warn about.
+  if (projects.rows.length === 0) return result;
+  if (!projectsOn) {
+    return {
+      ...result,
+      skipped:
+        "project revenue sync skipped: the Projects feature is off — turn it on in Company Settings → Features to recognize project progress",
+    };
+  }
+  if (!recognitionOn) {
+    return {
+      ...result,
+      skipped:
+        "project revenue sync skipped: revenue recognition is off — turn it on in Company Settings → Features to recognize project progress",
+    };
+  }
+
+  const accts = await recognitionAccounts(orgId, tx);
+  if (!accts.unbilledReceivable || !accts.projectRevenue) {
+    // Inert until mapped — but no longer silent: with qualifying projects
+    // waiting, the run must warn instead of posting zero project progress.
+    const missing = [
+      !accts.unbilledReceivable ? "unbilled receivable" : null,
+      !accts.projectRevenue ? "project revenue" : null,
+    ].filter((name): name is string => name !== null);
+    return {
+      ...result,
+      skipped:
+        `project revenue sync skipped: control accounts unmapped: ${missing.join(", ")} — map them in Company & Accounting`,
+    };
+  }
 
   let ruleId: string | null = null;
 

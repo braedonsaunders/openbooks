@@ -10,6 +10,7 @@ interface RouteState {
   syncCalls: { scope: Scope; syncedProjectIds: string[] }[]
   runCalls: { scope: Scope; postedProjectIds: string[] }[]
   runError: { kind: 'domain' | 'stale' | 'unexpected'; message: string } | null
+  syncSkipped: string | null
 }
 
 const stateKey = Symbol.for('openbooks.recognition-route-test')
@@ -19,6 +20,7 @@ const state: RouteState = {
   syncCalls: [],
   runCalls: [],
   runError: null,
+  syncSkipped: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
@@ -78,7 +80,7 @@ const mockSources = new Map<string, string>([
           ? projects
           : projects.filter((project) => allowedSubsidiaryIds.includes(project.subsidiaryId))
         state.syncCalls.push({ scope: allowedSubsidiaryIds == null ? undefined : [...allowedSubsidiaryIds], syncedProjectIds: visible.map((project) => project.id) })
-        return { synced: [], problems: [] }
+        return { synced: [], problems: [], skipped: state.syncSkipped }
       }
     `,
   ],
@@ -148,6 +150,7 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   state.syncCalls.length = 0
   state.runCalls.length = 0
   state.runError = null
+  state.syncSkipped = null
 }
 
 function post(): Promise<Response> {
@@ -221,6 +224,17 @@ test('a stale confirmation stays a 409 naming the remedy', async () => {
 
   assert.equal(response.status, 409)
   assert.deepEqual(await response.json(), { error: 'stale_preview' })
+})
+
+test('a skipped project sync surfaces as a named warning on the run result', async () => {
+  reset(null)
+  state.syncSkipped = 'project revenue sync skipped: control accounts unmapped: unbilled receivable, project revenue — map them in Company & Accounting'
+
+  const response = await post()
+
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { problems: string[] }
+  assert.deepEqual(body.problems, [state.syncSkipped])
 })
 
 test('an unexpected run defect stays a generic 500', async () => {
