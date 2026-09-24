@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -237,6 +237,53 @@ test("an entry re-ticketed between plan and apply refuses instead of writing a f
     );
     assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketC);
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("apply waits for a target ticket rehome and refuses stale project membership", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let releaseRehome!: () => void;
+  let acquiredRehome!: () => void;
+  const rehomeHeld = new Promise<void>((resolve) => { acquiredRehome = resolve; });
+  const rehomeCanCommit = new Promise<void>((resolve) => { releaseRehome = resolve; });
+  try {
+    const harness = await setup(org.orgId);
+    const ticketNumber = String((await db.execute<{ document_number: string }>(sql`select document_number from documents where id = ${harness.ticketB}`)).rows[0]!.document_number);
+    const entryId = await entry(harness, "SRC-REHOME-RACE", harness.ticketA);
+    const batch = [await plan(harness, "SRC-REHOME-RACE", ticketNumber)];
+    const otherProject = String((await db.execute<{ id: string }>(sql`insert into projects (org_id, name) values (${harness.orgId}, 'Rehomed Ticket Project') returning id`)).rows[0]!.id);
+
+    const rehome = withOrgTransaction(harness.orgId, async () => {
+      await db.execute(sql`select id from documents where org_id = ${harness.orgId} and id = ${harness.ticketB} for update`);
+      acquiredRehome();
+      await rehomeCanCommit;
+      await db.execute(sql`update documents set project_id = ${otherProject} where org_id = ${harness.orgId} and id = ${harness.ticketB}`);
+    });
+    await rehomeHeld;
+    const applying = withOrg(harness.orgId, () => applyTimeTicketLinks(harness.orgId, batch, {
+      reason: "test apply serializes with a ticket project change",
+      inputSha256: "test",
+      runId: randomUUID(),
+      actorId: null,
+    }));
+
+    let waiting = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const activity = await withOrg(harness.orgId, () => db.execute(sql`
+        select pid from pg_stat_activity where datname = current_database()
+          and pid <> pg_backend_pid() and wait_event_type = 'Lock'
+          and query ilike '%documents%'`));
+      if (activity.rows.length > 0) { waiting = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.ok(waiting, "apply waits on the target document lock before attaching the entry");
+    releaseRehome();
+    await rehome;
+    await assert.rejects(applying, /target ticket changed project after the plan/);
+    assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketA);
+  } finally {
+    releaseRehome();
     await dropScratchOrg(org.orgId);
   }
 });

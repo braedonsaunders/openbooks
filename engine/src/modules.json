@@ -545,6 +545,7 @@
       "description": "Project financial validation against source-system oracles.",
       "dependsOn": [
         "money",
+        "organization",
         "platform",
         "projects",
         "sync"
