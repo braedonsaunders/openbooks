@@ -13,6 +13,7 @@ import { isFeatureEnabled } from '../../../lib/features'
 import type { ProjectCockpitData } from './ProjectDrawer'
 import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money/money.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
 
 /**
  * Loads everything the project flyout's cockpit tabs need. The Financials tab is
@@ -63,7 +64,7 @@ export async function loadProjectCockpit(
   projectId: string,
   options: { includeApplicationBilling?: boolean } = {},
 ): Promise<ProjectCockpitData> {
-  const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today, fieldTimeEnabled] = await Promise.all([
+  const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today, fieldTimeEnabled, primaryBookId] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
     isFeatureEnabled(orgId, 'equipment'),
@@ -71,6 +72,10 @@ export async function loadProjectCockpit(
     businessToday(orgId),
     // HR-20: crew-today rides the fieldTime switch — off reads as nobody out.
     isFeatureEnabled(orgId, 'fieldTime'),
+    // The recognized total must sum the SAME book the recognition run posts
+    // to (active posting primary) — never the dead primary a bare
+    // is_primary join would keep reading after deactivation.
+    activePostingPrimaryBookId(orgId),
   ])
   const [financials, time, crewTodayRows, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, operatorRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
@@ -119,7 +124,7 @@ export async function loadProjectCockpit(
              coalesce(p.custom->>'percentCompleteOverride', '') as override_raw,
              coalesce((select sum(l.recognized_amount)
                          from recognition_schedules s
-                         join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_primary
+                         join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.id = ${primaryBookId}
                          join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
                         where s.obligation_id = o.id and s.org_id = o.org_id and l.journal_entry_id is not null), 0)::numeric(19,4) as recognized
         from projects p

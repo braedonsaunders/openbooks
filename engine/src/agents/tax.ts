@@ -5,6 +5,7 @@ import {
   type ContinuousCloseDetectorPolicy,
 } from "./continuous-close-config.ts";
 import { db } from "../platform/db.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { computeTaxReturn, TaxReturnError } from "../tax-returns/return.ts";
 import { absoluteUnits, classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
@@ -200,10 +201,9 @@ export async function taxFindings(
     `));
     const period = periods.rows[0];
     if (period) {
-      const book = (await db.execute<{ id: string }>(sql`
-        select id from accounting_books where org_id = ${orgId} and is_primary limit 1
-      `));
-      const bookId = book.rows[0]?.id ?? null;
+      // The shared active posting primary: lock scoping must read the live
+      // book, never a deactivated primary.
+      const bookId = await activePostingPrimaryBookId(orgId);
       const locked = bookId
         ? (await db.execute<{ id: string }>(sql`
             select id from period_locks

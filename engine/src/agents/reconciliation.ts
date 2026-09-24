@@ -191,7 +191,7 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
         select jl.id as journal_line_id, je.posting_date::text, jl.txn_amount::text as amount, jl.currency
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
-          join accounting_books b on b.id = je.book_id and b.org_id = je.org_id and b.is_primary
+          join accounting_books b on b.id = je.book_id and b.org_id = je.org_id and b.is_primary and b.is_active and b.posts_gl
          where jl.account_id = ${account.account_id} and jl.org_id = ${orgId}
            and je.posting_date <= ${cutoff}
            and jl.reconciled_at is null

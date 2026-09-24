@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { db, withOrg } from "../platform/db.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import {
   computeTaxReturn,
   TaxReturnError,
@@ -199,9 +200,8 @@ async function assertCoveredPeriodsClosed(
   to: string,
   subsidiaryIds: string[] | null,
 ): Promise<void> {
-  const book = (await db.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
-  const bookId = book.rows[0]?.id;
+  // The shared active posting primary — never a deactivated primary.
+  const bookId = await activePostingPrimaryBookId(orgId);
   if (!bookId) throw new TaxFilingError("period-not-closed", "no primary accounting book");
 
   // The window resolves through the shared posting-calendar resolver, never

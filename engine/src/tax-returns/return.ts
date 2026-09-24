@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { pool, type SqlExecutor } from "../platform/db.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { abs, add, cmp, fromUnits, mulRate, neg, toUnits } from "../money/money.ts";
 import {
   IncomeTaxProvisionError,
@@ -1130,10 +1131,10 @@ async function computeTaxReturnInSnapshot(
   // (assertCoveredPeriodsClosed) fences. The kernel posts documents to the
   // single primary posting book and every sibling engine scopes to
   // is_primary; without this predicate a tax journal in any secondary book
-  // leaked into the return while no period fence covered it.
-  const bookRes = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
-  const primaryBookId = bookRes.rows[0]?.id ?? null;
+  // leaked into the return while no period fence covered it. Resolved
+  // through the shared active posting primary: after a deactivation the
+  // return reads the live book, never the dead primary.
+  const primaryBookId = await activePostingPrimaryBookId(orgId, runner);
   if (!primaryBookId) throw new TaxReturnError("no primary accounting book");
 
   // Org control tax accounts — the fallback a tax code posts to when it has no
