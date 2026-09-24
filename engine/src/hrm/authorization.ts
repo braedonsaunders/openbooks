@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
 import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
-import { assertUnrestrictedScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import {
+  assertUnrestrictedScope,
+  lockScopeRows,
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+} from "../organization/subsidiary-scope.ts";
 import { businessToday } from "../platform/business-date.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
@@ -311,9 +316,9 @@ async function loadTrustedEmploymentSubject(
 }
 
 /**
- * Lock employment aggregates in stable id order before a scoped read or
- * write. Re-checking the employer from the locked rows closes the window in
- * which an entity rehome could commit after authorization but before use.
+ * Lock employment aggregates through the organization module's canonical
+ * scope-row helper, in stable id order, before a scoped read or write.
+ * Re-checking the employer under those locks closes the rehome race.
  * List readers may request `outOfScope: "filter"`; writes and single-record
  * reads refuse uniformly when any requested employment is not visible.
  */
@@ -327,20 +332,19 @@ export async function lockEmploymentsForScope(
   const allowed = await actorAllowedSubsidiaryIds(exec, scope.orgId, scope.actorId);
   const subjects: TrustedEmploymentSubject[] = [];
   for (const id of orderedIds) {
-    let subject: TrustedEmploymentSubject;
     try {
-      subject = await loadTrustedEmploymentSubject(exec, scope.orgId, id, true);
+      await lockScopeRows(exec, scope.orgId, [{ kind: "employment", id }], allowed, "update");
+      subjects.push(await loadTrustedEmploymentSubject(exec, scope.orgId, id));
     } catch (error) {
+      if (error instanceof ScopeNotFoundError) {
+        if (scope.outOfScope === "filter") continue;
+        throw new HrmAuthorizationError(
+          "Employment is not visible in this organization and legal-entity scope.",
+        );
+      }
       if (scope.outOfScope === "filter" && error instanceof HrmAuthorizationError) continue;
       throw error;
     }
-    if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
-      if (scope.outOfScope === "filter") continue;
-      throw new HrmAuthorizationError(
-        "Employment is not visible in this organization and legal-entity scope.",
-      );
-    }
-    subjects.push(subject);
   }
   return subjects;
 }
