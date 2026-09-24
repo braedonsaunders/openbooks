@@ -148,6 +148,8 @@ export interface NmYearRates {
   year: number;
   status: "published" | "draft";
   tables: Readonly<Record<NmFilingStatus, Readonly<Record<NmPeriod, NmPeriodTable>>>>;
+  /** Flat rate for separately-paid supplemental wages (FYI-104 p. 4). */
+  supplementalRate: string;
 }
 
 /**
@@ -159,6 +161,7 @@ export interface NmYearRates {
 export const NM_RATES_2026: NmYearRates = {
   year: 2026,
   status: "published",
+  supplementalRate: pctToRate("5.9"),
   tables: {
   single: {
     weekly: nmRows([
@@ -545,8 +548,7 @@ export function nmSupplementalFlat(
   supplemental: string,
   rates: NmYearRates = NM_RATES_2026,
 ): string {
-  void rates;
-  return D(mulRateCents(U(supplemental), pctToRate("5.9")));
+  return D(mulRateCents(U(supplemental), rates.supplementalRate));
 }
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
