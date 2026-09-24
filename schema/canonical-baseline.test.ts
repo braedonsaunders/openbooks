@@ -722,9 +722,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // at pricing time and copied on conversion; hand-priced lines stay
     // null and replay from the stored price.
     "0336_document_line_price_basis.sql",
-    // Audit wave G continued: 0338 refuses posted -> draft on documents in
-    // storage (G4). Further wave-G sections land in the same file under
-    // later commits, each extending this note to match.
+    // Audit wave G continued: 0338 refuses posted -> draft on documents
+    // in storage (G4) and fences amend-deletes by the soft-close-aware
+    // predicate, like amend-updates (G5). Further wave-G sections land in
+    // the same file under later commits, each extending this note to match.
     "0338_posting_guards_and_summary_heals.sql",
   ]);
   assert.deepEqual(
