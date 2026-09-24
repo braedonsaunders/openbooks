@@ -50,6 +50,20 @@ export async function candidateInScopeRequisitionIds(
   return rows.map((row) => row.requisitionId);
 }
 
+/** Reusable SQL visibility predicate for candidate-wide pool projections. */
+export function candidateInScopePredicate(
+  orgId: string,
+  candidateId: "c.id" | "m.candidate_id",
+  allowed: Set<string> | null,
+) {
+  if (allowed === null) return sql`true`;
+  const candidateRef = candidateId === "c.id" ? sql`c.id` : sql`m.candidate_id`;
+  return sql`exists (select 1 from hrm_applications a
+                      join hrm_requisitions r on r.org_id = a.org_id and r.id = a.requisition_id
+                     where a.org_id = ${orgId} and a.candidate_id = ${candidateRef}
+                       ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)})`;
+}
+
 /**
  * Require ownership of a candidate for a mutating path. Returns the
  * in-scope requisition ids. Throws the uniform not-visible refusal when the
