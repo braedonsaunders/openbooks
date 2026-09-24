@@ -1059,6 +1059,23 @@ export interface W2LocalLine {
   box19LocalIncomeTax: string;
 }
 
+/** Refuse a local tax line when its box 18 wage base was not preserved on the stub. */
+export function requireW2LocalWages(
+  amount: string | null,
+  employee: string,
+  state: string,
+  locality: string,
+): string {
+  if (amount !== null) return amount;
+  // IRS W-2 box 18 reports wages for the locality named in box 20.
+  // https://www.irs.gov/instructions/iw2w3
+  throw new PayrollError(
+    `W-2 box 18 local wages are unknown for ${employee} in ${state} (${locality}); `
+    + "record a sourced locality work allocation and correct the affected committed payroll "
+    + "through controlled reversal and recalculation before filing — refused by name",
+  );
+}
+
 /** One work state's boxes 15–17, plus its localities' boxes 18–20. */
 export interface W2StateLine {
   /** Box 15 — the two-letter work-state abbreviation from the stubs. */
@@ -1252,18 +1269,24 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   // taxable earnings of the stubs in this state carrying that locality's line.
   const localRows = (await db.execute<Record<string, unknown>>(sql`
     with stub_wages as (
-      select s.id as stub_id, s.employee_party_id, s.filing_account_id, s.province,
+      select s.id as stub_id, s.employee_party_id, s.filing_account_id, s.province, s.factors,
+             p.display_name as employee_name,
              (select coalesce(sum(l.amount), 0) from pay_stub_lines l
                join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
               where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
                 and coalesce(pc.taxable, true)) as wages
         from pay_stubs s
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+        join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
        where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
     )
-    select w.employee_party_id, w.filing_account_id, w.province, l.description,
+    select w.employee_party_id, w.employee_name, w.filing_account_id, w.province, l.description,
            sum(l.amount) as local_tax,
-           sum(case when coalesce(line_tax.line_tax, 0) <> 0 then w.wages else 0 end) as local_wages
+           sum(case when coalesce(line_tax.line_tax, 0) <> 0
+                     and w.factors ? format('W2_LOCAL_WAGES_%s', l.sequence)
+                    then (w.factors->>format('W2_LOCAL_WAGES_%s', l.sequence))::numeric else 0 end) as local_wages,
+           bool_or(coalesce(line_tax.line_tax, 0) <> 0
+                   and not (w.factors ? format('W2_LOCAL_WAGES_%s', l.sequence))) as local_wages_unknown
       from stub_wages w
       join pay_stub_lines l on l.org_id = ${orgId} and l.stub_id = w.stub_id and l.kind = 'deduction'
       join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -1274,7 +1297,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
          where l2.org_id = ${orgId} and l2.stub_id = w.stub_id and l2.kind = 'deduction'
            and l2.description = l.description
       ) line_tax on true
-     group by w.employee_party_id, w.filing_account_id, w.province, l.description
+     group by w.employee_party_id, w.employee_name, w.filing_account_id, w.province, l.description
      order by l.description
    `));
   const stateIds = await usEmployerStateIds(orgId);
@@ -1282,11 +1305,15 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   for (const row of localRows.rows) {
     const tax = num(row.local_tax);
     if (cmp(tax, "0") === 0) continue;
+    const localWages = requireW2LocalWages(
+      row.local_wages_unknown === true ? null : num(row.local_wages),
+      String(row.employee_name), String(row.province), String(row.description),
+    );
     const key = `${String(row.employee_party_id)}:${String(row.filing_account_id ?? "")}:${String(row.province ?? "")}`;
     const list = localByGroup.get(key) ?? [];
     list.push({
       locality: String(row.description),
-      box18LocalWages: num(row.local_wages),
+      box18LocalWages: localWages,
       box19LocalIncomeTax: tax,
     });
     localByGroup.set(key, list);

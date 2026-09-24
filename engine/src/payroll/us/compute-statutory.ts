@@ -20,6 +20,7 @@ import {
 } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
 import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
+import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 
 export type UsYtdRow = {
@@ -359,10 +360,14 @@ export async function computeUsStatutory(
       workRegionTaxes.push({ region: levy.region, amount: withheld.tax });
     }
     if (levy.level === "region") regionTax = withheld.tax;
+    const lineSequence = sequence++;
     pushStatutory(
       levy.level === "region" ? "state_income_tax" : "local_income_tax",
-      "deduction", withheld.label, withheld.tax, sequence++,
+      "deduction", withheld.label, withheld.tax, lineSequence,
     );
+    if (levy.level === "sub_region" && withheld.localTaxableWages !== undefined) {
+      factors[w2LocalWageTraceKey(lineSequence)] = withheld.localTaxableWages;
+    }
     factors = {
       ...factors,
       ...withheld.factors,

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildW2StateLines,
   openingYtdIntoW2Slip,
+  requireW2LocalWages,
   type W2LocalLine,
   type W2Slip,
 } from "./yearend.ts";
@@ -78,6 +79,34 @@ test("a locality-only state is kept, with a null state ID where no SUI account i
   assert.equal(lines.length, 1);
   assert.equal(lines[0]!.employerStateId, null);
   assert.equal(lines[0]!.localLines.length, 1);
+});
+
+test("known locality wage splits remain attached to their own W-2 box 18 lines", () => {
+  // IRS Instructions for Forms W-2 and W-3, box 18 (Local wages, tips, etc.):
+  // https://www.irs.gov/instructions/iw2w3
+  const lines = buildW2StateLines(
+    [{ province: "MI", wages: "1000.0000", stateTax: "0" }],
+    localsOf({
+      MI: [
+        { locality: "City A income tax", box18LocalWages: "600.0000", box19LocalIncomeTax: "6.0000" },
+        { locality: "City B income tax", box18LocalWages: "400.0000", box19LocalIncomeTax: "4.0000" },
+      ],
+    }),
+    stateIdOf({}),
+  );
+  assert.deepEqual(
+    lines[0]!.localLines.map((line) => [line.locality, line.box18LocalWages]),
+    [["City A income tax", "600.0000"], ["City B income tax", "400.0000"]],
+  );
+});
+
+test("W-2 refuses to file a local tax line when its locality wage fact is unknown", () => {
+  // IRS Instructions for Forms W-2 and W-3, box 18 requires locality wages.
+  // https://www.irs.gov/instructions/iw2w3
+  assert.throws(
+    () => requireW2LocalWages(null, "Mover Max", "MI", "City B income tax"),
+    /W-2 box 18 local wages are unknown for Mover Max in MI \(City B income tax\).*record a sourced locality work allocation/i,
+  );
 });
 
 test("a group with no work-state code earns no state entry", () => {
