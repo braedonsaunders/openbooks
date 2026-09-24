@@ -32,6 +32,15 @@ if (typeof window.matchMedia !== "function") {
   })) as typeof window.matchMedia;
 }
 
+declare global {
+  var __templateToasts: { kind: string; message: string }[] | undefined;
+  var __templatePushes: string[] | undefined;
+}
+Object.assign(globalThis, {
+  __templateToasts: [] as { kind: string; message: string }[],
+  __templatePushes: [] as string[],
+});
+
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
@@ -47,7 +56,13 @@ registerHooks({
     if (specifier === "next/navigation") {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/admin/pdf-templates'}export function useSearchParams(){return new URLSearchParams()}",
+        url: "data:text/javascript,export function useRouter(){return{push(u){(globalThis.__templatePushes??=[]).push(String(u))},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/admin/pdf-templates'}export function useSearchParams(){return new URLSearchParams()}",
+      };
+    }
+    if (specifier === "sonner") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export const toast={success(m){(globalThis.__templateToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__templateToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
       };
     }
     if (specifier === "next/link") {
@@ -68,7 +83,7 @@ const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/en")).default;
 const { PromptRoot } = await import("../../../../lib/prompt");
-const { NewTemplateButton } = await import("./TemplateActions");
+const { NewTemplateButton, DuplicateTemplateButton } = await import("./TemplateActions");
 const { TemplatesList } = await import("./TemplatesList");
 
 // F-x6-003: the starter row-level Duplicate button is a dead click — no
@@ -201,6 +216,162 @@ test("F-t13-001: starter Duplicate pre-fills a non-colliding name", async () => 
     const input = document.body.querySelector('[role="dialog"] input') as HTMLInputElement | null;
     assert.ok(input, "name prompt dialog must open from the list row");
     assert.equal(input.value, "Customer invoice starter 2");
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
+
+// F4T2-4: the duplicate round-trip checks the status before parsing, toasts
+// the named refusal on failure, and never navigates to /undefined.
+function setInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set as
+    | ((this: HTMLInputElement, value: string) => void)
+    | undefined;
+  setter?.call(input, value);
+  input.dispatchEvent(new window.Event("input", { bubbles: true }));
+}
+
+test("F4T2-4: duplicate posts the copy and navigates to its id", async () => {
+  (globalThis as Record<string, unknown>).__templateToasts = [];
+  (globalThis as Record<string, unknown>).__templatePushes = [];
+  const posted: Record<string, unknown>[] = [];
+  globalThis.fetch = (async (url: unknown, init?: { method?: string; body?: string }) => {
+    if (String(url).endsWith("/api/pdf-templates/tid-1")) {
+      return Response.json({
+        row: {
+          id: "tid-1",
+          name: "My template",
+          recordType: "customer_invoice",
+          description: null,
+          sourceHtml: "<p>x</p>",
+          headerHtml: "",
+          footerHtml: "",
+          paperSize: "letter",
+          orientation: "portrait",
+          marginMm: 10,
+        },
+      });
+    }
+    posted.push(JSON.parse(String(init?.body ?? "{}")));
+    return Response.json({ id: "new-9" });
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    /* eslint-disable react/no-children-prop */
+    root.render(
+      React.createElement(NextIntlClientProvider, {
+        locale: "en",
+        messages,
+        timeZone: "UTC",
+        children: React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(PromptRoot, {}),
+          React.createElement(DuplicateTemplateButton, {
+            templateId: "tid-1",
+            takenNames: new Set(["My template"]),
+          }),
+        ),
+      }),
+    );
+    /* eslint-enable react/no-children-prop */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    await act(async () => {
+      const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
+        (b) => b.textContent?.trim() === "Cancel",
+      );
+      staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    const button = [...host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Duplicate"),
+    );
+    assert.ok(button, "row Duplicate button must render");
+    await act(async () => {
+      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    const confirm = [...document.body.querySelectorAll('[role="dialog"] button')].find(
+      (b) => b.textContent?.trim() === "Save",
+    );
+    assert.ok(confirm, "the name prompt must offer confirm");
+    // Type an explicit name: the offered default is F4T2-5's concern, and
+    // this test pins the round-trip, not the default.
+    const input = document.body.querySelector('[role="dialog"] input') as HTMLInputElement | null;
+    assert.ok(input, "the name prompt must offer an input");
+    setInputValue(input, "My template 2");
+    await act(async () => {
+      confirm.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    assert.equal(posted.length, 1, "confirming posts the copy once");
+    assert.equal((posted[0] as { name?: unknown })?.name, "My template 2");
+    assert.deepEqual(globalThis.__templatePushes, ["/admin/pdf-templates/new-9"]);
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
+
+test("F4T2-4: a non-JSON failure toasts instead of navigating nowhere", async () => {
+  (globalThis as Record<string, unknown>).__templateToasts = [];
+  (globalThis as Record<string, unknown>).__templatePushes = [];
+  globalThis.fetch = (async () => new Response("", { status: 500 })) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    /* eslint-disable react/no-children-prop */
+    root.render(
+      React.createElement(NextIntlClientProvider, {
+        locale: "en",
+        messages,
+        timeZone: "UTC",
+        children: React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(PromptRoot, {}),
+          React.createElement(DuplicateTemplateButton, {
+            templateId: "tid-1",
+            takenNames: new Set(["My template"]),
+          }),
+        ),
+      }),
+    );
+    /* eslint-enable react/no-children-prop */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    await act(async () => {
+      const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
+        (b) => b.textContent?.trim() === "Cancel",
+      );
+      staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    const button = [...host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Duplicate"),
+    );
+    assert.ok(button, "row Duplicate button must render");
+    await act(async () => {
+      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    const errors = (globalThis.__templateToasts ?? []).filter((t) => t.kind === "error");
+    assert.equal(errors.length, 1, "the failure toasts exactly once");
+    assert.match(errors[0]!.message, /Save failed \(status 500\)/);
+    assert.deepEqual(globalThis.__templatePushes, [], "a failed duplicate navigates nowhere");
   } finally {
     await act(async () => {
       root.unmount();
