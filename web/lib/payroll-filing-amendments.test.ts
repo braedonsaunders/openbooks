@@ -228,7 +228,7 @@ const sectionHooks = registerHooks({
     if (specifier === '../../../../components/money-provider') {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export function useMoney() { return { money: (v) => String(v ?? "") } }',
+        url: 'data:text/javascript,export function useMoney() { return { money: (v) => `money:${v ?? ""}` } }',
       }
     }
     if (specifier === '../../../../lib/confirm') {
@@ -261,7 +261,7 @@ const REVIEW: FilingRowReview = {
   status: 'changed',
   lastRevision: 'original',
   lastIssuedAt: null,
-  changes: [],
+  changes: [{ code: '4', label: 'Child allowance', previous: '0.5', current: '0.5', redacted: false }, { code: '3', label: 'Income', previous: '40', current: '41', redacted: false, money: true }],
 }
 // The section fixture carries the full render contract: the correction
 // section reads country/key for its amendment URLs and label/data for the
@@ -370,7 +370,7 @@ test('cancellation cannot issue before its preview is reviewed', async (t) => {
   const { host, unmount } = await mountSection(sectionProps())
   t.after(unmount)
   const cancel = buttonByText(host, 'Cancel this slip')
-  assert.ok(cancel, 'the cancellation action renders')
+  assert.ok(cancel && host.textContent?.includes('0.5') && host.textContent.includes('money:41'), 'the count stays numeric and declared monetary values use the money formatter')
   await typeReason(host, 'Duplicate slip')
   assert.equal(
     buttonByText(host, 'Cancel this slip')!.disabled,

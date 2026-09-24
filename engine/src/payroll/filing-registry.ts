@@ -135,6 +135,8 @@ export interface PayrollSlipBox {
   code: string;
   label: string;
   value: string;
+  /** Mark currency amounts explicitly; counts and numeric codes stay unformatted. */
+  money?: boolean;
   /** Render as an emphasized/computed total line (the form's bold lines). */
   emphasis?: boolean;
 }
@@ -155,7 +157,7 @@ export interface PayrollFilingSlipData {
   /** The form's own printed identifier ("T4", "RL-1", "Form W-2"). */
   formNumber?: string;
   /** Identification fields printed above the box grid (employee, account…). */
-  headerFields: { label: string; value: string }[];
+  headerFields: { label: string; value: string; money?: boolean }[];
   boxes: PayrollSlipBox[];
   /** Instruction/disclosure notes printed on the slip (published gaps live
    *  here — on the paper they qualify, not as loose page prose). */
@@ -199,6 +201,8 @@ export interface PayrollFilingReportedField {
   code: string | null;
   label: string;
   value: string;
+  /** True only when the pack declares this value as a monetary amount. */
+  money?: boolean;
 }
 
 /**
@@ -224,6 +228,8 @@ export interface PayrollFilingFieldChange {
   current: string | null;
   /** The change is real; the values are withheld because they identify. */
   redacted: boolean;
+  /** Display metadata carried from the pack; numeric text alone is not money. */
+  money?: boolean;
 }
 
 /**
