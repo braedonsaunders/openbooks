@@ -191,6 +191,77 @@ test(
 );
 
 test(
+  "a backdated first invoice charges from service start, not the invocation date",
+  { skip: !DB },
+  async () => {
+    // The first invoice covers the complete [startOn, firstBillOn] service
+    // period even when it is cut after a backdated start: anchoring the
+    // charge to the invocation date would silently discard already-served
+    // days. 2026-07-10..2026-08-01 is 22 days at 100.00, all of them served
+    // by the 2026-07-20 invocation.
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      const planId = await seedPlan(org, actorId);
+      const subscriptionId = await seedSubscription(org, actorId, planId, org.customerId, {
+        startOn: "2026-07-10",
+        nextBillOn: "2026-07-10",
+      });
+
+      const gen = await prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-20", { actorId });
+      assert.equal(gen.amount, "100.0000", "the full 22-day slice is charged");
+      const total = (await db.execute<{ total: string }>(sql`
+        select total from documents where id = ${gen.invoiceId} and org_id = ${org.orgId}
+      `)).rows[0]!.total;
+      assert.equal(total, "100.0000");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "concurrent first-period prorations bill exactly once",
+  { skip: !DB },
+  async () => {
+    // A double-click on a first-period proration: both serialize on the
+    // subscription row lock inside prorateFirstInvoice. The winner cuts the
+    // invoice and records it; the loser observes the winner's committed
+    // invoice evidence and refuses instead of cutting a second invoice.
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      const planId = await seedPlan(org, actorId);
+      const subscriptionId = await seedSubscription(org, actorId, planId, org.customerId, {
+        startOn: "2026-07-10",
+        nextBillOn: "2026-07-10",
+      });
+
+      const outcomes = await Promise.allSettled([
+        prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
+        prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
+      ]);
+      const won = outcomes.filter((outcome) => outcome.status === "fulfilled");
+      const refused = outcomes.filter((outcome) => outcome.status === "rejected");
+      assert.equal(won.length, 1, "exactly one proration bills");
+      assert.equal(refused.length, 1, "the twin refuses instead of double-billing");
+      const refusal = (refused[0] as PromiseRejectedResult).reason;
+      assert.ok(
+        refusal instanceof SubscriptionError && /already been prorated/.test(refusal.message),
+        `the twin names the single-fire guard, got: ${String(refusal)}`,
+      );
+      const invoices = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents
+         where org_id = ${org.orgId} and kind = 'customer_invoice'
+      `)).rows[0]!.n;
+      assert.equal(invoices, 1, "exactly one first-period invoice exists");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
   "an inactive customer entity refuses by name with zero mutations — never the root",
   { skip: !DB },
   async () => {
