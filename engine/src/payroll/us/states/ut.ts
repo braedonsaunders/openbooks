@@ -249,7 +249,10 @@ function requirePeriodStart(input: UsStateWithholdingInput): string {
 
 function utPeriodFor(periodsPerYear: number): UtPeriod {
   const period = payPeriodFor(periodsPerYear);
-  if (period == null || !UT_PERIODS.includes(period)) {
+  // The daily schedule is 260-calibrated (single $36 = $9,348 ÷ 260), so a
+  // 365-day daily payroll has no printed schedule — refused like the KS/MO
+  // daily guards refuse theirs.
+  if (period == null || !UT_PERIODS.includes(period) || (period === "daily" && periodsPerYear !== 260)) {
     refuseUnprintedPeriod(UT_WITHHOLDING, periodsPerYear);
   }
   return period as UtPeriod;

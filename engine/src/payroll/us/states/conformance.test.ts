@@ -303,6 +303,15 @@ test("NYS Married Example 4 — daily $750, 2 exemptions: $44.58", () => {
   assert.equal(result.tax, money("44.58")); // 8.47 + 36.11
 });
 
+test("NYS refuses a 365-day daily payroll — the daily table is 260-based", () => {
+  // $33 = $8,500 ÷ 260: the printed daily table has no 365-day column, so a
+  // 365-day daily payroll is refused like any other unprinted frequency.
+  assert.throws(
+    () => nysCase(365, "750.00", "single_or_hoh", "2"),
+    /publishes withholding tables for .*there is nothing to scale/s,
+  );
+});
+
 test("NYS Single Example 2 — the publication's own arithmetic does not round", () => {
   // NYS-50-T-NYS (1/26) p. 16 prints step 4 as $165.00 × 0.0753 = $12.43 and a
   // total of $258.51. The exact product is 12.4245, which rounds HALF-UP to

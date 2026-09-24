@@ -247,7 +247,10 @@ export function wvRatesForPayDate(payDate: string): WvYearRates {
 
 function wvPeriodFor(periodsPerYear: number): WvPeriod {
   const period = payPeriodFor(periodsPerYear);
-  if (period == null || !WV_PERIODS.includes(period)) {
+  // The daily table is 260-calibrated ($29 = $7,500 ÷ 260), so a 365-day
+  // daily payroll has no printed table — refused like the KS/MO daily guards
+  // refuse theirs.
+  if (period == null || !WV_PERIODS.includes(period) || (period === "daily" && periodsPerYear !== 260)) {
     refuseUnprintedPeriod(WV_WITHHOLDING, periodsPerYear);
   }
   return period as WvPeriod;

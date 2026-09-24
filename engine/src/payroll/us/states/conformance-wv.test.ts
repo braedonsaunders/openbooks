@@ -131,6 +131,15 @@ test("WV refuses a pay frequency it does not print a table for", () => {
     }),
     /West Virginia income tax publishes withholding tables for/,
   );
+  // The daily table is 260-calibrated: a 365-day daily payroll has no
+  // printed table and is refused, not scaled.
+  assert.throws(
+    () => WV_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 365, wages: "100.00",
+      basis: "resident", certificate: cert(),
+    }),
+    /West Virginia income tax publishes withholding tables for/,
+  );
 });
 
 test("WV IT-104NR exemption stops withholding", () => {

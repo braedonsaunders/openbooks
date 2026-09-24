@@ -182,9 +182,10 @@ test("NM other periods read their own tables", () => {
     money("43.56"),
   );
   // Daily Table 8(a): over $94.40 but not over $129.00: $1.67 + 4.3% of
-  // excess over $94.40. 5.60 × 4.3% = 0.2408 → $0.24; total $1.91.
+  // excess over $94.40. 5.60 × 4.3% = 0.2408 → $0.24; total $1.91. The
+  // table is 260-calibrated, so only a 260-day daily payroll reads it.
   assert.equal(
-    compute({ periodsPerYear: 365, wages: "100.00" }).tax, money("1.91"),
+    compute({ periodsPerYear: 260, wages: "100.00" }).tax, money("1.91"),
   );
   // Annual Table 7(a): over $41,550 but not over $58,550: $1,165.50 + 4.7%
   // of excess over $41,550. 8,450 × 4.7% = $397.15 exact; total $1,562.65.
@@ -246,5 +247,11 @@ test("NM refuses a pay frequency it prints no table for", () => {
   assert.throws(
     () => compute({ periodsPerYear: 27, wages: "1000.00" }),
     /publishes withholding tables for weekly, biweekly, semimonthly, monthly, quarterly, semiannual, annual, daily/s,
+  );
+  // The daily tables are 260-calibrated: a 365-day daily payroll has no
+  // printed table and is refused, not scaled.
+  assert.throws(
+    () => compute({ periodsPerYear: 365, wages: "100.00" }),
+    /publishes withholding tables for .*there is nothing to scale/s,
   );
 });
