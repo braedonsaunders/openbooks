@@ -111,6 +111,7 @@ export async function POST(req: Request) {
       actorId: gate.user.id,
       movementDate: assertMovementDate(body.movementDate),
       rows,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null,
     })
     return NextResponse.json(result)
