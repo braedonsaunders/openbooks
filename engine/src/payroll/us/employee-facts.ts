@@ -7,10 +7,11 @@
  * module so every read registers before it can run. See
  * `../employee-facts.ts` for the shape and the derivation of `payable`.
  */
-import { registerEmployeeFacts } from "../employee-facts.ts";
+import { empFact, registerEmployeeFacts, resolveEmployeeFact } from "../employee-facts.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
-// Required employee facts. The compute path reads twelve `emp` keys and
+// Required employee facts. The compute path reads thirteen `emp` keys and
   // every one resolves in a typed declaration — nine W-4 answers through
   // their profile-column mappings (us/jurisdictions.ts), FICA/FUTA
   // exemption through the profileExemptionFlags below, and residence_region
@@ -103,6 +104,40 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
       required: false,
       producer: { kind: "base_column", column: "residence_region" },
     },
+    {
+      key: "us_w4_alien_status", kind: "choice",
+      choices: ["us_person_or_resident_alien", "nonresident_alien"],
+      label: "Federal tax-residency status for wage withholding",
+      refusalReason: "Federal withholding must distinguish nonresident aliens before using Pub. 15-T.",
+      // The calculation boundary below requires this row-backed status; keep
+      // it out of profile-column readiness gaps because certificates are
+      // resolved through the stored-certificate channel.
+      required: false,
+      producer: { kind: "certificate", certificate: "us_w4_tax_residency", field: "alien_status" },
+    },
 ];
 
 registerEmployeeFacts("US", US_EMPLOYEE_FACTS);
+
+/**
+ * The W-4 status is required at the federal calculation boundary. Pub. 15-T
+ * prescribes additional wage adjustments for nonresident aliens, except for
+ * specified student/apprentice cases that this alpha pack does not yet model.
+ */
+export function requireUsFederalAlienStatus(raw: string | null | undefined): boolean {
+  // Route certificate-backed facts through the same declared-fact reader as
+  // profile-backed facts, while preserving the certificate as the producer.
+  const status = resolveEmployeeFact(
+    "US",
+    "us_w4_alien_status",
+    empFact("US", { us_w4_alien_status: raw ?? null }, "us_w4_alien_status"),
+  );
+  if (!status) {
+    throw new PayrollPackError(
+      "US federal payroll cannot calculate without the employee's federal tax-residency status; "
+      + "record whether the employee is a U.S. person or resident alien, or a nonresident alien, "
+      + "on the employee's Payroll tax tab — refused by name",
+    );
+  }
+  return status === "nonresident_alien";
+}

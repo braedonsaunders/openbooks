@@ -156,6 +156,32 @@ const W4: PayrollCertificate = {
   ],
 };
 
+/**
+ * Employee's federal W-4 tax-residency status. The IRS requires electronic
+ * W-4 systems to provide a nonresident-alien status field; this row-backed
+ * answer records that status without pretending it is a W-4 profile column.
+ */
+const US_TAX_RESIDENCY: PayrollCertificate = {
+  key: "us_w4_tax_residency",
+  form: "Federal W-4 status",
+  label: "Federal withholding tax residency status",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation: "IRS Publication 15-T (2026), Electronic Form W-4 requirements and Nonresident alien employees, https://www.irs.gov/publications/p15t",
+  summary:
+    "Records whether the employee is a nonresident alien for federal wage withholding. "
+    + "The federal calculation refuses nonresident-alien payroll until the Pub. 15-T adjustment and exceptions are supported.",
+  storage: "certificate_rows",
+  fields: [{
+    key: "alien_status", label: "Federal tax-residency status", kind: "choice", required: true,
+    choices: [
+      { value: "us_person_or_resident_alien", label: "U.S. person or resident alien" },
+      { value: "nonresident_alien", label: "Nonresident alien" },
+    ],
+    help: "Use the employee's documented U.S. federal tax status. Pub. 15-T requires a nonresident-alien status field in an electronic W-4 system.",
+  }],
+};
+
 /** California Form DE 4 — EDD, Rev. 56 (1-26). */
 const CA_DE4: PayrollCertificate = {
   key: "us_ca_de4",
@@ -1060,7 +1086,7 @@ const NC_NC4: PayrollCertificate = {
 const US_CERTIFICATES: PayrollPackCertificates = {
   country: "US",
   certificates: [
-    W4, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
+    W4, US_TAX_RESIDENCY, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
     NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
     MA_M4, MA_M4_MS, GA_G4, NC_NC4, CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CT_CERTIFICATE, DC_CERTIFICATE,
     MD_CERTIFICATE, MD_MW507M, MD_MW507_NR, OR_CERTIFICATE, OR_TRANSIT_RECORD, DE_CERTIFICATE,

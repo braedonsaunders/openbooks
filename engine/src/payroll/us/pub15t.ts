@@ -69,6 +69,11 @@ export interface Pub15TInput {
   pre2020?: { allowances: number; married?: boolean };
   /** W-4 "Exempt" — no income tax withholding (FICA still applies). */
   fitExempt?: boolean;
+  /**
+   * Nonresident-alien wages require Pub. 15-T Table 1/2 adjustments and
+   * student/apprentice exceptions that this engine has not transcribed.
+   */
+  nonresidentAlien?: boolean;
 
   /** Statutory exemptions (e.g. F-1 students, some family employment). */
   ficaExempt?: boolean;
@@ -182,6 +187,15 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   const rates: YearRates = ratesForPayDate(input.payDate);
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) throw new PayrollError(`invalid pay periods per year: ${P}`);
+  if (input.nonresidentAlien) {
+    // IRS Publication 15-T (2026), Nonresident alien employees, Tables 1–2:
+    // https://www.irs.gov/publications/p15t
+    throw new PayrollError(
+      "Federal withholding for a nonresident-alien employee requires the Pub. 15-T Table 1 or Table 2 "
+      + "payroll-period wage adjustment and the applicable student/apprentice exception review; "
+      + "this calculation path does not implement those rules, so do not calculate or post this employee's federal payroll here — refused by name",
+    );
+  }
 
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
