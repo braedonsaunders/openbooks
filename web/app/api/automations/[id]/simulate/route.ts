@@ -41,6 +41,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       ...(body.subjectEntity ? { subjectEntity: body.subjectEntity } : {}),
       ...(body.subjectId ? { subjectId: body.subjectId } : {}),
       ...(body.sampleSize != null ? { sampleSize: body.sampleSize } : {}),
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     });
     return NextResponse.json({ simulations });
   } catch (e) {
