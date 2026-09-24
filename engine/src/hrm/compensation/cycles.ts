@@ -330,6 +330,13 @@ export async function listCycleLines(query: {
   const actorId = requireActorId(query.actorId);
   const cycleId = requireId(query.cycleId, "cycleId");
   const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
+  // An empty line list must mean "no lines", never "no such round": verify
+  // the round is visible first, with the same message as a missing round
+  // (never an existence oracle), mirroring getCycle.
+  const cycle = (await db.execute<CycleRow>(sql`
+    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
+  if (!cycle) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
+  assertCycleVisible(cycle, allowed);
   // The line predicate joins the trusted employment row on this runner, so
   // the employer subsidiary is loaded from storage, never caller input. The
   // allowlist crosses as JSON (bare JS arrays interpolate as row
@@ -759,7 +766,10 @@ export async function cyclePacing(orgId: string, actorId: string, cycleId: strin
 async function computePacing(orgId: string, cycleId: string, allowed: Set<string> | null): Promise<PacingRead> {
   const cycle = (await db.execute<CycleRow>(sql`
     select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
-  if (!cycle) return { totalPct: null, overBudget: false };
+  // A deleted or other-org cycle is not an empty envelope: without this,
+  // pacing a missing round returned the exact shape of a real round with
+  // no envelope. Refuse by name (404 at the route) like every other read.
+  if (!cycle) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
   // budget_total null is absence (no envelope, never over). Zero is a
   // real envelope and stays in the comparison below. The cycle header
   // is read only to discriminate legacy rows (which predate frozen
