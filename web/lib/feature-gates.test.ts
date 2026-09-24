@@ -1367,11 +1367,6 @@ test('the surfaces this test was written for are covered', () => {
     'lease-schedule writes must refuse when Property Management is off — existing schedule lines stay',
   )
   assert.match(
-    read('../engine/src/property/management.ts'),
-    /export async function finalizeCamPool[\s\S]{0,200}await assertEnabled\(tx, orgId\)/,
-    'CAM finalize must refuse when Property Management is off — existing pools stay',
-  )
-  assert.match(
     read('../engine/src/revenue/recognition.ts'),
     /export async function createObligationsFromInvoice[\s\S]{0,400}revenueRecognitionFeatureEnabled\(db, orgId\)/,
     'invoice posting must not mint obligations when Revenue Recognition is off — existing schedules stay',

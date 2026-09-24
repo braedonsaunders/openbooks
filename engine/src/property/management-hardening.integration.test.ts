@@ -544,6 +544,11 @@ test("R13: CAM finalization refuses an overlapping lease with no rentable area i
       ["LSE-CAM-AREA", "25.0000", "2500.0000"],
       ["LSE-CAM-NOAREA", "75.0000", "7500.0000"],
     ]);
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,propertyManagement}', 'false'::jsonb) where id = ${orgId}`);
+    await assert.rejects(
+      finalizeCamPool(orgId, fx.actorId, null, pool.id),
+      (error: unknown) => error instanceof PropertyManagementError && /feature is disabled/.test(error.message),
+    );
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }
