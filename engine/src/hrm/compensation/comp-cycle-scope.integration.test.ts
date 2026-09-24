@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -238,6 +238,50 @@ test("H-COMPCYCLE: submit, propose, and close recheck scope under the lock", { s
       (await closeCycle({ orgId: org.orgId, actorId: managerA, cycleId: pushedA.id })).status, "closed",
     );
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("H-COMPCYCLE: a line proposal waits for the employment scope lock", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let releaseHolder!: () => void;
+  let employmentLocked!: () => void;
+  let holder: Promise<void> | undefined;
+  const hold = new Promise<void>((resolve) => { releaseHolder = resolve; });
+  const locked = new Promise<void>((resolve) => { employmentLocked = resolve; });
+  try {
+    const adminId = await createScratchUser(org.orgId, "Cycle Lock Admin", "cyclelock_admin");
+    await grantPermissions(org.orgId, adminId, ["hrm.compensation.manage"]);
+    const managerId = await createScratchUser(org.orgId, "Cycle Lock Manager", "cyclelock_manager");
+    await scopeRole(org.orgId, "cyclelock_manager", ["hrm.compensation.manage"], [org.subsidiaryId]);
+    const employmentId = await seedEmployment(org.orgId, org.subsidiaryId);
+    const cycle = await createCycle({
+      orgId: org.orgId, actorId: adminId, name: "Locked proposal", ...CYCLE_BASE,
+      scope: { employerSubsidiaryId: org.subsidiaryId, departmentId: null },
+    });
+    await db.execute(sql`update hrm_comp_cycles set status = 'open' where org_id = ${org.orgId} and id = ${cycle.id}`);
+    const lineId = await seedLine(org.orgId, cycle.id, employmentId, "pending");
+    holder = withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`
+        select id from worker_employments
+         where org_id = ${org.orgId} and id = ${employmentId}
+         for update`);
+      employmentLocked();
+      await hold;
+    });
+    await locked;
+    let finished = false;
+    const proposal = proposeLine({
+      orgId: org.orgId, actorId: managerId, lineId, proposedRate: "95000.0000", reason: "scope lock probe",
+    }).finally(() => { finished = true; });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(finished, false, "the proposal must wait for the locked employment before checking its legal entity");
+    releaseHolder();
+    await holder;
+    assert.equal((await proposal).status, "proposed");
+  } finally {
+    releaseHolder();
+    if (holder) await holder;
     await dropScratchOrg(org.orgId);
   }
 });

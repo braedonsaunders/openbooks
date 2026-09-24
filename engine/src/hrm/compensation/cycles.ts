@@ -6,10 +6,12 @@ import { resolveWage, laborCostingSettings, laborFxQuote } from "../../projects/
 import { supersedeLaborCostRate } from "../../projects/labor-cost-rates.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulRate, normalizeDecimal, roundDiv, toUnits } from "../../money/money.ts";
 import {
+  HrmAuthorizationError,
   loadCompensationLens,
   loadOwnEmploymentIds,
   loadTeamEmploymentIdsForManager,
   requireAggregateCompensationRead,
+  lockEmploymentsForScope,
   requireCompensationManageForEmployer,
   requireHrmCompensationApprove,
   requireHrmCompensationManage,
@@ -313,37 +315,52 @@ function cycleNotVisible(): CompensationError {
  * subsidiary and every line's employer must sit inside the lens. An
  * unscoped (null) round constrains nothing by header — its lines govern
  * instead — so a restricted actor moves only rounds with no out-of-scope
- * line. Refuses uniformly not-visible, exactly like the read gate, so a
- * B round probes like a missing one. Line employers are read fresh inside
- * the write transaction (no new row locks: propose locks line-then-cycle
- * while cycle moves lock cycle-then-lines, and a third lock order would
- * wedge the two).
+ * line. Refuses uniformly not-visible, exactly like the read gate. Cycle
+ * actions lock cycle → lines in id order → employments in id order before
+ * checking the employers, matching the per-line action lock order.
  */
 async function assertCycleWriteScope(
   orgId: string,
   actorId: string,
   cycle: CycleRow,
-  lineEmployerIds: readonly string[],
+  employmentIds: readonly string[],
 ): Promise<void> {
   const allowed = await loadCompensationLens(db, orgId, actorId);
-  if (allowed === null) return;
   const subsidiary = cycleScopeSubsidiary(cycle);
-  if (subsidiary !== null && !allowed.has(subsidiary)) throw cycleNotVisible();
-  for (const employerId of lineEmployerIds) {
-    if (!allowed.has(employerId)) throw cycleNotVisible();
+  if (allowed !== null && subsidiary !== null && !allowed.has(subsidiary)) throw cycleNotVisible();
+  if (allowed === null) {
+    if (employmentIds.length > 0) {
+      const rows = (await db.execute<{ id: string }>(sql`
+        select id from worker_employments
+         where org_id = ${orgId}::uuid
+           and id in (select jsonb_array_elements_text(${JSON.stringify([...new Set(employmentIds)].sort())}::jsonb)::uuid)
+         order by id
+         for update`)).rows;
+      if (rows.length !== new Set(employmentIds).size) throw cycleNotVisible();
+    }
+    return;
+  }
+  let subjects: Awaited<ReturnType<typeof lockEmploymentsForScope>>;
+  try {
+    subjects = await lockEmploymentsForScope(db, employmentIds, { orgId, actorId });
+  } catch (error) {
+    if (error instanceof HrmAuthorizationError) throw cycleNotVisible();
+    throw error;
+  }
+  if (subjects.some((subject) => !allowed.has(subject.employerSubsidiaryId))) {
+    throw cycleNotVisible();
   }
 }
 
-/** Line employers for the write-scope check, read fresh in-transaction. */
-async function lineEmployerIds(orgId: string, cycleId: string): Promise<string[]> {
-  const rows = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
-    select e.employer_subsidiary_id
-      from hrm_comp_cycle_lines l
-      left join worker_employments e on e.org_id = l.org_id and e.id = l.employment_id
-     where l.org_id = ${orgId} and l.cycle_id = ${cycleId}`)).rows;
-  // A line with no attributable employer fails closed: the empty string
-  // sits in no lens, so restricted actors refuse while unrestricted pass.
-  return rows.map((row) => String(row.employer_subsidiary_id ?? ""));
+/** Lines are locked before their employment rows to keep one cycle-wide order. */
+async function lineEmploymentIds(orgId: string, cycleId: string): Promise<string[]> {
+  const rows = (await db.execute<{ employment_id: string }>(sql`
+    select employment_id
+      from hrm_comp_cycle_lines
+     where org_id = ${orgId} and cycle_id = ${cycleId}
+     order by id
+     for update`)).rows;
+  return rows.map((row) => row.employment_id);
 }
 
 /**
@@ -355,11 +372,24 @@ async function lineEmployerIds(orgId: string, cycleId: string): Promise<string[]
  */
 async function assertLineEmploymentScope(orgId: string, actorId: string, employmentId: string): Promise<void> {
   const allowed = await loadCompensationLens(db, orgId, actorId);
-  if (allowed === null) return;
-  const row = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
-    select employer_subsidiary_id from worker_employments
-     where org_id = ${orgId} and id = ${employmentId}`)).rows[0];
-  if (!row?.employer_subsidiary_id || !allowed.has(row.employer_subsidiary_id)) {
+  if (allowed === null) {
+    const rows = (await db.execute<{ id: string }>(sql`
+      select id from worker_employments
+       where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
+       for update`)).rows;
+    if (!rows[0]) throw new CompensationError("NOT_FOUND", "cycle line is not visible in this organization");
+    return;
+  }
+  let subjects: Awaited<ReturnType<typeof lockEmploymentsForScope>>;
+  try {
+    subjects = await lockEmploymentsForScope(db, [employmentId], { orgId, actorId });
+  } catch (error) {
+    if (error instanceof HrmAuthorizationError) {
+      throw new CompensationError("NOT_FOUND", "cycle line is not visible in this organization");
+    }
+    throw error;
+  }
+  if (!subjects[0] || !allowed.has(subjects[0].employerSubsidiaryId)) {
     throw new CompensationError("NOT_FOUND", "cycle line is not visible in this organization");
   }
 }
@@ -660,7 +690,7 @@ export async function openCycle(query: {
       orgId,
       actorId,
       cycle,
-      employments.map((e) => e.employerSubsidiaryId),
+      employments.map((e) => e.employmentId),
     );
     if (employments.length === 0) {
       throw new CompensationError(
@@ -1368,7 +1398,7 @@ export async function submitCycleForApproval(query: {
     // Submitting moves the whole round into approval: the anchor and
     // every line's employer are rechecked under the cycle lock first, or
     // an A-scoped actor submits B's wages for decision.
-    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmploymentIds(orgId, cycleId));
     if (cycle.status !== "open") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1479,7 +1509,7 @@ export async function pushCycle(query: {
     // Pushing writes wages: the anchor and every line's employer are
     // rechecked under the cycle lock before the first wage write, or an
     // A-scoped actor pushes B's wages into payroll.
-    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmploymentIds(orgId, cycleId));
     if (cycle.status !== "approved") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1600,7 +1630,7 @@ export async function closeCycle(query: { orgId: string; actorId: string; cycleI
     const cycle = await loadCycleForUpdate(orgId, cycleId);
     // Closing seals the round's wages: same anchor-and-lines recheck
     // under the lock, or an A-scoped actor closes B's merit round.
-    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmploymentIds(orgId, cycleId));
     if (cycle.status !== "pushed") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1634,7 +1664,7 @@ export async function cancelCycle(query: {
     const cycle = await loadCycleForUpdate(orgId, cycleId);
     // Cancelling voids the round for every line: same recheck, or an
     // A-scoped actor cancels B's live round.
-    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmploymentIds(orgId, cycleId));
     if (cycle.status === "pushed" || cycle.status === "closed" || cycle.status === "cancelled") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1668,7 +1698,7 @@ export async function setCycleBudgets(query: {
     const cycle = await loadCycleForUpdate(orgId, cycleId);
     // Budgets price the round's lines: same anchor-and-lines recheck, or
     // an A-scoped actor funds B's round.
-    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmploymentIds(orgId, cycleId));
     if (cycle.status !== "draft") {
       throw new CompensationError(
         "BAD_STATE",
