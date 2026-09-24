@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { classifyBudgetVariance, classifyPeriodPerformance, classifyUnmatchedBankActivity, nextContinuousCloseRunAt } from "./continuous-close.ts";
 import {
   defaultContinuousCloseDetectors,
@@ -9,10 +8,6 @@ import {
   normalizeContinuousCloseAnalysisSettings,
   normalizeContinuousCloseDetectors,
 } from "../agents/continuous-close-config.ts";
-
-// The accounting detectors moved byte-identical into the agent-pack registry
-// (agents/accounting.ts); composition guards follow the implementation.
-const accountingSource = readFileSync(new URL("../agents/accounting.ts", import.meta.url), "utf8");
 
 test("unmatched bank activity escalates for age, count, or exact materiality", () => {
   const now = new Date("2026-07-16T12:00:00Z");
@@ -55,13 +50,6 @@ test("unmatched bank activity escalates for age, count, or exact materiality", (
       now,
     }),
     "critical",
-  );
-});
-
-test("unmatched-bank age uses the org business day, not UTC today", () => {
-  assert.match(
-    accountingSource,
-    /const today = await businessToday\(orgId\);[\s\S]*?classifyUnmatchedBankActivity\(\{[\s\S]*?now: parseIsoDate\(today\)/,
   );
 });
 
@@ -139,71 +127,6 @@ test("agent schedules advance in UTC without local-time drift", () => {
   const from = new Date("2026-03-08T06:30:00.000Z");
   assert.equal(nextContinuousCloseRunAt("daily", from).toISOString(), "2026-03-09T06:30:00.000Z");
   assert.equal(nextContinuousCloseRunAt("weekly", from).toISOString(), "2026-03-15T06:30:00.000Z");
-});
-
-test("the occurrence claim shares one transaction with the run row, closing the crash-skip window", () => {
-  // The defect: the scheduler claimed by committing next_run_at advancement in
-  // its own statement BEFORE calling runContinuousCloseAgent — a process killed
-  // between the claim and the run's later insert stranded an advanced cursor
-  // with no run record, permanently skipping the occurrence. The fix claims
-  // INSIDE the agent's transaction, matching the recurring and subscription
-  // schedulers, so either both commit or neither does.
-  //
-  // This asserts the transaction STRUCTURE, not statement order: the fenced
-  // feature recheck writes its skipped row BEFORE the claim in the same
-  // transaction, so "the first insert follows the claim" is no longer true
-  // and must not be assumed. The crash itself is proved on a live database by
-  // "a crash at the claimed occurrence loses nothing" in
-  // continuous-close.integration.test.ts; here the composition guard pins the
-  // shape that proof depends on — one transaction holding both writes.
-  const source = readFileSync(new URL("./continuous-close.ts", import.meta.url), "utf8");
-  const run = source.indexOf("export async function runContinuousCloseAgent");
-  assert.notEqual(run, -1, "runContinuousCloseAgent exists");
-  const body = source.slice(run, source.indexOf("export async function runDueContinuousCloseAgents"));
-  // One transaction: exactly one withOrg scan, and no nested transaction that
-  // could commit the claim apart from the run row.
-  assert.equal(body.split("await withOrg(").length - 1, 1, "the scan runs in exactly one pinned org transaction");
-  const txnStart = body.indexOf("await withOrg(");
-  const txnEnd = body.indexOf('if (prepared.kind === "unclaimed")');
-  assert.ok(txnEnd > txnStart, "the claimed transaction ends before post-commit enrichment");
-  const txn = body.slice(txnStart, txnEnd);
-  assert.doesNotMatch(txn, /db\.transaction\(/, "no nested transaction splits the claim from the run row");
-  const claim = txn.indexOf("set next_run_at = ${occurrence.nextRunAt}");
-  assert.ok(claim !== -1, "the occurrence is claimed inside that same transaction");
-  // The ordinary run row — the `const [run]` insert whose id the detector
-  // section and every durable outcome build on — is written in the same
-  // transaction too. Skip-path inserts (`const [skipped]`) live here by
-  // design; what matters is that the claimed branch's row shares the claim's
-  // commit, not which insert comes first in the file.
-  const ordinaryInsert = txn.indexOf("const [run] = await db");
-  assert.ok(ordinaryInsert !== -1, "the durable run row is written inside that same transaction");
-  assert.match(
-    txn.slice(ordinaryInsert, ordinaryInsert + 400),
-    /\.insert\(schema\.aiAgentRuns\)/,
-    "the ordinary run row is an ai_agent_runs insert",
-  );
-  const claimSql = txn.slice(claim, txn.indexOf("returning id", claim));
-  assert.match(
-    claimSql,
-    /where id = \$\{occurrence\.policyId\} and org_id = \$\{args\.orgId\}\s+and next_run_at = \$\{occurrence\.claimedNextRunAt\}/,
-    "the claim stays compare-and-swap and org-scoped: one tick wins an occurrence",
-  );
-  // The claimed fire time rides on every durable outcome, so the run record
-  // keeps the occurrence's scheduled-for timestamp after a crash-gap resume:
-  // the fire time is bound into occurrenceStats once, and every stats write in
-  // the transaction spreads it.
-  assert.match(txn, /scheduled_for: scheduledFor/, "the fire time is bound into the occurrence stats");
-  assert.match(txn, /\.\.\.occurrenceStats/, "every durable outcome in the transaction carries it");
-});
-
-test("nothing may claim an occurrence outside the agent transaction anymore", () => {
-  // Any next_run_at writer left in the scheduler loop would reintroduce the
-  // committed-claim crash window between scan and execution.
-  const source = readFileSync(new URL("./continuous-close.ts", import.meta.url), "utf8");
-  const due = source.indexOf("export async function runDueContinuousCloseAgents");
-  const loop = source.slice(due);
-  assert.doesNotMatch(loop, /set next_run_at/, "the loop never writes the cursor itself");
-  assert.match(loop, /scheduledOccurrence:/, "the loop hands its observed occurrence to the agent");
 });
 
 test("detector policies default every registered control on and preserve explicit disablement", () => {
@@ -331,17 +254,4 @@ test("custom detector thresholds change inclusion and severity at exact boundari
   });
   assert.equal(variance.include, true);
   assert.equal(variance.severity, "critical");
-});
-
-test("reconciliation detector delegates to the authoritative bank totals", () => {
-  const reconciliationStart = accountingSource.indexOf('const reconciliationPolicy = byKey.get("reconciliation_difference")');
-  const staleStart = accountingSource.indexOf('const stalePolicy = byKey.get("stale_accounting_documents")', reconciliationStart);
-  assert.notEqual(reconciliationStart, -1, "reconciliation detector exists");
-  assert.notEqual(staleStart, -1, "reconciliation detector has a bounded query section");
-  const reconciliationSource = accountingSource.slice(reconciliationStart, staleStart);
-
-  // The database regression covers parallel books and the resulting finding.
-  // This composition guard prevents a second balance policy from reappearing.
-  assert.match(reconciliationSource, /await reconciliationTotals\(record\.id, \{ orgId, userId: SYSTEM_ACTOR_ID \}\)/);
-  assert.doesNotMatch(reconciliationSource, /journal_lines|journal_entries/);
 });
