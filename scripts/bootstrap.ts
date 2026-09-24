@@ -1662,6 +1662,20 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "PRC15c revision left behind and redefines the trigger idempotently. "
       + "Reapply, not restamp.",
   },
+  {
+    filename: "generated/0334_tenant_isolation_and_posting_guards.sql",
+    from: "08c69798a164afcace78fbf2b18bc196f983de7ab0d8599f62a7b8d94c99a30f",
+    to: "85e22004dcc3ea50eb5225e683c7e39de5335a65d7c004f02c4e4c0a3b55e7b7",
+    strategy: "restamp",
+    reason:
+      "comment-only header correction on an unpublished migration: the 0334 "
+      + "header described posting-guard and derived-summary sections that ship "
+      + "separately in 0338, so the file overclaimed its own contents. No "
+      + "statement changed — the applied RLS state is byte-identical before "
+      + "and after. Restamp, not reapply: replaying the file would be a no-op "
+      + "by construction (every statement tolerates re-execution), and only "
+      + "the recorded identity moves.",
+  },
 ];
 
 async function executeTrackedMigration(
