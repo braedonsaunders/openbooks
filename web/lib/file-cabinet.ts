@@ -343,6 +343,12 @@ function visibleFileRowPredicate(orgId: string, viewer: FileViewer, scope: ReadS
     and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}`
 }
 
+/** Query fence for consumers that build bounded manifests before loading bytes. */
+export async function fileReadPredicate(orgId: string, viewer: FileViewer): Promise<SQL> {
+  const scope = await resolveReadScope(orgId, viewer)
+  return visibleFileRowPredicate(orgId, viewer, scope)
+}
+
 /**
  * Folder-level record fence for record-leaf folders. An explicit folder grant
  * re-opens its folder, matching the file-level rule.

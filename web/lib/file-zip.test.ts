@@ -19,6 +19,7 @@ const mockSources = new Map<string, string>([
     'mock:file-cabinet',
     `
       const state = globalThis[Symbol.for('openbooks.file-zip-test')]
+      export async function fileReadPredicate() { return 'true' }
       export async function getFileBlob(_orgId, id, _viewer) {
         return state.blobs.get(id) ?? null
       }
@@ -37,6 +38,7 @@ const mockSources = new Map<string, string>([
       export default JSZip
     `,
   ],
+  ['mock:file-storage', `export function isMaskedFileContentError() { return false }`],
 ])
 
 const hooks = registerHooks({
@@ -49,6 +51,9 @@ const hooks = registerHooks({
     }
     if (specifier === './file-cabinet') {
       return { shortCircuit: true, format: 'module', url: 'mock:file-cabinet' }
+    }
+    if (specifier === './file-storage') {
+      return { shortCircuit: true, format: 'module', url: 'mock:file-storage' }
     }
     if (specifier === 'jszip') {
       return { shortCircuit: true, format: 'module', url: 'mock:jszip' }
