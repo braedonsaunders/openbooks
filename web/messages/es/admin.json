@@ -2805,6 +2805,7 @@
       "nciIncomeAccountId": "Cuenta de ingresos NCI",
       "nciMeasurement": "Medición NCI",
       "nonPeriodic": "No periódico (método de primas)",
+      "supplementalWageCategory": "Categoría de remuneración suplementaria",
       "notifyBalance": "Avisar en",
       "observance": "Si cae en fin de semana",
       "observedOn": "Fecha",

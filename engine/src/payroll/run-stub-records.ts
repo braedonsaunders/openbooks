@@ -14,6 +14,7 @@ import { resolveStatutoryHolidayPay, undeclaredJurisdictionHolidayConflict, type
 import { planMovementsForStub, recordEntitlementMovements } from "./entitlements.ts";
 import { type EarningsAssessedLine } from "./limits.ts";
 import { divideMoney } from "./run-allocation.ts";
+import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
 /**
  * One line of a stub under construction — earnings, deductions, and employer
  * contributions alike, in the order phases append them. Hoisted to module
@@ -75,6 +76,7 @@ export interface Line {
    */
   programApplicability?: Record<string, boolean>;
   vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
+  supplementalWageCategory?: UsSupplementalWageCategory | null;
   accrualOnly?: boolean;
   /**
    * Set on every pack-emitted statutory line: what the country pack declares

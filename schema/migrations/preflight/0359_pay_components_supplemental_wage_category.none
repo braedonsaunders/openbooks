@@ -1,0 +1,1 @@
+The relation is additive and backfills one nullable classification record per existing component; no tenant data shape requires operator remediation.

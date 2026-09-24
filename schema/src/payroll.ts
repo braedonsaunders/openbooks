@@ -9,6 +9,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -233,6 +234,28 @@ export const payComponents = pgTable(
     check("pay_components_basis_cap_order",
       sql`${t.basisCapAmountPerPeriod} is null or ${t.basisCapAmountPerYear} is null
           or ${t.basisCapAmountPerPeriod} <= ${t.basisCapAmountPerYear}`),
+  ],
+);
+
+/** Orthogonal, pack-consumed classification dimensions for earning components. */
+export const payComponentEarningClassifications = pgTable(
+  "pay_component_earning_classifications",
+  {
+    orgId: uuid("org_id").notNull(),
+    payComponentId: uuid("pay_component_id").notNull(),
+    supplementalWageCategory: text("supplemental_wage_category", {
+      enum: ["bonus_or_stock_option", "other"],
+    }),
+  },
+  (t) => [
+    primaryKey({ name: "pay_component_earning_classifications_pkey", columns: [t.orgId, t.payComponentId] }),
+    foreignKey({
+      name: "pay_component_earning_classifications_component_fkey",
+      columns: [t.orgId, t.payComponentId],
+      foreignColumns: [payComponents.orgId, payComponents.id],
+    }).onDelete("cascade"),
+    check("pay_component_earning_classifications_supplemental_category",
+      sql`${t.supplementalWageCategory} is null or ${t.supplementalWageCategory} in ('bonus_or_stock_option', 'other')`),
   ],
 );
 

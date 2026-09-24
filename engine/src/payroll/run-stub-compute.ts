@@ -9,6 +9,7 @@ import { type PayrollSubsidiaryScope } from "./scope.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
+import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { add, cmp, mulRatio, neg, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
 import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext } from "./packs.ts";
@@ -228,9 +229,12 @@ export async function calculateStub(
   // ever attributed them.
   const rosterEmploymentId = emp.employment_id ?? null;
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
-    select a.value as override, a.effective_from, a.effective_to, c.*
+    select a.value as override, a.effective_from, a.effective_to, c.*,
+           ec.supplemental_wage_category
       from employee_pay_components a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
+      join pay_component_earning_classifications ec
+        on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where a.org_id = ${orgId} and a.employee_party_id = ${employeePartyId}
        and a.is_active and c.is_active and c.system_key is null
        and (c.country is null or c.country = ${country})
@@ -476,6 +480,7 @@ export async function calculateStub(
       filingAccountId: jurisdiction.filingAccountId,
       periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
       income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,
+      supplementalWageAmounts: aggregateUsSupplementalWageAmounts(lines),
       programBases,
       reducedBases: reducedBases(),
       deduction,

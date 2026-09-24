@@ -19,6 +19,7 @@ import { clamp } from "../list-params";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission } from "./context";
 import { ApplicationError } from "./errors";
+import { setupReadProjection, setupReadSource } from "../setup/read-shape";
 
 function setupEntityEnabled(entity: SetupEntity, features: FeatureState): boolean {
   if (!entity.featureKey) return true;
@@ -80,6 +81,9 @@ function mapSetupRecord(entity: SetupEntity, row: Record<string, unknown>): Reco
   return {
     id: row[idColumn],
     ...Object.fromEntries(entity.columns.map((column) => [column.key, row[toSnake(column.key)]])),
+    ...(entity.key === 'pay-components'
+      ? { supplementalWageCategory: row.supplemental_wage_category }
+      : {}),
   };
 }
 
@@ -115,7 +119,7 @@ export async function listSetupRecords(
   const orderBy = entity.orderBy ?? (entity.naturalKey ? toSnake(entity.naturalKey) : idColumn);
   const [rows, count] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
-      select ${sql.raw(selectCols.join(", "))} from ${sql.raw(entity.table)} ${rowFilter}
+      select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderBy)}
        limit ${limit}`),
     db.execute<{ n: number }>(sql`
@@ -147,7 +151,7 @@ export async function getSetupRecord(
   const columnKeys = entity.columns.map((column) => toSnake(column.key));
   const selectCols = [...new Set([idColumn, ...columnKeys])];
   const rows = await db.execute<Record<string, unknown>>(sql`
-    select ${sql.raw(selectCols.join(", "))} from ${sql.raw(entity.table)}
+    select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)}
      where ${sql.raw(idColumn)} = ${input.id}
      ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}`);
   if (rows.rows.length === 0) throw setupRecordMissing(entity.key);

@@ -563,6 +563,11 @@ const PAY_COMPONENT_BASES = [
   { value: 'percent_of_gross', labelKey: 'options.payComponentBasis.percentOfGross' },
 ]
 
+const PAY_SUPPLEMENTAL_WAGE_CATEGORIES = [
+  { value: 'bonus_or_stock_option', label: 'Bonus or stock option' },
+  { value: 'other', label: 'Other supplemental wage' },
+]
+
 // STATIC FALLBACK ONLY for the pay-component treatment picker — server
 // surfaces replace these with the component's pack-declared treatments
 // (`optionsSource: 'payroll-deduction-treatments'`, resolved by
@@ -2052,6 +2057,11 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       },
       { key: 'vacationable', kind: 'boolean', defaultValue: true },
       { key: 'nonPeriodic', kind: 'boolean' },
+      {
+        key: 'supplementalWageCategory', kind: 'select',
+        options: PAY_SUPPLEMENTAL_WAGE_CATEGORIES,
+        showWhen: { field: 'kind', in: ['earning'] },
+      },
       // Pre-tax treatments THE COMPONENT'S PACK declares, resolved per
       // country at render time (`scopedOptions`): an AU component offers
       // salary sacrifice, a CA one the T4127 factors, and a pack with no

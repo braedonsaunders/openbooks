@@ -135,10 +135,7 @@ function dispatchInput(
 }
 
 test('Ohio school-district dispatch applies the IT 4 exemption count', () => {
-  // District 0303 taxes the traditional base at 1.25%: (52,000 − 650) ×
-  // 1.25% ÷ 26 = 24.69 with one exemption, 25.00 without. A dispatch that
-  // reads the count as zero (negated certificate guard) silently
-  // over-withholds every resident of every traditional-base district.
+  // District 0303: (52,000 − 650) × 1.25% ÷ 26 = 24.69 with one exemption.
   const withExemption = certificate('us_oh_it4', { total_exemptions: '1' })
   const input = dispatchInput('OH', '0303', 'us_oh_it4', () => withExemption, () => undefined)
   const result = computeUsWithholding(input)
@@ -152,9 +149,7 @@ test('Ohio school-district dispatch applies the IT 4 exemption count', () => {
 })
 
 test('an Ohio school-district number with no tax is refused by name', () => {
-  // 9999 is four digits but on no Department list: the school-district path
-  // must refuse naming the number, not compute a zero. (Negating the
-  // district guard throws on the VALID district instead — covered above.)
+  // 9999 is absent from the Department list and must not compute zero.
   assert.throws(
     () => computeUsWithholding(
       dispatchInput('OH', '9999', 'us_oh_it4', () => certificate('us_oh_it4', {}), () => undefined),
@@ -164,9 +159,7 @@ test('an Ohio school-district number with no tax is refused by name', () => {
 })
 
 test('PA Act 32 EIT withholds at the winning reach rate and refuses a missing one', () => {
-  // The generic resolver already picked the higher rate; the dispatch applies
-  // the reach it was handed. Swapping resident/nonresident withholds the
-  // wrong jurisdiction's rate on every PA cheque.
+  // Resolver-selected resident and nonresident rates must remain distinct.
   const tenantRates = () => ({ residentRate: '0.0100', nonresidentRate: '0.0050' })
   const resident = computeUsWithholding(
     dispatchInput('PA', '150001', 'us_pa_clgs32_6', () => null, tenantRates, 'resident'),
@@ -178,9 +171,7 @@ test('PA Act 32 EIT withholds at the winning reach rate and refuses a missing on
   )
   assert.equal(nonresident?.tax, '10.0000') // 2,000 × 0.50%
 
-  // No rate entered: refused naming the PSD and the DCED register — the
-  // refusal sentence itself is load-bearing (a message mutant turns it to
-  // NaN), and a present rate must never take this path.
+  // No rate entered: refuse naming the PSD and the DCED register.
   const missing = dispatchInput('PA', '150001', 'us_pa_clgs32_6', () => null, () => undefined)
   assert.throws(
     () => computeUsWithholding(missing),
@@ -210,8 +201,7 @@ test('local W-2 wages use the sourced work allocation instead of repeating state
 })
 
 test('Delaware refuses separately paid supplemental wages without Section 14 differential inputs', () => {
-  // Delaware Employer's Guide, Section 14, requires incremental withholding on
-  // a separately paid bonus. https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
+  // Delaware Employer's Guide §14: https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
   const input = {
     levy: levy('DE', 'us_de_sdw4a'),
     payDate: '2026-07-21', periodEnd: PERIOD_END, periodsPerYear: 26,
@@ -228,8 +218,7 @@ test('Delaware refuses separately paid supplemental wages without Section 14 dif
 })
 
 test('Alabama separately paid bonus uses the 5% rate effective in 2026', () => {
-  // Alabama Withholding Tax Booklet A (January 2026), p. 3.
-  // https://www.revenue.alabama.gov/wp-content/uploads/2026/01/whbooklet_0126.pdf
+  // Alabama Withholding Tax Booklet A (Jan. 2026), p. 3: https://www.revenue.alabama.gov/wp-content/uploads/2026/01/whbooklet_0126.pdf
   const result = computeUsWithholding({
     levy: levy('AL', 'us_al_a4'),
     payDate: '2026-01-01', periodEnd: PERIOD_END, periodsPerYear: 26,
@@ -260,9 +249,7 @@ test('US supplemental withholding refuses when payment timing was not captured',
 })
 
 test('Georgia separately paid bonus uses the effective flat supplemental rate', () => {
-  // Georgia 2026 Employer's Tax Guide, O.C.G.A. §48-7-101(f)(5): separately
-  // paid bonuses use the rate effective on the payment date.
-  // https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download
+  // O.C.G.A. §48-7-101(f)(5), 2026 Employer's Tax Guide: https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download
   const input = {
     levy: levy('GA', 'us_ga_g4'),
     payDate: '2026-05-11', periodEnd: PERIOD_END, periodsPerYear: 26,
@@ -284,8 +271,7 @@ test('Georgia separately paid bonus uses the effective flat supplemental rate', 
 })
 
 test('Michigan separately paid bonus uses 4.25% without the period exemption', () => {
-  // Michigan Form 446 (2026), Bonuses and Other Payments.
-  // https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf
+  // Michigan Form 446 (2026): https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf
   const result = computeUsWithholding({
     levy: levy('MI', 'us_mi_miw4'),
     payDate: '2026-07-21', periodEnd: PERIOD_END, periodsPerYear: 26,
@@ -300,8 +286,7 @@ test('Michigan separately paid bonus uses 4.25% without the period exemption', (
 })
 
 test('Minnesota separately paid supplemental wages use Method 2 at 6.25%', () => {
-  // Minnesota 2026 Withholding Tax Instructions, p. 7, Method 2.
-  // https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf
+  // Minnesota 2026 Withholding Tax Instructions, p. 7: https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf
   const result = computeUsWithholding({
     levy: levy('MN', 'us_mn_w4mn'),
     payDate: '2026-07-21', periodEnd: PERIOD_END, periodsPerYear: 26,
@@ -518,9 +503,16 @@ test('US resident withholding requires its out-of-region wages and actual work-s
   )
 })
 
-test('every US state and DC declares a separate-supplemental method', () => {
+test('US states declare methods and California applies the classified bonus rate', () => {
   assert.deepEqual(
     Object.keys(US_SEPARATE_SUPPLEMENTAL_METHODS).sort(),
     [...US_STATES].sort(),
   )
+  // EDD DE 44 Rev. 52 (4-26), p. 18: https://edd.ca.gov/pdf_pub_ctr/de44.pdf
+  assert.equal(computeUsWithholding({ levy: levy('CA', 'us_ca_de4'), payDate: PAY_DATE,
+    periodEnd: PERIOD_END, periodsPerYear: 26, wages: '0', supplemental: '1000',
+    supplementalPaymentTiming: 'separate', supplementalWageAmounts: [{ category: 'bonus_or_stock_option', amount: '1000' }],
+    certificateFor: () => certificate('us_ca_de4', { filing_status: 'single_or_dual', regular_allowances: '0', estimated_deduction_allowances: '0' }),
+    tenantRates: () => undefined, federalIncomeTax: '0',
+  } as Parameters<typeof computeUsWithholding>[0])?.tax, '102.3000')
 })

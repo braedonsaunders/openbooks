@@ -2886,6 +2886,7 @@
       "nciIncomeAccountId": "非支配持分利益口座",
       "nciMeasurement": "非支配持分の測定",
       "nonPeriodic": "非定期的（賞与方式）",
+      "supplementalWageCategory": "追加賃金の分類",
       "ownershipPercent": "持分％",
       "parentSubsidiaryId": "親子会社",
       "payDateOffsetDays": "支給日オフセット（日数）",

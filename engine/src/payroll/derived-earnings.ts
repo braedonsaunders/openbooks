@@ -4,6 +4,7 @@ import { utcDateFromParts } from "../platform/business-date.ts";
 import {
   add, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
 } from "../money/money.ts";
+import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
 
 /**
  * Derived earnings — money produced by operational facts rather than typed in.
@@ -177,6 +178,7 @@ export interface DerivedComponent {
   insurable: boolean;
   vacationable: boolean;
   nonPeriodic: boolean;
+  supplementalWageCategory?: UsSupplementalWageCategory | null;
 }
 
 /** An earning line shaped for calculateStub's line set. */
@@ -195,6 +197,7 @@ export interface DerivedEarningLine {
   insurable: boolean;
   vacationable: boolean;
   nonPeriodic: boolean;
+  supplementalWageCategory?: UsSupplementalWageCategory | null;
   /** Provenance: which rule paid this, for the stub trace and the preview. */
   ruleId: string;
   ruleCode: string;
@@ -853,6 +856,7 @@ export function applyDerivedRule(
       insurable: component.insurable,
       vacationable: component.vacationable,
       nonPeriodic: component.nonPeriodic,
+      supplementalWageCategory: component.supplementalWageCategory ?? null,
       ruleId: rule.id,
       ruleCode: rule.code,
     });
@@ -922,11 +926,14 @@ async function loadComponents(
   const r = (await tx.execute<{
       id: string; name: string; value: string | null; kind: string;
       taxable: boolean; pensionable: boolean; insurable: boolean;
-      vacationable: boolean; non_periodic: boolean;
+      vacationable: boolean; non_periodic: boolean; supplemental_wage_category: string | null;
     }>(sql`
-    select id, name, value, kind, taxable, pensionable, insurable, vacationable, non_periodic
-      from pay_components
-     where org_id = ${orgId} and id = any(${`{${componentIds.join(",")}}`}::uuid[])
+    select c.id, c.name, c.value, c.kind, c.taxable, c.pensionable, c.insurable, c.vacationable, c.non_periodic,
+           ec.supplemental_wage_category
+      from pay_components c
+      join pay_component_earning_classifications ec
+        on ec.org_id = c.org_id and ec.pay_component_id = c.id
+     where c.org_id = ${orgId} and c.id = any(${`{${componentIds.join(",")}}`}::uuid[])
   `));
   const map = new Map<string, DerivedComponent>();
   for (const row of r.rows) {
@@ -940,6 +947,7 @@ async function loadComponents(
       taxable: row.taxable === true, pensionable: row.pensionable === true,
       insurable: row.insurable === true, vacationable: row.vacationable === true,
       nonPeriodic: row.non_periodic === true,
+      supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
     });
   }
   return map;

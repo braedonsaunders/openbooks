@@ -2712,6 +2712,7 @@
       "insurable": "Segurável",
       "vacationable": "Conta p/ férias",
       "nonPeriodic": "Não periódico (método de bônus)",
+      "supplementalWageCategory": "Categoria de remuneração suplementar",
       "taxTreatment": "Tratamento fiscal",
       "expenseAccountId": "Conta de despesa",
       "liabilityAccountId": "Conta de passivo",

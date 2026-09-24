@@ -2886,6 +2886,7 @@
       "nciIncomeAccountId": "NCI-Ertragskonto",
       "nciMeasurement": "NCI-Bewertung",
       "nonPeriodic": "Nicht periodisch (Bonusmethode)",
+      "supplementalWageCategory": "Kategorie der zusätzlichen Lohnzahlung",
       "ownershipPercent": "Beteiligung %",
       "parentSubsidiaryId": "Mutter-Tochtergesellschaft",
       "payDateOffsetDays": "Zahltagsversatz (Tage)",
