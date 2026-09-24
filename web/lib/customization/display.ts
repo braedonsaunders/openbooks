@@ -1,20 +1,18 @@
+import { DEFAULT_VIEW_NAME } from '../../../engine/src/provisioning/default-view-name.ts'
+
 /**
  * Display names for resolved customization rows.
  *
- * Provisioned baselines are seeded in English (see
- * engine/src/provisioning/customization-defaults.ts) while the catalog carries the
+ * Provisioned baselines use the shared name in
+ * engine/src/provisioning/default-view-name.ts while the catalog carries the
  * translated system-default names. An unrenamed baseline row must render as
  * the translated default; a row the tenant renamed keeps its own name.
- * `display.test.ts` pins the seed reference so the two cannot drift apart.
  */
-
-/** English name the provisioning seed gives the baseline list view. */
-export const SEEDED_DEFAULT_VIEW_NAME = 'Default view'
 
 export function displayListViewName(
   storedName: string | null | undefined,
   translatedDefault: string,
 ): string {
-  if (!storedName || storedName === SEEDED_DEFAULT_VIEW_NAME) return translatedDefault
+  if (!storedName || storedName === DEFAULT_VIEW_NAME) return translatedDefault
   return storedName
 }
