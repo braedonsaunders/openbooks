@@ -303,6 +303,7 @@ function safeEqual(a: string, b: string): boolean {
 export interface PaymentProviderAdapter {
   key: AcceptanceProvider;
   createCheckout(secrets: ProviderSecrets, req: CheckoutRequest, fetchFn?: FetchFn): Promise<CheckoutSession>;
+  expireCheckout?(secrets: ProviderSecrets, externalRef: string, fetchFn?: FetchFn): Promise<boolean>;
   /** Verify and normalize a complete delivery without conflating authentication
    *  with whether this service handles any of its event types. A signature-
    *  valid item whose fields cannot be normalized exactly is isolated — logged
@@ -479,6 +480,16 @@ const stripeAdapter: PaymentProviderAdapter = {
       throw new PaymentAcceptanceError("stripe checkout returned no session url");
     }
     return { redirectUrl: json.url, externalRef: json.id };
+  },
+  async expireCheckout(secrets, externalRef, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) return false;
+    const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
+    const res = await fetchFn(`${base}/v1/checkout/sessions/${encodeURIComponent(externalRef)}/expire`, {
+      method: "POST",
+      redirect: "error",
+      headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}` },
+    });
+    return res.status < 400;
   },
   verifyWebhookDelivery: verifyStripeWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {
@@ -800,6 +811,62 @@ export function configSecrets(config: ProviderConfigRow): ProviderSecrets {
     merchantAccount: typeof settings.merchantAccount === "string" ? settings.merchantAccount : undefined,
     apiBase: typeof settings.apiBase === "string" ? settings.apiBase : undefined,
   };
+}
+
+/** Expire stale Stripe sessions after an invoice payment changes the balance.
+ * Other adapters have no supported session-expiry endpoint here; settlement
+ * still checks the locked invoice and routes any completed stale collection
+ * to discrepancy review. Provider failures are audited and never roll back an
+ * already-posted payment. */
+export async function expireStalePaymentLinkSessions(
+  orgId: string,
+  invoiceIds: readonly string[],
+): Promise<void> {
+  if (invoiceIds.length === 0) return;
+  const attempts = await withBypassContext(() => db.execute<{
+    id: string; linkId: string; provider: AcceptanceProvider; externalRef: string; invoiceId: string;
+  }>(sql`
+    select attempt.id, link.id as "linkId", attempt.provider, attempt.external_ref as "externalRef",
+           link.document_id as "invoiceId"
+      from payment_attempts attempt
+      join payment_links link on link.id = attempt.link_id and link.org_id = attempt.org_id
+      join documents invoice on invoice.id = link.document_id and invoice.org_id = link.org_id
+     where attempt.org_id = ${orgId} and link.document_id in ${invoiceIds}
+       and attempt.status = 'initiated' and link.amount is not null
+       and link.amount > invoice.open_balance
+  `));
+  for (const attempt of attempts.rows) {
+    const config = await withBypassContext(() => loadProviderConfig(orgId, attempt.provider));
+    const adapter = ACCEPTANCE_ADAPTERS[attempt.provider];
+    if (!config || !adapter.expireCheckout) continue;
+    let expired = false;
+    try {
+      expired = await adapter.expireCheckout(configSecrets(config), attempt.externalRef);
+    } catch {
+      expired = false;
+    }
+    await withOrg(orgId, async () => {
+      const evidence = {
+        reason: "invoice_balance_changed",
+        outcome: expired ? "provider_session_expired" : "provider_session_expiry_failed",
+        invoiceId: attempt.invoiceId,
+      };
+      const updated = await db.execute<{ id: string }>(sql`
+        update payment_attempts
+           set status = ${expired ? "cancelled" : "initiated"},
+               event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify({ sessionInvalidation: evidence })}::jsonb,
+               updated_at = now()
+         where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
+         returning id
+      `);
+      if (!updated.rows[0]) return;
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'payment_attempts', ${attempt.id}, 'update',
+                ${JSON.stringify({ after: { sessionInvalidation: evidence } })}::jsonb, null)
+      `);
+    });
+  }
 }
 
 export interface SurchargeResolution {
@@ -1670,7 +1737,7 @@ function logPaymentWebhookItemMalformed(
 }
 
 interface SettlementDiscrepancyEvidence {
-  reason: "missing_settlement_evidence" | "amount_currency_mismatch";
+  reason: "missing_settlement_evidence" | "amount_currency_mismatch" | "collection_exceeds_open_balance";
   provider: AcceptanceProvider;
   externalRef: string;
   reportedAmount: string | null;
@@ -2042,6 +2109,7 @@ async function processWebhookEvent(
     if (intentRef) await consumePendingClawback(orgId, provider, intentRef, found.id);
     try {
       const outcome = await settleAttempt(orgId, found.id);
+      if (typeof outcome !== "string") return outcome;
       return outcome === "gated" ? "awaiting_approval" : "settled";
     } catch (err) {
       // Roll the claim back so the next delivery retries settlement. The
@@ -2116,15 +2184,18 @@ async function recordSettlementDiscrepancy(
  * stays in its claimed non-initiated state and finalize completes the
  * bookkeeping when the approval flow eventually posts it.
  */
-async function settleAttempt(orgId: string, attemptId: string): Promise<"posted" | "gated"> {
+async function settleAttempt(
+  orgId: string,
+  attemptId: string,
+): Promise<"posted" | "gated" | { discrepancy: PaymentAcceptanceError }> {
   const rows = (await db.execute<{
-      id: string; amount: string | null; surcharge_amount: string | null;
+      id: string; provider: AcceptanceProvider; external_ref: string; amount: string | null; surcharge_amount: string | null;
       payment_document_id: string | null;
       event_payload: { feeIncomeAccountId?: string } | null;
       link_id: string; document_id: string; party_id: string; subsidiary_id: string; bank_account_id: string; currency: string;
       link_created_by: string | null;
     }>(sql`
-    select a.id, coalesce(a.amount, l.amount) as amount,
+    select a.id, a.provider, a.external_ref, coalesce(a.amount, l.amount) as amount,
            coalesce(a.surcharge_amount, l.surcharge_amount) as surcharge_amount,
            a.payment_document_id, a.event_payload,
            l.id as link_id, l.document_id, l.party_id, l.subsidiary_id, l.bank_account_id, l.currency, l.created_by as link_created_by
@@ -2145,6 +2216,7 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
 
   const doc = (await db.execute<{ id: string; document_number: string; open_balance: string }>(sql`
     select id, document_number, open_balance from documents where id = ${a.document_id} and org_id = ${orgId}
+     for update
   `));
   const invoice = doc.rows[0];
   if (!invoice) throw new PaymentAcceptanceError("invoice not found");
@@ -2152,6 +2224,25 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
   // collection is still real money. Continue by posting the full receipt as
   // an unapplied AR credit instead of marking the attempt settled without a
   // bank/AR journal entry.
+  const collectedPrincipal = a.amount ?? invoice.open_balance;
+  if (cmp(collectedPrincipal, invoice.open_balance) > 0) {
+    const quotedFee = a.surcharge_amount ?? "0";
+    const expectedCollectible = add(invoice.open_balance, quotedFee);
+    return recordSettlementDiscrepancy(
+      orgId,
+      a.id,
+      {
+        reason: "collection_exceeds_open_balance",
+        provider: a.provider,
+        externalRef: a.external_ref,
+        reportedAmount: add(collectedPrincipal, quotedFee),
+        reportedCurrency: a.currency.toUpperCase(),
+        expectedAmount: expectedCollectible,
+        expectedCurrency: a.currency.toUpperCase(),
+      },
+      `provider collected ${add(collectedPrincipal, quotedFee)} ${a.currency.toUpperCase()} but the invoice now owes ${invoice.open_balance}; refund review is required`,
+    );
+  }
   const invoiceAlreadySettled = cmp(invoice.open_balance, "0") <= 0;
 
   let allocations: AllocationInput[] = [];

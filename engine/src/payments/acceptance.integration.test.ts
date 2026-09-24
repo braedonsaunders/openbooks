@@ -647,7 +647,7 @@ test("a provider outage answering HTML surfaces as the named refusal, never a pa
   }
 });
 
-test("a receipt keeps the over-collected remainder on-account when another channel paid first", { skip: !DB }, async () => {
+test("a stale provider session after another channel payment enters discrepancy review", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     // Posted $100 invoice + stripe config + 3% rule + active link for $103.
@@ -689,53 +689,35 @@ test("a receipt keeps the over-collected remainder on-account when another chann
 
     // Signed provider settlement for the full quoted $103.
     const { body, headers } = signedStripeBody("whsec_INV-D2-OVER", "cs_test_d2over", link.token);
-    const result = await handleProviderWebhook("stripe", headers, body);
-    assert.ok(result);
-    assert.equal(result.status, "settled");
-
-    // The provider collected $103: the receipt must book all of it — $80
-    // applied to the invoice, $20 held on-account, $3 fee income — instead
-    // of posting only the $80 still open and dropping the $20 collected.
-    const receipt = (await db.execute<{ id: string; total: string }>(sql`
-      select id, total from documents
-       where org_id = ${org.orgId} and kind = 'customer_payment'
-         and memo like '%INV-D2-OVER%' and status = 'posted'
-    `));
-    assert.equal(receipt.rows.length, 1);
-    assert.equal(receipt.rows[0]!.total, "103.0000");
-    const legs = (await db.execute<{ leg: string; amount: string }>(sql`
-      select case when jl.account_id = ${org.accounts.bank} then 'bank'
-                  when jl.account_id = ${org.accounts.ar} then 'ar'
-                  else 'fee' end as leg, jl.amount
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id
-       where je.source_document_id = ${receipt.rows[0]!.id}
-       order by jl.line_number
-    `));
-    assert.deepEqual(
-      legs.rows.map((l) => [l.leg, l.amount]),
-      [["bank", "103.0000"], ["ar", "-100.0000"], ["fee", "-3.0000"]],
+    await assert.rejects(
+      handleProviderWebhook("stripe", headers, body),
+      /provider collected 103\.0000 CAD but the invoice now owes 80\.0000; refund review is required/,
     );
-    const invoice = (await db.execute<{ open_balance: string }>(sql`
-      select open_balance from documents where id = ${invoiceId}
-    `));
-    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
-    // Both applications settle the invoice; the second receipt's source leg
-    // consumes only its $80 application, leaving the $20 remainder available
-    // as an on-account credit rather than absorbing it.
-    const apps = (await db.execute<{ target: string; source: string }>(sql`
-      select a.target_transaction_amount::text as target, a.source_amount::text as source
-        from applications a
-        join journal_lines jl on jl.id = a.to_line_id
-        join journal_entries je on je.id = jl.entry_id
-       where a.org_id = ${org.orgId} and a.unapplied_at is null
-         and je.source_document_id = ${invoiceId}
-       order by a.target_transaction_amount
-    `));
-    assert.deepEqual(
-      apps.rows.map((a) => [a.target, a.source]),
-      [["20.0000", "20.0000"], ["80.0000", "80.0000"]],
-    );
+    const state = (await db.execute<{
+      status: string; payment_document_id: string | null; discrepancy: Record<string, unknown> | null;
+      open_balance: string; receipts: number;
+    }>(sql`
+      select attempt.status, attempt.payment_document_id,
+             attempt.event_payload->'settlementDiscrepancy' as discrepancy,
+             invoice.open_balance,
+             (select count(*)::int from documents payment where payment.org_id = ${org.orgId} and payment.kind = 'customer_payment') as receipts
+        from payment_attempts attempt
+        join documents invoice on invoice.id = ${invoiceId}
+       where attempt.org_id = ${org.orgId} and attempt.external_ref = 'cs_test_d2over'
+    `)).rows[0]!;
+    assert.equal(state.status, "succeeded");
+    assert.equal(state.payment_document_id, null);
+    assert.equal(state.open_balance, "80.0000");
+    assert.equal(state.receipts, 1, "the independently posted partial payment is the only receipt");
+    assert.deepEqual(state.discrepancy, {
+      reason: "collection_exceeds_open_balance",
+      provider: "stripe",
+      externalRef: "cs_test_d2over",
+      reportedAmount: "103.0000",
+      reportedCurrency: "CAD",
+      expectedAmount: "83.0000",
+      expectedCurrency: "CAD",
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1291,6 +1273,86 @@ test("checkout refuses a frozen link quote after a partial payment", { skip: !DB
     `)).rows[0]!;
     assert.equal(attempts.n, 0, "a refused stale quote must not leave a payment attempt");
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a live checkout session collected after a partial payment enters settlement discrepancy review", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const originalFetch = globalThis.fetch;
+  let expirationAttempted = false;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    assert.match(String(input), /\/v1\/checkout\/sessions\/cs_stale_after_partial\/expire$/);
+    expirationAttempted = true;
+    // Model the customer winning the race and completing the session before
+    // Stripe can expire it; the later success webhook must still be fenced.
+    return new Response(JSON.stringify({ error: { message: "session is complete" } }), {
+      status: 409, headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-STALE-SESSION");
+    await createCheckoutSession(fx.link.token, `https://app.test/pay/${fx.link.token}`, async () => ({
+      status: 200,
+      json: async () => ({ id: "cs_stale_after_partial", url: "https://checkout.stripe.test/cs_stale_after_partial" }),
+    }));
+    const openLineId = (await db.execute<{ id: string }>(sql`
+      select jl.id from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id
+       where je.source_document_id = ${fx.invoiceId} and jl.org_id = ${org.orgId}
+         and jl.is_open_item
+    `)).rows[0]!.id;
+    const partial = await createPaymentDocument({ allowedSubsidiaryIds: null,
+      orgId: org.orgId, kind: "customer_payment", createdBy: fx.userId,
+      partyId: org.customerId, bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: "CAD", fxRate: "1",
+    });
+    await updateDraftPayment(partial.id, {
+      partyId: org.customerId, bankAccountId: org.accounts.bank,
+      allocations: [sameCurrencyAllocation(openLineId, "50")],
+    }, fx.userId, org.orgId);
+    await db.execute(sql`update documents set status = 'approved', submitted_by = ${fx.userId}, submitted_at = now() where id = ${partial.id} and org_id = ${org.orgId}`);
+    await postPaymentWithApplications(partial.id, undefined, fx.userId);
+    assert.equal(expirationAttempted, true, "invoice balance changes should expire stale Stripe sessions when possible");
+
+    const delivery = signedStripeBody("whsec_INV-PAY-STALE-SESSION", "cs_stale_after_partial", fx.link.token);
+    let failure: unknown;
+    try {
+      await handleProviderWebhook("stripe", delivery.headers, delivery.body);
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure instanceof PaymentWebhookBatchError, "a stale live session must be surfaced to the provider for review");
+    assert.match(String((failure as Error).cause), /refund review is required/);
+
+    const state = (await db.execute<{
+      status: string; payment_document_id: string | null; journal_entry_id: string | null;
+      discrepancy: Record<string, unknown> | null; open_balance: string; receipts: number;
+    }>(sql`
+      select attempt.status, attempt.payment_document_id, attempt.journal_entry_id,
+             attempt.event_payload->'settlementDiscrepancy' as discrepancy,
+             invoice.open_balance,
+             (select count(*)::int from documents payment where payment.org_id = ${org.orgId} and payment.kind = 'customer_payment') as receipts
+        from payment_attempts attempt
+        join documents invoice on invoice.id = ${fx.invoiceId}
+       where attempt.org_id = ${org.orgId} and attempt.external_ref = 'cs_stale_after_partial'
+    `)).rows[0]!;
+    assert.equal(state.status, "succeeded");
+    assert.equal(state.payment_document_id, null);
+    assert.equal(state.journal_entry_id, null);
+    assert.equal(state.open_balance, "50.0000");
+    assert.equal(state.receipts, 1, "only the independently posted partial payment exists");
+    assert.deepEqual(state.discrepancy, {
+      reason: "collection_exceeds_open_balance",
+      provider: "stripe",
+      externalRef: "cs_stale_after_partial",
+      reportedAmount: "103.0000",
+      reportedCurrency: "CAD",
+      expectedAmount: "53.0000",
+      expectedCurrency: "CAD",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
     await dropScratchOrg(org.orgId);
   }
 });

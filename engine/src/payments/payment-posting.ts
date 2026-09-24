@@ -14,6 +14,7 @@ import { paymentControlDeps, paymentBookId } from "./payment-accounts.ts";
 import { openItemsForParty } from "./payment-queries.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind } from "./payment-documents.ts";
+import { expireStalePaymentLinkSessions } from "./acceptance.ts";
 // ---------------------------------------------------------------------------
 // Post + apply
 // ---------------------------------------------------------------------------
@@ -46,6 +47,7 @@ export async function postPaymentWithApplications(
   const [preflight] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
   if (!preflight || !isPaymentKind(preflight.kind)) throw new PaymentError("payment document not found");
 
+  let affectedInvoicesAfterCommit: string[] = [];
   const result = await withOrg(preflight.orgId, async () => {
     // Match the kernel's organization -> book lock order. Holding a shared
     // book/advisory lock before upgrading the organization lock can deadlock
@@ -127,6 +129,13 @@ export async function postPaymentWithApplications(
     });
     const openItems = await openItemsForParty(doc.partyId, side, doc.orgId);
     const byLine = new Map(openItems.map((item) => [item.lineId, item]));
+    const affectedInvoiceIds = side === "ar"
+      ? [...new Set(allocs.flatMap((allocation) => {
+          const documentId = byLine.get(allocation.openLineId)?.documentId;
+          return documentId ? [documentId] : [];
+        }))]
+      : [];
+    affectedInvoicesAfterCommit = affectedInvoiceIds;
     for (const allocation of allocs) {
       const item = byLine.get(allocation.openLineId);
       if (!item) throw new PaymentError("an allocated item is no longer open for this party");
@@ -451,6 +460,8 @@ export async function postPaymentWithApplications(
     }
     return { entryId };
   });
+
+  await expireStalePaymentLinkSessions(preflight.orgId, affectedInvoicesAfterCommit);
 
   if (!options.deferEffects) {
     await runPostDocumentEffects(paymentDocId, preflight.status);
