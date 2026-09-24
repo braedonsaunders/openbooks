@@ -58,6 +58,9 @@ type JournalDrawerProps = Parameters<typeof JournalDrawer>[0]
 export interface JournalData {
   title: string
   description: string
+  /** The New button posts through gl.post — without it the button hides
+   * rather than opening a drawer the loader refuses to fill. */
+  canPost: boolean
   currentParams: Record<string, string | string[] | undefined>
   hasDrafts: boolean
   draftsHeading: string
@@ -226,6 +229,7 @@ export async function loadJournal(
   return {
     title: t('list.title'),
     description: t('list.description', { count: total }),
+    canPost: can(authz, 'gl.post'),
     currentParams: sp,
     hasDrafts: drafts.length > 0,
     draftsHeading: t('list.draftsHeading'),
@@ -245,9 +249,10 @@ export function journalSpec(data: JournalData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        // The create button checks nothing client-side; the draft endpoint
-        // enforces gl.post, exactly as on the native path.
-        actions: [widget('new-journal', {})],
+        // The create button shows iff the server would allow the save:
+        // ?entryNew=1 opens nothing without gl.post, so offering it would
+        // be a dead click. The drawer's explicit Save enforces gl.post too.
+        actions: [widget('new-journal', {}, f('canPost'))],
       }),
     ],
     body: [
@@ -262,7 +267,9 @@ export function journalSpec(data: JournalData): PageSpec {
         recordType: 'journal',
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'journal-drawer', props: { drawer: data.drawer } } : null,
-        emptyAction: { widget: 'new-journal', props: {} },
+        // The empty-state New is the same dead click without gl.post, and
+        // the slot carries no `when` — the loader flag decides at build.
+        emptyAction: data.canPost ? { widget: 'new-journal', props: {} } : null,
       }),
     ],
   })
