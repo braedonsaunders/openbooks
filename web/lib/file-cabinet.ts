@@ -33,6 +33,8 @@ export interface FileViewer {
   userId: string
   isAdmin: boolean
   baseline?: AccessLevel
+  /** AP-capture intake is governed by its owning AP capability, not documents.read. */
+  canReadApCapture?: boolean
   /**
    * The caller's role-derived subsidiary fence (null = organization-wide).
    * Record-folder files/folders evidence a single record, so restricted
@@ -151,13 +153,12 @@ function deriveExtension(filename: string): string | null {
 export interface ReadScope {
   hiddenFolderIds: string[]
   grantedFileIds: string[]
+  apCaptureFolderIds: string[]
 }
 
 async function resolveReadScope(orgId: string, viewer: FileViewer): Promise<ReadScope> {
-  if (viewer.isAdmin) return { hiddenFolderIds: [], grantedFileIds: [] }
-
   // Private subtrees owned by others (hidden from the org-role baseline).
-  const hiddenRes = (await db.execute<{ id: string }>(sql`
+  const hiddenRes = viewer.isAdmin ? { rows: [] as { id: string }[] } : (await db.execute<{ id: string }>(sql`
     with recursive hidden_folders as (
       select id from folders
        where org_id = ${orgId} and is_private and owner_id is distinct from ${viewer.userId}
@@ -188,13 +189,29 @@ async function resolveReadScope(orgId: string, viewer: FileViewer): Promise<Read
     for (const row of grantedRes.rows) hidden.delete(row.id)
   }
 
+  // AP intake files need the owning AP permission even when an explicit file
+  // grant would otherwise reopen a hidden/private file. Record this subtree
+  // separately so the file grant cannot override the capability boundary.
+  const apCaptureFolders = viewer.canReadApCapture === true
+    ? []
+    : (await db.execute<{ id: string }>(sql`
+        with recursive capture_folders as (
+          select id from folders where org_id = ${orgId} and system_kind = 'ap_capture'
+          union all
+          select f.id from folders f join capture_folders c on f.parent_folder_id = c.id
+           where f.org_id = ${orgId}
+        )
+        select id from capture_folders
+      `)).rows.map((row) => row.id)
+  for (const id of apCaptureFolders) hidden.add(id)
+
   // Files shared directly with the caller.
   const fileGrants = (await db.execute<{ id: string }>(sql`
     select g.resource_id as id from resource_grants g
      where g.org_id = ${orgId} and g.resource_type = 'file' and ${grantAppliesTo(orgId, viewer)}
   `))
 
-  return { hiddenFolderIds: [...hidden], grantedFileIds: fileGrants.rows.map((x) => x.id) }
+  return { hiddenFolderIds: [...hidden], grantedFileIds: fileGrants.rows.map((x) => x.id), apCaptureFolderIds: apCaptureFolders }
 }
 
 /**
@@ -215,8 +232,9 @@ function visibleFolderPredicate(hidden: string[], folderIdCol: SQL): SQL {
  */
 function visibleFilePredicate(scope: ReadScope, folderIdCol: SQL, fileIdCol: SQL): SQL {
   const folderOk = visibleFolderPredicate(scope.hiddenFolderIds, folderIdCol)
-  if (scope.grantedFileIds.length === 0) return folderOk
-  return sql`(${folderOk} or ${fileIdCol} in (
+  const apCaptureOk = visibleFolderPredicate(scope.apCaptureFolderIds, folderIdCol)
+  if (scope.grantedFileIds.length === 0) return sql`${apCaptureOk} and ${folderOk}`
+  return sql`${apCaptureOk} and (${folderOk} or ${fileIdCol} in (
     select value::uuid from jsonb_array_elements_text(${JSON.stringify(scope.grantedFileIds)}::jsonb) as _g(value)
   ))`
 }

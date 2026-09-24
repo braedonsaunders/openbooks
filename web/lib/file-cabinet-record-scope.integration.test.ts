@@ -12,7 +12,7 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { attachExisting, deleteFile, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
+const { attachExisting, deleteFile, ensureApCaptureRoot, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
 const { buildZip, filesZipManifest, folderZipManifest, MAX_ZIP_FILES } = await import('./file-zip')
 
 /**
@@ -133,6 +133,35 @@ test('trash hides metadata and every pinned or ZIP byte read', { skip: !process.
     assert.equal(await getFileBlob(org.orgId, fileId, viewer), null)
     assert.equal(await getFileBlob(org.orgId, fileId, viewer, versionId), null)
     assert.equal((await buildZip(org.orgId, viewer, manifest)).included, 0)
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('generic cabinet readers require AP read for AP capture even with a file grant', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const actorId = await createScratchUser(org.orgId, 'AP capture reader', 'clerk')
+    const folderId = await ensureApCaptureRoot(org.orgId, actorId)
+    const fileId = randomUUID()
+    const versionId = randomUUID()
+    await db.execute(sql`insert into files(id, org_id, folder_id, name, content_type, size_bytes)
+      values (${fileId}, ${org.orgId}, ${folderId}, 'supplier-invoice.pdf', 'application/pdf', 4)`)
+    await db.execute(sql`insert into file_versions(id, file_id, version_number, content_type, size_bytes, storage_kind)
+      values (${versionId}, ${fileId}, 1, 'application/pdf', 4, 'db')`)
+    await db.execute(sql`insert into file_blobs(version_id, bytes) values (${versionId}, decode('64617461', 'hex'))`)
+    await db.execute(sql`update files set current_version_id = ${versionId} where id = ${fileId}`)
+    await db.execute(sql`insert into resource_grants(org_id, resource_type, resource_id, principal_type, principal_id, access, created_by)
+      values (${org.orgId}, 'file', ${fileId}, 'user', ${actorId}, 'viewer', ${actorId})`)
+
+    const noApPermission = { userId: actorId, isAdmin: false, baseline: 'viewer' as const, canReadApCapture: false }
+    const withApPermission = { ...noApPermission, canReadApCapture: true }
+    assert.equal(await getFile(org.orgId, fileId, noApPermission), null)
+    assert.equal(await getFileBlob(org.orgId, fileId, noApPermission), null)
+    assert.equal((await listFiles(org.orgId, noApPermission, { q: 'supplier-invoice' })).total, 0)
+    assert.equal(await getFolder(org.orgId, folderId, noApPermission), null)
+    assert.ok(await getFile(org.orgId, fileId, withApPermission))
+    assert.ok(await getFileBlob(org.orgId, fileId, withApPermission))
   } finally {
     await dropScratchOrg(org.orgId)
   }
