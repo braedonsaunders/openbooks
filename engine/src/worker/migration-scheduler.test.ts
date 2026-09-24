@@ -68,3 +68,31 @@ test("database-wire timestamp strings are accepted by the mirror scheduler", () 
     true,
   );
 });
+
+test("one org's enqueue failure is recorded by name while the remaining orgs still enqueue (C-57)", async () => {
+  const { enqueueDueMirrors } = await import("./migration-worker.ts");
+  const now = new Date("2026-07-22T15:00:00.000Z");
+  const candidate = (id: string, orgId: string) => ({
+    id,
+    orgId,
+    schedule: "hourly",
+    lastSuccessfulAt: null,
+    lastScheduledAttemptAt: null,
+    scheduledFailuresSinceSuccess: 0,
+  });
+  const enqueued: string[] = [];
+  const outcome = await enqueueDueMirrors(
+    [candidate("conn-a", "org-a"), candidate("conn-b", "org-b"), candidate("conn-c", "org-c")],
+    (async (data: { connectionId: string }) => {
+      if (data.connectionId === "conn-b") throw new Error("Redis unavailable for org-b");
+      enqueued.push(data.connectionId);
+      return undefined as never;
+    }) as never,
+    now,
+  );
+  assert.equal(outcome.attempted, 3);
+  assert.deepEqual(outcome.orgErrors, [
+    { orgId: "org-b", connectionId: "conn-b", error: "Redis unavailable for org-b" },
+  ]);
+  assert.deepEqual(enqueued, ["conn-a", "conn-c"]);
+});
