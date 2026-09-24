@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import nodeTest from "node:test";
+import test from "node:test";
 import { NextResponse } from "next/server";
 
 interface RouteState {
@@ -11,12 +11,6 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-options-route-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
@@ -132,26 +126,24 @@ const mockUrls = new Map<string, string>([
 ]);
 
 let optionsRoute: typeof import("./route.ts") | undefined;
-if (!isVitest) {
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      if (specifier === "server-only") {
-        return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-      }
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-options";
-  optionsRoute = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
-}
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-options";
+optionsRoute = (await import(routeUrl)) as typeof import("./route.ts");
+hooks.deregister();
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
@@ -172,42 +164,35 @@ function errors(): { EmploymentReadError: new (message: string) => Error; HrmAut
   };
 }
 
-if (isVitest) {
-  test("options route gates on the hrm feature and the employment read grant", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardFeaturePermission\('hrm\.employment\.read', 'hrm'\)/);
-  });
-} else {
-  test("a missing feature flag 404s before the service runs", async () => {
+test("a missing feature flag 404s before the service runs", async () => {
     reset();
     routeState.featureOn = false;
     const response = await optionsRoute!.GET(getRequest("?source=employments"));
     assert.equal(response.status, 404);
     assert.deepEqual(routeState.calls, []);
-  });
+});
 
-  test("an unauthenticated caller never reaches the service", async () => {
+test("an unauthenticated caller never reaches the service", async () => {
     reset();
     routeState.gate = { status: 401 };
     const response = await optionsRoute!.GET(getRequest("?source=employments"));
     assert.equal(response.status, 401);
     assert.deepEqual(routeState.calls, []);
-  });
+});
 
-  test("an unknown source is refused before the service runs", async () => {
+test("an unknown source is refused before the service runs", async () => {
     reset();
     assert.equal((await optionsRoute!.GET(getRequest(""))).status, 400);
     assert.equal((await optionsRoute!.GET(getRequest("?source=roster"))).status, 400);
     assert.deepEqual(routeState.calls, []);
-  });
+});
 
-  test("a non-integer limit and a non-uuid include are refused", async () => {
+test("a non-integer limit and a non-uuid include are refused", async () => {
     reset();
     assert.equal((await optionsRoute!.GET(getRequest("?source=employments&limit=many"))).status, 400);
     assert.equal((await optionsRoute!.GET(getRequest("?source=locations&include=nope"))).status, 400);
     assert.deepEqual(routeState.calls, []);
-  });
+});
 
   test("employments forwards org, actor, search, page, and pin, then 200s", async () => {
     reset();
@@ -341,7 +326,7 @@ if (isVitest) {
     assert.deepEqual(routeState.calls, []);
   });
 
-  test("F3-40: people forwards the pin under its own key for the exit-interviewer picker", async () => {
+test("F3-40: people forwards the pin under its own key for the exit-interviewer picker", async () => {
   reset();
   const include = "00000000-0000-4000-8000-000000000033";
   const response = await optionsRoute!.GET(getRequest(`?source=people&include=${include}`));
@@ -356,4 +341,3 @@ if (isVitest) {
     },
   ]);
 });
-}
