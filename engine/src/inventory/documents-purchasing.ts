@@ -9,6 +9,7 @@ import { assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.t
 import { stockLocationDim, postInventoryEntry } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition } from "./position.ts";
 import { receiveInventory } from "./movements.ts";
+import { liveReceiptQuantity } from "./return-quantities.ts";
 import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
 
 /**
@@ -165,28 +166,41 @@ function billLinePurchaseOrderLineId(custom: unknown): string | null {
 }
 
 /**
- * Stock a goods receipt (purchase_receipt document) already brought in for a
+ * Live stock a goods receipt (purchase_receipt document) still holds for a
  * purchase-order line: posted receipt movements on receipt lines whose
- * immutable evidence names that source line. Null when nothing was received
- * that way, so the legacy bill-is-the-receipt path applies.
+ * immutable evidence names that source line, each net of its posted
+ * reversals through the shared live-receipt helper. A receipt the return
+ * flow treats as dead nets to zero here, so the bill falls through to the
+ * legacy bill-is-the-receipt path and brings the stock into layers instead
+ * of clearing a variance against vanished stock. Null when nothing live
+ * was received that way.
  */
 async function purchaseReceiptCoverage(
   runner: SqlExecutor,
   orgId: string,
   purchaseOrderLineId: string,
 ): Promise<{ quantity: string; value: string } | null> {
-  const row = (await runner.execute<{ quantity: string; value: string }>(sql`
-    select coalesce(sum(m.quantity), 0)::text as quantity,
-           coalesce(sum(m.total_value), 0)::text as value
+  const receipts = (await runner.execute<{ id: string }>(sql`
+    select m.id
       from inventory_movements m
       join document_lines rl on rl.id = m.document_line_id and rl.org_id = m.org_id
       join documents rd on rd.id = rl.document_id and rd.org_id = rl.org_id
      where m.org_id = ${orgId} and m.kind = 'receipt' and m.status = 'posted'
        and rd.kind = ${PURCHASE_RECEIPT_DOCUMENT_KIND}
        and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
-  `)).rows[0];
-  if (!row || toUnits(row.quantity) <= 0n) return null;
-  return { quantity: row.quantity, value: row.value };
+  `)).rows;
+  // One movement per receipt line in practice; each nets its own reversals
+  // through the helper the vendor-return guard shares, so both readers
+  // agree on what "received" means.
+  let quantity = "0";
+  let value = "0";
+  for (const receipt of receipts) {
+    const live = await liveReceiptQuantity(runner, orgId, receipt.id);
+    quantity = add(quantity, live.quantity);
+    value = add(value, live.value);
+  }
+  if (toUnits(quantity) <= 0n) return null;
+  return { quantity, value };
 }
 
 /**
