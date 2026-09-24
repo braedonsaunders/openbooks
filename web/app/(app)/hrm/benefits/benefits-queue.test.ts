@@ -1,100 +1,223 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Shared-table composition contract for the Benefits tab (/hrm/benefits).
-// Runs without dependencies: it reads the maintained sources and proves the
-// windows and enrolments render through the shared table block (variant
-// 'app') over loader-resolved display cells, segments ride the shared
-// filter chips, the primary action is the shared link-button FIRST in the
-// page header, and the drawer/dialog open from URL params — with every
-// label from the hrm catalog.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const dialog = readFileSync(new URL("./WindowDialog.tsx", import.meta.url), "utf8");
-const drawer = readFileSync(new URL("./WindowDrawer.tsx", import.meta.url), "utf8");
-const actions = readFileSync(new URL("./EnrollmentRowActions.tsx", import.meta.url), "utf8");
-const loader = readFileSync(new URL("../../../../lib/hrm/benefits.ts", import.meta.url), "utf8");
-const widgets = readFileSync(new URL("../../../../components/viewspec/widgets-hrm.tsx", import.meta.url), "utf8");
-const contracts = readFileSync(new URL("../../../../components/viewspec/widget-contracts.ts", import.meta.url), "utf8");
-const names = readFileSync(new URL("../../../../components/viewspec/registry-names.ts", import.meta.url), "utf8");
-const strings = readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8");
+// Behaviour contract for the benefits desk (/hrm/benefits). These tests
+// CALL the benefits loader with hand-built service rows and assert on
+// what the page observes: refusal data for an unknown segment, exact
+// per-status counts on the windows view, and the enrolments view swap
+// (a different entity, not a status). Seams stub I/O only (group and
+// rewards tabs, the engine benefits reads, the departments lookup,
+// translations backed by the REAL en catalog). Authz stubbing is the
+// sanctioned seam, with permission logic proven by the existing scope DB
+// tests, not doubled here.
+const hrmCatalog = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+) as Record<string, unknown>;
 
-test("benefits renders through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadBenefitsPage/, "page loads through the benefits loader");
-  assert.match(view, /benefitsSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+(globalThis as Record<string, unknown>).__benefitsCatalogs = { hrm: hrmCatalog };
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    const parent = context.parentURL ?? "";
+    const owned =
+      parent.endsWith("/web/lib/hrm/benefits.ts") ||
+      parent.endsWith("/web/lib/hrm/workspace-tabs.ts") ||
+      parent.endsWith("/web/lib/hrm/change-requests.ts");
+    if (owned && specifier === "next-intl/server") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function getLocale() { return 'en'; }
+             export async function getTranslations(ns) {
+              const catalogs = globalThis.__benefitsCatalogs;
+              const catalog = catalogs[ns] ?? {};
+              const lookup = (key) => {
+                let node = catalog;
+                for (const part of key.split('.')) {
+                  if (node !== null && typeof node === 'object') node = node[part];
+                  else return key;
+                }
+                return typeof node === 'string' ? node : key;
+              };
+              const t = (key, params) => {
+                const template = lookup(key);
+                if (!params) return template;
+                return template.replace(/\\{(\\w+)\\}/g, (_, name) => (params[name] === undefined ? '{' + name + '}' : String(params[name])));
+              };
+              t.has = (key) => lookup(key) !== key;
+              return t;
+            }`,
+          ),
+      };
+    }
+    if (owned && (specifier === "../authz" || specifier.endsWith("/lib/authz"))) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export const can = (authz, perm) => authz.permissions.has('*') || authz.permissions.has(perm);
+             export async function requirePermission() { throw new Error('stubbed requirePermission must not run here'); }
+             export async function getAuthz() { return null; }`,
+          ),
+      };
+    }
+    if (
+      specifier === "../features" ||
+      specifier.endsWith("/lib/features") ||
+      specifier === "./features"
+    ) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function isFeatureEnabled() { return true; }
+             export async function requireFeatureEnabled() {}
+             export async function subsidiaryFeatureEnabled() { return false; }`,
+          ),
+      };
+    }
+    if (owned && specifier.endsWith("components/module-home/group-tabs")) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/src/platform/business-date.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/src/hrm/benefits/benefits-read.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function listEnrollmentWindows(db, orgId, actorId, filter) {
+              const s = globalThis.__benefitsReads;
+              const windows = (s && s.windows) || [];
+              if (filter && filter.status) return windows.filter((w) => w.status === filter.status);
+              return windows;
+            }
+            export async function listEnrollments() {
+              const s = globalThis.__benefitsReads;
+              return (s && s.enrolments) || [];
+            }
+            export async function benefitsCockpit() {
+              return { openWindows: [], pendingCount: 0, missingCount: 0 };
+            }`,
+          ),
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) };",
+      };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("benefits rows render through the shared table block, not a bespoke table", () => {
-  assert.match(view, /table\(\{/, "rows compose a table block");
-  assert.match(view, /variant: 'app'/, "the table uses the app list variant");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
-  assert.ok(!/<table/.test(dialog), "the dialog island holds no hand-rolled table");
-  assert.ok(!/<table/.test(drawer), "the drawer island holds no hand-rolled table");
+const { loadBenefits } = await import("../../../../lib/hrm/benefits.ts");
+
+const gap = globalThis as Record<string, unknown>;
+
+function authzWith(permissions: string[]) {
+  return {
+    user: { orgId: "org-benefits", id: "actor-benefits" },
+    permissions: new Set(permissions),
+    allowedSubsidiaryIds: null,
+  } as never;
+}
+
+const HR_BENEFITS = authzWith(["hrm.benefits.read", "hrm.benefits.manage"]);
+
+function stubReads(windows: Array<Record<string, unknown>>, enrolments: Array<Record<string, unknown>>) {
+  gap.__benefitsReads = { windows, enrolments };
+}
+
+function windowRow(id: string, status: string): Record<string, unknown> {
+  return { id, kind: "annual", status, opensOn: "2026-11-01", closesOn: "2026-11-30" };
+}
+
+function enrolmentRow(id: string, windowId: string): Record<string, unknown> {
+  return { id, windowId, employmentId: "emp-1", employeeName: "Ada", status: "elected" };
+}
+
+test("an unknown segment refuses naming the segment, never an empty table", async () => {
+  stubReads([], []);
+  const data = await loadBenefits(HR_BENEFITS, { segment: "enrolments" });
+  assert.ok(data.refusal, "the refusal travels as data the page renders");
+  assert.ok(data.refusal.message.includes("enrolments"), "the refusal names the rejected value");
+  assert.equal(data.hasContent, false, "no rows render beside the refusal");
+  assert.equal(data.showingEnrolments, false, "a refused segment shows neither view");
 });
 
-test("benefits segments ride the shared list toolbar", () => {
-  assert.match(view, /widgetBlock\('list-toolbar'/, "the window-status filter rides the shared toolbar");
-  assert.match(view, /paramKey: 'segment'/, "segments filter on the segment search param");
-  assert.doesNotMatch(view, /widgetBlock\('filter-chips'/, "no second filter treatment beside the toolbar");
+test("the windows view binds rows with exact per-status counts", async () => {
+  stubReads(
+    [windowRow("w-open", "open"), windowRow("w-draft", "draft"), windowRow("w-closed", "closed")],
+    [enrolmentRow("e-1", "w-open")],
+  );
+  const data = await loadBenefits(HR_BENEFITS, {});
+  assert.equal(data.refusal, null, "the windows view carries no refusal");
+  assert.equal(data.showingEnrolments, false, "windows are the default view");
+  assert.deepEqual(
+    data.segments.map((segment) => [segment.value, segment.count]),
+    [["all", 3], ["open", 1], ["draft", 1], ["closed", 1]],
+    "enrolments never leak into the status counts",
+  );
+  assert.equal(data.windowRows.length, 3, "every window lists");
+  const open = data.windowRows[0]!;
+  assert.equal(open.rangeLabel, "2026-11-01 – 2026-11-30", "the range renders verbatim");
+  assert.ok(open.windowHref.includes("window=w-open"), "each window opens its own drawer");
 });
 
-test("windows and enrolments are TABS, not options inside the status filter", () => {
-  assert.match(view, /widgetBlock\('module-home-tabs', \{ tabs: data\.viewTabs \}\)/,
-    "the view switch is the shared subtab strip");
-  // The defect this pins: 'enrolments' used to be a STATUS segment, so one
-  // control mixed "filter these windows" with "show a different entity".
-  assert.doesNotMatch(loader, /'enrolments'\] as const/, "enrolments is not a window status");
-  assert.match(loader, /sp\.view === 'enrolments'/, "the view lives on its own search param");
-  assert.match(loader, /hrmRewardsViewTabs/, "Windows and Enrolments fold into the Rewards viewTabs beside Compensation");
+test("the enrolments view swaps the table for the other entity", async () => {
+  stubReads([windowRow("w-open", "open")], [enrolmentRow("e-1", "w-open")]);
+  const data = await loadBenefits(HR_BENEFITS, { view: "enrolments" });
+  assert.equal(data.refusal, null, "the enrolments view carries no refusal");
+  assert.equal(data.showingEnrolments, true, "the view flag swaps the table");
+  assert.equal(data.enrollmentRows.length, 1, "enrolments list on their own view");
+  assert.equal(data.enrollmentRows[0]!.employeeLabel, "Ada", "rows resolve the employee name");
+  assert.ok(data.newWindowHref.includes("view=enrolments"), "dialogs opened from the view close back onto it");
 });
 
-test("the primary action is the shared link-button first in the page header", () => {
-  const headerStart = view.indexOf("pageHeader({");
-  const header = view.slice(headerStart, view.indexOf("module-home-tabs", headerStart));
-  assert.match(header, /link-button/, "the New window button is a link-button widget");
-  assert.match(header, /f\('newWindowHref'\)/, "it navigates to a loader-built href");
-  assert.match(header, /f\('canManage'\)/, "it renders only with the manage grant");
-  assert.ok(view.indexOf("'link-button'") < view.indexOf("'module-home-tabs'"), "the button precedes the tabs strip");
-});
-
-test("cells compose the shared primitives over loader-resolved display fields", () => {
-  assert.match(view, /link\(item\('name'\), item\('windowHref'\)\)/, "window opens the drawer href");
-  assert.match(view, /badge\(item\('statusLabel'\), \{ variant: item\('statusVariant'\) \}\)/, "status rides the shared badge");
-  assert.match(view, /widgetCell\('hrm-enrollment-actions'/, "pending rows carry the approve island");
-  assert.match(view, /align: 'right'/, "amounts align right");
-  assert.match(loader, /windowHref/, "the loader builds the window drawer href");
-  assert.match(loader, /statusVariant/, "the loader resolves the badge variant");
-  assert.match(loader, /employeeHref/, "the loader builds the employee href");
-});
-
-test("dialog, drawer, and approve island open from URL params through shared UI", () => {
-  assert.match(view, /hrm-window-dialog/, "the new-window dialog is a widget");
-  assert.match(view, /hrm-window-drawer/, "the window drawer is a widget");
-  assert.match(dialog, /from '@openbooks\/ui'/, "the dialog uses the shared UI primitives");
-  assert.match(drawer, /from '@openbooks\/ui'/, "the drawer uses the shared UI primitives");
-  assert.match(actions, /pending_approval/, "the island renders only for pending rows");
-  assert.match(actions, /router\.refresh\(\)/, "the island refreshes the loader-resolved list");
-  assert.match(widgets, /hrm-window-dialog/, "the dialog is registered in the HRM widget family");
-  assert.match(widgets, /hrm-window-drawer/, "the drawer is registered in the HRM widget family");
-  assert.match(widgets, /hrm-enrollment-actions/, "the approve island is registered in the HRM widget family");
-  assert.match(contracts, /hrm-window-dialog/, "widget contracts cover the dialog");
-  assert.match(contracts, /hrm-window-drawer/, "widget contracts cover the drawer");
-  assert.match(contracts, /hrm-enrollment-actions/, "widget contracts cover the island");
-  assert.match(names, /hrm-window-dialog/, "registry names cover the dialog");
-  assert.match(names, /hrm-window-drawer/, "registry names cover the drawer");
-  assert.match(names, /hrm-enrollment-actions/, "registry names cover the island");
-});
-
-test("every benefits label resolves from the hrm catalog", () => {
-  const catalog = JSON.parse(strings) as { benefits: Record<string, unknown> };
-  for (const key of ["title", "windowsTitle", "enrolmentsTitle", "newWindow", "approve", "segmentsLabel", "allLabel"]) {
-    assert.ok(catalog.benefits[key] !== undefined, `benefits.${key} is catalogued`);
-  }
-  const columns = catalog.benefits.columns as Record<string, unknown>;
-  for (const key of ["window", "kind", "range", "elections", "pending", "status", "employee", "plan", "coverage"]) {
-    assert.ok(columns[key] !== undefined, `benefits.columns.${key} is catalogued`);
+test("the benefits copy ships with translated statuses in every section", () => {
+  const catalog = JSON.parse(
+    readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+  ) as {
+    benefits: {
+      title: string;
+      windowsTitle: string;
+      enrolmentsTitle: string;
+      segments: { open: string; draft: string; closed: string };
+    };
+  };
+  assert.ok(catalog.benefits.title.length > 0, "the page title resolves from the catalog");
+  assert.ok(catalog.benefits.windowsTitle.length > 0, "the windows view resolves its own title");
+  assert.ok(catalog.benefits.enrolmentsTitle.length > 0, "the enrolments view resolves a different title");
+  for (const status of ["open", "draft", "closed"] as const) {
+    assert.ok(
+      catalog.benefits.segments[status].length > 0,
+      `the ${status} segment resolves its own label, never a bare status code`,
+    );
   }
 });
