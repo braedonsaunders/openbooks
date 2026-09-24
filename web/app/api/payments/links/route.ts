@@ -7,6 +7,7 @@ import {
   createPaymentLink,
   listPaymentLinks,
 } from "@openbooks/engine/src/payments/acceptance.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { guardPermission, type Authz } from "../../../../lib/authz";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
@@ -57,16 +58,21 @@ export async function GET(req: Request) {
   }
   const denied = await denyOutsideDocumentScope(gate, documentId);
   if (denied) return denied;
-  const [links, providers] = await Promise.all([
-    listPaymentLinks(gate.user.orgId, documentId),
-    db.execute<{ provider: string }>(sql`
-      select provider from psp_provider_configs
-       where org_id = ${gate.user.orgId} and is_enabled and acceptance_enabled
-         and default_bank_account_id is not null
-       order by provider
-    `),
-  ]);
-  return NextResponse.json({ links, providers: providers.rows.map((r) => r.provider) });
+  try {
+    const [links, providers] = await Promise.all([
+      listPaymentLinks(gate.user.orgId, documentId, gate.allowedSubsidiaryIds),
+      db.execute<{ provider: string }>(sql`
+        select provider from psp_provider_configs
+         where org_id = ${gate.user.orgId} and is_enabled and acceptance_enabled
+           and default_bank_account_id is not null
+         order by provider
+      `),
+    ]);
+    return NextResponse.json({ links, providers: providers.rows.map((r) => r.provider) });
+  } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    throw e;
+  }
 }
 
 export async function POST(req: Request) {
@@ -81,15 +87,21 @@ export async function POST(req: Request) {
   const denied = await denyOutsideDocumentScope(gate, body.documentId);
   if (denied) return denied;
   try {
-    const link = await createPaymentLink(gate.user.orgId, gate.user.id, {
-      documentId: body.documentId,
-      provider: body.provider,
-      bankAccountId: body.bankAccountId ?? null,
-      expiresOn: body.expiresOn ?? null,
-      memo: body.memo ?? null,
-    });
+    const link = await createPaymentLink(
+      gate.user.orgId,
+      gate.user.id,
+      {
+        documentId: body.documentId,
+        provider: body.provider,
+        bankAccountId: body.bankAccountId ?? null,
+        expiresOn: body.expiresOn ?? null,
+        memo: body.memo ?? null,
+      },
+      gate.allowedSubsidiaryIds,
+    );
     return NextResponse.json(link, { status: 201 });
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
     const status = e instanceof PaymentAcceptanceError ? 422 : 500;
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
   }

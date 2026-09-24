@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { PaymentAcceptanceError, voidPaymentLink } from "@openbooks/engine/src/payments/acceptance.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
@@ -28,9 +29,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId);
   if (denied) return denied;
   try {
-    await voidPaymentLink(gate.user.orgId, gate.user.id, id);
+    await voidPaymentLink(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds);
     return NextResponse.json({ ok: true });
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
     const status = e instanceof PaymentAcceptanceError ? 422 : 500;
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
   }
