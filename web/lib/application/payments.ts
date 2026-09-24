@@ -88,6 +88,7 @@ export async function createPayment(
           orgId: context.authz.user.orgId,
           kind: input.kind,
           createdBy: context.authz.user.id,
+          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
           partyId: input.partyId,
           bankAccountId: input.bankAccountId,
           documentDate: input.documentDate,

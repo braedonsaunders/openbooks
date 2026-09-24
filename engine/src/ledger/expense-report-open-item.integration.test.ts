@@ -89,7 +89,7 @@ test(
       assert.equal(open[0]!.open, "123.4500");
 
       // Settle it end-to-end through the payment-application engine.
-      const payment = await createPaymentDocument({
+      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "vendor_payment",
         createdBy: actorId,

@@ -24,7 +24,18 @@ import { cmp, fitsLedgerRange, ledgerSideTotals, normalizeDecimal, normalizeMone
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
+import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { allowedSubsidiaryIds } from './subsidiaries'
 import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
+
+/** Named draft-factory refusal (unknown scope assignment), mapped to 422. */
+export class DocumentDraftError extends Error {
+  readonly status = 422
+  constructor(message: string) {
+    super(message)
+    this.name = 'DocumentDraftError'
+  }
+}
 import { canonicalDecimal } from './exact-decimal'
 import { activeStockLocations, profiledItemIds } from './stock-locations'
 import { DOC_KIND_FEATURE, docKindConfig, isDocumentCreateKind, type DocKindConfig } from './document-kinds'
@@ -118,15 +129,37 @@ export async function createDocumentDraft(
   orgId: string,
   userId: string,
   kind: string,
-  options: { runFlows?: boolean; source?: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction' } = {},
+  options: {
+    /**
+     * REQUIRED actor scope (explicit null only for system flows): a
+     * restricted caller's draft lands in their single allowed subsidiary, or
+     * a named refusal — the org root is never assigned on their behalf,
+     * validated BEFORE numbering or insert.
+     */
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+    /** Explicit subsidiary choice; validated in scope before numbering. */
+    subsidiaryId?: string | null;
+    runFlows?: boolean;
+    source?: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction';
+  },
 ) {
   const cfg = docKindConfig(kind)
   if (!cfg) throw new Error(`unknown document kind "${kind}"`)
   const currency = await orgBaseCurrency(orgId)
-  const root = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null`))
-  const subsidiaryId = root.rows[0]?.id ?? null
-  const documentNumber = await nextDocumentNumber(orgId, kind, cfg.numberPrefix, subsidiaryId)
+  // Unrestricted callers keep the legacy default (the org root) when they
+  // name no subsidiary; restricted callers resolve to their single allowed
+  // subsidiary or refuse by name — validated BEFORE numbering or insert.
+  let subsidiaryId: string | null
+  if (options.allowedSubsidiaryIds === null && options.subsidiaryId === undefined) {
+    const root = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries where org_id = ${orgId} and parent_id is null`))
+    subsidiaryId = root.rows[0]?.id ?? null
+  } else {
+    const resolved = resolveDraftSubsidiary(options.allowedSubsidiaryIds, options.subsidiaryId)
+    if (!resolved.ok) throw new DocumentDraftError(resolved.error)
+    subsidiaryId = resolved.subsidiaryId
+  }
+  const documentNumber = await nextDocumentNumber(orgId, kind, cfg.numberPrefix, subsidiaryId ?? undefined)
   const [doc] = await db
     .insert(schema.documents)
     .values({
@@ -172,7 +205,7 @@ export async function createPostedCorrectionDraft(
 
   const created = await withOrgTransaction(ctx.orgId, async () => runDocumentVersionedTransaction<
     DocumentTransaction,
-    { kind: string; status: string; updatedAt: string },
+    { kind: string; status: string; subsidiaryId: string | null; updatedAt: string },
     { id: string; documentNumber: string; kind: string }
   >({
     expectedRevision,
@@ -183,9 +216,10 @@ export async function createPostedCorrectionDraft(
     lock: async (tx) => (await tx.execute<{
       kind: string
       status: string
+      subsidiaryId: string | null
       updatedAt: string
     }>(sql`
-      select kind, status,
+      select kind, status, subsidiary_id as "subsidiaryId",
              ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
        from documents
        where id = ${sourceId} and org_id = ${ctx.orgId}
@@ -207,7 +241,12 @@ export async function createPostedCorrectionDraft(
       if (source.status !== 'posted') {
         throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
       }
+      // The replacement inherits the source's (already scope-gated)
+      // subsidiary unless the body re-homes it; the factory validates the
+      // result against the actor's real scope, never the org root.
       const replacement = await createDocumentDraft(ctx.orgId, ctx.userId, source.kind, {
+        allowedSubsidiaryIds: await allowedSubsidiaryIds(ctx.userId, ctx.orgId),
+        subsidiaryId: body.subsidiaryId ?? source.subsidiaryId,
         runFlows: false,
         source: ctx.source,
       })

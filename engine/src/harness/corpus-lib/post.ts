@@ -176,6 +176,8 @@ async function replayPayment(
     orgId: world.orgId,
     kind: event.kind,
     createdBy: actor,
+    // Corpus harness: system provenance, unrestricted by construction.
+    allowedSubsidiaryIds: null,
     partyId: resolveParty(opts, event.party),
     bankAccountId: world.accounts.bank,
     documentDate: event.date,

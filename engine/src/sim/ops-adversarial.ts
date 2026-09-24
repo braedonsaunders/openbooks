@@ -124,6 +124,8 @@ export async function overApplicationProbe(world: SimOrg, simDate: string): Prom
       orgId: world.orgId,
       kind: "customer_payment",
       createdBy: world.actors.arClerk,
+      // Sim probe: system provenance, unrestricted by construction.
+      allowedSubsidiaryIds: null,
       partyId: customer.id,
       bankAccountId: world.accounts.bank,
       documentDate: simDate,

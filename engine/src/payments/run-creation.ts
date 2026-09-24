@@ -452,6 +452,9 @@ async function createPaymentRunWithinTransaction(
       orgId: opts.orgId,
       kind: "vendor_payment",
       createdBy: opts.createdBy,
+      // Payment-run job: system provenance, unrestricted by construction; the
+      // run's own bills were scope-checked when the run was authorized.
+      allowedSubsidiaryIds: null,
       partyId,
       bankAccountId: profile.bank_account_id,
       // An order-converted bill carries no subsidiary (single-entity orders

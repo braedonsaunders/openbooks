@@ -89,7 +89,7 @@ async function fixture() {
   const org = await createScratchOrg();
   const actor = await createScratchUser(org.orgId, "Scope audit", "admin");
   const target = await line(org);
-  const payment = await createPaymentDocument({
+  const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
     orgId: org.orgId,
     kind: "customer_payment",
     createdBy: actor,
@@ -356,7 +356,7 @@ test(
         amount: "-100",
       });
       const credit = await postedCredit(org, actor, true);
-      const payment = await createPaymentDocument({
+      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "vendor_payment",
         createdBy: actor,
@@ -404,7 +404,7 @@ test(
     const { org, actor, target, payment } = await fixture();
     try {
       const credit = await postedCredit(org, actor);
-      const other = await createPaymentDocument({
+      const other = await createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "customer_payment",
         createdBy: actor,
@@ -544,7 +544,7 @@ test(
           sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`,
         )
       ).rows[0]!.id;
-      const payment = await createPaymentDocument({
+      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "vendor_payment",
         createdBy: actor,

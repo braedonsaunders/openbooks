@@ -17,7 +17,9 @@ export async function POST() {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   try {
-    const created = await createFieldTicket(gate.user.orgId, gate.user.id)
+    const created = await createFieldTicket(gate.user.orgId, gate.user.id, {
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
     return NextResponse.json(created)
   } catch (e) {
     // A fenced in-transaction refusal stays indistinguishable from a missing

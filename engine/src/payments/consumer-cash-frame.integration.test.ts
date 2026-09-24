@@ -47,7 +47,7 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
       select id from journal_lines where entry_id = ${billEntryId} and account_id = ${org.accounts.ap}
     `)).rows[0]!.id;
 
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "vendor_payment",
       createdBy: actor,

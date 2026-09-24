@@ -25,7 +25,7 @@ test('Field Ticket service refuses direct creation when Field Tickets is disable
       `)
 
       await assert.rejects(
-        createFieldTicket(org.orgId, actor, { projectId }),
+        createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null}),
         (error: unknown) => error instanceof FieldTicketNotFoundError && error.status === 404,
       )
       assert.equal(

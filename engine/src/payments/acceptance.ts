@@ -2101,6 +2101,9 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
       orgId,
       kind: "customer_payment",
       createdBy: actorId,
+      // Bearer payment-link provenance: no actor scope to inherit; the receipt
+      // carries the invoiced subsidiary explicitly.
+      allowedSubsidiaryIds: null,
       partyId: a.party_id,
       bankAccountId: a.bank_account_id,
       documentDate: await businessToday(orgId),

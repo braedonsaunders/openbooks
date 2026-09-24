@@ -1208,6 +1208,12 @@ async function createDocument(
     throw e;
   }
   const draft = await createDocumentDraft(user.orgId, user.id, docKind, {
+    // The actor's own scope: a restricted writer drafts in their subsidiary
+    // (or refuses by name) instead of the org root. An explicit body
+    // subsidiary was already validated above; pass it through for the
+    // factory's own check.
+    allowedSubsidiaryIds: await mutationSubsidiaryScope(user, allowedScope),
+    subsidiaryId: body.subsidiaryId ?? undefined,
     source,
   });
   const draftId = draft!.id;

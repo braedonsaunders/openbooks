@@ -70,7 +70,7 @@ async function setupReceivedOrder(
   total: string,
 ): Promise<{ orderId: string; sourceIds: string[] }> {
   const { org, userId } = fx;
-  const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID()));
+  const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
   const sourceIds: string[] = [];
   await withBypassContext(async () => {
     let n = 0;

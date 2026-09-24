@@ -27,9 +27,9 @@ test("payment drafts persist the explicit entity or resolve the party then root 
         createdBy: null,
         documentDate: org.date,
       };
-      const fromParty = await createPaymentDocument({ ...common, partyId: org.customerId });
-      const fromRoot = await createPaymentDocument(common);
-      const explicit = await createPaymentDocument({
+      const fromParty = await createPaymentDocument({ allowedSubsidiaryIds: null, ...common, partyId: org.customerId });
+      const fromRoot = await createPaymentDocument({ allowedSubsidiaryIds: null, ...common });
+      const explicit = await createPaymentDocument({ allowedSubsidiaryIds: null,
         ...common, partyId: org.customerId, subsidiaryId: org.subsidiaryId,
       });
       for (const [document, expected] of [

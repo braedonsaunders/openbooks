@@ -58,7 +58,7 @@ test("vendor payment analytics counts an installment bill once and uses final se
     const payableLineId: string = targetLineId;
 
     const postInstallment = async (documentDate: string, amount: string): Promise<void> => {
-      const payment = await withBypass(() => createPaymentDocument({
+      const payment = await withBypass(() => createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "vendor_payment",
         createdBy: null,

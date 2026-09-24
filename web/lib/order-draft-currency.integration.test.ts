@@ -32,7 +32,7 @@ test("createOrderDraft refuses when the org base currency is missing", async () 
     // string — the same falsy "missing" state the canonical create refuses.
     await withBypassContext(() => db.execute(sql`update orgs set base_currency = '' where id = ${org.orgId}`));
     await assert.rejects(
-      () => withBypassContext(() => createOrderDraft(org.orgId, actor, "purchase_order", randomUUID())),
+      () => withBypassContext(() => createOrderDraft(org.orgId, actor, "purchase_order", randomUUID(), null)),
       (error: unknown) => {
         assert.ok(error instanceof OrderDraftError);
         assert.match(error.message, /no base currency configured/);
@@ -52,7 +52,7 @@ test("createOrderDraft mints the draft in the org base currency", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Drafter", "order_drafter"));
-    const draft = await withBypassContext(() => createOrderDraft(org.orgId, actor, "purchase_order", randomUUID()));
+    const draft = await withBypassContext(() => createOrderDraft(org.orgId, actor, "purchase_order", randomUUID(), null));
     const row = (await withBypassContext(() => db.execute<{ currency: string }>(sql`
       select currency from documents where id = ${draft.id} and org_id = ${org.orgId}`))).rows[0]!;
     assert.equal(row.currency, "CAD");

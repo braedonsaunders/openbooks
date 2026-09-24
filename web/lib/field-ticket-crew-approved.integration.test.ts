@@ -41,7 +41,7 @@ test('the crew grid refuses to silently rewrite approved entries', enabled, asyn
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'CREW-APP', 'Approved crew job',
                 ${org.customerId}, 'active', true, '{}'::jsonb)`)
 
-      const created = await createFieldTicket(org.orgId, actor, { projectId })
+      const created = await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})
       const loaded = await loadFieldTicket(org.orgId, created.id)
       const day = loaded.fieldTicket.periodStart
       const grid = (revision: string, hours: Record<string, string>) => saveCrewGrid(org.orgId, actor, created.id, [
@@ -105,7 +105,7 @@ test('project-ticket crew and line writes refuse while Projects is disabled', en
         (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'GATED', 'Gated job',
                 ${org.customerId}, 'active', true, '{}'::jsonb)`)
-      const created = await createFieldTicket(org.orgId, actor, { projectId })
+      const created = await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})
       // Reads hide with the gate, so capture the revision token and window
       // day before disabling.
       const loaded = await loadFieldTicket(org.orgId, created.id)
@@ -153,7 +153,7 @@ test('re-homing a ticket onto a project refuses while Projects is disabled', ena
           (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
           values (${id}, ${org.orgId}, ${org.subsidiaryId}, ${code}, ${code}, ${org.customerId}, 'active', true, '{}'::jsonb)`)
       }
-      const created = await createFieldTicket(org.orgId, actor, { projectId: firstId })
+      const created = await createFieldTicket(org.orgId, actor, { projectId: firstId, allowedSubsidiaryIds: null})
       const revision = (await loadFieldTicket(org.orgId, created.id)).revision
       await db.execute(sql`update orgs set settings = jsonb_set(settings,'{features,projects}','false'::jsonb) where id = ${org.orgId}`)
       await assert.rejects(

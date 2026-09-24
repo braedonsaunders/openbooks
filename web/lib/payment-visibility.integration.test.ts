@@ -412,7 +412,7 @@ for (const boundary of [
             })
             assert.ok(!JSON.stringify(tree).includes('VISIBLE-RUN'))
           } else {
-            const payment = await createPaymentDocument({
+            const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
               orgId: org.orgId,
               createdBy: actor,
               documentDate: org.date,
@@ -588,7 +588,7 @@ test(
     let save: Promise<unknown> | undefined
     try {
       const payment = await withOrgContext(org.orgId, () =>
-        createPaymentDocument({
+        createPaymentDocument({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: actor,
           documentDate: org.date,

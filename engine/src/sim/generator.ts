@@ -160,6 +160,8 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
       orgId: ctx.world.orgId,
       kind: "customer_payment",
       createdBy: ctx.world.actors.arClerk,
+      // Sim world-builder: system provenance, unrestricted by construction.
+      allowedSubsidiaryIds: null,
       partyId: customer.id,
       documentDate: ctx.simDate,
       currency: ctx.world.currency,

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
@@ -23,6 +24,12 @@ export async function POST() {
   const feature = await guardProjectsFeature(user.orgId)
   if (feature) return feature
 
+  // A NULL-subsidiary project is denied by projects/[id] even to its
+  // creator, so the draft must land in the actor's subsidiary — or refuse
+  // by name when no single one can be assigned.
+  const resolved = resolveDraftSubsidiary(gate.allowedSubsidiaryIds)
+  if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 422 })
+
   let created: { id: string } | undefined
   let featureRefused = false
   await withOrgTransaction(user.orgId, async () => {
@@ -35,6 +42,7 @@ export async function POST() {
       .insert(schema.projects)
       .values({
         orgId: user.orgId,
+        subsidiaryId: resolved.subsidiaryId,
         name: 'New project',
         status: 'active',
         isActive: false,

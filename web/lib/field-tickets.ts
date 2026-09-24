@@ -20,6 +20,7 @@ import { createProjectCharge } from './project-charges'
 import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
 import { getS3Blob } from './file-storage'
 import { subsidiaryScopeAllows } from './authz'
+import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
  * Field tickets — the signed crew timesheet for T&M work (the industry's
@@ -144,7 +145,7 @@ export async function resolveTicketPeriod(
 export async function createFieldTicket(
   orgId: string,
   userId: string,
-  input: { projectId?: string | null; date?: string; period?: TicketPeriod; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
+  input: { projectId?: string | null; date?: string; period?: TicketPeriod; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<{ id: string; documentNumber: string }> {
   return withOrg(orgId, async () => {
     // Fenced recheck inside the creation transaction (`withOrg` pins `db`
@@ -165,8 +166,19 @@ export async function createFieldTicket(
         ).rows[0] ?? null
       : null
     if (input.projectId && !proj) throw new FieldTicketError('Project not found')
-    if (!subsidiaryScopeAllows(input.allowedSubsidiaryIds ?? null, proj?.subsidiary_id ?? null)) {
+    // A requested project must be in scope (uniform not-found otherwise);
+    // with no project the draft-subsidiary resolution below decides.
+    if (proj && !subsidiaryScopeAllows(input.allowedSubsidiaryIds, proj.subsidiary_id ?? null)) {
       throw new FieldTicketNotFoundError('Project not found')
+    }
+    // An unassigned draft must still land in a subsidiary the actor's own
+    // reads can observe: a restricted caller gets their single allowed
+    // subsidiary, or a named refusal — never an org-wide null draft.
+    let ticketSubsidiaryId = proj?.subsidiary_id ?? null
+    if (ticketSubsidiaryId === null) {
+      const resolved = resolveDraftSubsidiary(input.allowedSubsidiaryIds)
+      if (!resolved.ok) throw new FieldTicketError(resolved.error)
+      ticketSubsidiaryId = resolved.subsidiaryId
     }
     const anchorDate = input.date ?? await businessToday(orgId)
     if (!isIsoCalendarDate(anchorDate)) throw new FieldTicketError('Invalid ticket date')
@@ -175,12 +187,12 @@ export async function createFieldTicket(
     const window = ticketWindow(period, anchorDate)
     const org = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
     const foreman = (await db.execute<{ party_id: string | null }>(sql`select party_id from users where id = ${userId}`))
-    const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', proj?.subsidiary_id ?? undefined)
+    const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', ticketSubsidiaryId ?? undefined)
     const row = (await db.execute<{ id: string; document_number: string }>(sql`
       insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, project_id,
                              subsidiary_id, reference_number, billing_method, subtotal, tax_total, total, custom, created_by)
       values (${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org.rows[0]?.base_currency ?? 'CAD'},
-              'draft', ${proj?.customer_id ?? null}, ${proj?.id ?? null}, ${proj?.subsidiary_id ?? null},
+              'draft', ${proj?.customer_id ?? null}, ${proj?.id ?? null}, ${ticketSubsidiaryId},
               ${proj?.po ?? null}, 'time_and_materials', '0', '0', '0', '{}'::jsonb, ${userId})
       returning id, document_number`))
     await db.execute(sql`

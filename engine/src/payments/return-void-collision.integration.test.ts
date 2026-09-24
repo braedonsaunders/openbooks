@@ -38,7 +38,7 @@ async function invoice(org: ScratchOrg, actor: string) {
 }
 
 async function payment(org: ScratchOrg, actor: string, line: string) {
-  const result = await createPaymentDocument({
+  const result = await createPaymentDocument({ allowedSubsidiaryIds: null,
     orgId: org.orgId,
     kind: "customer_payment",
     createdBy: actor,

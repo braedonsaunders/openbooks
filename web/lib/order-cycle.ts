@@ -125,7 +125,13 @@ export async function createOrderDraft(
   userId: string,
   kind: OrderKind,
   idempotencyKey: string,
-  subsidiaryId: string | null = null,
+  /**
+   * REQUIRED, no default: every draft lands in an explicitly named
+   * subsidiary, resolved from the actor's scope BEFORE numbering or insert by
+   * the caller (draft routes) or the v1 application layer — never an implicit
+   * null for a restricted actor.
+   */
+  subsidiaryId: string | null,
 ): Promise<{ id: string; document_number: string; replayed: boolean }> {
   // One system for every caller: the document id derives deterministically
   // from the org and key (verbatim for UUID keys, namespaced hash for

@@ -5,6 +5,7 @@ import { documentRevisionCounterSql } from "../records/revision.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, isZero, sum, toUnits } from "../money/money.ts";
 import { PaymentError, PaymentRevisionConflictError } from "./payment-errors.ts";
+import { resolveDraftSubsidiary } from "../organization/subsidiary-scope.ts";
 import { persistPaymentFxRate, persistPaymentMoney, sameCurrencyAllocation, validateAllocationInputs, validateSettlementEvidence, type AllocationInput } from "./settlement-policy.ts";
 import { type PaymentKind, PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentBookId } from "./payment-accounts.ts";
@@ -32,6 +33,14 @@ export async function createPaymentDocument(opts: {
   kind: PaymentKind;
   /** Null for scheduler-created runs: system provenance, never a fabricated user. */
   createdBy: string | null;
+  /**
+   * REQUIRED actor scope (explicit null only for system-initiated runs):
+   * the derived subsidiary is validated against it BEFORE any insert or
+   * numbering, the same check POST /api/payments applies — a restricted
+   * caller defaults to their own subsidiary, or a named refusal, never the
+   * org root.
+   */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   partyId?: string | null;
   bankAccountId?: string | null;
   documentDate?: string;
@@ -42,12 +51,15 @@ export async function createPaymentDocument(opts: {
 }): Promise<{ id: string; documentNumber: string }> {
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
-  const sub = (await db.execute<{ id: string }>(sql`
+  const sub = (await db.execute<{ id: string | null }>(sql`
     select coalesce(
       (select subsidiary_id from parties where id = ${opts.partyId ?? null} and org_id = ${opts.orgId}),
       (select id from subsidiaries where org_id = ${opts.orgId} and parent_id is null)
     ) as id`));
-  const subsidiaryId = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub.rows[0]?.id ?? null);
+  const derived = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub.rows[0]?.id ?? null);
+  const resolved = resolveDraftSubsidiary(opts.allowedSubsidiaryIds, derived);
+  if (!resolved.ok) throw new PaymentError(resolved.error);
+  const subsidiaryId = resolved.subsidiaryId;
   const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind]);
   const fxRate = persistPaymentFxRate(opts.fxRate ?? "1");
   const [doc] = await db

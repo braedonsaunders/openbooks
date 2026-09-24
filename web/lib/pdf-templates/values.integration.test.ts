@@ -131,7 +131,7 @@ test('field-ticket hours print exact decimals that reconcile to the billed amoun
       await db.execute(sql`insert into projects
         (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'HRS-1', 'Hours job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
-      const created = await createFieldTicket(org.orgId, actor, { projectId, date: org.date })
+      const created = await createFieldTicket(org.orgId, actor, { projectId, date: org.date, allowedSubsidiaryIds: null})
       const employee = randomUUID()
       await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id)
         values (${employee}, ${org.orgId}, 'employee', 'Exact Worker', ${org.subsidiaryId})`)
@@ -179,7 +179,7 @@ test('field-ticket merge values populate the customer party address', { skip: !p
       await db.execute(sql`insert into projects
         (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'ADDR-1', 'Address job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
-      const created = await createFieldTicket(org.orgId, actor, { projectId })
+      const created = await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})
       const record = await loadPdfRecordValues('field_ticket', org.orgId, created.id, null)
       assert.equal(record?.values.party_address, '400 King St W, Toronto, ON, M5V 1K2, CA')
     } finally {

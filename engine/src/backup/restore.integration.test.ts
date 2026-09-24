@@ -304,7 +304,7 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
     // Kernel payment applied to the invoice's AR line, then reversed.
     const invoiceArLine = (await db.execute<{ id: string }>(sql`
       select id from journal_lines where entry_id = ${invoiceEntryId} and account_id = ${source.accounts.ar}`)).rows[0]!.id;
-    const payment = await createPaymentDocument({
+    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: source.orgId,
       kind: "customer_payment",
       createdBy: actorId,
