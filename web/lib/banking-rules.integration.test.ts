@@ -46,6 +46,10 @@ test(
       const org = await createScratchOrg();
       try {
         const actorId = (await seedFlowActors(org.orgId)).adminId;
+        // Categorizing journals post to the ledger, so the applier holds gl.post
+        // (76a56b8fef); scratch roles start with no permissions.
+        await db.execute(sql\`update app_roles set permissions = '["gl.post"]'::jsonb
+          where org_id = \${org.orgId} and key = 'admin'\`);
         await db.execute(sql\`
           update accounts
              set reconcilable = true, currency_restriction = 'CAD'
@@ -181,6 +185,10 @@ test(
       const org = await createScratchOrg();
       try {
         const actorId = (await seedFlowActors(org.orgId)).adminId;
+        // Categorizing journals post to the ledger, so the applier holds gl.post
+        // (76a56b8fef); scratch roles start with no permissions.
+        await db.execute(sql\`update app_roles set permissions = '["gl.post"]'::jsonb
+          where org_id = \${org.orgId} and key = 'admin'\`);
         await db.execute(sql\`
           update accounts
              set reconcilable = true, currency_restriction = 'CAD'
@@ -295,6 +303,10 @@ test(
       const org = await createScratchOrg();
       try {
         const actorId = (await seedFlowActors(org.orgId)).adminId;
+        // Categorizing journals post to the ledger, so the applier holds gl.post
+        // (76a56b8fef); scratch roles start with no permissions.
+        await db.execute(sql\`update app_roles set permissions = '["gl.post"]'::jsonb
+          where org_id = \${org.orgId} and key = 'admin'\`);
         await db.execute(sql\`
           update accounts
              set reconcilable = true, currency_restriction = 'CAD'
