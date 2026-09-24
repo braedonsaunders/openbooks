@@ -11,6 +11,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { auditConfigChange } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -57,7 +58,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
       from payment_mandates m
       join parties p on p.id = m.party_id and p.org_id = m.org_id
       join party_bank_accounts b on b.id = m.party_bank_account_id and b.org_id = m.org_id
-     where m.org_id = ${gate.user.orgId} order by m.created_at desc
+     where m.org_id = ${gate.user.orgId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+     order by m.created_at desc
   `)
   return NextResponse.json({ rows: rows.rows })
 }
