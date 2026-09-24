@@ -248,14 +248,18 @@ for (const boundary of [
               const visibleBody = await (await sublist()).json()
               assert.equal(visibleBody.rows.length, 1)
               assert.equal(visibleBody.total, 1)
-              assert.equal(
-                (await activityRead(request({}), activityParams)).status,
-                200,
-              )
+              const activityDetail = await activityRead(request({}), activityParams)
+              assert.equal(activityDetail.status, 200)
+              // Authorized saves speak the revision contract (the
+              // out-of-scope save above stays tokenless to prove a missing
+              // token never upgrades a scope 404 into information).
+              const activityToken = (
+                (await activityDetail.json()) as { activity: { updated_at: string } }
+              ).activity.updated_at
               assert.equal(
                 (
                   await activityEdit(
-                    request({ subject: 'Authorized' }),
+                    request({ subject: 'Authorized', expectedUpdatedAt: activityToken }),
                     activityParams,
                   )
                 ).status,
@@ -338,14 +342,18 @@ for (const boundary of [
                 404,
               )
               await restrict(org.orgId, null)
-              assert.equal(
-                (await accountRead(request({}), accountParams)).status,
-                200,
-              )
+              const accountDetail = await accountRead(request({}), accountParams)
+              assert.equal(accountDetail.status, 200)
+              // Authorized saves speak the revision contract (the
+              // out-of-scope save above stays tokenless to prove a missing
+              // token never upgrades a scope 404 into information).
+              const accountToken = (
+                (await accountDetail.json()) as { account: { profile: { updated_at: string } } }
+              ).account.profile.updated_at
               assert.equal(
                 (
                   await accountEdit(
-                    request({ qualificationScore: 10 }),
+                    request({ qualificationScore: 10, expectedUpdatedAt: accountToken }),
                     accountParams,
                   )
                 ).status,
@@ -572,23 +580,26 @@ for (const boundary of [
                 '60.0000',
               )
             } else if (boundary === 'provision compute') {
-              assert.equal(
-                (
-                  await compute(
-                    request({ fiscalYear: Number(org.date.slice(0, 4)) }),
-                  )
-                ).status,
-                404,
+              // Computing a provision measures every entity: an org-wide
+              // write (canonical shape 2), so restricted callers get the
+              // named 403, not the record-denial 404.
+              const deniedCompute = await compute(
+                request({ fiscalYear: Number(org.date.slice(0, 4)) }),
               )
+              assert.equal(deniedCompute.status, 403)
+              assert.deepEqual(await deniedCompute.json(), {
+                error: 'requires unrestricted subsidiary access',
+              })
             } else {
-              assert.equal(
-                (
-                  await postProvision(request({}), {
-                    params: Promise.resolve({ id }),
-                  })
-                ).status,
-                404,
-              )
+              // Posting a provision creates and reverses journals for the
+              // complete entity set: same org-wide write, same named 403.
+              const deniedPost = await postProvision(request({}), {
+                params: Promise.resolve({ id }),
+              })
+              assert.equal(deniedPost.status, 403)
+              assert.deepEqual(await deniedPost.json(), {
+                error: 'requires unrestricted subsidiary access',
+              })
             }
           } else if (boundary.startsWith('subscription')) {
             const planId = randomUUID(),
@@ -818,11 +829,18 @@ for (const boundary of [
               await filingExport(new Request(url), {
                 params: Promise.resolve({ id }),
               }),
-              await prepareFiling(
-                request({ code: 'AUDIT', from: org.date, to: org.date }),
-              ),
             ])
               assert.equal(response.status, 404)
+            // Freezing the org-wide return is an org-wide write (canonical
+            // shape 2), so the restricted prepare gets the named 403 while
+            // the record reads above stay 404.
+            const deniedPrepare = await prepareFiling(
+              request({ code: 'AUDIT', from: org.date, to: org.date }),
+            )
+            assert.equal(deniedPrepare.status, 403)
+            assert.deepEqual(await deniedPrepare.json(), {
+              error: 'requires unrestricted subsidiary access',
+            })
             await restrict(org.orgId, null)
             const allowed = await returnPreview(new Request(url), params)
             assert.equal(
