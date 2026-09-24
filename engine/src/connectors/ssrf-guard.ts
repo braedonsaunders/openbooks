@@ -25,7 +25,7 @@ import { isIP } from "node:net";
 type LookupFunction = NonNullable<RequestOptions["lookup"]>;
 
 export const CONNECTOR_URL_REFUSED =
-  "Connector URL must use http or https and every resolved address must be public unicast. RFC1918, loopback, link-local, metadata, ULA, unspecified, and non-http(s) URLs are refused.";
+  "Connector URL must use http or https and every resolved address must be public unicast. IANA special-purpose, RFC1918, loopback, link-local, metadata, ULA, unspecified, and non-http(s) addresses are refused.";
 
 export type AddressLookup = (hostname: string) => Promise<string[]>;
 
@@ -69,22 +69,98 @@ function parseIpv4(ip: string): [number, number, number, number] | null {
   return [octets[0]!, octets[1]!, octets[2]!, octets[3]!];
 }
 
-function isPublicUnicastIpv4(ip: string): boolean {
+type AddressRange = { cidr: string; globallyReachable: boolean };
+
+/**
+ * Derived from IANA's IPv4/IPv6 Special-Purpose Address Registries
+ * (checked 2026-09-24; registry revision 2025-10-09):
+ * https://www.iana.org/assignments/iana-ipv4-special-registry
+ * https://www.iana.org/assignments/iana-ipv6-special-registry
+ * Globally reachable suballocations are explicit longest-prefix exceptions
+ * (notably 192.0.0.9/.10 and the registered 2001::/23 anycasts). The
+ * surrounding special-purpose allocations remain refused.
+ */
+const IPV4_SPECIAL_PURPOSE: readonly AddressRange[] = [
+  { cidr: "0.0.0.0/8", globallyReachable: false },
+  { cidr: "10.0.0.0/8", globallyReachable: false },
+  { cidr: "100.64.0.0/10", globallyReachable: false },
+  { cidr: "127.0.0.0/8", globallyReachable: false },
+  { cidr: "169.254.0.0/16", globallyReachable: false },
+  { cidr: "172.16.0.0/12", globallyReachable: false },
+  { cidr: "192.0.0.0/24", globallyReachable: false },
+  { cidr: "192.0.0.9/32", globallyReachable: true },
+  { cidr: "192.0.0.10/32", globallyReachable: true },
+  { cidr: "192.0.2.0/24", globallyReachable: false },
+  { cidr: "192.88.99.0/24", globallyReachable: false },
+  { cidr: "192.168.0.0/16", globallyReachable: false },
+  { cidr: "198.18.0.0/15", globallyReachable: false },
+  { cidr: "198.51.100.0/24", globallyReachable: false },
+  { cidr: "203.0.113.0/24", globallyReachable: false },
+  { cidr: "224.0.0.0/4", globallyReachable: false },
+  { cidr: "240.0.0.0/4", globallyReachable: false },
+  { cidr: "255.255.255.255/32", globallyReachable: false },
+].map((range) => ({ ...range, bits: Number(range.cidr.split("/")[1]) })) as readonly AddressRange[];
+
+const IPV6_SPECIAL_PURPOSE: readonly AddressRange[] = [
+  { cidr: "::/128", globallyReachable: false },
+  { cidr: "::1/128", globallyReachable: false },
+  { cidr: "::ffff:0:0/96", globallyReachable: false },
+  { cidr: "64:ff9b:1::/48", globallyReachable: false },
+  { cidr: "100::/64", globallyReachable: false },
+  { cidr: "100:0:0:1::/64", globallyReachable: false },
+  { cidr: "2001::/23", globallyReachable: false },
+  { cidr: "2001:1::1/128", globallyReachable: true },
+  { cidr: "2001:1::2/128", globallyReachable: true },
+  { cidr: "2001:1::3/128", globallyReachable: true },
+  { cidr: "2001:3::/32", globallyReachable: true },
+  { cidr: "2001:4:112::/48", globallyReachable: true },
+  { cidr: "2001:20::/28", globallyReachable: true },
+  { cidr: "2001:30::/28", globallyReachable: true },
+  { cidr: "2001:db8::/32", globallyReachable: false },
+  { cidr: "2002::/16", globallyReachable: false },
+  { cidr: "3fff::/20", globallyReachable: false },
+  { cidr: "5f00::/16", globallyReachable: false },
+  { cidr: "fc00::/7", globallyReachable: false },
+  { cidr: "fe80::/10", globallyReachable: false },
+  { cidr: "ff00::/8", globallyReachable: false },
+].map((range) => ({ ...range, bits: Number(range.cidr.split("/")[1]) })) as readonly AddressRange[];
+
+function ipv4Value(ip: string): bigint | null {
   const octets = parseIpv4(ip);
-  if (!octets) return false;
-  const [a, b, c] = octets;
-  if (a === 0) return false;
-  if (a === 10) return false;
-  if (a === 127) return false;
-  if (a === 169 && b === 254) return false;
-  if (a === 172 && b >= 16 && b <= 31) return false;
-  if (a === 192 && b === 168) return false;
-  if (a === 192 && b === 0 && c === 2) return false;
-  if (a === 198 && (b === 18 || b === 19)) return false;
-  if (a === 198 && b === 51 && c === 100) return false;
-  if (a === 203 && b === 0 && c === 113) return false;
-  if (a === 100 && b >= 64 && b <= 127) return false;
-  if (a >= 224) return false;
+  if (!octets) return null;
+  return octets.reduce((value, octet) => (value << 8n) | BigInt(octet), 0n);
+}
+
+function ipv6Value(ip: string): bigint | null {
+  const groups = expandIpv6(ip);
+  if (!groups) return null;
+  return groups.reduce((value, group) => (value << 16n) | BigInt(group), 0n);
+}
+
+function cidrContains(address: bigint, network: bigint, bits: number, width: number): boolean {
+  const shift = BigInt(width - bits);
+  return (address >> shift) === (network >> shift);
+}
+
+function registeredRangeDecision(ip: string, ranges: readonly AddressRange[], width: number): boolean | null {
+  const address = width === 32 ? ipv4Value(ip) : ipv6Value(ip);
+  if (address === null) return null;
+  const matching = ranges
+    .map((range) => {
+      const [networkText, bitsText] = range.cidr.split("/");
+      const network = width === 32 ? ipv4Value(networkText!) : ipv6Value(networkText!);
+      const bits = Number(bitsText);
+      return network !== null && cidrContains(address, network, bits, width) ? { range, bits } : null;
+    })
+    .filter((match): match is { range: AddressRange; bits: number } => match !== null)
+    .sort((left, right) => right.bits - left.bits)[0];
+  return matching?.range.globallyReachable ?? null;
+}
+
+function isPublicUnicastIpv4(ip: string): boolean {
+  if (!parseIpv4(ip)) return false;
+  const registryDecision = registeredRangeDecision(ip, IPV4_SPECIAL_PURPOSE, 32);
+  if (registryDecision !== null) return registryDecision;
   return true;
 }
 
@@ -114,17 +190,11 @@ function expandIpv6(host: string): number[] | null {
 }
 
 function isPublicUnicastIpv6(host: string): boolean {
-  const mapped = ipv4FromMapped6(host);
-  if (mapped) return isPublicUnicastIpv4(mapped);
   const groups = expandIpv6(host);
   if (!groups) return false;
-  if (groups.every((group) => group === 0)) return false;
-  if (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) return false;
   const first = groups[0]!;
-  if (first === 0x2001 && groups[1] === 0xdb8) return false;
-  if ((first & 0xffc0) === 0xfe80) return false;
-  if ((first & 0xfe00) === 0xfc00) return false;
-  if ((first & 0xff00) === 0xff00) return false;
+  const registryDecision = registeredRangeDecision(host, IPV6_SPECIAL_PURPOSE, 128);
+  if (registryDecision !== null) return registryDecision;
   return (first & 0xe000) === 0x2000;
 }
 
