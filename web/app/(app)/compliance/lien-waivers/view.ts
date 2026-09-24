@@ -27,7 +27,7 @@ import {
   requireLienWaiverFeature,
   type LienWaiverRow,
 } from '../../../../lib/compliance'
-import { pickString } from '../../../../lib/list-params'
+import { isUuid, pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { complianceTabs } from '../tabs'
 
@@ -125,7 +125,17 @@ export async function loadLienWaiversPage(
     complianceTabs('/compliance/lien-waivers', { projectsEnabled: true }),
   ])
 
-  const open: LienWaiverRow | null = openId ? (waivers.find((w) => w.id === openId) ?? null) : null
+  // The open record loads independently of the list filters: a waiver the
+  // direction/status filter excludes must still open from a deep link. The
+  // targeted load keeps the org and subsidiary scope (and the permission
+  // gates above), so a filter-excluded id opens while an out-of-scope one
+  // still opens nothing. isUuid guards the uuid cast in the query.
+  const openUuid = openId && isUuid(openId) ? openId : null
+  const open: LienWaiverRow | null = openUuid
+    ? (waivers.find((w) => w.id === openUuid) ??
+      (await loadLienWaivers({ orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, id: openUuid }))[0] ??
+      null)
+    : null
   // Open bills the vendor could release, so a waiver's amount comes from the
   // money it is exchanged for rather than from retyping.
   const openBills = open
