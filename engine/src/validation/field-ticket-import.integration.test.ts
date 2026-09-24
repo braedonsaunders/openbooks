@@ -8,7 +8,6 @@ import {
 } from "../testing/fixtures.ts";
 import {
   importFieldTickets,
-  sourceIdMap,
   type ImportTicket,
 } from "./field-ticket-import.ts";
 
@@ -172,34 +171,41 @@ test("one unmapped job refuses the whole import with zero writes", { skip: !DB }
   }
 });
 
-test("source mappings cannot see another tenant through a hostile org id", { skip: !DB }, async () => {
+test("a hostile org id refuses named at the boundary, before any query", { skip: !DB }, async () => {
+  // The target reaches SQL in every query below, so a quote must die here
+  // with its remedy — never as a driver syntax error, and never inside a
+  // statement. (The bound-parameter sink itself is proven by the wire-format
+  // unit test, which fails against the old sql.raw spelling.)
+  await assert.rejects(
+    () =>
+      importFieldTickets({
+        orgId: `x' OR '1'='1`,
+        sourceSystem: "test-source",
+        tickets: [ticket()],
+        apply: false,
+      }),
+    /--org must be a UUID/,
+  );
+});
+
+test("one tenant's mappings stay invisible to another tenant's import", { skip: !DB }, async () => {
   const victim = await createScratchOrg();
   const probe = await createScratchOrg();
   try {
     await project(victim.orgId, "JOB-1");
     await project(probe.orgId, "PROBE-JOB");
-    // Under the old sql.raw spelling this broke out of org_id = '<value>'
-    // and returned every tenant's mappings; bound, it matches nothing.
-    const leaked = await sourceIdMap("projects", `x' OR '1'='1`);
-    assert.equal(leaked.size, 0);
-    // Sanity: each tenant still resolves its own mappings under its own id.
-    assert.ok((await sourceIdMap("projects", victim.orgId)).has("JOB-1"));
-    assert.ok((await sourceIdMap("projects", probe.orgId)).has("PROBE-JOB"));
+    const plan = await importFieldTickets({
+      orgId: probe.orgId,
+      sourceSystem: "test-source",
+      tickets: [ticket()],
+      apply: false,
+    });
+    assert.deepEqual(
+      plan.unmapped.map((row) => row.jobRef),
+      ["JOB-1"],
+    );
   } finally {
     await dropScratchOrg(victim.orgId);
     await dropScratchOrg(probe.orgId);
   }
-});
-
-test("a hostile org id refuses as a missing organization, never as a driver error", { skip: !DB }, async () => {
-  await assert.rejects(
-    () =>
-      importFieldTickets({
-        orgId: `not-a-uuid'"`,
-        sourceSystem: "test-source",
-        tickets: [ticket()],
-        apply: false,
-      }),
-    /target organization has no base currency/,
-  );
 });

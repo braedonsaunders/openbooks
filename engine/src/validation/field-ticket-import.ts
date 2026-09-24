@@ -143,6 +143,9 @@ export async function importFieldTickets(input: {
   tickets: readonly ImportTicket[];
   apply: boolean;
 }): Promise<FieldTicketImportResult> {
+  // The target reaches SQL in every query below: refuse a non-UUID before any
+  // database work with a named refusal, never a driver syntax error.
+  assertImportOrgId(input.orgId);
   const { orgId, sourceSystem, tickets } = input;
   const projects = await sourceIdMap("projects", orgId);
   const parties = await sourceIdMap("parties", orgId);
