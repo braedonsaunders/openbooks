@@ -2,7 +2,8 @@ import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/li
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { InventoryOwnershipError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
 import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "@openbooks/engine/src/inventory/transfer-orders.ts";
@@ -255,6 +256,36 @@ export async function POST(req: Request) {
       execute,
     });
 
+  /**
+   * Locked rechecks inside the write transaction: the orderSubsidiaryInScope
+   * / voucherSubsidiaryInScope probes above can authorize an A record while
+   * a concurrent A→B reassignment lands before the service commits (the
+   * service joins this transaction, so the lock covers its whole unit —
+   * including retries). Throw the inventory-domain 403 the probes answer
+   * with; the outer catch maps it.
+   */
+  // A row deleted between the probe and this lock is the service's own
+  // not-found to name — only a present-but-out-of-scope row refuses here.
+  const lockedOrderFence = async (orderId: string): Promise<void> => {
+    const r = await db.execute<{ subsidiary_id: string | null }>(
+      sql`select subsidiary_id from transfer_orders where id = ${orderId} and org_id = ${orgId} for update`,
+    );
+    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
+    if (subsidiaryId !== null && gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
+      throw new InventoryOwnershipError("subsidiary not permitted");
+    }
+  };
+
+  const lockedVoucherFence = async (voucherId: string): Promise<void> => {
+    const r = await db.execute<{ subsidiary_id: string | null }>(
+      sql`select subsidiary_id from landed_cost_vouchers where id = ${voucherId} and org_id = ${orgId} for update`,
+    );
+    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
+    if (subsidiaryId !== null && gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
+      throw new InventoryOwnershipError("subsidiary not permitted");
+    }
+  };
+
   try {
     switch (body.action) {
       case "createTransfer": {
@@ -302,11 +333,14 @@ export async function POST(req: Request) {
         if (!(await orderSubsidiaryInScope(body.id))) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
-        const { value: res, replayed } = await idempotent(
-          "inventory.transfer-order.ship",
-          { id: body.id, date: body.date },
-          () => shipTransferOrder(orgId, userId, body.id!, body.date),
-        );
+        const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
+          await lockedOrderFence(body.id!);
+          return idempotent(
+            "inventory.transfer-order.ship",
+            { id: body.id, date: body.date },
+            () => shipTransferOrder(orgId, userId, body.id!, body.date),
+          );
+        });
         return NextResponse.json({ replayed, ...res });
       }
       case "receiveTransfer": {
@@ -314,11 +348,14 @@ export async function POST(req: Request) {
         if (!(await orderSubsidiaryInScope(body.id))) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
-        const { value: res, replayed } = await idempotent(
-          "inventory.transfer-order.receive",
-          { id: body.id, date: body.date },
-          () => receiveTransferOrder(orgId, userId, body.id!, body.date),
-        );
+        const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
+          await lockedOrderFence(body.id!);
+          return idempotent(
+            "inventory.transfer-order.receive",
+            { id: body.id, date: body.date },
+            () => receiveTransferOrder(orgId, userId, body.id!, body.date),
+          );
+        });
         return NextResponse.json({ replayed, ...res });
       }
       case "postLandedVoucher": {
@@ -372,16 +409,19 @@ export async function POST(req: Request) {
         if (!(await voucherSubsidiaryInScope(body.id))) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
-        const { value: res, replayed } = await idempotent(
-          "inventory.landed-voucher.reverse",
-          { id: body.id, date: body.date, reason: body.memo },
-          () =>
-            reverseLandedCostVoucher(orgId, userId, {
-              voucherId: body.id!,
-              reversalDate: body.date!,
-              reason: body.memo!,
-            }),
-        );
+        const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
+          await lockedVoucherFence(body.id!);
+          return idempotent(
+            "inventory.landed-voucher.reverse",
+            { id: body.id, date: body.date, reason: body.memo },
+            () =>
+              reverseLandedCostVoucher(orgId, userId, {
+                voucherId: body.id!,
+                reversalDate: body.date!,
+                reason: body.memo!,
+              }),
+          );
+        });
         return NextResponse.json({ replayed, ...res });
       }
       case "ensureLot": {

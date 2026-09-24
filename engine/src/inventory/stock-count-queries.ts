@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { add, neg } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
-import { InventoryError } from "./contracts.ts";
+import { InventoryError, InventoryOwnershipError } from "./contracts.ts";
 import {
   loadCountHeader,
   parseCountStatus,
@@ -163,53 +163,69 @@ export interface StockCountDetail {
   lines: StockCountLineDetail[];
 }
 
-export async function getStockCountDetail(orgId: string, countId: string): Promise<StockCountDetail> {
-  const header = await loadCountHeader(db, orgId, countId, false);
-  const names = (await db.execute<{ location_name: string | null; subsidiary_name: string | null }>(sql`
-    select (select name from locations where org_id = ${orgId} and id = ${header.locationId}) as location_name,
-           (select name from subsidiaries where org_id = ${orgId} and id = ${header.subsidiaryId}) as subsidiary_name`)).rows[0];
-  const r = (await db.execute<{
-    id: string;
-    item_id: string;
-    stock_location_id: string;
-    lot_id: string | null;
-    expected_quantity: string;
-    counted_quantity: string | null;
-    adjustment_movement_id: string | null;
-    item_code: string | null;
-    item_name: string | null;
-    stock_location_code: string | null;
-    lot_number: string | null;
-  }>(sql`
-    select l.id, l.item_id, l.stock_location_id, l.lot_id,
-           l.expected_quantity::text, l.counted_quantity::text, l.adjustment_movement_id,
-           (select code from items where org_id = ${orgId} and id = l.item_id) as item_code,
-           (select name from items where org_id = ${orgId} and id = l.item_id) as item_name,
-           (select code from stock_locations where org_id = ${orgId} and id = l.stock_location_id) as stock_location_code,
-           (select lot_number from lots where org_id = ${orgId} and id = l.lot_id) as lot_number
-      from stock_count_lines l
-     where l.org_id = ${orgId} and l.stock_count_id = ${header.id}
-     order by item_code nulls last, stock_location_code nulls last, l.id`));
-  return {
-    header: {
-      ...header,
-      locationName: names?.location_name ?? null,
-      subsidiaryName: names?.subsidiary_name ?? null,
-    },
-    lines: r.rows.map((row) => ({
-      id: row.id,
-      itemId: row.item_id,
-      stockLocationId: row.stock_location_id,
-      lotId: row.lot_id,
-      expectedQuantity: row.expected_quantity,
-      countedQuantity: row.counted_quantity,
-      adjustmentMovementId: row.adjustment_movement_id,
-      itemCode: row.item_code,
-      itemName: row.item_name,
-      stockLocationCode: row.stock_location_code,
-      lotNumber: row.lot_number,
-      variance: row.counted_quantity === null ? null : add(row.counted_quantity, neg(row.expected_quantity)),
-    })),
-  };
+export async function getStockCountDetail(
+  orgId: string,
+  countId: string,
+  /** REQUIRED, no default: null is the explicit unrestricted sentinel. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<StockCountDetail> {
+  // One transaction for the scope gate and every detail read, locking the
+  // header first (READ COMMITTED, like loadAsset): a concurrent count
+  // reassignment blocks on the lock instead of authorizing the header and
+  // then moving the count before the line reads of one response. (A
+  // REPEATABLE READ snapshot cannot take the lock: a locking read that meets
+  // a concurrent update errors with 40001 instead of waiting.)
+  return withOrgTransaction(orgId, async () => {
+    const header = await loadCountHeader(db, orgId, countId, true);
+    if (allowedSubsidiaryIds !== null && !allowedSubsidiaryIds.has(header.subsidiaryId)) {
+      throw new InventoryOwnershipError("subsidiary not permitted");
+    }
+    const names = (await db.execute<{ location_name: string | null; subsidiary_name: string | null }>(sql`
+      select (select name from locations where org_id = ${orgId} and id = ${header.locationId}) as location_name,
+             (select name from subsidiaries where org_id = ${orgId} and id = ${header.subsidiaryId}) as subsidiary_name`)).rows[0];
+    const r = (await db.execute<{
+      id: string;
+      item_id: string;
+      stock_location_id: string;
+      lot_id: string | null;
+      expected_quantity: string;
+      counted_quantity: string | null;
+      adjustment_movement_id: string | null;
+      item_code: string | null;
+      item_name: string | null;
+      stock_location_code: string | null;
+      lot_number: string | null;
+    }>(sql`
+      select l.id, l.item_id, l.stock_location_id, l.lot_id,
+             l.expected_quantity::text, l.counted_quantity::text, l.adjustment_movement_id,
+             (select code from items where org_id = ${orgId} and id = l.item_id) as item_code,
+             (select name from items where org_id = ${orgId} and id = l.item_id) as item_name,
+             (select code from stock_locations where org_id = ${orgId} and id = l.stock_location_id) as stock_location_code,
+             (select lot_number from lots where org_id = ${orgId} and id = l.lot_id) as lot_number
+        from stock_count_lines l
+       where l.org_id = ${orgId} and l.stock_count_id = ${header.id}
+       order by item_code nulls last, stock_location_code nulls last, l.id`));
+    return {
+      header: {
+        ...header,
+        locationName: names?.location_name ?? null,
+        subsidiaryName: names?.subsidiary_name ?? null,
+      },
+      lines: r.rows.map((row) => ({
+        id: row.id,
+        itemId: row.item_id,
+        stockLocationId: row.stock_location_id,
+        lotId: row.lot_id,
+        expectedQuantity: row.expected_quantity,
+        countedQuantity: row.counted_quantity,
+        adjustmentMovementId: row.adjustment_movement_id,
+        itemCode: row.item_code,
+        itemName: row.item_name,
+        stockLocationCode: row.stock_location_code,
+        lotNumber: row.lot_number,
+        variance: row.counted_quantity === null ? null : add(row.counted_quantity, neg(row.expected_quantity)),
+      })),
+    };
+  });
 }
 
