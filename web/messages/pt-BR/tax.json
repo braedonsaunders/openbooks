@@ -187,7 +187,8 @@
       },
       "auto": "auto",
       "manual": "manual"
-    }
+    },
+    "postFailed": "Não foi possível lançar a provisão."
   },
   "tabs": {
     "prepare": "Preparar uma declaração",

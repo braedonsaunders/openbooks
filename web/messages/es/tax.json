@@ -187,7 +187,8 @@
       },
       "auto": "auto",
       "manual": "manual"
-    }
+    },
+    "postFailed": "No se pudo contabilizar la provisión."
   },
   "tabs": {
     "prepare": "Preparar una declaración",

@@ -187,7 +187,8 @@
       },
       "auto": "自动",
       "manual": "手工"
-    }
+    },
+    "postFailed": "无法过账该计提。"
   },
   "tabs": {
     "prepare": "编制申报表",
