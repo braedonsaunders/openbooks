@@ -132,6 +132,17 @@ export function mnScheduleFor(maritalStatus: string | null): MnSchedule {
   return maritalStatus === "married" ? "married" : "single";
 }
 
+/**
+ * The annualizing divisor. The interface marks daily as 260 or 365 worked
+ * days, but the booklet's own list multiplies a day by 360 — so daily
+ * payrolls annualize AND de-annualize with the edition's dailyPeriods, in
+ * both directions (the Delaware engine maps its 300 the same way).
+ */
+export function mnAnnualPeriods(periodsPerYear: number, dailyPeriods: number): number {
+  if (periodsPerYear === 260 || periodsPerYear === 365) return dailyPeriods;
+  return periodsPerYear;
+}
+
 /** Step 5 — the chart. Amounts at or below the first "More than" are zero. */
 export function mnAnnualTax(taxable: bigint, schedule: MnSchedule, rates: MnYearRates): bigint {
   if (taxable <= 0n) return 0n;
@@ -176,8 +187,10 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
 
   // Method 1: "Add the supplemental payment to the regular wages."
+  // Daily payrolls annualize with the booklet's 360, not the caller's P.
+  const annualP = mnAnnualPeriods(P, rates.dailyPeriods);
   const wages = U(input.wages) + U(input.supplemental ?? "0");
-  const annualWages = wages * BigInt(P);
+  const annualWages = wages * BigInt(annualP);
   trace("MN_ANNUAL_WAGES", annualWages);
 
   const annualAllowance = U(rates.allowance) * BigInt(Math.max(allowances, 0));
@@ -196,7 +209,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const annualTax = mnAnnualTax(taxable, schedule, rates);
   trace("MN_ANNUAL_TAX", annualTax);
 
-  const periodTax = divIntCents(annualTax, P);
+  const periodTax = divIntCents(annualTax, annualP);
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   const total = periodTax + extra;
   trace("MN_WITHHELD", total);

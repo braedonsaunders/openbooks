@@ -117,6 +117,23 @@ test("MN withholds nothing at or below the first 'More than', and daily uses 360
   assert.equal(daily.tax, money("4.65"));
 });
 
+test("MN daily payrolls annualize with the booklet's 360, whichever daily P the caller uses", () => {
+  // The interface marks daily as 260 or 365 worked days, but the booklet's
+  // own list multiplies a day by 360. Daily $200, single, 0 allowances:
+  // $200 × 360 = $72,000; single chart $1,782.09 + 6.80% × ($72,000 −
+  // $38,010) = $1,782.09 + $2,311.32 = $4,093.41; ÷ 360 = $11.37.
+  // Annualizing by 260 would give $10.51, by 365 $11.40 — both wrong cents.
+  for (const periodsPerYear of [260, 365]) {
+    const result = MN_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear, wages: "200.00", basis: "resident",
+      certificate: cert({ marital_status: "single", allowances: "0" }),
+    });
+    assert.equal(result.factors.MN_ANNUAL_WAGES, money("72000"), `P=${periodsPerYear}`);
+    assert.equal(result.factors.MN_ANNUAL_TAX, money("4093.41"), `P=${periodsPerYear}`);
+    assert.equal(result.tax, money("11.37"), `P=${periodsPerYear}`);
+  }
+});
+
 test("MN married chart, extra withholding after the rate, and the no-certificate default", () => {
   // $2,000 biweekly, married, 2 allowances: $52,000 − $10,600 = $41,400.
   // Married, more than $14,700 but not more than $63,400:
