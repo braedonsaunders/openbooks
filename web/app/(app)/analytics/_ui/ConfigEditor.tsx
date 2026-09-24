@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Settings2 } from 'lucide-react'
 import { Panel } from './Panel'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useAppAction } from '../../../../lib/use-app-action'
+import { ActionError } from '@braedonsaunders/appkit-errors'
 
 /**
  * Editable analytics thresholds — the Configuration-tab save flow.
@@ -34,7 +36,7 @@ export function ConfigEditor({
 }) {
   const router = useRouter()
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, String(values[f.key] ?? defaults[f.key])])))
-  const [busy, setBusy] = useState(false)
+  const { busy, execute } = useAppAction()
   const [msg, setMsg] = useState<string | null>(null)
   /** Exact server revision backing the next save (null until the first read). */
   const [revision, setRevision] = useState<number | null>(null)
@@ -69,49 +71,62 @@ export function ConfigEditor({
   }
 
   const save = async (payload: Record<string, string | number>) => {
-    setBusy(true)
     setMsg(null)
-    const r = await fetch(`/api/analytics/config/${dashboard}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expectedRevision: revision ?? 0, values: payload }),
-    })
-    if (r.ok) {
-      const body = (await r.json()) as { revision?: unknown }
-      if (typeof body.revision === 'number') setRevision(body.revision)
-      setMsg('Saved — recomputing…')
-      router.refresh()
-    } else if (r.status === 409) {
-      // Another admin committed first: adopt the latest values (the
-      // conflicting edit is not saved) and name the remedy.
-      let body: {
-        error?: unknown
-        revision?: unknown
-        values?: unknown
-      } | null = null
+    await execute(async () => {
       try {
-        body = (await r.json()) as {
-          error?: unknown
-          revision?: unknown
-          values?: unknown
-        } | null
+        const r = await fetch(`/api/analytics/config/${dashboard}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedRevision: revision ?? 0, values: payload }),
+        })
+        if (r.ok) {
+          const body = (await r.json()) as { revision?: unknown }
+          if (typeof body.revision === 'number') setRevision(body.revision)
+          setMsg('Saved — recomputing…')
+          router.refresh()
+        } else if (r.status === 409) {
+          // Another admin committed first: adopt the latest values (the
+          // conflicting edit is not saved) and name the remedy.
+          let body: {
+            error?: unknown
+            revision?: unknown
+            values?: unknown
+          } | null = null
+          try {
+            body = (await r.json()) as {
+              error?: unknown
+              revision?: unknown
+              values?: unknown
+            } | null
+          } catch {
+            body = null
+          }
+          if (typeof body?.revision === 'number') setRevision(body.revision)
+          applyServerValues(body?.values)
+          setMsg(
+            typeof body?.error === 'string' && body.error
+              ? body.error
+              : 'This configuration changed after you opened it — the latest values are shown; reapply your change and save again.',
+          )
+          router.refresh()
+        } else if (r.status === 403) {
+          setMsg('Saving requires the Setup permission.')
+        } else {
+          setMsg(await readApiErrorMessage(r, 'Save failed'))
+        }
+        return { ok: true as const, status: r.status, data: null }
       } catch {
-        body = null
+        // Network and unreadable-success-body failures must release busy and
+        // leave the operator a visible retryable refusal.
+        return {
+          ok: false as const,
+          error: new ActionError({ kind: 'transport', serverMessage: 'Save failed' }),
+        }
       }
-      if (typeof body?.revision === 'number') setRevision(body.revision)
-      applyServerValues(body?.values)
-      setMsg(
-        typeof body?.error === 'string' && body.error
-          ? body.error
-          : 'This configuration changed after you opened it — the latest values are shown; reapply your change and save again.',
-      )
-      router.refresh()
-    } else if (r.status === 403) {
-      setMsg('Saving requires the Setup permission.')
-    } else {
-      setMsg(await readApiErrorMessage(r, 'Save failed'))
-    }
-    setBusy(false)
+    }, {
+      fallbackMessage: 'Save failed',
+      onRefused: (error) => setMsg(error.displayMessage('Save failed')),
+    })
   }
 
   return (
