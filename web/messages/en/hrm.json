@@ -1817,6 +1817,9 @@
     "recordForm": {
       "employment": "Employment",
       "type": "Qualification type",
+      "employmentPlaceholder": "Select an employee…",
+      "employmentsFailed": "Employees could not be loaded.",
+      "recordFailed": "The qualification could not be recorded.",
       "issuedOn": "Issued on",
       "expiresOn": "Expires on",
       "identifier": "License number",

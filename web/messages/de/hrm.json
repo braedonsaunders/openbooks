@@ -1760,6 +1760,9 @@
     "recordForm": {
       "employment": "Anstellung",
       "type": "Qualifikationstyp",
+      "employmentPlaceholder": "Mitarbeiter auswählen…",
+      "employmentsFailed": "Mitarbeiter konnten nicht geladen werden.",
+      "recordFailed": "Die Qualifikation konnte nicht erfasst werden.",
       "issuedOn": "Ausgestellt am",
       "expiresOn": "Läuft ab am",
       "identifier": "Lizenznummer",
