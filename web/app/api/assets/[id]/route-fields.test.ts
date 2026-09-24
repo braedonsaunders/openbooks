@@ -212,10 +212,31 @@ const cases: [Record<string, unknown>, string][] = [
     "Section 179 must be non-negative",
   ],
   [
+    { taxDepreciation: { us: { businessUsePercent: "not a decimal" } } },
+    "Business use must be between 0 and 100 percent",
+  ],
+  [
+    { taxDepreciation: { us: { bonusPercent: "1000000000000000" } } },
+    "Bonus depreciation must be between 0 and 100 percent",
+  ],
+  [
+    { taxDepreciation: { us: { section179: "not a decimal" } } },
+    "Section 179 must be non-negative",
+  ],
+  [
     { taxDepreciation: { us: { classCode: "NOPE" } } },
     "Invalid tax depreciation class",
   ],
   [{ openingAccumulated: "abc" }, "Opening accumulated depreciation must be a number"],
+  [
+    { openingAccumulated: "1000000000000000" },
+    "Opening accumulated depreciation must be a number",
+  ],
+  [{ unitsTotal: "abc" }, "Expected lifetime units must be an exact positive quantity"],
+  [
+    { unitsTotal: "1000000000000000" },
+    "Expected lifetime units must be an exact positive quantity",
+  ],
   [{ openingAccumulated: "-1" }, "Opening accumulated depreciation must be a non-negative number"],
   [
     { openingAccumulated: "10", openingAsOf: "2026-13-01" },

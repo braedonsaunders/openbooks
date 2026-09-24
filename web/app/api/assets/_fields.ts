@@ -117,7 +117,12 @@ export function parseUnitsTotal(v: unknown): string | null | undefined {
   if (v === undefined) return undefined;
   if (v === null || v === "") return null;
   const units = moneyOrNull(v);
-  if (units === "invalid" || units === null || cmp(units, "0") <= 0) {
+  if (
+    units === null ||
+    units === "unreadable" ||
+    units === "too-wide" ||
+    cmp(units, "0") <= 0
+  ) {
     throw new FieldRefusal("invalid_units");
   }
   return units;
@@ -127,7 +132,9 @@ export function parseOpeningAmount(v: unknown): string | null | undefined {
   if (v === undefined) return undefined;
   if (v === null || v === "") return null;
   const amount = moneyOrNull(v);
-  if (amount === "invalid" || amount === null) throw new FieldRefusal("opening_invalid");
+  if (amount === null || amount === "unreadable" || amount === "too-wide") {
+    throw new FieldRefusal("opening_invalid");
+  }
   if (cmp(amount, "0") < 0) throw new FieldRefusal("opening_negative");
   return amount;
 }
@@ -252,22 +259,28 @@ export async function parseTaxDepreciation(
     const bonusPercent = moneyOrNull((raw as Record<string, unknown>).bonusPercent ?? "0");
     const section179 = moneyOrNull((raw as Record<string, unknown>).section179 ?? 0);
     if (
-      businessUsePercent === "invalid" ||
       businessUsePercent === null ||
+      businessUsePercent === "unreadable" ||
+      businessUsePercent === "too-wide" ||
       cmp(businessUsePercent, "0") < 0 ||
       cmp(businessUsePercent, "100") > 0
     ) {
       throw new FieldRefusal("tax_business_use_invalid");
     }
     if (
-      bonusPercent === "invalid" ||
       bonusPercent === null ||
+      bonusPercent === "unreadable" ||
+      bonusPercent === "too-wide" ||
       cmp(bonusPercent, "0") < 0 ||
       cmp(bonusPercent, "100") > 0
     ) {
       throw new FieldRefusal("tax_bonus_invalid");
     }
-    if (section179 === "invalid" || (section179 && cmp(section179, "0") < 0)) {
+    if (
+      section179 === "unreadable" ||
+      section179 === "too-wide" ||
+      (section179 !== null && cmp(section179, "0") < 0)
+    ) {
       throw new FieldRefusal("tax_section179_invalid");
     }
     const classCode = strOrNull((raw as Record<string, unknown>).classCode);
