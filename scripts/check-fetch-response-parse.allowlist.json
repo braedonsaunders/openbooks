@@ -195,11 +195,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/projects/tabs/ChargesSection.tsx",
-    "fn": "submit",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/project-charges (web/app/api/project-charges/route.ts): chargePosting sits inside try/catch-all answering NextResponse.json (409/422/500); no rethrow; outside-try work is guards, validation, and id-gated reads. Verified by reading the handler."
-  },
-  {
     "path": "web/app/(app)/projects/tabs/WorkBreakdownTab.tsx",
     "fn": "refresh",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

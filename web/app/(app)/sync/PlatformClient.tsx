@@ -528,10 +528,18 @@ export function PlatformClient() {
       const res = await fetch(`/api/platform/connections/${conn.id}/test`, {
         method: "POST",
       });
-      const body = await res.json();
-      if (body.ok)
+      // The status is checked before the body is parsed: a refusal (404/409/
+      // 422) or a non-JSON error body (a 500 page, a gateway) must surface
+      // the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("toast.testFailed", { error: t("toast.unknownError") })));
+      const body = (await res.json().catch(() => null)) as {
+        ok?: unknown;
+        detail?: unknown;
+        error?: unknown;
+      } | null;
+      if (body?.ok === true)
         toast.success(
-          body.detail
+          typeof body.detail === "string" && body.detail
             ? t("toast.connectedDetail", { detail: body.detail })
             : t("toast.connected"),
           { id: tid },
@@ -539,7 +547,10 @@ export function PlatformClient() {
       else
         toast.error(
           t("toast.testFailed", {
-            error: body.error ?? t("toast.unknownError"),
+            error:
+              typeof body?.error === "string" && body.error
+                ? body.error
+                : t("toast.unknownError"),
           }),
           { id: tid, duration: 8000 },
         );
