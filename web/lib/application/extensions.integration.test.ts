@@ -1,39 +1,9 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { ApplicationContext } from './context'
-
-const extensionsSource = readFileSync(new URL('./extensions.ts', import.meta.url), 'utf8')
-const draftsRouteSource = readFileSync(new URL('../../app/api/apps/drafts/route.ts', import.meta.url), 'utf8')
-
-function functionBody(source: string, name: string): string {
-  const start = source.indexOf(`export async function ${name}`)
-  assert.notEqual(start, -1, `${name} must remain defined`)
-  const end = source.indexOf('\nexport ', start + 1)
-  return source.slice(start, end === -1 ? undefined : end)
-}
-
-function registerSourceTests(): void {
-  test('discardExtensionDraft refuses a zero-row discard instead of reporting discarded:true', () => {
-    const body = functionBody(extensionsSource, 'discardExtensionDraft')
-    assert.match(body, /already discarded/)
-    assert.match(body, /if \(!changed\.length\)/)
-    assert.doesNotMatch(body, /status !== 'discarded'\) throw/)
-    assert.match(draftsRouteSource, /discardExtensionDraft/)
-  })
-
-  test('activateExtensionDraft refuses an already-applied draft before returning activated:true', () => {
-    const body = functionBody(extensionsSource, 'activateExtensionDraft')
-    const appliedGuard = body.search(/status === ['"]applied['"]/)
-    const activated = body.indexOf('activated: true')
-    assert.match(body, /already activated/)
-    assert.ok(appliedGuard >= 0 && appliedGuard < activated, 'already-applied must be refused before a success payload')
-    assert.match(draftsRouteSource, /activateExtensionDraft/)
-  })
-}
 
 registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
@@ -45,8 +15,6 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@open
 const { draftExtension, discardExtensionDraft, getExtensionDraft, activateExtensionDraft, describeExtensionVocabulary, getExtensionPackage, previewExtensionPage } = await import('./extensions')
 const { getAppByKey, installApp } = await import('../apps/store')
 
-registerSourceTests()
-
 async function fixture() {
   const org = await createScratchOrg()
   const { adminId, approver1Id } = await seedFlowActors(org.orgId)
@@ -57,6 +25,39 @@ async function fixture() {
   }
   return { org, context, approver1Id }
 }
+
+test('discard refuses when its draft update affects no rows', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
+  const { org, context } = await fixture()
+  const trigger = `test_discard_noop_${randomUUID().replaceAll('-', '')}`
+  try {
+    const { example } = await describeExtensionVocabulary(context)
+    const draft = await draftExtension(context, { bundle: example, reason: 'Exercise a zero-row discard' })
+    await db.execute(sql.raw(`
+      create function public.${trigger}() returns trigger language plpgsql as $body$
+      begin
+        if new.status = 'discarded' then return null; end if;
+        return new;
+      end
+      $body$
+    `))
+    await db.execute(sql.raw(`
+      create trigger ${trigger} before update on public.extension_drafts
+      for each row execute function public.${trigger}()
+    `))
+
+    await assert.rejects(() => discardExtensionDraft(context, draft), /no longer available/)
+    assert.equal((await getExtensionDraft(context, draft.draftId)).status, 'draft')
+    const audit = await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from audit_log
+       where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${draft.draftId}
+    `)
+    assert.equal(audit.rows[0]!.count, 0)
+  } finally {
+    await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.extension_drafts`))
+    await db.execute(sql.raw(`drop function if exists public.${trigger}()`))
+    await dropScratchOrg(org.orgId)
+  }
+}))
 
 test('platform administrators author tenant drafts using their real home identity', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
   const home = await fixture()
