@@ -74,38 +74,38 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
     calculationModel: "pool",
     classAttribute: "ca_cca_class",
     classes: caClass({
-      "1": [0.04, "Buildings (post-1987)"],
-      "3": [0.05, "Buildings (pre-1988)"],
-      "8": [0.2, "Furniture, equipment, machinery"],
-      "10": [0.3, "Vehicles, general"],
-      "12": [1.0, "Tools, software, small items", { firstYearFraction: 1 }],
-      "13": [0, "Leasehold improvements", { firstYearFraction: 1, method: "straight_line" }],
-      "14": [0, "Limited-life intangibles", { firstYearFraction: 1, method: "straight_line" }],
-      "14.1": [0.05, "Goodwill & unlimited-life intangibles"],
-      "16": [0.4, "Taxis, rental & freight vehicles"],
-      "43": [0.3, "Manufacturing & processing equipment"],
-      "43.1": [0.3, "Clean-energy equipment"],
-      "43.2": [0.5, "Clean-energy equipment (2005–2024)"],
-      "50": [0.55, "Computer hardware & systems software"],
-      "53": [0.5, "Manufacturing equipment (2016–2025)"],
+      "1": ["0.04", "Buildings (post-1987)"],
+      "3": ["0.05", "Buildings (pre-1988)"],
+      "8": ["0.2", "Furniture, equipment, machinery"],
+      "10": ["0.3", "Vehicles, general"],
+      "12": ["1", "Tools, software, small items", { firstYearFraction: "1" }],
+      "13": ["0", "Leasehold improvements", { firstYearFraction: "1", method: "straight_line" }],
+      "14": ["0", "Limited-life intangibles", { firstYearFraction: "1", method: "straight_line" }],
+      "14.1": ["0.05", "Goodwill & unlimited-life intangibles"],
+      "16": ["0.4", "Taxis, rental & freight vehicles"],
+      "43": ["0.3", "Manufacturing & processing equipment"],
+      "43.1": ["0.3", "Clean-energy equipment"],
+      "43.2": ["0.5", "Clean-energy equipment (2005–2024)"],
+      "50": ["0.55", "Computer hardware & systems software"],
+      "53": ["0.5", "Manufacturing equipment (2016–2025)"],
       // Finance Canada acquisition-date ceilings: $55,000 from 2019-03-19,
       // $59,000 from 2022, then $61,000 from 2023 onward. The 2026 release
       // confirms $61,000 remains the 2026 cap:
       // https://www.canada.ca/en/department-finance/news/2026/01/government-announces-the-2026-automobile-deduction-limits-and-expense-benefit-rates-for-businesses.html
-      "54": [0.3, "Zero-emission passenger vehicles", { costCapByAcquiredOn: [
+      "54": ["0.3", "Zero-emission passenger vehicles", { costCapByAcquiredOn: [
         { effectiveFrom: "2019-03-19", amount: 55000 },
         { effectiveFrom: "2022-01-01", amount: 59000 },
         { effectiveFrom: "2023-01-01", amount: 61000 },
       ] }],
-      "55": [0.4, "Zero-emission vehicles (Class 16 type)"],
-      "56": [0.3, "Zero-emission automotive equipment"],
+      "55": ["0.4", "Zero-emission vehicles (Class 16 type)"],
+      "56": ["0.3", "Zero-emission automotive equipment"],
       // Finance Canada acquisition-date ceilings: $30,000 from 2001, $34,000
       // from 2022, $36,000 from 2023, $37,000 from 2024, $38,000 from 2025,
       // and $39,000 from 2026. CRA publishes the earlier history and Finance
       // Canada publishes the 2026 increase:
       // https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-22900-other-employment-expenses/capital-cost-allowance.html
       // https://www.canada.ca/en/department-finance/news/2026/01/government-announces-the-2026-automobile-deduction-limits-and-expense-benefit-rates-for-businesses.html
-      "10.1": [0.3, "Passenger vehicles (over ceiling)", { costCapByAcquiredOn: [
+      "10.1": ["0.3", "Passenger vehicles (over ceiling)", { costCapByAcquiredOn: [
         { effectiveFrom: "2001-01-01", amount: 30000 },
         { effectiveFrom: "2022-01-01", amount: 34000 },
         { effectiveFrom: "2023-01-01", amount: 36000 },
@@ -122,9 +122,9 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
     calculationModel: "pool",
     classAttribute: "tax_pool_class",
     classes: {
-      main: fullYear("main", 0.18, "Main rate pool"),
-      special: fullYear("special", 0.06, "Special rate pool"),
-      sba: { code: "sba", rate: 0.03, method: "straight_line", firstYearFraction: 1, allowRecapture: false, allowTerminalLoss: false, name: "Structures & buildings allowance" },
+      main: fullYear("main", "0.18", "Main rate pool"),
+      special: fullYear("special", "0.06", "Special rate pool"),
+      sba: { code: "sba", rate: "0.03", method: "straight_line", firstYearFraction: "1", allowRecapture: false, allowTerminalLoss: false, name: "Structures & buildings allowance" },
     },
   },
   au_pool: {
@@ -135,8 +135,8 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
     classAttribute: "tax_pool_class",
     classes: {
       // Diminishing-value pools: half the pool rate in the year of allocation.
-      sbp: { code: "sbp", rate: 0.3, method: "declining", firstYearFraction: 0.5, allowRecapture: true, allowTerminalLoss: true, name: "Small business pool (15% then 30%)" },
-      lvp: { code: "lvp", rate: 0.375, method: "declining", firstYearFraction: 0.5, allowRecapture: true, allowTerminalLoss: true, name: "Low-value pool (18.75% then 37.5%)" },
+      sbp: { code: "sbp", rate: "0.3", method: "declining", firstYearFraction: "0.5", allowRecapture: true, allowTerminalLoss: true, name: "Small business pool (15% then 30%)" },
+      lvp: { code: "lvp", rate: "0.375", method: "declining", firstYearFraction: "0.5", allowRecapture: true, allowTerminalLoss: true, name: "Low-value pool (18.75% then 37.5%)" },
     },
   },
   nz_pool: {
@@ -148,7 +148,7 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
     classes: {
       // The pool depreciates at the lowest DV rate of its assets; a maintained
       // default the tenant tunes per pool (see Tax Setup → pool classes).
-      pool: fullYear("pool", 0.1, "Pooled assets (diminishing value)"),
+      pool: fullYear("pool", "0.1", "Pooled assets (diminishing value)"),
     },
   },
   us_macrs: {
@@ -191,7 +191,7 @@ function macrs(
     // is deliberately not calculated with a JavaScript binary float.
     code, name, rate: exactRatio(macrsMethod === "200_db" ? 2n : macrsMethod === "150_db" ? 3n : 1n, macrsMethod === "150_db" ? 2n : 1n, recoveryPeriodYears),
     method: macrsMethod === "straight_line" ? "straight_line" : "declining",
-    firstYearFraction: convention === "half_year" ? 0.5 : 1,
+    firstYearFraction: convention === "half_year" ? "0.5" : "1",
     allowRecapture: false, allowTerminalLoss: false,
     depreciationSystem, macrsMethod, recoveryPeriodYears, convention,
   };
@@ -199,7 +199,7 @@ function macrs(
 
 /** A full-year regime class (no half-year rule): first-year fraction 1. */
 function fullYear(code: string, rate: ExactDecimal, name: string): PoolClassDef {
-  return { code, rate, method: "declining", firstYearFraction: 1, allowRecapture: true, allowTerminalLoss: true, name };
+  return { code, rate, method: "declining", firstYearFraction: "1", allowRecapture: true, allowTerminalLoss: true, name };
 }
 
 /** Build Canada class defs with the half-year rule as the default first-year fraction. */
@@ -213,7 +213,7 @@ function caClass(
       code,
       rate,
       method: over.method ?? "declining",
-      firstYearFraction: over.firstYearFraction ?? 0.5, // half-year rule
+      firstYearFraction: over.firstYearFraction ?? "0.5", // half-year rule
       allowRecapture: over.allowRecapture ?? true,
       allowTerminalLoss: over.allowTerminalLoss ?? true,
       costCap: over.costCap,
@@ -622,11 +622,11 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
   // (pool classes, first-year rules, run options), so fail closed here —
   // the one boundary every caller crosses — instead of posting the misstatement.
   if (factorUnits(input.rate, "rate") < 0n) throw new Error("rate cannot be negative");
-  const shortYearUnits = factorUnits(input.shortYearFactor ?? 1, "short year factor");
+  const shortYearUnits = factorUnits(input.shortYearFactor ?? "1", "short year factor");
   if (shortYearUnits <= 0n || shortYearUnits > FACTOR_SCALE) {
     throw new Error("short year factor must be greater than 0 and at most 1 (days/365)");
   }
-  const firstYearUnits = factorUnits(input.firstYearFraction ?? 1, "first year fraction");
+  const firstYearUnits = factorUnits(input.firstYearFraction ?? "1", "first year fraction");
   if (firstYearUnits < 0n || firstYearUnits > FACTOR_SCALE) {
     throw new Error("first year fraction must be between 0 and 1");
   }
@@ -658,7 +658,7 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const immediateExpense = minMoney(requestedImmediateExpense, balance);
   const afterIei = add(balance, neg(immediateExpense));
   let base: string;
-  const enhancedMultiplier = persistPoolEnhancedMultiplier(input.enhancedFirstYearMultiplier ?? 1);
+  const enhancedMultiplier = persistPoolEnhancedMultiplier(input.enhancedFirstYearMultiplier ?? "1");
   if (cmp(enhancedMultiplier, "1") > 0) {
     const enhancedAddition = add(mulDecimal(netAdditions, enhancedMultiplier), neg(netAdditions));
     base = add(afterIei, enhancedAddition);
