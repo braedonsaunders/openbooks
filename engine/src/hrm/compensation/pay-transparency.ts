@@ -5,6 +5,7 @@ import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { laborFxQuote, resolveWage, type LaborFxQuote } from "../../projects/labor-costing.ts";
 import { mul, mulRate } from "../../money/money.ts";
+import { compareDecimal } from "../../money/exact-decimal.ts";
 import {
   HrmAuthorizationError,
   loadOwnEmploymentIds,
@@ -68,7 +69,7 @@ export interface GapFxEvidence {
 
 export interface GapMetrics {
   readonly comparisonAttributeKey: string;
-  readonly thresholdPct: number;
+  readonly thresholdPct: string;
   readonly groupA: string;
   readonly groupB: string;
   readonly meanGapPct: number | null;
@@ -112,6 +113,9 @@ function toStoredMetrics(metrics: GapMetrics): Record<string, unknown> {
 
 function fromStoredMetrics(stored: Record<string, unknown>): GapMetrics {
   const s = stored as Record<string, unknown>;
+  if (typeof s.threshold_pct !== "string") {
+    throw new CompensationError("BAD_STATE", "stored gap snapshot threshold is not exact decimal text");
+  }
   const fxEvidence: Record<string, GapFxEvidence> = {};
   const rawFx = s.fx_evidence;
   if (rawFx !== null && typeof rawFx === "object" && !Array.isArray(rawFx)) {
@@ -129,7 +133,7 @@ function fromStoredMetrics(stored: Record<string, unknown>): GapMetrics {
   }
   return {
     comparisonAttributeKey: s.comparison_attribute_key as string,
-    thresholdPct: s.threshold_pct as number,
+    thresholdPct: s.threshold_pct,
     groupA: s.group_a as string,
     groupB: s.group_b as string,
     meanGapPct: (s.mean_gap_pct ?? null) as number | null,
@@ -529,7 +533,8 @@ export async function computeGapSnapshot(query: {
         medianGapPct: medianGap,
         unexplainedGapPct: unexplained,
         method,
-        jointAssessmentDue: unexplained !== null && Math.abs(unexplained) >= settings.gapThresholdPct,
+        jointAssessmentDue:
+          unexplained !== null && compareDecimal(String(Math.abs(unexplained)), settings.gapThresholdPct) >= 0,
       });
     }
     categories.sort((x, y) => (x.levelCode < y.levelCode ? -1 : 1));

@@ -6,6 +6,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { compensationErrorResponse } from "../compensation/_lib";
+import { COMPENSATION_PERCENTAGE_INPUTS } from "../compensation/percentage-inputs";
 
 export const runtime = "nodejs";
 
@@ -27,7 +28,7 @@ export const runtime = "nodejs";
  */
 const settingsBody = z.object({
   comparisonAttributeKey: z.string().trim().max(120).nullable().optional(),
-  gapThresholdPct: z.number().nonnegative().nullable().optional(),
+  gapThresholdPct: COMPENSATION_PERCENTAGE_INPUTS.gapThresholdPct.nullable().optional(),
   responseDays: z.number().int().positive().nullable().optional(),
   fteRounding: z.enum(["up_to_whole", "nearest_tenth", "nearest_hundredth"]).nullable().optional(),
   burdenRate: z.string().regex(/^\d+(\.\d+)?$/).nullable().optional(),

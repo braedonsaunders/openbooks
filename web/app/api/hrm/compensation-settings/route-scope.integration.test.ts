@@ -97,7 +97,7 @@ test("a restricted caller cannot rewrite org-wide compensation policy", { skip: 
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    const response = await put({ gapThresholdPct: 5, burdenRate: "1.25" });
+    const response = await put({ gapThresholdPct: "5", burdenRate: "1.25" });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
     assert.equal(await storedCompensation(org.orgId), null, "a refused write stores no policy");
@@ -111,14 +111,16 @@ test("an unrestricted caller writes it; restricted callers still read it", { ski
   const { org } = await fixture();
   try {
     state.allowedSubsidiaryIds = null;
-    const saved = await put({ gapThresholdPct: 5, burdenRate: "1.25" });
+    const numeric = await put({ gapThresholdPct: 9007199254.000001, burdenRate: "1.25" });
+    assert.equal(numeric.status, 400, "the API rejects rounded JSON percentages");
+    const saved = await put({ gapThresholdPct: "9007199254.000001", burdenRate: "1.25" });
     assert.equal(saved.status, 200, JSON.stringify(await saved.json().catch(() => null)));
-    assert.deepEqual(await storedCompensation(org.orgId), { gapThresholdPct: 5, burdenRate: "1.25" });
+    assert.deepEqual(await storedCompensation(org.orgId), { gapThresholdPct: "9007199254.000001", burdenRate: "1.25" });
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
     const response = await GET();
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()) as unknown, {
-      settings: { gapThresholdPct: 5, burdenRate: "1.25" },
+      settings: { gapThresholdPct: "9007199254.000001", burdenRate: "1.25" },
     });
   } finally {
     state.allowedSubsidiaryIds = null;

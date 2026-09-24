@@ -638,7 +638,7 @@ export function CompensationSettingsForm({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             comparisonAttributeKey: attributeKey.trim() || null,
-            gapThresholdPct: threshold.trim() === '' ? null : Number(threshold),
+            gapThresholdPct: threshold.trim() === '' ? null : threshold.trim(),
             responseDays: responseDays.trim() === '' ? null : Number.parseInt(responseDays, 10),
             fteRounding: rounding,
             burdenRate: burden.trim() || null,

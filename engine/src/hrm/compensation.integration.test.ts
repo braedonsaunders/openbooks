@@ -707,7 +707,7 @@ test("HR-12 gap snapshots measure a known unexplained gap and flag joint assessm
       computeGapSnapshot({ orgId: org.orgId, actorId: h.hrId, asOf: "2024-06-01", groupA: "A", groupB: "B" }),
       /no comparison attribute is configured/,
     );
-    await setCompensationSettings(org.orgId, { comparisonAttributeKey: "eeo_group", gapThresholdPct: 5 });
+    await setCompensationSettings(org.orgId, { comparisonAttributeKey: "eeo_group", gapThresholdPct: "5" });
     const { level } = await seedArchitecture(org.orgId, h.hrId);
     // Six workers split 3/3 across groups with group B paid exactly 80%
     // of group A and tenure balanced across the groups (so tenure cannot

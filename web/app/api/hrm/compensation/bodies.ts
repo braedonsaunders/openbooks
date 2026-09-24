@@ -3,6 +3,7 @@ import { civilDateInput } from "@/lib/api/civil-date";
 import { canonicalDecimal, isPositiveDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { isUuid } from "../../../../lib/list-params";
 import { decimalNullRefusal, suppliedValue } from "../../../../lib/payroll-decimal-refusal";
+import { COMPENSATION_PERCENTAGE_INPUTS } from "./percentage-inputs";
 
 /**
  * Typed request bodies for /api/hrm/compensation/* (financial-boundary
@@ -33,17 +34,6 @@ const money4 = (field: string) =>
     }
     return exact;
   });
-const percent6 = z.string({ error: "Proposed percent must be sent as a decimal string" }).transform((raw, ctx) => {
-  const exact = canonicalDecimal(raw, 6);
-  if (exact === null || exact.startsWith("-")) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Proposed percent must be non-negative with at most 6 decimals — send the exact decimal text",
-    });
-    return z.NEVER;
-  }
-  return exact;
-});
 const currency = z.string().regex(/^[A-Z]{3}$/, "must be an ISO 4217 code");
 
 export const createFamilyBody = z.object({
@@ -121,7 +111,7 @@ export const setBudgetsBody = z.object({
 });
 
 export const proposeLineBody = z.object({
-  proposedPct: percent6.nullable().optional(),
+  proposedPct: COMPENSATION_PERCENTAGE_INPUTS.proposedPct.nullable().optional(),
   proposedRate: money4("Proposed rate").nullable().optional(),
   reason: z.string().trim().max(2000).nullable().optional(),
 });

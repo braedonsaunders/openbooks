@@ -133,6 +133,45 @@ test("the FTE-rounding select shows translated labels, never raw codes", () => {
   assert.ok(!html.includes(">nearest_hundredth<"), "no raw snake_case code renders as an option");
 });
 
+test("compensation settings sends the gap threshold as exact decimal text", async () => {
+  stubFetch();
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <CompensationSettingsForm
+          labels={LABELS}
+          initial={{ comparisonAttributeKey: "group", gapThresholdPct: "5", responseDays: "10", fteRounding: "up_to_whole", burdenRate: "" }}
+          attributeLabel="Attribute"
+          thresholdLabel="Threshold"
+          responseDaysLabel="Response days"
+          roundingLabel="Rounding"
+          roundingOptions={[{ value: "up_to_whole", label: "Up to a whole number" }]}
+          burdenLabel="Burden"
+        />
+      </NextIntlClientProvider>,
+    );
+  });
+  const input = host.querySelector("#comp-set-threshold") as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+  assert.ok(input && setter);
+  await act(async () => {
+    setter!.call(input, "9007199254.000001");
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    host.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    await tick();
+    await tick();
+  });
+  const body = JSON.parse(posted[0]!.body) as { gapThresholdPct: unknown };
+  assert.equal(body.gapThresholdPct, "9007199254.000001");
+  await act(async () => root.unmount());
+  host.remove();
+});
+
 // F3-33: Number('abc') is NaN, which JSON serializes as null — the old
 // submit posted an empty proposal the server could only refuse blindly.
 // The form now parses through the exact decimal grammar, refuses

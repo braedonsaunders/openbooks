@@ -197,7 +197,7 @@ async function setupHarness(): Promise<Harness> {
   await linkPerson(org.orgId, hrId);
   await setCompensationSettings(org.orgId, {
     comparisonAttributeKey: "eeo_group",
-    gapThresholdPct: 5,
+    gapThresholdPct: "5",
     responseDays: 30,
   });
   const subB = randomUUID();
