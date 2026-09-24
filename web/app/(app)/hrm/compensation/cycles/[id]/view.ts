@@ -67,10 +67,10 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
             rowKey: item('id'),
             empty: { title: f('linesEmpty') },
             columns: [
-              column('employee', link(item('employeeName'), item('lineHref'))),
-              column('current', text(item('current')), { align: 'right', className: 'tabular-nums' }),
+              column(f('columns.employee'), link(item('employeeName'), item('lineHref'))),
+              column(f('columns.current'), text(item('current')), { align: 'right', className: 'tabular-nums' }),
               column(
-                'placement',
+                f('columns.placement'),
                 widgetCell('hrm-placement-bar', {
                   min: item('placementMin'),
                   target: item('placementTarget'),
@@ -79,10 +79,10 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
                   label: item('placementLabel'),
                 }),
               ),
-              column('rating', text(item('rating'))),
-              column('guideline', text(item('guideline'))),
-              column('proposed', text(item('proposedPct')), { align: 'right', className: 'tabular-nums' }),
-              column('status', badge(item('statusLabel'), { variant: item('statusVariant') })),
+              column(f('columns.rating'), text(item('rating'))),
+              column(f('columns.guideline'), text(item('guideline'))),
+              column(f('columns.proposed'), text(item('proposedPct')), { align: 'right', className: 'tabular-nums' }),
+              column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
             ],
           }),
         ],

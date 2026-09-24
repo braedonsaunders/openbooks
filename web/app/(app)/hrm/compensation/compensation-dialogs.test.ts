@@ -121,7 +121,18 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function listCycles() { return []; } export async function listCycleLines() { return []; } export async function cyclePacing() { return null; } export async function getCycle() { return null; }",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `const detail = () => globalThis.__compDlgDetail === true;
+             export async function listCycles() { return []; }
+             export async function listCycleLines() { return []; }
+             export async function cyclePacing() { return { totalPct: null, overBudget: false }; }
+             export async function getCycle() {
+               if (!detail()) return null;
+               return { id: 'cycle-1', name: 'Fall merit round', kind: 'merit', status: 'open', effectiveOn: '2026-10-01' };
+             }`,
+          ),
       };
     }
     if (owned && specifier === "@openbooks/engine/src/hrm/compensation/bands.ts") {
@@ -149,7 +160,15 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function listPlans() { return []; } export async function listPlanLines() { return []; }",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function listPlans() {
+               if (globalThis.__compDlgDetail !== true) return [];
+               return [{ id: 'plan-1', name: 'FY27 growth', status: 'draft', fiscalPeriodFrom: '2026-01-01', fiscalPeriodTo: '2026-12-31' }];
+             }
+             export async function listPlanLines() { return []; }`,
+          ),
       };
     }
     if (owned && specifier === "@openbooks/engine/src/hrm/compensation/pay-transparency.ts") {
@@ -159,11 +178,20 @@ registerHooks({
         url: "data:text/javascript,export async function latestGapSnapshot() { return null; }",
       };
     }
+    if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript," + encodeURIComponent(`export const db = { execute: async () => ({ rows: [] }) };`),
+      };
+    }
     return nextResolve(specifier, context);
   },
 });
 
-const { loadCompensationHome, loadEquity } = await import("../../../../lib/hrm/compensation.ts");
+const { loadCompensationHome, loadCompCycleDetail, loadHeadcountPlanDetail, loadEquity } = await import(
+  "../../../../lib/hrm/compensation.ts"
+);
 
 const gap = globalThis as Record<string, unknown>;
 
@@ -453,4 +481,124 @@ test("every literal ?<param>=new href is armed where it lands", () => {
   }
   assert.ok(seen.size > 0, "the href scan found nothing — the guard is blind, not green");
   assert.deepEqual(offenders, [], `dead ?<param>=new links (a URL nothing reads):\n${offenders.join("\n")}`);
+});
+
+// F3-27/F3-28/F3-29: the bands, cycles, plans, team-grid and plan-line
+// tables headed their columns with hard-coded English literals ('level',
+// 'employee', 'title', …), so every non-English locale still read English.
+// The loaders already resolved the catalog strings; the specs just never
+// used them. The walker below collects every table's headers in order from
+// the emitted spec — ModuleView resolves the field refs at render, so a
+// header of {$: 'bandsColumns.level'} renders the loader-resolved catalog
+// string while a literal 'level' renders English everywhere.
+function tableHeaders(spec: unknown): unknown[][] {
+  const found: unknown[][] = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const entry of node) visit(entry);
+      return;
+    }
+    if (node !== null && typeof node === "object") {
+      const record = node as Record<string, unknown>;
+      if (record.kind === "table" && Array.isArray(record.columns)) {
+        found.push((record.columns as { header: unknown }[]).map((column) => column.header));
+      }
+      for (const value of Object.values(record)) visit(value);
+    }
+  };
+  visit((spec as { body: unknown }).body);
+  return found;
+}
+
+function assertProse(value: unknown, label: string) {
+  assert.equal(typeof value, "string", `${label} resolves to a string, never a key path`);
+  assert.ok(!(value as string).includes("."), `${label} resolves to prose, never a key path`);
+}
+
+test("home tables head their columns from the resolved catalog, never literals", async () => {
+  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  const data = await loadCompensationHome(MANAGER, {});
+  assert.ok(data, "the home loader still resolves");
+  assert.deepEqual(
+    [data.bandsColumns.level, data.bandsColumns.range, data.bandsColumns.headcount],
+    ["Level", "Range", "Headcount"],
+    "the band headers resolve from the en catalog",
+  );
+  assert.deepEqual(
+    [data.cyclesColumns.name, data.cyclesColumns.status, data.cyclesColumns.effective],
+    ["Name", "Status", "Effective"],
+    "the cycle headers resolve from the en catalog",
+  );
+  assert.deepEqual(
+    [data.plansColumns.name, data.plansColumns.status, data.plansColumns.cost],
+    ["Name", "Status", "Cost"],
+    "the plan headers resolve from the en catalog",
+  );
+  const { compensationSpec } = await import("./view.ts");
+  assert.deepEqual(
+    tableHeaders(compensationSpec(data!)),
+    [
+      [{ $: "bandsColumns.level" }, { $: "bandsColumns.range" }, { $: "bandsColumns.headcount" }],
+      [{ $: "cyclesColumns.name" }, { $: "cyclesColumns.status" }, { $: "cyclesColumns.effective" }],
+      [{ $: "plansColumns.name" }, { $: "plansColumns.status" }, { $: "plansColumns.cost" }],
+    ],
+    "the three home tables head their columns from the loader-resolved fields",
+  );
+});
+
+test("the team grid heads its seven columns from the resolved catalog, never literals", async () => {
+  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  (gap as Record<string, unknown>).__compDlgDetail = true;
+  try {
+    const data = await loadCompCycleDetail(MANAGER, "cycle-1", {});
+    assert.ok(data, "the cycle detail loader resolves the canned round");
+    for (const [key, value] of Object.entries(data.columns)) assertProse(value, `columns.${key}`);
+    assert.equal(data.columns.employee, "Employee", "the employee header resolves from the en catalog");
+    const { compCycleSpec } = await import("./cycles/[id]/view.ts");
+    assert.deepEqual(
+      tableHeaders(compCycleSpec(data!)),
+      [
+        [
+          { $: "columns.employee" },
+          { $: "columns.current" },
+          { $: "columns.placement" },
+          { $: "columns.rating" },
+          { $: "columns.guideline" },
+          { $: "columns.proposed" },
+          { $: "columns.status" },
+        ],
+      ],
+      "the team grid heads all seven columns from the loader-resolved fields",
+    );
+  } finally {
+    (gap as Record<string, unknown>).__compDlgDetail = false;
+  }
+});
+
+test("the plan lines head their six columns from the resolved catalog, never literals", async () => {
+  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  (gap as Record<string, unknown>).__compDlgDetail = true;
+  try {
+    const data = await loadHeadcountPlanDetail(MANAGER, "plan-1");
+    assert.ok(data, "the plan detail loader resolves the canned plan");
+    for (const [key, value] of Object.entries(data.columns)) assertProse(value, `columns.${key}`);
+    assert.equal(data.columns.title, "Title", "the title header resolves from the en catalog");
+    const { compPlanSpec } = await import("./plans/[id]/view.ts");
+    assert.deepEqual(
+      tableHeaders(compPlanSpec(data!)),
+      [
+        [
+          { $: "columns.title" },
+          { $: "columns.kind" },
+          { $: "columns.fte" },
+          { $: "columns.start" },
+          { $: "columns.cost" },
+          { $: "columns.status" },
+        ],
+      ],
+      "the plan lines head all six columns from the loader-resolved fields",
+    );
+  } finally {
+    (gap as Record<string, unknown>).__compDlgDetail = false;
+  }
 });
