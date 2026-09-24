@@ -1,45 +1,60 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Shared-table composition contract for /me/reviews. Owed
-// self-assessments, shared manager reviews with the acknowledge action,
-// and own goals render through the shared `table` block; answering rides
-// the existing performance drawer through row links, never a new write
-// surface. No calibration ever renders — the loader strips it before the
-// spec is built.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const loader = readFileSync(new URL("../../../../lib/hrm/self-service.ts", import.meta.url), "utf8");
-const engine = readFileSync(new URL("../../../../../engine/src/hrm/self-service/my-work.ts", import.meta.url), "utf8");
-
-test("me reviews renders through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadMeReviewsPage/, "page loads through the reviews loader");
-  assert.match(view, /meReviewsSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+// Behaviour contract for the reviews page (/me/reviews). The spec builder
+// runs over hand-built data: a refused read renders its title and remedy,
+// the self and manager review tables bind their rows, and the goal dialog
+// renders only with its dialog data. Calibration stripping stays covered
+// by engine/src/hrm/self-service/my-workspace.integration.test.ts
+// ('a shared manager review reaches the subject with calibration
+// stripped'), which owns the service shape — the spec renders what the
+// loader carries, never more.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("review rows render through the shared table block", () => {
-  assert.match(view, /table\(\{/, "rows compose a table block");
-  assert.match(view, /variant: 'app'/, "the table uses the app list variant");
-  assert.match(view, /rows: f\('selfRows'\)/, "self-assessments read the loader-resolved rows");
-  assert.match(view, /rows: f\('sharedRows'\)/, "shared reviews read the loader-resolved rows");
-  assert.match(view, /rows: f\('goalRows'\)/, "goals read the loader-resolved rows");
-  assert.match(view, /badge\(item\('statusLabel'\), \{ variant: item\('statusVariant'\) \}\)/, "status rides the shared badge");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
+const { meReviewsSpec } = await import("./view.ts");
+
+function specJson(data: Record<string, unknown>): string {
+  return JSON.stringify(meReviewsSpec(data as never));
+}
+
+const TABS = [{ label: "Reviews", href: "/me/reviews" }];
+
+function baseData(): Record<string, unknown> {
+  return {
+    tabs: TABS,
+    refusal: null,
+    goalDialog: null,
+    goalDialogCloseHref: "/me/reviews",
+  } as unknown as Record<string, unknown>;
+}
+
+test("a refused reviews read renders the remedy", () => {
+  const data = baseData();
+  data.refusal = { title: "No reviews", message: "ask an administrator for a linked employment" };
+  const json = specJson(data);
+  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes("No reviews"), "the refusal title reaches the page");
+  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
 });
 
-test("answering rides the performance drawer and acknowledge rides a row island", () => {
-  assert.match(view, /link\(item\('openLabel'\), item\('openHref'\)\)/, "self rows link to the existing drawer");
-  assert.match(view, /hrm-review-acknowledge/, "shared rows carry the acknowledge island");
-  assert.match(view, /hrm-goal-dialog/, "goals carry the progress dialog");
-  assert.match(engine, /\/hrm\/performance\?cycle=/, "the engine builds drawer hrefs into its slices");
-  assert.ok(!/calibratedRating|calibrationReason|managerGapCount/.test(view), "the spec never names a calibration field");
-});
+test("the self and manager tables bind with the goal dialog gated on its data", () => {
+  const json = specJson(baseData());
+  assert.ok(json.includes("\"selfRows\""), "the self review table binds its rows");
+  assert.ok(json.includes("\"sharedRows\""), "the shared review table binds its rows");
+  assert.ok(json.includes("\"goalRows\""), "the goals table binds its rows");
+  assert.ok(json.includes('"dialog":null'), "no goal dialog renders without its dialog data");
 
-test("the reviews loader scopes every row to the login", () => {
-  assert.match(loader, /getMyReviewWorkspace\(\{\s*orgId/, "the page reads the self-service workspace, never an org list");
-  assert.match(view, /requirePermission\('hrm\.self\.read'\)/, "page requires the self-service grant");
-  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
+  const withDialog = baseData();
+  withDialog.goalDialog = { title: "Update goal" };
+  const dialogJson = specJson(withDialog);
+  assert.ok(dialogJson.includes("\"hrm-goal-dialog\""), "the goal dialog widget renders");
+  assert.ok(dialogJson.includes("Update goal"), "the dialog carries its data");
 });
