@@ -65,6 +65,7 @@
       "funded": "ETP financés",
       "filled": "ETP pourvus",
       "vacant": "ETP vacants",
+      "refusal": "Refus de vacance",
       "unassignedDepartment": "Sans service",
       "empty": "Aucun poste n'est établi au {date}.",
       "total": "Total"

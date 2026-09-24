@@ -65,6 +65,7 @@
       "funded": "Funded FTE",
       "filled": "Filled FTE",
       "vacant": "Vacant FTE",
+      "refusal": "Vacancy refusal",
       "unassignedDepartment": "No department",
       "empty": "No positions are established as of {date}.",
       "total": "Total"

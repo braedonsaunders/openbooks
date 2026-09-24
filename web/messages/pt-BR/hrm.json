@@ -65,6 +65,7 @@
       "funded": "FTE financiado",
       "filled": "FTE preenchido",
       "vacant": "FTE vago",
+      "refusal": "Recusa de vaga",
       "unassignedDepartment": "Sem departamento",
       "empty": "Nenhuma posição está estabelecida em {date}.",
       "total": "Total"

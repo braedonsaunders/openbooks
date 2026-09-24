@@ -105,6 +105,7 @@ export interface PositionsPageData {
     funded: string
     filled: string
     vacant: string
+    refusal: string
     holder: string
   }
   rows: PositionRow[]
@@ -222,6 +223,7 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
             column(data.columns.funded, text(item('fundedFte')), { align: 'right', className: 'tabular-nums' }),
             column(data.columns.filled, text(item('filledFte')), { align: 'right', className: 'tabular-nums' }),
             column(data.columns.vacant, text(item('vacantFte')), { align: 'right', className: 'tabular-nums' }),
+            column(data.columns.refusal, text(item('refusal'), { fallback: '—' })),
             column(data.columns.holder, text(item('holderLabel'))),
           ],
         }),
@@ -482,6 +484,7 @@ export async function loadPositionsPage(
       funded: t('positions.columns.funded'),
       filled: t('positions.columns.filled'),
       vacant: t('positions.columns.vacant'),
+      refusal: t('positions.columns.refusal'),
       holder: t('positions.columns.holder'),
     },
     rows,

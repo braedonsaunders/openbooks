@@ -65,6 +65,7 @@
       "funded": "已拨款 FTE",
       "filled": "已填补 FTE",
       "vacant": "空缺 FTE",
+      "refusal": "空缺拒绝原因",
       "unassignedDepartment": "无部门",
       "empty": "截至 {date} 没有已设立的职位。",
       "total": "合计"
