@@ -36,6 +36,7 @@ import {
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   refuseUntranscribedYear,
   type UsStateWithholdingEngine,
@@ -174,6 +175,21 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
+  const militarySpouseCertificate = input.supportingCertificates?.us_wi_w221;
+  if (militarySpouseCertificate?.onFile) {
+    requireMilitarySpouseEligibility(militarySpouseCertificate, "Wisconsin", [
+      { key: "employee_is_servicemember_spouse", description: "the employee is the spouse of a servicemember" },
+      { key: "servicemember_present_under_orders", description: "the servicemember is present in Wisconsin in compliance with military orders" },
+      { key: "spouse_present_solely_to_accompany", description: "the spouse is in Wisconsin solely to be with the servicemember" },
+      { key: "spouse_resides_with_servicemember", description: "the spouse resides with the servicemember" },
+      { key: "elected_domicile_not_wisconsin", description: "the spouse elected a qualifying domicile that is not Wisconsin" },
+    ]);
+    return {
+      state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+      factors: { WI_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "1" },
+    };
+  }
+
   if (certificateFlag(input.certificate, "exempt")) {
     return {
       state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
@@ -239,6 +255,7 @@ export const WI_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: WI_TAX_YEAR_EDITIONS,
   printedPeriods: null,
+  supportingCertificateKeys: ["us_wi_w221"],
   compute,
 };
 
@@ -338,6 +355,56 @@ export const WI_W220: PayrollCertificate = {
       ],
       required: true,
       help: "Wisconsin has reciprocal agreements with exactly these four states.",
+    },
+  ],
+};
+
+/** Form W-221 — Nonresident Military Spouse Withholding Exemption. */
+export const WI_W221: PayrollCertificate = {
+  key: "us_wi_w221",
+  form: "W-221",
+  label: "Nonresident Military Spouse Withholding Exemption (Wisconsin)",
+  scope: { level: "region", region: "WI" },
+  purpose: "exemption",
+  citation:
+    "Wisconsin Form W-221 (R. 11/2024); Wisconsin DOR Nonresident Military Spouse Withholding "
+    + "Exemption FAQ (Oct. 9, 2025); 50 U.S.C. 4001(a)(3)",
+  summary:
+    "The W-221 election remains effective until revoked. It exempts the employee's Wisconsin "
+    + "service income only while every statutory military-spouse condition remains true.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "employee_is_servicemember_spouse",
+      label: "Employee is the spouse of a servicemember",
+      kind: "flag", required: true,
+      help: "W-221 Part II eligibility certification.",
+    },
+    {
+      key: "servicemember_present_under_orders",
+      label: "Servicemember is present in Wisconsin in compliance with military orders",
+      kind: "flag", required: true,
+      help: "W-221 Part II eligibility certification.",
+    },
+    {
+      key: "spouse_present_solely_to_accompany",
+      label: "Spouse is in Wisconsin solely to be with the servicemember",
+      kind: "flag", required: true,
+      help: "W-221 Part II eligibility certification.",
+    },
+    {
+      key: "spouse_resides_with_servicemember",
+      label: "Spouse resides with the servicemember",
+      kind: "flag", required: true,
+      help: "Wisconsin DOR's W-221 eligibility guidance requires that the spouse and servicemember reside together.",
+    },
+    {
+      key: "elected_domicile_not_wisconsin",
+      label: "Spouse elected a qualifying domicile that is not Wisconsin",
+      kind: "flag", required: true,
+      help:
+        "W-221 election may use the servicemember's domicile, the spouse's domicile, or the "
+        + "servicemember's permanent duty station; the elected domicile cannot be Wisconsin.",
     },
   ],
 };
