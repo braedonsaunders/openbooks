@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add, cmp, mulRatio, roundMoney, sum } from "../money/money.ts";
 
@@ -403,10 +403,38 @@ const day = (value: string | Date | null): string | null =>
   value === null ? null
   : String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
 
-/** Every schedule row an org holds, with its cycle days attached. */
+/**
+ * Subsidiary predicate for schedule rows. Only the employee and subsidiary
+ * scope keys name a legal entity: an employee row belongs to its employee's
+ * party subsidiary, a subsidiary row to its subsidiary. Job-title, trade,
+ * department and organization rows are org-wide selectors with no entity
+ * lineage of their own, so they stay visible to every holder of the read
+ * grant — their WRITES are fenced at the route, never here.
+ */
+function scheduleScopeFilter(allowed: ReadonlySet<string> | null): SQL {
+  if (allowed === null) return sql``;
+  const ids = [...allowed];
+  if (ids.length === 0) return sql` and false`;
+  const list = `{${ids.join(",")}}`;
+  return sql` and (
+    (s.employee_party_id is not null and p.subsidiary_id = any(${list}::uuid[]))
+    or (s.employee_party_id is null and s.subsidiary_id is not null
+        and s.subsidiary_id = any(${list}::uuid[]))
+    or (s.employee_party_id is null and s.subsidiary_id is null)
+  )`;
+}
+
+/**
+ * Every schedule row an org holds, with its cycle days attached.
+ *
+ * Actor-facing reads pass the caller's allowed subsidiaries explicitly
+ * (null = unrestricted); system computation (holiday-pay resolution) passes
+ * null because it answers for the whole org, never for one actor.
+ */
 export async function loadWorkSchedules(
   tx: Pick<typeof db, "execute">,
   orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<WorkScheduleRow[]> {
   const rows = (await tx.execute<{
       id: string; name: string | null; employee_party_id: string | null; job_title: string | null;
@@ -425,7 +453,9 @@ export async function loadWorkSchedules(
                where d.org_id = s.org_id and d.schedule_id = s.id),
              '[]'::json) as days
       from work_schedules s
+      left join parties p on p.org_id = s.org_id and p.id = s.employee_party_id
      where s.org_id = ${orgId}
+       ${scheduleScopeFilter(allowedSubsidiaryIds)}
      order by s.effective_from, s.id
   `));
   return rows.rows.map((row) => ({
@@ -484,6 +514,8 @@ export async function resolveWorkSchedule(
       subsidiaryId: found?.subsidiary_id ?? null,
     };
   }
-  const rows = await loadWorkSchedules(tx, orgId);
+  // System computation, not an actor read: holiday-pay resolution answers
+  // for the whole org, so it resolves over every row unrestricted.
+  const rows = await loadWorkSchedules(tx, orgId, null);
   return pickWorkSchedule(rows, { employeePartyId, ...keys }, onDate);
 }
