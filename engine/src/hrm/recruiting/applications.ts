@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import {
   requireHrmRecruitingManage,
   requireOwnRequisitionForHiringManager,
@@ -9,6 +10,7 @@ import { assertStageMoveAllowed } from "./funnel.ts";
 import { requireActorId, requireId, requireOrgId, requireReason, isUniqueViolation } from "./input.ts";
 import { firstStage, loadPipelineTemplate } from "./pipeline.ts";
 import { createCandidate, loadCandidate, type CandidateDTO } from "./candidates.ts";
+import { candidateApplicationCount, candidateInScopeRequisitionIds } from "./candidate-scope.ts";
 // HR-18 begin: disposition sync for posting-sourced applications (0229).
 // Static edge applications→postings only; postings reaches back dynamically,
 // so the module graph stays acyclic. recordDispositionForApplication is a
@@ -178,6 +180,19 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
     const candidate = await loadCandidate(db, orgId, candidateId);
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
+    }
+    // The target requisition is authorized above, but the CANDIDATE must be
+    // attachable too: owned through an application on an in-scope
+    // requisition, or a fresh prospect with no applications (first attach
+    // wins and establishes ownership on this in-scope opening). Anything
+    // else — including a candidate owned entirely outside the actor's
+    // scope — refuses exactly like an unknown id, so ids cannot be probed.
+    const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    if (allowed !== null) {
+      const owned = await candidateInScopeRequisitionIds(db, orgId, candidateId, allowed);
+      if (owned.length === 0 && (await candidateApplicationCount(db, orgId, candidateId)) > 0) {
+        throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
+      }
     }
     if (!requisition.pipelineTemplateId) {
       throw new RecruitingError(
