@@ -8,6 +8,7 @@ import { useMoney } from "./money-provider";
 import { useBusinessToday } from "./business-date-provider";
 import { useAppAction } from "../lib/use-app-action";
 import { decimalCmp } from "../lib/statement-format";
+import { moneyFieldError } from "./money-input";
 
 type Settlement = {
   applicationId: string;
@@ -147,6 +148,13 @@ export function CreditApplicationsPanel({
 
   async function apply() {
     if (!state || !partyId) return;
+    const unreadable = Object.values(amounts).find(
+      (amount) => amount.trim() !== "" && moneyFieldError("Application amount", "a money amount", amount) !== null,
+    );
+    if (unreadable !== undefined) {
+      setError(moneyFieldError("Application amount", "a money amount", unreadable)!);
+      return;
+    }
     const credits = Object.entries(amounts)
       .filter(([, amount]) => isPositiveEntry(amount))
       .map(([toLineId, amount]) => ({
