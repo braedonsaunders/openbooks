@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, allocateLargestRemainder, cmp, div, divRate, fitsLedgerRange, formatMoney, isZero, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+import { abs, allocateLargestRemainder, cmp, div, divRate, fitsLedgerRange, formatMoney, isZero, ledgerSideTotals, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -439,4 +439,14 @@ test("the shared ledger bound holds fifteen whole digits, no more", () => {
   assert.equal(fitsLedgerRange("1000000000000000"), false);
   assert.equal(fitsLedgerRange("-1000000000000000"), false);
   assert.equal(fitsLedgerRange("0.0000"), true);
+});
+
+test("side totals split debits and credit magnitudes exactly", () => {
+  // A balanced set whose sides each overflow still reports both sides, so
+  // the stored-total guards refuse by name instead of dying in Postgres.
+  assert.deepEqual(ledgerSideTotals(["900000000000000.0000", "-900000000000000.0000", "0.0000"]), {
+    debits: "900000000000000.0000",
+    credits: "900000000000000.0000",
+  });
+  assert.deepEqual(ledgerSideTotals([]), { debits: "0.0000", credits: "0.0000" });
 });

@@ -243,6 +243,20 @@ export function fitsLedgerRange(canonical: string): boolean {
 }
 
 /**
+ * Debit/credit side totals of one amount set, for the ledger's numeric(19,4)
+ * total columns. In-range lines can still sum past the column a stored total
+ * lands in, so every path that persists a sum checks both sides through
+ * fitsLedgerRange instead of dying in Postgres. Credits return as a
+ * magnitude so the same bound applies to both sides.
+ */
+export function ledgerSideTotals(amounts: readonly string[]): { debits: string; credits: string } {
+  const positives: string[] = [];
+  const negatives: string[] = [];
+  for (const amount of amounts) (cmp(amount, "0") < 0 ? negatives : positives).push(amount);
+  return { debits: sum(positives), credits: sum(negatives.map(neg)) };
+}
+
+/**
  * Canonicalize a non-money decimal without crossing the IEEE-754 boundary.
  * Quantities and commercial rates legitimately carry more precision than
  * posted money, so callers choose an explicit scale (up to 10 places).

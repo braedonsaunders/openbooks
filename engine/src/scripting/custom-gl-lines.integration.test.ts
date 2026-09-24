@@ -401,6 +401,53 @@ test("oversize script lines are refused with the shared bound message", { skip: 
   }
 });
 
+test("balanced script lines whose sides overflow the ledger are refused by name", { skip: !DB }, async () => {
+  // Every line fits numeric(19,4), the set balances, but each side sums to
+  // sixteen whole digits: the side totals refuse with the shared bound
+  // message instead of dying in Postgres at posting, and nothing posts.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+    await withOrgContext(org.orgId, async () => {
+      await enableAllocScripting(org.orgId);
+      await db.execute(sql`
+        update app_roles set permissions = '["gl.post"]'::jsonb
+         where org_id = ${org.orgId} and key = 'poster'`);
+      await seedCustomGlScript(
+        org.orgId,
+        `function main(ctx) { return { lines: [
+          { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "900000000000000" },
+          { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "900000000000000" },
+          { accountId: ${JSON.stringify(org.accounts.clearing)}, amount: "-900000000000000" },
+          { accountId: ${JSON.stringify(org.accounts.clearing)}, amount: "-900000000000000" },
+        ] }; }`,
+      );
+    });
+    const documentId = await withOrgContext(org.orgId, () =>
+      seedBalancedDraftJournal(org, "JE-CGL-WIDE", actorId),
+    );
+    await withOrgContext(org.orgId, () =>
+      submitAndReleaseIfUngated("journal", documentId, actorId),
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        postDocument(documentId, postingControlDeps(org), {
+          deferEffects: true,
+          audit: { actorId, source: "test" },
+        }),
+      ),
+      /debit total is out of range — at most 15 whole digits fit the ledger/,
+    );
+    const entries = await withOrgContext(org.orgId, () =>
+      db.execute<{ n: number }>(sql`
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`),
+    );
+    assert.equal(entries.rows[0]!.n, 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("unknown accountCode is refused with no write", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {

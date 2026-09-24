@@ -20,7 +20,7 @@ import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.
 import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { assertReturnSourceSelectable, type ReturnSide } from '@openbooks/engine/src/inventory/returnable-sources.ts'
 import { InventoryError } from '@openbooks/engine/src/inventory/contracts.ts'
-import { cmp, fitsLedgerRange, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp, fitsLedgerRange, ledgerSideTotals, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
@@ -437,7 +437,8 @@ type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
  * Pure — unit-tested directly in documents.test.ts.
  */
 export function validateEditableDocumentLines(lines: DocumentLineInput[]): DocumentLineInput[] {
-  return lines.map((l, i) => {
+  const amounts: string[] = []
+  const out = lines.map((l, i) => {
     const n = i + 1
     if (!l.accountId) {
       throw new DocumentEditError(422, `Line ${n}: an account is required`)
@@ -462,6 +463,7 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
         `Line ${n}: amount is out of range — at most 15 whole digits fit the ledger`,
       )
     }
+    amounts.push(exactAmount)
     // Quantity is informational beside the amount, but it persists into the
     // numeric(28,8) column verbatim: junk or blank text died in Postgres with
     // a storage error (a 500), and anything past 8dp was silently rounded to
@@ -487,6 +489,23 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
     }
     return l
   })
+  // In-range lines can still sum past the stored document total, which is
+  // numeric(19,4) like every other money column: refuse the debit/credit
+  // side totals by name instead of dying in Postgres.
+  const { debits, credits } = ledgerSideTotals(amounts)
+  if (!fitsLedgerRange(debits)) {
+    throw new DocumentEditError(
+      422,
+      `draft debit total is out of range — at most 15 whole digits fit the ledger`,
+    )
+  }
+  if (!fitsLedgerRange(credits)) {
+    throw new DocumentEditError(
+      422,
+      `draft credit total is out of range — at most 15 whole digits fit the ledger`,
+    )
+  }
+  return out
 }
 
 /**
