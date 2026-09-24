@@ -90,8 +90,8 @@ test('purchasing scalar metrics convert transaction-currency documents before or
 
       await withOrgContext(org.orgId, async () => {
         const home = await purchasingHome(org.orgId)
-        assert.equal(home.spend30d, 235, '30-day spend is shown in organization currency')
-        assert.equal(home.badges.paid7dValue, 235, '7-day payments are shown in organization currency')
+        assert.equal(home.spend30d, '235.0000', '30-day spend is shown in organization currency')
+        assert.equal(home.badges.paid7dValue, '235.0000', '7-day payments are shown in organization currency')
         assert.equal(home.trend.find((week) => week.spend > 0)?.spend, 235, 'trend spend is shown in organization currency')
       })
     })

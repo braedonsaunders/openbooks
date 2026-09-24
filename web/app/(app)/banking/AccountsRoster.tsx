@@ -11,6 +11,7 @@ import { Sparkline } from '../../../components/module-home/ui'
 import { LayoutMenu } from '../../../components/page-layout/LayoutMenu'
 import { LayoutSaveStatus } from '../../../components/page-layout/LayoutSaveStatus'
 import { usePageLayout } from '../../../components/page-layout/use-page-layout'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 
 /** Statements older than this are flagged as a stale feed on the roster. */
 const STALE_STATEMENT_DAYS = 30
@@ -30,8 +31,8 @@ export function AccountsRosterPanel({
   layoutPrefs,
 }: {
   accounts: BankingAccountRow[]
-  totalCash: number
-  totalCards: number
+  totalCash: string
+  totalCards: string
   layoutPrefs: PageLayoutPrefs
 }) {
   const t = useTranslations('banking')
@@ -119,7 +120,7 @@ function RosterSection({
   accounts: BankingAccountRow[]
   hiddenCount: number
   totalLabel: string
-  total: number
+  total: string
 }) {
   const { money } = useMoney()
   const t = useTranslations('banking')
@@ -185,13 +186,13 @@ function RosterSection({
                   points={a.spark}
                   className={cn(
                     'hidden sm:block',
-                    a.balance < 0 ? 'text-red-400 dark:text-red-500' : 'text-teal-500 dark:text-teal-400',
+                    cmp(a.balance, '0') < 0 ? 'text-red-400 dark:text-red-500' : 'text-teal-500 dark:text-teal-400',
                   )}
                 />
                 <span
                   className={cn(
                     'w-28 shrink-0 text-right text-sm font-semibold tabular-nums',
-                    a.balance < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100',
+                    cmp(a.balance, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100',
                   )}
                 >
                   {money(a.balance)}
@@ -206,7 +207,7 @@ function RosterSection({
         <span
           className={cn(
             'text-sm font-bold tabular-nums',
-            total < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100',
+            cmp(total, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100',
           )}
         >
           {money(total)}

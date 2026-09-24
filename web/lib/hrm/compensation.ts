@@ -38,6 +38,8 @@ import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmRewardsViewTabs } from './workspace-tabs'
 import { isFeatureEnabled } from '../features'
 import { requireFeatureEnabled } from '../feature-gates'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { planTotalCost } from './compensation-money'
 
 /**
  * Compensation workspace loaders — one read per surface behind the
@@ -308,7 +310,7 @@ export async function loadCompensationHome(
         for (const row of edgeRows) roundEdges.set(row.id, row.min)
       }
       belowMinRound = String(
-        roundLines.filter((l) => l.bandId !== null && Number(l.currentRate) < Number(roundEdges.get(l.bandId) ?? '0')).length,
+        roundLines.filter((l) => l.bandId !== null && cmp(l.currentRate, roundEdges.get(l.bandId) ?? '0') < 0).length,
       )
     } catch {
       belowMinRound = '—'
@@ -344,7 +346,7 @@ export async function loadCompensationHome(
   const planRows: CompPlanRow[] = []
   for (const plan of plans.slice(0, 10)) {
     const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId: plan.id }).catch(() => [])
-    const total = lines.reduce((sum, l) => sum + Number(l.estAnnualCost), 0)
+    const total = planTotalCost(lines)
     planRows.push({
       id: plan.id,
       name: plan.name,
@@ -352,7 +354,7 @@ export async function loadCompensationHome(
       status: plan.status,
       statusLabel: t.has(`compensation.planStatus.${plan.status}`) ? t(`compensation.planStatus.${plan.status}`) : plan.status,
       statusVariant: plan.status === 'approved' ? 'success' : plan.status === 'submitted' ? 'warning' : 'default',
-      totalCost: total.toFixed(2),
+      totalCost: total,
       href: `/hrm/compensation/plans/${plan.id}`,
     })
   }
@@ -634,9 +636,9 @@ export async function loadCompCycleDetail(
       const placement =
         edges === null
           ? ('no_band' as const)
-          : Number(l.currentRate) < Number(edges.min)
-            ? ('below_min' as const)
-            : Number(l.currentRate) > Number(edges.max)
+        : cmp(l.currentRate, edges.min) < 0
+          ? ('below_min' as const)
+          : cmp(l.currentRate, edges.max) > 0
               ? ('above_max' as const)
               : ('in_range' as const)
       const href = `/hrm/compensation/cycles/${cycleId}?line=${l.id}${segment ? `&department=${segment}` : ''}`
@@ -655,9 +657,9 @@ export async function loadCompCycleDetail(
         rating: l.ratingKey ?? '—',
         guideline:
           l.guidelineMinPct !== null && l.guidelineMaxPct !== null
-            ? `${Number(l.guidelineMinPct)}% – ${Number(l.guidelineMaxPct)}%`
+            ? `${l.guidelineMinPct}% – ${l.guidelineMaxPct}%`
             : '—',
-        proposedPct: l.proposedPct !== null ? `${Number(l.proposedPct)}%` : '—',
+        proposedPct: l.proposedPct !== null ? `${l.proposedPct}%` : '—',
         proposedRate: l.proposedRate ?? '—',
         status: l.status,
         statusLabel: t.has(`compensation.lineStatus.${l.status}`) ? t(`compensation.lineStatus.${l.status}`) : l.status,
@@ -797,7 +799,7 @@ export async function loadHeadcountPlanDetail(
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
   const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation')
   const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId }).catch(() => [])
-  const total = lines.reduce((sum, l) => sum + Number(l.estAnnualCost), 0)
+  const total = planTotalCost(lines)
   return {
     title: plan.name,
     planName: plan.name,
@@ -807,7 +809,7 @@ export async function loadHeadcountPlanDetail(
     tabs,
     viewTabs,
     totalLabel: t('compensation.totalCost'),
-    totalCost: total.toFixed(2),
+    totalCost: total,
     linesTitle: t('compensation.planLinesTitle'),
     columns: {
       title: t('compensation.columns.title'),

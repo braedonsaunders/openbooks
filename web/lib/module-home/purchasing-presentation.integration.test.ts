@@ -79,12 +79,12 @@ test('purchasing cockpit translates every payable functional to presentation', {
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const home = await purchasingHome(org.orgId)
-        assert.equal(home.apOutstanding, 235)
-        assert.equal(home.spend30d, 235)
-        assert.equal(home.badges.paid7dValue, 235)
+        assert.equal(home.apOutstanding, '235.0000')
+        assert.equal(home.spend30d, '235.0000')
+        assert.equal(home.badges.paid7dValue, '235.0000')
         assert.equal(home.trend.find((w) => w.spend > 0)?.spend, 235)
         const usRow = home.topExposure.find((r) => r.partyId === usVend)!
-        assert.equal(usRow.billedOpen, 135)
+        assert.equal(usRow.billedOpen, '135.0000')
       })
     })
   } finally {

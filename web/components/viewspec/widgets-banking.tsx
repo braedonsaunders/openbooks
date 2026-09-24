@@ -23,7 +23,7 @@ import { StartReconciliationButton } from '../../app/(app)/banking/[accountId]/S
 import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
-import { num, str, type WidgetRenderer } from './widget-props'
+import { decimalText, num, str, type WidgetRenderer } from './widget-props'
 
 /** Banking adapters. Compose native components without changing their props or boundaries. */
 export const BANKING_WIDGETS = {
@@ -35,8 +35,8 @@ export const BANKING_WIDGETS = {
   'banking-roster': (props) => (
     <AccountsRosterPanel
       accounts={props.accounts as ComponentProps<typeof AccountsRosterPanel>['accounts']}
-      totalCash={num(props, 'totalCash') ?? 0}
-      totalCards={num(props, 'totalCards') ?? 0}
+      totalCash={decimalText(props, 'totalCash') ?? '0.0000'}
+      totalCards={decimalText(props, 'totalCards') ?? '0.0000'}
       layoutPrefs={props.layoutPrefs as ComponentProps<typeof AccountsRosterPanel>['layoutPrefs']}
     />
   ),

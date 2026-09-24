@@ -19,6 +19,7 @@ import { reportSubsidiaryScope, reportSubsidiaryView } from '../../../lib/consol
 import { resolveAsOf } from '../../../lib/cash/core'
 import { purchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
+import { cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { trendWeekLabel } from '../../../lib/format'
 import { groupTabs } from '../../../components/module-home/group-tabs'
@@ -191,7 +192,7 @@ export async function loadPurchasing(
         return {
           value: String(data.badges.openBills),
           hint: t('home.directory.billsHint', { overdue: moneyCompact(data.apOverdue) }),
-          tone: data.apOverdue > 0 ? 'warning' : 'neutral',
+          tone: cmp(data.apOverdue, '0') > 0 ? 'warning' : 'neutral',
         }
       case '/payments':
         return { value: String(data.badges.payments7d), hint: t('home.directory.paymentsHint') }
@@ -267,7 +268,7 @@ export async function loadPurchasing(
     apOutstanding: moneyCompact(data.apOutstanding),
     apOverdue: moneyCompact(data.apOverdue),
     dueNext7: moneyCompact(data.dueNext7),
-    apOverdueIsNegative: data.apOverdue > 0,
+    apOverdueIsNegative: cmp(data.apOverdue, '0') > 0,
     apHref: `/ap${subQs}`,
     trendTitle: t('home.trend.title'),
     trendHint: t('home.trend.hint'),
@@ -287,13 +288,13 @@ export function needsAttention(
   exposure: VendorExposureRow[],
   unpostedExpenses: number,
   t: T,
-  moneyCompact: (value: number) => string,
+  moneyCompact: (value: string) => string,
 ): AttentionItem[] {
   const items: AttentionItem[] = []
   for (const r of exposure) {
-    if (r.overdue > 0) {
+    if (cmp(r.overdue, '0') > 0) {
       items.push({
-        tone: r.overdue > r.billedOpen / 2 ? 'negative' : 'warning',
+        tone: cmp(r.overdue, mulDecimal(r.billedOpen, '0.5')) > 0 ? 'negative' : 'warning',
         text: t('home.attention.overdueVendor', { vendor: r.name, amount: moneyCompact(r.overdue) }),
         href: '/ap',
       })

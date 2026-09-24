@@ -69,8 +69,8 @@ test('purchasing cockpit denies every row to an empty subsidiary scope', { skip:
       })
 
       const denied = await withBypass(() => purchasingHome(scratch.orgId, []))
-      assert.equal(denied.spend30d, 0, 'empty scope reads no spend')
-      assert.equal(denied.apOutstanding, 0, 'empty scope reads no payables')
+      assert.equal(denied.spend30d, '0.0000', 'empty scope reads no spend')
+      assert.equal(denied.apOutstanding, '0.0000', 'empty scope reads no payables')
       assert.deepEqual(denied.topExposure, [], 'empty scope exposes no vendor')
       assert.ok(
         denied.trend.every((w) => w.spend === 0),
@@ -78,7 +78,7 @@ test('purchasing cockpit denies every row to an empty subsidiary scope', { skip:
       )
 
       const all = await withBypass(() => purchasingHome(scratch.orgId))
-      assert.equal(all.spend30d, 100, 'unrestricted callers still see the spend')
+      assert.equal(all.spend30d, '100.0000', 'unrestricted callers still see the spend')
     })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
