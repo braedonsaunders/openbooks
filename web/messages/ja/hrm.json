@@ -1802,7 +1802,13 @@
       "identifier": "免許番号",
       "notes": "備考",
       "evidence": "証跡を見る",
-      "events": "履歴"
+      "events": "履歴",
+      "eventKinds": {
+        "recorded": "記録済み",
+        "verified": "検証済み",
+        "renewed": "更新済み",
+        "revoked": "失効"
+      }
     },
     "recordForm": {
       "employment": "雇用",

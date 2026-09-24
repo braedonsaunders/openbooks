@@ -1802,7 +1802,13 @@
       "identifier": "执照编号",
       "notes": "备注",
       "evidence": "查看证明",
-      "events": "历史"
+      "events": "历史",
+      "eventKinds": {
+        "recorded": "已记录",
+        "verified": "已验证",
+        "renewed": "已续期",
+        "revoked": "已撤销"
+      }
     },
     "recordForm": {
       "employment": "雇佣关系",

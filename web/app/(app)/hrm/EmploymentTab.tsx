@@ -519,7 +519,11 @@ export function EmploymentTab({
           ) : exit.record ? (
             <div className="space-y-3">
               <p className="text-sm text-slate-700 dark:text-slate-300">
-                <span className="font-medium">{exit.record.reasonKind}</span>
+                <span className="font-medium">
+                  {t.has(`performance.exitReason_${exit.record.reasonKind}`)
+                    ? t(`performance.exitReason_${exit.record.reasonKind}`)
+                    : exit.record.reasonKind}
+                </span>
                 {' · '}
                 {exit.record.isVoluntary ? t('performance.exitVoluntaryYes') : t('performance.exitVoluntaryNo')}
                 {exit.record.destination ? ` · ${exit.record.destination}` : null}

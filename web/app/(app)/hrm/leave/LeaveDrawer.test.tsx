@@ -72,6 +72,7 @@ const { LeaveDrawer } = await import("./LeaveDrawer");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const TYPE_ID = "00000000-0000-4000-8000-000000000022";
+const REQUEST_ID = "00000000-0000-4000-8000-000000000032";
 // Two employments the manager may manage, plus one they may not: the
 // picker must name exactly the manageable two, never the third.
 const MANAGED_A = "00000000-0000-4000-8000-0000000000a1";
@@ -90,6 +91,12 @@ function installFetch(script: Script, manageable: boolean, own: "two" | "one" | 
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url === `/api/hrm/leave-requests/${REQUEST_ID}` && (init?.method ?? "GET") === "GET") {
+      return Response.json({
+        request: { id: REQUEST_ID, employmentId: OWN_A, leaveTypeCode: "PPL-VAC", startsOn: "2026-10-20", endsOn: "2026-10-21", hours: "8", reason: null, status: "submitted", decidedBy: null, decisionReason: null },
+        timeBalance: null, valueBalances: [], asOf: "2026-10-01",
+      });
+    }
     if (url.includes("/api/hrm/options?source=leave-types")) {
       return Response.json({ options: [{ id: TYPE_ID, label: "PPL-VAC — Vacation" }] });
     }
@@ -125,14 +132,14 @@ function installFetch(script: Script, manageable: boolean, own: "two" | "one" | 
   };
 }
 
-async function mountFiling() {
+async function mountFiling(requestId: string | null = null) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <LeaveDrawer requestId={null} canWithdrawCancel onClose={() => {}} />
+        <LeaveDrawer requestId={requestId} canWithdrawCancel onClose={() => {}} />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -148,6 +155,17 @@ async function mountFiling() {
     },
   };
 }
+
+test("leave request details render a localized status name", async (t) => {
+  (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
+  const restoreFetch = installFetch({ posts: [] }, true);
+  t.after(restoreFetch);
+  const { unmount } = await mountFiling(REQUEST_ID);
+  t.after(unmount);
+
+  assert.match(document.body.textContent ?? "", /Submitted/);
+  assert.doesNotMatch(document.body.textContent ?? "", /\bsubmitted\b/);
+});
 
 function setInput(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   const proto =

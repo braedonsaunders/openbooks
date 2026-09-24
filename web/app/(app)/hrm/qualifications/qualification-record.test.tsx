@@ -250,7 +250,7 @@ const PENDING_DETAIL = {
     evidenceFileId: null,
     notes: null,
   },
-  events: [],
+  events: [{ id: 'event-1', kind: 'recorded', actorId: null, reason: null, recordedAt: '2026-09-01' }],
 }
 
 function detailRespond(url: string): Promise<{ ok: boolean; body: unknown }> {
@@ -282,6 +282,9 @@ test('a read-only viewer sees the credential with no Verify, Renew or Revoke', a
     await flushAsync()
     const text = m.document.body.textContent ?? ''
     assert.match(text, /First aid/, 'the credential detail still renders for a read-only viewer')
+    assert.match(text, /Pending verification/, 'the derived status uses its localized label')
+    assert.match(text, /Recorded/, 'the event kind uses its localized label')
+    assert.doesNotMatch(text, /pending_verification|recorded/, 'raw status and event codes never render')
     const buttons = actionButtons(m.document)
     assert.ok(!buttons.includes('Verify'), 'Verify never renders without the manage grant')
     assert.ok(!buttons.includes('Renew'), 'Renew never renders without the manage grant')

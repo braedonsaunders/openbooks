@@ -1802,7 +1802,13 @@
       "identifier": "Lizenznr.",
       "notes": "Notizen",
       "evidence": "Nachweis ansehen",
-      "events": "Verlauf"
+      "events": "Verlauf",
+      "eventKinds": {
+        "recorded": "Erfasst",
+        "verified": "Verifiziert",
+        "renewed": "Erneuert",
+        "revoked": "Widerrufen"
+      }
     },
     "recordForm": {
       "employment": "Anstellung",
