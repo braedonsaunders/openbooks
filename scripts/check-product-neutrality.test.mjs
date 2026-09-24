@@ -80,7 +80,7 @@ test('the full audit accepts every tracked connector test file, including its ve
 })
 
 test('catalog cognate pins may quote connector-namespace keys', () => {
-  assert.equal(isConnectorPath('web/lib/messages-catalog.test.ts'), true)
+  assert.equal(isConnectorPath('web/messages/catalog-parity.test.ts'), true)
 })
 
 test('review-tenant fixtures may seed functional connector-branch rows', () => {
