@@ -240,10 +240,21 @@ export async function POST(req: Request) {
   }
 
   return withOrgTransaction(orgId, async () => {
-    // The open-row lock serializes concurrent saves for one employee and
-    // form: whoever commits second supersedes the first's row rather than
-    // forking two current certificates (the partial unique index would
-    // refuse that fork with a storage error; the lock refuses it first).
+    // Lock the stable parent before reading current certificates. On a first
+    // filing there is no certificate row for FOR UPDATE to lock, so locking
+    // only the open rows lets two transactions both decide to insert a
+    // current row. The payroll profile exists for every eligible employee and
+    // serializes certificate filings for that employee, including first ones.
+    const profileLock = (await db.execute<{ employee_party_id: string }>(sql`
+      select employee_party_id from employee_payroll_profiles
+       where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
+       for update`)).rows
+    if (profileLock.length !== 1) {
+      return NextResponse.json(
+        { error: 'no payroll profile for this employee — save the profile before filing a certificate' },
+        { status: 422 },
+      )
+    }
     const open = (await db.execute<{ id: string; effective_from: string | null }>(sql`
       select id, effective_from::text as effective_from from employee_tax_certificates
        where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
