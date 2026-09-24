@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '@/lib/authz'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
@@ -59,10 +61,25 @@ function parseSchedule(body: Record<string, unknown>): { error: string } | {
   return { priceLevelId, customerId, currency, quantityBasis, effectiveFrom, effectiveTo, isActive: body.isActive !== false, breaks }
 }
 
-async function validateReferences(tx: Pick<typeof db, 'execute'>, orgId: string, parsed: Exclude<ReturnType<typeof parseSchedule>, { error: string }>) {
+async function validateReferences(tx: Pick<typeof db, 'execute'>, orgId: string, parsed: Exclude<ReturnType<typeof parseSchedule>, { error: string }>, allowedSubsidiaryIds: ReadonlySet<string> | null) {
   if (!(await tx.execute(sql`select 1 from currencies where code=${parsed.currency}`)).rows[0]) throw new Error('Currency is not configured')
   if (parsed.priceLevelId && !(await tx.execute(sql`select 1 from price_levels where org_id=${orgId} and id=${parsed.priceLevelId} and is_active`)).rows[0]) throw new Error('Price level is not active in this organization')
-  if (parsed.customerId && !(await tx.execute(sql`select 1 from customer_roles where org_id=${orgId} and party_id=${parsed.customerId} and is_active`)).rows[0]) throw new Error('Customer is not active in this organization')
+  if (parsed.customerId && !(await tx.execute(sql`
+    select 1 from parties p
+      join customer_roles r on r.org_id=p.org_id and r.party_id=p.id and r.is_active
+     where p.org_id=${orgId} and p.id=${parsed.customerId} and p.is_active
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     for share of p`)).rows[0]) throw new ScopeNotFoundError()
+}
+
+async function requireCustomerVisible(tx: Pick<typeof db, 'execute'>, orgId: string, customerId: string | null, allowedSubsidiaryIds: ReadonlySet<string> | null) {
+  if (!customerId || allowedSubsidiaryIds === null) return
+  const visible = (await tx.execute(sql`
+    select 1 from parties p
+     where p.org_id=${orgId} and p.id=${customerId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     for share of p`)).rows[0]
+  if (!visible) throw new ScopeNotFoundError()
 }
 
 /** Normalize a DATE column value (driver may return a Date or a string) to YYYY-MM-DD. */
@@ -94,7 +111,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!isUuid(id) || !(await itemExists(gate.user.orgId, id))) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const [levels, customers, currencies, organization, schedules] = await Promise.all([
     db.execute(sql`select id,code,name,pricing_method,percentage,cost_basis,is_base from price_levels where org_id=${gate.user.orgId} and is_active order by is_base desc,name`),
-    db.execute(sql`select p.id,p.display_name from parties p join customer_roles r on r.org_id=p.org_id and r.party_id=p.id and r.is_active where p.org_id=${gate.user.orgId} and p.is_active order by p.display_name limit 2000`),
+    db.execute(sql`select p.id,p.display_name from parties p join customer_roles r on r.org_id=p.org_id and r.party_id=p.id and r.is_active where p.org_id=${gate.user.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name limit 2000`),
     db.execute(sql`select code,name from currencies order by code`),
     db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${gate.user.orgId}`),
     db.execute(sql`
@@ -108,6 +125,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         left join parties customer on customer.org_id=schedule.org_id and customer.id=schedule.customer_id
         left join item_price_breaks price on price.org_id=schedule.org_id and price.schedule_id=schedule.id
        where schedule.org_id=${gate.user.orgId} and schedule.item_id=${id}
+         and (schedule.customer_id is null or exists (
+           select 1 from parties visible_customer
+            where visible_customer.org_id=schedule.org_id and visible_customer.id=schedule.customer_id
+              ${subsidiaryVisibleFilter(sql`visible_customer.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+         ))
        group by schedule.id,level.name,customer.display_name
        order by schedule.effective_from desc,level.name nulls first,customer.display_name nulls first`),
   ])
@@ -144,12 +166,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       breaks: parsed.breaks,
     }
     const outcome = await db.transaction(async (tx) => {
+      if (!(await tx.execute(sql`select 1 from items where org_id=${gate.user.orgId} and id=${id} for update`)).rows[0]) throw new Error('not found')
+      await validateReferences(tx, gate.user.orgId, parsed, gate.allowedSubsidiaryIds)
       const claim = await claimIdempotentCreate(tx, { orgId: gate.user.orgId, table: 'item_price_schedules', key: requestId })
       if (claim === 'exists') {
         return { kind: 'replay' as const, result: await resolveIdempotentReplay(tx, { orgId: gate.user.orgId, table: 'item_price_schedules', key: requestId, match }) }
       }
-      if (!(await tx.execute(sql`select 1 from items where org_id=${gate.user.orgId} and id=${id} for update`)).rows[0]) throw new Error('not found')
-      await validateReferences(tx, gate.user.orgId, parsed)
       // A retained prior version (inactive) still owns its window: creating
       // over it would silently fork history, so a correction must go through
       // PATCH with a reason instead. The overlap exclusion below stays as the
@@ -186,6 +208,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (outcome.kind === 'replay' && outcome.result === 'conflict') return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
     return NextResponse.json({ id: requestId }, { status: outcome.kind === 'created' ? 201 : 200 })
   } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const code = (error as { code?: string }).code
     const message = error instanceof Error ? error.message : 'Pricing schedule could not be saved'
     if (code === '23P01' || message === 'An active pricing schedule already covers that scope and date range') {
@@ -263,6 +286,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
          where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} for update`))
         .rows[0] as LockedSchedule | undefined
       if (!locked) return { kind: 'missing' as const }
+      await requireCustomerVisible(tx, gate.user.orgId, locked.customer_id, gate.allowedSubsidiaryIds)
       // The row is locked BEFORE it is read: the revision comparison, the
       // lifecycle checks, the mutation and the audit are one serialized
       // unit, so a racing request sees the winner's committed revision and
@@ -279,7 +303,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         toDay: locked.to_day === null ? null : toDay(locked.to_day),
         isActive: locked.is_active,
       }
-      await validateReferences(tx, gate.user.orgId, parsed)
+      await validateReferences(tx, gate.user.orgId, parsed, gate.allowedSubsidiaryIds)
       const priorBreaks = (await tx.execute<{ minimum_quantity: string; unit_price: string }>(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${gate.user.orgId} and schedule_id=${scheduleId} order by minimum_quantity`)).rows
       const contentChanged = before.priceLevelId !== parsed.priceLevelId
         || before.customerId !== parsed.customerId
@@ -376,6 +400,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (outcome.kind === 'refused') return NextResponse.json({ error: outcome.error }, { status: outcome.status })
     return NextResponse.json({ id: outcome.scheduleId })
   } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const code = (error as { code?: string }).code
     return NextResponse.json({ error: code === '23P01' ? 'An active pricing schedule already covers that scope and date range' : error instanceof Error ? error.message : 'Pricing schedule could not be saved' }, { status: code === '23P01' ? 409 : 400 })
   }
@@ -401,6 +426,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
        where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} for update`))
       .rows[0] as LockedSchedule | undefined
     if (!locked) return { kind: 'missing' as const }
+    await requireCustomerVisible(tx, gate.user.orgId, locked.customer_id, gate.allowedSubsidiaryIds)
     if (Number(locked.revision) !== expectedRevision) {
       return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
     }
@@ -436,7 +462,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     }
     await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'delete', changes: { before: { ...locked, breaks } }, actorId: gate.user.id }, tx)
     return { kind: 'deleted' as const }
+  }).catch((error: unknown) => {
+    if (error instanceof ScopeNotFoundError) return { kind: 'scope-denied' as const }
+    throw error
   })
+  if (outcome.kind === 'scope-denied') return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (outcome.kind === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (outcome.kind === 'refused') return NextResponse.json({ error: outcome.error }, { status: outcome.status })
   return NextResponse.json({ ok: true, endDated: outcome.kind === 'ended' })
