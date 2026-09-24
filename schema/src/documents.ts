@@ -277,6 +277,13 @@ export const documentLines = pgTable(
     quantity: numeric("quantity", { precision: 28, scale: 8 }).notNull().default("1"),
     unit: text("unit"),
     unitPrice: numeric("unit_price", { precision: 28, scale: 8 }).notNull().default("0"),
+    /**
+     * Pricing provenance stamped at pricing time (0336): the resolver basis
+     * {kind, scheduleId, levelId, assignmentId, unitPrice, resolvedAt}.
+     * Replay and audit read this, never a re-resolution. Null for
+     * hand-priced lines (replay reads the stored unit price).
+     */
+    priceBasis: jsonb("price_basis"),
     amount: money("amount").notNull(), // qty × price, txn currency
     taxCodeId: uuid("tax_code_id"),
     /** Mutually exclusive with tax_code_id; expands to ordered component evidence. */

@@ -718,6 +718,13 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // composite FK, staged NOT VALID, concurrent indexes) so unproven
     // collisions import flagged for review instead of vanishing.
     "0335_bank_statement_line_possible_duplicate.sql",
+    // A priced line kept only its unit price, so replay re-resolved from
+    // live configuration and a revoked assignment rewrote history: 0336
+    // adds the nullable document_lines.price_basis provenance (kind,
+    // schedule/level/assignment ids, resolved instant and price), stamped
+    // at pricing time and copied on conversion; hand-priced lines stay
+    // null and replay from the stored price.
+    "0336_document_line_price_basis.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

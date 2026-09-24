@@ -1,0 +1,5 @@
+Adding a nullable jsonb column with no default rewrites no rows and
+backfills nothing: existing lines keep a null basis (replay reads their
+stored unit price, as before) and new lines stamp theirs at save. The only
+lock is the brief catalog lock for ADD COLUMN, which needs no operator
+remedy, so no preflight is needed.

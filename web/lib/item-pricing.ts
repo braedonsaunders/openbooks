@@ -12,6 +12,13 @@ export interface ResolvedItemPrice {
   priceLevelName: string | null
   minimumQuantity: string
   quantityBasis: 'line_quantity' | 'overall_item_quantity'
+  /**
+   * Lineage for the priced line's recorded basis (0336): the assignment row
+   * this price resolved from (customer_level only), and the instant the
+   * resolution ran. Replay reads the recorded basis, never a re-resolution.
+   */
+  assignmentId: string | null
+  resolvedAt: string
 }
 
 /**
@@ -27,6 +34,13 @@ export async function resolveItemPrice(input: {
   lineQuantity: string
   overallItemQuantity?: string | null
   onDate: string
+  /**
+   * The instant the lookup runs as of (ISO-8601). Defaults to now: a row
+   * revoked at instant T reads as inactive for lookups at or after T, so a
+   * same-date revoke ends pricing from its instant while earlier instants
+   * still resolve what was offered then (RESIDUAL).
+   */
+  asOf?: string | null
 }): Promise<ResolvedItemPrice | null> {
   const currency = input.currency.trim().toUpperCase()
   const overallQuantity = input.overallItemQuantity ?? input.lineQuantity
@@ -38,6 +52,7 @@ export async function resolveItemPrice(input: {
     minimum_quantity: string
     quantity_basis: 'line_quantity' | 'overall_item_quantity'
     source: 'customer_item' | 'customer_level' | 'base_level'
+    assignment_id: string | null
   }>(sql`
     with assigned_level as (
       -- Membership is the effective-dated window, never current activation:
@@ -45,16 +60,21 @@ export async function resolveItemPrice(input: {
       -- inside the old window still finds its level. But an inactive row with
       -- a still-open window is a revocation (or a draft that was never
       -- offered) and must not price: only a closed window reads as history
-      -- (PRC15d). The trigger and backfill remove never-effective rows, so
-      -- this predicate is the backstop for rows they never saw.
-      select assignment.price_level_id
+      -- (PRC15d) — unless the row was revoked at an instant AFTER the lookup
+      -- instant, in which case the lookup predates the revoke and still
+      -- resolves what was offered then (RESIDUAL). The trigger and backfill
+      -- remove never-effective future rows, so the open-window exclusion is
+      -- the backstop for rows they never saw.
+      select assignment.id, assignment.price_level_id
         from customer_price_level_assignments assignment
        where assignment.org_id = ${input.orgId}
          and assignment.customer_id = ${input.customerId ?? null}
          and assignment.effective_from <= ${input.onDate}::date
          and (assignment.effective_to is null or assignment.effective_to >= ${input.onDate}::date)
          and (assignment.is_active
-              or (assignment.effective_to is not null and assignment.effective_to < current_date))
+              or (assignment.effective_to is not null and assignment.effective_to < current_date)
+              or (assignment.revoked_at is not null
+                  and coalesce(${input.asOf ?? null}::timestamptz, now()) < assignment.revoked_at))
        order by assignment.effective_from desc
        limit 1
     ), candidates as (
@@ -102,7 +122,8 @@ export async function resolveItemPrice(input: {
     )
     select candidate.id as schedule_id, candidate.price_level_id, candidate.price_level_name,
            price.unit_price::text, price.minimum_quantity::text, candidate.quantity_basis,
-           case candidate.precedence when 1 then 'customer_item' when 2 then 'customer_level' else 'base_level' end as source
+           case candidate.precedence when 1 then 'customer_item' when 2 then 'customer_level' else 'base_level' end as source,
+           (select id from assigned_level) as assignment_id
       from candidates candidate
       join lateral (
         select item_price_breaks.unit_price, item_price_breaks.minimum_quantity
@@ -121,6 +142,7 @@ export async function resolveItemPrice(input: {
      limit 1
   `)
   const winner = result.rows[0]
+  const resolvedAt = new Date().toISOString()
   if (winner) {
     return {
       unitPrice: winner.unit_price,
@@ -131,6 +153,8 @@ export async function resolveItemPrice(input: {
       priceLevelName: winner.price_level_name,
       minimumQuantity: winner.minimum_quantity,
       quantityBasis: winner.quantity_basis,
+      assignmentId: winner.source === 'customer_level' ? winner.assignment_id : null,
+      resolvedAt,
     }
   }
 
@@ -150,5 +174,7 @@ export async function resolveItemPrice(input: {
     priceLevelName: null,
     minimumQuantity: '1.0000',
     quantityBasis: 'line_quantity',
+    assignmentId: null,
+    resolvedAt,
   }
 }

@@ -1630,37 +1630,41 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0327_item_price_level_activation_history.sql",
     from: "26606980c32021dae07ba3942fbe0bf955c6c10dae5e5f5985f84b19ce4049b2",
-    to: "b70ecb046f73f2f4310cacfaa9f45075819466e09e73a85d2902db75a65c8eab",
+    to: "683a93ba8734ba3b472ce6dbdff1fe4a7fe1477c687b70a90a837b22129f5432",
     strategy: "reapply",
     reason:
-      "corrective revision PRC15d: revoking a future-effective assignment "
-      + "before it starts kept its open window (the trigger only handled "
-      + "effective_from <= today) while the resolver matches windows ignoring "
-      + "the flag, so a dead future window would price when its dates arrive; "
-      + "and an inactive row with a still-open window was honoured at all. "
-      + "The trigger now removes any revocation before the row ever starts "
-      + "(today or later), the backfill deletes matching pre-upgrade rows, "
-      + "and the resolver honours an inactive row only for its closed "
-      + "history. Every removal writes a before-image audit row, trigger and "
-      + "backfill alike. Same idempotence story as the PRC15c entry: IF NOT "
-      + "EXISTS DDL, CREATE OR REPLACE FUNCTION, conditional triggers, "
-      + "gap-only backfills. Reapply, not restamp: enforced trigger behavior "
-      + "changes. For databases still at the original digest; databases "
-      + "already at the PRC15c digest use the next entry.",
+      "corrective revision (PRC15d plus the Sol residual): revoking a "
+      + "future-effective assignment before it starts kept its open window "
+      + "while the resolver matches windows ignoring the flag, so a dead "
+      + "future window would price when its dates arrive — the trigger now "
+      + "removes it audited with the before-image. A same-day revoke keeps "
+      + "the row and stamps revoked_at/revoked_by instead of deleting it: "
+      + "the row may already have priced intraday transactions whose "
+      + "recorded price basis points at it, and removing it destroyed that "
+      + "lineage; the resolver treats the row as inactive for lookups at or "
+      + "after the instant, and reactivation clears the stamp. Activation "
+      + "periods record opened_at/closed_at instants for same-date evidence. "
+      + "Same idempotence story as the PRC15c entry: IF NOT EXISTS DDL, "
+      + "ADD-COLUMN-IF-NOT-EXISTS, CREATE OR REPLACE FUNCTION, DROP + "
+      + "CREATE of the widened trigger, gap-only backfills. Reapply, not "
+      + "restamp: enforced trigger behavior changes. For databases still at "
+      + "the original digest; databases already at the PRC15c digest use "
+      + "the next entry.",
   },
   {
     filename: "generated/0327_item_price_level_activation_history.sql",
     from: "74408c2026f5e84d304f1a1586dca7e7967222efd6cdb388f02ffd128f9552be",
-    to: "b70ecb046f73f2f4310cacfaa9f45075819466e09e73a85d2902db75a65c8eab",
+    to: "683a93ba8734ba3b472ce6dbdff1fe4a7fe1477c687b70a90a837b22129f5432",
     strategy: "reapply",
     reason:
-      "same PRC15d revision as the entry above, for databases that already "
-      + "reapplied the PRC15c revision: the only delta from that state is the "
-      + "future-start removal in the trigger and backfill, the resolver "
-      + "backstop for inactive open windows (a query, not stored state), and "
-      + "comments. Re-running converges future-start half-revocations the "
-      + "PRC15c revision left behind and redefines the trigger idempotently. "
-      + "Reapply, not restamp.",
+      "same revision as the entry above, for databases that already "
+      + "reapplied the PRC15c revision: the delta from that state is the "
+      + "future-start audited removal, the same-day keep-and-stamp with "
+      + "revoked_at/revoked_by (instead of PRC15c's delete), the activation "
+      + "period instants, and comments; the resolver asOf/backstop change is "
+      + "a query, not stored state. Re-running converges half-revocations "
+      + "the PRC15c revision left behind and redefines the trigger "
+      + "idempotently. Reapply, not restamp.",
   },
   {
     filename: "generated/0334_tenant_isolation_and_posting_guards.sql",
