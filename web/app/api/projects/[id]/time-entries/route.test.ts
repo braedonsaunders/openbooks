@@ -110,6 +110,9 @@ const mockSources = new Map<string, string>([
         },
       }
       export const schema = {}
+          // Like the engine's: runs the work in the org's transaction scope,
+      // where the ambient db proxy answers every query.
+      export async function withOrgTransaction(_orgId, work) { return work() }
     `,
   ],
 ])
