@@ -260,6 +260,22 @@ test('Michigan separately paid bonus uses 4.25% without the period exemption', (
   assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '21.2500')
 })
 
+test('Minnesota separately paid supplemental wages use Method 2 at 6.25%', () => {
+  // Minnesota 2026 Withholding Tax Instructions, p. 7, Method 2.
+  // https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf
+  const result = computeUsWithholding({
+    levy: levy('MN', 'us_mn_w4mn'),
+    payDate: '2026-07-21', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '4000.0000',
+    supplementalPaymentTiming: 'separate',
+    certificateFor: () => certificate('us_mn_w4mn', { marital_status: 'married', allowances: '9' }),
+    tenantRates: () => undefined, federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0])
+  assert.equal(result?.tax, '250.0000')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_METHOD, 'flat')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.0625')
+})
+
 test('every US state and DC declares a separate-supplemental method', () => {
   assert.deepEqual(
     Object.keys(US_SEPARATE_SUPPLEMENTAL_METHODS).sort(),
