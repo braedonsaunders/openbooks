@@ -8,6 +8,8 @@ export type ProjectTimeDimension = 'employee' | 'item' | 'task'
 export interface ProjectTimeEntryDetail {
   id: string
   workedOn: string
+  workRegion: string | null
+  workSubregion: string | null
   employeeName: string
   itemName: string
   taskName: string
@@ -108,6 +110,8 @@ export async function loadProjectTimeEntryPage(args: {
     const entries = await db.execute(sql`
       select te.id,
              te.worked_on::text as worked_on,
+             te.work_region as work_region,
+             te.work_subregion as work_subregion,
              coalesce(employee.display_name, '') as employee_name,
              coalesce(item.name, '') as item_name,
              coalesce(task.name, '') as task_name,
@@ -147,6 +151,8 @@ export async function loadProjectTimeEntryPage(args: {
     entries: (entryResult.rows).map((row) => ({
       id: String(row.id),
       workedOn: String(row.worked_on),
+      workRegion: row.work_region == null ? null : String(row.work_region),
+      workSubregion: row.work_subregion == null ? null : String(row.work_subregion),
       employeeName: String(row.employee_name ?? ''),
       itemName: String(row.item_name ?? ''),
       taskName: String(row.task_name ?? ''),

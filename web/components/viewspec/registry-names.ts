@@ -375,6 +375,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'overhead-rates-tab',
   'paper-view',
   'parallel-run-workspace',
+  'payroll-work-locations',
   'party-drawer',
   'party-heading',
   'party-link-cell',

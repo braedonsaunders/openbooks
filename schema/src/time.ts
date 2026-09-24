@@ -82,6 +82,15 @@ export const timeEntries = pgTable(
     orgId: orgRef(),
     employeePartyId: uuid("employee_party_id").notNull(),
     workedOn: date("worked_on").notNull(),
+    /** Jurisdiction where services were physically performed. Defaulted at
+     * insert from project.site_jurisdiction, then payroll-profile province;
+     * an HR correction requires a reason and is written to audit_log. */
+    workRegion: text("work_region"),
+    workSubregion: text("work_subregion"),
+    workRegionSource: text("work_region_source", {
+      enum: ["project_site", "payroll_profile", "hr_override", "imported_record"],
+    }),
+    workRegionReason: text("work_region_reason"),
     hours: money("hours").notNull(),
     /**
      * When the work on this entry STARTED, if the capture surface knows.

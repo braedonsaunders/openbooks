@@ -455,6 +455,50 @@ export const employeePayrollProfiles = pgTable(
   ],
 );
 
+/** HR evidence for work location in periods without approved time entries. */
+export const payrollWorkLocationAllocations = pgTable(
+  "payroll_work_location_allocations",
+  {
+    id: id(),
+    orgId: orgRef(),
+    employmentId: uuid("employment_id").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    region: text("region").notNull(),
+    subregion: text("subregion"),
+    serviceDays: integer("service_days"),
+    workShare: numeric("work_share", { precision: 12, scale: 10 }),
+    source: text("source", { enum: ["hr_records", "certificate", "adequate_records"] }).notNull(),
+    evidenceDocumentId: uuid("evidence_document_id"),
+    changeReason: text("change_reason").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("payroll_work_location_allocations_org_id_unique").on(t.orgId, t.id),
+    uniqueIndex("payroll_work_location_allocations_period_region")
+      .on(t.orgId, t.employmentId, t.periodStart, t.periodEnd, t.region, sql`coalesce(${t.subregion}, '')`),
+    index("payroll_work_location_allocations_employment_period")
+      .on(t.orgId, t.employmentId, t.periodStart, t.periodEnd),
+    foreignKey({
+      name: "payroll_work_location_allocations_employment_fkey",
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [workerEmployments.orgId, workerEmployments.id],
+    }),
+    foreignKey({
+      name: "payroll_work_location_allocations_evidence_fkey",
+      columns: [t.orgId, t.evidenceDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+    }),
+    check("payroll_work_location_allocations_period", sql`${t.periodStart} <= ${t.periodEnd}`),
+    check("payroll_work_location_allocations_measure", sql`
+      (${t.serviceDays} is not null and ${t.serviceDays} >= 0 and ${t.workShare} is null)
+      or (${t.serviceDays} is null and ${t.workShare} between 0 and 1)`),
+    check("payroll_work_location_allocations_source",
+      sql`${t.source} in ('hr_records', 'certificate', 'adequate_records')`),
+    check("payroll_work_location_allocations_reason", sql`length(btrim(${t.changeReason})) > 0`),
+  ],
+);
+
 /** Recurring per-employee component assignments (effective-dated). */
 export const employeePayComponents = pgTable(
   "employee_pay_components",

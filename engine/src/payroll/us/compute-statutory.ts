@@ -207,6 +207,13 @@ export async function computeUsStatutory(
     // periodic wage, so it reads the reduced leg, not the reported gross.
     B: nonPeriodic, I: fitWages, PI: pensionable, IE: insurable,
   };
+  for (const allocation of ctx.workAllocations ?? []) {
+    if (allocation.subRegion !== null || allocation.sourceWagesCurrentPeriod == null) continue;
+    const key = `work_source_wages:${allocation.region}`;
+    factors[key] = key in factors
+      ? sum([factors[key]!, allocation.sourceWagesCurrentPeriod])
+      : allocation.sourceWagesCurrentPeriod;
+  }
 
   const certificateKeysOnFile = (): string[] =>
     storedCertificates
