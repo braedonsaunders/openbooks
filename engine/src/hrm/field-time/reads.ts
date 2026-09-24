@@ -12,6 +12,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, refuse } from "./errors.ts";
+import { isClockPhotoSql } from "./photos.ts";
 
 /** Actor identity for reads: own party when the login is linked, else null.
  *  Unlike resolveOwnParty (which refuses — right for clock-in), an unlinked
@@ -75,7 +76,8 @@ export async function myClockDay(orgId: string, userId: string, exec: SqlExecuto
            (select sum(te.hours)::text from time_entries te
              where te.org_id = i.org_id and te.clock_pair_id = i.id) as "entryHours",
            i.geo_check as "geoCheck", o.auto_closed as "autoClosed",
-           (i.photo_file_id is not null or o.photo_file_id is not null) as "hasPhoto"
+           (${isClockPhotoSql(sql`i.org_id`, sql`i.photo_file_id`)}
+             or ${isClockPhotoSql(sql`o.org_id`, sql`o.photo_file_id`)}) as "hasPhoto"
       from time_clock_events i
       left join time_clock_events o
         on o.org_id = i.org_id and o.pair_id = i.id and o.kind = 'clock_out'
@@ -367,8 +369,8 @@ export async function approvalFlags(
              else max(ev.geo_check)
            end as "geoCheck",
            coalesce(bool_or(ev.auto_closed), false) as "autoClosed",
-           coalesce(bool_or(ev.photo_file_id is not null), false) as "hasPhoto",
-           max(ev.photo_file_id::text) as "photoFileId"
+           coalesce(bool_or(${isClockPhotoSql(sql`ev.org_id`, sql`ev.photo_file_id`)}), false) as "hasPhoto",
+           max(ev.photo_file_id::text) filter (where ${isClockPhotoSql(sql`ev.org_id`, sql`ev.photo_file_id`)}) as "photoFileId"
       from time_entries te
       left join time_clock_events ev
         on ev.org_id = te.org_id and ev.pair_id = te.clock_pair_id

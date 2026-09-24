@@ -8,10 +8,30 @@
  * load converges — never duplicates, never drops.
  */
 
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 
 const HR_ROLE_KEYS = ["admin", "controller", "accountant", "approver"];
+
+/**
+ * The only files that count as field-time photos: a live image with a
+ * current image version, in the live system photo folder under Attachments.
+ * Keep event admission and all photo indicators on this same predicate.
+ */
+export function isClockPhotoSql(orgId: SQL, fileId: SQL): SQL {
+  return sql`exists (
+    select 1
+      from files f
+      join folders folder on folder.org_id = f.org_id and folder.id = f.folder_id
+      join folders root on root.org_id = folder.org_id and root.id = folder.parent_folder_id
+      join file_versions version on version.file_id = f.id and version.id = f.current_version_id
+     where f.org_id = ${orgId} and f.id = ${fileId}
+       and not f.is_inactive and f.file_type = 'image'
+       and f.content_type like 'image/%' and version.content_type like 'image/%'
+       and folder.name = 'Field time photos' and folder.is_system and not folder.is_inactive
+       and root.system_kind = 'attachments' and not root.is_inactive
+  )`;
+}
 
 /**
  * The org folder without per-user grants — for session-less kiosk

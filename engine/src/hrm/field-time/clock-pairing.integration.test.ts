@@ -19,6 +19,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrg } from "../../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
 import { recordClockEvent } from "./clock.ts";
+import { approvalFlags } from "./reads.ts";
 import { FieldTimeError } from "./errors.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -102,6 +103,92 @@ test("a clock-out before its clock-in refuses and leaves the pair open", { skip:
          where org_id = ${org.orgId} and kind = 'clock_in'`)).rows;
       assert.equal(open.length, 1);
       assert.equal(open[0]?.status, "recorded");
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("clock events accept only live images in the field-time photo folder and flags use the same rule", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId);
+    const worker = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, null);
+    const photoFolderId = randomUUID();
+    const otherFolderId = randomUUID();
+    const attachmentRootId = randomUUID();
+    const makeFile = async (fileId: string, folderId: string, fileType: string, contentType: string, inactive = false) => {
+      const versionId = randomUUID();
+      await db.execute(sql`
+        insert into files (id, org_id, folder_id, name, file_type, content_type, size_bytes, is_inactive)
+        values (${fileId}, ${org.orgId}, ${folderId}, 'clock capture', ${fileType}, ${contentType}, 10, ${inactive})`);
+      await db.execute(sql`
+        insert into file_versions (id, file_id, version_number, size_bytes, content_type)
+        values (${versionId}, ${fileId}, 1, 10, ${contentType})`);
+      await db.execute(sql`update files set current_version_id = ${versionId} where org_id = ${org.orgId} and id = ${fileId}`);
+    };
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`
+        insert into folders (id, org_id, name, is_system, system_kind)
+        values (${attachmentRootId}, ${org.orgId}, 'Attachments', true, 'attachments')`);
+      await db.execute(sql`
+        insert into folders (id, org_id, parent_folder_id, name, is_system)
+        values (${photoFolderId}, ${org.orgId}, ${attachmentRootId}, 'Field time photos', true),
+               (${otherFolderId}, ${org.orgId}, ${attachmentRootId}, 'Other', true)`);
+      await makeFile(randomUUID(), photoFolderId, 'image', 'image/jpeg');
+      await makeFile(randomUUID(), photoFolderId, 'pdf', 'application/pdf');
+      await makeFile(randomUUID(), photoFolderId, 'image', 'image/jpeg', true);
+    });
+    const imageId = await withOrg(org.orgId, async () => {
+      const row = (await db.execute<{ id: string }>(sql`
+        select id::text as id from files where org_id = ${org.orgId} and folder_id = ${photoFolderId}
+         and file_type = 'image' and not is_inactive`)).rows[0];
+      assert.ok(row);
+      return row.id;
+    });
+    const pdfId = await withOrg(org.orgId, async () => {
+      const row = (await db.execute<{ id: string }>(sql`
+        select id::text as id from files where org_id = ${org.orgId} and folder_id = ${photoFolderId} and file_type = 'pdf'`)).rows[0];
+      assert.ok(row);
+      return row.id;
+    });
+    const inactiveImageId = await withOrg(org.orgId, async () => {
+      const row = (await db.execute<{ id: string }>(sql`
+        select id::text as id from files where org_id = ${org.orgId} and folder_id = ${photoFolderId} and is_inactive`)).rows[0];
+      assert.ok(row);
+      return row.id;
+    });
+    const outsideFolderId = randomUUID();
+    await withOrg(org.orgId, async () => makeFile(outsideFolderId, otherFolderId, 'image', 'image/jpeg'));
+    const now = new Date().toISOString();
+    for (const badPhotoId of [pdfId, inactiveImageId, outsideFolderId]) {
+      const trialWorker = randomUUID();
+      await seedWorker(org.orgId, org.subsidiaryId, trialWorker, null);
+      const code = await withOrg(org.orgId, () => refusesCode(() => recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: trialWorker, kind: 'clock_in', occurredAt: now,
+        source: 'mobile', clientEventId: randomUUID(), photoFileId: badPhotoId,
+      })));
+      assert.equal(code, 'photo_invalid', `invalid file ${badPhotoId} must be refused`);
+    }
+    await withOrg(org.orgId, async () => {
+      const clockInAt = new Date(Date.parse(now) - 8 * 60 * 60_000).toISOString();
+      await recordClockEvent({ orgId: org.orgId, actorUserId: null, employeePartyId: worker, kind: 'clock_in',
+        occurredAt: clockInAt, source: 'mobile', clientEventId: randomUUID(), photoFileId: imageId });
+      await recordClockEvent({ orgId: org.orgId, actorUserId: null, employeePartyId: worker, kind: 'clock_out',
+        occurredAt: now, source: 'mobile', clientEventId: randomUUID() });
+      const entry = (await db.execute<{ id: string; week_start: string }>(sql`
+        select id::text as id, date_trunc('week', worked_on)::date::text as week_start
+          from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows[0]!;
+      const flags = await approvalFlags(org.orgId, { weekStart: entry.week_start, employeePartyId: worker });
+      assert.equal(flags[0]?.hasPhoto, true);
+      assert.equal(flags[0]?.photoFileId, imageId);
+      // A legacy/corrupt reference is not reported as evidence by the read model.
+      await db.execute(sql`update time_clock_events set photo_file_id = ${pdfId}
+        where org_id = ${org.orgId} and employee_party_id = ${worker} and kind = 'clock_in'`);
+      const invalidFlags = await approvalFlags(org.orgId, { weekStart: entry.week_start, employeePartyId: worker });
+      assert.equal(invalidFlags[0]?.hasPhoto, false);
+      assert.equal(invalidFlags[0]?.photoFileId, null);
     });
   } finally {
     await dropScratchOrg(org.orgId);

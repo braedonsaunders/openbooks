@@ -21,6 +21,7 @@ import { businessTimeZone } from "../../platform/business-date.ts";
 import { isUuid } from "../../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, isForeignKeyViolation, refuse } from "./errors.ts";
+import { isClockPhotoSql } from "./photos.ts";
 import {
   FIELD_TIME_GEOFENCE_FEATURE,
   FIELD_TIME_FEATURE,
@@ -121,9 +122,12 @@ async function checkPhotoRequirement(input: RecordClockInput): Promise<void> {
     );
   }
   if (input.photoFileId) {
-    const file = (await db.execute<{ id: string }>(sql`
-      select id from files where org_id = ${input.orgId} and id = ${input.photoFileId}`)).rows[0];
-    if (!file) refuse("photo_unknown", "The attached photo is not in this organization — upload the photo through the File Cabinet and retry");
+    const file = (await db.execute<{ valid: boolean }>(sql`
+      select ${isClockPhotoSql(sql`${input.orgId}`, sql`${input.photoFileId}`)} as valid`)).rows[0];
+    if (!file?.valid) refuse(
+      "photo_invalid",
+      "The attached file is not a live image in the Field time photos folder — upload a current image there and retry",
+    );
   }
 }
 
