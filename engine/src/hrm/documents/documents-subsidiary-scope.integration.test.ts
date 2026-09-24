@@ -376,6 +376,31 @@ test("generation and upload reject an employment that belongs to another party",
   });
 });
 
+test("employment-linked templates refuse generation without an employment", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const template = await saveTemplate({
+      orgId: h.org.orgId, actorId: h.adminId, name: "Employment details template",
+      categoryKey: "contract", bodyTemplate: "{{department}} / {{position_title}} / {{employment_start}}",
+      mergeFields: ["department", "position_title", "employment_start"],
+      requiresSignature: false, signerRoles: [], acknowledgmentOnly: false,
+    });
+    const before = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_documents where org_id = ${h.org.orgId}
+    `)).rows[0]!.count;
+    await assert.rejects(
+      generateDocument({
+        orgId: h.org.orgId, actorId: h.adminId, templateId: template.id,
+        partyId: h.partyA, title: "Missing employment", today: "2026-09-21",
+      }),
+      (error: unknown) => error instanceof HrmDocumentsError && /needs employment details/.test(error.message),
+    );
+    const after = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_documents where org_id = ${h.org.orgId}
+    `)).rows[0]!.count;
+    assert.equal(after, before);
+  });
+});
+
 test("an A-restricted manager cannot generate for or template over an out-of-scope subject", { skip: !DB }, async () => {
   await withHarness(async (h: Harness) => {
     const before = (await db.execute<{ n: string }>(sql`
