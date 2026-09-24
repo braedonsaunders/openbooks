@@ -339,7 +339,9 @@
     },
     "exit": {
       "title": "Registro de salida",
-      "empty": "Aún no hay registro de salida."
+      "empty": "Aún no hay registro de salida.",
+      "interview": "Entrevista de salida el {date} con {name}",
+      "interviewNoName": "Entrevista de salida el {date}"
     },
     "benefits": {
       "title": "Beneficios",
@@ -899,6 +901,10 @@
     "exitVoluntaryNo": "No, involuntaria",
     "exitDestination": "Destino",
     "exitNotes": "Notas",
+    "exitInterviewDate": "Fecha de la entrevista",
+    "exitInterviewer": "Entrevistador",
+    "exitInterviewerPlaceholder": "Seleccionar al entrevistador",
+    "exitInterviewerFailed": "No se pudo cargar la lista de entrevistadores.",
     "saveExit": "Guardar registro de salida",
     "recordExit": "Registrar salida",
     "continuous": {

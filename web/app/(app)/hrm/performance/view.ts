@@ -206,6 +206,8 @@ export interface PerformancePageData {
       id: string
       reasonKind: string
       isVoluntary: boolean
+      interviewHeldOn: string | null
+      interviewerPartyId: string | null
       destination: string | null
       notes: string | null
       revision: number
@@ -683,6 +685,8 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
                 id: first.id,
                 reasonKind: first.reasonKind,
                 isVoluntary: first.isVoluntary,
+                interviewHeldOn: first.interviewHeldOn,
+                interviewerPartyId: first.interviewerPartyId,
                 destination: first.destination,
                 notes: first.notes,
                 revision: first.revision,

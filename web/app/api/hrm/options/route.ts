@@ -3,6 +3,7 @@ import {
   EmploymentReadError,
   listEmploymentOptions,
   listLocationOptions,
+  listPeopleOptions,
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { listPositionOptions } from "@openbooks/engine/src/hrm/positions-read.ts";
@@ -24,7 +25,9 @@ export const runtime = "nodejs";
  * and the read grant for the requested source (the same double gate as the
  * record route): `source=employments` names people holding an employment
  * for the line-manager picker, `source=locations` names active native
- * locations, `source=positions` names the funded establishment for the
+ * locations, `source=people` names the same holders keyed by party for the
+ * exit-interviewer picker (the exit record names its interviewer by party),
+ * `source=positions` names the funded establishment for the
  * position-assignment picker (behind hrm.position.read, never the
  * employment grant), and `source=leave-types` names active leave types for
  * the leave filing drawer (filers hold hrm.leave.request, so that source
@@ -48,6 +51,7 @@ export async function GET(req: Request) {
     source !== "employments" &&
     source !== "locations" &&
     source !== "positions" &&
+    source !== "people" &&
     source !== "leave-types" &&
     source !== "leave-filing-employments" &&
     source !== "leave-own-employments"
@@ -55,7 +59,7 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         error:
-          "source must be one of employments, locations, positions, leave-types, leave-filing-employments, leave-own-employments",
+          "source must be one of employments, locations, positions, people, leave-types, leave-filing-employments, leave-own-employments",
       },
       { status: 400 },
     );
@@ -114,9 +118,16 @@ export async function GET(req: Request) {
           ? await listLocationOptions(
               include === null ? base : { ...base, includeLocationId: include },
             )
-          : await listPositionOptions(
-              include === null ? base : { ...base, includePositionId: include },
-            );
+          : source === "people"
+            ? // F3-40: directory people holding an employment, keyed by
+              // party for the exit-interviewer picker — the same read
+              // grant and subsidiary scope as the employment picker.
+              await listPeopleOptions(
+                include === null ? base : { ...base, includePartyId: include },
+              )
+            : await listPositionOptions(
+                include === null ? base : { ...base, includePositionId: include },
+              );
     return NextResponse.json({ options });
   } catch (e) {
     if (e instanceof HrmAuthorizationError) {

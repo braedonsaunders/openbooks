@@ -7,6 +7,7 @@ import {
   EmploymentReadError,
   listEmploymentOptions,
   listLocationOptions,
+  listPeopleOptions,
 } from "./employment-read.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import {
@@ -246,6 +247,43 @@ test("location options list active native locations inside the scope", { skip },
       listLocationOptions({ orgId: org.orgId, actorId: stranger }),
       HrmAuthorizationError,
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("people options key directory holders by party for the exit-interviewer picker", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "HRM reader", "hrm_reader");
+    await grantRead(org.orgId, "hrm_reader");
+    await enableHrm(org.orgId);
+    const alice = await mkParty(org.orgId, "Alice Holder");
+    const aliceEmployment = await mkEmployment(org.orgId, alice, org.subsidiaryId);
+    await mkPrimaryAssignment(org.orgId, aliceEmployment, "Cashier");
+    const bob = await mkParty(org.orgId, "Bob Reserved");
+    await mkEmployment(org.orgId, bob, org.subsidiaryId);
+    // A person with two employments is one row: the picker submits party ids.
+    await mkEmployment(org.orgId, alice, org.subsidiaryId);
+
+    const options = await listPeopleOptions({ orgId: org.orgId, actorId: actor });
+    assert.equal(options.length, 2);
+    const aliceOption = options.find((option) => option.partyId === alice);
+    assert.ok(aliceOption);
+    assert.equal(aliceOption.label, "Alice Holder");
+    const bobOption = options.find((option) => option.partyId === bob);
+    assert.ok(bobOption);
+    const filtered = await listPeopleOptions({ orgId: org.orgId, actorId: actor, q: "bob" });
+    assert.equal(filtered.length, 1);
+    assert.equal(filtered[0]?.partyId, bob);
+    // The pinned stored interviewer leads the page.
+    const pinned = await listPeopleOptions({
+      orgId: org.orgId,
+      actorId: actor,
+      limit: 1,
+      includePartyId: bob,
+    });
+    assert.equal(pinned[0]?.partyId, bob);
   } finally {
     await dropScratchOrg(org.orgId);
   }

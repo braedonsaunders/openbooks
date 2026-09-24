@@ -339,7 +339,9 @@
     },
     "exit": {
       "title": "离职记录",
-      "empty": "暂无离职记录。"
+      "empty": "暂无离职记录。",
+      "interview": "于{date}由{name}进行面谈",
+      "interviewNoName": "于{date}进行面谈"
     },
     "benefits": {
       "title": "福利",
@@ -899,6 +901,10 @@
     "exitVoluntaryNo": "否，非自愿",
     "exitDestination": "去向",
     "exitNotes": "备注",
+    "exitInterviewDate": "面谈日期",
+    "exitInterviewer": "面谈人",
+    "exitInterviewerPlaceholder": "选择面谈人",
+    "exitInterviewerFailed": "无法加载面谈人列表。",
     "saveExit": "保存离职记录",
     "recordExit": "记录离职",
     "continuous": {

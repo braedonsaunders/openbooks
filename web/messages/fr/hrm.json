@@ -339,7 +339,9 @@
     },
     "exit": {
       "title": "Fiche de sortie",
-      "empty": "Pas encore de fiche de sortie."
+      "empty": "Pas encore de fiche de sortie.",
+      "interview": "Entretien de départ le {date} avec {name}",
+      "interviewNoName": "Entretien de départ le {date}"
     },
     "benefits": {
       "title": "Avantages",
@@ -899,6 +901,10 @@
     "exitVoluntaryNo": "Non, involontaire",
     "exitDestination": "Destination",
     "exitNotes": "Notes",
+    "exitInterviewDate": "Date de l’entretien",
+    "exitInterviewer": "Responsable de l’entretien",
+    "exitInterviewerPlaceholder": "Sélectionner le responsable",
+    "exitInterviewerFailed": "La liste des responsables n’a pas pu être chargée.",
     "saveExit": "Enregistrer la fiche de sortie",
     "recordExit": "Enregistrer la sortie",
     "continuous": {

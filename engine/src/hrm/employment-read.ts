@@ -1342,6 +1342,100 @@ export async function listEmploymentOptions(
   });
 }
 
+export interface PeopleOptionsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Substring match on the person's display name; empty matches all. */
+  readonly q?: string;
+  /** Bounded page size; defaults to 25, refuses above 100. */
+  readonly limit?: number;
+  /** Party id to pin first (the stored interviewer under edit). */
+  readonly includePartyId?: string;
+}
+
+export interface PeopleOptionDTO {
+  readonly partyId: string;
+  readonly label: string;
+}
+
+/**
+ * Directory people holding an employment, for the exit-interviewer picker
+ * (F3-40): the exit record names its interviewer by party, so the picker
+ * submits party ids, never employment ids or names. Authority is the
+ * aggregate half (grant + employer-subsidiary scope), the same population
+ * the employment picker already exposes — one holder, one row, whatever
+ * their assignment history. An empty page is truthful, never a refusal.
+ */
+export async function loadPeopleOptions(
+  exec: SqlExecutor,
+  query: PeopleOptionsQuery,
+): Promise<readonly PeopleOptionDTO[]> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  const limit = requireOptionsLimit(query.limit);
+  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
+  const fragment = (query.q ?? "").trim();
+  const includeId = query.includePartyId?.trim() ? query.includePartyId.trim() : null;
+
+  type PeopleOptionRow = {
+    partyId: string;
+    subsidiaryIds: string[];
+    personName: string;
+  };
+  // One holder, one row: the subsidiary list decides scope below — a
+  // holder with any in-scope employment is listed (uuid has no min(), so
+  // the scope projects as an array, never an aggregate).
+  const inScope = (row: PeopleOptionRow): boolean =>
+    allowed === null || row.subsidiaryIds.some((id) => allowed.has(id));
+  const page = (await exec.execute<PeopleOptionRow>(sql`
+    select p.id::text as "partyId",
+           array_agg(distinct e.employer_subsidiary_id::text) as "subsidiaryIds",
+           p.display_name as "personName"
+      from parties p
+      join worker_employments e
+        on e.org_id = p.org_id and e.worker_party_id = p.id
+     where p.org_id = ${orgId}::uuid
+       and e.employer_subsidiary_id is not null
+       ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
+     group by p.id, p.display_name
+     order by p.display_name
+     limit ${limit}`)).rows.filter(inScope);
+  // The pinned stored value is read by id, never by page position: it
+  // leads even when it falls outside the bounded page. An unknown or
+  // out-of-scope id stays absent rather than leaking existence.
+  const pinned = includeId
+    ? (await exec.execute<PeopleOptionRow>(sql`
+      select p.id::text as "partyId",
+             array_agg(distinct e.employer_subsidiary_id::text) as "subsidiaryIds",
+             p.display_name as "personName"
+        from parties p
+        join worker_employments e
+          on e.org_id = p.org_id and e.worker_party_id = p.id
+       where p.org_id = ${orgId}::uuid
+         and p.id = ${includeId}::uuid
+         and e.employer_subsidiary_id is not null
+       group by p.id, p.display_name`)).rows.filter(inScope)[0] ?? null
+    : null;
+  const rows = pinned ? [pinned, ...page.filter((row) => row.partyId !== pinned.partyId)] : page;
+
+  const toOption = (row: PeopleOptionRow): PeopleOptionDTO => ({
+    partyId: requireText("parties.id", row.partyId),
+    label: row.personName,
+  });
+  return rows.slice(0, limit + (pinned ? 1 : 0)).map(toOption);
+}
+
+/** Public boundary: one tenant-scoped transaction, the HRM feature rechecked inside it. Read only. */
+export async function listPeopleOptions(
+  query: PeopleOptionsQuery,
+): Promise<readonly PeopleOptionDTO[]> {
+  const orgId = requireId("orgId", query.orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadPeopleOptions(db, query);
+  });
+}
+
 export interface LocationOptionsQuery {
   readonly orgId: string;
   readonly actorId: string;

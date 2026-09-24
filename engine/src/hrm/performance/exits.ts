@@ -76,6 +76,9 @@ export interface ExitRecordDTO {
   readonly wouldRehire: boolean | null;
   readonly interviewHeldOn: string | null;
   readonly interviewerPartyId: string | null;
+  /** Display name of the interviewer (F3-40): resolved by join so readers
+   * never render a raw party uuid. Null when no interview was held. */
+  readonly interviewerName: string | null;
   readonly destination: string | null;
   readonly notes: string | null;
   readonly recordedBy: string | null;
@@ -95,6 +98,7 @@ type StoredExit = {
   wouldRehire: boolean | null;
   interviewHeldOn: string | null;
   interviewerPartyId: string | null;
+  interviewerName: string | null;
   destination: string | null;
   notes: string | null;
   recordedBy: string | null;
@@ -116,6 +120,7 @@ function toExitDTO(row: StoredExit): ExitRecordDTO {
     wouldRehire: row.wouldRehire,
     interviewHeldOn: row.interviewHeldOn,
     interviewerPartyId: row.interviewerPartyId,
+    interviewerName: row.interviewerName,
     destination: row.destination,
     notes: row.notes,
     recordedBy: row.recordedBy,
@@ -141,6 +146,7 @@ async function loadExit(
            x.would_rehire as "wouldRehire",
            x.interview_held_on::text as "interviewHeldOn",
            x.interviewer_party_id as "interviewerPartyId",
+           p.display_name as "interviewerName",
            x.destination, x.notes,
            x.recorded_by as "recordedBy",
            x.recorded_at as "recordedAt",
@@ -148,6 +154,8 @@ async function loadExit(
       from hrm_exit_records x
       join worker_employments e
         on e.org_id = x.org_id and e.id = x.employment_id
+      left join parties p
+        on p.org_id = x.org_id and p.id = x.interviewer_party_id
      where x.org_id = ${orgId} and x.id = ${exitId}
      ${forUpdate ? sql`for update of x` : sql``}
   `)).rows[0];
@@ -351,6 +359,8 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
           would_rehire as "wouldRehire",
           interview_held_on::text as "interviewHeldOn",
           interviewer_party_id as "interviewerPartyId",
+          (select display_name from parties
+            where org_id = ${orgId} and id = ${interviewerPartyId}) as "interviewerName",
           destination, notes,
           recorded_by as "recordedBy",
           recorded_at as "recordedAt",
@@ -556,6 +566,7 @@ export async function listExitRecords(args: {
              x.would_rehire as "wouldRehire",
              x.interview_held_on::text as "interviewHeldOn",
              x.interviewer_party_id as "interviewerPartyId",
+             p.display_name as "interviewerName",
              x.destination, x.notes,
              x.recorded_by as "recordedBy",
              x.recorded_at as "recordedAt",
@@ -563,6 +574,8 @@ export async function listExitRecords(args: {
         from hrm_exit_records x
         join worker_employments e
           on e.org_id = x.org_id and e.id = x.employment_id
+        left join parties p
+          on p.org_id = x.org_id and p.id = x.interviewer_party_id
        where x.org_id = ${orgId}
          ${employmentId === null ? sql`` : sql`and x.employment_id = ${employmentId}`}
          ${scopeFilter}
