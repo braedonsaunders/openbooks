@@ -175,14 +175,20 @@ test('a partial bulk result names each failed document with its reason and keeps
   assert.ok(actions.length > 0 && actions.every((b) => !(b as HTMLButtonElement).disabled), 'busy must release after a partial result')
 })
 
-test('a non-JSON 502 on a bulk action toasts the translated fallback, never a SyntaxError', async (t) => {
+test('a non-JSON 502 on a bulk action marks the chunk unknown with the named outcome, never a SyntaxError', async (t) => {
   await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }), 2)
   await click(checkboxFor('invoice-1.pdf'))
   const drafts = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Create drafts'))
   assert.ok(drafts, 'bulk actions must appear once rows are selected')
   await click(drafts as HTMLButtonElement)
-  assert.deepEqual(script.errors, ['The capture action failed. (status 502)'])
-  assert.equal(document.querySelector('[role="alert"]'), null, 'a transport failure names no per-item reasons')
+  assert.deepEqual(script.errors, [
+    'Bulk action partially complete: 0 succeeded, 1 failed. The failed documents stay selected with their reasons below.',
+  ])
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the failed chunk renders its named outcome inline')
+  assert.match(alert.textContent ?? '', /Outcome unknown/)
+  assert.match(alert.textContent ?? '', /The capture action failed\. \(status 502\)/)
+  assert.equal(checkboxFor('invoice-1.pdf').checked, true, 'the unknown rows stay selected')
 })
 
 test('a 60-row selection is attempted in bounded batches and unanswered ids stay selected', async (t) => {
@@ -219,4 +225,65 @@ test('a 60-row selection is attempted in bounded batches and unanswered ids stay
     assert.equal(checkboxFor(`invoice-${i}.pdf`).checked, true, `unanswered invoice-${i}.pdf must stay selected`)
   }
   assert.equal(checkboxFor('invoice-1.pdf').checked, false, 'an answered row must leave the selection')
+})
+
+test('a second-batch 502 keeps the first batch confirmed verdicts and marks the rest unknown', async (t) => {
+  const batches: string[][] = []
+  await mount(
+    t,
+    (body) => {
+      batches.push(body.ids)
+      if (batches.length === 1) return Response.json({ results: body.ids.map((id) => ({ id, ok: true })) })
+      return new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } })
+    },
+    60,
+  )
+  const selectAll = document.querySelector('label input[type="checkbox"]') as HTMLInputElement | null
+  assert.ok(selectAll, 'the select-all checkbox must render')
+  await click(selectAll)
+  const reject = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Reject'))
+  assert.ok(reject, 'bulk actions must appear once rows are selected')
+  await click(reject as HTMLButtonElement)
+  assert.deepEqual(
+    batches.map((batch) => batch.length),
+    [50, 10],
+    'both batches must be attempted',
+  )
+  assert.equal(script.errors.length, 1)
+  assert.match(script.errors[0]!, /50 succeeded, 10 failed/)
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the unknown chunk must render inline with its named outcome')
+  assert.match(alert.textContent ?? '', /Outcome unknown/)
+  assert.match(alert.textContent ?? '', /status 502/)
+  for (let i = 51; i <= 60; i++) {
+    assert.equal(checkboxFor(`invoice-${i}.pdf`).checked, true, `unknown invoice-${i}.pdf must stay selected`)
+  }
+  assert.equal(checkboxFor('invoice-1.pdf').checked, false, 'a confirmed row must leave the selection, not replay')
+})
+
+test('a lost acknowledgement after first-batch success marks only the lost chunk unknown', async (t) => {
+  const batches: string[][] = []
+  await mount(
+    t,
+    (body) => {
+      batches.push(body.ids)
+      if (batches.length === 1) return Response.json({ results: body.ids.map((id) => ({ id, ok: true })) })
+      throw new TypeError('fetch failed')
+    },
+    60,
+  )
+  const selectAll = document.querySelector('label input[type="checkbox"]') as HTMLInputElement | null
+  assert.ok(selectAll, 'the select-all checkbox must render')
+  await click(selectAll)
+  const reject = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Reject'))
+  assert.ok(reject, 'bulk actions must appear once rows are selected')
+  await click(reject as HTMLButtonElement)
+  assert.match(script.errors[0]!, /50 succeeded, 10 failed/)
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the lost chunk must render inline')
+  assert.match(alert.textContent ?? '', /Outcome unknown/)
+  for (let i = 51; i <= 60; i++) {
+    assert.equal(checkboxFor(`invoice-${i}.pdf`).checked, true, `lost invoice-${i}.pdf must stay selected`)
+  }
+  assert.equal(checkboxFor('invoice-50.pdf').checked, false, 'a confirmed row must not replay')
 })
