@@ -51,6 +51,7 @@ const sources = {
   `,
   '@openbooks/jobs': `
     export const CLOSE_DELIVERY_QUEUE = 'test';
+    export const closeDeliveryManualEmailIntentKey = () => { throw new Error('unexpected manual delivery in attachment-staging test'); };
     export const getBlockingConnection = () => ({});
     export const newEmailIntentKey = (s) => s + '|intent';
     export const enqueueEmail = async (data, options) => {
@@ -71,6 +72,7 @@ const sources = {
     export const db = { execute: async () => globalThis.__closeEmailStageTest.queue.shift() ?? { rows: [] } };
     export const withOrgContext = (_org, fn) => fn();
   `,
+  '../organization/actor-subsidiaries.ts': 'export const actorAllowedSubsidiaryIds = async () => null;',
   '../reports/ensure-report-definitions.ts': 'export const ensureReportDefinitions = async () => {};',
   './render-client.ts': `export const renderReportPdf = async () => Buffer.from('pdf-bytes');`,
 }
@@ -99,15 +101,19 @@ function packageContext() {
     recipients: ['a@example.com'],
     delivery: {},
     org_name: 'Acme',
+    package_author: 'user-1',
   }
 }
 
 // Consumed in call order: package context load, report-definition lookup,
-// post-send close event insert.
+// report-run insert, report status update, binder lookup, and close event.
 function primeDb() {
   state.queue.push(
     { rows: [packageContext()] },
     { rows: [{ slug: 'pnl', id: 'def-1', name: 'P&L' }] },
+    { rows: [{ id: 'report-run-1' }] },
+    { rows: [] },
+    { rows: [] },
     { rows: [] },
   )
 }
@@ -124,7 +130,7 @@ function reset() {
 }
 
 function jobData() {
-  return { orgId: 'org-1', packageId: 'pkg-1', periodId: 'p-1', bookId: 'b-1' }
+  return { orgId: 'org-1', packageId: 'pkg-1', runId: 'run-1' }
 }
 
 // The queue-state probe the tests inject: the fake queue's recorded jobs.
@@ -150,7 +156,7 @@ test('lost acknowledgement: an enqueue that records the job then throws keeps th
   // every ref the recorded job carries is still live.
   assert.equal(state.live.size, 1)
   assert.deepEqual(state.deleted, [])
-  const recorded = state.recorded.get('close-package|org-1|pkg-1|p-1|b-1|intent')
+  const recorded = state.recorded.get('close-package|org-1|run-1|unbound')
   assert.ok(recorded, 'the accepted job is the deterministic email intent key')
   assert.equal(recorded.attachments.length, 1)
   assert.ok(state.live.has(recorded.attachments[0].storageKey))
