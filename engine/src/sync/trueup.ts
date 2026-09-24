@@ -335,7 +335,11 @@ export async function trueUpResidualGl(
       else if (amount !== 0n) bump(month, accountId, -amount);
     }
 
-    await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
+    // No migration flag: true-up residuals are ordinary postings by a
+    // user-launched sync, not a migration, so every posting check applies —
+    // including the inactive-account refusal. A narrower waiver would hide
+    // exactly the misconfiguration (a deactivated account) the operator
+    // must see.
     for (const [month, accounts] of [...residualByMonth.entries()].sort()) {
       const entryLines = [...accounts.entries()].filter(
         ([, units]) => units !== 0n,

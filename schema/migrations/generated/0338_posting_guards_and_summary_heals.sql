@@ -312,3 +312,56 @@ UPDATE public.documents d
  WHERE d.status = 'posted'
    AND d.posted_entry_id IS NOT NULL
    AND d.open_balance IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- Section G9: the inactive-account refusal names the remedy.
+-- ---------------------------------------------------------------------------
+-- True-up residuals are ordinary postings, so they no longer run under the
+-- migration flag that waived this check — and the refusal they now meet
+-- named only the account, never what to do about it. The guard below is
+-- otherwise identical to the 0236 body: the only change is the refusal
+-- text, which now tells the operator to reactivate the account or map the
+-- posting to an active one.
+CREATE OR REPLACE FUNCTION public.jl_check_account() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_summary boolean;
+  v_active boolean;
+  v_ccy text;
+begin
+  -- Evidence-only stamps (0236) are not postings. The line satisfied the
+  -- posting rules below when it was posted; recording cleared/reconciled
+  -- evidence changes no posting-relevant field, so the question is not
+  -- re-opened. The column set matches jl_guard() exactly: any UPDATE that
+  -- touches anything else falls through to the full checks. Whether the
+  -- stamp itself is a legal append-only transition stays jl_guard's call.
+  if tg_op = 'UPDATE'
+     and to_jsonb(new) - 'reconciled_at' - 'reconciliation_id' - 'source_cleared_date' - 'source_cleared_connector'
+       = to_jsonb(old) - 'reconciled_at' - 'reconciliation_id' - 'source_cleared_date' - 'source_cleared_connector'
+  then
+    return new;
+  end if;
+  select is_summary, is_active, currency_restriction
+    into v_summary, v_active, v_ccy
+   from accounts
+   where id = new.account_id and org_id = new.org_id
+     for share;
+  if not found then
+    raise exception 'account % does not exist in organization %', new.account_id, new.org_id
+      using errcode = '23503';
+  end if;
+  if v_summary then
+    raise exception 'account % is a summary account and cannot be posted to', new.account_id;
+  end if;
+  if not v_active and coalesce(current_setting('openbooks.migration', true), 'off') <> 'on' then
+    raise exception 'account % is inactive — reactivate the account or map the posting to an active account instead of posting to a deactivated one', new.account_id;
+  end if;
+  if v_ccy is not null and new.currency <> v_ccy then
+    raise exception 'account % only accepts % postings', new.account_id, v_ccy;
+  end if;
+  return new;
+end $$;
+
+COMMENT ON FUNCTION public.jl_check_account() IS
+  'openbooks:jl_check_account:v5 - locks the tenant-coherent account row before validating a direct journal-line write; evidence-only stamps (0236) are not re-validated as postings; the inactive-account refusal (0338/G9) names the remedy';
