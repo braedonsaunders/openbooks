@@ -6,6 +6,7 @@ import {
   type FlowSubjectProfile,
 } from "@openbooks/forms-core";
 import { getFlowAdapter } from "./registry.ts";
+import { invalidScheduledTriggerCronReason } from "./scheduled.ts";
 import {
   BANK_ACCOUNT_ENGINE_MANAGED_RELEASE_STATUSES,
   BANK_ACCOUNT_SUBJECT_KIND,
@@ -93,6 +94,19 @@ export function lintFlowGraphForSubject(
           );
         }
       }
+    }
+  }
+
+  // A scheduled trigger whose cron (or timezone) can never yield an
+  // occurrence would sit enabled and never fire, with no run and no alert —
+  // the occurrence function answers null for it exactly like "nothing due".
+  // Refuse it here (blocking when the save leaves the flow enabled,
+  // warning on drafts) with the value named and the remedy attached.
+  for (const node of parsed.data.nodes) {
+    if (node.data.kind !== "trigger" || node.data.trigger.trigger !== "scheduled") continue;
+    const reason = invalidScheduledTriggerCronReason(node.data.trigger.cron, node.data.trigger.tz);
+    if (reason) {
+      errors.push(`node "${node.id}": ${reason} — remove or fix this trigger before enabling`);
     }
   }
 

@@ -109,22 +109,63 @@ export function lastCronOccurrenceBetween(
   }
 }
 
-/** Which scheduled trigger nodes of a graph are due, and the latest occurrence. */
+/**
+ * Named refusal reason when a scheduled trigger's cron (or timezone) can
+ * never yield an occurrence — the same parser the occurrence walk below
+ * uses (one parse plus a forward step in the trigger's timezone). Null when
+ * the trigger can fire. dueScheduledNodes and the author-time lint share
+ * this so 'invalid cron' never reads as 'not due'.
+ */
+export function invalidScheduledTriggerCronReason(cron: string, tz?: string): string | null {
+  const zone = tz || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: zone });
+  } catch {
+    return (
+      `scheduled trigger timezone '${zone}' is not a valid IANA timezone — ` +
+      `no occurrence can ever be computed; fix the timezone`
+    );
+  }
+  try {
+    CronExpressionParser.parse(cron, { currentDate: new Date(), tz: zone }).next();
+    return null;
+  } catch {
+    return (
+      `scheduled trigger cron '${cron}' is not a valid cron expression — ` +
+      `no occurrence can ever be computed; fix the cron`
+    );
+  }
+}
+
+/**
+ * Which scheduled trigger nodes of a graph are due, and the latest
+ * occurrence — plus the nodes whose cron can never fire. The occurrence
+ * function answers null for an unparseable cron exactly as it does for a
+ * schedule with nothing due, so the invalid/not-due distinction is made
+ * HERE, explicitly: invalid nodes are named in `invalid` (the caller counts
+ * them as errors) instead of dissolving into a silent "nothing due".
+ */
 function dueScheduledNodes(
   graph: AutomationGraph,
   anchor: Date,
   now: Date,
-): { nodeIds: string[]; latest: Date } | null {
+): { nodeIds: string[]; latest: Date | null; invalid: { nodeId: string; cron: string; reason: string }[] } {
   const nodeIds: string[] = [];
+  const invalid: { nodeId: string; cron: string; reason: string }[] = [];
   let latest: Date | null = null;
   for (const node of graph.nodes) {
     if (node.data.kind !== "trigger" || node.data.trigger.trigger !== "scheduled") continue;
+    const reason = invalidScheduledTriggerCronReason(node.data.trigger.cron, node.data.trigger.tz);
+    if (reason) {
+      invalid.push({ nodeId: node.id, cron: node.data.trigger.cron, reason });
+      continue;
+    }
     const occ = lastCronOccurrenceBetween(node.data.trigger.cron, anchor, now, node.data.trigger.tz);
     if (!occ) continue;
     nodeIds.push(node.id);
     if (!latest || occ.getTime() > latest.getTime()) latest = occ;
   }
-  return nodeIds.length > 0 && latest ? { nodeIds, latest } : null;
+  return { nodeIds, latest, invalid };
 }
 
 /**
@@ -323,7 +364,16 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
 
     const anchor = flow.lastScheduledRunAt ?? flow.createdAt;
     const due = dueScheduledNodes(graph, anchor, now);
-    if (!due) continue;
+    if (due.invalid.length > 0) {
+      // Fail closed like the invalid-graph path above: a configured flow
+      // whose cron can never fire is a failed flow, not a clean tick —
+      // count it in errors and name the nodes instead of skipping silently
+      // (a skip would read as "nothing due" forever).
+      result.errors++;
+      const named = due.invalid.map((n) => `node "${n.nodeId}": ${n.reason}`).join("; ");
+      console.error(`[flows] scheduled flow ${flow.id} ("${flow.name}") has invalid schedule(s) — occurrence not claimed: ${named}`);
+    }
+    if (due.nodeIds.length === 0 || !due.latest) continue;
 
     let claims: FlowOccurrenceClaim[];
     try {

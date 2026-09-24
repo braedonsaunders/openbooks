@@ -35,6 +35,38 @@ test("rejects a change_status to 'approved' on a document flow", () => {
   assert.ok(res.errors.some((e) => /change_status.*approved.*engine-enforced/i.test(e)));
 });
 
+function scheduledGraph(cron: string) {
+  return graph(
+    [
+      { id: "trig", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "scheduled", cron } } },
+      {
+        id: "n1",
+        position: { x: 0, y: 1 },
+        data: {
+          kind: "action",
+          action: { action: "notify", to: [{ type: "user", userId: "someone" }], title: "Scheduled probe" },
+        },
+      },
+    ],
+    [{ id: "e1", source: "trig", target: "n1", sourceHandle: "next" }],
+  );
+}
+
+test("rejects a scheduled trigger whose cron can never fire, naming the node", () => {
+  const res = lintFlowGraphForSubject("vendor_bill", scheduledGraph("not-a-cron"));
+  assert.equal(res.ok, false);
+  assert.ok(
+    res.errors.some((e) => /node "trig".*cron 'not-a-cron' is not a valid cron expression/i.test(e)),
+    `expected a named cron refusal, got: ${res.errors.join("; ")}`,
+  );
+});
+
+test("a scheduled trigger with a valid cron draws no cron refusal", () => {
+  const res = lintFlowGraphForSubject("vendor_bill", scheduledGraph("0 9 * * *"));
+  const cronErrors = res.ok ? [] : res.errors.filter((e) => /cron|timezone/i.test(e));
+  assert.deepEqual(cronErrors, []);
+});
+
 test("rejects a change_status to 'draft' on a document flow", () => {
   const g = graph(
     [
