@@ -117,7 +117,6 @@
     "web/app/api/flows/gates/delegate/route-subsidiary-scope.test.ts": 1,
     "web/app/api/flows/runs/[id]/retry/route.test.ts": 1,
     "web/app/api/hrm/change-requests/route.test.ts": 1,
-    "web/app/api/hrm/comp-cycles/route.test.ts": 1,
     "web/app/api/hrm/employments/[id]/route.test.ts": 1,
     "web/app/api/hrm/exit-records/[id]/route.test.ts": 1,
     "web/app/api/hrm/exit-records/route.test.ts": 1,
