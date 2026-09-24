@@ -299,14 +299,6 @@ test("a non-integer limit and a non-uuid include are refused", async () => {
     ]);
   });
 
-  test("leave-filing-employments without the manage grant never reaches the service", async () => {
-    reset();
-    routeState.gate = { status: 403 };
-    const response = await optionsRoute!.GET(getRequest("?source=leave-filing-employments"));
-    assert.equal(response.status, 403);
-    assert.deepEqual(routeState.calls, []);
-  });
-
   test("leave-own-employments projects the caller's employments to id/label", async () => {
     reset();
     const response = await optionsRoute!.GET(getRequest("?source=leave-own-employments"));
@@ -317,11 +309,11 @@ test("a non-integer limit and a non-uuid include are refused", async () => {
     assert.deepEqual(routeState.calls, [{ fn: "leave-own-employments", args: { orgId: "org-1", actorId: "user-1" } }]);
   });
 
-  test("leave-own-employments without the request grant never reaches the service", async () => {
+  test("leave option sources without their grants never reach the service", async () => {
     reset();
     routeState.gate = { status: 403 };
-    const response = await optionsRoute!.GET(getRequest("?source=leave-own-employments"));
-    assert.equal(response.status, 403);
+    assert.equal((await optionsRoute!.GET(getRequest("?source=leave-filing-employments"))).status, 403);
+    assert.equal((await optionsRoute!.GET(getRequest("?source=leave-own-employments"))).status, 403);
     assert.deepEqual(routeState.calls, []);
   });
 

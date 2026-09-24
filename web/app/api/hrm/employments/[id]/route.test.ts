@@ -11,12 +11,7 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-employment-record-route-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
+const test = nodeTest;
 
 const routeState: RouteState = {
   employmentGate: { user: { id: "user-1", orgId: "org-1" } },
@@ -85,7 +80,6 @@ const mockUrls = new Map<string, string>([
 ]);
 
 let recordRoute: typeof import("./route.ts") | undefined;
-if (!isVitest) {
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -104,7 +98,7 @@ if (!isVitest) {
   const routeUrl: string = "./route.ts?hrm-employment-record";
   recordRoute = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
-}
+
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 

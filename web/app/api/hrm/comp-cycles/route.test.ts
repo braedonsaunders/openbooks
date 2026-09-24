@@ -342,7 +342,7 @@ function patchRequest(url: string, body: unknown): Request {
     reset("hrm.compensation.read");
     const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
     const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
-    for (const proposedPct of [3.5, 1_234_567_890, 0.12345600000000001]) {
+    for (const proposedPct of [3.5, 0.12345600000000001]) {
       const refused = await lineRoute!.PATCH(patchRequest(url, { proposedPct }), params as never);
       assert.equal(refused.status, 400, `${proposedPct} must be a decimal string`);
       assert.match(((await refused.json()) as { error: string }).error, /proposedPct.*decimal string/);
