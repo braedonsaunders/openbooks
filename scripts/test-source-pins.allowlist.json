@@ -41,7 +41,6 @@
     "engine/src/validation/import-field-tickets.test.ts": 1,
     "engine/src/worker/backup-scheduler.test.ts": 13,
     "engine/src/worker/overhead-scheduler.test.ts": 1,
-    "web/app/(app)/banking/AccountsRoster.test.tsx": 1,
     "web/app/(app)/banking/[accountId]/view.test.ts": 2,
     "web/app/(app)/banking/cash/view.banner.test.ts": 3,
     "web/app/(app)/banking/imports/imports-copy.test.ts": 4,
