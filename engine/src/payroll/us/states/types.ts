@@ -51,6 +51,21 @@ export type UsStatePayPeriod =
 /** Whether the supplemental amount shares the regular wage payment. */
 export type UsSupplementalPaymentTiming = "combined" | "separate";
 
+/** Per-state rounding applied to the final period amount after certificate extras. */
+export type UsFinalWithholdingRounding = "nearest_dollar" | "ceiling_dollar";
+
+/** Apply the pack-declared whole-dollar rule to the final exact amount. */
+export function roundUsFinalWithholding(
+  amount: bigint,
+  rule: UsFinalWithholdingRounding | undefined,
+): bigint {
+  if (!rule) return amount;
+  const dollar = 10_000n;
+  if (rule === "nearest_dollar") return roundDiv(amount, dollar) * dollar;
+  if (amount <= 0n) return 0n;
+  return ((amount + dollar - 1n) / dollar) * dollar;
+}
+
 /** The US use of the shared payroll work-allocation contract. */
 export type UsWageAllocation = PayrollWorkAllocation;
 
@@ -423,6 +438,8 @@ export interface UsStateWithholdingEngine {
    * because a scaled table is not the published table.
    */
   printedPeriods: readonly UsStatePayPeriod[] | null;
+  /** Final whole-dollar convention, applied only after all elected additions. */
+  finalRounding?: UsFinalWithholdingRounding;
   compute(input: UsStateWithholdingInput): UsStateWithholdingResult;
 }
 

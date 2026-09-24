@@ -106,6 +106,17 @@ test("MT extra withholding is added, exempt is zero, and an unpublished period i
   );
 });
 
+test("MT rounds up the formula plus Line 3 extra to a whole dollar", () => {
+  // The Montana employer guide says to round the formula plus any Line 3
+  // additional amount up to the next whole dollar.
+  // https://revenuefiles.mt.gov/files/Forms/Montana_Employer_and_Information_Agent_Guide_with_Tax_Tables.pdf
+  assert.equal(MT_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "1375.00",
+    basis: "resident",
+    certificate: cert({ filing_status: "single_or_both", additional_per_period: "5.25" }),
+  }).tax, money("39"));
+});
+
 test("MT refuses a year it has not transcribed", () => {
   assert.throws(
     () => MT_WITHHOLDING.compute({

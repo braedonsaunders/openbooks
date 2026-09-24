@@ -114,6 +114,17 @@ test("MS extra withholding is added, exempt is zero, and an unpublished period i
   );
 });
 
+test("MS rounds the formula plus Line 7 to a whole dollar", () => {
+  // The Computer Payroll Accounting flowchart adds Line 7, then rounds the
+  // total withholding to whole dollars.
+  // https://www.dor.ms.gov/sites/default/files/business/Computer%20Payroll%20Flowchart%20-%20updated%208-13-25.pdf
+  assert.equal(MS_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00",
+    basis: "resident",
+    certificate: cert({ filing_status: "single", exemption: "0", additional_per_period: "5.75" }),
+  }).tax, money("17"));
+});
+
 test("MS refuses a year it has not transcribed", () => {
   assert.throws(
     () => MS_WITHHOLDING.compute({

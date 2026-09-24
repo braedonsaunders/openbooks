@@ -92,6 +92,18 @@ test("MO extra withholding is added, exempt is zero, and an unpublished period i
   );
 });
 
+test("MO rounds the formula plus Line 2 to a whole dollar", () => {
+  // The 2026 formula requires withholding totals to be rounded to the nearest dollar.
+  // https://dor.mo.gov/forms/Withholding%20Formula_2026.pdf
+  assert.equal(MO_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 12, wages: "2916.67",
+    basis: "resident",
+    certificate: cert({
+      filing_status: "married_spouse_works", additional_per_period: "10.75",
+    }),
+  }).tax, money("70"));
+});
+
 test("MO refuses a year it has not transcribed", () => {
   assert.throws(
     () => MO_WITHHOLDING.compute({
