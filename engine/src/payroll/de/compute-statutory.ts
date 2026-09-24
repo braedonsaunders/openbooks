@@ -236,7 +236,7 @@ export function computeDeStatutoryWithRates(
   // --- SV: four branches on the same gross, monthly BBGs, halves. ---
   // Quoted figures: KV 14,6 (§241 SGB V) hälftig (§249); RV 18,6 hälftig
   // (§168 SGB VI); AV 2,6 hälftig (§§341/346 SGB III); PV 3,6 + 0,6
-  // Kinderlosenzuschlag − 0,25/Kind, Sachsen +1,0 AN (§§55/58 SGB XI) —
+  // Kinderlosenzuschlag − 0,25/Kind, Sachsen ±0,5 from an equal half (§§55/58 SGB XI) —
   // all transcribed in DE_2026_RATES / DE_2026_CEILINGS with quotes.
   const kvBase = Math.min(re4, Math.round(DE_2026_CEILINGS.kvPbbgMonthly * 100));
   const rvBase = Math.min(re4, Math.round(DE_2026_CEILINGS.rvBbgMonthly * 100));
@@ -249,11 +249,11 @@ export function computeDeStatutoryWithRates(
   const avW = shareHalfUp(rvBase, avHalfMilli);
   const pvBase = kvBase;
   const pvEmployeeMilli = Math.round(DE_2026_RATES.pv / 2 * 1000)
-    + (ctx.region === "SN" ? Math.round(DE_2026_RATES.pvSachsenExtra * 1000) : 0)
+    + (ctx.region === "SN" ? Math.round(DE_2026_RATES.pvSachsenDifferential * 1000) : 0)
     + (pvz === 1 ? Math.round(DE_2026_RATES.pvKinderlosenzuschlag * 1000) : 0)
     - Math.round(DE_2026_RATES.pvKindAbschlag * 1000) * pva;
   const pvEmployerMilli = Math.round(DE_2026_RATES.pv / 2 * 1000)
-    - (ctx.region === "SN" ? Math.round(DE_2026_RATES.pvSachsenExtra * 1000) : 0);
+    - (ctx.region === "SN" ? Math.round(DE_2026_RATES.pvSachsenDifferential * 1000) : 0);
   const pvW = shareHalfUp(pvBase, pvEmployeeMilli);
   const pvEr = shareHalfUp(pvBase, pvEmployerMilli);
 
