@@ -209,6 +209,47 @@ test("manual values: exact decimals, overlap guard, end-dating, onDate read", { 
   }
 });
 
+test("manual value update maps an exclusion violation raised by the database", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const triggerName = `allocation_update_overlap_${randomUUID().replaceAll("-", "")}`;
+  const functionName = `${triggerName}_fn`;
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const driver = await createDriver(org.orgId, actorId, {
+      key: "manual-update-overlap",
+      name: "Manual update overlap",
+      dimension: "subsidiary",
+      sourceKind: "manual",
+    });
+    const value = await createDriverValue(org.orgId, actorId, driver.id, {
+      dimensionValueId: org.subsidiaryId,
+      effectiveFrom: "2026-01-01",
+      value: "1",
+    });
+    // Model the exclusion constraint winning a concurrent-write race after the
+    // service's overlap read but while its UPDATE is executing.
+    await db.execute(sql.raw(`create function public."${functionName}"() returns trigger
+      language plpgsql as $$ begin
+        if old.id = '${value.id}'::uuid then
+          raise exception 'overlapping allocation driver value'
+            using errcode = '23P01', constraint = 'allocation_driver_values_no_overlap';
+        end if;
+        return new;
+      end $$`));
+    await db.execute(sql.raw(`create trigger "${triggerName}" before update on public.allocation_driver_values
+      for each row execute function public."${functionName}"()`));
+
+    await assert.rejects(
+      () => updateDriverValue(org.orgId, actorId, value.id, { value: "2" }),
+      (error: unknown) => error instanceof DriverAdminError && error.code === "conflict",
+    );
+  } finally {
+    await db.execute(sql.raw(`drop trigger if exists "${triggerName}" on public.allocation_driver_values`));
+    await db.execute(sql.raw(`drop function if exists public."${functionName}"()`));
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("manual values must reference an active value in the driver's dimension", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
