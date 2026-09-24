@@ -183,6 +183,60 @@ export function empFact(
   return emp[key];
 }
 
+/** Resolve and validate one declared employee fact at the calculation
+ * boundary. The caller reads the value from the declared producer (profile
+ * or certificate); this common gate guarantees every pack gets the same
+ * missing-value and primitive/bounds semantics instead of a silent default. */
+export function resolveEmployeeFact(
+  country: string,
+  key: string,
+  raw: string | null | undefined,
+): string | null {
+  if (!FACTS.has(country)) {
+    throw new PayrollJurisdictionError(
+      `no employeeFacts registered for ${country || "(unset)"} — the pack's compute path `
+      + "must import its own <country>/employee-facts.ts so its reads resolve through the declaration",
+    );
+  }
+  const fact = (FACTS.get(country) ?? []).find((candidate) => candidate.key === key);
+  if (!fact) {
+    throw new PayrollPackError(
+      `the ${country} payroll pack reads employee fact "${key}" without declaring it — `
+      + `declare it in employeeFacts (kind, bounds, producer, refusal reason) first`,
+    );
+  }
+  if (raw == null || raw.trim() === "") {
+    if (!fact.required) return null;
+    throw new PayrollPackError(
+      `${country} payroll cannot calculate without ${fact.label} (${fact.key}): `
+      + `${fact.refusalReason} Supply this fact through the pack's declared producer.`,
+    );
+  }
+  const value = raw.trim();
+  let invalid: string | null = null;
+  if (fact.kind === "flag" && value !== "true" && value !== "false") {
+    invalid = `must be "true" or "false"`;
+  } else if (fact.kind === "choice" && !fact.choices?.includes(value)) {
+    invalid = `must be one of ${fact.choices?.join(", ") ?? "the declared choices"}`;
+  } else if (fact.kind === "year" || fact.kind === "integer" || fact.kind === "count") {
+    const n = Number(value);
+    if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(n)) {
+      invalid = "must be a whole number";
+    } else if (fact.min !== undefined && n < fact.min || fact.max !== undefined && n > fact.max) {
+      invalid = `must be between ${fact.min ?? "−∞"} and ${fact.max ?? "∞"}`;
+    } else if (fact.kind === "count" && n < 0) {
+      invalid = "must be a non-negative whole number";
+    }
+  }
+  if (invalid) {
+    throw new PayrollPackError(
+      `${country} payroll cannot use ${fact.label} (${fact.key}) value "${value}": ${invalid}. `
+      + `${fact.refusalReason} Correct the value in the pack's declared producer.`,
+    );
+  }
+  return value;
+}
+
 /**
  * The required facts absent (or blank) for one employee — the per-person
  * gap readiness enumerates BEFORE calculation. Optional facts are never
