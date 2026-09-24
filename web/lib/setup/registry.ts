@@ -2400,6 +2400,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
+    readOnly: true,
     columns: [
       { key: 'templateId', kind: 'ref', ref: 'hrm-process-templates' },
       { key: 'position', kind: 'number' },
@@ -2608,6 +2609,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'name',
     hasActive: true,
+    readOnly: true,
     columns: [
       { key: 'name', kind: 'text' },
       { key: 'isActive', kind: 'badge-active' },
@@ -2627,6 +2629,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
+    readOnly: true,
     columns: [
       { key: 'frameworkId', kind: 'ref', ref: 'hrm-competency-frameworks' },
       { key: 'code', kind: 'text' },

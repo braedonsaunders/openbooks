@@ -105,10 +105,35 @@ async function requireCompetenciesRead(
   return scope;
 }
 
-function assertFrameworkManageScope(appliesTo: unknown, allowed: Set<string> | null): void {
-  if (allowed === null) return;
+async function frameworkEffectiveSubsidiary(
+  exec: SqlExecutor,
+  orgId: string,
+  appliesTo: unknown,
+): Promise<string | null | false> {
   const scope = mathRefusal("REFUSED", () => parseAppliesScope(appliesTo));
-  if (scope.employerSubsidiaryId === null || !allowed.has(scope.employerSubsidiaryId)) {
+  let departmentSubsidiary: string | null = null;
+  if (scope.departmentId !== null) {
+    const department = (await exec.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from departments
+       where org_id = ${orgId} and id = ${scope.departmentId}
+    `)).rows[0];
+    if (!department) return false;
+    departmentSubsidiary = department.subsidiaryId;
+  }
+  if (scope.employerSubsidiaryId !== null && departmentSubsidiary !== null &&
+      scope.employerSubsidiaryId !== departmentSubsidiary) return false;
+  return scope.employerSubsidiaryId ?? departmentSubsidiary;
+}
+
+async function assertFrameworkManageScope(
+  exec: SqlExecutor,
+  orgId: string,
+  appliesTo: unknown,
+  allowed: Set<string> | null,
+): Promise<void> {
+  if (allowed === null) return;
+  const subsidiaryId = await frameworkEffectiveSubsidiary(exec, orgId, appliesTo);
+  if (subsidiaryId === false || subsidiaryId === null || !allowed.has(subsidiaryId)) {
     throw new HrmAuthorizationError(
       "competency framework is not visible in this organization and legal-entity scope — ask an HR administrator covering its subsidiary to configure it",
     );
@@ -127,7 +152,7 @@ async function requireFrameworkInManageScope(
   if (!framework) {
     throw new HrmPerformanceError("NOT_FOUND", "competency framework was not found — choose a framework in this organization");
   }
-  assertFrameworkManageScope(framework.applies_to, allowed);
+  await assertFrameworkManageScope(exec, orgId, framework.applies_to, allowed);
 }
 
 async function requireCompetencyFrameworkInManageScope(
@@ -186,7 +211,6 @@ export async function createFramework(args: {
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    assertFrameworkManageScope({ employer_subsidiary_id: appliesTo.employerSubsidiaryId }, allowed);
     const references = (await db.execute<{
       subsidiaryExists: boolean;
       departmentSubsidiaryId: string | null;
@@ -216,6 +240,10 @@ export async function createFramework(args: {
         references.departmentSubsidiaryId !== null && references.departmentSubsidiaryId !== appliesTo.employerSubsidiaryId) {
       throw new HrmPerformanceError("INVALID_INPUT", "the competency framework department belongs to another subsidiary — choose a department in the selected subsidiary");
     }
+    await assertFrameworkManageScope(db, orgId, {
+      employer_subsidiary_id: appliesTo.employerSubsidiaryId,
+      department_id: appliesTo.departmentId,
+    }, allowed);
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into hrm_competency_frameworks (org_id, name, applies_to, created_by, updated_by)
       values (${orgId}, ${args.name.trim()}, ${JSON.stringify({
@@ -272,8 +300,8 @@ export async function getFramework(args: {
     const framework = frameworks[0];
     if (!framework) return null;
     if (allowed !== null) {
-      const scope = mathRefusal("REFUSED", () => parseAppliesScope(framework.applies_to));
-      if (scope.employerSubsidiaryId !== null && !allowed.has(scope.employerSubsidiaryId)) return null;
+      const subsidiary = await frameworkEffectiveSubsidiary(db, orgId, framework.applies_to);
+      if (subsidiary === false || (subsidiary !== null && !allowed.has(subsidiary))) return null;
     }
     return {
       id: framework.id,
@@ -297,8 +325,8 @@ export async function listFrameworks(args: { orgId: string; actorId: string }): 
     const out: CompetencyFrameworkDTO[] = [];
     for (const framework of frameworks) {
       if (allowed !== null) {
-        const scope = mathRefusal("REFUSED", () => parseAppliesScope(framework.applies_to));
-        if (scope.employerSubsidiaryId !== null && !allowed.has(scope.employerSubsidiaryId)) continue;
+        const subsidiary = await frameworkEffectiveSubsidiary(db, orgId, framework.applies_to);
+        if (subsidiary === false || (subsidiary !== null && !allowed.has(subsidiary))) continue;
       }
       out.push({
         id: framework.id,
