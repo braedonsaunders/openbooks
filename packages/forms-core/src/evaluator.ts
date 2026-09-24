@@ -15,7 +15,16 @@
 // no DB, and deliberately NO eval()/new Function() — untrusted designer input
 // can never reach a JavaScript runtime.
 
+import { parseExactDecimalParts } from './decimals'
 import type { DefaultValueExpression, FormulaExpression, LogicRule } from './schema'
+
+/**
+ * A formula operand that cannot be evaluated to a number: garbage input,
+ * divide-by-zero, or a non-finite intermediate. Thrown — never coerced to 0
+ * — so a broken formula persists as a blank field (see withComputedFormulas)
+ * instead of a real-looking amount. The message names the cause.
+ */
+export class FormulaEvaluationError extends Error {}
 
 export type FieldValueMap = Record<string, unknown>
 
@@ -142,11 +151,144 @@ export function evaluateLogicRule(rule: LogicRule, ctx: EvalContext): boolean {
 
 // --- Formula evaluator -----------------------------------------------------
 
+/** Exact rational with a positive denominator, always reduced. */
+type Rational = { num: bigint; den: bigint }
+
+function gcd(a: bigint, b: bigint): bigint {
+  let x = a < 0n ? -a : a
+  let y = b < 0n ? -b : b
+  while (y !== 0n) {
+    const t = x % y
+    x = y
+    y = t
+  }
+  return x
+}
+
+function rational(num: bigint, den: bigint): Rational {
+  if (den === 0n) throw new FormulaEvaluationError('Cannot divide by zero in a formula')
+  if (den < 0n) {
+    num = -num
+    den = -den
+  }
+  const g = gcd(num, den)
+  return g === 0n ? { num: 0n, den: 1n } : { num: num / g, den: den / g }
+}
+
+const RATIONAL_ONE: Rational = { num: 1n, den: 1n }
+
+/** Decimal places kept by formula division (halves away from zero). */
+const FORMULA_DIVISION_SCALE = 10
+
+function addRational(a: Rational, b: Rational): Rational {
+  return rational(a.num * b.den + b.num * a.den, a.den * b.den)
+}
+
+function subRational(a: Rational, b: Rational): Rational {
+  return rational(a.num * b.den - b.num * a.den, a.den * b.den)
+}
+
+function mulRational(a: Rational, b: Rational): Rational {
+  return rational(a.num * b.num, a.den * b.den)
+}
+
+function divRational(a: Rational, b: Rational): Rational {
+  if (b.num === 0n) throw new FormulaEvaluationError('Cannot divide by zero in a formula')
+  // Halves away from zero at the division scale.
+  const num = a.num * b.den * 10n ** BigInt(FORMULA_DIVISION_SCALE)
+  const den = a.den * b.num
+  const negative = num < 0n !== den < 0n
+  const absNum = num < 0n ? -num : num
+  const absDen = den < 0n ? -den : den
+  const rounded = (absNum * 2n + absDen) / (absDen * 2n)
+  return { num: negative && rounded !== 0n ? -rounded : rounded, den: 10n ** BigInt(FORMULA_DIVISION_SCALE) }
+}
+
+function cmpRational(a: Rational, b: Rational): number {
+  const d = a.num * b.den - b.num * a.den
+  return d < 0n ? -1 : d > 0n ? 1 : 0
+}
+
+function negativeRational(a: Rational): Rational {
+  return { num: -a.num, den: a.den }
+}
+
+/** Floored integer quotient (toward −∞), for floor/ceil/round. */
+function floorQuotient(num: bigint, den: bigint): bigint {
+  const q = num / den
+  return num >= 0n || num % den === 0n ? q : q - 1n
+}
+
+/**
+ * An evaluated operand as an exact rational, or null when it is blank
+ * (missing, null, or empty — blanks are skipped by n-ary operators and
+ * propagate through binary ones). Anything else that is not an exact
+ * decimal throws instead of coercing to 0.
+ */
+function toOperandRational(value: unknown, what: string): Rational | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new FormulaEvaluationError(`${what} is not a finite number`)
+    }
+    return scaledToRational(parseExactDecimalParts(String(value))!)
+  }
+  if (typeof value === 'string') {
+    if (value.trim() === '') return null
+    const parts = parseExactDecimalParts(value)
+    if (!parts) throw new FormulaEvaluationError(`${what} ("${value}") is not a number`)
+    return scaledToRational(parts)
+  }
+  throw new FormulaEvaluationError(`${what} is not a number`)
+}
+
+function scaledToRational(parts: { units: bigint; scale: number }): Rational {
+  return rational(parts.units, 10n ** BigInt(parts.scale))
+}
+
+/**
+ * Render an exact result for persistence: canonical trimmed decimal text,
+ * carried as a JSON number whenever the double round-trips losslessly
+ * (2 × 5 stays 10, not "10") and as an exact string when it cannot.
+ */
+function renderAmount(value: Rational): number | string {
+  const text = renderFraction(value)
+  const n = Number(text)
+  if (Number.isFinite(n) && String(n) === text) return n
+  return text
+}
+
+function renderFraction(value: Rational): string {
+  const negative = value.num < 0n
+  const abs = negative ? -value.num : value.num
+  // Long division to 24 places, then trim: every exact decimal terminates
+  // long before that, and non-terminating division results were already
+  // rounded at FORMULA_DIVISION_SCALE by divRational.
+  let remainder = abs % value.den
+  const digits = (abs / value.den).toString()
+  let fraction = ''
+  for (let i = 0; i < 24 && remainder !== 0n; i++) {
+    remainder *= 10n
+    fraction += (remainder / value.den).toString()
+    remainder = remainder % value.den
+  }
+  fraction = fraction.replace(/0+$/, '')
+  const whole = digits.replace(/^0+(?=\d)/, '') || '0'
+  const zero = whole === '0' && fraction === ''
+  return `${negative && !zero ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`
+}
+
 /**
  * Evaluate a FormulaExpression tree. Returns `number | string | null`.
  *
- * - Pure arithmetic operators coerce inputs to numbers (missing → 0).
- * - `concat` produces a string.
+ * - Arithmetic is exact bigint-rational math: 0.1 + 0.2 is 0.3, and
+ *   19.99 × 3 is 59.97 — never the nearest double.
+ * - Blanks (missing/null/empty) are skipped by n-ary operators and
+ *   propagate through binary ones; an operator with no usable input
+ *   returns null (blank), never a silent 0.
+ * - Garbage operands and divide-by-zero throw FormulaEvaluationError
+ *   naming the cause. Callers persist the failure as a blank field.
+ * - `concat` produces a string; `count_section` a count.
  * - `if` returns whichever branch matches the condition.
  * - `*_section` rollups walk `ctx.rows[sectionKey]`.
  */
@@ -161,80 +303,135 @@ export function evaluateFormulaTree(
     case 'field_ref': {
       const v = resolveFieldRef(ctx, expr.fieldKey)
       if (v === undefined || v === null) return null
-      // String values stay as strings; numeric strings coerce automatically
-      // when the caller composes them through `sum` etc.
-      return typeof v === 'number' ? v : typeof v === 'string' ? v : coerceNumber(v)
+      if (typeof v === 'number' || typeof v === 'string') return v
+      throw new FormulaEvaluationError(`the value of "${expr.fieldKey}" is not a number`)
     }
 
-    case 'sum':
-      return expr.of.reduce<number>((acc, e) => acc + coerceNumber(evaluateFormulaTree(e, ctx)), 0)
+    case 'sum': {
+      let acc: Rational | null = null
+      for (const e of expr.of) {
+        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e))
+        if (r !== null) acc = acc === null ? r : addRational(acc, r)
+      }
+      return acc === null ? null : renderAmount(acc)
+    }
 
-    case 'product':
-      return expr.of.reduce<number>((acc, e) => acc * coerceNumber(evaluateFormulaTree(e, ctx)), 1)
+    case 'product': {
+      let acc: Rational | null = null
+      for (const e of expr.of) {
+        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e))
+        if (r !== null) acc = acc === null ? r : mulRational(acc, r)
+      }
+      return acc === null ? null : renderAmount(acc)
+    }
 
-    case 'subtract':
-      return (
-        coerceNumber(evaluateFormulaTree(expr.left, ctx)) -
-        coerceNumber(evaluateFormulaTree(expr.right, ctx))
-      )
+    case 'subtract': {
+      const left = toOperandRational(evaluateFormulaTree(expr.left, ctx), operandName(expr.left))
+      const right = toOperandRational(evaluateFormulaTree(expr.right, ctx), operandName(expr.right))
+      if (left === null || right === null) return null
+      return renderAmount(subRational(left, right))
+    }
 
     case 'divide': {
-      const r = coerceNumber(evaluateFormulaTree(expr.right, ctx))
-      // Divide-by-zero short-circuits to 0 so chained formulas don't NaN.
-      return r === 0 ? 0 : coerceNumber(evaluateFormulaTree(expr.left, ctx)) / r
+      const left = toOperandRational(evaluateFormulaTree(expr.left, ctx), operandName(expr.left))
+      const right = toOperandRational(evaluateFormulaTree(expr.right, ctx), operandName(expr.right))
+      if (left === null || right === null) return null
+      return renderAmount(divRational(left, right))
     }
 
     case 'min': {
-      if (expr.of.length === 0) return 0
-      return Math.min(...expr.of.map((e) => coerceNumber(evaluateFormulaTree(e, ctx))))
+      let best: Rational | null = null
+      for (const e of expr.of) {
+        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e))
+        if (r !== null && (best === null || cmpRational(r, best) < 0)) best = r
+      }
+      return best === null ? null : renderAmount(best)
     }
 
     case 'max': {
-      if (expr.of.length === 0) return 0
-      return Math.max(...expr.of.map((e) => coerceNumber(evaluateFormulaTree(e, ctx))))
+      let best: Rational | null = null
+      for (const e of expr.of) {
+        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e))
+        if (r !== null && (best === null || cmpRational(r, best) > 0)) best = r
+      }
+      return best === null ? null : renderAmount(best)
     }
 
     case 'power': {
-      const r = Math.pow(
-        coerceNumber(evaluateFormulaTree(expr.base, ctx)),
-        coerceNumber(evaluateFormulaTree(expr.exponent, ctx)),
-      )
-      return Number.isFinite(r) ? r : 0
+      const base = toOperandRational(evaluateFormulaTree(expr.base, ctx), operandName(expr.base))
+      const exponent = toOperandRational(evaluateFormulaTree(expr.exponent, ctx), operandName(expr.exponent))
+      if (base === null || exponent === null) return null
+      if (exponent.den === 1n) return renderAmount(integerPower(base, exponent.num))
+      return renderApproximate(Math.pow(toFloat(base), toFloat(exponent)), 'power')
     }
 
     case 'root': {
-      const b = coerceNumber(evaluateFormulaTree(expr.of, ctx))
-      const d = coerceNumber(evaluateFormulaTree(expr.degree, ctx))
-      if (d === 0) return 0
-      // Preserve sign so odd roots of negatives work (cube root of −8 = −2)
-      // and even roots of negatives don't produce NaN.
-      const r = Math.sign(b) * Math.pow(Math.abs(b), 1 / d)
-      return Number.isFinite(r) ? r : 0
+      const of = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
+      const degree = toOperandRational(evaluateFormulaTree(expr.degree, ctx), operandName(expr.degree))
+      if (of === null || degree === null) return null
+      if (degree.num === 0n) throw new FormulaEvaluationError('Cannot take a zeroth root in a formula')
+      if (degree.den === 1n) {
+        // Integer degrees keep the old sign rule exactly where it is
+        // mathematically sound: odd roots of negatives stay negative (cube
+        // root of −8 = −2), while an even root of a negative is a refusal —
+        // the old code returned a sign-flipped real number for it.
+        const n = degree.num
+        const ofFloat = toFloat(of)
+        if (ofFloat < 0 && n % 2n === 0n) {
+          throw new FormulaEvaluationError('Cannot take an even root of a negative value in a formula')
+        }
+        const r =
+          ofFloat < 0
+            ? -Math.pow(-ofFloat, 1 / Number(n))
+            : Math.pow(ofFloat, 1 / Number(n))
+        return renderApproximate(r, 'root')
+      }
+      // Fractional degrees go straight through the double: a negative base
+      // is complex, so Math.pow yields NaN and the refusal below fires.
+      return renderApproximate(Math.pow(toFloat(of), 1 / toFloat(degree)), 'root')
     }
 
-    case 'abs':
-      return Math.abs(coerceNumber(evaluateFormulaTree(expr.of, ctx)))
+    case 'abs': {
+      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
+      if (v === null) return null
+      return renderAmount(v.num < 0n ? negativeRational(v) : v)
+    }
 
     case 'round': {
+      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
+      if (v === null) return null
       const places =
         Number.isInteger(expr.places) &&
         (expr.places as number) >= 0 &&
         (expr.places as number) <= 12
           ? (expr.places as number)
           : 0
-      const factor = Math.pow(10, places)
-      return Math.round(coerceNumber(evaluateFormulaTree(expr.of, ctx)) * factor) / factor
+      // Halves toward +∞ (Math.round semantics).
+      const scaled = { num: v.num * 10n ** BigInt(places), den: v.den }
+      const rounded = floorQuotient(scaled.num * 2n + scaled.den, scaled.den * 2n)
+      return renderAmount({ num: rounded, den: 10n ** BigInt(places) })
     }
 
-    case 'floor':
-      return Math.floor(coerceNumber(evaluateFormulaTree(expr.of, ctx)))
+    case 'floor': {
+      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
+      if (v === null) return null
+      return renderAmount({ num: floorQuotient(v.num, v.den), den: 1n })
+    }
 
-    case 'ceil':
-      return Math.ceil(coerceNumber(evaluateFormulaTree(expr.of, ctx)))
+    case 'ceil': {
+      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
+      if (v === null) return null
+      return renderAmount({ num: -floorQuotient(-v.num, v.den), den: 1n })
+    }
 
     case 'sum_section': {
       const rows = ctx.rows[expr.sectionKey] ?? []
-      return rows.reduce<number>((acc, row) => acc + coerceNumber(row[expr.rowFieldKey]), 0)
+      let acc: Rational | null = null
+      for (const row of rows) {
+        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`)
+        if (r !== null) acc = acc === null ? r : addRational(acc, r)
+      }
+      return acc === null ? null : renderAmount(acc)
     }
 
     case 'count_section':
@@ -242,23 +439,34 @@ export function evaluateFormulaTree(
 
     case 'avg_section': {
       const rows = ctx.rows[expr.sectionKey] ?? []
-      if (rows.length === 0) return null
-      const sum = rows.reduce<number>((acc, row) => acc + coerceNumber(row[expr.rowFieldKey]), 0)
-      return sum / rows.length
+      let acc: Rational | null = null
+      let count = 0
+      for (const row of rows) {
+        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`)
+        if (r === null) continue
+        acc = acc === null ? r : addRational(acc, r)
+        count += 1
+      }
+      if (acc === null || count === 0) return null
+      return renderAmount(divRational(acc, { num: BigInt(count), den: 1n }))
     }
 
     case 'min_section': {
-      const nums = (ctx.rows[expr.sectionKey] ?? []).map((row) =>
-        coerceNumber(row[expr.rowFieldKey]),
-      )
-      return nums.length === 0 ? null : Math.min(...nums)
+      let best: Rational | null = null
+      for (const row of ctx.rows[expr.sectionKey] ?? []) {
+        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`)
+        if (r !== null && (best === null || cmpRational(r, best) < 0)) best = r
+      }
+      return best === null ? null : renderAmount(best)
     }
 
     case 'max_section': {
-      const nums = (ctx.rows[expr.sectionKey] ?? []).map((row) =>
-        coerceNumber(row[expr.rowFieldKey]),
-      )
-      return nums.length === 0 ? null : Math.max(...nums)
+      let best: Rational | null = null
+      for (const row of ctx.rows[expr.sectionKey] ?? []) {
+        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`)
+        if (r !== null && (best === null || cmpRational(r, best) > 0)) best = r
+      }
+      return best === null ? null : renderAmount(best)
     }
 
     case 'concat': {
@@ -277,6 +485,50 @@ export function evaluateFormulaTree(
         ? evaluateFormulaTree(expr.then, ctx)
         : evaluateFormulaTree(expr.else, ctx)
   }
+}
+
+/** Human name of one operand for refusal messages. */
+function operandName(expr: FormulaExpression): string {
+  if (expr.kind === 'field_ref') return `the value of "${expr.fieldKey}"`
+  if (expr.kind === 'literal') return 'a literal value'
+  return 'a formula value'
+}
+
+function toFloat(value: Rational): number {
+  return Number(value.num) / Number(value.den)
+}
+
+/** Exact integer power (negative exponents invert; 0^negative throws). */
+function integerPower(base: Rational, exponent: bigint): Rational {
+  let e = exponent
+  let b = base
+  if (e < 0n) {
+    if (b.num === 0n) throw new FormulaEvaluationError('Cannot raise zero to a negative power in a formula')
+    b = rational(b.den, b.num)
+    e = -e
+  }
+  let result: Rational = RATIONAL_ONE
+  while (e > 0n) {
+    if (e % 2n === 1n) result = mulRational(result, b)
+    b = mulRational(b, b)
+    e /= 2n
+  }
+  return result
+}
+
+/**
+ * The two approximative cases (non-integer power, roots): an exact rational
+ * result need not exist, so they compute in double precision and carry the
+ * double's exact expansion. A non-finite result throws instead of coercing
+ * to 0 — an even root of a negative is a refusal, not a zero.
+ */
+function renderApproximate(value: number, what: string): number | string {
+  if (!Number.isFinite(value)) {
+    throw new FormulaEvaluationError(`The ${what} has no finite result in this formula`)
+  }
+  const parts = parseExactDecimalParts(String(value))
+  if (!parts) throw new FormulaEvaluationError(`The ${what} has no finite result in this formula`)
+  return renderAmount(rational(parts.units, 10n ** BigInt(parts.scale)))
 }
 
 // --- Default-value resolver ------------------------------------------------
@@ -308,8 +560,15 @@ export function resolveDefaultValue(expr: DefaultValueExpression, ctx: EvalConte
     case 'current_user_name':
       return ctx.requestContext?.currentUserName ?? null
     case 'expression': {
-      const v = evaluateFormulaTree(expr.expr, ctx)
-      return v ?? undefined
+      // A failing default (divide-by-zero, garbage operand) leaves the field
+      // blank rather than failing the whole fill — the failure is still
+      // visible, because withComputedFormulas persists null, never 0.
+      try {
+        return evaluateFormulaTree(expr.expr, ctx) ?? undefined
+      } catch (error) {
+        if (error instanceof FormulaEvaluationError) return undefined
+        throw error
+      }
     }
   }
 }
