@@ -451,6 +451,7 @@
     "cancelProcess": "Checkliste abbrechen",
     "attachmentLabel": "Nachweisdatei",
     "attachmentUnset": "Zum Suchen tippen",
+    "fileSearchFailed": "Dateivorschläge konnten nicht geladen werden. Versuchen Sie eine andere Suche.",
     "skipReasonLabel": "Grund für das Überspringen",
     "skipReasonPlaceholder": "Warum wird dieser Schritt übersprungen?",
     "cancelReasonLabel": "Grund für den Abbruch",

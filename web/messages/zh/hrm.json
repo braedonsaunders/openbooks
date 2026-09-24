@@ -451,6 +451,7 @@
     "cancelProcess": "取消清单",
     "attachmentLabel": "凭证文件",
     "attachmentUnset": "输入以搜索文件",
+    "fileSearchFailed": "无法加载文件建议。请尝试其他搜索。",
     "skipReasonLabel": "跳过原因",
     "skipReasonPlaceholder": "跳过此步骤的原因",
     "cancelReasonLabel": "取消原因",

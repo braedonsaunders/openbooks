@@ -90,6 +90,35 @@ async function mount(element: React.ReactNode): Promise<() => Promise<void>> {
   };
 }
 
+async function mountSwitchable(build: (partyId: string) => React.ReactNode) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const render = async (partyId: string) => {
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <MoneyProvider currency="USD">{build(partyId)}</MoneyProvider>
+        </NextIntlClientProvider>,
+      );
+      await tick();
+      await tick();
+      await tick();
+    });
+    await tick();
+    await tick();
+  };
+  await render("p1");
+  return {
+    text: () => host.textContent ?? "",
+    render,
+    close: async () => {
+      await act(async () => root.unmount());
+      host.remove();
+    },
+  };
+}
+
 test("a refused activities load toasts the named refusal", async (t) => {
   globalThis.__partySublistErrors = [];
   const realFetch = globalThis.fetch;
@@ -122,4 +151,34 @@ test("a non-JSON transactions error toasts the fallback with the status", async 
     !message.includes("Unexpected token") && !message.includes("JSON"),
     `a parse error must never reach the operator, got ${JSON.stringify(message)}`,
   );
+});
+
+test("activity and transaction rows are hidden when the selected party's filtered request fails", async (t) => {
+  globalThis.__partySublistErrors = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/p1/activities")) return Response.json({
+      rows: [{ id: "a-1", kind: "task", status: "planned", subject: "Prior party activity", activity_date: "2026-09-01T12:00:00.000Z" }],
+      total: 1, page: 1, perPage: 15, kinds: ["task"], statuses: ["planned"],
+    });
+    if (url.includes("/p1/transactions")) return Response.json({
+      rows: [{ id: "d-1", kind: "customer_invoice", document_number: "INV-PRIOR", reference_number: null, document_date: "2026-09-01", due_date: null, status: "posted", currency: "USD", total: "10.00", open_balance: "10.00", memo: null }],
+      total: 1, page: 1, perPage: 15, kinds: ["customer_invoice"], statuses: ["posted"],
+    });
+    return Response.json({ error: "Current party data is unavailable" }, { status: 403 });
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+
+  const activity = await mountSwitchable((partyId) => <ActivitySublist partyId={partyId} canManage={false} />);
+  t.after(activity.close);
+  assert.ok(activity.text().includes("Prior party activity"));
+  await activity.render("p2");
+  assert.ok(!activity.text().includes("Prior party activity"), "old activity rows must not survive a failed request for another party");
+
+  const transactions = await mountSwitchable((partyId) => <TransactionSublist partyId={partyId} role="customer" />);
+  t.after(transactions.close);
+  assert.ok(transactions.text().includes("INV-PRIOR"));
+  await transactions.render("p2");
+  assert.ok(!transactions.text().includes("INV-PRIOR"), "old transaction rows must not survive a failed request for another party");
 });
