@@ -1746,6 +1746,8 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "index names and definitions, same foreign-key names and references, "
       + "validated — so only the digest moves. Restamp, not reapply: the "
       + "revision stages the build but changes no enforced state.",
+  },
+  {
     filename: "generated/0328_obligation_legacy_reconciliation.sql",
     from: "1c526dc25a2edb8aa2ec2da422bcf11b6eef00cba2021994359e5e512a3a0d0f",
     to: "4ef841e91a1c3ec9c0609c93a677f562b0e5b44c601ad549a553b4efb8715703",
