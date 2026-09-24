@@ -5,6 +5,7 @@ import test from "node:test";
 declare global {
   var __payToasts: { kind: string; message: string }[] | undefined;
   var __payRouter: { push(url: string): void; refresh(): void } | undefined;
+  var __payConfirmCalls: { title: string; message: string; confirmLabel: string }[] | undefined;
 }
 
 // PaymentDrawer on the shared action path. Two deltas over the old code get
@@ -12,8 +13,7 @@ declare global {
 // non-JSON body threw past the busy reset), and a refused auto-apply toasted
 // without pinning. The void 202 pending-approval branch moved from an HTTP
 // status read to the body's status field — same wire signal, so its toast is
-// covered as a preservation test. (Save/post pins were already covered by
-// PaymentDrawer.test.tsx source guards, migrated to the shared path there.)
+// covered as a preservation test.
 
 // jsdom first: the drawer reads browser globals at render.
 const { JSDOM } = await import("jsdom");
@@ -65,7 +65,7 @@ registerHooks({
     if (specifier.endsWith("/lib/confirm")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export async function confirmDialog(){return true}",
+        url: "data:text/javascript,export async function confirmDialog(options){(globalThis.__payConfirmCalls??=[]).push(options);return true}",
       };
     }
     if (specifier.endsWith("/lib/prompt")) {
@@ -125,18 +125,27 @@ function approvalFixture() {
   });
 }
 
-async function mountPayment(doc: Record<string, unknown>, initialOpenItems: unknown[] = [], initialMode?: string) {
+async function mountPayment(
+  doc: Record<string, unknown>,
+  initialOpenItems: unknown[] = [],
+  initialMode?: string,
+  bankAccountId: string | null = null,
+  allocations: unknown[] = [],
+  locale = "en",
+  localeMessages: typeof messages = messages,
+) {
   globalThis.__payToasts = [];
   globalThis.__payRouter = { push() {}, refresh() {} };
+  globalThis.__payConfirmCalls = [];
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <NextIntlClientProvider locale={locale} messages={localeMessages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <PaymentDrawer
-            payment={{ doc, bankAccountId: null, allocations: [], applied: [] }}
+            payment={{ doc, bankAccountId, allocations: allocations as never, applied: [] }}
             initialOpenItems={initialOpenItems as never}
             parties={[]}
             bankAccounts={[]}
@@ -206,8 +215,10 @@ test("a refused delete pins the reason instead of toasting into the void", async
 
 test("a void landing as pending approval still toasts submit, not voided", async (t) => {
   const doc = { ...DRAFT_DOC(), status: "posted" };
+  let voidBody: unknown;
   const restoreFetch = scriptFetch((url, init) => {
     if (url === `/api/documents/${doc.id}/void` && init?.method === "POST") {
+      voidBody = JSON.parse(String(init.body));
       return Response.json({ ok: true, status: "pending_approval" }, { status: 202 });
     }
     if (url.includes("/api/flows/record-state")) return approvalFixture();
@@ -232,7 +243,157 @@ test("a void landing as pending approval still toasts submit, not voided", async
     toasts.every((toast) => toast.kind !== "error"),
     "an accepted void must never toast an error",
   );
+  assert.deepEqual(voidBody, {
+    reason: "duplicate payment",
+    expectedUpdatedAt: doc.updated_at,
+  });
   assert.equal(document.querySelector('[role="alert"]'), null, "an accepted void pins nothing");
+});
+
+test("a refused void sends the drawer revision and pins the server reason", async (t) => {
+  const doc = { ...DRAFT_DOC(), status: "posted" };
+  let voidBody: unknown;
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/documents/${doc.id}/void` && init?.method === "POST") {
+      voidBody = JSON.parse(String(init.body));
+      return Response.json({ error: "The posting period is closed; use an open period." }, { status: 409 });
+    }
+    if (url.includes("/api/flows/record-state")) return approvalFixture();
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPayment(doc);
+  t.after(unmount);
+  await click(buttonsNamed("Actions")[0]!);
+  const voidAction = buttonsNamed("Void")[0];
+  assert.ok(voidAction, "a posted payment offers the controlled void action");
+  await click(voidAction);
+  assert.deepEqual(voidBody, { reason: "duplicate payment", expectedUpdatedAt: doc.updated_at });
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /posting period is closed/i);
+  assert.ok(
+    (globalThis.__payToasts ?? []).some((toast) => toast.kind === "error" && /posting period is closed/i.test(toast.message)),
+    "the server refusal is also announced as an error toast",
+  );
+  await click(buttonsNamed("Actions")[0]!);
+  const retry = buttonsNamed("Void")[0];
+  assert.ok(retry);
+  assert.equal(retry.disabled, false, "a refused void releases its action for correction and retry");
+});
+
+test("a non-JSON post refusal keeps its fallback visible and releases the action", async (t) => {
+  const doc = { ...DRAFT_DOC(), kind: "customer_payment" };
+  let postBody: unknown;
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === "/api/payments/post-with-applications" && init?.method === "POST") {
+      postBody = JSON.parse(String(init.body));
+      return new Response("upstream proxy error", { status: 422, headers: { "content-type": "text/html" } });
+    }
+    if (url.includes("/api/flows/record-state")) return approvalFixture();
+    return null;
+  });
+  t.after(restoreFetch);
+  const item = {
+    lineId: "invoice-line-1",
+    entryNumber: "INV-1",
+    postingDate: "2026-09-01",
+    dueDate: null,
+    documentNumber: "INV-1",
+    documentKind: "customer_invoice",
+    referenceNumber: null,
+    amount: "250.00",
+    applied: "0.00",
+    open: "250.00",
+    currency: "USD",
+    transactionAmount: "250.00",
+    transactionApplied: "0.00",
+    transactionOpen: "250.00",
+  };
+  const { unmount } = await mountPayment(
+    doc,
+    [item],
+    undefined,
+    "bank-account-1",
+    [{
+      openLineId: "invoice-line-1",
+      sourceTransactionAmount: "250.00",
+      targetTransactionAmount: "250.00",
+      settlementRate: "1",
+      settlementRateSource: "same_currency",
+      settlementRateReference: "same currency",
+    }],
+  );
+  t.after(unmount);
+  const actions = buttonsNamed("Actions")[0];
+  assert.ok(actions);
+  await click(actions);
+  const post = [...document.querySelectorAll("button")].find((button) => /Pay & post/.test(button.textContent ?? "")) as HTMLButtonElement | undefined;
+  assert.ok(post, "a valid draft payment offers Pay & post");
+  assert.equal(post.disabled, false);
+  await click(post);
+  assert.deepEqual(postBody, {
+    documentId: doc.id,
+    expectedUpdatedAt: doc.updated_at,
+    allocations: [{
+      openLineId: "invoice-line-1",
+      sourceTransactionAmount: "250.0000",
+      targetTransactionAmount: "250.0000",
+      settlementRate: "1",
+      settlementRateSource: "same_currency",
+      settlementRateReference: "same currency",
+    }],
+  });
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Posting failed/);
+  assert.doesNotMatch(document.querySelector('[role="alert"]')?.textContent ?? "", /SyntaxError|Unexpected token/);
+  assert.ok(
+    (globalThis.__payToasts ?? []).some((toast) => toast.kind === "error" && /Posting failed/.test(toast.message)),
+    "the refused post remains announced after its persistent alert is rendered",
+  );
+  assert.equal(post.disabled, false, "the action is available again after the non-JSON refusal");
+});
+
+test("the drawer title shows the business reference instead of a sync handle", async (t) => {
+  const doc = {
+    ...DRAFT_DOC(),
+    document_number: "salesInvoice:cf83a37e-8376-f111-a5be-7ced8d265cbd",
+    reference_number: "RCPT-84",
+  };
+  const restoreFetch = scriptFetch((url) => {
+    if (url.includes("/api/flows/record-state")) return approvalFixture();
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountPayment(doc);
+  t.after(unmount);
+  assert.match(document.body.textContent ?? "", /RCPT-84/);
+  assert.doesNotMatch(document.body.textContent ?? "", /salesInvoice:cf83a37e/);
+});
+
+test("delete confirmation text reaches the real drawer in every locale", async () => {
+  const { LOCALES } = await import("../../../i18n/config.ts");
+  for (const { code: locale } of LOCALES) {
+    const localeMessages = locale === "en"
+      ? messages
+      : (await import(`../../../messages/${locale}/index.ts`)).default as typeof messages;
+    const strings = localeMessages as unknown as {
+      common: { labels: { actions: string }; actions: { delete: string } };
+      payments: { drawer: { deleteConfirmTitle: string; deleteConfirmBody: string; deleteConfirmAction: string } };
+    };
+    const restoreFetch = scriptFetch((url) => url.includes("/api/flows/record-state") ? approvalFixture() : null);
+    const { unmount } = await mountPayment(DRAFT_DOC(), [], undefined, null, [], locale, localeMessages);
+    try {
+      await click(buttonsNamed(strings.common.labels.actions)[0]!);
+      await click(buttonsNamed(strings.common.actions.delete)[0]!);
+      assert.deepEqual(globalThis.__payConfirmCalls, [{
+        title: strings.payments.drawer.deleteConfirmTitle,
+        message: strings.payments.drawer.deleteConfirmBody,
+        confirmLabel: strings.payments.drawer.deleteConfirmAction,
+        tone: "danger",
+      }], `${locale} confirmation should resolve from the drawer catalog`);
+    } finally {
+      await unmount();
+      restoreFetch();
+    }
+  }
 });
 
 test("a refused auto-apply pins instead of toasting into the void", async (t) => {

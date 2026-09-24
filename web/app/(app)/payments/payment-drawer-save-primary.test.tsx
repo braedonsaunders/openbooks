@@ -107,12 +107,17 @@ const DRAFT_RECEIPT = () => ({
 
 test("edit mode offers Save as a primary button, not inside the Actions menu", async (t) => {
   const prior = globalThis.fetch;
-  globalThis.fetch = (async () => Response.json({})) as typeof fetch;
+  let saveRequest: { url: string; init?: RequestInit } | null = null;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    saveRequest = { url: String(input), init };
+    return Response.json({ error: "This payment changed; reload before saving." }, { status: 409 });
+  }) as typeof fetch;
   t.after(() => {
     globalThis.fetch = prior;
   });
   globalThis.__payToasts = [];
   globalThis.__payRouter = { push() {}, refresh() {} };
+  const doc = DRAFT_RECEIPT();
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -121,7 +126,7 @@ test("edit mode offers Save as a primary button, not inside the Actions menu", a
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <PaymentDrawer
-            payment={{ doc: DRAFT_RECEIPT(), bankAccountId: null, allocations: [], applied: [] }}
+            payment={{ doc, bankAccountId: null, allocations: [], applied: [] }}
             initialOpenItems={[] as never}
             parties={[]}
             bankAccounts={[]}
@@ -146,4 +151,23 @@ test("edit mode offers Save as a primary button, not inside the Actions menu", a
   const saves = buttonsNamed("Save");
   assert.equal(saves.length, 1, "edit mode must offer exactly one primary Save button");
   assert.ok(buttonsNamed("Cancel").length >= 1, "edit mode keeps Cancel beside Save");
+  await act(async () => {
+    saves[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  const request = saveRequest as { url: string; init?: RequestInit } | null;
+  assert.ok(request, "saving an existing payment reaches its update endpoint");
+  assert.equal(request.url, `/api/payments/${doc.id}`);
+  assert.equal(request.init?.method, "PATCH");
+  assert.equal(
+    JSON.parse(String(request.init?.body)).expectedUpdatedAt,
+    "2026-09-17T12:00:00.000000Z",
+    "the write is fenced by the revision loaded into the drawer",
+  );
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /payment changed; reload/i);
+  assert.ok(
+    (globalThis.__payToasts ?? []).some((toast) => toast.kind === "error" && /payment changed; reload/i.test(toast.message)),
+    "the save refusal is announced as an error toast as well as a persistent alert",
+  );
+  assert.equal(saves[0]!.disabled, false, "the primary action is enabled after the refusal");
 });
