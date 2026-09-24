@@ -363,6 +363,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   return (
     <WizardShell
       testId="allocation-rule-wizard"
+      dialogLabel={t('wizard.when.title')}
       stepKey={options ? step : 'loading'}
       progress={options ? { index: stepIdx, total: WIZARD_STEPS.length } : null}
       skip={!busy ? { label: tc('actions.close'), onClick: close } : null}

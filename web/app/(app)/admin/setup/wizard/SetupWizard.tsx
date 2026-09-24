@@ -404,6 +404,7 @@ export function SetupWizard(props: {
   return (
     <WizardShell
       testId="setup-wizard"
+      dialogLabel={t('welcome.title')}
       stepKey={step}
       progress={
         stepIdx > 0 && stepIdx < steps.indexOf('applying')
