@@ -1732,6 +1732,21 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "recorded at the corrected body re-runs the current file idempotently. Each "
       + "later 0338 revision re-points every earlier digest here to its own.",
   },
+  {
+    filename: "generated/0257_provisional_cost_subsidiary.sql",
+    from: "ecd2626b775e72025ce26251643930f1bf676ec06fcfae4f1605d35374c734f3",
+    to: "67256fd8450973ff88a2592c4d0bb834547499da41e9410ff96a43a3eb1583fa",
+    strategy: "restamp",
+    reason:
+      "staged revision declares no-transaction, builds both lookup indexes "
+      + "CONCURRENTLY behind an INVALID-drop guard, and arrives both foreign "
+      + "keys NOT VALID with separate guarded VALIDATEs, instead of scanning "
+      + "inventory_provisional_costs under write-blocking locks. An install "
+      + "recorded at the old digest holds the identical end catalog — same "
+      + "index names and definitions, same foreign-key names and references, "
+      + "validated — so only the digest moves. Restamp, not reapply: the "
+      + "revision stages the build but changes no enforced state.",
+  },
 ];
 
 async function executeTrackedMigration(
