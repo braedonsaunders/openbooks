@@ -51,6 +51,7 @@ export function parseCivilDay(value: unknown, field: string): string {
  * refused by name before the write.
  */
 export const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
+const PERSISTED_DECIMAL_RE = /^-?\d+(\.\d{1,4})?$/;
 
 /** Scale a decimal string to a bigint at 4 fractional digits (exact, never float). */
 function scale4(value: string): bigint {
@@ -87,6 +88,11 @@ export function parseRatingScale(value: unknown): RatingScale {
       `the review template scale bounds must be decimal numbers, got min ${JSON.stringify(min)} max ${JSON.stringify(max)} — fix the template before opening the cycle`,
     );
   }
+  if (!PERSISTED_DECIMAL_RE.test(minStr) || !PERSISTED_DECIMAL_RE.test(maxStr)) {
+    throw new PerformanceMathError(
+      `the review template scale bounds may have at most four decimal places because ratings persist at scale 4 — fix the template before opening the cycle`,
+    );
+  }
   if (scale4(maxStr) <= scale4(minStr)) {
     throw new PerformanceMathError(
       `the review template scale is inverted (min ${minStr} is not below max ${maxStr}) — fix the template before opening the cycle`,
@@ -114,6 +120,11 @@ export function assertRatingInScale(scale: RatingScale, rating: string, question
   if (!DECIMAL_RE.test(rating)) {
     throw new PerformanceMathError(
       `the answer to ${JSON.stringify(questionPrompt)} must be a decimal rating, got ${JSON.stringify(rating)}`,
+    );
+  }
+  if (!PERSISTED_DECIMAL_RE.test(rating)) {
+    throw new PerformanceMathError(
+      `the answer to ${JSON.stringify(questionPrompt)} has more than four decimal places, but ratings persist at scale 4 — enter a rating with at most four decimal places`,
     );
   }
   const value = scale4(rating);
