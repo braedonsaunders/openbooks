@@ -25,6 +25,6 @@ test('invalid joins, unknown fields, unauthorized sources and SQL-shaped identif
 })
 
 test('missing filter values and unresolved report presets refuse instead of dropping the constraint',()=>{
- assert.throws(()=>compileAppQuery({...plan,filters:{combinator:'and',rules:[{field:'work.hours',op:'gte'}]}},catalog,'org'),/Incomplete/)
+ assert.throws(()=>compileAppQuery({...plan,filters:{combinator:'and',rules:[{field:'work.hours',op:'gte'}]}},catalog,'org'),/requires a value/)
  assert.throws(()=>compileAppQuery({...plan,filters:{combinator:'and',rules:[{field:'work.hours',op:'period_preset',value:'current-month'}]}},catalog,'org'),/Incomplete/)
 })
