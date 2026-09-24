@@ -101,7 +101,9 @@ export function countryTaxPack(country: string): CountryTaxPackDefinition | unde
 
 export function countryTaxPackForReturn(returnPackCode: string): CountryTaxPackDefinition | undefined {
   return COUNTRY_TAX_PACKS.find((pack) =>
-    pack.parentReturnPackCode === returnPackCode || pack.jurisdictions.some((item) => item.returnPackCode === returnPackCode),
+    pack.parentReturnPackCode === returnPackCode ||
+    pack.returnPacks.some((item) => item.code === returnPackCode) ||
+    pack.jurisdictions.some((item) => item.returnPackCode === returnPackCode),
   );
 }
 

@@ -13,7 +13,7 @@ import {
   packTaxCodesForReturn,
   primaryPackTaxCode,
 } from "../country-tax-packs/index.ts";
-import type { EffectiveTaxRate } from "../country-tax-packs/types.ts";
+import type { CountryTaxCodeDefinition, EffectiveTaxRate } from "../country-tax-packs/types.ts";
 
 test("every default tax code has an explicit effective-dated rate schedule", () => {
   for (const [packCode, definition] of Object.entries(PACK_DEFAULT_CODES)) {
@@ -117,12 +117,36 @@ test("pack completeness is explicit and never inferred from a jurisdiction check
 });
 
 test("default tax codes are unique across packs", () => {
-  const codes = [
-    ...COUNTRY_TAX_PACKS.flatMap((pack) =>
-      packReturnCodesWithTaxCodes(pack).flatMap((code) => packTaxCodesForReturn(pack, code))),
-    ...TAX_SUBDIVISION_CATALOG.flatMap((jurisdiction) => jurisdiction.defaultTaxCode ? [jurisdiction.defaultTaxCode] : []),
-  ].map((c) => c.code);
-  assert.equal(new Set(codes).size, codes.length);
+  // One pack may declare the SAME schedule under two returns (Argentina
+  // prices identical alícuotas on F.2002 and IVA Simple from one shared
+  // array, so the two forms can never disagree): a repeated code string is
+  // legitimate only when the definitions are identical, because tenant
+  // tax_codes are keyed by org+code and two different definitions under one
+  // string would collide on install.
+  const seen = new Map<string, { where: string; body: string }>();
+  const check = (where: string, definition: CountryTaxCodeDefinition) => {
+    const body = JSON.stringify(definition);
+    const prior = seen.get(definition.code);
+    if (!prior) {
+      seen.set(definition.code, { where, body });
+      return;
+    }
+    assert.equal(
+      prior.body,
+      body,
+      `code ${definition.code} is declared differently by ${prior.where} and ${where}`,
+    );
+  };
+  for (const pack of COUNTRY_TAX_PACKS) {
+    for (const returnCode of packReturnCodesWithTaxCodes(pack)) {
+      for (const definition of packTaxCodesForReturn(pack, returnCode)) {
+        check(`${pack.code}/${returnCode}`, definition);
+      }
+    }
+  }
+  for (const jurisdiction of TAX_SUBDIVISION_CATALOG) {
+    if (jurisdiction.defaultTaxCode) check(`${jurisdiction.country}-${jurisdiction.region}`, jurisdiction.defaultTaxCode);
+  }
 });
 
 test("return pack tax code sets are keyed by own returns, non-empty, and code-unique", () => {

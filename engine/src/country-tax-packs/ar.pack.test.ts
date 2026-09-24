@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
+import { countryTaxPackForReturn, packReturnCodesWithTaxCodes, packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 import { ARGENTINA_TAX_PACK } from "./ar.ts";
 import type { EffectiveTaxRate } from "./types.ts";
 
@@ -15,24 +15,47 @@ function assertContiguous(rates: readonly EffectiveTaxRate[]): void {
   }
 }
 
-test("Argentina pack is found by country with one F2002 return and the maintained version pin", () => {
+test("Argentina pack is found by country with the IVA Simple parent and the F2002 history return", () => {
   assert.equal(ARGENTINA_TAX_PACK.country, "AR");
   assert.equal(ARGENTINA_TAX_PACK.code, "AR_INDIRECT_TAX");
   assert.equal(ARGENTINA_TAX_PACK.countryTaxType, "vat");
   assert.equal(ARGENTINA_TAX_PACK.version, "2026.08.01");
-  assert.equal(ARGENTINA_TAX_PACK.returnPacks.length, 1);
-  assert.equal(ARGENTINA_TAX_PACK.parentReturnPackCode, "AR_F2002");
-  assert.equal(ARGENTINA_TAX_PACK.returnPacks[0]!.code, "AR_F2002");
+  assert.equal(ARGENTINA_TAX_PACK.returnPacks.length, 2);
+  assert.equal(ARGENTINA_TAX_PACK.parentReturnPackCode, "AR_IVA_SIMPLE");
+  assert.deepEqual(ARGENTINA_TAX_PACK.returnPacks.map((entry) => entry.code), ["AR_IVA_SIMPLE", "AR_F2002"]);
+  assert.deepEqual([...packReturnCodesWithTaxCodes(ARGENTINA_TAX_PACK)].sort(), ["AR_F2002", "AR_IVA_SIMPLE"]);
+});
+
+test("both returns resolve to the Argentina pack so provisioning and the return engine see F.2002 history", () => {
+  assert.equal(countryTaxPackForReturn("AR_IVA_SIMPLE")?.code, "AR_INDIRECT_TAX");
+  assert.equal(countryTaxPackForReturn("AR_F2002")?.code, "AR_INDIRECT_TAX");
+  assert.deepEqual(
+    packTaxCodesForReturn(ARGENTINA_TAX_PACK, "AR_IVA_SIMPLE").map((code) => code.code),
+    packTaxCodesForReturn(ARGENTINA_TAX_PACK, "AR_F2002").map((code) => code.code),
+  );
+});
+
+test("IVA Simple files monthly through Portal IVA as F.2051 with the registración and determinación modules", () => {
+  const simple = ARGENTINA_TAX_PACK.returnPacks.find((entry) => entry.code === "AR_IVA_SIMPLE")!;
+  assert.equal(simple.defaultFrequency, "monthly");
+  assert.equal(simple.submissionChannel, "portal_manual");
+  assert.equal(simple.governmentFormat, "portal_entry");
+  assert.match(simple.submissionUrl, /arca\.gob\.ar\/iva\/iva-simple/);
+  assert.deepEqual(simple.boxes.map((box) => box.lineCode), [
+    "REG_EMITIDOS", "REG_RECIBIDOS", "DET_DEBITO", "DET_CREDITO", "DET_RET_PERC", "DET_PAGOS_CTA", "DET_SALDO",
+    "OB_OUTPUT", "OB_INPUT",
+  ]);
 });
 
 test("Argentina return carries the real F2002 lines plus the two OB workpaper boxes", () => {
-  assert.deepEqual(ARGENTINA_TAX_PACK.returnPacks[0]!.boxes.map((box) => box.lineCode), [
+  const f2002 = ARGENTINA_TAX_PACK.returnPacks.find((entry) => entry.code === "AR_F2002")!;
+  assert.deepEqual(f2002.boxes.map((box) => box.lineCode), [
     "DF_ALIC_21", "DF_ALIC_105", "DF_ALIC_27", "CF_TOTAL", "SALDO_AFIP", "SALDO_CONTRIB", "OB_OUTPUT", "OB_INPUT",
   ]);
 });
 
 test("Argentina filing is monthly portal entry through the ARCA responsables inscriptos page", () => {
-  const returnPack = ARGENTINA_TAX_PACK.returnPacks[0]!;
+  const returnPack = ARGENTINA_TAX_PACK.returnPacks.find((entry) => entry.code === "AR_F2002")!;
   assert.equal(returnPack.defaultFrequency, "monthly");
   assert.equal(returnPack.submissionChannel, "portal_manual");
   assert.equal(returnPack.governmentFormat, "portal_entry");
@@ -54,12 +77,14 @@ test("Argentina primary code is the standard 21% band", () => {
 });
 
 test("Argentina rate schedules are contiguous and every sourceId resolves", () => {
-  assert.deepEqual(packReturnCodesWithTaxCodes(ARGENTINA_TAX_PACK), ["AR_F2002"]);
+  assert.deepEqual([...packReturnCodesWithTaxCodes(ARGENTINA_TAX_PACK)].sort(), ["AR_F2002", "AR_IVA_SIMPLE"]);
   const sourceIds = new Set(ARGENTINA_TAX_PACK.sources.map((source) => source.id));
-  for (const code of packTaxCodesForReturn(ARGENTINA_TAX_PACK, "AR_F2002")) {
-    assert.ok(code.rates && code.rates.length > 0, `${code.code} must carry a sourced schedule`);
-    assertContiguous(code.rates!);
-    for (const rate of code.rates!) assert.ok(sourceIds.has(rate.sourceId), `${rate.sourceId} must resolve`);
+  for (const returnCode of ["AR_F2002", "AR_IVA_SIMPLE"]) {
+    for (const code of packTaxCodesForReturn(ARGENTINA_TAX_PACK, returnCode)) {
+      assert.ok(code.rates && code.rates.length > 0, `${code.code} must carry a sourced schedule`);
+      assertContiguous(code.rates!);
+      for (const rate of code.rates!) assert.ok(sourceIds.has(rate.sourceId), `${rate.sourceId} must resolve`);
+    }
   }
 });
 

@@ -1,5 +1,36 @@
 import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
 
+const AR_IVA_SIMPLE_2026: TaxReturnPack = {
+  code: "AR_IVA_SIMPLE",
+  name: "Formulario F.2051 — IVA Simple (Portal IVA)",
+  country: "AR",
+  jurisdiction: { code: "AR", name: "Argentina — IVA national territory", country: "AR", level: "country", taxType: "vat" },
+  defaultFrequency: "monthly",
+  submissionChannel: "portal_manual",
+  governmentFormat: "portal_entry",
+  submissionUrl: "https://www.arca.gob.ar/iva/iva-simple/confeccion-declaracion.asp",
+  watermark: "Working copy — validate the pre-loaded comprobantes and the determinación against the electronic registración, then file F.2051 through Portal IVA",
+  // F.2051 is a module flow, not a numbered grid: the Registración
+  // Electrónica de Operaciones module (comprobantes emitidos/recibidos with
+  // taxpayer adjustments) feeds the Determinación del impuesto y del saldo
+  // resultante module (débito, crédito, SIRE/SICORE retenciones y
+  // percepciones, pagos a cuenta, saldos a favor, saldo resultante), per the
+  // ARCA confección page. The module names are used as codes: inventing
+  // numeric codes would be worse than naming them. The return aggregates
+  // from the electronic records, so no box names an alícuota.
+  boxes: [
+    { lineCode: "REG_EMITIDOS", label: "Registración Electrónica de Operaciones — comprobantes emitidos (base del débito fiscal)", sign: 1, sequence: 10 },
+    { lineCode: "REG_RECIBIDOS", label: "Registración Electrónica de Operaciones — comprobantes recibidos (base del crédito fiscal)", sign: 1, sequence: 20 },
+    { lineCode: "DET_DEBITO", label: "Determinación del impuesto — débito fiscal del período", sign: -1, sequence: 30 },
+    { lineCode: "DET_CREDITO", label: "Determinación del impuesto — crédito fiscal del período", sign: 1, sequence: 40 },
+    { lineCode: "DET_RET_PERC", label: "Determinación del impuesto — retenciones y percepciones (SIRE/SICORE)", sign: 1, sequence: 50 },
+    { lineCode: "DET_PAGOS_CTA", label: "Determinación del impuesto — pagos a cuenta y saldos a favor aplicados", sign: 1, sequence: 60 },
+    { lineCode: "DET_SALDO", label: "Determinación del impuesto — saldo resultante del período", sign: 1, sequence: 70 },
+    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 80, basis: "tax_collected", glMap: "sales" },
+    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 90, basis: "tax_paid", glMap: "purchases" },
+  ],
+};
+
 const AR_F2002_2026: TaxReturnPack = {
   code: "AR_F2002",
   name: "Formulario 2002 — IVA por Actividad",
@@ -73,26 +104,76 @@ const AR_F2002_2026: TaxReturnPack = {
  * Lodgement is portal data entry, not a validated file upload: the F. 2002
  * web manual describes interactive Mis Aplicaciones Web entry (solapas,
  * editable grids, GRABAR). The SIAP-era F731 aplicativo is legacy and
- * attests nothing here. Since November 2025 ARCA requires responsables
- * inscriptos to file through the "IVA Simple" electronic procedure
- * (RG 5705/2025); the F. 2002 box structure is retained as this pack's
- * return basis.
+ * attests nothing here.
+ *
+ * Return by period (ARCA IVA Simple cronograma, RG 5705/2025): fiscal
+ * periods up to May 2025 file on F.731, F.810, F.2002 IVA por Actividad or
+ * F.2082 IVA Listo as applicable — this pack retains the F.2002 box
+ * structure for those periods. June–October 2025 is the optative window
+ * (IVA Simple may replace F.731/F.810 or F.2002). From November 2025,
+ * originales and rectificativas alike file as IVA Simple: monthly
+ * determinación through Portal IVA with clave fiscal, form F.2051, modules
+ * Registración Electrónica de Operaciones (pre-loaded comprobantes
+ * emitidos/recibidos, taxpayer-validated with ajustes, "SIN MOVIMIENTO"
+ * when empty, with declaración-jurada character) and Determinación del
+ * impuesto y del saldo resultante (débito, crédito, SIRE/SICORE
+ * retenciones y percepciones, pagos a cuenta, saldos a favor). IVA Simple
+ * is therefore this pack's parent return; F.2002 stays declared for
+ * history. Retenciones/percepciones and pagos-a-cuenta regimes are named
+ * by the F.2051 determinación module and nothing further is declared for
+ * them.
  *
  * Out of scope by declaration: Ingresos Brutos is a provincial turnover
- * tax, genuinely subnational and genuinely not this pack's indirect tax;
- * the retenciones/percepciones and pagos-a-cuenta regimes are named and
- * nothing is declared for them. The 0% system-table value covers
- * non-taxed/exempt operations (the form's "Operaciones No Gravadas y
- * Exentas"), not a zero-rated refundable band, so no zero code is
- * declared.
+ * tax, genuinely subnational and genuinely not this pack's indirect tax.
+ * The 0% system-table value covers non-taxed/exempt operations (the
+ * form's "Operaciones No Gravadas y Exentas"), not a zero-rated
+ * refundable band, so no zero code is declared.
  */
+/**
+ * The three alícuotas price identically on both returns: F.2002 reports
+ * them por actividad y alícuota, IVA Simple derives them from the
+ * electronic registración. One shared schedule so the two forms can never
+ * disagree on the rate.
+ */
+const AR_IVA_TAX_CODES = [
+  {
+    code: "AR-VAT-STD",
+    name: "Argentina IVA alícuota general",
+    ratePercent: 21,
+    role: "standard",
+    rates: [
+      { ratePercent: 18, effectiveFrom: "1992-03-01", effectiveTo: "1995-03-31", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: 21, effectiveFrom: "1995-04-01", effectiveTo: "1996-03-31", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: 21, effectiveFrom: "1996-04-01", effectiveTo: "2002-11-17", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: 19, effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: 21, effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
+    ],
+  },
+  {
+    code: "AR-VAT-RED105",
+    name: "Argentina IVA alícuota reducida 10,5% — bienes primarios del art. 28",
+    ratePercent: 10.5,
+    role: "reduced",
+    rates: [
+      { ratePercent: 9.5, effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
+      { ratePercent: 10.5, effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
+    ],
+  },
+  {
+    code: "AR-VAT-INC27",
+    name: "Argentina IVA alícuota incrementada 27% — servicios públicos a responsables inscriptos",
+    ratePercent: 27,
+    rates: [{ ratePercent: 27, effectiveFrom: "1992-03-01", sourceId: "infoleg_ley23349_art28" }],
+  },
+] as const;
+
 export const ARGENTINA_TAX_PACK: CountryTaxPackDefinition = {
   code: "AR_INDIRECT_TAX",
   version: "2026.08.01",
   country: "AR",
   name: "Argentina",
   countryTaxType: "vat",
-  parentReturnPackCode: "AR_F2002",
+  parentReturnPackCode: "AR_IVA_SIMPLE",
   completeness: {
     jurisdictions: "not_applicable",
     standardRates: "partial",
@@ -123,44 +204,27 @@ export const ARGENTINA_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "arca_iva_simple",
-      title: "ARCA (ex AFIP) — IVA Simple mandatory from November 2025 for responsables inscriptos (RG 5705/2025); F. 2002 superseded",
+      title: "ARCA (ex AFIP) — IVA Simple mandatory from November 2025 for responsables inscriptos (RG 5705/2025)",
       url: "https://www.arca.gob.ar/iva/iva-simple/sujetos-operaciones-alcanzadas.asp",
+      asOf: "2026-09-18",
+    },
+    {
+      id: "arca_iva_simple_confeccion",
+      title: "ARCA — IVA Simple confección: monthly F.2051 through Portal IVA (clave fiscal); Registración Electrónica de Operaciones and Determinación del impuesto y del saldo resultante modules with SIRE/SICORE retenciones y percepciones",
+      url: "https://www.arca.gob.ar/iva/iva-simple/confeccion-declaracion.asp",
+      asOf: "2026-09-18",
+    },
+    {
+      id: "arca_iva_simple_cronograma",
+      title: "ARCA — IVA Simple cronograma: mandatory from November 2025 (originales y rectificativas); optative June–October 2025 replacing F.731/F.810 or F.2002; May 2025 and earlier stay on F.731/F.810/F.2002/F.2082",
+      url: "https://www.arca.gob.ar/iva/iva-simple/cronograma-implementacion.asp",
       asOf: "2026-09-18",
     },
   ],
   jurisdictions: [],
-  returnPacks: [AR_F2002_2026],
+  returnPacks: [AR_IVA_SIMPLE_2026, AR_F2002_2026],
   returnPackTaxCodes: {
-    AR_F2002: [
-      {
-        code: "AR-VAT-STD",
-        name: "Argentina IVA alícuota general",
-        ratePercent: 21,
-        role: "standard",
-        rates: [
-          { ratePercent: 18, effectiveFrom: "1992-03-01", effectiveTo: "1995-03-31", sourceId: "infoleg_ley23349_art28" },
-          { ratePercent: 21, effectiveFrom: "1995-04-01", effectiveTo: "1996-03-31", sourceId: "infoleg_ley23349_art28" },
-          { ratePercent: 21, effectiveFrom: "1996-04-01", effectiveTo: "2002-11-17", sourceId: "infoleg_ley23349_art28" },
-          { ratePercent: 19, effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
-          { ratePercent: 21, effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
-        ],
-      },
-      {
-        code: "AR-VAT-RED105",
-        name: "Argentina IVA alícuota reducida 10,5% — bienes primarios del art. 28",
-        ratePercent: 10.5,
-        role: "reduced",
-        rates: [
-          { ratePercent: 9.5, effectiveFrom: "2002-11-18", effectiveTo: "2003-01-17", sourceId: "infoleg_ley23349_art28" },
-          { ratePercent: 10.5, effectiveFrom: "2003-01-18", sourceId: "infoleg_ley23349_art28" },
-        ],
-      },
-      {
-        code: "AR-VAT-INC27",
-        name: "Argentina IVA alícuota incrementada 27% — servicios públicos a responsables inscriptos",
-        ratePercent: 27,
-        rates: [{ ratePercent: 27, effectiveFrom: "1992-03-01", sourceId: "infoleg_ley23349_art28" }],
-      },
-    ],
+    AR_IVA_SIMPLE: AR_IVA_TAX_CODES,
+    AR_F2002: AR_IVA_TAX_CODES,
   },
 };
