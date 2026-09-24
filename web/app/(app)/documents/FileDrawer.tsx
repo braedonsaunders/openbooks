@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ChevronDown, Download, History, Link2, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { Badge, Button, Input, Label, Popover, UrlDrawer } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '../../../lib/confirm'
 import { dateTime } from '../../../lib/format'
 import { FilePreview } from './FilePreview'
@@ -110,13 +111,14 @@ export function FileDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim() }),
       })
-      if (res.ok) {
-        toast.success(tt('fileRenamed'))
-        setMode('view')
-        router.refresh()
-      } else {
-        toast.error(tt('fileRenameFailed'))
-      }
+      // The status is checked before the body is parsed: the server's named
+      // refusal wins over the generic fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('fileRenameFailed')))
+      toast.success(tt('fileRenamed'))
+      setMode('view')
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : tt('fileRenameFailed'))
     } finally {
       setSaving(false)
     }
@@ -132,13 +134,12 @@ export function FileDrawer({
     setDeleting(true)
     try {
       const res = await fetch(`/api/file-cabinet/files/${file.id}`, { method: 'DELETE' })
-      if (res.ok) {
-        toast.success(tt('fileDeleted'))
-        router.push(closeHref())
-        router.refresh()
-      } else {
-        toast.error(tt('fileDeleteFailed'))
-      }
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('fileDeleteFailed')))
+      toast.success(tt('fileDeleted'))
+      router.push(closeHref())
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : tt('fileDeleteFailed'))
     } finally {
       setDeleting(false)
     }
@@ -150,13 +151,11 @@ export function FileDrawer({
     form.append('file', fileInput)
     try {
       const res = await fetch(`/api/file-cabinet/files/${file.id}/replace`, { method: 'POST', body: form })
-      if (res.ok) {
-        toast.success(tt('fileReplaced'))
-        router.refresh()
-      } else {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(err.error ?? tt('fileReplaceFailed'))
-      }
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('fileReplaceFailed')))
+      toast.success(tt('fileReplaced'))
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : tt('fileReplaceFailed'))
     } finally {
       setReplacing(false)
     }
