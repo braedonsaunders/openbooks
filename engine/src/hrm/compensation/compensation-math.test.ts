@@ -94,6 +94,21 @@ describe("matrix guideline", () => {
     const hollow = { ...matrix, cells: { ...matrix.cells, meets: {} } };
     assert.throws(() => resolveMatrixGuideline(hollow, null, "0.75"), /no usable cell for performance "meets" in quartile q1/);
   });
+
+  test("a missing quartile column refuses instead of pricing from the first column", () => {
+    const narrow = {
+      rows: ["meets"],
+      cols: ["q1"],
+      cells: { meets: { q1: { min: 3, max: 5 } } },
+    };
+    // 1.2 is a q4 compa-ratio (>1.1): the q1 cell must never price it.
+    assert.throws(
+      () => resolveMatrixGuideline(narrow, "meets", "1.2"),
+      /no column for compa-ratio quartile q4.*performance "meets"/,
+    );
+    // 0.75 is q1 (<0.8): the declared q1 cell still resolves.
+    assert.deepEqual(resolveMatrixGuideline(narrow, "meets", "0.75"), { min: 3, max: 5 });
+  });
 });
 
 describe("formula evaluator", () => {
