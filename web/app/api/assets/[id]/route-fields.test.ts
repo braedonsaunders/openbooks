@@ -100,6 +100,8 @@ const mockDb = `
     execute,
     transaction: async (work) => work({ execute }),
   }
+  export const ambientTenantOrgId = () => null
+  export const withBypassContext = async (work) => work()
 `;
 
 const mockSources = new Map<string, string>([

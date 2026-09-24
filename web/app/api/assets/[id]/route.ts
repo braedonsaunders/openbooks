@@ -251,9 +251,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let openingAccumulated: string | null | undefined
   let openingAsOf: string | null | undefined
   try {
-    assetAccountId = await parseAccountOverride(db, user.orgId, body.assetAccountId, 'invalid_asset_account')
-    accumulatedAccountId = await parseAccountOverride(db, user.orgId, body.accumulatedDepreciationAccountId, 'invalid_accumulated_account')
-    expenseAccountId = await parseAccountOverride(db, user.orgId, body.depreciationExpenseAccountId, 'invalid_expense_account')
+    assetAccountId = await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.assetAccountId, 'invalid_asset_account')
+    accumulatedAccountId = await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.accumulatedDepreciationAccountId, 'invalid_accumulated_account')
+    expenseAccountId = await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.depreciationExpenseAccountId, 'invalid_expense_account')
 
     if (body.custom !== undefined) {
       const defs = await customFieldDefinitions()

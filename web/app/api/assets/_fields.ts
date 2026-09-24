@@ -192,11 +192,37 @@ async function accountExists(
   exec: SqlExecutor,
   id: string,
   orgId: string,
+  allowedSubsidiaryIds: readonly string[] | null,
 ): Promise<boolean> {
   const found = await exec.execute(
-    sql`select 1 from accounts where id = ${id} and org_id = ${orgId} and not is_summary`,
+    sql`select 1 from accounts a
+         where a.id = ${id} and a.org_id = ${orgId} and not a.is_summary
+           ${assetAccountScopeSql(orgId, allowedSubsidiaryIds)}`,
   );
   return !!found.rows[0];
+}
+
+/** SQL scope shared by asset account pickers and submitted account overrides. */
+export function assetAccountScopeSql(
+  orgId: string,
+  allowedSubsidiaryIds: readonly string[] | null,
+) {
+  if (allowedSubsidiaryIds === null) return sql``;
+  const ids = `{${allowedSubsidiaryIds.join(",")}}`;
+  return sql`and (
+    a.subsidiary_id is null
+    or a.subsidiary_id = any(${ids}::uuid[])
+    or (a.subsidiary_include_children and exists (
+      with recursive ancestors as (
+        select id, parent_id from subsidiaries
+         where org_id = ${orgId} and id = any(${ids}::uuid[])
+        union
+        select parent.id, parent.parent_id from subsidiaries parent
+          join ancestors child on child.parent_id = parent.id
+         where parent.org_id = ${orgId}
+      ) select 1 from ancestors where id = a.subsidiary_id
+    ))
+  )`;
 }
 
 /**
@@ -206,13 +232,14 @@ async function accountExists(
 export async function parseAccountOverride(
   exec: SqlExecutor,
   orgId: string,
+  allowedSubsidiaryIds: readonly string[] | null,
   v: unknown,
   code: string,
 ): Promise<string | null | undefined> {
   if (v === undefined) return undefined;
   const candidate = strOrNull(v);
   if (candidate === null) return null;
-  if (!isUuid(candidate) || !(await accountExists(exec, candidate, orgId))) {
+  if (!isUuid(candidate) || !(await accountExists(exec, candidate, orgId, allowedSubsidiaryIds))) {
     throw new FieldRefusal(code);
   }
   return candidate.toLowerCase();
