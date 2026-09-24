@@ -214,6 +214,11 @@
     "title": "Renonciations au privilège",
     "description": "Quittances légales échangées contre paiement de travaux — reçues des sous-traitants, émises aux maîtres d'ouvrage.",
     "new": "Nouvelle renonciation",
+    "legacyNotice": {
+      "title": "Renonciation antérieure — la preuve signée n’a pas été enregistrée lors de la signature.",
+      "body": "L’impression reflète les dossiers actuels, pas le document signé.",
+      "remedy": "Vérifiez la copie signée jointe, ou annulez la renonciation et réémettez-la."
+    },
     "create": "Créer la renonciation",
     "columns": {
       "number": "Renonciation",

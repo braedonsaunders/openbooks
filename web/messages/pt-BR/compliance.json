@@ -214,6 +214,11 @@
     "title": "Quitações",
     "description": "Quitações legais trocadas pelo pagamento da obra — recebidas de subcontratados, emitidas para proprietários.",
     "new": "Nova quitação",
+    "legacyNotice": {
+      "title": "Quitação antiga — a evidência assinada não foi registrada no momento da assinatura.",
+      "body": "A impressão reflete os registros atuais, não o documento assinado.",
+      "remedy": "Confira a cópia assinada anexada ou anule a quitação e emita outra."
+    },
     "create": "Criar quitação",
     "columns": {
       "number": "Quitação",
