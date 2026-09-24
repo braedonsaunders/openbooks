@@ -2,7 +2,7 @@ import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/li
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
   cancelStockCount,
   createStockCount,
@@ -16,6 +16,7 @@ import {
 } from '@openbooks/engine/src/inventory/stock-counts.ts'
 import { getStockCountDetail, listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 import { executeIdempotentInventoryAction } from '@openbooks/engine/src/inventory/action-idempotency.ts'
+import { InventoryError, InventoryOwnershipError } from '@openbooks/engine/src/inventory/contracts.ts'
 import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
 import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -73,7 +74,9 @@ export async function GET(req: Request) {
       if (gate.allowedSubsidiaryIds && (!subsidiaryId || !gate.allowedSubsidiaryIds.has(subsidiaryId))) {
         return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })
       }
-      return NextResponse.json({ ok: true, ...(await getStockCountDetail(user.orgId, id)) })
+      // The detail rechecks the scope under the count lock inside its own
+      // snapshot: the probe above is a fast path only.
+      return NextResponse.json({ ok: true, ...(await getStockCountDetail(user.orgId, id, gate.allowedSubsidiaryIds)) })
     }
     // The list is subsidiary-scoped server-side: a restricted caller sees
     // only the entities in their grant, and an empty grant sees nothing.
@@ -138,6 +141,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })
     }
     return null
+  }
+
+  /**
+   * Locked recheck inside the write transaction: the fenceCount probe above
+   * can authorize count A while a concurrent A→B reassignment lands before
+   * the service commits (the service joins this transaction, so the lock
+   * covers its whole unit — including retries). Throws the same
+   * inventory-domain refusals the probe answers with.
+   */
+  async function lockedCountFence(countId: string): Promise<void> {
+    const r = await db.execute<{ subsidiary_id: string }>(
+      sql`select subsidiary_id from stock_counts where id = ${countId} and org_id = ${user.orgId} for update`,
+    )
+    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null
+    if (!subsidiaryId) throw new InventoryError('count not found in this organization')
+    if (allowedSubsidiaryIds && !allowedSubsidiaryIds.has(subsidiaryId)) {
+      throw new InventoryOwnershipError('subsidiary not permitted')
+    }
   }
 
   try {
@@ -213,11 +234,18 @@ export async function POST(req: Request) {
     if (fence) return fence
 
     const keyed = async <T>(operation: string, request: unknown, execute: () => Promise<T>) => {
-      const { value, replayed } = await executeIdempotentInventoryAction(user.orgId, user.id, {
-        operation,
-        idempotencyKey: body.idempotencyKey,
-        request,
-        execute,
+      // The whole unit — locked recheck plus the idempotent service call,
+      // which joins this transaction — commits atomically, so a concurrent
+      // reassignment blocks on the count lock instead of slipping between
+      // the fenceCount probe and the service write.
+      const { value, replayed } = await withOrgTransaction(user.orgId, async () => {
+        await lockedCountFence(countId)
+        return executeIdempotentInventoryAction(user.orgId, user.id, {
+          operation,
+          idempotencyKey: body.idempotencyKey,
+          request,
+          execute,
+        })
       })
       return { ok: true, replayed, ...(value as Record<string, unknown>) }
     }
@@ -275,11 +303,16 @@ export async function POST(req: Request) {
         // Posting defaults its key to the count itself: two operators racing
         // the same Post share one claim and serialize (replay/conflict),
         // never double-apply. An explicit client key still wins when given.
-        const { value: res, replayed } = await executeIdempotentInventoryAction(user.orgId, user.id, {
-          operation: 'inventory.stock-count.post',
-          idempotencyKey: body.idempotencyKey ?? `stock-count-post:${countId}`,
-          request: { countId },
-          execute: () => postStockCount(user.orgId, user.id, countId),
+        // Like keyed() above, the locked recheck and the post join one
+        // transaction so a reassignment cannot slip between them.
+        const { value: res, replayed } = await withOrgTransaction(user.orgId, async () => {
+          await lockedCountFence(countId)
+          return executeIdempotentInventoryAction(user.orgId, user.id, {
+            operation: 'inventory.stock-count.post',
+            idempotencyKey: body.idempotencyKey ?? `stock-count-post:${countId}`,
+            request: { countId },
+            execute: () => postStockCount(user.orgId, user.id, countId),
+          })
         })
         return NextResponse.json({ ok: true, replayed, ...res })
       }
