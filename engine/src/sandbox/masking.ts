@@ -259,6 +259,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_calibration_entries", columnName: "justification", transform: "redact" },
   { tableName: "hrm_talent_reviews", columnName: "notes", transform: "redact" },
   { tableName: "hrm_succession_candidates", columnName: "notes", transform: "redact" },
+  { tableName: "hrm_succession_plans", columnName: "notes", transform: "redact" },
   // HR-17 end
 ];
 
