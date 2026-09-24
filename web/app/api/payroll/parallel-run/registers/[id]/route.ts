@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { deletePriorRegister } from '@openbooks/engine/src/payroll/parallel-run-store.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
+import {
+  deletePriorRegister,
+  PriorRegisterNotFoundError,
+} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
@@ -53,6 +57,18 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       if (denied) return denied
     }
   }
-  await deletePriorRegister(gate.user.orgId, id, gate.user.id)
+  // A discard naming nothing is a named 404 with no audit row — never
+  // {ok:true} over zero matched rows, and never a 500 carrying the refusal.
+  try {
+    await deletePriorRegister(gate.user.orgId, id, gate.user.id)
+  } catch (error) {
+    if (error instanceof PriorRegisterNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof PayrollError) {
+      return NextResponse.json({ error: error.message }, { status: 422 })
+    }
+    throw error
+  }
   return NextResponse.json({ ok: true })
 }
