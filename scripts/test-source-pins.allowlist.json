@@ -84,7 +84,6 @@
     "web/app/(app)/items/ItemCostingEditor.test.ts": 2,
     "web/app/(app)/items/ItemDrawer.test.tsx": 4,
     "web/app/(app)/journal/JournalDrawer.test.tsx": 6,
-    "web/app/(app)/me/benefits/me-benefits.test.ts": 4,
     "web/app/(app)/me/checklists/me-checklists.test.ts": 3,
     "web/app/(app)/me/compensation/me-compensation.test.ts": 3,
     "web/app/(app)/me/me-documents-surveys.test.ts": 4,
