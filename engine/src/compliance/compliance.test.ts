@@ -191,6 +191,20 @@ test("a limit stated in another currency is refused, never silently converted", 
   assert.equal(f.blocksPayment, true);
 });
 
+test("a minimum with no denomination fails closed instead of judging foreign amounts", () => {
+  const p = policy({ minCoverageAmount: "1000000", coverageCurrency: null });
+  // Below the number: refused as a mismatch, never as below-minimum.
+  const short = evaluate(p, [evidence({ coverageAmount: "900000", coverageCurrency: "EUR" })]);
+  assert.equal(short.state, "insufficient");
+  assert.ok(short.reasons.includes("coverage_currency_mismatch"));
+  assert.ok(!short.reasons.includes("coverage_below_minimum"));
+  // Above the number: still refused — a unitless minimum never passes.
+  const ample = evaluate(p, [evidence({ coverageAmount: "2000000", coverageCurrency: "EUR" })]);
+  assert.equal(ample.state, "insufficient");
+  assert.ok(ample.reasons.includes("coverage_currency_mismatch"));
+  assert.equal(ample.blocksPayment, true);
+});
+
 test("missing endorsements are reported individually", () => {
   const p = policy({
     requiresAdditionalInsured: true,
