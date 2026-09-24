@@ -87,6 +87,9 @@ export async function loadBudgets(
       page: budgetList.page,
       perPage: budgetList.perPage,
       dims,
+      // The drawer payload carries the scenario's name, status and lines:
+      // an out-of-scope scenario loads as missing so the drawer stays shut.
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     }) : Promise.resolve(null),
     creating ? loadUnsavedBudgetWorkspace(orgId, {
       q: budgetList.q,

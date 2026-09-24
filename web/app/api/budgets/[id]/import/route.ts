@@ -10,6 +10,7 @@ import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { ImportParseError, parseImportFile } from '../../../../../lib/data-io/parse'
 import type { ImportFormat } from '../../../../../lib/data-io/types'
 import { BudgetMutationError, normalizeBudgetAmount, type BudgetCellInput } from '../../../../../lib/budget-mutations'
+import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
 import { PNL_TYPES } from '../../../../../lib/account-types'
 
 export const runtime = 'nodejs'
@@ -110,6 +111,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const scenario = scenarioResult.rows[0]
   if (!scenario) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (scenario.status !== 'draft') return NextResponse.json({ error: 'budget_is_locked' }, { status: 409 })
+  // Scenario owner-scope gate BEFORE the lookup loads below (which resolve
+  // every subsidiary and project name): an import rewrites the scenario's
+  // lines, so a caller whose scope misses any of them is refused by name.
+  const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
+  if (outOfScope.length > 0) {
+    const refusal = outOfScopeScenarioError(outOfScope)
+    return NextResponse.json({ error: refusal.message }, { status: refusal.status })
+  }
 
   const [accountsResult, periodsResult, subsidiariesResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
     db.execute<Lookup>(sql`select id, coalesce(number, '') as key, name, type from accounts where org_id = ${user.orgId} and is_active and not is_summary`),

@@ -7,6 +7,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { BudgetMutationError } from '../../../../../lib/budget-mutations'
+import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
 
 export const runtime = 'nodejs'
 
@@ -67,6 +68,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const scenario = locked.rows[0]
       if (!scenario) throw new BudgetMutationError('not_found', 404)
       if (Number(scenario.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+
+      // Scenario-level authority for the status transitions below (submit,
+      // approve, reject, archive): the status governs EVERY line in the
+      // scenario, so the caller must hold authority over every subsidiary
+      // its lines touch — refused by name otherwise. The line-copy actions
+      // (copy, copy_prior_actuals, apply_source) stay on their existing
+      // visible-scope design: they only ever read and write lines the
+      // caller can already see.
+      if (action === 'submit' || action === 'approve' || action === 'reject' || action === 'archive') {
+        const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
+        if (outOfScope.length > 0) throw outOfScopeScenarioError(outOfScope)
+      }
 
       // F-t07-003: the maker's submit and the checker's decision. Direct
       // status transitions (no tenant-authored flow graph required) so the
