@@ -216,9 +216,10 @@ export async function buildChangeSet(
   name: string,
   createdBy?: string | null,
 ): Promise<{ changeSetId: string; itemCount: number }> {
-  // A null creator is retained for trusted non-interactive/CLI captures.  The
-  // production server action always supplies its authenticated user; review,
-  // approval, and application actors are mandatory regardless.
+  // A null creator is retained for trusted non-interactive captures.  The
+  // production server action always supplies its authenticated user and the
+  // CLI requires --actor resolved to a user (C-46); review, approval, and
+  // application actors are mandatory regardless.
   const creator = createdBy == null ? null : requireActor(createdBy, "change-set creation");
   // The header and every item are one trusted, cross-tenant transaction.  A
   // failed catalog read or item insert therefore rolls back the header too;
