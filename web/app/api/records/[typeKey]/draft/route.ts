@@ -9,6 +9,8 @@ import { buildSearchText, hasSubsidiaryField, inTypeAudience, loadRecordTypeByKe
 import {
   lintRecordFields,
   recordNumberPrefix,
+  stripUnknownData,
+  validateRecordData,
   withComputedFormulas,
 } from '../../../../../lib/record-schema'
 
@@ -66,6 +68,23 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
     values.subsidiary_id = allowed[0]
   }
   const data = withComputedFormulas(lint.sections, values)
+  // A draft may be incomplete, but it can't be wrongly typed: seeded
+  // default-expression values reach storage here, so validate at 'draft'
+  // stage (required checks relaxed, same as an inactive record update) and
+  // refuse wrongly-typed values by name. The subsidiary fence token is not a
+  // declared field, so validate the stripped bag — mirroring the update path,
+  // which validates stripped data while persisting the retained token.
+  const errors = validateRecordData(lint.sections, stripUnknownData(lint.sections, data), 'draft')
+  if (errors.length > 0) {
+    return NextResponse.json(
+      {
+        error: errors[0]!.message,
+        errors,
+        issues: errors.map((e) => ({ path: e.fieldId, message: e.message })),
+      },
+      { status: 422 },
+    )
+  }
 
   const recordNumber = await nextDocumentNumber(
     user.orgId,
