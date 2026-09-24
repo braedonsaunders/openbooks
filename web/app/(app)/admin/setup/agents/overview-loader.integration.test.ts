@@ -151,7 +151,7 @@ test("a fresh run resolves a relative last-run cell", { skip: !DB }, async () =>
         detectors: [],
       }),
     );
-    await withBypassContext(() => runSetupAgentNow(org.orgId, userId, "accounting"));
+    await withBypassContext(() => runSetupAgentNow(org.orgId, userId, "accounting", null /* test setup: system provenance, unrestricted */));
     const data = await withBypassContext(() => loadAgentsOverview({}));
     const row = data.rows.find((entry) => entry.agentKey === "accounting")!;
     assert.equal(row.lastRun.hasRun, true);

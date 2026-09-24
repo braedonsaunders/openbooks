@@ -39,27 +39,8 @@ async function seedParty(orgId: string, name: string): Promise<string> {
   return id;
 }
 
-/** One shared balanced posted entry backing every seeded posted document. */
-async function seedPostedEntry(org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; date: string; accounts: Record<string, string> }): Promise<string> {
-  const id = randomUUID();
-  await withBypassContext(() =>
-    db.transaction(async (tx) => {
-      await tx.execute(sql`insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${id}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${id}, ${org.date}, ${org.periodId}, 'draft', 'manual')`);
-      await tx.execute(sql`insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
-        values (${org.orgId}, ${id}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, '1', 'CAD', '1', 1),
-               (${org.orgId}, ${id}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-1', 'CAD', '-1', 1)`);
-      await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${id}`);
-    }),
-  );
-  return id;
-}
-
 async function seedInvoice(
-  org: { orgId: string; periodId: string },
-  entryId: string,
+  org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; date: string; accounts: Record<string, string> },
   partyId: string,
   number: string,
   dueDate: string,
@@ -67,15 +48,26 @@ async function seedInvoice(
   expectedPayDate: string | null = null,
 ): Promise<string> {
   const id = randomUUID();
+  const entryId = randomUUID();
   await withBypassContext(
-    () => db.execute(sql`
-      insert into documents
-        (id, org_id, kind, status, document_number, document_date, due_date,
-         currency, subtotal, tax_total, total, open_balance, party_id, expected_pay_date,
-         posted_entry_id, posting_period_id)
-      values (${id}, ${org.orgId}, 'customer_invoice', 'posted', ${number}, ${dueDate}, ${dueDate},
-              'CAD', ${total}, '0', ${total}, ${total}, ${partyId}, ${expectedPayDate},
-              ${entryId}, ${org.periodId})`),
+    () => db.transaction(async (tx) => {
+      await tx.execute(sql`insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entryId}, ${org.date}, ${org.periodId}, 'draft', 'manual')`);
+      await tx.execute(sql`insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, party_id, due_date, is_open_item)
+        values (${org.orgId}, ${entryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${total}, 'CAD', ${total}, 1, ${partyId}, ${dueDate}, true),
+               (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${`-${total}`}, 'CAD', ${`-${total}`}, 1, ${partyId}, ${dueDate}, false)`);
+      await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
+      await tx.execute(sql`
+        insert into documents
+          (id, org_id, subsidiary_id, kind, status, document_number, document_date, due_date,
+           currency, subtotal, tax_total, total, open_balance, party_id, expected_pay_date,
+           posted_entry_id, posting_period_id)
+        values (${id}, ${org.orgId}, ${org.subsidiaryId}, 'customer_invoice', 'posted', ${number}, ${dueDate}, ${dueDate},
+                'CAD', ${total}, '0', ${total}, ${total}, ${partyId}, ${expectedPayDate},
+                ${entryId}, ${org.periodId})`);
+    }),
   );
   return id;
 }
@@ -88,27 +80,24 @@ test(
     const other = await withBypass(() => createScratchOrg());
     try {
       const today = await withBypassContext(() => businessToday(org.orgId));
-      const entry = await seedPostedEntry(org);
-      const otherEntry = await seedPostedEntry(other);
-
       const big = await seedParty(org.orgId, "Big Debtor");
-      await seedInvoice(org, entry, big, "INV-A1", minusDays(today, 45), "5000", minusDays(today, 20));
-      await seedInvoice(org, entry, big, "INV-A2", minusDays(today, 10), "500.00");
-      await seedInvoice(org, entry, big, "INV-A3", plusDays(today, 30), "7000.00");
+      await seedInvoice(org, big, "INV-A1", minusDays(today, 45), "5000", minusDays(today, 20));
+      await seedInvoice(org, big, "INV-A2", minusDays(today, 10), "500.00");
+      await seedInvoice(org, big, "INV-A3", plusDays(today, 30), "7000.00");
 
       const small = await seedParty(org.orgId, "Small Debtor");
-      await seedInvoice(org, entry, small, "INV-B1", minusDays(today, 20), "10.00");
+      await seedInvoice(org, small, "INV-B1", minusDays(today, 20), "10.00");
 
       const hold = await seedParty(org.orgId, "Hold Candidate");
-      await seedInvoice(org, entry, hold, "INV-C1", minusDays(today, 70), "2000.00");
-      await seedInvoice(org, entry, hold, "INV-C2", minusDays(today, 70), "2000.00");
-      await seedInvoice(org, entry, hold, "INV-C3", minusDays(today, 70), "2000.00");
+      await seedInvoice(org, hold, "INV-C1", minusDays(today, 70), "2000.00");
+      await seedInvoice(org, hold, "INV-C2", minusDays(today, 70), "2000.00");
+      await seedInvoice(org, hold, "INV-C3", minusDays(today, 70), "2000.00");
 
       const current = await seedParty(org.orgId, "Current Payer");
-      await seedInvoice(org, entry, current, "INV-D1", plusDays(today, 15), "9000.00");
+      await seedInvoice(org, current, "INV-D1", plusDays(today, 15), "9000.00");
 
       const foreign = await seedParty(other.orgId, "Foreign Debtor");
-      await seedInvoice(other, otherEntry, foreign, "INV-X1", minusDays(today, 100), "99999.00");
+      await seedInvoice(other, foreign, "INV-X1", minusDays(today, 100), "99999.00");
 
       const findings = await withBypassContext(() =>
         collectionsFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("collections")),
@@ -160,9 +149,8 @@ test(
     const org = await withBypass(() => createScratchOrg());
     try {
       const today = await withBypassContext(() => businessToday(org.orgId));
-      const entry = await seedPostedEntry(org);
       const party = await seedParty(org.orgId, "Persistent Debtor");
-      await seedInvoice(org, entry, party, "INV-P1", minusDays(today, 40), "2500.00");
+      await seedInvoice(org, party, "INV-P1", minusDays(today, 40), "2500.00");
       await withBypassContext(
         () => db.execute(sql`
           insert into ai_agent_policies (org_id, agent_key, enabled, materiality_threshold)
@@ -170,7 +158,12 @@ test(
       );
 
       const result = await withBypassContext(() =>
-        runContinuousCloseAgent({ orgId: org.orgId, agentKey: "collections", trigger: "manual" }),
+        runContinuousCloseAgent({
+          orgId: org.orgId,
+          agentKey: "collections",
+          trigger: "manual",
+          allowedSubsidiaryIds: null, // test setup: unrestricted system scan
+        }),
       );
       assert.notEqual((result as { status: string }).status, "claimed_elsewhere");
       const run = result as { status: string; detected: number };

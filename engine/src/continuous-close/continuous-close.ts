@@ -14,6 +14,7 @@ import {
 import { AGENT_PACKS } from "../agents/registry.ts";
 import type { AgentFinding, AgentFindingProposal } from "../agents/types.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
 
 export {
   CONTINUOUS_CLOSE_AGENT_KEYS,
@@ -278,6 +279,14 @@ export async function runContinuousCloseAgent(args: {
   agentKey: ContinuousCloseAgentKey;
   trigger: AgentTrigger;
   initiatedBy?: string | null;
+  /**
+   * REQUIRED actor scope (explicit null only for scheduler/system runs and
+   * unrestricted manual runs): a scan runs the org-wide detector pack and
+   * auto-resolves unmatched open/in_review items across every entity, so a
+   * subsidiary-restricted caller is refused by name before any run row,
+   * finding, or resolution is persisted. The scheduler always passes null.
+   */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   scheduledOccurrence?: {
     policyId: string;
     /** Fire time this tick observed as due, claimed with a compare-and-swap. */
@@ -286,6 +295,10 @@ export async function runContinuousCloseAgent(args: {
     nextRunAt: Date;
   };
 }): Promise<ContinuousCloseRunResult | ContinuousCloseClaimLoss> {
+  // Manual org-wide scans require unrestricted scope: the detector pack and
+  // the auto-resolution below act on every entity at once. This runs before
+  // the transaction so a refused caller leaves no run row behind.
+  assertUnrestrictedScope(args.allowedSubsidiaryIds);
   type PreparedRun =
     | { kind: "terminal"; result: ContinuousCloseRunResult }
     | {
@@ -605,6 +618,8 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
           orgId: policy.org_id,
           agentKey: policy.agent_key,
           trigger: "scheduler",
+          // Scheduler provenance: system run, unrestricted by construction.
+          allowedSubsidiaryIds: null,
           scheduledOccurrence: {
             policyId: policy.id,
             claimedNextRunAt: new Date(policy.next_run_at),

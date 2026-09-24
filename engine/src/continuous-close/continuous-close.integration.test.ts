@@ -284,14 +284,14 @@ test(
     try {
       await seedManualPolicy(org);
 
-      const first = runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual" });
+      const first = runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
       const { runId: firstRunId } = await enricherEntered;
 
       // The detectors committed but enrichment is paused: the lease is held.
       assert.equal((await runStatus(org.orgId, firstRunId)).status, "running",
         "the first run stays running while it enriches");
 
-      const second = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual" });
+      const second = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
       assert(second.status === "skipped", "the overlapping scan is refused");
       const secondRow = await runStatus(org.orgId, second.runId);
       assert.equal((secondRow.stats as { reason: string }).reason, "already_running");
@@ -367,6 +367,8 @@ test(
           claimedNextRunAt: fireAt,
           nextRunAt: nextContinuousCloseRunAt("daily", now),
         },
+        // Test setup: system provenance, unrestricted by construction.
+        allowedSubsidiaryIds: null,
       });
       assert(outcome.status !== "claimed_elsewhere", "the occurrence was not lost to a phantom claim");
       if (outcome.status === "skipped") {
@@ -411,7 +413,7 @@ test(
       await setContinuousCloseFeature(org.orgId, false);
 
       await assert.rejects(
-        runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual" }),
+        runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ }),
         /feature_disabled/,
         "the refusal names the disabled feature",
       );
@@ -440,7 +442,7 @@ test(
         values (${staleRunId}, ${org.orgId}, 'accounting', 'manual', 'running', 'test', now() - interval '1 hour')
       `));
 
-      const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual" });
+      const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
       assert.equal(result.status, "completed", "the scan proceeds once the stale lease expired");
 
       const stale = await runStatus(org.orgId, staleRunId);
@@ -483,10 +485,61 @@ test(
       });
 
       for (const agentKey of CONTINUOUS_CLOSE_AGENT_KEYS) {
-        const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey, trigger: "manual" });
+        const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey, trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
         assert.equal(result.status, "completed", `${agentKey} completes through the registry dispatch`);
       }
       assert.equal(await workItemCount(org.orgId), 0, "disabled detectors detect nothing on any agent");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a subsidiary-restricted manual scan is refused before any run, finding, or auto-resolution",
+  { skip: !DB },
+  async () => {
+    // A manual scan runs the org-wide detector pack and auto-resolves every
+    // unmatched open/in_review item of its finding types across all entities:
+    // a restricted caller must be refused by name before the run row exists,
+    // so neither fresh findings nor the auto-resolution of another entity's
+    // items can happen on their behalf.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const itemId = randomUUID();
+      await withBypassContext(() =>
+        db.execute(sql`
+          insert into ai_work_items
+            (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity, status)
+          values (${itemId}, ${org.orgId}, 'accounting', 'unreconciled_payout', 'test', 'rehome-fp', 'warning', 'open')
+        `),
+      );
+      const restricted = new Set([org.subsidiaryId]);
+      await assert.rejects(
+        runContinuousCloseAgent({
+          orgId: org.orgId,
+          agentKey: "accounting",
+          trigger: "manual",
+          allowedSubsidiaryIds: restricted,
+        }),
+        (error: unknown) =>
+          error instanceof Error && error.message === "requires unrestricted subsidiary access",
+        "the refusal names its remedy",
+      );
+      const items = await withBypassContext(() =>
+        db.execute<{ id: string; status: string }>(sql`
+          select id, status from ai_work_items where org_id = ${org.orgId}
+        `),
+      );
+      assert.deepEqual(
+        items.rows,
+        [{ id: itemId, status: "open" }],
+        "the other entity's unmatched item is neither resolved nor touched",
+      );
+      const runs = await withBypassContext(() =>
+        db.execute<{ n: string }>(sql`select count(*) as n from ai_agent_runs where org_id = ${org.orgId}`),
+      );
+      assert.equal(Number(runs.rows[0]!.n), 0, "a refused scan leaves no run row behind");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }

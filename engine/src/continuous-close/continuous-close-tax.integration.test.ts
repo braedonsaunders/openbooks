@@ -218,7 +218,7 @@ test(
                   null)
         `);
       });
-      const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "tax", trigger: "manual" });
+      const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "tax", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
       assert.equal((result as { status: string }).status, "completed");
       assert.ok((result as { detected: number }).detected >= 1, "the run detects the untaxed bill");
       const persisted = (await withBypassContext(() =>
