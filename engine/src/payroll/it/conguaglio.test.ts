@@ -394,6 +394,35 @@ test("pension income refuses in parity with the monthly engine", () => {
   );
 });
 
+test("annual conguaglio refuses an unknown post-1995 status above the IVS massimale", () => {
+  // The status controls application of the 2026 €122,295 cap: L. 335/1995
+  // art. 2 c. 18 and INPS Circ. 14/2026.
+  // https://www.normattiva.it/uri/N2Ls?urn:nir:stato:legge:1995-08-08;335
+  // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2026/02/Circolare_15162/Allegati/16561_Circolare-numero-14-del-09-02-2026.pdf
+  const pushed: Pushed[] = [];
+  assert.throws(
+    () => calculateItConguaglio({
+      taxYear: 2026,
+      regionCode: "03",
+      ytdGross: "130000.0000",
+      ytdBySystemKey: {},
+      declaration: { ...DECLARATION_FILED, isPost1995: undefined },
+      rates: { ...RATES_123_08 },
+    }, (systemKey, kind, _description, amount, sequence) => {
+      pushed.push({ systemKey, kind, amount, sequence });
+    }),
+    /IVS base.*122295.*anzianita_post_1995/,
+  );
+  assert.deepEqual(pushed, [], "a refused conguaglio must not emit partial settlement lines");
+});
+
+test("monthly adapter preserves missing post-1995 status instead of defaulting it to false", async () => {
+  await assert.rejects(
+    () => monthlyRun("10833.3333"),
+    /IVS base.*122295.*anzianita_post_1995/,
+  );
+});
+
 test("untranscribed year refuses in the pure core too", () => {
   assert.throws(
     () =>

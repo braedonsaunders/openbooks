@@ -158,6 +158,24 @@ test("INPS 2026 post-1995 at 130.000: capped at the 122.295 massimale", () => {
   assert.equal(r.inpsEmployer, "29118.4400");
 });
 
+test("INPS 2026 refuses a missing post-1995 status only when the massimale changes IVS", () => {
+  // L. 335/1995 art. 2 c. 18 applies the annual massimale only to workers
+  // without pre-1996 contribution seniority (or opting into the contributory
+  // system); INPS Circ. 14/2026 sets that 2026 massimale at €122,295.
+  // https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1995-08-08;335
+  // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2026/02/Circolare_15162/Allegati/16561_Circolare-numero-14-del-09-02-2026.pdf
+  assert.throws(
+    () => calculateIt2026({
+      ...BASE, annualGrossEmployment: "130000", annualPensionable: "130000", isPost1995: undefined,
+    }),
+    /IVS base.*122295.*anzianita_post_1995/,
+  );
+  const belowMassimale = calculateIt2026({
+    ...BASE, annualGrossEmployment: "120000", annualPensionable: "120000", isPost1995: undefined,
+  });
+  assert.equal(belowMassimale.inpsWorker, "11665.7600");
+});
+
 test("missing rates refuse naming the 2026 scope point", () => {
   const ok = {
     ...BASE,
