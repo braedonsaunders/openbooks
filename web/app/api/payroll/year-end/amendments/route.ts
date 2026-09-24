@@ -57,13 +57,16 @@ export async function GET(req: Request) {
   `)).rows
   const denied = await guardPayrollFilingRowIds(gate, country, filing, rows.map((row) => row.rowId), year)
   if (denied) return denied
-  if (rows.length === 0) {
-    const section = (await orgYearEndFilings(gate.user.orgId, year))
-      .find((candidate) => candidate.country === country && candidate.key === filing)
-    if (section) {
-      const populationDenied = await guardPayrollFilingData(gate, country, filing, section.data, year)
-      if (populationDenied) return populationDenied
-    }
+  // The CURRENT population is guarded on every read, not just when nothing
+  // was ever filed: the lifecycle below returns every newly unfiled row's
+  // label, id and status, so guarding only stored rows would show a
+  // restricted reader the new slip identities of entities outside their
+  // scope. Deny-by-default, like the year-end page itself.
+  const section = (await orgYearEndFilings(gate.user.orgId, year))
+    .find((candidate) => candidate.country === country && candidate.key === filing)
+  if (section) {
+    const populationDenied = await guardPayrollFilingData(gate, country, filing, section.data, year)
+    if (populationDenied) return populationDenied
   }
   try {
     const lifecycle = await filingLifecycle(
@@ -71,6 +74,7 @@ export async function GET(req: Request) {
       country,
       filing,
       year,
+      gate.allowedSubsidiaryIds ?? undefined,
     )
     return NextResponse.json({
       ...lifecycle,
@@ -145,16 +149,22 @@ export async function POST(req: Request) {
   }
   const country = body.country ?? ''
   const filing = body.filing ?? ''
-  if (Array.isArray(body.rowIds)) {
-    const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds.map(String), year)
-    if (denied) return denied
-  } else {
+  // An original covers the WHOLE population by definition — the service
+  // ignores rowIds for it — so a caller-supplied list (empty, partial, or
+  // anything else) can never narrow this guard. Guarding only the list while
+  // persisting the population let a restricted actor issue the org-wide
+  // filing by passing []. A correction persists exactly its named rows, so
+  // the list IS its population and is guarded as such.
+  if (revision === 'original' || !Array.isArray(body.rowIds)) {
     const section = (await orgYearEndFilings(gate.user.orgId, year))
       .find((candidate) => candidate.country === country && candidate.key === filing)
     if (section) {
       const denied = await guardPayrollFilingData(gate, country, filing, section.data, year)
       if (denied) return denied
     }
+  } else {
+    const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds.map(String), year)
+    if (denied) return denied
   }
   try {
     const issueInput = {
@@ -165,6 +175,7 @@ export async function POST(req: Request) {
       taxYear: year,
       revision: revision as 'original' | 'amended' | 'cancelled',
       rowIds: Array.isArray(body.rowIds) ? body.rowIds.map(String) : undefined,
+      scope: gate.allowedSubsidiaryIds ?? undefined,
       // A cancellation's explanation is its audit evidence. Keep it in the
       // existing filing note column so history readers show the same reason
       // that was confirmed at the destructive boundary.

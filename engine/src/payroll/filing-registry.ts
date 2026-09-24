@@ -1,4 +1,5 @@
 import { PAYROLL_COUNTRY_PACKS, PayrollPackError } from "./packs.ts";
+import type { PayrollSubsidiaryScope } from "./scope.ts";
 
 /**
  * The payroll FILING registry — the jurisdiction layer's answer to "what does
@@ -347,8 +348,22 @@ export interface PayrollYearEndFiling {
   cadence: PayrollFilingCadence;
   description?: string;
   emptyText?: string;
-  /** The rows that belong on this filing for the year. */
-  population(orgId: string, taxYear: number): Promise<PayrollFilingData>;
+  /**
+   * The rows that belong on this filing for the year.
+   *
+   * `scope` is the actor's subsidiary visibility (null/undefined =
+   * unrestricted). The amendment service always passes it; a pack that
+   * narrows its population to the scope returns only those rows, and one
+   * that does not (no pack does yet) returns the whole population — which
+   * the caller's subsidiary-scope guard then refuses for a restricted actor
+   * rather than exposing. A statutory return is never half-filed by
+   * narrowing here: restriction is enforced by refusal, not by subset.
+   */
+  population(
+    orgId: string,
+    taxYear: number,
+    scope?: PayrollSubsidiaryScope,
+  ): Promise<PayrollFilingData>;
   /**
    * The filing's row-key grammar, as the inverse of whatever its population
    * builds (`employee:province:account`, a bare employee id, `account:quarter`
