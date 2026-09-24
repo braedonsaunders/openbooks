@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrg } from "../platform/db.ts";
+import { db, withBypass, withOrg, type SqlExecutor } from "../platform/db.ts";
 import {
   importStatement,
   requireBankAccountInScope,
@@ -562,6 +562,7 @@ async function syncOne(
     externalAccountId: string | null;
     lastSyncAt: Date | string | null;
     syncOverlapDays: number | null;
+    configurationRevision: string;
   },
   actorId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
@@ -591,14 +592,34 @@ async function syncOne(
           lines,
           currency: currency ?? undefined,
           sourceEvidence,
+          beforeWrite: (executor) => assertCurrentSyncConfiguration(executor, row),
         },
         { orgId: row.orgId, userId: actorId, allowedSubsidiaryIds },
       ),
     );
     imported = result.imported;
     duplicates = result.duplicates;
+  } else {
+    await withOrg(row.orgId, () => assertCurrentSyncConfiguration(db, row));
   }
   return { connectionId: row.id, imported, duplicates };
+}
+
+/** Hold the configuration row stable while fetched lines enter the ledger. */
+async function assertCurrentSyncConfiguration(
+  executor: SqlExecutor,
+  connection: { id: string; orgId: string; configurationRevision: string },
+): Promise<void> {
+  const current = await executor.execute(sql`
+    select c.id from bank_feed_connections c
+      join orgs o on o.id = c.org_id
+     where c.id = ${connection.id} and c.org_id = ${connection.orgId}
+       and c.updated_at::text = ${connection.configurationRevision}
+       and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
+       and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end
+     for share of c, o
+  `);
+  if (!current.rows.length) throw new FeedError("Bank feed configuration changed during sync; run the sync again");
 }
 
 /**
@@ -616,12 +637,12 @@ async function syncOne(
  *    derivation.
  */
 async function recordSyncOutcome(
-  connection: { id: string; orgId: string },
+  connection: { id: string; orgId: string; configurationRevision: string },
   outcome: FeedSyncOutcome,
-): Promise<void> {
+): Promise<boolean> {
   const lastResult = JSON.stringify({ imported: outcome.imported, duplicates: outcome.duplicates });
-  await withBypass(async () => {
-    await db.execute(outcome.error
+  return withBypass(async () => {
+    const result = await db.execute(outcome.error
       ? sql`
         update bank_feed_connections
            set last_attempt_at = now(),
@@ -629,6 +650,10 @@ async function recordSyncOutcome(
                last_error = ${outcome.error},
                status = 'error'
          where id = ${connection.id} and org_id = ${connection.orgId}
+           and updated_at::text = ${connection.configurationRevision} and is_active
+           and exists (select 1 from orgs o where o.id = bank_feed_connections.org_id
+             and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end)
+         returning id
       `
       : sql`
         update bank_feed_connections
@@ -638,7 +663,12 @@ async function recordSyncOutcome(
                last_error = null,
                status = 'connected'
          where id = ${connection.id} and org_id = ${connection.orgId}
+           and updated_at::text = ${connection.configurationRevision} and is_active
+           and exists (select 1 from orgs o where o.id = bank_feed_connections.org_id
+             and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end)
+         returning id
       `);
+    return result.rows.length > 0;
   });
 }
 
@@ -696,6 +726,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
         nextSyncAt: Date | null;
         lastSyncAt: Date | string | null;
         syncOverlapDays: number | null;
+        configurationRevision: string;
       }>(sql`
         update bank_feed_connections c set next_sync_at = ${nextSync}
           from orgs o
@@ -710,7 +741,8 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
                   c.account_id as "accountId", c.credentials,
                   c.external_account_id as "externalAccountId",
                   c.sync_cadence as "syncCadence", c.next_sync_at as "nextSyncAt",
-                  c.last_sync_at as "lastSyncAt", c.sync_overlap_days as "syncOverlapDays"
+                  c.last_sync_at as "lastSyncAt", c.sync_overlap_days as "syncOverlapDays",
+                  c.updated_at::text as "configurationRevision"
       `)),
     );
     const claim = claimed.rows[0];
@@ -722,7 +754,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
     } catch (e) {
       outcome = { connectionId: row.id, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
     }
-    await recordSyncOutcome(claim, outcome);
+    if (!(await recordSyncOutcome(claim, outcome))) outcome.error = "Bank feed configuration changed during sync; run the sync again";
     outcomes.push(outcome);
   }
   return outcomes;
@@ -748,14 +780,16 @@ export async function syncBankFeedNow(
         externalAccountId: string | null;
         lastSyncAt: Date | string | null;
         syncOverlapDays: number | null;
+        configurationRevision: string;
       }>(sql`
       select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
              c.external_account_id as "externalAccountId", c.last_sync_at as "lastSyncAt",
-             c.sync_overlap_days as "syncOverlapDays"
+             c.sync_overlap_days as "syncOverlapDays", c.updated_at::text as "configurationRevision"
         from bank_feed_connections c
         join orgs o on o.id = c.org_id
        where c.id = ${connectionId}
          and c.org_id = ${ctx.orgId}
+         and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
          and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
     `)),
   );
@@ -776,7 +810,7 @@ export async function syncBankFeedNow(
   } catch (e) {
     outcome = { connectionId, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
   }
-  await recordSyncOutcome(conn, outcome);
+  if (!(await recordSyncOutcome(conn, outcome))) outcome.error = "Bank feed configuration changed during sync; run the sync again";
   return outcome;
 }
 
