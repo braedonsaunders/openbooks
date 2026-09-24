@@ -526,13 +526,13 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       const response = await fetch(`/api/field-tickets/project-context?projectId=${encodeURIComponent(nextProjectId)}`)
       // The status is checked before the body parses: a non-JSON 502 page
       // must toast the translated fallback, never a SyntaxError.
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.projectLoadFailed')))
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.lines.projectLoadFailed')))
       const body = (await response.json()) as { customerName?: string; tasks?: unknown; period?: string }
       setCustomerName(body.customerName ?? '')
       setProjectTasks(Array.isArray(body.tasks) ? body.tasks : [])
       if (!gridHasHours && body.period) setPeriod(body.period)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('editor.projectLoadFailed'))
+      toast.error(error instanceof Error ? error.message : t('editor.lines.projectLoadFailed'))
     }
   }
 
@@ -546,10 +546,10 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       const response = await fetch(`/api/field-tickets/${ticket.id}`)
       // The status is checked before the body parses, and the named refusal
       // is toasted — never the literal 'failed' the operator cannot act on.
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.reloadFailed')))
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.lines.reloadFailed')))
       applyPayload((await response.json()) as TicketPayload)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('editor.reloadFailed'))
+      toast.error(e instanceof Error ? e.message : t('editor.lines.reloadFailed'))
     }
   }
 
