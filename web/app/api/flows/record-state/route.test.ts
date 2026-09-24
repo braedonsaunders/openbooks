@@ -13,6 +13,8 @@ interface RouteState {
   statusCalls: string[];
   runRows: Array<Record<string, unknown>>;
   canRetry: boolean;
+  canRead: boolean;
+  readChecks: string[];
 }
 
 const stateKey = Symbol.for("openbooks.flow-record-state-route-test");
@@ -27,6 +29,8 @@ const routeState: RouteState = {
   statusCalls: [],
   runRows: [],
   canRetry: false,
+  canRead: true,
+  readChecks: [],
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -90,6 +94,16 @@ const mockSources = new Map<string, string>([
       export function isUuid(value) { return typeof value === 'string' && value.length > 0 }
     `,
   ],
+  [
+    "mock:subject-authz",
+    `
+      const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
+      export function canReadFlowSubject(authz, subjectKind) {
+        state.readChecks.push(subjectKind)
+        return state.canRead ?? true
+      }
+    `,
+  ],
 ]);
 
 const mockUrls = new Map<string, string>([
@@ -98,6 +112,7 @@ const mockUrls = new Map<string, string>([
   ["../_lib", "mock:lib"],
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/list-params", "mock:list-params"],
+  ["../../../../lib/flow-subject-authz", "mock:subject-authz"],
 ]);
 
 const hooks = registerHooks({
@@ -125,6 +140,8 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.statusCalls = [];
   routeState.runRows = [];
   routeState.canRetry = false;
+  routeState.canRead = true;
+  routeState.readChecks = [];
 }
 
 function request(): Request {
@@ -151,6 +168,31 @@ test("an in-scope caller may read approval state", async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.scopeChecks, ["sub-hidden"]);
   assert.deepEqual(routeState.statusCalls, ["subject-1"]);
+});
+
+test("a caller without the kind's read grant meets the missing-record answer", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.canRead = false;
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "record not found" });
+  assert.deepEqual(routeState.readChecks, ["vendor_bill"]);
+  assert.deepEqual(routeState.scopeChecks, [], "no subsidiary lookup may run");
+  assert.deepEqual(routeState.statusCalls, [], "no record read may run");
+});
+
+test("the no-read denial is identical to the missing-record denial", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.canRead = false;
+  const denied = await (await GET(request())).json();
+
+  routeState.canRead = true;
+  routeState.status = null;
+  const missing = await (await GET(request())).json();
+
+  assert.deepEqual(denied, missing);
 });
 
 /** F-t04-004: a latest failed run surfaces for the row retry affordance. */

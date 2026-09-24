@@ -4,6 +4,7 @@ import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { gateDecisionCapability, getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
 import { loadFlowSubjectSubsidiary, requireFlowsSession } from '../_lib'
 import { can, guardSubsidiaryScope } from '../../../../lib/authz'
+import { canReadFlowSubject } from '../../../../lib/flow-subject-authz'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -105,6 +106,14 @@ export async function GET(req: Request) {
   const orgId = authz.user.orgId
   const adapter = getFlowAdapter(subjectKind)
   if (!adapter) return NextResponse.json({ error: 'unknown subject kind' }, { status: 400 })
+  // Domain read before anything about the record is disclosed: a caller
+  // without the subject kind's read grant (ap.read for a vendor bill, …)
+  // meets the same answer as for a nonexistent record, so approval
+  // participants, decisions, comments and failure reasons stay inside the
+  // domain that owns them.
+  if (!canReadFlowSubject(authz, subjectKind)) {
+    return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  }
   // Scope the direct read before asking the adapter for status. Otherwise a
   // restricted caller can forge a subject id from another subsidiary and
   // learn its lifecycle plus approver/history metadata even though the record
