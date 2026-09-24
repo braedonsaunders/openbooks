@@ -69,7 +69,7 @@ interface DrillTarget {
   label: string
 }
 
-const fmtHours = (v: number) => v.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 4 })
+const fmtHours = (v: number, locale: string) => v.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 4 })
 
 export function CostTimeTab({
   data,
@@ -81,6 +81,7 @@ export function CostTimeTab({
   // HR-20: who is clocked in now; undefined on surfaces without cockpit data.
   crewToday?: { employeePartyId: string; employeeName: string | null; since: string; costCodeRef: string | null; geoCheck: string }[]
 }) {
+  const locale = useLocale()
   const { money } = useMoney()
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
@@ -88,8 +89,8 @@ export function CostTimeTab({
   const [drill, setDrill] = useState<DrillTarget | null>(null)
 
   const kpis: Kpi[] = [
-    { label: t('cockpit.totalHours'), value: fmtHours(data.totals.hours) },
-    { label: t('cockpit.billableHours'), value: fmtHours(data.totals.billableHours) },
+    { label: t('cockpit.totalHours'), value: fmtHours(data.totals.hours, locale) },
+    { label: t('cockpit.billableHours'), value: fmtHours(data.totals.billableHours, locale) },
     { label: t('cockpit.laborCost'), value: money(data.totals.cost) },
     { label: t('cockpit.laborBill'), value: money(data.totals.bill), tone: 'good' },
   ]
@@ -162,8 +163,8 @@ export function CostTimeTab({
                 ),
                 search: (r) => r.label,
               },
-              { key: 'hours', header: t('cockpit.hoursHead'), align: 'right', cell: (r) => fmtHours(r.hours) },
-              { key: 'billable', header: t('cockpit.billableHead'), align: 'right', cell: (r) => fmtHours(r.billableHours) },
+              { key: 'hours', header: t('cockpit.hoursHead'), align: 'right', cell: (r) => fmtHours(r.hours, locale) },
+              { key: 'billable', header: t('cockpit.billableHead'), align: 'right', cell: (r) => fmtHours(r.billableHours, locale) },
               { key: 'cost', header: t('labels.actualCost'), align: 'right', cell: (r) => money(r.cost) },
               { key: 'bill', header: t('cockpit.billValue'), align: 'right', cell: (r) => money(r.bill) },
             ]}
@@ -248,8 +249,8 @@ function TimeEntriesDrawer({
     >
       <div className="flex h-full min-h-0 flex-col">
         <div className="grid grid-cols-2 gap-x-5 gap-y-2 border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-sm sm:grid-cols-4 dark:border-slate-800 dark:bg-slate-950/40">
-          <TimeDetailMetric label={t('cockpit.entriesHead')} value={data ? data.totals.entries.toLocaleString() : '—'} />
-          <TimeDetailMetric label={t('cockpit.hoursHead')} value={data ? fmtHours(Number(data.totals.hours)) : '—'} />
+          <TimeDetailMetric label={t('cockpit.entriesHead')} value={data ? data.totals.entries.toLocaleString(locale) : '—'} />
+          <TimeDetailMetric label={t('cockpit.hoursHead')} value={data ? fmtHours(Number(data.totals.hours), locale) : '—'} />
           <TimeDetailMetric label={t('labels.actualCost')} value={data ? money(data.totals.cost) : '—'} />
           <TimeDetailMetric label={t('cockpit.billValue')} value={data ? money(data.totals.bill) : '—'} />
         </div>
@@ -298,7 +299,7 @@ function TimeEntriesDrawer({
                         {entry.billable ? tCommon('labels.yes') : tCommon('labels.no')}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtHours(Number(entry.hours))}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtHours(Number(entry.hours), locale)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(entry.cost)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(entry.bill)}</TableCell>
                   </TableRow>

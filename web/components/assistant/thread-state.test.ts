@@ -69,15 +69,23 @@ test("stick-to-bottom holds only while the reader is at the bottom", () => {
 
 test("timestamps show time today, date + time otherwise", () => {
   const now = new Date("2026-09-16T12:00:00");
-  const today = formatMessageTimestamp("2026-09-16T09:41:00", now);
+  const today = formatMessageTimestamp("2026-09-16T09:41:00Z", now, 'en-US', 'UTC');
   assert.ok(today);
   assert.ok(!today.compact.includes("Sep"));
-  const older = formatMessageTimestamp("2026-08-02T09:41:00", now);
+  const older = formatMessageTimestamp("2026-08-02T09:41:00Z", now, 'en-US', 'UTC');
   assert.ok(older);
   assert.ok(older.compact.includes("Aug"));
-  const lastYear = formatMessageTimestamp("2025-12-31T23:59:00", now);
+  const lastYear = formatMessageTimestamp("2025-12-31T23:59:00Z", now, 'en-US', 'UTC');
   assert.ok(lastYear);
   assert.ok(lastYear.compact.includes("2025"));
   assert.ok(today.full.length > today.compact.length);
-  assert.equal(formatMessageTimestamp("not-a-date", now), null);
+  assert.equal(formatMessageTimestamp("not-a-date", now, 'en-US', 'UTC'), null);
 });
+
+test('timestamps compare and format dates in the configured viewer time zone', () => {
+  const now = new Date('2026-09-16T03:00:00Z')
+  const priorUtcDay = formatMessageTimestamp('2026-09-16T02:30:00Z', now, 'fr', 'America/Toronto')
+  assert.ok(priorUtcDay)
+  assert.ok(!priorUtcDay.compact.includes('sept'))
+  assert.match(priorUtcDay.full, /sept/i)
+})

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { ArrowDown, ArrowUp, Undo2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Textarea, UrlDrawer } from '@openbooks/ui'
@@ -150,6 +151,7 @@ function Fields({ fields, truncated, t }: { fields: FieldDescriptor[]; truncated
 }
 
 export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
+  const { dateTime } = useViewerFormat()
   const t = useTranslations('admin.pageLayouts')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -495,7 +497,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
                     {versions.map((version) => (
                       <li key={version.id} className="flex items-center gap-3 py-2">
                         <span className="text-sm text-slate-700 dark:text-slate-200">
-                          {new Date(version.savedAt).toLocaleString()}
+                          {dateTime(new Date(version.savedAt))}
                         </span>
                         {version.active ? (
                           <Badge variant="success" className="text-[10px]">{t('history.active')}</Badge>

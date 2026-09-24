@@ -14,6 +14,12 @@ registerHooks({
         url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })',
       }
     }
+    if (specifier === 'next-intl') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export function useLocale(){return "fr-CA"};export function useTimeZone(){return "America/Toronto"};export function useTranslations(){return (key)=>key}',
+      }
+    }
     return next(specifier, context)
   },
 })
@@ -45,6 +51,8 @@ const labels: Record<string, string> = {
   eventRetentionFlagged: 'Flagged for retention',
   eventDeleted: 'Deleted',
   actionFailed: 'Failed.',
+  retentionActionDelete: 'Delete document',
+  retentionActionAnonymize: 'Anonymize document',
 }
 
 function drawerWith(events: { kind: string; recordedAt: string }[], canManage = true): Drawer {
@@ -130,6 +138,28 @@ test('F3-67: an unrecognized event kind falls back to its code, never blank', as
   const m = await renderText(drawerWith([{ kind: 'mystery_kind', recordedAt: '2026-09-04' }]))
   try {
     assert.match(m.text, /mystery_kind/, 'an unknown kind stays visible as its code')
+  } finally {
+    await m.unmount()
+  }
+})
+
+test('event instants render in the viewer locale and organization time zone', async () => {
+  const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02T01:30:00.000Z' }]))
+  try {
+    assert.match(m.text, /1 sept\. 2026/)
+    assert.match(m.text, /21 h 30/)
+  } finally {
+    await m.unmount()
+  }
+})
+
+test('retention actions render their translated action label', async () => {
+  const drawer = drawerWith([], true)
+  drawer.document!.retentionAction = 'delete'
+  const m = await renderText(drawer)
+  try {
+    assert.match(m.text, /Delete document/)
+    assert.doesNotMatch(m.text, /\bdelete\b/)
   } finally {
     await m.unmount()
   }

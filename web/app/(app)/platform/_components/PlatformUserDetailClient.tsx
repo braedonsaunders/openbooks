@@ -10,6 +10,7 @@ import { GrantAccessForm } from './GrantAccessForm'
 import { PlatformMutationButton } from './PlatformMutationButton'
 import { setSuperAdminAction } from '../actions'
 import { GrantActingCell, GrantControlCell } from '../users/[id]/sections'
+import { useViewerFormat } from '@/lib/viewer-format'
 
 export function PlatformUserDetailClient({
   user,
@@ -36,6 +37,7 @@ export function PlatformUserDetailClient({
   actingUsers: Pick<PlatformUser, 'id' | 'name' | 'email' | 'orgName' | 'orgId'>[]
   isSelf: boolean
 }) {
+  const { dateTime } = useViewerFormat()
   return (
     <PageContainer>
       <div className="space-y-5">
@@ -127,8 +129,8 @@ export function PlatformUserDetailClient({
             {[
               { label: 'Email', value: user.email },
               { label: 'Home organization', value: user.orgName },
-              { label: 'Last login', value: asDate(user.lastLoginAt)?.toLocaleString() ?? 'Never' },
-              { label: 'Created', value: asDate(user.createdAt)?.toLocaleString() ?? '—' },
+              { label: 'Last login', value: asDate(user.lastLoginAt) ? dateTime(asDate(user.lastLoginAt)!) : 'Never' },
+              { label: 'Created', value: asDate(user.createdAt) ? dateTime(asDate(user.createdAt)!) : '—' },
               { label: 'Account ID', value: user.id, mono: true },
             ].map((fact) => (
               <div key={fact.label}>

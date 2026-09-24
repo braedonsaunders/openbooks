@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useViewerFormat } from "../../../../../lib/viewer-format";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 import { readApiErrorMessage } from "../../../../../lib/api-error";
 import {
@@ -123,6 +124,7 @@ export function BankFeedsClient({
   accounts: Account[];
   daemon: Daemon;
 }) {
+  const { date } = useViewerFormat();
   const router = useRouter();
   const t = useTranslations("banking.bankFeeds.client");
   const [adding, setAdding] = useState(false);
@@ -260,8 +262,8 @@ export function BankFeedsClient({
                     <span>·</span>
                     <span className="font-mono">{c.accountNumber}</span>
                     <span className="truncate">{c.accountName}</span>
-                    {c.lastSyncAt && <><span>·</span><span>{t("connection.synced", { date: new Date(c.lastSyncAt).toLocaleDateString("en-CA") })}</span></>}
-                    {c.lastError && c.lastAttemptAt && <><span>·</span><span>{t("connection.attempted", { date: new Date(c.lastAttemptAt).toLocaleDateString("en-CA") })}</span></>}
+                    {c.lastSyncAt && <><span>·</span><span>{t("connection.synced", { date: date(new Date(c.lastSyncAt)) })}</span></>}
+                    {c.lastError && c.lastAttemptAt && <><span>·</span><span>{t("connection.attempted", { date: date(new Date(c.lastAttemptAt)) })}</span></>}
                   </div>
                   {c.lastError && <div className="mt-1 truncate text-xs text-red-600" title={c.lastError}>⚠ {c.lastError}</div>}
                 </div>

@@ -8,6 +8,7 @@ import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { SortTh } from '../../../../components/sortable-th'
 import { asDate } from '../../../../lib/platform-console'
+import { ViewerDateTime } from '../../../../components/viewer-format'
 import type { PlatformUser } from '../../../../lib/platform-admin'
 
 /**
@@ -195,7 +196,7 @@ export function UsersList({
                       />
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                      {asDate(user.lastLoginAt)?.toLocaleString() ?? 'Never'}
+                      {asDate(user.lastLoginAt) ? <ViewerDateTime value={asDate(user.lastLoginAt)!} /> : 'Never'}
                     </TableCell>
                     <TableCell className="w-px whitespace-nowrap px-2 text-center" style={{ width: 64 }}>
                       <UserManageCell href={`/platform/users/${user.id}`} />

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCivilDate, formatCount, formatPercent01, monthLabel, monthYearLabel, shortDateLabel, trendWeekLabel } from './format';
+import { countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCivilDate, formatCount, formatPercent01, monthLabel, monthYearLabel, shortDateLabel, trendWeekLabel, viewerDateTime, viewerNumber } from './format';
 
 // Intl uses narrow/no-break spaces in some locales; compare on plain spaces.
 const nbsp = (s: string): string => s.replace(/[\u00a0\u202f]/g, " ");
@@ -109,4 +109,13 @@ test("civil dates render medium in the operator locale without shifting days", (
   assert.equal(formatCivilDate("2026-01-05", "de"), "5. Jan. 2026");
   assert.equal(formatCivilDate("2026-01-05", "fr"), "5 janv. 2026");
   assert.equal(formatCivilDate("2026-01-05T00:00:00", "en"), "Jan 5, 2026");
+});
+
+test("viewer formatting uses both the requested locale and organization time zone", () => {
+  const instant = new Date("2026-01-05T01:30:00Z");
+  const local = viewerDateTime(instant, "fr", "America/Toronto", { dateStyle: "short", timeStyle: "short" });
+  const utc = viewerDateTime(instant, "fr", "UTC", { dateStyle: "short", timeStyle: "short" });
+  assert.match(local, /04\/01\/2026|4\/01\/2026/);
+  assert.notEqual(local, utc);
+  assert.notEqual(viewerNumber(12345.6, "fr"), viewerNumber(12345.6, "en"));
 });

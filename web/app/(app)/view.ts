@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '@/lib/authz'
 
@@ -34,6 +34,7 @@ export interface RootDashboardData {
 
 export async function loadRootDashboard(): Promise<RootDashboardData | null> {
   const t = await getTranslations('dashboard')
+  const locale = await getLocale()
   const authz = await getAuthz()
   if (!authz) return null
 
@@ -41,15 +42,15 @@ export async function loadRootDashboard(): Promise<RootDashboardData | null> {
   // live in the slot now — they need the session, and re-deriving them there
   // is what keeps them out of the spec.
 
-  // The server paint uses the org zone; the header corrects to the browser
-  // zone on mount. The name is the user's own first name.
+  // The configured org zone is also installed in the request's NextIntl
+  // context and remains authoritative after hydration.
   const today = new Date()
   return {
     greeting: buildGreeting(today, authz.user.name, {
       morning: t('greeting.morning'),
       afternoon: t('greeting.afternoon'),
       evening: t('greeting.evening'),
-    }, await businessTimeZone(authz.user.orgId)),
+    }, await businessTimeZone(authz.user.orgId), locale),
     name: authz.user.name,
   }
 }

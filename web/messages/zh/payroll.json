@@ -402,6 +402,7 @@
     "schedule": "发薪计划",
     "noSchedules": "无有效的发薪计划",
     "create": "新建工资核算",
+    "createFailed": "无法创建工资核算。",
     "description": "确认本次核算覆盖的期间。已预填计划的下一期间;周期外或补核算请更改日期。",
     "periodStart": "期间开始",
     "periodEnd": "期间结束",

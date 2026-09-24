@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { Badge } from '@openbooks/ui'
 
 /**
@@ -71,6 +72,7 @@ export function BankFeedPanel({
   neverLabel,
   feeds,
 }: BankFeedPanelProps) {
+  const { date } = useViewerFormat()
   return (
     <section className="mb-4 rounded-lg border border-slate-200 dark:border-slate-800">
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
@@ -94,11 +96,11 @@ export function BankFeedPanel({
               {feed.showPaused ? <span className="text-xs text-slate-400">(paused)</span> : null}
               <span className="ml-auto text-slate-500 dark:text-slate-400">
                 {lastSyncLabel}:{' '}
-                {feed.lastSyncAt ? new Date(feed.lastSyncAt).toLocaleDateString('en-CA') : neverLabel}
+                {feed.lastSyncAt ? date(new Date(feed.lastSyncAt), { dateStyle: 'medium' }) : neverLabel}
                 {feed.lastError && feed.lastAttemptAt ? (
                   <>
                     {' '}· {lastAttemptLabel}:{' '}
-                    {new Date(feed.lastAttemptAt).toLocaleDateString('en-CA')}
+                    {date(new Date(feed.lastAttemptAt), { dateStyle: 'medium' })}
                   </>
                 ) : null}
               </span>

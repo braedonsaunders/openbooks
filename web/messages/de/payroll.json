@@ -402,6 +402,7 @@
     "schedule": "Lohnplan",
     "noSchedules": "Keine aktiven Lohnpläne",
     "create": "Neuer Lohnlauf",
+    "createFailed": "Der Lohnlauf konnte nicht erstellt werden.",
     "description": "Bestätigen Sie den Zeitraum dieses Laufs. Die nächste Periode des Plans ist vorausgefüllt; ändern Sie die Daten für einen außerplanmäßigen oder Nachhollauf.",
     "periodStart": "Periodenbeginn",
     "periodEnd": "Periodenende",

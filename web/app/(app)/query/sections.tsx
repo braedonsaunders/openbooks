@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
@@ -57,6 +58,7 @@ interface SavedSnippet {
 type RailTab = 'schema' | 'snippets' | 'history'
 
 export function QueryConsole() {
+  const { number } = useViewerFormat()
   const t = useTranslations('query')
   const today = useBusinessToday()
   const [sqlText, setSqlText] = useState(STARTER)
@@ -554,7 +556,7 @@ export function QueryConsole() {
               >
                 {ROW_LIMITS.map((n) => (
                   <option key={n} value={n}>
-                    {n.toLocaleString()}
+                    {number(n)}
                   </option>
                 ))}
               </Select>

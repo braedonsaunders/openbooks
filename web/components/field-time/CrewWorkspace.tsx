@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { Button, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../lib/api-error'
 
@@ -80,6 +81,7 @@ export function CrewWorkspace({
     defaultWorkedOn: string
   } | null
 }) {
+  const { dateTime } = useViewerFormat()
   const t = useTranslations('timesheets')
   const [lines, setLines] = useState<CrewLine[]>(initialLines.length > 0 ? initialLines : [{ ...EMPTY_LINE }])
   const [busy, setBusy] = useState(false)
@@ -109,7 +111,7 @@ export function CrewWorkspace({
           setError(payload?.error ?? t('field.sendFailed'))
           return false
         }
-        setSavedAt(new Date().toLocaleTimeString())
+        setSavedAt(dateTime(new Date(), { hour: 'numeric', minute: '2-digit' }))
         return true
       } catch {
         setError(t('field.sendFailed'))
@@ -118,7 +120,7 @@ export function CrewWorkspace({
         setBusy(false)
       }
     },
-    [batchId, t],
+    [batchId, dateTime, t],
   )
 
   const save = useCallback(async () => {

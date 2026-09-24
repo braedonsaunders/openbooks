@@ -244,8 +244,21 @@ test("a dual A+B employee's B-employment slice stays out of an A-only actor's re
       /not visible in this organization/,
     );
     // The A-employment slice of the same person stays readable.
+    await db.execute(sql`
+      update hrm_documents
+         set sent_at = '2026-09-02T01:30:00Z'::timestamptz,
+             expires_at = '2026-09-30T23:59:59Z'::timestamptz
+       where org_id = ${h.org.orgId} and id = ${h.docDualAId}
+    `);
     const detail = await getDocumentDetail({ ...q, documentId: h.docDualAId });
     assert.equal(detail.id, h.docDualAId);
+    assert.ok(detail.sentAt instanceof Date, "sentAt stays a Date value through the document service");
+    assert.ok(detail.expiresAt instanceof Date, "expiresAt stays a Date value through the document service");
+    assert.ok(detail.events.length > 0, "the document has its recorded creation event");
+    assert.ok(
+      detail.events.every((event) => event.recordedAt instanceof Date),
+      "event timestamps remain Date values until the viewer formats them",
+    );
   });
 });
 

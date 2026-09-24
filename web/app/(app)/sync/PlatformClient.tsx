@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
 import {
   Plug,
@@ -181,13 +182,9 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> =
     unconfigured: "secondary",
   };
 
-function fmt(ts: string | null): string {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-}
-
 export function PlatformClient() {
+  const { dateTime, number } = useViewerFormat();
+  const fmt = (ts: string | null) => ts ? dateTime(new Date(ts)) : "—";
   const t = useTranslations("sync");
   const tHub = useTranslations("admin.hub");
   const [data, setData] = useState<Payload | null>(null);
@@ -374,7 +371,7 @@ export function PlatformClient() {
             </span>
             {p.total ? (
               <span className="tabular-nums text-slate-500">
-                {(p.current ?? 0).toLocaleString()}/{p.total.toLocaleString()}
+                {number(p.current ?? 0)}/{number(p.total)}
               </span>
             ) : null}
           </div>

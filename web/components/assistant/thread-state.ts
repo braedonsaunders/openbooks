@@ -87,23 +87,27 @@ export function reconcileThreadAfterStop<T extends ThreadMessage>(
  */
 export function formatMessageTimestamp(
   value: string,
-  now = new Date(),
+  now: Date,
+  locale: string,
+  timeZone: string,
 ): { compact: string; full: string } | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
+  const civilDate = (value: Date) => new Intl.DateTimeFormat(locale, {
+    year: 'numeric', month: '2-digit', day: '2-digit', timeZone,
+  }).format(value)
   const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    civilDate(date) === civilDate(now);
+  const time = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", timeZone }).format(date);
   const compact = sameDay
     ? time
-    : `${date.toLocaleDateString(undefined, {
+    : `${new Intl.DateTimeFormat(locale, {
         month: "short",
         day: "numeric",
-        ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" as const }),
-      })} · ${time}`;
-  const full = date.toLocaleString(undefined, {
+        ...(new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone }).format(date) === new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone }).format(now) ? {} : { year: "numeric" as const }),
+        timeZone,
+      }).format(date)} · ${time}`;
+  const full = new Intl.DateTimeFormat(locale, {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -111,6 +115,7 @@ export function formatMessageTimestamp(
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
-  });
+    timeZone,
+  }).format(date);
   return { compact, full };
 }

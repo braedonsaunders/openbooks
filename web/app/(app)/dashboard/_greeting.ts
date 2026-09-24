@@ -11,18 +11,18 @@ export function buildGreeting(
   now: Date,
   name: string | null,
   copy: { morning: string; afternoon: string; evening: string },
-  timeZone?: string,
+  timeZone: string,
+  locale: string,
 ): string {
-  const hour = hourInZone(now, timeZone)
+  const hour = hourInZone(now, timeZone, locale)
   const stem = hour < 12 ? copy.morning : hour < 17 ? copy.afternoon : copy.evening
   const firstName = name?.trim().split(/\s+/)[0] ?? null
   return firstName ? `${stem}, ${firstName}` : stem
 }
 
-function hourInZone(now: Date, timeZone?: string): number {
-  if (!timeZone) return now.getHours()
+function hourInZone(now: Date, timeZone: string, locale: string): number {
   try {
-    const parts = new Intl.DateTimeFormat('en-US', {
+    const parts = new Intl.DateTimeFormat(locale, {
       timeZone,
       hour: 'numeric',
       hour12: false,

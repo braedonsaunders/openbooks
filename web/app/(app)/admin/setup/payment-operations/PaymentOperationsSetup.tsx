@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
+import { useViewerFormat } from '../../../../../lib/viewer-format'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -204,6 +205,7 @@ export function PaymentOperationsSetup({
 }
 
 function SetupTable({ view, rows, t, basePath }: { view: PaymentSetupView; rows: SetupRow[]; t: Translator; basePath: string }) {
+  const { dateTime } = useViewerFormat()
   const cols: Record<PaymentSetupView, string[]> = {
     profiles: ['name', 'bank', 'format', 'currency', 'delivery', 'approval', 'status'],
     formats: ['code', 'name', 'rail', 'direction', 'currency', 'status'],
@@ -229,7 +231,7 @@ function SetupTable({ view, rows, t, basePath }: { view: PaymentSetupView; rows:
           </TableRow>
           if (view === 'schedules') return <TableRow key={row.id}>
             <TableCell><Link href={href} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.name}</Link></TableCell><TableCell>{row.profile_name}</TableCell>
-            <TableCell className="font-mono text-xs">{row.cron}</TableCell><TableCell>{row.next_run_at ? new Date(row.next_run_at).toLocaleString() : '—'}</TableCell>
+            <TableCell className="font-mono text-xs">{row.cron}</TableCell><TableCell>{row.next_run_at ? dateTime(new Date(row.next_run_at)) : '—'}</TableCell>
             <TableCell>{t(`actions.${row.action}`)}</TableCell><TableCell><Active active={row.is_active} t={t} /></TableCell>
           </TableRow>
           return <TableRow key={row.id}>

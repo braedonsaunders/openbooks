@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { mergeHref } from '@/lib/list-params'
 import { isReportOverlayParam } from '@/lib/report-overlay'
 import { OverlayLink } from './overlay-link'
@@ -25,6 +26,7 @@ export function Pagination({
   pageParamKey?: string
 }) {
   const t = useTranslations('ui.pagination')
+  const { number } = useViewerFormat()
   const tCommon = useTranslations('common')
   const overlay = useReportOverlayOptional()
   const overlayNav = Boolean(overlay && isReportOverlayParam(pageParamKey))
@@ -47,13 +49,13 @@ export function Pagination({
     <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
       <span>
         {isOutOfRange
-          ? t('outOfRange', { page: page.toLocaleString() })
+          ? t('outOfRange', { page: number(page) })
           : total === 0
             ? tCommon('feedback.noResults')
             : t.rich('showing', {
-                from: from.toLocaleString(),
-                to: to.toLocaleString(),
-                total: total.toLocaleString(),
+                from: number(from),
+                to: number(to),
+                total: number(total),
                 strong: (chunks) => (
                   <strong className="font-medium text-slate-900 dark:text-slate-100">
                     {chunks}
@@ -65,10 +67,10 @@ export function Pagination({
         <PageButton
           href={lastPageHref}
           overlayNav={overlayNav}
-          aria-label={t('goToLastPageAria', { page: pageCount.toLocaleString() })}
+          aria-label={t('goToLastPageAria', { page: number(pageCount) })}
         >
           <ChevronLeft size={14} />
-          {t('goToPage', { page: pageCount.toLocaleString() })}
+          {t('goToPage', { page: number(pageCount) })}
         </PageButton>
       ) : pageCount > 1 ? (
         <div className="flex items-center gap-1">

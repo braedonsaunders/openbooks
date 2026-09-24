@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
 import { Badge, Button, UrlDrawer } from "@openbooks/ui";
 import { PagedTable, type PagedColumn } from "../../../../../components/paged-table";
 import { confirmDialog } from "../../../../../lib/confirm";
@@ -23,6 +24,7 @@ function pickLabel<T extends string>(value: string, options: readonly T[], resol
 }
 
 export function ChangeSetDrawer({ detail, actorId }: { detail: ChangeSetDetail; actorId: string }) {
+  const { dateTime } = useViewerFormat();
   const t = useTranslations("admin");
   const cs = "sandboxes.changeSets";
   const router = useRouter();
@@ -75,7 +77,7 @@ export function ChangeSetDrawer({ detail, actorId }: { detail: ChangeSetDetail; 
               approved: { name: detail.approvedName, at: detail.approvedAt },
               applied: { name: detail.appliedName, at: detail.appliedAt },
             }[stage];
-            return <div key={stage}><dt className="font-medium">{t(`${cs}.stages.${stage}`)}</dt><dd>{entry.at ? `${entry.name ?? t(`${cs}.recordedActor`)} · ${new Date(entry.at).toLocaleString()}` : t(`${cs}.pending`)}</dd></div>;
+            return <div key={stage}><dt className="font-medium">{t(`${cs}.stages.${stage}`)}</dt><dd>{entry.at ? `${entry.name ?? t(`${cs}.recordedActor`)} · ${dateTime(new Date(entry.at))}` : t(`${cs}.pending`)}</dd></div>;
           })}
         </dl>
         {next.reasonKey && <p role="status" className="text-sm text-amber-800 dark:text-amber-300">{t(`${cs}.reasons.${next.reasonKey}`)}</p>}

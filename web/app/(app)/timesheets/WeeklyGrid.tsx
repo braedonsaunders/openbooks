@@ -14,7 +14,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { decimalLabel, viewerDate } from '../../../lib/format'
 import { toast } from 'sonner'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { confirmDialog } from '../../../lib/confirm'
@@ -96,8 +97,8 @@ function num(v: string): number {
   return Number.isNaN(n) ? 0 : n
 }
 
-function fmt(n: number): string {
-  return n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function fmt(n: number, locale: string): string {
+  return decimalLabel(n, locale, 2, 2)
 }
 
 /** Day-of-month from a day's ISO date ("2026-07-13" → 13). */
@@ -106,13 +107,13 @@ function dayOfMonth(iso: string): number {
 }
 
 /** Formatted week endpoints from the week's Sunday, for the "Week of …" title. */
-function weekRange(sundayIso: string): { from: string; to: string } {
+function weekRange(sundayIso: string, locale: string): { from: string; to: string } {
   const [y, m, d] = sundayIso.split('-').map(Number)
   const sun = new Date(Date.UTC(y!, m! - 1, d!, 12))
   const sat = new Date(sun)
   sat.setUTCDate(sat.getUTCDate() + 6)
   const fmtDate = (dt: Date, withYear: boolean) =>
-    dt.toLocaleDateString('en-CA', {
+    viewerDate(dt, locale, 'UTC', {
       month: 'short',
       day: 'numeric',
       timeZone: 'UTC',
@@ -177,6 +178,7 @@ export function WeeklyGrid({
   anomalyFlags?: { kind: string; kindLabel: string; severity: string; explanation: string }[]
 }) {
   const t = useTranslations('timesheets')
+  const locale = useLocale()
   const tCommon = useTranslations('common')
   const statusLabel = (s: string) =>
     COMMON_STATUS_KEYS.has(s) ? tCommon(`status.${s}`) : LOCAL_STATUS_KEYS.has(s) ? t(`status.${s}`) : s
@@ -535,7 +537,7 @@ export function WeeklyGrid({
             <ChevronLeft size={15} /> {t('grid.prev')}
           </Button>
           <span className="min-w-[220px] text-center text-sm font-medium text-slate-700 dark:text-slate-200">
-            {t('grid.weekOf', weekRange(week))}
+            {t('grid.weekOf', weekRange(week, locale))}
           </span>
           <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, 1))} disabled={!employeeId}>
             {tCommon('actions.next')} <ChevronRight size={15} />
@@ -689,11 +691,11 @@ export function WeeklyGrid({
                   tot > 0 ? 'font-semibold text-slate-800 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500',
                 )}
               >
-                {tot > 0 ? fmt(tot) : '—'}
+                {tot > 0 ? fmt(tot, locale) : '—'}
               </div>
             ))}
             <div className="border-t border-slate-200 px-2 py-2 text-right text-sm font-bold tabular-nums text-teal-700 dark:border-slate-700 dark:text-teal-300">
-              {fmt(grandTotal)}
+              {fmt(grandTotal, locale)}
             </div>
             <div className="border-t border-slate-200 dark:border-slate-700" />
           </div>
@@ -711,10 +713,10 @@ export function WeeklyGrid({
           )}
           <div className="flex items-center gap-5 text-sm">
             <span className="text-slate-500 dark:text-slate-400">
-              {t('labels.billable')} <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">{fmt(billableTotal)}</span>
+              {t('labels.billable')} <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">{fmt(billableTotal, locale)}</span>
             </span>
             <span className="text-slate-500 dark:text-slate-400">
-              {t('labels.totalHours')} <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-300">{fmt(grandTotal)}</span>
+              {t('labels.totalHours')} <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-300">{fmt(grandTotal, locale)}</span>
             </span>
           </div>
         </div>

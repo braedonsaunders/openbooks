@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Repo-wide audit: viewer-facing output must never pin the 'en-US' locale.
+ * Repo-wide audit: viewer-facing output must never omit or pin its locale.
  *
  * F2-14b: twenty-two web files formatted dates, counts, and currency with a
  * hardcoded 'en-US', so every viewer saw English month names and groupings
@@ -62,7 +62,7 @@ const ALLOWLIST_PATH = "scripts/check-viewer-locale.allowlist.json";
  * number as pins are converted; never raise it. The stale-entry ratchet
  * below stops entries rotting; this stops the list growing.
  */
-export const ALLOWLIST_CEILING = 13;
+export const ALLOWLIST_CEILING = 12;
 
 function repoRoot() {
   return join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -106,7 +106,7 @@ function discoverWebSources() {
 }
 
 function isEnUsLiteral(node) {
-  return (
+  return !!node && (
     (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
     node.text === "en-US"
   );
@@ -136,37 +136,48 @@ function enclosingFunctionName(node) {
   return "(top-level)";
 }
 
-function isIntlLocaleCall(node) {
+function intlLocaleCall(node) {
   const callee =
     (ts.isCallExpression(node) || ts.isNewExpression(node)) ? node.expression : null;
   if (!callee || !ts.isPropertyAccessExpression(callee)) return false;
   const method = callee.name.text;
-  if (method === "toLocaleString" || method === "toLocaleDateString") return true;
+  if (/^toLocale(?:String|DateString|TimeString)$/.test(method)) return "method";
   if (
-    (method === "NumberFormat" || method === "DateTimeFormat") &&
-    ts.isIdentifier(callee.expression) &&
-    callee.expression.text === "Intl"
-  ) {
-    return true;
-  }
-  return false;
+    ts.isIdentifier(callee.expression) && callee.expression.text === "Intl" &&
+    ["DateTimeFormat", "NumberFormat", "RelativeTimeFormat", "Collator", "PluralRules", "DisplayNames", "ListFormat"].includes(method)
+  ) return "constructor";
+  return null;
+}
+
+function isMissingLocale(node) {
+  return !node || (ts.isIdentifier(node) && node.text === "undefined") || node.kind === ts.SyntaxKind.NullKeyword;
+}
+
+function isPinnedLocale(node) {
+  return !!node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+    (node.text === "en-US" || node.text === "en-CA");
 }
 
 export function scanSource(text, filePath) {
   const source = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true);
   const violations = [];
+  const requireExplicitViewerLocale = filePath.startsWith("web/app/") || filePath.startsWith("web/components/");
   const visit = (node) => {
-    if ((ts.isCallExpression(node) || ts.isNewExpression(node)) && isIntlLocaleCall(node)) {
-      const first = node.arguments?.[0];
-      if (first && isEnUsLiteral(first)) {
-        const { line } = source.getLineAndCharacterOfPosition(first.getStart(source));
+    if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+      const callKind = intlLocaleCall(node);
+      if (callKind) {
+        const first = node.arguments?.[0];
+        const pinned = requireExplicitViewerLocale ? isPinnedLocale(first) : isEnUsLiteral(first);
+        if ((requireExplicitViewerLocale && isMissingLocale(first)) || pinned) {
+        const { line } = source.getLineAndCharacterOfPosition((first ?? node.expression).getStart(source));
         violations.push({ path: filePath, fn: enclosingFunctionName(node), line: line + 1 });
+        }
       }
     }
     if (
       (ts.isParameter(node) || ts.isBindingElement(node)) &&
       node.initializer &&
-      isEnUsLiteral(node.initializer)
+      (requireExplicitViewerLocale ? isPinnedLocale(node.initializer) : isEnUsLiteral(node.initializer))
     ) {
       const { line } = source.getLineAndCharacterOfPosition(node.initializer.getStart(source));
       violations.push({ path: filePath, fn: enclosingFunctionName(node), line: line + 1 });
@@ -243,8 +254,8 @@ export function main() {
   if (newViolations.length > 0) {
     failed = true;
     console.error(
-      `FAIL: ${newViolations.length} viewer-facing site(s) pin the 'en-US' locale.\n` +
-        `Every viewer sees English month names and groupings regardless of locale.\n` +
+      `FAIL: ${newViolations.length} viewer-facing site(s) omit or pin the locale.\n` +
+        `Every viewer must receive locale-sensitive output in their active locale.\n` +
         `Route the site through the required-locale family in web/lib/format.ts\n` +
         `(trendWeekLabel, dateLabel, shortDateLabel, monthYearLabel, monthLabel,\n` +
         `countLabel, decimalLabel, currencyLabel), threaded from the viewer's locale\n` +
@@ -265,7 +276,7 @@ export function main() {
   }
 
   console.log(
-    `PASS: no viewer-facing 'en-US' pins across ${scannedFiles} files ` +
+    `PASS: no omitted or hardcoded viewer locales across ${scannedFiles} files ` +
       `(${violations.length} known pin(s) allow-listed).`,
   );
   for (const gap of knownGaps) {

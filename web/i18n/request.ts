@@ -1,5 +1,5 @@
 import { getRequestConfig } from "next-intl/server";
-import { resolveLocale } from "../lib/locale";
+import { resolveLocale, resolveTimeZone } from "../lib/locale";
 import { DEFAULT_LOCALE, type Locale } from "./config";
 
 type Messages = Record<string, unknown>;
@@ -34,7 +34,7 @@ function withEnglishFallback(base: Messages, overlay: Messages): Messages {
 }
 
 export default getRequestConfig(async () => {
-  const locale = await resolveLocale();
+  const [locale, timeZone] = await Promise.all([resolveLocale(), resolveTimeZone()]);
   const en = (await MESSAGE_LOADERS[DEFAULT_LOCALE]()).default;
   const messages =
     locale === DEFAULT_LOCALE
@@ -44,8 +44,8 @@ export default getRequestConfig(async () => {
   return {
     locale,
     messages: (messages),
-    // Stable server/client timezone. Monetary rendering uses the same resolved
-    // locale through the shared client and server money formatters.
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // Viewer dates and times use the tenant's configured civil-time zone,
+    // consistent with business-date and financial workflow rules.
+    timeZone,
   };
 });

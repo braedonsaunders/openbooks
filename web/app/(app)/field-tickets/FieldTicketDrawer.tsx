@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { toast } from 'sonner'
 import { Mail, Plus, Send, Trash2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
@@ -299,6 +300,7 @@ export async function sendFieldTicketMutation(
 }
 
 export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
+  const { date } = useViewerFormat()
   const { money } = useMoney()
   const t = useTranslations('fieldTickets')
   const tCommon = useTranslations('common')
@@ -899,7 +901,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const totalHours = grid.reduce((a, r) => a + rowHours(r), 0)
   const dayLabel = (isoDay: string) => {
     const d = new Date(`${isoDay}T12:00:00Z`)
-    return { dow: d.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }), dom: isoDay.slice(5) }
+    return { dow: date(d, { weekday: 'short', timeZone: 'UTC' }), dom: isoDay.slice(5) }
   }
 
   return (

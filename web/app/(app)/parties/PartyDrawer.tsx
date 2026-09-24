@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { Building2, CalendarDays, CircleDollarSign, FileText, Landmark, Plus, Search, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
@@ -2007,6 +2008,7 @@ function PartyReadOnlyField({
 }
 
 function PartySummary({ payload }: { payload: PartyPayload }) {
+  const { date } = useViewerFormat()
   const { money } = useMoney()
   const t = useTranslations('parties.drawer')
   const summary = payload.transactionSummary
@@ -2021,7 +2023,7 @@ function PartySummary({ payload }: { payload: PartyPayload }) {
     },
     {
       label: t('summary.lastTransaction'),
-      value: summary.lastDate ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(`${summary.lastDate}T00:00:00`)) : '—',
+      value: summary.lastDate ? date(new Date(`${summary.lastDate}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' }) : '—',
       icon: <CalendarDays size={17} />,
     },
   ]
@@ -2515,10 +2517,10 @@ interface ActivityResponse {
 
 /** Exported for the refusal-path regression test: the drawer mounts it by tab. */
 export function ActivitySublist({ partyId, canManage }: { partyId: string; canManage: boolean }) {
+  const { dateTime } = useViewerFormat()
   const t = useTranslations('parties.drawer')
   const tcrm = useTranslations('crm')
   const tc = useTranslations('common')
-  const locale = useLocale()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -2623,7 +2625,7 @@ export function ActivitySublist({ partyId, canManage }: { partyId: string; canMa
                   <TableCell><Link href={activityHref(row.id)} className="font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.subject}</Link></TableCell>
                   <TableCell>{tcrm(`activityKinds.${row.kind}`)}</TableCell>
                   <TableCell><Badge variant={row.status === 'completed' ? 'success' : 'outline'}>{tcrm(`activityStatuses.${row.status}`)}</Badge></TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">{new Date(row.activity_date).toLocaleString(locale)}</TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">{dateTime(new Date(row.activity_date))}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -2686,6 +2688,7 @@ function transactionTarget(row: TransactionRow): { path: string; param: string }
 
 /** Exported for the refusal-path regression test: the drawer mounts it by tab. */
 export function TransactionSublist({ partyId, role }: { partyId: string; role?: 'customer' | 'vendor' | 'employee' }) {
+  const { date } = useViewerFormat()
   const { money } = useMoney()
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
@@ -2799,7 +2802,7 @@ export function TransactionSublist({ partyId, role }: { partyId: string; role?: 
               {data.rows.map((row) => (
                 <TableRow key={row.id} className={loading ? 'opacity-60' : undefined}>
                   <TableCell><div className="flex items-center gap-2"><DocTypeBadge kind={row.kind} /><Link href={transactionHref(row) as never} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">{row.document_number}</Link></div></TableCell>
-                  <TableCell>{new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(`${row.document_date}T00:00:00`))}</TableCell>
+                  <TableCell>{date(new Date(`${row.document_date}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{row.reference_number || '—'}</TableCell>
                   <TableCell><Badge variant={row.status === 'posted' ? 'success' : row.status === 'pending_approval' ? 'warning' : 'secondary'}>{statusLabel(row.status)}</Badge></TableCell>
                   <TableCell className="text-right tabular-nums">{money(row.total, { currency: row.currency })}</TableCell>

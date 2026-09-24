@@ -1,38 +1,40 @@
 import { PlatformHub } from '@braedonsaunders/appkit-superadmin/react'
 import { ShieldCheck } from 'lucide-react'
 import { platformSummary } from '../../../lib/platform-admin'
+import { getFormatter } from 'next-intl/server'
 import { OPENBOOKS_PLATFORM_NAV } from '../../../lib/platform-console'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PlatformPage() {
+  const format = await getFormatter()
   const summary = await platformSummary()
   const tiles = OPENBOOKS_PLATFORM_NAV.tiles.map((tile) => {
     if (tile.id === 'tenants') {
       return {
         ...tile,
-        stat: summary.organizations.toLocaleString(),
+        stat: format.number(summary.organizations),
         detail: `${summary.productionOrganizations} production · ${summary.environments} non-production`,
       }
     }
     if (tile.id === 'users') {
       return {
         ...tile,
-        stat: summary.activeUsers.toLocaleString(),
+        stat: format.number(summary.activeUsers),
         detail: `${summary.superAdmins} super administrator${summary.superAdmins === 1 ? '' : 's'}`,
       }
     }
     if (tile.id === 'access') {
       return {
         ...tile,
-        stat: summary.activeGrants.toLocaleString(),
+        stat: format.number(summary.activeGrants),
         detail: 'Active explicit grants',
       }
     }
     if (tile.id === 'emailLog') {
       return {
         ...tile,
-        stat: summary.failedEmails.toLocaleString(),
+        stat: format.number(summary.failedEmails),
         detail: 'Failed deliveries requiring attention',
       }
     }

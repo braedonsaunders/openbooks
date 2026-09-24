@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useViewerFormat } from "@/lib/viewer-format";
 import { promptDialog } from "../../../../lib/prompt";
 import { confirmDialog } from "../../../../lib/confirm";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
@@ -52,6 +53,7 @@ export function SandboxManager({
   sandboxes: SandboxRow[];
   periods: PeriodOption[];
 }) {
+  const { dateTime, number } = useViewerFormat();
   const [name, setName] = useState("");
   const [tier, setTier] = useState("masked");
   const [asOfPeriodId, setAsOfPeriodId] = useState("");
@@ -162,8 +164,8 @@ export function SandboxManager({
                   {s.masked && <Badge variant="secondary">masked</Badge>}
                 </div>
                 <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {s.storageRows.toLocaleString()} records ·{" "}
-                  {s.lastRefreshAt ? `refreshed ${new Date(s.lastRefreshAt).toLocaleString()}` : "never refreshed"}
+                  {number(s.storageRows)} records ·{" "}
+                  {s.lastRefreshAt ? `refreshed ${dateTime(new Date(s.lastRefreshAt))}` : "never refreshed"}
                   {s.refreshSchedule ? ` · auto-refresh ${s.refreshSchedule}` : ""}
                 </div>
                 {s.lastError && (

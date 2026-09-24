@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
 import {
   Alert,
@@ -134,6 +135,7 @@ export function WipBillingWorkspace({
   canApprove: boolean;
   canCreateInvoice: boolean;
 }) {
+  const { dateTime } = useViewerFormat();
   const router = useRouter();
   const { money } = useMoney();
   const today = useBusinessToday();
@@ -697,7 +699,7 @@ export function WipBillingWorkspace({
                       <span className="text-slate-500">
                         {" "}
                         · {event.actorName ?? t("trail.system")} ·{" "}
-                        {new Date(event.occurredAt).toLocaleString()}
+                        {dateTime(new Date(event.occurredAt))}
                       </span>
                     </div>
                   </li>

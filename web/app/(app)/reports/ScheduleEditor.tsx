@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
 import { REPORT_CADENCES, type ReportCadence } from '@openbooks/reports'
 import { confirmDialog } from '@/lib/confirm'
@@ -159,8 +160,6 @@ export function ScheduleEditor({
   )
 }
 
-const GUESSED_TZ = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
-
 function ScheduleForm({
   definitionId,
   statementParams,
@@ -172,6 +171,7 @@ function ScheduleForm({
   onDone: () => void
   onCancel: () => void
 }) {
+  const { timeZone } = useViewerFormat()
   const t = useTranslations('reports.schedule')
   const tc = useTranslations('common')
   const [cadence, setCadence] = useState<ReportCadence>('weekly')
@@ -179,7 +179,7 @@ function ScheduleForm({
   const [dayOfMonth, setDayOfMonth] = useState(1)
   const [hour, setHour] = useState(7)
   const [minute, setMinute] = useState(0)
-  const [timezone, setTimezone] = useState(GUESSED_TZ || 'UTC')
+  const [timezone, setTimezone] = useState(timeZone)
   const [recipients, setRecipients] = useState('')
   const [busy, setBusy] = useState(false)
 

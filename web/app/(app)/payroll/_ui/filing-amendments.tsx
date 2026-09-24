@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '../../../../lib/viewer-format'
 import { FileDown, History } from 'lucide-react'
 import {
   Alert,
@@ -269,6 +270,7 @@ export function FilingLifecycleBar({
    */
   canFile: boolean
 }) {
+  const { date } = useViewerFormat()
   const text = useFilingText()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [note, setNote] = useState('')
@@ -345,7 +347,7 @@ export function FilingLifecycleBar({
                 <Badge variant="outline">
                   #{latest.revisionNumber} · {latest.revision}
                 </Badge>
-                <span>{new Date(latest.issuedAt).toLocaleDateString()}</span>
+                <span>{date(new Date(latest.issuedAt))}</span>
               </span>
             )}
             {changed > 0 && (
@@ -406,6 +408,7 @@ function FilingHistoryDrawer({
   year: number
   onClose: () => void
 }) {
+  const { dateTime } = useViewerFormat()
   const text = useFilingText()
   const tCommon = useTranslations('common')
   const ordered = [...lifecycle.submissions].reverse()
@@ -437,7 +440,7 @@ function FilingHistoryDrawer({
                     #{submission.revisionNumber} · {submission.revision}
                   </Badge>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {new Date(submission.issuedAt).toLocaleString()}
+                    {dateTime(new Date(submission.issuedAt))}
                   </span>
                 </div>
                 {submission.artifact ? (

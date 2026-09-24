@@ -456,7 +456,7 @@ function OverviewTab({ data }: { data: UtilizationData }) {
               <Donut
                 data={[{ name: t('chart.billable'), value: c.billableHours }, { name: t('chart.nonBillable'), value: c.nonBillableHours }]}
                 height={200}
-                valueFormat={(v) => `${Math.round(v).toLocaleString()} ${t('unit.hrs')}`}
+                valueFormat={(v) => `${hrs0(Math.round(v))} ${t('unit.hrs')}`}
                 colors={['#10b981', '#ef4444']}
               />
             </Panel>

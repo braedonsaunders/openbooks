@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useViewerFormat } from "@/lib/viewer-format";
 import { Button, Card, CardContent, Input, Label } from "@openbooks/ui";
 
 type MfaStatus = { enabled: boolean; recoveryCodesRemaining: number };
@@ -26,6 +27,7 @@ async function jsonRequest(url: string, init?: RequestInit) {
 }
 
 export function SecurityPanel() {
+  const { dateTime } = useViewerFormat();
   const router = useRouter();
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -180,7 +182,7 @@ export function SecurityPanel() {
                   <p className="text-sm font-medium text-slate-900 dark:text-white">
                     {session.current ? "This session" : "Browser session"} · {session.authMethod.toUpperCase()}
                   </p>
-                  <p className="text-xs text-slate-500">Last used {new Date(session.lastSeenAt).toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">Last used {dateTime(new Date(session.lastSeenAt))}</p>
                 </div>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => {
                   await jsonRequest(`/api/auth/sessions/${session.id}`, { method: "DELETE" });

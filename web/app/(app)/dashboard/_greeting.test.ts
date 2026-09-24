@@ -12,10 +12,10 @@ const copy = { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'G
  * handling that the shared helper owns.
  */
 test('dashboard greeting picks the stem by hour of day', () => {
-  assert.equal(buildGreeting(new Date(2026, 0, 1, 8, 30), 'Ada', copy), 'Good morning, Ada')
-  assert.equal(buildGreeting(new Date(2026, 0, 1, 12, 0), 'Ada', copy), 'Good afternoon, Ada')
-  assert.equal(buildGreeting(new Date(2026, 0, 1, 16, 59), 'Ada', copy), 'Good afternoon, Ada')
-  assert.equal(buildGreeting(new Date(2026, 0, 1, 17, 0), 'Ada', copy), 'Good evening, Ada')
+  assert.equal(buildGreeting(new Date(Date.UTC(2026, 0, 1, 8, 30)), 'Ada', copy, 'UTC', 'en'), 'Good morning, Ada')
+  assert.equal(buildGreeting(new Date(Date.UTC(2026, 0, 1, 12, 0)), 'Ada', copy, 'UTC', 'en'), 'Good afternoon, Ada')
+  assert.equal(buildGreeting(new Date(Date.UTC(2026, 0, 1, 16, 59)), 'Ada', copy, 'UTC', 'en'), 'Good afternoon, Ada')
+  assert.equal(buildGreeting(new Date(Date.UTC(2026, 0, 1, 17, 0)), 'Ada', copy, 'UTC', 'en'), 'Good evening, Ada')
 })
 
 /**
@@ -26,19 +26,19 @@ test('dashboard greeting picks the stem by hour of day', () => {
 test('dashboard greeting resolves the hour in the given time zone', () => {
   // 2026-09-15T00:10:00Z: 8:10 PM EDT the previous day, 2:10 PM in Kiritimati.
   const instant = new Date('2026-09-15T00:10:00.000Z')
-  assert.equal(buildGreeting(instant, 'Ada', copy, 'America/Toronto'), 'Good evening, Ada')
-  assert.equal(buildGreeting(instant, 'Ada', copy, 'Pacific/Kiritimati'), 'Good afternoon, Ada')
-  assert.equal(buildGreeting(instant, 'Ada', copy, 'UTC'), 'Good morning, Ada')
+  assert.equal(buildGreeting(instant, 'Ada', copy, 'America/Toronto', 'fr'), 'Good evening, Ada')
+  assert.equal(buildGreeting(instant, 'Ada', copy, 'Pacific/Kiritimati', 'fr'), 'Good afternoon, Ada')
+  assert.equal(buildGreeting(instant, 'Ada', copy, 'UTC', 'fr'), 'Good morning, Ada')
 })
 
 test('dashboard greeting falls back to UTC for an unknown time zone', () => {
   const instant = new Date('2026-09-15T00:10:00.000Z')
-  assert.equal(buildGreeting(instant, 'Ada', copy, 'Not/AZone'), 'Good morning, Ada')
+  assert.equal(buildGreeting(instant, 'Ada', copy, 'Not/AZone', 'en'), 'Good morning, Ada')
 })
 
 test('dashboard greeting uses the first name, or the bare stem without one', () => {
-  assert.equal(buildGreeting(new Date(2026, 0, 1, 9, 0), 'Ada Lovelace', copy), 'Good morning, Ada')
-  assert.equal(buildGreeting(new Date(2026, 0, 1, 9, 0), '  Ada   Lovelace  ', copy), 'Good morning, Ada')
-  assert.equal(buildGreeting(new Date(2026, 0, 1, 9, 0), null, copy), 'Good morning')
-  assert.equal(buildGreeting(new Date(2026, 0, 1, 9, 0), '   ', copy), 'Good morning')
+  assert.equal(buildGreeting(new Date(Date.UTC(2026, 0, 1, 9, 0)), 'Ada Lovelace', copy, 'UTC', 'en'), 'Good morning, Ada')
+  assert.equal(buildGreeting(new Date(Date.UTC(2026, 0, 1, 9, 0)), '  Ada   Lovelace  ', copy, 'UTC', 'en'), 'Good morning, Ada')
+  assert.equal(buildGreeting(new Date(Date.UTC(2026, 0, 1, 9, 0)), null, copy, 'UTC', 'en'), 'Good morning')
+  assert.equal(buildGreeting(new Date(Date.UTC(2026, 0, 1, 9, 0)), '   ', copy, 'UTC', 'en'), 'Good morning')
 })

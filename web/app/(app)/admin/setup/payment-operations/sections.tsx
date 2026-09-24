@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useViewerFormat } from '../../../../../lib/viewer-format'
 import { Plus } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
 import { SetupEditor, type PaymentSetupView } from './PaymentOperationsSetup'
@@ -76,7 +77,8 @@ export function PaymentOperationsTabs({
  * the identical expression so the spec render matches byte for byte.
  */
 export function PaymentScheduleNextRun({ value }: { value: string | null }) {
-  return <>{value ? new Date(value).toLocaleString() : '—'}</>
+  const { dateTime } = useViewerFormat()
+  return <>{value ? dateTime(new Date(value)) : '—'}</>
 }
 
 export function NewSetupRecordButton({ href, label }: { href: string; label: string }) {

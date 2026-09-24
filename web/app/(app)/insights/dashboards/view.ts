@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getFormatter, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
@@ -78,7 +78,7 @@ export interface DashboardsData {
 export async function loadDashboards(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<DashboardsData> {
-  const [t, tCommon] = await Promise.all([getTranslations('insights'), getTranslations('common')])
+  const [t, tCommon, format] = await Promise.all([getTranslations('insights'), getTranslations('common'), getFormatter()])
   const authz = await requirePermission('insights.read')
   const canCreate = can(authz, 'insights.create')
   const orgId = authz.user.orgId
@@ -150,7 +150,7 @@ export async function loadDashboards(
       cardCount: String(Number(row.card_count)),
       statusLabel: row.status === 'published' ? t('status.published') : tCommon('status.draft'),
       statusVariant: row.status === 'published' ? 'success' : 'outline',
-      updated: new Date(String(row.updated_at)).toLocaleDateString(),
+      updated: format.dateTime(new Date(String(row.updated_at)), { dateStyle: 'medium' }),
     })),
     total: filteredTotal,
     currentPage: params.page,

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { getDocumentDetail, listDocuments } from '@openbooks/engine/src/hrm/documents/documents.ts'
 import { listCategories } from '@openbooks/engine/src/hrm/documents/categories.ts'
@@ -11,6 +11,8 @@ import { hrmPeopleViewTabs } from './workspace-tabs'
 import { can, requirePermission, type Authz } from '../authz'
 import { requireFeatureEnabled } from '../feature-gates'
 import { setupSectionParams } from '../list-params'
+import { resolveTimeZone } from '../locale'
+import { viewerDateTime } from '../format'
 
 /**
  * HR documents home loader (0230, HR-19).
@@ -122,7 +124,12 @@ export async function loadDocumentsHome(
   authz: DocumentsHomeAuthz,
   sp: Record<string, string | undefined>,
 ) {
-  const t = await getTranslations('hrm')
+  const [t, retentionAction, locale, timeZone] = await Promise.all([
+    getTranslations('hrm'),
+    getTranslations('admin.setup.options.hrmDocAction'),
+    getLocale(),
+    resolveTimeZone(),
+  ])
   const tabs = await hrmGroupTabs(authz.session, '/hrm/documents')
   const viewTabs = await hrmPeopleViewTabs(authz.session, '/hrm/documents')
   const status =
@@ -178,8 +185,8 @@ export async function loadDocumentsHome(
     status: doc.status,
     statusLabel: statusLabel(doc.status),
     statusVariant: statusVariant(doc.status),
-    sent: doc.sentAt,
-    expires: doc.expiresAt,
+    sent: doc.sentAt ? viewerDateTime(doc.sentAt, locale, timeZone) : null,
+    expires: doc.expiresAt ? viewerDateTime(doc.expiresAt, locale, timeZone) : null,
     hold: doc.legalHold,
     href: hrefFor(status, doc.id, false),
   }))
@@ -227,6 +234,8 @@ export async function loadDocumentsHome(
           pending: t('documents.drawer.pending'),
           viewed: t('documents.drawer.viewed'),
           retention: t('documents.drawer.retention'),
+          retentionActionDelete: retentionAction('delete'),
+          retentionActionAnonymize: retentionAction('anonymize'),
           retentionUnverified: t('documents.drawer.retentionUnverified'),
           eventCreated: t('documents.drawer.eventCreated'),
           eventSent: t('documents.drawer.eventSent'),
@@ -331,5 +340,4 @@ export async function loadDocumentsHome(
     generate,
   }
 }
-
 
