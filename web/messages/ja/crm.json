@@ -165,13 +165,34 @@
       "negotiation": "交渉",
       "closedWon": "受注",
       "closedLost": "失注"
+    },
+    "kanban": {
+      "listView": "リスト",
+      "boardView": "営業パイプライン",
+      "filterPlaceholder": "案件名、取引先、担当者で絞り込み…",
+      "showingCount": "{total, number} 件中 {shown, number} 件の商談を表示",
+      "requiresLines": "このステージには商談の明細が1件以上必要です。",
+      "requiresPrimaryContact": "このステージには主担当者の割り当てが必要です。",
+      "requiresPositiveAmount": "このステージには正の予測商談金額が必要です。",
+      "weighted": "加重",
+      "stagnantTitle": "{days, number} 日を超えて活動記録もステージ変更もありません",
+      "stagnantDays": "{days, plural, other {# 日超}}",
+      "noOpportunities": "商談がありません",
+      "lossReasonTitle": "受注・失注の理由が必要です",
+      "lossReasonDescription": "履歴レポートとパイプライン分析のため、この商談を受注または失注として終了した理由を記録してください。",
+      "reasonDetails": "理由の詳細",
+      "reasonPlaceholder": "例：価格で競合に敗れた、予算が中止された、対象範囲が縮小された…",
+      "cancel": "キャンセル",
+      "confirmStageChange": "ステージ変更を確定",
+      "lossReasonRequired": "失注として終了するには失注理由が必要です。"
     }
   },
   "forecastCategories": {
     "omitted": "除外",
     "worst_case": "最悪ケース",
     "most_likely": "最有力",
-    "upside": "上振れ"
+    "upside": "上振れ",
+    "pipeline": "パイプライン"
   },
   "forecasts": {
     "title": "予測とノルマ",

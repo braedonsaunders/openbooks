@@ -52,8 +52,9 @@ const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
+const messagesDe = (await import("../../../messages/de")).default;
 const { BusinessDateProvider } = await import("../../../components/business-date-provider");
-const { OpportunityKanbanBoard } = await import("./OpportunityKanban");
+const { OpportunityKanbanBoard, OpportunityViewSwitcher } = await import("./OpportunityKanban");
 type KanbanOpportunity = import("./OpportunityKanban").KanbanOpportunity;
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -155,6 +156,77 @@ test("a deal due on the business day is not flagged overdue; yesterday is", asyn
   );
   assert.equal(overdue.length, 1, `exactly the past-due deal flags overdue, got ${overdue.map((el) => el.textContent)}`);
   assert.match(overdue[0]!.textContent ?? "", /2026-09-16/);
+});
+
+test("the board and view switcher use the selected locale", async (t) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="de" messages={messagesDe} timeZone="UTC">
+        <BusinessDateProvider today="2026-09-17">
+          <OpportunityViewSwitcher view="board" />
+          <OpportunityKanbanBoard statuses={[STATUS]} opportunities={[]} canManage={false} />
+        </BusinessDateProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  assert.match(host.textContent ?? "", /Liste/);
+  assert.match(host.textContent ?? "", /Vertriebspipeline/);
+  assert.match(host.textContent ?? "", /0 von 0 Verkaufschancen angezeigt/);
+  assert.match(host.textContent ?? "", /Keine Verkaufschancen/);
+  const filter = host.querySelector("input");
+  assert.equal(filter?.placeholder, "Geschäfte nach Titel, Konto oder Verantwortlichem filtern …");
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+});
+
+test("the win/loss reason dialog uses translated copy", async (t) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const closedLost = {
+    ...STATUS,
+    id: "closed-lost",
+    name: "Closed Lost",
+    sequence: 2,
+    probability: 0,
+    isClosed: true,
+  };
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="de" messages={messagesDe} timeZone="UTC">
+        <BusinessDateProvider today="2026-09-17">
+          <OpportunityKanbanBoard
+            statuses={[STATUS, closedLost]}
+            opportunities={[opp("lost", "2026-09-17")]}
+            canManage
+          />
+        </BusinessDateProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  const stage = host.querySelector("select") as HTMLSelectElement;
+  await act(async () => {
+    stage.value = closedLost.id;
+    stage.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
+  assert.match(host.textContent ?? "", /Begründung für Gewinn oder Verlust erforderlich/);
+  assert.match(host.textContent ?? "", /Begründung/);
+  assert.match(host.textContent ?? "", /Phasenänderung bestätigen/);
+  assert.equal(host.querySelector("textarea")?.placeholder, "z. B. wegen des Preises an einen Wettbewerber verloren; Budget gestrichen; Umfang reduziert …");
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
 });
 
 // UX-03: the forecast exclusion note links to the board with `undated=1`.

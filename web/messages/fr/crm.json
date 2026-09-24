@@ -165,13 +165,34 @@
       "negotiation": "Négociation",
       "closedWon": "Gagnée",
       "closedLost": "Perdue"
+    },
+    "kanban": {
+      "listView": "Liste",
+      "boardView": "Pipeline commercial",
+      "filterPlaceholder": "Filtrer les affaires par titre, compte ou responsable…",
+      "showingCount": "{shown, number} sur {total, number} occasions affichées",
+      "requiresLines": "Cette étape exige au moins une ligne dans l’occasion.",
+      "requiresPrimaryContact": "Cette étape exige un contact principal attribué.",
+      "requiresPositiveAmount": "Cette étape exige un montant prévisionnel positif.",
+      "weighted": "Pondéré",
+      "stagnantTitle": "Aucune activité ni évolution d’étape depuis plus de {days, number} jours",
+      "stagnantDays": "{days, plural, one {> # jour} other {> # jours}}",
+      "noOpportunities": "Aucune occasion",
+      "lossReasonTitle": "Le motif de gain ou de perte est requis",
+      "lossReasonDescription": "Expliquez pourquoi cette occasion a été conclue ou perdue pour les rapports historiques et l’analyse du pipeline.",
+      "reasonDetails": "Détails du motif",
+      "reasonPlaceholder": "ex. perdue face à un concurrent sur le prix ; budget annulé ; périmètre réduit…",
+      "cancel": "Annuler",
+      "confirmStageChange": "Confirmer le changement d’étape",
+      "lossReasonRequired": "Un motif de perte est requis pour clôturer comme perdu."
     }
   },
   "forecastCategories": {
     "omitted": "Exclue",
     "worst_case": "Scénario pessimiste",
     "most_likely": "Plus probable",
-    "upside": "Potentiel"
+    "upside": "Potentiel",
+    "pipeline": "Canal commercial"
   },
   "forecasts": {
     "title": "Prévisions et quotas",

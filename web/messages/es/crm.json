@@ -165,13 +165,34 @@
       "negotiation": "Negociación",
       "closedWon": "Ganada",
       "closedLost": "Perdida"
+    },
+    "kanban": {
+      "listView": "Lista",
+      "boardView": "Canal de ventas",
+      "filterPlaceholder": "Filtrar acuerdos por título, cuenta o responsable…",
+      "showingCount": "{shown, number} de {total, number} oportunidades mostradas",
+      "requiresLines": "Esta etapa requiere al menos una línea en la oportunidad.",
+      "requiresPrimaryContact": "Esta etapa requiere un contacto principal asignado.",
+      "requiresPositiveAmount": "Esta etapa requiere un importe proyectado positivo.",
+      "weighted": "Ponderado",
+      "stagnantTitle": "Sin actividad registrada ni cambio de etapa durante más de {days, number} días",
+      "stagnantDays": "{days, plural, one {> # día} other {> # días}}",
+      "noOpportunities": "No hay oportunidades",
+      "lossReasonTitle": "Se requiere el motivo de ganancia o pérdida",
+      "lossReasonDescription": "Documente por qué se cerró o se perdió esta oportunidad para los informes históricos y el análisis del canal.",
+      "reasonDetails": "Detalles del motivo",
+      "reasonPlaceholder": "p. ej., se perdió por precio frente a un competidor; se canceló el presupuesto; se redujo el alcance…",
+      "cancel": "Cancelar",
+      "confirmStageChange": "Confirmar cambio de etapa",
+      "lossReasonRequired": "Se requiere un motivo de pérdida para cerrar como perdida."
     }
   },
   "forecastCategories": {
     "omitted": "Omitida",
     "worst_case": "Peor caso",
     "most_likely": "Más probable",
-    "upside": "Potencial"
+    "upside": "Potencial",
+    "pipeline": "Canal de ventas"
   },
   "forecasts": {
     "title": "Previsiones y cuotas",

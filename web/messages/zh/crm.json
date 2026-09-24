@@ -165,13 +165,34 @@
       "negotiation": "谈判",
       "closedWon": "已赢单",
       "closedLost": "已输单"
+    },
+    "kanban": {
+      "listView": "列表",
+      "boardView": "销售管道",
+      "filterPlaceholder": "按商机名称、客户或负责人筛选…",
+      "showingCount": "显示 {total, number} 个商机中的 {shown, number} 个",
+      "requiresLines": "此阶段要求商机至少包含一个明细行。",
+      "requiresPrimaryContact": "此阶段要求分配主要联系人。",
+      "requiresPositiveAmount": "此阶段要求预计商机金额为正数。",
+      "weighted": "加权",
+      "stagnantTitle": "超过 {days, number} 天没有记录活动或阶段变更",
+      "stagnantDays": "超过 {days, plural, other {# 天}}",
+      "noOpportunities": "没有商机",
+      "lossReasonTitle": "必须填写赢单或失单原因",
+      "lossReasonDescription": "请记录此商机为何结束为赢单或失单，以供历史报告和销售管道分析使用。",
+      "reasonDetails": "原因详情",
+      "reasonPlaceholder": "例如：因价格输给竞争对手；预算取消；范围缩减…",
+      "cancel": "取消",
+      "confirmStageChange": "确认阶段变更",
+      "lossReasonRequired": "以失单结束时必须填写失单原因。"
     }
   },
   "forecastCategories": {
     "omitted": "已排除",
     "worst_case": "最坏情况",
     "most_likely": "最可能",
-    "upside": "乐观情况"
+    "upside": "乐观情况",
+    "pipeline": "销售管道"
   },
   "forecasts": {
     "title": "预测与配额",

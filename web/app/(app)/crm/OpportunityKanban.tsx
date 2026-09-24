@@ -68,6 +68,7 @@ export interface KanbanOpportunity {
 
 export function OpportunityViewSwitcher({ view = 'list' }: { view?: 'board' | 'list' }) {
   const router = useRouter()
+  const t = useTranslations('crm')
   return (
     <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-medium dark:border-slate-800 dark:bg-slate-900">
       <button
@@ -80,7 +81,7 @@ export function OpportunityViewSwitcher({ view = 'list' }: { view?: 'board' | 'l
             : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200',
         )}
       >
-        <span>List</span>
+        <span>{t('opportunities.kanban.listView')}</span>
       </button>
       <button
         type="button"
@@ -92,7 +93,7 @@ export function OpportunityViewSwitcher({ view = 'list' }: { view?: 'board' | 'l
             : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200',
         )}
       >
-        <span>Pipeline Board</span>
+        <span>{t('opportunities.kanban.boardView')}</span>
       </button>
     </div>
   )
@@ -199,17 +200,17 @@ export function OpportunityKanbanBoard({
 
     // Stage-gating validation
     if (targetStatus.requiresLines && opportunity.linesCount === 0) {
-      toast.error('This stage requires at least one line item on the opportunity.')
+      toast.error(t('opportunities.kanban.requiresLines'))
       return
     }
 
     if (targetStatus.requiresPrimaryContact && !opportunity.primaryContactId) {
-      toast.error('This stage requires an assigned primary contact.')
+      toast.error(t('opportunities.kanban.requiresPrimaryContact'))
       return
     }
 
     if (targetStatus.requiresPositiveAmount && !isPositiveKanbanAmount(opportunity.projectedAmount)) {
-      toast.error('This stage requires a positive projected deal amount.')
+      toast.error(t('opportunities.kanban.requiresPositiveAmount'))
       return
     }
 
@@ -243,14 +244,17 @@ export function OpportunityKanbanBoard({
         <div className="relative w-full max-w-sm">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <Input
-            placeholder="Filter deals by title, account, owner..."
+            placeholder={t('opportunities.kanban.filterPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="text-xs text-slate-500">
-          Showing {filteredOpportunities.length} of {opportunities.length} opportunities
+          {t('opportunities.kanban.showingCount', {
+            shown: filteredOpportunities.length,
+            total: opportunities.length,
+          })}
         </div>
       </div>
 
@@ -290,7 +294,7 @@ export function OpportunityKanbanBoard({
                       </span>
                       {isPositiveKanbanAmount(total.weighted) && total.weighted !== total.projected && (
                         <span className="text-[11px] text-slate-400">
-                          Weighted: {formatMoney(total.weighted, total.currency, locale)}
+                          {t('opportunities.kanban.weighted')}: {formatMoney(total.weighted, total.currency, locale)}
                         </span>
                       )}
                     </div>
@@ -329,14 +333,14 @@ export function OpportunityKanbanBoard({
                             <Badge
                               variant="outline"
                               className="border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-                              title="No recorded activity or stage change in >14 days"
+                              title={t('opportunities.kanban.stagnantTitle', { days: 14 })}
                             >
                               <AlertTriangle className="mr-1 h-3 w-3" />
-                              &gt;14d
+                              {t('opportunities.kanban.stagnantDays', { days: 14 })}
                             </Badge>
                           )}
                           <Badge variant="secondary" className="px-1.5 py-0 text-[10px] capitalize">
-                            {op.forecastCategory.replace('_', ' ')}
+                            {t(`forecastCategories.${op.forecastCategory}`)}
                           </Badge>
                         </div>
                       </div>
@@ -390,7 +394,7 @@ export function OpportunityKanbanBoard({
                       {/* Owner & Stage Quick Switch */}
                       <div className="flex items-center justify-between gap-2 pt-1">
                         <span className="truncate text-[11px] text-slate-500">
-                          {op.ownerName || 'Unassigned'}
+                          {op.ownerName || t('fields.unassigned')}
                         </span>
                         {canManage && (
                           <Select
@@ -413,7 +417,7 @@ export function OpportunityKanbanBoard({
 
                 {colOpps.length === 0 && (
                   <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400 dark:border-slate-800">
-                    <p>No opportunities</p>
+                    <p>{t('opportunities.kanban.noOpportunities')}</p>
                   </div>
                 )}
               </div>
@@ -427,16 +431,16 @@ export function OpportunityKanbanBoard({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              Win / Loss Reason Required
+              {t('opportunities.kanban.lossReasonTitle')}
             </h3>
             <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-              Please document why this opportunity was closed or lost for historical reporting and pipeline analytics.
+              {t('opportunities.kanban.lossReasonDescription')}
             </p>
             <div className="mt-4 space-y-1.5">
-              <Label className="text-xs">Reason details</Label>
+              <Label className="text-xs">{t('opportunities.kanban.reasonDetails')}</Label>
               <Textarea
                 rows={4}
-                placeholder="e.g. Lost to competitor on price; project budget cancelled; scope reduced..."
+                placeholder={t('opportunities.kanban.reasonPlaceholder')}
                 value={lossPrompt.reason}
                 onChange={(e) =>
                   setLossPrompt({ ...lossPrompt, reason: e.target.value })
@@ -450,13 +454,13 @@ export function OpportunityKanbanBoard({
                 size="sm"
                 onClick={() => setLossPrompt(null)}
               >
-                Cancel
+                {t('opportunities.kanban.cancel')}
               </Button>
               <Button
                 size="sm"
                 onClick={() => {
                   if (!lossPrompt.reason.trim()) {
-                    toast.error('A loss reason is required to close as lost.')
+                    toast.error(t('opportunities.kanban.lossReasonRequired'))
                     return
                   }
                   executeStageChange(
@@ -467,7 +471,7 @@ export function OpportunityKanbanBoard({
                   )
                 }}
               >
-                Confirm Stage Change
+                {t('opportunities.kanban.confirmStageChange')}
               </Button>
             </div>
           </div>
