@@ -245,7 +245,7 @@ export async function loadReconSummary(authz: Authz): Promise<{ unreconciledItem
  */
 export async function loadExpenseSummary(authz: Authz): Promise<{ pendingExpenses: number } | null> {
   if (!can(authz, 'expenses.read')) return null
-  const dashboard = await expensesDashboard(authz.user.orgId)
+  const dashboard = await expensesDashboard(authz.user.orgId, authz.allowedSubsidiaryIds)
   return { pendingExpenses: dashboard.pipeline.pendingCount }
 }
 
