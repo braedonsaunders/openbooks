@@ -502,7 +502,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // regular wages on this call the supplemental necessarily stood alone:
   // refuse by name rather than aggregate it as if it rode the regular check.
   if (U(input.supplemental ?? "0") > 0n && U(input.wages) === 0n) {
-    throw new Error(
+    throw new PayrollError(
       "Connecticut supplemental compensation paid separately from regular wages needs "
       + "Circular CT Example 12's recompute — tax on regular-plus-supplemental wages minus tax "
       + "already withheld on the regular wages — and this payment carries no regular wages whose "

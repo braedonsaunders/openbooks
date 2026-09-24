@@ -41,6 +41,8 @@ import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.t
 import { calculateT4127 } from "./canada/t4127.ts";
 import { ratesForPayDate as caRatesForPayDate } from "./canada/rates.ts";
 import { ratesForPayDate as usRatesForPayDate } from "./us/rates.ts";
+import { CT_CERTIFICATE, CT_WITHHOLDING } from "./us/states/ct.ts";
+import { resolveCertificate } from "./certificates.ts";
 import { miCityWithholding } from "./us/states/mi.ts";
 import { ohMunicipalWithholding } from "./us/states/oh.ts";
 import { orgYearEndFilings } from "./yearend.ts";
@@ -133,6 +135,16 @@ test("pack calculation entries refuse with a PayrollError", () => {
   );
   assert.throws(
     () => calculateT4127({ payDate: "2026-01-15", province: "ON", periodsPerYear: 0, income: "1000.00" }),
+    PayrollError,
+  );
+  // A Connecticut supplemental paid with no regular wages refuses as a
+  // PayrollError too: the year-end conversion sites rethrow anything else,
+  // so a bare Error here would kill the whole year-end page org-wide.
+  assert.throws(
+    () => CT_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 52, wages: "0", supplemental: "500.00",
+      basis: "resident", certificate: resolveCertificate({ certificate: CT_CERTIFICATE }),
+    }),
     PayrollError,
   );
   // Edition resolvers refuse an untranscribed year with an operator remedy —
