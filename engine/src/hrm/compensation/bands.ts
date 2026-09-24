@@ -7,8 +7,7 @@ import {
   HrmAuthorizationError,
   loadOwnEmploymentIds,
   requireAggregateCompensationRead,
-  requireHrmCompensationManage,
-  requireHrmCompensationRead,
+  requireCompensationManageForEmployer,
   requireHrmCompensationReadOnEmployment,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
@@ -152,7 +151,12 @@ export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandD
   }
   const scope = query.scope;
   return withOrgTransaction(orgId, async () => {
-    await requireHrmCompensationManage(db, orgId, actorId);
+    // The declared employer anchor is the write's legal-entity claim: a
+    // B-anchored band by an A-scoped actor refuses uniformly not-visible,
+    // and an org-wide (null) band needs unrestricted scope — it prices
+    // every entity's employees at once. Checked inside the write
+    // transaction, beside the grant.
+    await requireCompensationManageForEmployer(db, orgId, actorId, scope.employerSubsidiaryId, "Pay band");
     const level = (await db.execute<{ id: string; family_id: string | null }>(sql`
       select id, family_id from hrm_job_levels where org_id = ${orgId} and id = ${levelId}`)).rows[0];
     if (!level) {
@@ -205,7 +209,11 @@ export async function listPayBands(query: {
 }): Promise<readonly PayBandDTO[]> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  await requireHrmCompensationRead(db, orgId, actorId);
+  // List-shaped band read: the grant plus the actor's employer lens. A
+  // B-anchored band never reaches an A-scoped reader; org-wide (null)
+  // bands are shared architecture like the job ladder, so they stay
+  // readable — only their WRITES need unrestricted scope.
+  const allowed = await requireBandsReadScope(orgId, actorId);
   const asOf = query.asOf ?? (await businessToday(orgId));
   const rows = (await db.execute<BandRow>(sql`
     select id, family_id, level_id, employer_subsidiary_id, location_id, currency, basis,
@@ -217,7 +225,14 @@ export async function listPayBands(query: {
        and effective_from <= ${asOf}::date
        and (effective_to is null or effective_to >= ${asOf}::date)
      order by level_id, employer_subsidiary_id nulls last, location_id nulls last`)).rows;
-  return rows.map(toBandDTO);
+  return rows
+    .filter(
+      (row) =>
+        allowed === null ||
+        row.employer_subsidiary_id === null ||
+        allowed.has(row.employer_subsidiary_id),
+    )
+    .map(toBandDTO);
 }
 
 /**
