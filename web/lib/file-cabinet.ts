@@ -367,6 +367,12 @@ export async function fileReadPredicate(orgId: string, viewer: FileViewer): Prom
   return visibleFileRowPredicate(orgId, viewer, scope)
 }
 
+/** Private-folder visibility for paths built by file exports. */
+export async function folderPathVisiblePredicate(orgId: string, viewer: FileViewer, folderIdCol: SQL): Promise<SQL> {
+  const scope = await resolveReadScope(orgId, viewer)
+  return visibleFolderPredicate(scope.hiddenFolderIds, folderIdCol)
+}
+
 /**
  * Folder-level record fence for record-leaf folders. An explicit folder grant
  * re-opens its folder, matching the file-level rule.

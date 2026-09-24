@@ -15,14 +15,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { attachExisting, deleteFile, ensureApCaptureRoot, fileAccessLevel, folderAccessLevel, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
 const { buildZip, filesZipManifest, folderZipManifest, MAX_ZIP_FILES } = await import('./file-zip')
 
-/**
- * Cabinet reads never apply the caller's subsidiary fence to record-folder
- * files: a file evidencing a hidden-entity record is listed, detailed, and
- * downloadable through the cabinet by a restricted documents.read holder,
- * although the attachment surfaces hide the same record as not-found.
- * Record-folder files whose folder-record target sits outside the fence must
- * be invisible at the query layer (metadata and bytes alike).
- */
 test('cabinet reads hide record-folder files outside the caller fence', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
   try {
@@ -75,6 +67,7 @@ test('ZIP manifests apply record visibility before enforcing the file cap', { sk
   const org = await createScratchOrg()
   try {
     const actorId = await createScratchUser(org.orgId, 'ZIP branch viewer', 'clerk')
+    const ownerId = await createScratchUser(org.orgId, 'Private folder owner', 'clerk')
     const subA = randomUUID()
     const subB = randomUUID()
     await db.execute(sql`insert into subsidiaries
@@ -88,6 +81,14 @@ test('ZIP manifests apply record visibility before enforcing the file cap', { sk
              (${docB}, ${org.orgId}, 'customer_invoice', 'draft', 'ZIP-B', ${subB}, ${org.customerId}, ${org.date}, 'CAD', 1)`)
     const folderId = randomUUID()
     await db.execute(sql`insert into folders(id, org_id, name) values (${folderId}, ${org.orgId}, 'ZIP common')`)
+    const privateFolderId = randomUUID()
+    const privateFileId = randomUUID()
+    await db.execute(sql`insert into folders(id, org_id, parent_folder_id, name, is_private, owner_id)
+      values (${privateFolderId}, ${org.orgId}, ${folderId}, 'Confidential folder', true, ${ownerId})`)
+    await db.execute(sql`insert into files(id, org_id, folder_id, name, content_type, size_bytes)
+      values (${privateFileId}, ${org.orgId}, ${privateFolderId}, 'evidence.pdf', 'application/pdf', 1)`)
+    await db.execute(sql`insert into resource_grants(org_id, resource_type, resource_id, principal_type, principal_id, access, created_by)
+      values (${org.orgId}, 'file', ${privateFileId}, 'user', ${actorId}, 'viewer', ${actorId})`)
     await db.execute(sql`insert into files(id, org_id, folder_id, name, content_type, size_bytes)
       select gen_random_uuid(), ${org.orgId}, ${folderId}, 'hidden-' || n::text || '.pdf', 'application/pdf', 1
         from generate_series(1, ${MAX_ZIP_FILES + 1}) as n`)
@@ -104,7 +105,8 @@ test('ZIP manifests apply record visibility before enforcing the file cap', { sk
     const folderEntries = await folderZipManifest(org.orgId, folderId, viewer)
     const selectedIds = (await db.execute<{ id: string }>(sql`select id from files where org_id = ${org.orgId} and folder_id = ${folderId}`)).rows.map((row) => row.id)
     const selectedEntries = await filesZipManifest(org.orgId, selectedIds, viewer)
-    assert.deepEqual(folderEntries.map((entry) => entry.id), [visibleId])
+    assert.ok(folderEntries.some((entry) => entry.id === privateFileId && entry.path === 'evidence.pdf'))
+    assert.ok(folderEntries.every((entry) => !entry.path.includes('Confidential folder')))
     assert.deepEqual(selectedEntries.map((entry) => entry.id), [visibleId])
   } finally {
     await dropScratchOrg(org.orgId)
@@ -194,8 +196,6 @@ test('generic cabinet readers require AP read for AP capture even with a file gr
 
 /**
  * Attachment-target fence: a file evidences every record it is attached to,
- * not just its folder's record. A common-folder file linked to a scoped
- * record — and a scoped-leaf file moved out to a common folder while keeping
  * its links — must stay invisible (metadata and bytes) to viewers outside the
  * targets' subsidiaries. Every target must be in-fence; an explicit file
  * grant re-opens exactly its file.

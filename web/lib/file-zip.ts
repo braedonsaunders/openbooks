@@ -2,7 +2,7 @@ import 'server-only'
 import JSZip from 'jszip'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { fileReadPredicate, getFileBlob, type FileViewer } from './file-cabinet'
+import { fileReadPredicate, folderPathVisiblePredicate, getFileBlob, type FileViewer } from './file-cabinet'
 import { isMaskedFileContentError } from './file-storage'
 
 /** Guardrails — zipping fetches every blob (often from object storage), so cap
@@ -50,16 +50,19 @@ export function safeZipPath(raw: string): string {
  */
 export async function folderZipManifest(orgId: string, folderId: string, viewer: FileViewer): Promise<ZipEntry[]> {
   const visible = await fileReadPredicate(orgId, viewer)
+  const rootPathVisible = await folderPathVisiblePredicate(orgId, viewer, sql`id`)
+  const childPathVisible = await folderPathVisiblePredicate(orgId, viewer, sql`f.id`)
   const r = (await db.execute<ZipEntry>(sql`
     with recursive tree as (
-      select id, name, parent_folder_id, name::text as prefix
+      select id, name, parent_folder_id, name::text as prefix, not ${rootPathVisible} as hidden_path
         from folders where id = ${folderId} and org_id = ${orgId}
       union all
-      select f.id, f.name, f.parent_folder_id, (t.prefix || '/' || f.name)
+      select f.id, f.name, f.parent_folder_id, (t.prefix || '/' || f.name),
+             (t.hidden_path or not ${childPathVisible})
         from folders f join tree t on f.parent_folder_id = t.id and f.org_id = ${orgId}
        where not f.is_inactive
     )
-    select fi.id, (t.prefix || '/' || fi.name) as path
+    select fi.id, case when t.hidden_path then fi.name else (t.prefix || '/' || fi.name) end as path
       from files fi join tree t on t.id = fi.folder_id
       left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
      where ${visible}
