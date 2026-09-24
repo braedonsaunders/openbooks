@@ -6,6 +6,7 @@ import {
   SubscriptionError,
   billSubscriptionNow,
   changeSubscription,
+  lockSubscriptionCustomerForScope,
   monthlyRecurringRevenue,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
@@ -13,8 +14,9 @@ import {
   resolveNextBillOnUpdate,
   type Interval,
 } from "@openbooks/engine/src/billing/subscription-billing.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission, guardSubsidiaryScope, type Authz } from "../../../lib/authz";
+import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 
@@ -257,6 +259,8 @@ export async function POST(req: Request) {
   try {
     switch (body.action) {
       case "addPlan": {
+        const unrestrictedDenied = guardUnrestrictedScope(authz);
+        if (unrestrictedDenied) return unrestrictedDenied;
         // Plan currency is Multi-currency configuration. Turning that switch
         // off must refuse a new write; omitted currency leaves the column
         // unset so turning the feature back on does not invent a code.
@@ -289,6 +293,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ id: ((created)).id }, { status: 201 });
       }
       case "updatePlan": {
+        const unrestrictedDenied = guardUnrestrictedScope(authz);
+        if (unrestrictedDenied) return unrestrictedDenied;
         // Plan currency is Multi-currency configuration. Turning that switch
         // off must refuse a new write; the stored code stays so turning the
         // feature back on restores the same currency.
@@ -337,6 +343,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "deletePlan": {
+        const unrestrictedDenied = guardUnrestrictedScope(authz);
+        if (unrestrictedDenied) return unrestrictedDenied;
         const deleted = await db.transaction(async (tx) => {
           // Re-check "in use" inside the transaction so a subscription created
           // between check and delete cannot orphan onto a vanished plan.
@@ -437,7 +445,7 @@ export async function POST(req: Request) {
         const result = await changeSubscription(String(body.id), {
           quantity,
           priceOverride,
-        }, undefined, { actorId: userId });
+        }, undefined, { actorId: userId }, authz.allowedSubsidiaryIds);
         return NextResponse.json(result);
       }
       case "updateSubscription": {
@@ -485,11 +493,11 @@ export async function POST(req: Request) {
         if (nextBillOn !== undefined) sets.push(sql`next_bill_on = ${nextBillOn}`);
         if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
         const outcome = await db.transaction(async (tx) => {
-          // Lock the subscription row FIRST — the same row lock the billing
-          // engine's claim and billOne take — so the guard-max re-read, the
-          // boundary validation, and the write below are atomic against a
-          // concurrent tick. Without it an edit validated against a pre-bill
-          // cursor commits after the tick and rewinds into billed service.
+          await lockSubscriptionCustomerForScope(tx, orgId, String(body.id), authz.allowedSubsidiaryIds);
+          // Lock the customer above before the subscription row so a rehome
+          // cannot move the mutation out of scope. This subscription lock is
+          // shared with the billing claim so the cursor check and edit remain
+          // atomic against a concurrent tick.
           const before = (await tx.execute<Record<string, unknown>>(sql`
             select * from subscriptions where id = ${body.id} and org_id = ${orgId} for update
           `));
@@ -557,7 +565,7 @@ export async function POST(req: Request) {
         if (scopeDenied) return scopeDenied;
         // The authenticated caller authors the bill-now invoice — the
         // subscription's own id is never an actor.
-        const gen = await billSubscriptionNow(String(body.id), undefined, { actorId: userId });
+        const gen = await billSubscriptionNow(String(body.id), undefined, { actorId: userId }, authz.allowedSubsidiaryIds);
         return NextResponse.json(gen);
       }
       default:
@@ -565,6 +573,7 @@ export async function POST(req: Request) {
     }
   } catch (e) {
     if (e instanceof SubscriptionError) return NextResponse.json({ error: e.message }, { status: e.status });
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
     throw e;
   }
 }

@@ -44,12 +44,12 @@ async function refused(f: Fixture, generate: () => Promise<unknown>) {
 
 test('subscription requires plan income account despite available chart revenue', enabled, () => fixture(async f => {
   await db.execute(sql`update subscription_plans set income_account_id=null where id=${f.planId}`);
-  await refused(f, () => billSubscriptionNow(f.subscriptionId, f.org.date, { actorId: f.actor }));
+  await refused(f, () => billSubscriptionNow(f.subscriptionId, f.org.date, { actorId: f.actor }, null));
 }));
 for (const state of ['inactive', 'summary'] as const) {
   test(`subscription rejects ${state} plan income account atomically`, enabled, () => fixture(async f => {
     await db.execute(sql`update accounts set is_active=${state !== 'inactive'},is_summary=${state === 'summary'} where id=${f.org.accounts.revenue}`);
-    await refused(f, () => billSubscriptionNow(f.subscriptionId, f.org.date, { actorId: f.actor }));
+    await refused(f, () => billSubscriptionNow(f.subscriptionId, f.org.date, { actorId: f.actor }, null));
   }));
 }
 test('subscription invoice rejects nonexistent and other-organization accounts before writes', enabled, () => fixture(async f => {
@@ -67,7 +67,7 @@ test('component account validation does not fall back to the scalar plan account
   ] })));
 }));
 test('configured subscription preserves precise amount and period provenance', enabled, () => fixture(async f => {
-  const generated = await billSubscriptionNow(f.subscriptionId, f.org.date, { actorId: f.actor });
+  const generated = await billSubscriptionNow(f.subscriptionId, f.org.date, { actorId: f.actor }, null);
   assert.deepEqual((await db.execute(sql`select account_id,amount::text from document_lines where document_id=${generated.invoiceId}`)).rows,
     [{ account_id: f.org.accounts.revenue, amount: '100.1234' }]);
   assert.equal((await db.execute(sql`select invoice_id from subscription_period_invoices where subscription_id=${f.subscriptionId}`)).rows[0]?.invoice_id, generated.invoiceId);

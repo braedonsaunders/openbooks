@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
-import { db, orgContext, withBypass, withOrg } from "../platform/db.ts";
+import { db, orgContext, withBypass, withOrg, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
@@ -21,6 +21,7 @@ import {
 } from "./advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 
 /**
  * Subscription billing engine. Each active subscription is billed when its
@@ -56,6 +57,29 @@ export class SubscriptionError extends Error {
     super(message);
     this.name = "SubscriptionError";
   }
+}
+
+/** Lock and scope-check the customer whose entity determines subscription billing. */
+export async function lockSubscriptionCustomerForScope(
+  tx: SqlExecutor,
+  orgId: string,
+  subscriptionId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<void> {
+  const allowed = scope === null
+    ? sql``
+    : scope.size
+      ? sql`and (c.subsidiary_id is null or c.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`
+      : sql`and c.subsidiary_id is null`;
+  const customer = await tx.execute(sql`
+    select c.id
+      from subscriptions s
+      join parties c on c.id = s.customer_id and c.org_id = s.org_id
+     where s.org_id = ${orgId} and s.id = ${subscriptionId}
+       ${allowed}
+     for share of c
+  `);
+  if (!customer.rows[0]) throw new ScopeNotFoundError();
 }
 
 /**
@@ -918,8 +942,9 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
  */
 export async function billSubscriptionNow(
   subscriptionId: string,
-  asOf?: string,
-  actor?: SubscriptionBillingActorOptions,
+  asOf: string | undefined,
+  actor: SubscriptionBillingActorOptions | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
   const actorId = actor?.actorId ?? null;
   // Both flags use the registry fallback shape (non-boolean stored values
@@ -940,6 +965,7 @@ export async function billSubscriptionNow(
   if (meta.rows[0]!.advancedLifecycle && !meta.rows[0]!.advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
   const today = asOf ?? (await businessToday(orgId));
   const gen = await withOrg(orgId, async () => {
+    await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, allowedSubsidiaryIds);
     const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`));
     const s = r.rows[0];
     if (!s) throw new SubscriptionError("subscription not found");
@@ -1023,8 +1049,9 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
 export async function changeSubscription(
   subscriptionId: string,
   changes: { quantity?: string; priceOverride?: string | null },
-  asOf?: string,
-  actor?: SubscriptionBillingActorOptions,
+  asOf: string | undefined,
+  actor: SubscriptionBillingActorOptions | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ invoiceId: string | null; documentNumber: string | null; adjustment: string }> {
   const actorId = actor?.actorId ?? null;
   const orgId = await loadSubOrgId(subscriptionId);
@@ -1036,6 +1063,7 @@ export async function changeSubscription(
   // One transaction also commits the invoice and the configuration change
   // together or not at all.
   return withOrg(orgId, async () => {
+    await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, allowedSubsidiaryIds);
     await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
     const row = await loadSubRow(subscriptionId, orgId);
     if (row.status === "canceled") throw new SubscriptionError("subscription is canceled");

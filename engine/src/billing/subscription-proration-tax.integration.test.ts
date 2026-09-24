@@ -48,7 +48,7 @@ async function invoiceOf(orgId: string, invoiceId: string) {
 }
 
 test("an upgrade proration taxes the remaining slice under the plan tax code", enabled, () => fixture(async (f) => {
-  const result = await changeSubscription(f.subscriptionId, { quantity: "2" }, AS_OF, { actorId: f.actor });
+  const result = await changeSubscription(f.subscriptionId, { quantity: "2" }, AS_OF, { actorId: f.actor }, null);
   assert.ok(result.invoiceId, "an upgrade must cut a proration invoice");
   // Same remaining-slice math as the first-period proration: one extra unit
   // over [AS_OF, PERIOD_END], taxed exactly like a normal invoice line.
@@ -67,8 +67,8 @@ test("an upgrade proration taxes the remaining slice under the plan tax code", e
 }));
 
 test("a downgrade proration credits the remaining slice with its tax", enabled, () => fixture(async (f) => {
-  await changeSubscription(f.subscriptionId, { quantity: "2" }, AS_OF, { actorId: f.actor });
-  const result = await changeSubscription(f.subscriptionId, { quantity: "1" }, AS_OF, { actorId: f.actor });
+  await changeSubscription(f.subscriptionId, { quantity: "2" }, AS_OF, { actorId: f.actor }, null);
+  const result = await changeSubscription(f.subscriptionId, { quantity: "1" }, AS_OF, { actorId: f.actor }, null);
   assert.ok(result.invoiceId, "a downgrade must cut a proration credit");
   const expectedNet = prorate("100.0000", PERIOD_START, PERIOD_END, AS_OF);
   const cfg = await loadTaxComponentConfig(f.org.orgId, f.taxCodeId, AS_OF);
