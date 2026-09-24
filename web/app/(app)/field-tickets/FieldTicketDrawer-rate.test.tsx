@@ -84,7 +84,7 @@ const TICKET = {
   projectName: 'Acme Tower',
   foremanName: 'Sammy Sloppy',
   revision: '2026-09-01T10:00:00.000000Z',
-  fieldTicket: { period: '2026-09', periodStart: '2026-09-01', periodEnd: '2026-09-30', foremanPartyId: null },
+  fieldTicket: { period: 'daily', periodStart: '2026-09-01', periodEnd: '2026-09-30', foremanPartyId: null },
   entries: [],
   lines: [],
   laborTotal: '0',
@@ -94,15 +94,24 @@ const TICKET = {
   billingRequests: [],
 }
 
-async function mount(t: TestContext, rateResponder: () => Response): Promise<void> {
+async function mount(
+  t: TestContext,
+  rateResponder: () => Response,
+  deleteResponder: () => Response = () => Response.json({ ok: true }),
+  initialMode: 'edit' | 'view' = 'edit',
+): Promise<{ requests: { url: string; method: string }[] }> {
+  const requests: { url: string; method: string }[] = []
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input)
+    const method = init?.method ?? 'GET'
+    requests.push({ url, method })
     if (url.startsWith('/api/flows/manual')) return Response.json({ buttons: [] })
     if (url.startsWith('/api/flows/record-state')) {
       return Response.json({ approvalState: { status: 'draft', pendingWith: [], myActions: null }, history: [] })
     }
     if (url.startsWith('/api/field-tickets/item-rate')) return rateResponder()
+    if (url === `/api/field-tickets/${TICKET.id}` && method === 'DELETE') return deleteResponder()
     throw new Error(`unexpected fetch ${(init?.method ?? 'GET')} ${url}`)
   }) as typeof fetch
   t.after(() => {
@@ -133,13 +142,14 @@ async function mount(t: TestContext, rateResponder: () => Response): Promise<voi
             equipmentUnits={[]}
             equipmentEnabled={false}
             canManage
-            initialMode="edit"
+            initialMode={initialMode}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
     )
     for (let i = 0; i < 10; i++) await tick()
   })
+  return { requests }
 }
 
 async function pickItem(): Promise<void> {
@@ -195,4 +205,40 @@ test('a refused rate lookup keeps the last good rate and pins the named reason',
     (document.querySelector('#ft-rate') as HTMLInputElement | null)?.value.includes('150'),
     'the last good rate must stay on screen beside the refusal',
   )
+})
+
+test('a pristine draft closes by discarding its server shell', async (t) => {
+  const { requests } = await mount(t, () => Response.json({}), () => Response.json({ ok: true }), 'view')
+  const close = document.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null
+  assert.ok(close, 'the drawer close action renders')
+  await act(async () => {
+    close.click()
+    await tick()
+    await tick()
+  })
+  assert.ok(requests.some((request) => request.url === `/api/field-tickets/${TICKET.id}` && request.method === 'DELETE'))
+})
+
+test('explicit discard keeps a refused draft open with its reason pinned', async (t) => {
+  const priorConfirm = window.confirm
+  window.confirm = () => true
+  t.after(() => {
+    window.confirm = priorConfirm
+  })
+  const { requests } = await mount(t, () => Response.json({}), () => Response.json({ error: 'Ticket contains billable time' }, { status: 409 }), 'view')
+  const actions = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Actions')
+  assert.ok(actions, 'the drawer actions menu renders')
+  await act(async () => {
+    actions.click()
+    await tick()
+  })
+  const discard = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Discard draft'))
+  assert.ok(discard, `manageable drafts offer Discard; buttons: ${[...document.querySelectorAll('button')].map((button) => button.textContent?.trim()).join(' | ')}`)
+  await act(async () => {
+    discard.click()
+    await tick()
+    await tick()
+  })
+  assert.ok(requests.some((request) => request.url === `/api/field-tickets/${TICKET.id}` && request.method === 'DELETE'))
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Ticket contains billable time/)
 })
