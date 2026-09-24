@@ -1,4 +1,5 @@
 import { parseJsonBody } from "@/lib/api/json";
+import { dbWriteErrorResponse } from "@/lib/api/db-errors";
 import { isUuid } from "@/lib/list-params";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -60,7 +61,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     isActive?: boolean;
   };
   const sets: ReturnType<typeof sql>[] = [];
-  const changes: Record<string, unknown> = {};
   if (body.name !== undefined && typeof body.name !== "string") {
     return NextResponse.json({ error: "name must be a string" }, { status: 400 });
   }
@@ -74,11 +74,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.name !== undefined) {
     const name = body.name.trim();
     sets.push(sql`name = ${name}`);
-    changes.name = name;
   }
   if (body.description !== undefined) {
     sets.push(sql`description = ${body.description}`);
-    changes.description = body.description;
   }
   if (body.allowedRoles !== undefined) {
     // resolveFormLayout calls allowedRoles.some after a length check. A
@@ -98,7 +96,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // JSON.stringify: pg serializes JS arrays as Postgres array literals, which
     // are invalid input for the jsonb column.
     sets.push(sql`allowed_roles = ${body.allowedRoles ? JSON.stringify(body.allowedRoles) : null}`);
-    changes.allowedRoles = body.allowedRoles;
   }
   if (body.isActive !== undefined) {
     // Collection POST refuses a non-boolean isDefault. An explicit PATCH
@@ -108,7 +105,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
     }
     sets.push(sql`is_active = ${body.isActive}`);
-    changes.isActive = body.isActive;
   }
   if (body.layout !== undefined) {
     const parsed = parseFormLayout(body.layout);
@@ -117,14 +113,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (parsed.data!.recordType !== existing.recordType)
       return NextResponse.json({ error: "layout.recordType does not match this form's record type" }, { status: 400 });
     sets.push(sql`layout = ${parsed.data}`);
-    changes.layout = true;
   }
   if (body.isDefault !== undefined) {
     if (typeof body.isDefault !== "boolean") {
       return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
     }
     sets.push(sql`is_default = ${body.isDefault}`);
-    changes.isDefault = body.isDefault;
   }
   // Request-complete contradiction needs no row snapshot. Concurrent
   // default+deactivate is decided from the locked row inside the write.
@@ -145,9 +139,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         recordType: string;
         isDefault: boolean;
         isActive: boolean;
+        snapshot: Record<string, unknown>;
       }>(sql`
         select id, record_type as "recordType",
-               is_default as "isDefault", is_active as "isActive"
+               is_default as "isDefault", is_active as "isActive",
+               to_jsonb(form_layouts) as snapshot
           from form_layouts
          where id = ${id} and org_id = ${user.orgId}
          for update`)).rows[0];
@@ -162,27 +158,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
              and is_default and id <> ${id}`);
       // Next-state default+inactive must match zero rows even if the JS
       // refusal is skipped — refuse by name, never {ok:true}.
-      const written = (await tx.execute<{ id: string }>(sql`
+      const written = (await tx.execute<{ id: string; snapshot: Record<string, unknown> }>(sql`
         update form_layouts set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId}
            and not (${nextDefaultSql} and not ${nextActiveSql})
-         returning id`)).rows[0];
+         returning id, to_jsonb(form_layouts) as snapshot`)).rows[0];
       if (!written) {
         return { kind: "inactive_default" as const, error: inactiveDefaultMessage("form") };
       }
+      // Update evidence follows the {before, after} convention with full row
+      // snapshots (layout blob plus flags) taken under the same lock, so the
+      // prior state is recoverable. The new-values-only `changes` this
+      // replaces logged `layout: true` — a boolean where the blob belongs.
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'form_layouts', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
+        values (${user.orgId}, 'form_layouts', ${id}, 'update', ${JSON.stringify({ before: locked.snapshot, after: written.snapshot })}, ${user.id})`);
       return { kind: "ok" as const };
     });
     if (updated.kind === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
     if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const msg = (e as Error).message ?? "update failed";
-    if (msg.includes("unique"))
-      return NextResponse.json({ error: "A form with that name already exists" }, { status: 409 });
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return dbWriteErrorResponse(e, {
+      route: "customization:form-layouts",
+      uniqueConflicts: { form_layouts_org_type_name: "A form with that name already exists" },
+    });
   }
 }
 
@@ -198,17 +198,18 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
   if (refused) return refused;
   // Delete + audit in one transaction so the two can't diverge (db.execute
-  // pools per-statement). audit_log.changes is jsonb NOT NULL, so log the
-  // deleted form's name rather than a bare null (which raised a 500).
+  // pools per-statement). audit_log.changes is jsonb NOT NULL, and a bare name
+  // cannot reconstruct the deleted form — so the delete returns the full row
+  // as the before-image ({before, after: null}).
   const deleted = await db.transaction(async (tx) => {
-    const r = ((await tx.execute(sql`
+    const r = ((await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
       delete from form_layouts where id = ${id} and org_id = ${user.orgId}
-        returning name`)));
+        returning to_jsonb(form_layouts) as snapshot`)));
     const row = r.rows[0];
     if (!row) return null;
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${user.orgId}, 'form_layouts', ${id}, 'delete', ${JSON.stringify({ name: row.name })}, ${user.id})`);
+      values (${user.orgId}, 'form_layouts', ${id}, 'delete', ${JSON.stringify({ before: row.snapshot, after: null })}, ${user.id})`);
     return row;
   });
   if (!deleted) return NextResponse.json({ error: "not found" }, { status: 404 });

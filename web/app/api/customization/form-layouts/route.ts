@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { dbWriteErrorResponse } from "@/lib/api/db-errors";
 import { isUuid } from "@/lib/list-params";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -100,25 +101,31 @@ export async function POST(req: Request) {
         await tx.execute(sql`
           update form_layouts set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${body.recordType} and is_default`);
-      const result = (await tx.execute<{ id: string; name: string }>(sql`
+      const result = (await tx.execute<{ id: string; name: string; snapshot: Record<string, unknown> }>(sql`
         insert into form_layouts (org_id, record_type, name, description, is_default, is_active,
                                   allowed_roles, layout, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${body.description ?? null},
                 ${body.isDefault === true}, ${isActive},
                 ${body.allowedRoles ? JSON.stringify(body.allowedRoles) : null}, ${layout}, ${user.id}, ${user.id})
-        returning id, name
+        returning id, name, to_jsonb(form_layouts) as snapshot
       `));
       const inserted = result.rows[0]!;
+      // Insert evidence follows the {before, after} convention: the created
+      // form's full row, so the audit shows what was designed — not just its
+      // name. A name alone cannot reconstruct the prior state.
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'form_layouts', ${inserted.id}, 'insert', ${JSON.stringify({ name: body.name })}, ${user.id})`);
+        values (${user.orgId}, 'form_layouts', ${inserted.id}, 'insert', ${JSON.stringify({ before: null, after: inserted.snapshot })}, ${user.id})`);
       return inserted;
     });
     return NextResponse.json({ id: row.id, name: row.name });
   } catch (e) {
-    const msg = (e as Error).message ?? "insert failed";
-    if (msg.includes("unique"))
-      return NextResponse.json({ error: "A form with that name already exists" }, { status: 409 });
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Match the (org, record_type, name) unique index by code + constraint
+    // name: any driver message mentioning 'unique' is not a name conflict,
+    // and the raw driver text must never reach the client.
+    return dbWriteErrorResponse(e, {
+      route: "customization:form-layouts",
+      uniqueConflicts: { form_layouts_org_type_name: "A form with that name already exists" },
+    });
   }
 }

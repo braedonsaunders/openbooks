@@ -266,6 +266,13 @@ export function pgErrorCode(e: unknown): string | undefined {
   return error?.code ?? error?.cause?.code
 }
 
+/** The driver failure's constraint/index name (e.g. a unique index), digging
+ * through the Drizzle wrapper the same way pgErrorCode does, so callers can
+ * map a violation deterministically instead of substring-matching text. */
+export function pgErrorConstraint(e: unknown): string | undefined {
+  const error = e as { constraint?: string; cause?: { constraint?: string } }
+  return error?.constraint ?? error?.cause?.constraint
+}
 /**
  * Residual storage-shape refusal for the review-template rating scale.
  * The input boundary coerces decimal strings to numbers and the engine

@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { dbWriteErrorResponse } from "@/lib/api/db-errors";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -93,11 +94,11 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ id: row.id, name: row.name });
   } catch (e) {
-    const msg = (e as Error).message ?? "insert failed";
     if (e instanceof AmbiguousListViewDefaultError)
       return NextResponse.json({ error: e.message }, { status: 409 });
-    if (msg.includes("unique"))
-      return NextResponse.json({ error: "A view with that name already exists" }, { status: 409 });
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return dbWriteErrorResponse(e, {
+      route: "customization:list-views",
+      uniqueConflicts: { list_views_org_scope_type_name: "A view with that name already exists" },
+    });
   }
 }
