@@ -456,7 +456,15 @@ export async function markPaymentRemittanceFailed(
  * be in its posting claim, in which case its finisher reconciles the stamp
  * from this sent remittance once that claim commits.
  */
-export async function markPaymentRemittanceSent(orgId: string, id: string): Promise<void> {
+/**
+ * What the sent-mark did: `sent` moved the row, `already-sent` found the
+ * provider acceptance already recorded (idempotent replay). Anything else —
+ * an unknown id, a wrong org, a cancelled row — is a refusal, never a
+ * silent success the caller mistakes for a recorded send.
+ */
+export type PaymentRemittanceSentOutcome = "sent" | "already-sent";
+
+export async function markPaymentRemittanceSent(orgId: string, id: string): Promise<PaymentRemittanceSentOutcome> {
   const remittance = (await db.execute<{ paymentInstructionId: string }>(sql`
     update payment_remittances
        set status = 'sent', sent_at = coalesce(sent_at, now()),
@@ -471,7 +479,12 @@ export async function markPaymentRemittanceSent(orgId: string, id: string): Prom
         from payment_remittances
        where id = ${id} and org_id = ${orgId} and status = 'sent'
     `)).rows[0];
-    if (!existing) return;
+    if (!existing) {
+      throw new Error(
+        `no such pending remittance ${id} in this organization — the send was not recorded. ` +
+          "Confirm the remittance id and org, and that the row is still pending, failed, or sent (a cancelled row can never complete as sent).",
+      );
+    }
     try {
       await db.execute(sql`
         update payment_instructions
@@ -482,7 +495,7 @@ export async function markPaymentRemittanceSent(orgId: string, id: string): Prom
     } catch (error) {
       console.error(`[email] payment remittance ${id} sent but instruction stamp deferred:`, error);
     }
-    return;
+    return "already-sent";
   }
   try {
     await db.execute(sql`
@@ -494,6 +507,7 @@ export async function markPaymentRemittanceSent(orgId: string, id: string): Prom
   } catch (error) {
     console.error(`[email] payment remittance ${id} sent but instruction stamp deferred:`, error);
   }
+  return "sent";
 }
 
 /**
