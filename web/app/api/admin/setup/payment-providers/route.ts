@@ -15,6 +15,7 @@ import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
 
 export const runtime = "nodejs";
 
@@ -165,6 +166,21 @@ export async function POST(req: Request) {
     const percent = moneyOrNull(body.percent);
     const fixedAmount = moneyOrNull(body.fixedAmount);
     const capAmount = moneyOrNull(body.capAmount);
+    // Unreadable input gets the named cause; the combined message below
+    // keeps covering non-positive and over-wide figures (12 whole digits
+    // on these columns, so the composer carries that bound too).
+    for (const [label, raw, noun] of [
+      ["Surcharge percent", body.percent, "a percent"],
+      ["Surcharge fixed amount", body.fixedAmount, "an amount"],
+      ["Surcharge cap amount", body.capAmount, "an amount"],
+    ] as Array<[string, unknown, string]>) {
+      if (raw != null && raw !== "" && canonicalDecimal(raw, 4) === null) {
+        return NextResponse.json(
+          { error: moneyRefusal(label, raw, noun, 4, 12) },
+          { status: 422 },
+        );
+      }
+    }
     if (percent === "invalid" || fixedAmount === "invalid" || capAmount === "invalid") {
       return NextResponse.json(
         { error: "surcharge amounts must be positive decimals with at most 4 fraction digits" },

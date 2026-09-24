@@ -12,6 +12,7 @@ import {
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadFilings } from '@/lib/compliance'
 import { canonicalDecimal } from '@/lib/exact-decimal'
+import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -83,8 +84,11 @@ export async function POST(req: Request) {
   // (HTTP 500 — only InformationReturnError maps to 422 below).
   if (body.threshold !== undefined) {
     const exact = canonicalDecimal(body.threshold, 4)
-    if (exact === null || exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
-      return NextResponse.json({ error: 'threshold must be an exact decimal with at most 15 whole digits' }, { status: 400 })
+    if (exact === null) {
+      return NextResponse.json({ error: moneyRefusal('Threshold', body.threshold) }, { status: 400 })
+    }
+    if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+      return NextResponse.json({ error: 'Threshold is out of range — at most 15 whole digits fit the ledger' }, { status: 400 })
     }
   }
 

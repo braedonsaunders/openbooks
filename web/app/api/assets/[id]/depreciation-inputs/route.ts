@@ -8,6 +8,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
 
@@ -46,7 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'effective date must be a real calendar date (YYYY-MM-DD)' }, { status: 422 })
   }
   if (valueRaw === null) {
-    return NextResponse.json({ error: 'value must be an exact amount with no more than four decimal places' }, { status: 422 })
+    return NextResponse.json({ error: moneyRefusal('Value', body.value) }, { status: 422 })
   }
   const value = normalizeMoney(valueRaw)
 

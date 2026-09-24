@@ -11,6 +11,7 @@ import {
 } from "@openbooks/engine/src/tax/rate-providers.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 
 export const runtime = "nodejs";
@@ -63,15 +64,20 @@ export async function POST(req: Request) {
   try {
     if (body.action === "manualQuote") {
       const taxableAmount = canonicalDecimal(body.taxableAmount ?? "0", 4);
+      if (taxableAmount === null) {
+        return NextResponse.json({ error: moneyRefusal("Taxable amount", body.taxableAmount ?? "0") }, { status: 422 });
+      }
       const ratePercent = canonicalDecimal(body.ratePercent ?? "0", 10);
-      if (taxableAmount === null || ratePercent === null) {
-        return NextResponse.json({ error: "invalid amount or rate" }, { status: 422 });
+      if (ratePercent === null) {
+        return NextResponse.json({ error: moneyRefusal("Rate percent", body.ratePercent ?? "0", "a rate", 10) }, { status: 422 });
       }
       const q = quoteFromRate(normalizeMoney(taxableAmount), ratePercent, String(body.jurisdiction ?? "LOCAL"));
       return NextResponse.json(q);
     }
     const taxableAmount = canonicalDecimal(body.taxableAmount ?? "0", 4);
-    if (taxableAmount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+    if (taxableAmount === null) {
+      return NextResponse.json({ error: moneyRefusal("Taxable amount", body.taxableAmount ?? "0") }, { status: 422 });
+    }
     if (body.currency != null && typeof body.currency !== "string") return NextResponse.json({ error: "invalid currency" }, { status: 422 });
     if (body.itemCode != null && typeof body.itemCode !== "string") return NextResponse.json({ error: "invalid item code" }, { status: 422 });
     if (body.quotedOn != null && typeof body.quotedOn !== "string") return NextResponse.json({ error: "invalid quotedOn" }, { status: 422 });

@@ -15,7 +15,7 @@ test('CRM estimate persists projected_amount through canonicalDecimal then norma
   const helper = estimate.slice(helperStart, helperEnd + 2)
   assert.match(helper, /canonicalDecimal\(value, 4\)/)
   assert.match(helper, /normalizeMoney\(exact\)/)
-  assert.match(helper, /projected amount must be an exact decimal/)
+  assert.match(helper, /moneyRefusal\('Projected amount', value\)/)
 
   const start = estimate.indexOf('export async function POST')
   const persist = estimate.slice(start, estimate.indexOf('insert into documents', start) + 400)
@@ -31,7 +31,7 @@ test('CRM estimate persists document_lines amount through canonicalDecimal then 
   const helper = estimate.slice(helperStart, helperEnd + 2)
   assert.match(helper, /canonicalDecimal\(value, 4\)/)
   assert.match(helper, /normalizeMoney\(exact\)/)
-  assert.match(helper, /line amount must be an exact decimal/)
+  assert.match(helper, /moneyRefusal\('Line amount', value\)/)
 
   const start = estimate.indexOf('insert into document_lines')
   const persist = estimate.slice(start, estimate.indexOf('from items i', start))
@@ -47,7 +47,7 @@ test('CRM estimate persists document_lines quantity through canonicalDecimal the
   const helper = estimate.slice(helperStart, helperEnd + 2)
   assert.match(helper, /canonicalDecimal\(value, 4\)/)
   assert.match(helper, /normalizeMoney\(exact\)/)
-  assert.match(helper, /line quantity must be an exact decimal/)
+  assert.match(helper, /decimalNullRefusal\('Line quantity', 'a quantity', value, 4\)/)
 
   const start = estimate.indexOf('insert into document_lines')
   const persist = estimate.slice(start, estimate.indexOf('from items i', start))
@@ -63,7 +63,7 @@ test('CRM estimate persists document_lines unit_price through canonicalDecimal t
   const helper = estimate.slice(helperStart, helperEnd + 2)
   assert.match(helper, /canonicalDecimal\(value, 4\)/)
   assert.match(helper, /normalizeMoney\(exact\)/)
-  assert.match(helper, /line unit price must be an exact decimal/)
+  assert.match(helper, /moneyRefusal\('Line unit price', value\)/)
 
   const start = estimate.indexOf('insert into document_lines')
   const persist = estimate.slice(start, estimate.indexOf('from items i', start))

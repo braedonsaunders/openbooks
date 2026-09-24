@@ -22,6 +22,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
+import { decimalNullRefusal, moneyRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 
 export const dynamic = 'force-dynamic'
 
@@ -133,16 +134,24 @@ function persistStatutoryRateValues(
       persisted[key] = text
       continue
     }
+    // The agency writes a rate, a percent, or money on its notice — the noun
+    // follows the field kind so the remedy names what the operator typed.
+    // Amounts persist into numeric(19,4) and carry the ledger width bound;
+    // rates and percents persist as declared-scale text with no width bound.
+    const noun = field.kind === 'percent' ? 'a percent' : field.kind === 'rate' ? 'a decimal rate' : 'an amount'
     const exact = canonicalDecimal(raw, field.decimals)
     if (exact === null) {
-      return `${slot.label}: ${field.label} must be an exact decimal`
+      const refusal = field.kind === 'amount'
+        ? moneyRefusal(field.label, raw, noun, field.decimals)
+        : decimalNullRefusal(field.label, noun, raw, field.decimals)
+      return `${slot.label}: ${refusal}`
     }
     try {
       persisted[key] = field.kind === 'amount'
         ? normalizeMoney(exact)
         : normalizeDecimal(exact, field.decimals)
     } catch {
-      return `${slot.label}: ${field.label} must be an exact decimal`
+      return `${slot.label}: ${field.label} is out of range for its declared scale — got "${suppliedValue(raw)}"`
     }
   }
   return persisted

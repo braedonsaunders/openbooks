@@ -11,6 +11,7 @@ import {
   type OpeningBalanceWrite,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardPayrollEmployees } from '../subsidiary-scope'
 import { scopedOpeningBalances } from '../../../../lib/payroll-scoped-views'
@@ -79,14 +80,17 @@ function persistMoney(value: unknown): string | '' | 'invalid' {
   }
 }
 
-function persistMoneyMap(raw: Record<string, unknown>): Record<string, unknown> | 'invalid' {
+// The refusal names the offending entry, so the map carries the first bad
+// key and value instead of a bare 'invalid' no message can observe.
+type MoneyMap = { ok: true; map: Record<string, unknown> } | { ok: false; key: string; value: unknown }
+function persistMoneyMap(raw: Record<string, unknown>): MoneyMap {
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(raw)) {
     const persisted = persistMoney(value)
-    if (persisted === 'invalid') return 'invalid'
+    if (persisted === 'invalid') return { ok: false, key, value }
     out[key] = persisted
   }
-  return out
+  return { ok: true, map: out }
 }
 
 /** Component openings arrive keyed by component id (or code); values are text. */
@@ -122,21 +126,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'amounts must be an object' }, { status: 422 })
     }
     const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>)
-    if (amounts === 'invalid') {
-      return NextResponse.json({ error: 'opening-balance amounts must be exact decimals' }, { status: 422 })
+    if (!amounts.ok) {
+      return NextResponse.json({ error: moneyRefusal(`Opening-balance amount for "${amounts.key}"`, amounts.value) }, { status: 422 })
     }
     const rawComponents = componentAmounts(row.components)
     let components: Record<string, unknown> | undefined
     if (rawComponents !== undefined) {
       const persisted = persistMoneyMap(rawComponents)
-      if (persisted === 'invalid') {
-        return NextResponse.json({ error: 'opening-balance component amounts must be exact decimals' }, { status: 422 })
+      if (!persisted.ok) {
+        return NextResponse.json({ error: moneyRefusal(`Component amount for "${persisted.key}"`, persisted.value) }, { status: 422 })
       }
-      components = persisted
+      components = persisted.map
     }
     rows.push({
       employeePartyId: row.employeePartyId,
-      amounts,
+      amounts: amounts.map,
       // Absent means "this client does not speak components", which the service
       // treats as "keep what is stored". Sending {} is how the grid clears them.
       components,

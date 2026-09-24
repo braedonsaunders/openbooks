@@ -6,6 +6,7 @@
 export {
   decimalNullCause,
   decimalNullRefusal,
+  moneyRefusal,
   suppliedValue,
   type DecimalNullCause,
 } from "@openbooks/engine/src/money/decimal-refusal.ts";

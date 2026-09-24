@@ -24,6 +24,7 @@ import { isUuid } from "../../../lib/list-params";
 import { projectCostSummary } from "../../../lib/project-costing";
 import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { moneyRefusal, suppliedValue } from "../../../lib/payroll-decimal-refusal";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
 import { acquireFeatureGateLock } from "../../../lib/features";
 import { lockAndCheckOrgFeature } from "@openbooks/engine/src/organization/org-feature-lock.ts";
@@ -307,7 +308,7 @@ export async function POST(req: Request) {
         if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const description = String(body.description ?? "").trim();
         const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
-        if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
+        if (scheduledRaw === null) throw new ConstructionBillingError(moneyRefusal("Scheduled value", body.scheduledValue ?? "0"));
         const scheduledValue = normalizeMoney(scheduledRaw);
         // scheduled_value is numeric(19,4): fifteen whole digits. The shape
         // check admits any magnitude, so a pasted 20-digit figure died in
@@ -315,7 +316,7 @@ export async function POST(req: Request) {
         if (wholeDigits(scheduledValue) > 15) throw new ConstructionBillingError("Scheduled value is out of range — at most 15 whole digits fit the ledger");
         const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
         if (body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null) {
-          throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
+          throw new ConstructionBillingError(moneyRefusal("Retainage percent", body.retainagePercent, "a percent"));
         }
         const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
         if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
@@ -400,12 +401,12 @@ export async function POST(req: Request) {
           } else {
             const description = String(body.description ?? "").trim();
             const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
-            if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
+            if (scheduledRaw === null) throw new ConstructionBillingError(moneyRefusal("Scheduled value", body.scheduledValue ?? "0"));
             const scheduledValue = normalizeMoney(scheduledRaw);
             if (wholeDigits(scheduledValue) > 15) throw new ConstructionBillingError("Scheduled value is out of range — at most 15 whole digits fit the ledger");
             const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
             if (body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null) {
-              throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
+              throw new ConstructionBillingError(moneyRefusal("Retainage percent", body.retainagePercent, "a percent"));
             }
             const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
             if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
@@ -440,10 +441,10 @@ export async function POST(req: Request) {
         if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const number = String(body.number ?? "").trim();
         const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
-        if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        if (amountRaw === null) return NextResponse.json({ error: moneyRefusal("Change-order amount", body.amount ?? "0") }, { status: 422 });
         const amount = normalizeMoney(amountRaw);
         // change_orders.amount is numeric(19,4): same bound, same refusal.
-        if (wholeDigits(amount) > 15) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        if (wholeDigits(amount) > 15) return NextResponse.json({ error: `Change-order amount is out of range — at most 15 whole digits fit the ledger; got "${suppliedValue(body.amount)}"` }, { status: 422 });
         const targetSovLineId = typeof body.targetSovLineId === "string" && body.targetSovLineId ? body.targetSovLineId : null;
         if (targetSovLineId && !isUuid(targetSovLineId)) {
           throw new ConstructionBillingError("The target schedule line id must be a valid UUID");
@@ -529,13 +530,13 @@ export async function POST(req: Request) {
           `));
           const effectRaw = canonicalDecimal(String(row.amount), 4);
           if (effectRaw === null) {
-            throw new ConstructionBillingError("Change-order amount must be a number with no more than four decimal places");
+            throw new ConstructionBillingError(moneyRefusal("Change-order amount", String(row.amount)));
           }
           let effect: string;
           try {
             effect = normalizeMoney(effectRaw);
           } catch {
-            throw new ConstructionBillingError("Change-order amount must be a number with no more than four decimal places");
+            throw new ConstructionBillingError("Change-order amount is out of range for the ledger");
           }
           const contractValueBefore = project.rows[0]?.contract_value ?? null;
           const contractValueAfter = add(contractValueBefore ?? "0", effect);
@@ -647,7 +648,7 @@ export async function POST(req: Request) {
       case "createPayApp": {
         if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const retainageRaw = canonicalDecimal(body.retainagePercent ?? "10", 4);
-        if (retainageRaw === null) throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
+        if (retainageRaw === null) throw new ConstructionBillingError(moneyRefusal("Retainage percent", body.retainagePercent ?? "10", "a percent"));
         const r = await createPayApplication(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(retainageRaw), authz.allowedSubsidiaryIds);
         return NextResponse.json(r, { status: 201 });
       }
@@ -661,8 +662,11 @@ export async function POST(req: Request) {
             const blankToZero = (v: unknown) => (typeof v === "string" && v.trim() === "" ? "0" : (v ?? "0"));
             const thisPeriod = canonicalDecimal(blankToZero(line.thisPeriodCompleted), 4);
             const stored = canonicalDecimal(blankToZero(line.materialsStored), 4);
-            if (thisPeriod === null || stored === null) {
-              throw new ConstructionBillingError("Draw amounts must be numbers with no more than four decimal places");
+            if (thisPeriod === null) {
+              throw new ConstructionBillingError(moneyRefusal("Completed this period", line.thisPeriodCompleted));
+            }
+            if (stored === null) {
+              throw new ConstructionBillingError(moneyRefusal("Materials stored", line.materialsStored));
             }
             lines.push({
               sovLineId: String(line.sovLineId ?? ""),
@@ -689,7 +693,7 @@ export async function POST(req: Request) {
       case "releaseRetainage": {
         if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
-        if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        if (amountRaw === null) return NextResponse.json({ error: moneyRefusal("Release amount", body.amount ?? "0") }, { status: 422 });
         const r = await releaseRetainage(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(amountRaw), authz.allowedSubsidiaryIds);
         return NextResponse.json(r);
       }

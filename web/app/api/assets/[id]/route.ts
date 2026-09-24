@@ -10,6 +10,7 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
 import { loadAsset, loadAssetWithRunner } from '../_lib'
+import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import {
   FieldRefusal,
   checkCustomReferences,
@@ -206,14 +207,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let cost: string | undefined
   if (body.acquisitionCost !== undefined) {
     const v = moneyOrNull(body.acquisitionCost)
-    if (v === 'invalid') return bad('Acquisition cost must be a number')
+    if (v === 'unreadable') return bad(moneyRefusal('Acquisition cost', body.acquisitionCost))
+    if (v === 'too-wide') return bad('Acquisition cost is out of range — at most 15 whole digits fit the ledger')
     if (v !== null && cmp(v, '0') < 0) return bad('Acquisition cost must be a non-negative number')
     cost = v ?? '0'
   }
   let salvage: string | undefined
   if (body.salvageValue !== undefined) {
     const v = moneyOrNull(body.salvageValue)
-    if (v === 'invalid') return bad('Salvage value must be a number')
+    if (v === 'unreadable') return bad(moneyRefusal('Salvage value', body.salvageValue))
+    if (v === 'too-wide') return bad('Salvage value is out of range — at most 15 whole digits fit the ledger')
     if (v !== null && cmp(v, '0') < 0) return bad('Salvage value must be a non-negative number')
     salvage = v ?? '0'
   }

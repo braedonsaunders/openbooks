@@ -6,6 +6,7 @@ import { guardPermission } from '@/lib/authz'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
+import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeMoney, cmp } from '@openbooks/engine/src/money/money.ts'
 import { auditSetupChange } from '@/lib/setup/audit'
@@ -44,8 +45,10 @@ function parseSchedule(body: Record<string, unknown>): { error: string } | {
   const seen = new Set<string>()
   for (const raw of body.breaks as BreakInput[]) {
     const quantity = canonicalDecimal(raw.minimumQuantity, 4)
+    if (quantity === null) return { error: moneyRefusal('Break quantity', raw.minimumQuantity, 'a quantity') }
     const price = canonicalDecimal(raw.unitPrice, 4)
-    if (quantity === null || price === null || cmp(quantity, '0') <= 0 || cmp(price, '0') < 0) return { error: 'Break quantities must be positive and prices must be non-negative' }
+    if (price === null) return { error: moneyRefusal('Break unit price', raw.unitPrice) }
+    if (cmp(quantity, '0') <= 0 || cmp(price, '0') < 0) return { error: 'Break quantities must be positive and prices must be non-negative' }
     if (quantity.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15 || price.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) return { error: 'Pricing values must fit within numeric(19,4)' }
     const normalizedQuantity = normalizeMoney(quantity)
     if (seen.has(normalizedQuantity)) return { error: 'Quantity breaks must be unique' }

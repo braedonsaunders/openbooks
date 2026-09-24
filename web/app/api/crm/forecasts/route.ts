@@ -10,6 +10,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { calculateForecast } from '../../../../lib/crm'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
 
@@ -91,7 +92,10 @@ export async function POST(req: NextRequest) {
   const overrideRaw = body.overrideAmount == null || body.overrideAmount === ''
     ? null
     : canonicalDecimal(body.overrideAmount, 4)
-  if (body.overrideAmount != null && body.overrideAmount !== '' && (overrideRaw === null || compareDecimal(overrideRaw, '0') < 0)) {
+  if (body.overrideAmount != null && body.overrideAmount !== '' && overrideRaw === null) {
+    return NextResponse.json({ error: moneyRefusal('Override amount', body.overrideAmount) }, { status: 422 })
+  }
+  if (body.overrideAmount != null && body.overrideAmount !== '' && overrideRaw !== null && compareDecimal(overrideRaw, '0') < 0) {
     return NextResponse.json({ error: 'override must be a non-negative amount' }, { status: 422 })
   }
   // override_amount is numeric(19,4): a wider figure would die in Postgres as

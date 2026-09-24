@@ -29,6 +29,7 @@ import {
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../lib/authz";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { isFeatureEnabled } from "../../../lib/features";
 import { isUuid } from "../../../lib/list-params";
 import { guardSubcontractsFeature } from "../../../lib/subcontracts-gate";
@@ -53,8 +54,8 @@ function exactMoney(value: unknown): string | null {
   }
 }
 
-function invalidDecimal(label: string) {
-  return NextResponse.json({ error: `${label} must be an exact decimal` }, { status: 422 });
+function invalidDecimal(label: string, raw: unknown, noun = "an amount") {
+  return NextResponse.json({ error: moneyRefusal(label, raw, noun) }, { status: 422 });
 }
 
 export async function GET(request: Request) {
@@ -290,12 +291,12 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "not found" }, { status: 404 });
         }
         const originalCommitment = exactMoney(body.originalCommitment);
-        if (originalCommitment === null) return invalidDecimal("Original commitment");
+        if (originalCommitment === null) return invalidDecimal("Original commitment", body.originalCommitment);
         const retainageInput = body.defaultRetainagePercent;
         const defaultRetainagePercent = retainageInput == null || retainageInput === ""
           ? undefined
           : exactMoney(retainageInput);
-        if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent");
+        if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent", retainageInput, "a percent");
         result = await createSubcontract({
           ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
         } as unknown as { orgId: string; userId: string; projectId: string; vendorId: string; number: string; title: string; description?: string | null; currency?: string | null; originalCommitment: string; defaultRetainagePercent?: string; purchaseOrderId?: string | null; startsOn?: string | null; endsOn?: string | null; });
@@ -303,9 +304,9 @@ export async function POST(request: Request) {
       }
       case "updateSubcontract": {
         const originalCommitment = exactMoney(body.originalCommitment);
-        if (originalCommitment === null) return invalidDecimal("Original commitment");
+        if (originalCommitment === null) return invalidDecimal("Original commitment", body.originalCommitment);
         const defaultRetainagePercent = exactMoney(body.defaultRetainagePercent);
-        if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent");
+        if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent", body.defaultRetainagePercent, "a percent");
         await updateDraftSubcontract({
           ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
         } as unknown as { orgId: string; userId: string; id: string; title: string; description?: string | null; originalCommitment: string; defaultRetainagePercent: string; startsOn?: string | null; endsOn?: string | null; });
@@ -313,11 +314,11 @@ export async function POST(request: Request) {
       }
       case "addSovLine": {
         const scheduledValue = exactMoney(body.scheduledValue);
-        if (scheduledValue === null) return invalidDecimal("Scheduled value");
+        if (scheduledValue === null) return invalidDecimal("Scheduled value", body.scheduledValue);
         let retainagePercent: string | null = null;
         if (body.retainagePercent != null && body.retainagePercent !== "") {
           retainagePercent = exactMoney(body.retainagePercent);
-          if (retainagePercent === null) return invalidDecimal("Retainage percent");
+          if (retainagePercent === null) return invalidDecimal("Retainage percent", body.retainagePercent, "a percent");
         }
         result = await addSubcontractSovLine({
           ...body, orgId, userId, scheduledValue, retainagePercent,
@@ -348,7 +349,7 @@ export async function POST(request: Request) {
       }
       case "addChangeOrder": {
         const amount = exactMoney(body.amount);
-        if (amount === null) return invalidDecimal("Amount");
+        if (amount === null) return invalidDecimal("Amount", body.amount);
         result = await createSubcontractChangeOrder({ ...body, orgId, userId, amount } as unknown as { orgId: string; userId: string; subcontractId: string; number: string; description?: string | null; amount: string; targetSovLineId?: string | null; });
         break;
       }
@@ -385,9 +386,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: `${label}: sovLineId must be a valid uuid` }, { status: 422 });
           }
           const workCompletedThisPeriod = exactMoney(line.workCompletedThisPeriod ?? "0");
+          if (workCompletedThisPeriod === null) {
+            return NextResponse.json({ error: moneyRefusal(`${label} (${sovLineId}): work completed`, line.workCompletedThisPeriod ?? "0") }, { status: 422 });
+          }
           const materialsStoredCurrent = exactMoney(line.materialsStoredCurrent ?? "0");
-          if (workCompletedThisPeriod === null || materialsStoredCurrent === null) {
-            return NextResponse.json({ error: `${label} (${sovLineId}): draw amount must be an exact decimal` }, { status: 422 });
+          if (materialsStoredCurrent === null) {
+            return NextResponse.json({ error: moneyRefusal(`${label} (${sovLineId}): materials stored`, line.materialsStoredCurrent ?? "0") }, { status: 422 });
           }
           lines.push({
             sovLineId,
@@ -412,7 +416,7 @@ export async function POST(request: Request) {
         break;
       case "releaseRetainage": {
         const amount = exactMoney(body.amount);
-        if (amount === null) return invalidDecimal("Amount");
+        if (amount === null) return invalidDecimal("Amount", body.amount);
         result = await releaseVendorRetainage({ ...body, orgId, userId, amount } as unknown as { orgId: string; userId: string; subcontractId: string; periodEnd: string; amount: string; memo?: string | null; });
         break;
       }
@@ -420,7 +424,7 @@ export async function POST(request: Request) {
         let amountLimit: string | null = null;
         if (body.amountLimit != null && body.amountLimit !== "") {
           amountLimit = exactMoney(body.amountLimit);
-          if (amountLimit === null) return invalidDecimal("Amount limit");
+          if (amountLimit === null) return invalidDecimal("Amount limit", body.amountLimit);
         }
         result = await createSubcontractPaymentControl({ ...body, orgId, userId, amountLimit } as unknown as { orgId: string; userId: string; subcontractId: string; payApplicationId?: string | null; vendorBillDocumentId?: string | null; controlType: "joint_check" | "payment_hold"; jointPayeePartyId?: string | null; amountLimit?: string | null; reason: string; effectiveOn: string; expiresOn?: string | null; });
         break;

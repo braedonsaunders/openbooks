@@ -6,6 +6,7 @@ import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { moneyRefusal } from "../money/decimal-refusal.ts";
 import { advanceAnchoredMonth } from "./cadence.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
@@ -249,7 +250,7 @@ function wholeDigits(canonical: string): number {
 function exactMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) {
-    throw new AdvancedSubscriptionError(`${label} must be an exact decimal`);
+    throw new AdvancedSubscriptionError(moneyRefusal(label, value));
   }
   // Component quantity/unit_price are numeric(19,4): a wider figure would die
   // in Postgres as a raw storage failure (HTTP 500 — the route rethrows
@@ -262,7 +263,7 @@ function exactMoney(value: unknown, label: string): string {
   try {
     return normalizeMoney(exact);
   } catch {
-    throw new AdvancedSubscriptionError(`${label} must be an exact decimal`);
+    throw new AdvancedSubscriptionError(moneyRefusal(label, value));
   }
 }
 

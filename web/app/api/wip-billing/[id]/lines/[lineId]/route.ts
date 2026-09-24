@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../../../../lib/list-params'
 import { holdPrebillLine, updatePrebillLine, WipBillingError } from '../../../../../../lib/wip-billing'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
@@ -50,7 +51,7 @@ export async function PATCH(
     }
     const proposedBillAmount = exactMoney(body.proposedBillAmount)
     if (proposedBillAmount === null) {
-      return NextResponse.json({ error: 'Proposed bill amount must be an exact decimal' }, { status: 422 })
+      return NextResponse.json({ error: moneyRefusal('Proposed bill amount', body.proposedBillAmount) }, { status: 422 })
     }
     // Mandatory optimistic-concurrency evidence (same contract as document and
     // payment edits): a stale tab must 409 instead of overwriting a newer

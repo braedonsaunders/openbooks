@@ -8,6 +8,7 @@ import { guardPermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../lib/list-params'
 import { loadItem } from './_lib'
 
@@ -94,8 +95,11 @@ function money(
   const raw = textOrNull(value)
   if (raw === null) return { ok: true, value: null }
   const exact = canonicalDecimal(raw, 4)
-  if (exact === null || (options.nonNegative && compareDecimal(exact, '0') < 0)) {
-    return { ok: false, response: bad(`${label} must be ${options.nonNegative ? 'a non-negative number' : 'a number'} with no more than four decimal places`) }
+  if (exact === null) {
+    return { ok: false, response: bad(moneyRefusal(label, raw)) }
+  }
+  if (options.nonNegative && compareDecimal(exact, '0') < 0) {
+    return { ok: false, response: bad(`${label} must be a non-negative number with no more than four decimal places`) }
   }
   if (wholeDigits(exact) > 15) {
     return { ok: false, response: bad(`${label} is out of range — at most 15 whole digits fit the ledger`) }

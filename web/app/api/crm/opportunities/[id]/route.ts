@@ -18,6 +18,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'
 import { isIsoCalendarDate } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 
@@ -231,8 +232,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     try {
       lineMathInputs = lines.map((line) => {
         const quantity = canonicalDecimal(line.quantity, 4)
+        if (quantity === null) throw new Error(moneyRefusal('line quantity', line.quantity, 'a quantity'))
         const unitPrice = canonicalDecimal(line.unitPrice, 4)
-        if (quantity === null || unitPrice === null) throw new Error('invalid lines')
+        if (unitPrice === null) throw new Error(moneyRefusal('line unit price', line.unitPrice))
         if (wholeDigits(quantity) > 15 || wholeDigits(unitPrice) > 15) {
           throw new Error('line quantities and prices must fit the ledger (at most 15 whole digits)')
         }
@@ -242,7 +244,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         // sends, so it reads as absence rather than as zero.
         const rawUnitCost = line.unitCost
         const unitCost = rawUnitCost == null || rawUnitCost === '' ? null : canonicalDecimal(rawUnitCost, 4)
-        if (rawUnitCost != null && rawUnitCost !== '' && unitCost === null) throw new Error('invalid lines')
+        if (rawUnitCost != null && rawUnitCost !== '' && unitCost === null) {
+          throw new Error(moneyRefusal('line unit cost', rawUnitCost))
+        }
         if (unitCost !== null && wholeDigits(unitCost) > 15) {
           throw new Error('line costs must fit the ledger (at most 15 whole digits)')
         }
@@ -316,7 +320,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!Array.isArray(team)) return NextResponse.json({ error: 'team must be an array' }, { status: 422 })
     for (const member of team) {
       const contribution = canonicalDecimal(member.contributionPercent, 4)
-      if (contribution === null) return NextResponse.json({ error: 'invalid sales-team contribution' }, { status: 422 })
+      if (contribution === null) {
+        return NextResponse.json({ error: moneyRefusal('sales-team contribution', member.contributionPercent, 'a percent') }, { status: 422 })
+      }
       if (wholeDigits(contribution) > 15) return NextResponse.json({ error: 'sales-team contributions must fit the ledger (at most 15 whole digits)' }, { status: 422 })
       teamRows.push({ ...member, contributionPercent: normalizeMoney(contribution) })
     }
@@ -327,12 +333,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const rangeMoney = (raw: unknown) => {
     if (raw == null || raw === '') return null
     const exact = canonicalDecimal(raw, 4)
-    if (exact === null || compareDecimal(exact, '0') < 0) return 'invalid'
+    if (exact === null) return 'unreadable'
+    if (compareDecimal(exact, '0') < 0) return 'invalid'
     if (wholeDigits(exact) > 15) return 'too-wide'
     return normalizeMoney(exact)
   }
   const rangeLow = body.rangeLow !== undefined ? rangeMoney(body.rangeLow) : undefined
   const rangeHigh = body.rangeHigh !== undefined ? rangeMoney(body.rangeHigh) : undefined
+  if (rangeLow === 'unreadable') return NextResponse.json({ error: moneyRefusal('Range low', body.rangeLow) }, { status: 422 })
+  if (rangeHigh === 'unreadable') return NextResponse.json({ error: moneyRefusal('Range high', body.rangeHigh) }, { status: 422 })
   if (rangeLow === 'invalid' || rangeHigh === 'invalid') return NextResponse.json({ error: 'range must be a non-negative amount' }, { status: 422 })
   if (rangeLow === 'too-wide' || rangeHigh === 'too-wide') return NextResponse.json({ error: 'range must fit the ledger (at most 15 whole digits)' }, { status: 422 })
 

@@ -6,6 +6,7 @@ import { isDunnableDocumentKind } from "@openbooks/engine/src/receivables/dunnin
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { isValidEmailAddress } from "@openbooks/emails";
 
 export const runtime = "nodejs";
@@ -139,14 +140,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "appliesToKind must be a dunnable receivable document kind" }, { status: 422 });
   }
   const minBalanceRaw = canonicalDecimal(body.minBalance ?? "0", 4);
-  if (minBalanceRaw === null || compareDecimal(minBalanceRaw, "0") < 0) {
+  if (minBalanceRaw === null) {
+    return NextResponse.json({ error: moneyRefusal("minBalance", body.minBalance ?? "0") }, { status: 400 });
+  }
+  if (compareDecimal(minBalanceRaw, "0") < 0) {
     return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
   }
   // min_balance is numeric(19,4): fifteen whole digits. The format check
   // admits any magnitude, so a pasted 20-digit balance died in Postgres with
   // a storage error.
   if (minBalanceRaw.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
-    return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
+    return NextResponse.json({ error: "minBalance must fit the ledger (at most 15 whole digits)" }, { status: 400 });
   }
   const minBalance = normalizeMoney(minBalanceRaw);
   const gracePeriodDays = parseGracePeriodDays(body.gracePeriodDays);

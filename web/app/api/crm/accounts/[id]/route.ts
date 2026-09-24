@@ -10,6 +10,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
 
@@ -178,7 +179,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     ? null
     : canonicalDecimal(body.annualRevenue, 4)
   if (body.annualRevenue !== undefined && body.annualRevenue !== null && body.annualRevenue !== ''
-    && (annualRevenueRaw === null || compareDecimal(annualRevenueRaw, '0') < 0)) {
+    && annualRevenueRaw === null) {
+    return NextResponse.json({ error: moneyRefusal('Annual revenue', body.annualRevenue) }, { status: 422 })
+  }
+  if (body.annualRevenue !== undefined && body.annualRevenue !== null && body.annualRevenue !== ''
+    && annualRevenueRaw !== null && compareDecimal(annualRevenueRaw, '0') < 0) {
     return NextResponse.json({ error: 'annual revenue must be a non-negative amount' }, { status: 422 })
   }
   // annual_revenue is numeric(19,4): refuse wider figures here instead of

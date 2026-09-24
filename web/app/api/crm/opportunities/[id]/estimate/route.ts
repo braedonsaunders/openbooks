@@ -7,6 +7,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isDocKindEnabled } from "../../../../../../lib/documents.ts";
 import { guardPermission } from '../../../../../../lib/authz'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
+import { decimalNullRefusal, moneyRefusal } from '../../../../../../lib/payroll-decimal-refusal'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -21,44 +22,44 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 /** Persist leftover estimate projected amount through exact decimal then ledger money. Fail closed. */
 function persistEstimateProjectedAmount(value: unknown): string {
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new Error('projected amount must be an exact decimal')
+  if (exact === null) throw new Error(moneyRefusal('Projected amount', value))
   try {
     return normalizeMoney(exact)
   } catch {
-    throw new Error('projected amount must be an exact decimal')
+    throw new Error(moneyRefusal('Projected amount', value))
   }
 }
 
 /** Persist leftover estimate line amount through exact decimal then ledger money. Fail closed. */
 function persistEstimateLineAmount(value: unknown): string {
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new Error('line amount must be an exact decimal')
+  if (exact === null) throw new Error(moneyRefusal('Line amount', value))
   try {
     return normalizeMoney(exact)
   } catch {
-    throw new Error('line amount must be an exact decimal')
+    throw new Error(moneyRefusal('Line amount', value))
   }
 }
 
 /** Persist leftover estimate line quantity through exact decimal then ledger money. Fail closed. */
 function persistEstimateLineQuantity(value: unknown): string {
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new Error('line quantity must be an exact decimal')
+  if (exact === null) throw new Error(decimalNullRefusal('Line quantity', 'a quantity', value, 4))
   try {
     return normalizeMoney(exact)
   } catch {
-    throw new Error('line quantity must be an exact decimal')
+    throw new Error('Line quantity is out of range for the ledger')
   }
 }
 
 /** Persist leftover estimate line unit price through exact decimal then ledger money. Fail closed. */
 function persistEstimateLineUnitPrice(value: unknown): string {
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new Error('line unit price must be an exact decimal')
+  if (exact === null) throw new Error(moneyRefusal('Line unit price', value))
   try {
     return normalizeMoney(exact)
   } catch {
-    throw new Error('line unit price must be an exact decimal')
+    throw new Error(moneyRefusal('Line unit price', value))
   }
 }
 

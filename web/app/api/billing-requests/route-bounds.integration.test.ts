@@ -95,6 +95,32 @@ test("billing-request creation refuses a non-calendar cutoff date without writin
   }
 });
 
+test("billing-request creation refuses a decimal-comma draw with the dotted rewrite", { skip: !DB }, async () => {
+  // B3-SAL-01: '12,34' is twelve-thirty-four written correctly in seven
+  // installed locales — stripping the comma would post 1234, a 100x error.
+  // The house classifier names the dotted rewrite instead of the generic
+  // 'must be an exact decimal', and the dotted figure files normally.
+  const { org, projectId } = await fixture();
+  try {
+    const refused = await post({
+      projectId, basis: "draw_amount", drawAmount: "12,34", cutoffDate: "2026-08-15",
+    });
+    const refusedJson = (await refused.json().catch(() => null)) as { error?: string } | null;
+    assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refusedJson)}`);
+    assert.match(refusedJson?.error ?? "", /must use "\." as the decimal point/);
+    assert.match(refusedJson?.error ?? "", /write "12,34" as "12\.34"/);
+    assert.equal(await requestCount(org.orgId), 0);
+
+    const filed = await post({
+      projectId, basis: "draw_amount", drawAmount: "12.34", cutoffDate: "2026-08-15",
+    });
+    assert.equal(filed.status, 200, JSON.stringify(await filed.json().catch(() => null)));
+    assert.equal(await requestCount(org.orgId), 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("billing-request creation still files an ordinary draw request", { skip: !DB }, async () => {
   const { org, projectId } = await fixture();
   try {

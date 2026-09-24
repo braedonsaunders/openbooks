@@ -6,6 +6,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
 
@@ -21,6 +22,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { newCarryingValue?: string; date?: string }
   const carryingRaw = canonicalDecimal(body.newCarryingValue, 4)
+  if (carryingRaw === null && body.newCarryingValue !== undefined && body.newCarryingValue !== null && body.newCarryingValue !== '') {
+    return NextResponse.json({ error: moneyRefusal('New carrying value', body.newCarryingValue) }, { status: 422 })
+  }
   if (carryingRaw === null || compareDecimal(carryingRaw, '0') < 0) {
     return NextResponse.json({ error: 'enter the new carrying value' }, { status: 422 })
   }

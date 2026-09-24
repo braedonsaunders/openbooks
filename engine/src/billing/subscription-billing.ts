@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { moneyRefusal } from "../money/decimal-refusal.ts";
 import { db, orgContext, withBypass, withOrg } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
@@ -67,12 +68,12 @@ export function normalizeSubscriptionMoney(
   requirement: "nonnegative" | "positive",
 ): string {
   const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new SubscriptionError(`${label} must be an exact decimal`);
+  if (exact === null) throw new SubscriptionError(moneyRefusal(label, value));
   let normalized: string;
   try {
     normalized = normalizeMoney(exact);
   } catch {
-    throw new SubscriptionError(`${label} must be an exact decimal`);
+    throw new SubscriptionError(moneyRefusal(label, value));
   }
   const units = toUnits(normalized);
   if (units > POSTGRES_MONEY_MAX_UNITS || units < -POSTGRES_MONEY_MAX_UNITS) {

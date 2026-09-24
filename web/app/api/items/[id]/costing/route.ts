@@ -12,6 +12,7 @@ import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
 
@@ -168,13 +169,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const allowNegativeInventory = body.allowNegativeInventory === true
   const negativeCostBasis = body.negativeCostBasis ?? 'last_receipt'
   const provisionalUnitCost = moneyOrNull(body.provisionalUnitCost)
-  if (
-    standardCost === 'invalid'
-    || reorderPoint === 'invalid'
-    || preferredStockLevel === 'invalid'
-    || provisionalUnitCost === 'invalid'
-  ) {
-    return NextResponse.json({ error: 'Costs and stock levels must be numbers with no more than four decimal places' }, { status: 422 })
+  if (standardCost === 'invalid') {
+    return NextResponse.json({ error: moneyRefusal('Standard cost', body.standardCost) }, { status: 422 })
+  }
+  if (reorderPoint === 'invalid') {
+    return NextResponse.json({ error: moneyRefusal('Reorder point', body.reorderPoint, 'a quantity') }, { status: 422 })
+  }
+  if (preferredStockLevel === 'invalid') {
+    return NextResponse.json({ error: moneyRefusal('Preferred stock level', body.preferredStockLevel, 'a quantity') }, { status: 422 })
+  }
+  if (provisionalUnitCost === 'invalid') {
+    return NextResponse.json({ error: moneyRefusal('Provisional unit cost', body.provisionalUnitCost) }, { status: 422 })
   }
   if (allowNegativeInventory && negativeCostBasis === 'configured' && provisionalUnitCost == null) {
     return NextResponse.json({ error: 'A configured provisional cost is required for negative inventory' }, { status: 400 })

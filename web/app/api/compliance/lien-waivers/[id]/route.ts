@@ -13,6 +13,7 @@ import type { LienWaiverExecutedSnapshot } from '@/lib/lien-waiver-form'
 import { isUuid } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
+import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
 
@@ -177,7 +178,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         // lien_waivers.amount is numeric(19,4): refuse whole-digit widths the
         // column cannot hold before any write.
         if (amountRaw !== null && wholeDigits(amountRaw) > 15) {
-          return NextResponse.json({ error: 'amount must fit within numeric(19,4)' }, { status: 422 })
+          return NextResponse.json({ error: 'Amount is out of range — at most 15 whole digits fit the ledger' }, { status: 422 })
         }
         // through_date casts straight to date: require a real calendar day
         // before any write, instead of leaking the cast failure.
@@ -185,7 +186,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           return NextResponse.json({ error: 'through date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
         }
         if (body.amount != null && body.amount !== '' && amountRaw === null) {
-          return NextResponse.json({ error: 'invalid amount' }, { status: 422 })
+          return NextResponse.json({ error: moneyRefusal('Amount', body.amount) }, { status: 422 })
         }
         const amount = amountRaw === null ? null : normalizeMoney(amountRaw)
         await db.execute(sql`

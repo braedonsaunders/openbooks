@@ -27,10 +27,11 @@ import test from 'node:test'
 interface RouteState {
   deleteAttempts: string[]
   deleteResult: 'retired' | 'missing'
+  upsertAttempts: unknown[]
 }
 
 const stateKey = Symbol.for('openbooks.payroll-rates-route-test')
-const state: RouteState = { deleteAttempts: [], deleteResult: 'retired' }
+const state: RouteState = { deleteAttempts: [], deleteResult: 'retired', upsertAttempts: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mockSources = new Map<string, string>([
@@ -79,7 +80,9 @@ const mockSources = new Map<string, string>([
         return { regions: { label: 'province', known: ['ON'] }, statutoryRates: { slots: [] } }
       }
       export function packRates() { return { slots: [] } }
-      export function statutoryRateSlot() { return null }
+      export function statutoryRateSlot() {
+        return { key: 'eht', label: 'EHT', fields: [{ key: 'rate', label: 'Rate', kind: 'rate', decimals: 5 }] }
+      }
       export function payrollTaxYearCoverage() { return [] }
       export function payrollTaxYearForDate() { return { taxYear: 2026 } }
     `,
@@ -96,7 +99,10 @@ const mockSources = new Map<string, string>([
       }
       export async function listStatutoryRates() { return [] }
       export function statutoryRateProblem() { return null }
-      export async function upsertStatutoryRate() { return { id: 'rate-1', values: {} } }
+      export async function upsertStatutoryRate(input) {
+        state.upsertAttempts.push(input.values)
+        return { id: 'rate-1', values: {} }
+      }
     `,
   ],
   [
@@ -225,6 +231,33 @@ test('a malformed id is refused before the engine is reached', async () => {
   assert.equal(response.status, 422)
   assert.equal((await response.json()).error, 'invalid id')
   assert.deepEqual(state.deleteAttempts, [])
+})
+
+test('a decimal-comma rate on PUT is refused with the dotted rewrite before the engine', async () => {
+  // B3-SAL-01: '12,34' is a correctly-written decimal in seven installed
+  // locales — persisting it as 1234 (or 12.34-by-guess) would mis-levy every
+  // employee in scope. The house classifier names the dotted rewrite, and
+  // the engine upsert is never reached.
+  state.upsertAttempts.length = 0
+
+  const refused = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '12,34' } }),
+  }))
+  const refusedJson = (await refused.json()) as { error?: string }
+  assert.equal(refused.status, 422)
+  assert.match(refusedJson.error ?? '', /EHT: Rate/)
+  assert.match(refusedJson.error ?? '', /must use "\." as the decimal point/)
+  assert.deepEqual(state.upsertAttempts, [])
+
+  const filed = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '0.027' } }),
+  }))
+  assert.equal(filed.status, 200)
+  assert.deepEqual(state.upsertAttempts, [{ rate: '0.02700' }])
 })
 
 test('an unknown country on PUT is a 422 naming the implemented countries', async () => {

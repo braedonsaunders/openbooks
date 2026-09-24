@@ -7,6 +7,7 @@ import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
+import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
 export const runtime = 'nodejs'
@@ -101,10 +102,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ? optionalCoverageMoney(body.aggregateAmount)
       : undefined
     if (coverageAmount === 'invalid') {
-      return NextResponse.json({ error: 'coverage amount must be a number with no more than four decimal places' }, { status: 422 })
+      return NextResponse.json({ error: moneyRefusal('Coverage amount', body.coverageAmount) }, { status: 422 })
     }
     if (aggregateAmount === 'invalid') {
-      return NextResponse.json({ error: 'aggregate amount must be a number with no more than four decimal places' }, { status: 422 })
+      return NextResponse.json({ error: moneyRefusal('Aggregate amount', body.aggregateAmount) }, { status: 422 })
     }
     // The update casts these straight to date: shape alone admits impossible
     // days ('2026-09-31') that Postgres then refuses with a raw driver
