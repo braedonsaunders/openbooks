@@ -137,7 +137,10 @@ export class XeroClient {
     private app: XeroApp,
     private tenantId: string,
     tokens: XeroTokens,
-    private onRefresh?: (t: XeroTokens) => Promise<void> | void,
+    private onRefresh?: (
+      consumed: XeroTokens,
+      refresh: (refreshToken: string) => Promise<XeroTokens>,
+    ) => Promise<XeroTokens>,
     private transport: typeof fetch = guardedFetch,
   ) {
     this.tokens = tokens;
@@ -145,8 +148,11 @@ export class XeroClient {
 
   private async accessToken(): Promise<string> {
     if (new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
-      this.tokens = await refreshTokens(this.app, this.tokens.refreshToken, this.transport);
-      await this.onRefresh?.(this.tokens);
+      const consumed = this.tokens;
+      const refresh = (refreshToken: string) => refreshTokens(this.app, refreshToken, this.transport);
+      this.tokens = this.onRefresh
+        ? await this.onRefresh(consumed, refresh)
+        : await refresh(consumed.refreshToken);
     }
     return this.tokens.accessToken;
   }
