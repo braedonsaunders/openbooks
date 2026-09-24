@@ -163,7 +163,7 @@ test('a legacy file without a subsidiary column lands in the root', { skip: !DB 
   }
 })
 
-test('an out-of-scope subsidiary is rejected before any write', { skip: !DB }, async () => {
+test('an out-of-scope subsidiary is treated as unknown before any write', { skip: !DB }, async () => {
   const f = await fixture()
   try {
     state.allowed = new Set([f.org.subsidiaryId])
@@ -175,7 +175,7 @@ test('an out-of-scope subsidiary is rejected before any write', { skip: !DB }, a
     assert.equal(refused.status, 200)
     const payload = await refused.json() as { valid: boolean; errors: { field: string; message: string }[] }
     assert.equal(payload.valid, false)
-    assert.ok(payload.errors.some((e) => e.field === 'Subsidiary' && e.message === 'invalid_subsidiary'))
+    assert.ok(payload.errors.some((e) => e.field === 'Subsidiary' && e.message === 'unknown_subsidiary'))
     assert.deepEqual(await lines(f.scenarioId, f.org.orgId), [])
     assert.equal(await revision(f.scenarioId, f.org.orgId), 1)
   } finally {

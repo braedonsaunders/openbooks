@@ -121,7 +121,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const [accountsResult, periodsResult, subsidiariesResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
-    db.execute<Lookup>(sql`select id, coalesce(number, '') as key, name, type from accounts where org_id = ${user.orgId} and is_active and not is_summary`),
+    db.execute<Lookup>(sql`
+      select a.id, coalesce(a.number, '') as key, a.name, a.type
+        from accounts a
+       where a.org_id = ${user.orgId} and a.is_active and not a.is_summary
+         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
     // Periods resolve within the budget's pinned calendar only: the line
     // guard admits default-calendar periods, so resolving a same-named
     // period from another calendar would write a line the worksheet hides.
@@ -131,11 +135,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where p.org_id = ${user.orgId} and p.fiscal_year = ${scenario.fiscal_year}
          and not p.is_adjustment and fc.is_default`),
-    db.execute<Lookup>(sql`select id, name as key, name from subsidiaries where org_id = ${user.orgId} and is_active and not is_elimination`),
-    db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from departments where org_id = ${user.orgId} and is_active`),
-    db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from projects where org_id = ${user.orgId} and is_active`),
-    db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from locations where org_id = ${user.orgId} and is_active`),
-    db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from classes where org_id = ${user.orgId} and is_active`),
+    db.execute<Lookup & { parentId: string | null }>(sql`
+      select id, name as key, name, parent_id as "parentId"
+        from subsidiaries
+       where org_id = ${user.orgId} and is_active and not is_elimination
+         ${subsidiaryVisibleFilter(sql`id`, gate.allowedSubsidiaryIds)}`),
+    db.execute<Lookup>(sql`
+      select d.id, coalesce(d.code, '') as key, d.name
+        from departments d
+       where d.org_id = ${user.orgId} and d.is_active
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+    db.execute<Lookup>(sql`
+      select p.id, coalesce(p.code, '') as key, p.name
+        from projects p
+       where p.org_id = ${user.orgId} and p.is_active
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+    db.execute<Lookup>(sql`
+      select l.id, coalesce(l.code, '') as key, l.name
+        from locations l
+       where l.org_id = ${user.orgId} and l.is_active
+         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+    db.execute<Lookup>(sql`
+      select c.id, coalesce(c.code, '') as key, c.name
+        from classes c
+       where c.org_id = ${user.orgId} and c.is_active
+         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
   ]))
   const resolveAccount = buildResolver(accountsResult.rows)
   // An Account Number cell resolves as a number only (account numbers are
@@ -165,13 +189,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     ids.add(row.id)
     subsidiaryFoldedIds.set(folded, ids)
   }
-  const rootSubsidiary = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries
-     where org_id = ${user.orgId}
-       and parent_id is null and is_active and not is_elimination
-     order by created_at, id
-     limit 1
-  `)).rows[0]?.id ?? null
+  const rootSubsidiary = subsidiariesResult.rows.find((row) => row.parentId === null)?.id ?? null
   // Dimensions resolve by code or name (the export writes code with a name
   // fallback, so either form round-trips); a blank cell is genuinely "no
   // dimension" because the export never emits a blank for a set dimension.
