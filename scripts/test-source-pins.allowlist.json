@@ -330,7 +330,6 @@
     "web/lib/list/order-clause.test.ts": 1,
     "web/lib/list/project-type-options.test.ts": 1,
     "web/lib/module-home/customers.test.ts": 1,
-    "web/lib/payroll-bank-file-route.test.ts": 1,
     "web/lib/payroll-filing-amendments.test.ts": 3,
     "web/lib/payroll-setup-checklist.test.ts": 1,
     "web/lib/project-costing.test.ts": 1,
