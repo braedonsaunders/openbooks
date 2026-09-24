@@ -679,6 +679,15 @@ export function certificateSubRegions(resolved: ResolvedCertificate): Certificat
 /** One stored certificate, as the storage layer hands it over. */
 export interface StoredCertificate {
   certificateKey: string;
+  /**
+   * The jurisdiction point the row was filed for — the certificate's own
+   * scope, enforced at POST. Optional because rows predate the scoping check;
+   * an absent point reads as unscoped, which the scope revalidation treats
+   * as a mismatch on a scoped certificate rather than as a match.
+   */
+  region?: string | null;
+  /** The sub-region point, present only on sub_region-level certificates. */
+  subRegion?: string | null;
   /** Answers keyed by field key. Values are strings at the declared scale. */
   answers: Record<string, string>;
   /** The date the employee signed it — the effective date of the answers. */
@@ -796,6 +805,125 @@ export function resolveCertificate(input: {
     answers,
     missing,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Scope revalidation — the read path's second check
+// ---------------------------------------------------------------------------
+
+/** A stored certificate the employee's current scope cannot honour. */
+export interface StoredCertificateScopeMismatch {
+  certificateKey: string;
+  region: string | null;
+  subRegion: string | null;
+  /** Ready to show: names the certificate, the scope, and the remedy. */
+  message: string;
+}
+
+/**
+ * Revalidate every stored certificate against the pack's declaration and the
+ * employee's CURRENT work and residence regions.
+ *
+ * The POST route scopes new filings to the employee's own region, but rows
+ * filed before that check — and employees who moved regions after filing —
+ * leave rows whose jurisdiction point no longer matches. Key membership alone
+ * would then grant reciprocity, or answers would drive the wrong region's
+ * table, with no gap. A mismatched row is EXCLUDED from the valid set and
+ * reported, so the run withholds without it and names it instead of
+ * honouring it silently.
+ *
+ * Pure: the caller supplies the regions it already resolved (the run reads
+ * them from the profile once), and raises the mismatches through its own
+ * refusal channel.
+ */
+export function revalidateStoredCertificates(input: {
+  stored: readonly StoredCertificate[];
+  country: string;
+  workRegion: string;
+  residenceRegion: string;
+}): { valid: StoredCertificate[]; mismatched: StoredCertificateScopeMismatch[] } {
+  const { stored, country, workRegion, residenceRegion } = input;
+  const valid: StoredCertificate[] = [];
+  const mismatched: StoredCertificateScopeMismatch[] = [];
+  for (const row of stored) {
+    let declared: PayrollCertificate;
+    try {
+      declared = payrollCertificate(country, row.certificateKey);
+    } catch {
+      mismatched.push({
+        certificateKey: row.certificateKey,
+        region: row.region ?? null,
+        subRegion: row.subRegion ?? null,
+        message:
+          `"${row.certificateKey}" is on file for this employee but the ${country} payroll pack `
+          + "declares no such certificate — it is ignored. "
+          + "File the certificate the pack declares, or correct the profile if the employee moved packs.",
+      });
+      continue;
+    }
+    const { level, region: scopeRegion, subRegion: scopeSubRegion } = declared.scope;
+    const rowRegion = row.region ?? null;
+    const rowSubRegion = row.subRegion ?? null;
+    const inScopeRegion = scopeRegion === workRegion || scopeRegion === residenceRegion;
+    if (level === "country") {
+      if (rowRegion !== null || rowSubRegion !== null) {
+        mismatched.push({
+          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          message:
+            `"${declared.form}" is a country-level certificate and carries no region, but this row `
+            + `is filed for ${rowRegion ?? rowSubRegion} — it is ignored. `
+            + "File the certificate without a region, or correct the profile if the employee moved.",
+        });
+        continue;
+      }
+    } else if (level === "region") {
+      if (rowRegion !== scopeRegion) {
+        mismatched.push({
+          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          message:
+            `"${declared.form}" files for region "${scopeRegion}", but this row is filed for `
+            + `"${rowRegion ?? "(no region)"}" — it is ignored. `
+            + "File the certificate for its own region, or correct the profile if the employee moved.",
+        });
+        continue;
+      }
+      if (!inScopeRegion) {
+        mismatched.push({
+          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          message:
+            `"${declared.form}" is scoped to ${scopeRegion}, but this employee now works in `
+            + `${workRegion} and resides in ${residenceRegion} — it is ignored. `
+            + "Correct the profile regions if they are wrong, or file the certificate "
+            + "the employee's own region declares.",
+        });
+        continue;
+      }
+    } else {
+      if (rowRegion !== scopeRegion || rowSubRegion !== scopeSubRegion) {
+        mismatched.push({
+          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          message:
+            `"${declared.form}" files for "${scopeRegion ?? ""}/${scopeSubRegion ?? ""}", but this row `
+            + `is filed for "${rowRegion ?? "(no region)"}/${rowSubRegion ?? "(no sub-region)"}" — it is ignored. `
+            + "File the certificate for its own jurisdiction, or correct the profile if the employee moved.",
+        });
+        continue;
+      }
+      if (!inScopeRegion) {
+        mismatched.push({
+          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          message:
+            `"${declared.form}" is scoped to ${scopeRegion}, but this employee now works in `
+            + `${workRegion} and resides in ${residenceRegion} — it is ignored. `
+            + "Correct the profile regions if they are wrong, or file the certificate "
+            + "the employee's own region declares.",
+        });
+        continue;
+      }
+    }
+    valid.push(row);
+  }
+  return { valid, mismatched };
 }
 
 // ---------------------------------------------------------------------------

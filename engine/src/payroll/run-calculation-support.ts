@@ -68,16 +68,19 @@ export async function storedTaxCertificates(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, country: string,
 ): Promise<StoredCertificate[]> {
   const r = (await tx.execute<{
-      certificate_key: string; answers: Record<string, string> | null;
+      certificate_key: string; region: string | null; sub_region: string | null;
+      answers: Record<string, string> | null;
       effective_from: string | null; superseded_on: string | null;
     }>(sql`
-    select certificate_key, answers, effective_from::text as effective_from,
+    select certificate_key, region, sub_region, answers, effective_from::text as effective_from,
            superseded_on::text as superseded_on
       from employee_tax_certificates
      where org_id = ${orgId} and employee_party_id = ${employeePartyId} and country = ${country}
   `));
   return r.rows.map((row) => ({
     certificateKey: row.certificate_key,
+    region: row.region,
+    subRegion: row.sub_region,
     answers: row.answers ?? {},
     effectiveFrom: row.effective_from,
     supersededOn: row.superseded_on,

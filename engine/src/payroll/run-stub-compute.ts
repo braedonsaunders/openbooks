@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
-import { payrollCertificate, resolveCertificate, type ResolvedCertificate } from "./certificates.ts";
+import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
 import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext } from "./packs.ts";
 import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
 import { createPushStatutory } from "./push-statutory.ts";
@@ -111,7 +111,24 @@ export async function calculateStub(
   // per statutory pass: the deduction-protection fixpoint runs the pass up to
   // PROTECTION_MAX_PASSES times and an employee's signed forms do not change
   // between them.
-  const storedCertificates = await storedTaxCertificates(tx, orgId, employeePartyId, country);
+  const filedCertificates = await storedTaxCertificates(tx, orgId, employeePartyId, country);
+  // A certificate filed for another region — before the POST route scoped
+  // filings to the employee's own region, or after the employee moved — must
+  // not grant reciprocity by key membership nor drive another region's table
+  // by its answers. It is ignored, and the run stops naming it: withholding
+  // under the wrong region's rules is the silently-wrong class, and neither
+  // the profile nor the filing can be trusted to pick the fallback.
+  const { valid: storedCertificates, mismatched } = revalidateStoredCertificates({
+    stored: filedCertificates,
+    country,
+    workRegion: province,
+    residenceRegion: (emp.residence_region as string | null) || province,
+  });
+  if (mismatched.length > 0) {
+    throw new PayrollError(
+      `${emp.display_name ?? employeePartyId}: ${mismatched.map((entry) => entry.message).join(" ")}`,
+    );
+  }
   /**
    * One declared certificate, resolved against what is stored — the row the
    * employee signed, else the profile column that predates the model, else the
