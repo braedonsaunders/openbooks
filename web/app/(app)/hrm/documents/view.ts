@@ -40,7 +40,11 @@ export function documentsSpec(data: DocumentsPageData): PageSpec {
   return page({
     route: '/hrm/documents',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    // Whole-page scroll in normal block flow: this page has no internal
+    // scroll panel (unlike the app-feel HRM tabs), so a viewport-height
+    // flex lock here would compress the register grid below its content
+    // and let the setup sections paint over its rows (CK-32b).
+    bodyClassName: 'space-y-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -54,17 +58,18 @@ export function documentsSpec(data: DocumentsPageData): PageSpec {
     ],
     body: [
       widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
-      grid('grid shrink-0 grid-cols-2 gap-3 xl:grid-cols-4', [
+      grid('grid grid-cols-2 gap-3 xl:grid-cols-4', [
         statTile({ iconKey: f('tiles.0.iconKey'), accent: f('tiles.0.accent'), label: f('tiles.0.label'), value: f('tiles.0.value'), tone: f('tiles.0.tone') }),
         statTile({ iconKey: f('tiles.1.iconKey'), accent: f('tiles.1.accent'), label: f('tiles.1.label'), value: f('tiles.1.value'), tone: f('tiles.1.tone') }),
         statTile({ iconKey: f('tiles.2.iconKey'), accent: f('tiles.2.accent'), label: f('tiles.2.label'), value: f('tiles.2.value'), tone: f('tiles.2.tone') }),
         statTile({ iconKey: f('tiles.3.iconKey'), accent: f('tiles.3.accent'), label: f('tiles.3.label'), value: f('tiles.3.value'), tone: f('tiles.3.tone') }),
       ]),
-      // The register sizes to its content: a viewport-height clamp here
-      // would box the table while its rows overflow visibly, and the
-      // setup sections below would paint over the overflowed rows and
-      // intercept their clicks (CK-32). The page scrolls as a whole.
-      grid('flex min-h-0 flex-col gap-4', [
+      // The register sizes to its content in normal flow: a flex item
+      // with min-h-0 inside a viewport-locked column shrinks below its
+      // rows, and the setup sections below paint over the overflowed
+      // rows and intercept their clicks (CK-32/CK-32b). A single-column
+      // grid cannot shrink under its content. The page scrolls as a whole.
+      grid('grid gap-4', [
         widgetBlock('filter-chips', {
           basePath: '/hrm/documents',
           currentParams: data.currentParams,
