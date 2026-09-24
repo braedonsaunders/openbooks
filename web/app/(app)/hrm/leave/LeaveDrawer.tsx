@@ -7,6 +7,7 @@ import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { useAppAction } from '../../../../lib/use-app-action'
+import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { ActionError } from '@braedonsaunders/appkit-errors'
 
 /**
@@ -59,6 +60,15 @@ export function LeaveDrawer({
   const [detail, setDetail] = useState<Detail | null>(null)
   const [loading, setLoading] = useState(requestId !== null)
   const [status, setStatus] = useState<string | undefined>(undefined)
+  const [filingDirty, setFilingDirty] = useState(false)
+  const [filingBusy, setFilingBusy] = useState(false)
+  const filingClose = useDirtyClose({
+    dirty: filingDirty,
+    busy: filingBusy,
+    onClose,
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   useEffect(() => {
     if (!requestId) return
@@ -109,7 +119,7 @@ export function LeaveDrawer({
   }
 
   return (
-    <Drawer open onClose={onClose} size="md" title={requestId ? t('leave.drawerTitle') : t('leave.fileTitle')}>
+    <Drawer open onClose={() => void filingClose.close()} size="md" title={requestId ? t('leave.drawerTitle') : t('leave.fileTitle')}>
       {loading ? <p className="text-sm text-slate-500">{t('leave.detailLoading')}</p> : null}
       {status ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -201,12 +211,29 @@ export function LeaveDrawer({
           </div>
         </div>
       ) : null}
-      {!loading && !requestId ? <LeaveFileForm onClose={onClose} /> : null}
+      {!loading && !requestId ? (
+        <LeaveFileForm
+          onCancel={filingClose.close}
+          onSaved={onClose}
+          onDirtyChange={setFilingDirty}
+          onBusyChange={setFilingBusy}
+        />
+      ) : null}
     </Drawer>
   )
 }
 
-function LeaveFileForm({ onClose }: { onClose: () => void }) {
+function LeaveFileForm({
+  onCancel,
+  onSaved,
+  onDirtyChange,
+  onBusyChange,
+}: {
+  onCancel: () => void | Promise<void>
+  onSaved: () => void
+  onDirtyChange: (dirty: boolean) => void
+  onBusyChange: (busy: boolean) => void
+}) {
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -357,7 +384,9 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
       return
     }
     setStatus(undefined)
-    await execute(async () => {
+    onBusyChange(true)
+    try {
+      await execute(async () => {
       try {
         const res = await fetch('/api/hrm/leave-requests', {
           method: 'POST',
@@ -379,7 +408,8 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
           return { ok: true as const, status: res.status, data: null }
         }
         router.refresh()
-        onClose()
+        onDirtyChange(false)
+        onSaved()
         return { ok: true as const, status: res.status, data: null }
       } catch {
         return {
@@ -387,10 +417,18 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
           error: new ActionError({ kind: 'transport', serverMessage: t('leave.fileFailed') }),
         }
       }
-    }, {
-      fallbackMessage: t('leave.fileFailed'),
-      onRefused: (error) => setStatus(error.displayMessage(t('leave.fileFailed'))),
-    })
+      }, {
+        fallbackMessage: t('leave.fileFailed'),
+        onRefused: (error) => setStatus(error.displayMessage(t('leave.fileFailed'))),
+      })
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
+  function markDirty<T>(update: (value: T) => void, value: T) {
+    update(value)
+    onDirtyChange(true)
   }
 
   return (
@@ -404,7 +442,7 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
               name="leave-filing-for"
               className="accent-teal-700"
               checked={filingFor === 'self'}
-              onChange={() => setFilingFor('self')}
+              onChange={() => markDirty(setFilingFor, 'self')}
             />
             {t('leave.onBehalfSelfLabel')}
           </label>
@@ -414,7 +452,7 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
               name="leave-filing-for"
               className="accent-teal-700"
               checked={filingFor === 'onBehalf'}
-              onChange={() => setFilingFor('onBehalf')}
+              onChange={() => markDirty(setFilingFor, 'onBehalf')}
             />
             {t('leave.onBehalfOtherLabel')}
           </label>
@@ -427,7 +465,7 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
           <Select
             id="leave-onbehalf-employment"
             value={onBehalfEmploymentId}
-            onChange={(event) => setOnBehalfEmploymentId(event.target.value)}
+            onChange={(event) => markDirty(setOnBehalfEmploymentId, event.target.value)}
           >
             <option value="">{t('leave.onBehalfEmployeePlaceholder')}</option>
             {manageOptions.map((option) => (
@@ -445,7 +483,7 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
           <Select
             id="leave-employment"
             value={employmentId}
-            onChange={(event) => setEmploymentId(event.target.value)}
+            onChange={(event) => markDirty(setEmploymentId, event.target.value)}
           >
             <option value="">{t('leave.fileEmploymentPlaceholder')}</option>
             {ownOptions.map((option) => (
@@ -458,7 +496,7 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
       )}
       <div>
         <Label htmlFor="leave-type">{t('leave.fileTypeLabel')}</Label>
-        <Select id="leave-type" value={leaveTypeId} onChange={(event) => setLeaveTypeId(event.target.value)}>
+        <Select id="leave-type" value={leaveTypeId} onChange={(event) => markDirty(setLeaveTypeId, event.target.value)}>
           <option value="">{t('leave.fileTypePlaceholder')}</option>
           {typeOptions.map((option) => (
             <option key={option.value} value={option.value}>
@@ -470,20 +508,20 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label htmlFor="leave-starts">{t('leave.calendarFromLabel')}</Label>
-          <Input id="leave-starts" type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
+            <Input id="leave-starts" type="date" value={startsOn} onChange={(event) => markDirty(setStartsOn, event.target.value)} />
         </div>
         <div>
           <Label htmlFor="leave-ends">{t('leave.calendarToLabel')}</Label>
-          <Input id="leave-ends" type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} />
+            <Input id="leave-ends" type="date" value={endsOn} onChange={(event) => markDirty(setEndsOn, event.target.value)} />
         </div>
       </div>
       <div>
         <Label htmlFor="leave-hours">{t('leave.fileHoursLabel')}</Label>
-        <Input id="leave-hours" inputMode="decimal" value={hours} onChange={(event) => setHours(event.target.value)} placeholder="8" />
+          <Input id="leave-hours" inputMode="decimal" value={hours} onChange={(event) => markDirty(setHours, event.target.value)} placeholder="8" />
       </div>
       <div>
         <Label htmlFor="leave-reason">{t('leave.fileReasonLabel')}</Label>
-        <Textarea id="leave-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+          <Textarea id="leave-reason" value={reason} onChange={(event) => markDirty(setReason, event.target.value)} />
       </div>
       {status ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -491,7 +529,7 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
         </p>
       ) : null}
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={onClose}>
+        <Button variant="outline" onClick={() => void onCancel()}>
           {tCommon('actions.cancel')}
         </Button>
         <Button size="sm" disabled={saving} onClick={() => void save()}>
