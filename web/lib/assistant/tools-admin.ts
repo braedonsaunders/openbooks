@@ -5,6 +5,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isFeatureEnabled } from "../features";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { capList, dateInput, uuidInput } from "./tools-shared";
+import { projectOutboxFailure } from "./outbox-status";
 
 /**
  * Administration read tools for the agentic assistant. Each mirrors its
@@ -297,12 +298,12 @@ const getOutboxStatus: AssistantToolDef = {
          group by status
       `),
       db.execute<Record<string, unknown>>(sql`
-        (select kind as job, status, attempt_count, error, created_at, updated_at
+        (select id as job_id, 'scheduler'::text as job_type, status, attempt_count, created_at, updated_at
            from scheduler_outbox
           where org_id = ${authz.user.orgId} and status = 'failed'
           order by updated_at desc limit 5)
         union all
-        (select recipient as job, status, attempt_count, error, created_at, updated_at
+        (select id as job_id, 'report_delivery'::text as job_type, status, attempt_count, created_at, updated_at
            from report_delivery_outbox
           where org_id = ${authz.user.orgId} and status = 'failed'
           order by updated_at desc limit 5)
@@ -323,14 +324,7 @@ const getOutboxStatus: AssistantToolDef = {
       data: {
         scheduler: summarize(scheduled.rows),
         deliveries: summarize(deliveries.rows),
-        recentFailures: failures.rows.map((f) => ({
-          job: f.job,
-          status: f.status,
-          attempts: f.attempt_count,
-          error: typeof f.error === "string" ? f.error.slice(0, 500) : f.error,
-          createdAt: f.created_at,
-          updatedAt: f.updated_at,
-        })),
+        recentFailures: failures.rows.map(projectOutboxFailure),
         href: "/admin/audit",
       },
     };
