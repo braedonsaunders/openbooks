@@ -234,7 +234,6 @@
     "web/lib/journal-payrun-visibility.test.ts": 1,
     "web/lib/list/order-clause.test.ts": 1,
     "web/lib/list/project-type-options.test.ts": 1,
-    "web/lib/project-costing.test.ts": 1,
     "web/lib/report-definition-export-calendar.test.ts": 3,
     "web/lib/report-drill.test.ts": 1,
     "web/lib/report-registers-book.integration.test.ts": 2,
