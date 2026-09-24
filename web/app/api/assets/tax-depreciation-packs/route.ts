@@ -1,6 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { installTaxDepreciationPack, taxDepreciationPacks } from '@openbooks/engine/src/tax-returns/depreciation-packs.ts'
+import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
@@ -14,6 +15,10 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
+  // Tax depreciation packs install the org-wide regime every entity's
+  // assets depreciate under.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { code?: string }
