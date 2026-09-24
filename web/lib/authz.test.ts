@@ -1,3 +1,4 @@
+// source-pin-contract: API routes must answer auth failures with 401/403 JSON, never the page gate redirect; subjects derived by walking web/app/api
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
