@@ -29,6 +29,23 @@
 -- openbooks_query projection gains columns only through its own view
 -- migrations, and the harness tie-out already attributes provisional value
 -- through the issuing movement, which this migration makes explicit.
+--
+-- Staged build (U-staging): inventory_provisional_costs is a hot
+-- transactional table, so this file declares `-- openbooks: no-transaction`
+-- and the runner executes it statement by statement with a bounded session
+-- lock_timeout. The contract that makes a mid-file failure retry-safe:
+-- every statement is idempotent (IF NOT EXISTS throughout, guarded adds,
+-- anti-joined fills), and the DO block below drops this file's own INVALID
+-- indexes — a failed CONCURRENTLY build leaves one behind, and IF NOT
+-- EXISTS below would then skip the name forever, silently keeping the
+-- missing index. Both lookup indexes build CONCURRENTLY and both foreign
+-- keys arrive NOT VALID with separate guarded VALIDATE steps, so no step
+-- takes a write-blocking lock over the whole table.
+--
+-- This file carries no lock_timeout of its own (refused for ordinals above
+-- 0251 by check-migration-headers); the runner's bound governs.
+
+-- openbooks: no-transaction
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -37,6 +54,30 @@ SET standard_conforming_strings = on;
 SET client_min_messages = warning;
 
 SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
+
+-- Retry safety: drop our own INVALID indexes before rebuilding. A failed
+-- CONCURRENTLY build leaves the name present but unusable, and IF NOT
+-- EXISTS below would then skip it forever. Plain (non-concurrent) DROP
+-- inside the DO block is safe: an INVALID index answers no query, so its
+-- brief exclusive lock contends with nothing.
+DO $$
+DECLARE
+  idx text;
+BEGIN
+  FOR idx IN
+    SELECT c.relname
+      FROM pg_index i
+      JOIN pg_class c ON c.oid = i.indexrelid
+     WHERE NOT i.indisvalid
+       AND c.relname IN (
+         'inv_provisional_org_sub_id',
+         'inventory_provisional_subsidiary_fifo'
+       )
+  LOOP
+    EXECUTE format('DROP INDEX IF EXISTS %I', idx);
+  END LOOP;
+END
+$$;
 
 ALTER TABLE public.inventory_provisional_costs
   ADD COLUMN IF NOT EXISTS subsidiary_id uuid;
@@ -77,12 +118,12 @@ ALTER TABLE public.inventory_provisional_costs
 
 -- Unique key letting the composite foreign key below pin each deficit to an
 -- issue movement carrying the SAME legal entity.
-CREATE UNIQUE INDEX IF NOT EXISTS inv_provisional_org_sub_id
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS inv_provisional_org_sub_id
   ON public.inventory_provisional_costs USING btree (org_id, subsidiary_id, id);
 
 -- The settlement query filters org + item + location + subsidiary under a
 -- position lock; index that shape directly.
-CREATE INDEX IF NOT EXISTS inventory_provisional_subsidiary_fifo
+CREATE INDEX CONCURRENTLY IF NOT EXISTS inventory_provisional_subsidiary_fifo
   ON public.inventory_provisional_costs USING btree (org_id, item_id, stock_location_id, subsidiary_id);
 
 -- A deficit exists only under a real subsidiary of its own org...
@@ -92,7 +133,15 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inv_prov
   ALTER TABLE public.inventory_provisional_costs
     ADD CONSTRAINT inv_provisional_org_subsidiary_fk
     FOREIGN KEY (org_id, subsidiary_id)
-    REFERENCES public.subsidiaries (org_id, id); END IF; END $$;
+    REFERENCES public.subsidiaries (org_id, id) NOT VALID; END IF; END $$;
+DO $$ BEGIN IF EXISTS (
+  SELECT 1 FROM pg_constraint
+   WHERE conrelid = 'public.inventory_provisional_costs'::regclass
+     AND conname = 'inv_provisional_org_subsidiary_fk'
+     AND NOT convalidated
+) THEN
+  ALTER TABLE public.inventory_provisional_costs
+    VALIDATE CONSTRAINT inv_provisional_org_subsidiary_fk; END IF; END $$;
 
 -- ...and belongs to the same entity as the issue movement that created it,
 -- so one subsidiary's receipt can never settle another's shortfall again.
@@ -100,7 +149,15 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inv_prov
   ALTER TABLE public.inventory_provisional_costs
     ADD CONSTRAINT inv_provisional_issue_movement_entity_fk
     FOREIGN KEY (org_id, subsidiary_id, issue_movement_id)
-    REFERENCES public.inventory_movements (org_id, subsidiary_id, id); END IF; END $$;
+    REFERENCES public.inventory_movements (org_id, subsidiary_id, id) NOT VALID; END IF; END $$;
+DO $$ BEGIN IF EXISTS (
+  SELECT 1 FROM pg_constraint
+   WHERE conrelid = 'public.inventory_provisional_costs'::regclass
+     AND conname = 'inv_provisional_issue_movement_entity_fk'
+     AND NOT convalidated
+) THEN
+  ALTER TABLE public.inventory_provisional_costs
+    VALIDATE CONSTRAINT inv_provisional_issue_movement_entity_fk; END IF; END $$;
 
 -- Owner-fill: writers omit ownership at their peril; storage derives it from
 -- the row's own issue movement instead of accepting ownerless deficits.
