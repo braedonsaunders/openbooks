@@ -1,3 +1,4 @@
+// source-pin-contract: every setup-section embedding receives loader-derived params; subjects derived by walking web/app views
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { registerHooks } from "node:module";
