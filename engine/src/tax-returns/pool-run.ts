@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, formatMoney, fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
-import { computeMacrsYear, computePoolYear, type PoolClassDef, type PoolYearResult, TAX_DEPRECIATION_REGIMES } from "./depreciation-pool.ts";
+import { computeMacrsYear, computePoolYear, costCapForAcquisition, type PoolClassDef, type PoolYearResult, TAX_DEPRECIATION_REGIMES } from "./depreciation-pool.ts";
 
 /**
  * Run a jurisdiction's tax depreciation pools for a tax year on a book. Groups
@@ -117,10 +117,15 @@ async function effectiveClasses(tx: SqlExecutor, orgId: string, regime: string):
            depreciation_system, macrs_method, recovery_period_years::text as recovery_period_years, convention
       from tax_pool_classes where org_id = ${orgId} and regime = ${regime} and is_active`));
   for (const r of rows.rows) {
+    const builtIn = TAX_DEPRECIATION_REGIMES[regime]?.classes[r.class_code];
     map.set(r.class_code, {
+      ...builtIn,
       code: r.class_code, rate: r.rate, method: r.method, firstYearFraction: r.fyf,
       allowRecapture: r.allow_recapture, allowTerminalLoss: r.allow_terminal_loss,
-      costCap: r.cost_cap ?? undefined, name: r.name,
+      costCap: r.cost_cap ?? builtIn?.costCap, name: r.name,
+      // The organization may tune pool mechanics, but statutory limits remain
+      // the built-in effective-dated policy for these classes.
+      costCapByAcquiredOn: builtIn?.costCapByAcquiredOn,
       depreciationSystem: r.depreciation_system ?? undefined,
       macrsMethod: r.macrs_method ?? undefined,
       recoveryPeriodYears: r.recovery_period_years ?? undefined,
@@ -278,11 +283,12 @@ async function runPools(
   // asset status is deliberately not consulted.
   const assetRows = (await tx.execute<{
     acquisition_cost: string;
+    acquired_on: string;
     placed_on: string | null;
     class_code: string;
     held_at_year_end: boolean;
   }>(sql`
-    select a.acquisition_cost::text,
+    select a.acquisition_cost::text, a.acquired_on::text as acquired_on,
            coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
            c.tax_attributes->>${attr} as class_code,
            (
@@ -328,8 +334,15 @@ async function runPools(
     aggregateByClass.set(classCode, created);
     return created;
   };
-  const cappedCost = (cost: string, classDef: PoolClassDef): string => {
-    const cap = classDef.costCap == null ? null : normalizeMoney(classDef.costCap);
+  const cappedCost = (cost: string, classDef: PoolClassDef, acquiredOn: string): string => {
+    let effectiveCap: string | undefined;
+    try {
+      const resolved = costCapForAcquisition(classDef, acquiredOn);
+      effectiveCap = resolved == null ? undefined : normalizeMoney(resolved);
+    } catch (error) {
+      throw new TaxPoolError(error instanceof Error ? error.message : String(error));
+    }
+    const cap = effectiveCap ?? null;
     if (cap == null || toUnits(cost) <= toUnits(cap)) return cost;
     return cap;
   };
@@ -337,7 +350,7 @@ async function runPools(
   for (const row of assetRows.rows) {
     const classDef = classes.get(row.class_code)!;
     const aggregate = addAggregate(row.class_code);
-    const capitalCost = cappedCost(row.acquisition_cost, classDef);
+    const capitalCost = cappedCost(row.acquisition_cost, classDef, row.acquired_on);
     if (row.placed_on && row.placed_on >= run.yearStart && row.placed_on <= run.yearEnd) {
       aggregate.additions += toUnits(capitalCost);
     }
@@ -349,9 +362,10 @@ async function runPools(
   const dispRows = (await tx.execute<{
     amount: string | null;
     acquisition_cost: string;
+    acquired_on: string;
     class_code: string;
   }>(sql`
-    select e.amount::text, a.acquisition_cost::text,
+    select e.amount::text, a.acquisition_cost::text, a.acquired_on::text as acquired_on,
            c.tax_attributes->>${attr} as class_code
       from asset_events e
       join fixed_assets a on a.id = e.asset_id and a.org_id = e.org_id
@@ -370,7 +384,7 @@ async function runPools(
   for (const row of dispRows.rows) {
     const classDef = classes.get(row.class_code)!;
     const aggregate = addAggregate(row.class_code);
-    const capitalCost = cappedCost(row.acquisition_cost, classDef);
+    const capitalCost = cappedCost(row.acquisition_cost, classDef, row.acquired_on);
     const proceeds = row.amount ?? "0";
     aggregate.dispositions += toUnits(toUnits(proceeds) <= toUnits(capitalCost) ? proceeds : capitalCost);
   }
