@@ -5,7 +5,7 @@ import {
   getFeedbackSettings,
   setFeedbackSettings,
 } from "@openbooks/engine/src/hrm/performance/feedback.ts";
-import { getAuthz } from "../../../../../lib/authz";
+import { getAuthz, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
 
@@ -40,6 +40,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const scopeDenied = guardUnrestrictedScope(authz);
+  if (scopeDenied) return scopeDenied;
   if (
     !(await isFeatureEnabled(authz.user.orgId, "hrm")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||

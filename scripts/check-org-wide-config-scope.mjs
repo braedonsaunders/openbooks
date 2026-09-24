@@ -27,6 +27,27 @@ for (const table of policyTables) {
 const declaration = /CREATE TABLE(?: IF NOT EXISTS)? public\.labor_cost_rates \(([\s\S]*?)\n\);/i.exec(schema);
 assert.ok(declaration, "conditionally scoped policy table labor_cost_rates has no generated schema declaration");
 assert.match(declaration[1], /\bsubsidiary_id\b/i, "labor_cost_rates scope model changed; review conditional policy enforcement");
+
+function actionArm(source, action) {
+  const marker = new RegExp(`if\\s*\\(\\s*body\\.action\\s*===\\s*['\"]${action}['\"]\\s*\\)\\s*\\{`);
+  const match = marker.exec(source);
+  assert.ok(match, `labor-costing route is missing the ${action} mutation arm`);
+  const next = /\n\s*if\s*\(body\.action\s*===/.exec(source.slice(match.index + match[0].length));
+  return source.slice(match.index, next ? match.index + match[0].length + next.index : source.length);
+}
+
+function assertLaborRateMutationGuard(source, action) {
+  const arm = actionArm(source, action);
+  assert.match(arm, /isOrgWideWageScope\s*\(/, `labor-costing ${action} does not classify the persisted wage scope`);
+  assert.match(arm, /guardUnrestrictedScope\s*\(/, `labor-costing ${action} does not guard org-wide wage scopes`);
+}
+function handlerArm(source, method) {
+  const marker = new RegExp(`export\\s+async\\s+function\\s+${method}\\s*\\(`);
+  const match = marker.exec(source);
+  assert.ok(match, `org-settings route is missing its ${method} handler`);
+  const next = /\nexport\s+async\s+function\s+/.exec(source.slice(match.index + match[0].length));
+  return source.slice(match.index, next ? match.index + match[0].length + next.index : source.length);
+}
 const routes = globSync("web/app/api/**/route.ts", { cwd: root }).sort();
 const writes = [];
 for (const file of routes) {
@@ -43,13 +64,25 @@ for (const file of routes) {
   // Cashflow categories are stored under orgs.settings and have no subsidiary
   // row anchor; detect that JSON policy by the key plus an org mutation.
   if (/cashflowCategories/.test(source) && /\bupdate\s+orgs\b/i.test(source)) touched.push("orgs.settings.analytics.cashflowCategories");
+  // The HRM feedback writer is in the engine service, not inline in the
+  // route. Detect its API adapter through the setting field and writer call.
+  if (/setFeedbackSettings\s*\(/.test(source) && /publicPraiseBy|public_praise_by/.test(source)) {
+    touched.push("orgs.settings.hrm_feedback.public_praise_by");
+    const post = handlerArm(source, "POST");
+    assert.match(post, /guardUnrestrictedScope\s*\(/,
+      `${file} writes org-wide orgs.settings policy without a POST unrestricted-scope guard`);
+  }
   if (touched.length === 0) continue;
   writes.push({ file, tables: touched });
-  assert.match(
-    source,
-    /guardUnrestrictedScope\s*\(/,
-    `${file} writes org-wide configuration (${touched.join(", ")}) without guardUnrestrictedScope`,
-  );
+  if (touched.some((target) => target.startsWith("labor_cost_rates"))) {
+    // The three mutation arms have independent authorization decisions. A
+    // token in save-rate cannot stand in for end-rate or delete-rate.
+    for (const action of ["save-rate", "end-rate", "delete-rate"]) {
+      assertLaborRateMutationGuard(source, action);
+    }
+  }
+  assert.match(source, /guardUnrestrictedScope\s*\(/,
+    `${file} writes org-wide configuration (${touched.join(", ")}) without guardUnrestrictedScope`);
 }
 
 // Connector configuration, execution, run metadata, OAuth, and source
