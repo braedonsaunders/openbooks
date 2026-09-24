@@ -348,6 +348,7 @@ export const HRM_WIDGETS = {
       enrollmentId={str(props, 'enrollmentId') ?? ''}
       enrollmentStatus={str(props, 'enrollmentStatus') ?? ''}
       approveLabel={str(props, 'approveLabel') ?? ''}
+      failedLabel={str(props, 'failedLabel') ?? ''}
       canManage={props.canManage === true}
     />
   ),
@@ -367,6 +368,7 @@ export const HRM_WIDGETS = {
       approveLabel={str(props, 'approveLabel') ?? ''}
       voidLabel={str(props, 'voidLabel') ?? ''}
       submitLabel={str(props, 'submitLabel') ?? ''}
+      failedLabel={str(props, 'failedLabel') ?? ''}
     />
   ),
   'hrm-compliance-generate': (props) => (

@@ -247,6 +247,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
                         acknowledgeLabel: '',
                         resolveLabel: '',
                         approveLabel: f('actions.approve'),
+                        failedLabel: f('actions.actionFailed'),
                         voidLabel: f('actions.void'),
                         submitLabel: '',
                         canManage: f('canManage'),

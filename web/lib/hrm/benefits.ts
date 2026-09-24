@@ -104,6 +104,7 @@ export interface BenefitsData {
   drawer: WindowDrawerData | null
   drawerCloseHref: string
   approveLabel: string
+  actionFailed: string
 }
 
 type BenefitsCatalog = {
@@ -191,6 +192,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       drawer: null,
       drawerCloseHref: basePath,
       approveLabel: t('benefits.approve'),
+      actionFailed: t('benefits.actionFailed'),
     }
   }
 
@@ -316,6 +318,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     drawer,
     drawerCloseHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, {}),
     approveLabel: t('benefits.approve'),
+    actionFailed: t('benefits.actionFailed'),
   }
 }
 

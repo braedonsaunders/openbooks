@@ -110,6 +110,7 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
                           enrollmentId: item('id'),
                           enrollmentStatus: item('status'),
                           approveLabel: f('approveLabel'),
+                          failedLabel: f('actionFailed'),
                           canManage: f('canManage'),
                         }),
                       ),

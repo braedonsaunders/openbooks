@@ -24,6 +24,7 @@ export function ComplianceActions({
   approveLabel,
   voidLabel,
   submitLabel,
+  failedLabel,
 }: {
   actionKind: 'finding' | 'entry' | 'run'
   rowId: string
@@ -35,6 +36,7 @@ export function ComplianceActions({
   approveLabel: string
   voidLabel: string
   submitLabel: string
+  failedLabel: string
 }) {
   const router = useRouter()
   if (!canManage) return null
@@ -82,7 +84,7 @@ export function ComplianceActions({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'approve', entryId: rowId, kind: entryKind }),
       },
-      approveLabel,
+      failedLabel,
     )
   }
 

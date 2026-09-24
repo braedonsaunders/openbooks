@@ -100,6 +100,7 @@ export interface ComplianceData {
     acknowledge: string
     resolve: string
     approve: string
+    actionFailed: string
     void: string
     submit: string
   }
@@ -188,6 +189,7 @@ export async function loadCompliancePage(
       acknowledge: t('compliance.actions.acknowledge'),
       resolve: t('compliance.actions.resolve'),
       approve: t('compliance.actions.approve'),
+      actionFailed: t('compliance.actionFailed'),
       void: t('compliance.actions.void'),
       submit: t('compliance.actions.submit'),
     },
