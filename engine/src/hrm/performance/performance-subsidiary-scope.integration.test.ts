@@ -13,6 +13,13 @@ import { HrmAuthorizationError } from "../authorization.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
 import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
+import {
+  addCompetencyLevel,
+  competencyProfileForEmployment,
+  createCompetency,
+  createFramework,
+  setSectionCompetency,
+} from "./competencies.ts";
 import { createGoal } from "./goals.ts";
 import { fulfillRequest, listFeedback, writeFeedback } from "./feedback.ts";
 import { getCycleDetail, getRetentionOverview, getReviewDetail, getTurnover, listMyReviews } from "./performance-read.ts";
@@ -47,6 +54,10 @@ async function enableHrm(orgId: string): Promise<void> {
   await db.execute(sql`
     update orgs
        set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmFeedback}', 'true'::jsonb, true)
+     where id = ${orgId}`);
+  await db.execute(sql`
+    update orgs
+       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCompetencies}', 'true'::jsonb, true)
      where id = ${orgId}`);
 }
 
@@ -677,6 +688,94 @@ test("corrections clear explicit nulls, require the read revision, and append au
     assert.equal(events[1]!.reason, "notes were speculation");
     assert.equal((events[1]!.before as { notes: string }).notes, "Left for growth");
     assert.equal((events[1]!.after as { notes: null }).notes, null);
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("a restricted HR reads only the competency profiles they cover", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    // Org-wide cycle so both sides hold a calibrated, shared manager review.
+    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const sectionId = (await db.execute<{ id: string }>(sql`
+      select id from hrm_review_template_sections
+       where org_id = ${h.org.orgId} and template_id = ${templateId}`)).rows[0]!.id;
+    const framework = await createFramework({
+      orgId: h.org.orgId, actorId: h.hrFull, name: "Engineering",
+    });
+    const competency = await createCompetency({
+      orgId: h.org.orgId, actorId: h.hrFull, frameworkId: framework.id,
+      code: "IMPACT", name: "Customer impact",
+    });
+    await addCompetencyLevel({
+      orgId: h.org.orgId, actorId: h.hrFull, competencyId: competency.id,
+      levelRank: 1, label: "Meets", expectation: "Ships working software",
+    });
+    await setSectionCompetency({
+      orgId: h.org.orgId, actorId: h.hrFull, sectionId, competencyId: competency.id,
+    });
+    const cycle = await createCycle({
+      orgId: h.org.orgId,
+      actorId: h.hrFull,
+      templateId,
+      name: "FY26 profile scope",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-06-30",
+    });
+    await openCycle({ orgId: h.org.orgId, actorId: h.hrFull, cycleId: cycle.id });
+    for (const side of [h.a, h.b]) {
+      const reviewId = await submitManagerReview(h, cycle.id, side);
+      await calibrateReview({
+        orgId: h.org.orgId, actorId: h.hrFull, reviewId,
+        calibratedRating: "4", reason: "exceeded in H2",
+      });
+      await shareReview({ orgId: h.org.orgId, actorId: h.hrFull, reviewId });
+    }
+    // HR-A covers subsidiary A only: the B employment's profile answers
+    // as missing, never as refused.
+    await assert.rejects(
+      competencyProfileForEmployment({ orgId: h.org.orgId, actorId: h.hrA, employmentId: h.b.employmentId }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmAuthorizationError);
+        assert.match(e.message, /not visible in this organization and legal-entity scope/);
+        return true;
+      },
+    );
+    await assert.rejects(
+      competencyProfileForEmployment({ orgId: h.org.orgId, actorId: h.hrB, employmentId: h.a.employmentId }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmAuthorizationError);
+        assert.match(e.message, /not visible in this organization and legal-entity scope/);
+        return true;
+      },
+    );
+    // Inside their own scope the same call lands with the assessed rating.
+    const profileA = await competencyProfileForEmployment({
+      orgId: h.org.orgId, actorId: h.hrA, employmentId: h.a.employmentId,
+    });
+    assert.equal(profileA.length, 1);
+    assert.equal(profileA[0]!.sectionTitle, "Impact");
+    assert.equal(profileA[0]!.assessedRating, "3.0000");
+    assert.equal(profileA[0]!.levels.length, 1);
+    // The subject and their line manager read their own slice without the grant.
+    const own = await competencyProfileForEmployment({
+      orgId: h.org.orgId, actorId: h.a.userId, employmentId: h.a.employmentId,
+    });
+    assert.equal(own.length, 1);
+    const managed = await competencyProfileForEmployment({
+      orgId: h.org.orgId, actorId: h.a.managerUserId, employmentId: h.a.employmentId,
+    });
+    assert.equal(managed.length, 1);
+    // A stranger without the grant keeps the grant refusal.
+    await assert.rejects(
+      competencyProfileForEmployment({ orgId: h.org.orgId, actorId: h.b.userId, employmentId: h.a.employmentId }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "FORBIDDEN");
+        return true;
+      },
+    );
   } finally {
     await dropScratchOrg(h.org.orgId);
   }

@@ -10,9 +10,10 @@ export const runtime = "nodejs";
 /**
  * Expected vs assessed competencies for one employment, from their last
  * calibrated (or shared) manager review. Serves the employee record
- * drawer's Competencies section. Readers without the performance grant
- * get 403 and the section hides. The client checks res.ok before
- * parsing.
+ * drawer's Competencies section. HR readers see employments inside
+ * their allowed subsidiaries, the subject and their line manager see
+ * their own slice; anyone else gets 403 and the section hides. The
+ * client checks res.ok before parsing.
  */
 export async function GET(req: Request) {
   const authz = await getAuthz();
