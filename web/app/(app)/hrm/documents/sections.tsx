@@ -27,14 +27,16 @@ function msg(labels: Record<string, string>, key: string): string {
   return labels[key] ?? key
 }
 
-async function post(url: string, body: unknown, failed: string): Promise<boolean> {
+async function post(url: string, body: unknown, failed: string, onRefusal?: (message: string) => void): Promise<boolean> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
   if (!res.ok) {
-    toast.error(await readApiErrorMessage(res, failed))
+    const message = await readApiErrorMessage(res, failed)
+    toast.error(message)
+    onRefusal?.(message)
     return false
   }
   return true
@@ -248,11 +250,9 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
       '/api/hrm/documents?mode=generate',
       { templateId, partyId, title },
       msg(labels, 'failed'),
+      setFailed,
     )
-    if (!ok) {
-      setFailed(msg(labels, 'failed'))
-      return
-    }
+    if (!ok) return
     router.push('/hrm/documents')
     router.refresh()
   }

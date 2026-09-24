@@ -137,6 +137,7 @@ const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const { SETUP_ENTITY_BY_KEY } = await import("../../../../lib/setup/registry");
 const { SetupEntitySection } = await import("../../admin/setup/[entity]/SetupEntitySection");
+const { DocumentsGenerateDialog } = await import("./sections.tsx");
 
 const SECTIONS = [
   { entityKey: "hrm-document-templates", rowParam: "template" },
@@ -267,6 +268,69 @@ test("?retention=new opens only the retention drawer", async () => {
 test("the legacy bare ?row=new no longer fans out to every section", async () => {
   const { counts } = await renderSections({ row: "new" });
   assert.deepEqual(counts, [0, 0, 0], "no section reads the shared key anymore");
+});
+
+test("document generation keeps the named API refusal in the dialog", async () => {
+  const previousFetch = globals.fetch;
+  globals.fetch = async () => ({
+    ok: false,
+    status: 409,
+    json: async () => ({
+      error: "The document cannot be generated for this employment.",
+      remedy: "Choose an active employment and try again.",
+    }),
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={allMessages} timeZone="UTC">
+          <DocumentsGenerateDialog
+            generate={{
+              closeHref: "/hrm/documents",
+              templates: [{ value: "tpl-1", label: "Offer", category: "Employment", mergeFields: [] }],
+              people: [{ value: "party-1", label: "Ari Worker" }],
+              labels: allMessages.hrm.documents.generate,
+            }}
+          />
+        </NextIntlClientProvider>,
+      );
+      await tick();
+    });
+    const selects = [...document.querySelectorAll("select[aria-hidden]")];
+    assert.equal(selects.length, 2, "template and person controls render");
+    for (const [index, value] of ["tpl-1", "party-1"].entries()) {
+      const select = selects[index] as HTMLSelectElement;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!;
+      setter.call(select, value);
+      await act(async () => {
+        select.dispatchEvent(new window.Event("change", { bubbles: true }));
+      });
+    }
+    const title = document.querySelector("input") as HTMLInputElement;
+    const setTitle = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    setTitle.call(title, "Employment letter");
+    await act(async () => {
+      title.dispatchEvent(new window.Event("input", { bubbles: true }));
+      title.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+    await act(async () => {
+      const submit = [...document.querySelectorAll("button")].find((button) => button.textContent === "Generate");
+      assert.ok(submit, "the generation action renders");
+      submit!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+    });
+    const body = document.body.textContent ?? "";
+    assert.ok(body.includes("The document cannot be generated for this employment."), "the API refusal is shown inline");
+    assert.ok(body.includes("Choose an active employment and try again."), "the API remedy is shown inline");
+    assert.ok(!body.includes("Generation failed."), "the named refusal does not collapse to the generic copy");
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    globals.fetch = previousFetch;
+  }
 });
 
 // -- render: direct links read the saved record back ----------------------------
