@@ -197,6 +197,15 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     };
   }
 
+  const withholdingAgreement = input.supportingCertificates?.us_wi_wt4a;
+  if (withholdingAgreement?.onFile) {
+    const agreedAmount = U(certificateAmount(withholdingAgreement, "agreed_per_period") ?? "0");
+    return {
+      state: "WI", year: rates.year, tax: D(agreedAmount), taxSupplemental: D(0n),
+      factors: { WI_WT4A_AGREED_WITHHOLDING: D(agreedAmount) },
+    };
+  }
+
   const schedule = wiScheduleFor(certificateChoice(input.certificate, "marital_status"));
   factors.WI_SCHEDULE = schedule;
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
@@ -239,6 +248,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const WI_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WI_EXEMPT: "Exempt from Wisconsin withholding",
+  WI_WT4A_AGREED_WITHHOLDING: "Wisconsin WT-4A agreed withholding per period",
   WI_SCHEDULE: "Wisconsin schedule (marital status)",
   WI_ANNUAL_GROSS: "Wisconsin annual gross",
   WI_DEDUCTION: "Wisconsin deduction",
@@ -255,7 +265,7 @@ export const WI_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: WI_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  supportingCertificateKeys: ["us_wi_w221"],
+  supportingCertificateKeys: ["us_wi_w221", "us_wi_wt4a"],
   compute,
 };
 
@@ -326,6 +336,29 @@ export const WI_CERTIFICATE: PayrollCertificate = {
         + "Reciprocity is Form W-220, not this line.",
     },
   ],
+};
+
+/** Form WT-4A — Employee Withholding Agreement (2026 Form W-234, R. 11-25). */
+export const WI_WT4A: PayrollCertificate = {
+  key: "us_wi_wt4a",
+  form: "WT-4A",
+  label: "Wisconsin Employee Withholding Agreement",
+  scope: { level: "region", region: "WI" },
+  purpose: "withholding",
+  validity: { kind: "following_year_date", monthDay: "04-30" },
+  citation:
+    "Wisconsin Form WT-4A, Employee Withholding Agreement (W-234 R. 11-25), lines 1–3 and employer instructions; "
+    + "Publication W-166 (January 2026), §3.B p. 8, https://www.revenue.wi.gov/TaxForms2017through2019/w-234f.pdf",
+  summary:
+    "Records an employee and employer agreement to withhold a lesser per-pay-period amount than the Wisconsin table, "
+    + "when the employee has claimed the maximum WT-4 exemptions and still expects overwithholding.",
+  storage: "certificate_rows",
+  fields: [{
+    key: "agreed_per_period",
+    label: "Line 3 — Amount to be withheld each payroll period",
+    kind: "amount", decimals: 4, min: "0", required: true,
+    help: "Enter the amount on line 3 of the filed WT-4A agreement. This replaces Wisconsin table withholding.",
+  }],
 };
 
 /**

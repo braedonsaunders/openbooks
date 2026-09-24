@@ -15,7 +15,7 @@ import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   WI_CERTIFICATE, WI_REGION, WI_W220, WI_W221, WI_RATES_2026, WI_WITHHOLDING, wiAnnualTax, wiDeduction,
-  wiScheduleFor,
+  WI_WT4A, wiScheduleFor,
 } from "./wi.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
@@ -27,8 +27,22 @@ test("WI certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(WI_CERTIFICATE), null);
   assert.equal(certificateDeclarationProblem(WI_W220), null);
   assert.equal(certificateDeclarationProblem(WI_W221), null);
+  assert.equal(certificateDeclarationProblem(WI_WT4A), null);
   assert.equal(WI_REGION.implemented, true);
   assert.equal(WI_REGION.certificateKey, "us_wi_wt4");
+});
+
+test("WI filed WT-4A replaces table withholding with its agreed per-period amount", () => {
+  const agreement = resolvedCertificate(WI_WT4A, { agreed_per_period: "4.25" });
+  const result = WI_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "350.00", basis: "resident",
+    certificate: cert({ marital_status: "single", exemptions: "1", additional_per_period: "10.00" }),
+    supportingCertificates: { us_wi_wt4a: agreement },
+  });
+  // The agreement amount replaces both the formula result and the WT-4 extra.
+  // W-166 §3.B p. 8; 2026 Form WT-4A, employer instruction under line 3.
+  assert.equal(result.tax, money("4.25"));
+  assert.equal(result.factors.WI_WT4A_AGREED_WITHHOLDING, money("4.25"));
 });
 
 test("WI Example 1 — weekly $350, single, 1 exemption: $7.59", () => {
