@@ -14,6 +14,11 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { budgetScenarioOptions, budgetVsActualView } from '../../../../lib/budget-report'
 import { orgInfo } from '../../../../lib/data'
+import {
+  baseCurrencyNotice,
+  hasBaseCurrency,
+  type BaseCurrencyNotice,
+} from '../../../../lib/reports/base-currency'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { resolvePeriod } from '../../../../lib/periods'
 import { can, requirePermission } from '../../../../lib/authz'
@@ -61,6 +66,13 @@ export interface BudgetReportData {
   hasView: boolean
   view: unknown
   currency: string | undefined
+  /**
+   * Set exactly when the org has no base currency: the page renders the
+   * named refusal (with the Company settings link) instead of numbers —
+   * the boundary swallows thrown messages, so the refusal is data.
+   */
+  baseCurrencyNotice: BaseCurrencyNotice | null
+  baseCurrencyReady: boolean
   drill: unknown
 }
 
@@ -76,10 +88,43 @@ export async function loadBudgetReport(
   // bounds the actuals (and the budget periods), so a year-to-date view no
   // longer leaks future-dated lines the P&L never shows.
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const [scenarios, dimensions, org] = await Promise.all([
+  // The base currency gates every money figure below: refuse before the
+  // scenario and view queries run, never after them, and never by throwing.
+  const org = await orgInfo(authz.user.orgId)
+  if (!org || !hasBaseCurrency(org.base_currency)) {
+    return {
+      title: t('budget.title'),
+      backHref: '/reports',
+      backLabel: t('hub.title'),
+      scenarioFilter: { paramKey: 'scenario', label: t('budget.scenario'), value: '', options: [] },
+      hasScenarios: false,
+      noScenarios: false,
+      showSections: false,
+      hideSections: true,
+      canManage: false,
+      manageHref: '/budgets',
+      manageLabel: t('budget.manage'),
+      dimensions: null,
+      exportParams: sp,
+      company: '',
+      periodPhrase: '',
+      emptyNote: '',
+      wide: false,
+      hasView: false,
+      view: null,
+      currency: undefined,
+      baseCurrencyNotice: baseCurrencyNotice({
+        title: t('baseCurrency.title'),
+        description: t('baseCurrency.description'),
+        actionLabel: t('baseCurrency.action'),
+      }),
+      baseCurrencyReady: false,
+      drill: null,
+    }
+  }
+  const [scenarios, dimensions] = await Promise.all([
     budgetScenarioOptions(authz.user.orgId),
     loadBudgetDimensionOptions(authz.user.orgId),
-    orgInfo(authz.user.orgId),
   ])
 
   // With no scenarios there is nothing to compare against, so the loader
@@ -141,7 +186,7 @@ export async function loadBudgetReport(
     manageLabel: t('budget.manage'),
     dimensions,
     exportParams: { ...sp, scenario: scenarioId },
-    company: org?.name ?? '',
+    company: org.name,
     // With no scenarios at all the native page shows the description instead
     // of a scenario name; otherwise the scenario echoes the resolved window
     // so the reader can see which actuals the variance compares.
@@ -153,7 +198,9 @@ export async function loadBudgetReport(
     wide: (view?.columns.length ?? 0) > 4,
     hasView: Boolean(view),
     view,
-    currency: org?.base_currency,
+    currency: org.base_currency,
+    baseCurrencyNotice: null,
+    baseCurrencyReady: true,
     drill: { dims: q.dims, basis: 'accrual', budgetScenarioId: scenarioId },
   }
 }
@@ -213,35 +260,52 @@ export function budgetReportSpec(data: BudgetReportData): PageSpec {
         when: f('hideSections'),
       },
     ],
-    body: [
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        wide: f('wide'),
-        blocks: [
+    // The named refusal renders instead of numbers when the org has no
+    // base currency: title, description and the Company settings link.
+    body: data.baseCurrencyNotice
+      ? [
           {
-            ...widgetBlock('statement-matrix', {
-              view: data.view,
-              currency: data.currency,
-              drill: data.drill,
+            ...widgetBlock('empty-state', {
+              title: data.baseCurrencyNotice?.title ?? '',
+              description: data.baseCurrencyNotice?.description,
+              action: 'link-button',
+              actionProps: {
+                href: data.baseCurrencyNotice?.actionHref ?? '/admin/setup/company',
+                label: data.baseCurrencyNotice?.actionLabel ?? '',
+              },
             }),
-            when: f('hasView'),
+            when: f('baseCurrencyNotice'),
           },
-          {
-            ...textBlock(f('emptyNote'), {
-              className: 'py-8 text-center text-slate-400 italic',
-            }),
-            when: f('noScenarios'),
-          },
-          {
-            ...textBlock(f('emptyNote'), {
-              className: 'py-8 text-center text-slate-400 italic',
-            }),
-            when: f('hideSections'),
-          },
+        ]
+      : [
+          paper({
+            company: f('company'),
+            title: f('title'),
+            periodPhrase: f('periodPhrase'),
+            wide: f('wide'),
+            blocks: [
+              {
+                ...widgetBlock('statement-matrix', {
+                  view: data.view,
+                  currency: data.currency,
+                  drill: data.drill,
+                }),
+                when: f('hasView'),
+              },
+              {
+                ...textBlock(f('emptyNote'), {
+                  className: 'py-8 text-center text-slate-400 italic',
+                }),
+                when: f('noScenarios'),
+              },
+              {
+                ...textBlock(f('emptyNote'), {
+                  className: 'py-8 text-center text-slate-400 italic',
+                }),
+                when: f('hideSections'),
+              },
+            ],
+          }),
         ],
-      }),
-    ],
   })
 }

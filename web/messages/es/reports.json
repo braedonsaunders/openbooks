@@ -59,6 +59,11 @@
     "searchPlaceholder": "Buscar informes…",
     "noMatches": "Ningún informe coincide con tu búsqueda."
   },
+  "baseCurrency": {
+    "title": "La moneda base no está configurada",
+    "description": "Los informes convierten cada línea a la moneda base de la empresa. Configúrela primero en los ajustes de la empresa; los datos existentes se conservan.",
+    "action": "Abrir ajustes de la empresa"
+  },
   "statement": {
     "sectionTotal": "Total {section}",
     "other": "Otros",

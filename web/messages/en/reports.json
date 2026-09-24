@@ -59,6 +59,11 @@
     "searchPlaceholder": "Search reports…",
     "noMatches": "No reports match your search."
   },
+  "baseCurrency": {
+    "title": "Base currency is not configured",
+    "description": "Money reports convert every line to the company base currency. Set it in Company settings first — existing data is kept.",
+    "action": "Open company settings"
+  },
   "statement": {
     "sectionTotal": "Total {section}",
     "other": "Other",

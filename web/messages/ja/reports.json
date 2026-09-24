@@ -59,6 +59,11 @@
     "searchPlaceholder": "レポートを検索…",
     "noMatches": "検索に一致するレポートはありません。"
   },
+  "baseCurrency": {
+    "title": "基準通貨が設定されていません",
+    "description": "金額レポートはすべての行を会社の基準通貨に換算します。先に会社設定で設定してください — 既存のデータは保持されます。",
+    "action": "会社設定を開く"
+  },
   "statement": {
     "sectionTotal": "{section}合計",
     "other": "その他",
