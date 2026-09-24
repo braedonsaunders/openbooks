@@ -39,6 +39,7 @@ function validStages(raw: unknown): StagesParse {
     const o = s as Record<string, unknown>;
     if (typeof o.name !== "string" || !o.name.trim()) return invalid;
     if (typeof o.subjectTemplate !== "string" || typeof o.bodyTemplate !== "string") return invalid;
+    if (o.escalate !== undefined && typeof o.escalate !== "boolean") return invalid;
     // A blank template renders an empty letter: refuse it at the boundary
     // with the fix named instead of storing a rung that mails nothing.
     if (!o.subjectTemplate.trim() || !o.bodyTemplate.trim()) return blank;
@@ -48,7 +49,7 @@ function validStages(raw: unknown): StagesParse {
       offsetDays: Number(o.offsetDays),
       subjectTemplate: o.subjectTemplate,
       bodyTemplate: o.bodyTemplate,
-      escalate: Boolean(o.escalate),
+      escalate: o.escalate ?? false,
     });
   }
   // Enforce unique, ascending sequences (the DB has a unique index too).
