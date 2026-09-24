@@ -21,7 +21,7 @@ import {
   setSectionCompetency,
 } from "./competencies.ts";
 import { createGoal } from "./goals.ts";
-import { fulfillRequest, listFeedback, retractFeedback, writeFeedback } from "./feedback.ts";
+import { fulfillRequest, listFeedback, listOpenRequestsForParty, retractFeedback, writeFeedback } from "./feedback.ts";
 import { getCycleDetail, getRetentionOverview, getReviewDetail, getTurnover, listCycleProgress, listMyReviews } from "./performance-read.ts";
 import { getExitRecord, listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
 
@@ -496,10 +496,19 @@ test("fulfilling a request twice returns the one fulfilment", { skip: !DB }, asy
       kind: "request", visibility: "manager_and_subject", body: "Tell me about the launch",
       requestedFromPartyId: h.a.managerPartyId,
     });
+    assert.deepEqual(
+      (await listOpenRequestsForParty({ orgId: h.org.orgId, actorId: h.a.managerUserId })).map((row) => row.id),
+      [request.id],
+    );
     const first = await fulfillRequest({
       orgId: h.org.orgId, actorId: h.a.managerUserId, requestId: request.id,
       visibility: "manager_and_subject", body: "They led the launch",
     });
+    assert.deepEqual(
+      await listOpenRequestsForParty({ orgId: h.org.orgId, actorId: h.a.managerUserId }),
+      [],
+      "the answered request must no longer be in the open inbox",
+    );
     const second = await fulfillRequest({
       orgId: h.org.orgId, actorId: h.a.managerUserId, requestId: request.id,
       visibility: "manager_and_subject", body: "They led the launch",
