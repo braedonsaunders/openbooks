@@ -531,6 +531,7 @@
     "recordButton": "Saisir une absence",
     "calendarTitle": "Calendrier par service",
     "calendarDepartmentLabel": "Service",
+    "calendarAllDepartments": "Tous les services",
     "calendarFromLabel": "Du",
     "calendarToLabel": "Au",
     "calendarShowLabel": "Afficher",

@@ -531,6 +531,7 @@
     "recordButton": "欠勤を記録",
     "calendarTitle": "部門別カレンダー",
     "calendarDepartmentLabel": "部門",
+    "calendarAllDepartments": "すべての部門",
     "calendarFromLabel": "開始",
     "calendarToLabel": "終了",
     "calendarShowLabel": "表示",

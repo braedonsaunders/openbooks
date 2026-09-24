@@ -110,7 +110,7 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
                   {
                     paramKey: 'department',
                     label: data.calendarDepartmentLabel,
-                    allLabel: data.queue.notAvailable,
+                    allLabel: data.calendarAllDepartments,
                     options: data.departmentOptions,
                   },
                 ],

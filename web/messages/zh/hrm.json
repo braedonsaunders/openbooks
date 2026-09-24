@@ -531,6 +531,7 @@
     "recordButton": "补记缺勤",
     "calendarTitle": "按部门查看日历",
     "calendarDepartmentLabel": "部门",
+    "calendarAllDepartments": "所有部门",
     "calendarFromLabel": "从",
     "calendarToLabel": "至",
     "calendarShowLabel": "显示",

@@ -531,6 +531,7 @@
     "recordButton": "Fehltag erfassen",
     "calendarTitle": "Kalender nach Abteilung",
     "calendarDepartmentLabel": "Abteilung",
+    "calendarAllDepartments": "Alle Abteilungen",
     "calendarFromLabel": "Von",
     "calendarToLabel": "Bis",
     "calendarShowLabel": "Anzeigen",

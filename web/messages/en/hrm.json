@@ -588,6 +588,7 @@
     "recordButton": "Record absence",
     "calendarTitle": "Calendar by department",
     "calendarDepartmentLabel": "Department",
+    "calendarAllDepartments": "All departments",
     "calendarFromLabel": "From",
     "calendarToLabel": "To",
     "calendarShowLabel": "Show",
