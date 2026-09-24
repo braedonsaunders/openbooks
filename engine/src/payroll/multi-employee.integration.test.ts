@@ -494,6 +494,83 @@ test(
   },
 );
 
+test(
+  "overlapping concurrent regular-run creates on one schedule yield one payable period",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg();
+    try {
+      const attempts = await Promise.allSettled([
+        createPayRun({
+          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+          periodStart: "2026-01-01", periodEnd: "2026-01-15", payDate: "2026-01-20",
+        }),
+        createPayRun({
+          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+          periodStart: "2026-01-10", periodEnd: "2026-01-20", payDate: "2026-01-25",
+        }),
+      ]);
+      assert.equal(attempts.filter((result) => result.status === "fulfilled").length, 1);
+      const refusal = attempts.find((result) => result.status === "rejected");
+      assert.ok(refusal && refusal.status === "rejected");
+      assert.match(String(refusal.reason), /already covers/);
+      const bonus = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-01-10", periodEnd: "2026-01-20", payDate: "2026-01-25",
+        runType: "bonus",
+      });
+      assert.ok(bonus.documentId, "off-cycle bonus remains permitted within a regular period");
+      const runs = await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from pay_runs
+         where org_id = ${fx.orgId} and pay_schedule_id = ${fx.scheduleId}
+           and run_type = 'regular' and run_status <> 'voided'
+      `);
+      assert.equal(runs.rows[0]!.n, 1);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "the database refuses overlapping live regular periods even on direct writes",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg();
+    try {
+      const first = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-01-01", periodEnd: "2026-01-15", payDate: "2026-01-20",
+      });
+      const second = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-01-16", periodEnd: "2026-01-31", payDate: "2026-02-05",
+      });
+      assert.notEqual(first.documentId, second.documentId);
+      await assert.rejects(
+        db.execute(sql`
+          update pay_runs set period_start = '2026-01-10'
+           where org_id = ${fx.orgId} and document_id = ${second.documentId}
+        `),
+        (error: unknown) => {
+          let code: string | undefined;
+          for (let cause: unknown = error; cause instanceof Error; cause = cause.cause) {
+            const candidate = cause as Error & { code?: unknown };
+            if (typeof candidate.code === "string") {
+              code = candidate.code;
+              break;
+            }
+          }
+          assert.equal(code, "23P01");
+          return true;
+        },
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
 /* ------------------------------------------------------------------ */
 /* M-1 — a wage is converted to the currency the run pays in            */
 /* ------------------------------------------------------------------ */
