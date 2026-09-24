@@ -344,16 +344,19 @@
     "benefits": {
       "title": "Benefits",
       "empty": "No benefit elections or dependents yet.",
+      "loadFailed": "Benefits could not be loaded.",
       "viewAll": "Benefits",
       "dependents": "{count, plural, one {# dependent: {names}} other {# dependents: {names}}}"
     },
     "qualifications": {
       "title": "Qualifications",
       "viewAll": "View all",
-      "empty": "No qualifications recorded."
+      "empty": "No qualifications recorded.",
+      "loadFailed": "Qualifications could not be loaded."
     },
     "continuous": {
-      "title": "Feedback & competencies"
+      "title": "Feedback & competencies",
+      "loadFailed": "Feedback and competencies could not be loaded."
     }
   },
   "directory": {
