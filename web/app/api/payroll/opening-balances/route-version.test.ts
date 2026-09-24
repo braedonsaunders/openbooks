@@ -24,7 +24,8 @@ import {
 
 const stateKey = Symbol.for('openbooks.opening-balances-version-test')
 interface RouteState {
-  saveCalls: { rows: { employeePartyId: string; updatedAt?: string | null }[] }[]
+  saveCalls: { rows: { employeePartyId: string; updatedAt?: string | null }[]; allowedSubsidiaryIds?: Set<string> | null }[]
+  allowedSubsidiaryIds: Set<string> | null
   saveResult: unknown
   throwSave: unknown
   ErrorClass: typeof RealOpeningBalanceSaveError
@@ -32,6 +33,7 @@ interface RouteState {
 }
 const routeState: RouteState = {
   saveCalls: [],
+  allowedSubsidiaryIds: new Set(['sub-a']),
   saveResult: { created: 0, updated: 1, deleted: 0, skipped: [], errors: [] },
   throwSave: null,
   ErrorClass: RealOpeningBalanceSaveError,
@@ -57,8 +59,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:feature-gates',
     `
+      const state = globalThis[Symbol.for('openbooks.opening-balances-version-test')]
       export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'actor-1' } }
+        return { user: { orgId: 'org-1', id: 'actor-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
     `,
   ],
@@ -129,6 +132,7 @@ function uuid(n: number): string {
 function reset() {
   routeState.saveCalls = []
   routeState.throwSave = null
+  routeState.allowedSubsidiaryIds = new Set(['sub-a'])
 }
 
 function post(body: unknown) {
@@ -150,6 +154,16 @@ test('POST threads each row loader-served version into the save', async () => {
   assert.equal(res.status, 200)
   assert.equal(routeState.saveCalls.length, 1)
   assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, '2026-09-01 00:00:00+00')
+})
+
+test('POST passes the restricted subsidiary scope into the opening-balance writer', async () => {
+  reset()
+  const allowedSubsidiaryIds = new Set(['sub-a'])
+  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds
+  const res = await post({ taxYear: 2026, rows: [{ employeePartyId: uuid(1), amounts: {} }] })
+  assert.equal(res.status, 200)
+  assert.equal(routeState.saveCalls.length, 1)
+  assert.equal(routeState.saveCalls[0]!.allowedSubsidiaryIds, allowedSubsidiaryIds)
 })
 
 test('a row with no version arrives unguarded for callers that do not speak versions', async () => {
