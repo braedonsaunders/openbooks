@@ -102,6 +102,7 @@ const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   getUrls: [] as string[],
   postBodies: [] as Array<Record<string, unknown>>,
+  postRefusalMessage: null as string | null,
 }
 Object.assign(globalThis, {
   __voucherTestToasts: script.toasts,
@@ -156,6 +157,9 @@ async function mountPicker(t: TestContext): Promise<void> {
     const url = String(input)
     if ((init?.method ?? 'GET') === 'POST') {
       script.postBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>)
+      if (script.postRefusalMessage) {
+        return Response.json({ error: script.postRefusalMessage }, { status: 409 })
+      }
       return Response.json({ replayed: false, voucherId: 'voucher-old', entryId: 'entry-1', alreadyReversed: false })
     }
     script.getUrls.push(url)
@@ -174,6 +178,7 @@ async function mountPicker(t: TestContext): Promise<void> {
   script.toasts.length = 0
   script.getUrls.length = 0
   script.postBodies.length = 0
+  script.postRefusalMessage = null
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -306,5 +311,49 @@ test('searching the picker queries posted vouchers on the server', async (t) => 
   assert.ok(
     offeredLabels().some((label) => label.includes('LCV-OLD-0001')),
     'the search must surface the older voucher',
+  )
+})
+
+test('a refused reversal shows the server reason and submits the selected date and trimmed memo', async (t) => {
+  await mountPicker(t)
+  await clickButtonNamed('Reverse landed-cost voucher')
+  await openVoucherMenu()
+  const option = document.querySelector('button[role="option"]') as HTMLButtonElement | null
+  assert.ok(option, 'a posted voucher must be selectable')
+  const selectedLabel = option.textContent ?? ''
+  await act(async () => {
+    option.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+  })
+  const date = document.querySelector('input[type="date"]') as HTMLInputElement | null
+  const reason = document.querySelector('textarea') as HTMLTextAreaElement | null
+  assert.ok(date, 'a reversal date must be editable')
+  assert.ok(reason, 'a reversal reason must be editable')
+  await act(async () => {
+    setInputValue(date, '2026-08-31')
+    setTextareaValue(reason, '  Freight was billed to the wrong receipt  ')
+    await tick()
+  })
+
+  script.postRefusalMessage = 'The posting period is closed.'
+  await clickButtonNamed('Reverse voucher')
+
+  assert.equal(script.postBodies.length, 1, 'one reversal request must be sent')
+  const body = script.postBodies[0]!
+  assert.equal(body.action, 'reverseLandedVoucher')
+  const selectedDocumentNumber = selectedLabel.split(' · ')[0]
+  assert.equal(
+    body.id,
+    ALL.find((voucher) => voucher.documentNumber === selectedDocumentNumber)?.id,
+    'the selected voucher is the reversal subject',
+  )
+  assert.equal(body.date, '2026-08-31')
+  assert.equal(body.memo, 'Freight was billed to the wrong receipt')
+  assert.equal(typeof body.idempotencyKey, 'string')
+  assert.ok((body.idempotencyKey as string).length > 0)
+  assert.equal(document.querySelector('[role="alert"]')?.textContent, script.postRefusalMessage)
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'error' && toast.message === script.postRefusalMessage),
+    'the refusal reaches the operator as an error toast too',
   )
 })
