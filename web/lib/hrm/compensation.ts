@@ -112,6 +112,7 @@ export interface CompDialogRefusal {
 export interface CompCycleDialogState {
   open: boolean
   closeHref: string
+  defaultCurrency: string
   title: string
   kinds: { value: string; label: string }[]
   kindLabel: string
@@ -370,6 +371,11 @@ export async function loadCompensationHome(
   const planOpen = firstParam(sp.plan) === 'new'
   let cycleDialog: CompCycleDialogState | null = null
   let planDialog: CompPlanDialogState | null = null
+  const cycleCurrency = cycleOpen
+    ? (await db.execute<{ base_currency: string | null }>(sql`
+        select base_currency from orgs where id = ${orgId}
+      `)).rows[0]?.base_currency ?? ''
+    : ''
   if (cycleOpen || planOpen) {
     const g = await getTranslations('shell.routeState')
     const adminT = await getTranslations('admin')
@@ -401,6 +407,7 @@ export async function loadCompensationHome(
       cycleDialog = {
         open: true,
         closeHref: dialogCloseHref,
+        defaultCurrency: cycleCurrency,
         title: t('compensation.newCycle'),
         kinds: (['merit', 'promotion', 'adjustment', 'cola'] as const).map((kind) => ({
           value: kind,

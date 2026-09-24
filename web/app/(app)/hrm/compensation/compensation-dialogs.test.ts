@@ -179,7 +179,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript," + encodeURIComponent(`export const db = { execute: async () => ({ rows: [] }) };`),
+        url: "data:text/javascript," + encodeURIComponent(`export const db = { execute: async () => ({ rows: globalThis.__compDlgBaseCurrency ? [{ base_currency: globalThis.__compDlgBaseCurrency }] : [] }) };`),
       };
     }
     return nextResolve(specifier, context);
@@ -227,13 +227,13 @@ test("?plan=new resolves an open plan dialog with the existing create form", asy
 
 test("?cycle=new resolves an open cycle dialog over the four engine kinds", async () => {
   features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  gap.__compDlgBaseCurrency = "USD";
   const data = await loadCompensationHome(MANAGER, { cycle: "new" });
   assert.ok(data, "the home loader still resolves");
-  assert.equal(data.cycleOpen, true, "?cycle=new opens the cycle dialog");
-  assert.equal(data.planOpen, false, "the plan dialog stays shut");
+  assert.deepEqual([data.cycleOpen, data.planOpen], [true, false], "?cycle=new opens only the requested dialog");
   const dialog = data.cycleDialog;
   assert.ok(dialog, "the cycle dialog resolves instead of nothing");
-  assert.equal(dialog.open, true, "the widget's open state is set");
+  assert.equal(dialog.defaultCurrency, "USD", "cycle creation inherits the organization's configured currency");
   assert.equal(dialog.closeHref, "/hrm/compensation", "closing navigates the param away");
   assert.deepEqual(
     dialog.kinds.map((k) => k.value),
