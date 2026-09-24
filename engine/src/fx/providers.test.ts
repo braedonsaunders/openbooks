@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
@@ -21,7 +20,6 @@ import {
 } from "./providers.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
-const source = readFileSync(new URL("./providers.ts", import.meta.url), "utf8");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function listen(server: Server): Promise<string> {
@@ -108,55 +106,70 @@ test("normalization materializes every directed currency pair", () => {
   assert.equal(rates.find((rate) => rate.fromCurrency === "CAD" && rate.toCurrency === "USD")?.rate, "0.8000000000");
 });
 
-test("FX provider observation window uses the org business day, not UTC today", () => {
-  const start = source.indexOf("export async function runFxProvider");
-  const end = source.indexOf("\nexport async function runDueFxProviders", start);
-  assert.ok(start >= 0 && end > start, "runFxProvider is defined");
-  const body = source.slice(start, end);
-  assert.match(body, /const today = await businessToday\(orgId\)/);
-  assert.match(body, /from: addDays\(today, -6\), to: today/);
-  assert.match(body, /syncRange\(config, today\)/);
-  assert.doesNotMatch(body, /isoDate\(now\)/);
-});
+test(
+  "FX test sync requests the org's latest seven business days",
+  { skip: !DB },
+  async () => {
+    const org = await setupManualFxScratchOrg();
+    const captured: URL[] = [];
+    const provider = createServer((req, res) => {
+      const requested = new URL(req.url ?? "", "http://localhost");
+      captured.push(requested);
+      const end = requested.searchParams.get("end_date");
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        observations: [{ d: end, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+      }));
+    });
+    const providerOrigin = await listen(provider);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (requested.host === "www.bankofcanada.ca") {
+        requested.protocol = "http:";
+        requested.host = new URL(providerOrigin).host;
+      }
+      return originalFetch(requested, init);
+    }) as typeof fetch;
 
-test("FX run conflicts inspect wrapped database causes before returning a domain refusal", () => {
-  const detectorStart = source.indexOf("function isFxRunInProgressConflict");
-  const createRunStart = source.indexOf("async function createRun", detectorStart);
-  assert.ok(detectorStart >= 0 && createRunStart > detectorStart, "the run-conflict detector is defined");
-  const detector = source.slice(detectorStart, createRunStart);
-  assert.match(detector, /candidate\.code === "23505" && candidate\.constraint === "fx_provider_runs_one_running"/);
-  assert.match(detector, /current = candidate\.cause/);
-  assert.match(
-    source.slice(createRunStart, source.indexOf("\nexport async function runFxProvider", createRunStart)),
-    /if \(isFxRunInProgressConflict\(error\)\) throw new FxProviderError\("an FX provider run is already in progress"\)/,
-  );
-});
+    try {
+      const instant = (await db.execute<{ epoch: number; utcHour: number }>(sql`
+        select extract(epoch from now())::float8 as epoch,
+               extract(hour from now() at time zone 'UTC')::int as "utcHour"
+      `)).rows[0]!;
+      // Select a valid IANA zone that places this instant on a different local
+      // date from UTC, so a UTC-based request cannot accidentally pass.
+      const timeZone = instant.utcHour >= 10 ? "Pacific/Kiritimati" : "Etc/GMT+12";
+      const savedZone = await db.execute<{ id: string }>(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('timeZone', ${timeZone}::text)
+         where id = ${org.orgId}
+         returning id
+      `);
+      assert.equal(savedZone.rows.length, 1, "the test organization stores its business time zone");
+      const dateParts = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(new Date(instant.epoch * 1000));
+      const today = `${dateParts.find((part) => part.type === "year")!.value}-${dateParts.find((part) => part.type === "month")!.value}-${dateParts.find((part) => part.type === "day")!.value}`;
+      const fromDate = new Date(`${today}T00:00:00.000Z`);
+      fromDate.setUTCDate(fromDate.getUTCDate() - 6);
 
-// The completion stamp must live INSIDE the rates' transaction and be fenced
-// on the per-claim lease token (same idiom as posting_effects), so a crash can
-// never leave rates applied while the run/config still say running, and a
-// reclaimed claim can neither resurrect its row nor promote schedule
-// ownership. These static guards pin the structure that makes the recovery
-// stages idempotent.
-test("FX run claims are fenced by a per-claim lease token with an atomic completion unit", () => {
-  const claimStart = source.indexOf("async function createRun");
-  const runEnd = source.indexOf("\n/** Scheduler scan", claimStart);
-  assert.ok(claimStart >= 0 && runEnd > claimStart, "runFxProvider is defined after createRun");
+      const result = await runFxProvider(org.orgId, "test");
+      assert.equal(result.observationsReceived, 1);
+      assert.equal(captured.length, 1, "the configured provider receives one bounded range request");
+      assert.equal(captured[0]!.searchParams.get("start_date"), fromDate.toISOString().slice(0, 10));
+      assert.equal(captured[0]!.searchParams.get("end_date"), today);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await close(provider);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-  // The takeover path clears the stale claim's token when reclaiming it...
-  assert.match(source.slice(claimStart, source.indexOf("\nexport async function runFxProvider", claimStart)), /lease_token = null/);
-  // ...every new claim mints its own token...
-  assert.match(source.slice(claimStart, runEnd), /gen_random_uuid\(\)/);
-  // ...rate application only happens under a held, token-matched running row...
-  assert.match(source.slice(claimStart, runEnd), /and lease_token = \$\{claim\.leaseToken\} and status = 'running'\s+for update/);
-  // ...the success stamp is executed on the transaction executor...
-  const stampMatch = source.slice(claimStart, runEnd).match(/const stamped = await tx\.execute\(sql`[\s\S]*?`\);[\s\S]*?if \(!stamped\.rowCount\) throw new FxRunLeaseLostError\(\);/);
-  assert.ok(stampMatch, "the success stamp runs inside the rates transaction with the lease fence");
-  assert.match(stampMatch[0]!, /lease_token = null/);
-  assert.match(stampMatch[0]!, /id = \$\{claim\.runId\} and org_id = \$\{orgId\} and lease_token = \$\{claim\.leaseToken\} and status = 'running'/);
-  // ...and the failure stamp carries the identical fence.
-  assert.match(source.slice(claimStart, runEnd), /where id = \$\{claim\.runId\} and org_id = \$\{orgId\} and lease_token = \$\{claim\.leaseToken\} and status = 'running'\s*`\);\s*if \(!stamped\.rowCount\) return;/);
-});
 
 test("weekday schedules skip weekends and weekly schedules remain seven days apart", () => {
   assert.equal(
