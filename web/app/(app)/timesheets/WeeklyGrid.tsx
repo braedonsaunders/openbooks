@@ -268,8 +268,16 @@ export function WeeklyGrid({
   )
 
   // ---- navigation (URL is the source of truth; no full reload) -------------
-  const go = (nextEmployee: string | null, nextWeek: string) => {
-    if (dirty && !confirm(t('grid.discardConfirm'))) return
+  const confirmDiscard = async () => {
+    if (!dirty) return true
+    return confirmDialog({
+      message: t('grid.discardConfirm'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+  const go = async (nextEmployee: string | null, nextWeek: string) => {
+    if (!(await confirmDiscard())) return
     const emp = nextEmployee ?? employeeId
     if (!emp) return
     // Stay in the flyout and keep the list's filters: closeHref is the list URL
@@ -452,6 +460,7 @@ export function WeeklyGrid({
     <UrlDrawer
       open
       closeHref={closeHref}
+      beforeClose={confirmDiscard}
       size="2xl"
       // Seven day columns plus the line metadata need ~1260px; open expanded so
       // the matrix is readable, and leave the header's toggle to collapse it.

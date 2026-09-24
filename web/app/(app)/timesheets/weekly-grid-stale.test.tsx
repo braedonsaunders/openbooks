@@ -32,7 +32,7 @@ if (typeof window.requestAnimationFrame !== "function") {
   window.cancelAnimationFrame = ((_id: number) => setTimeout(() => {}, 0)) as unknown as typeof window.cancelAnimationFrame;
 }
 
-const script = { refreshed: 0, putBodies: [] as Record<string, unknown>[] };
+const script = { refreshed: 0, putBodies: [] as Record<string, unknown>[], confirms: 0, confirmNext: false };
 Object.assign(globalThis, {
   __gridStale: script,
   __gridStaleRouter: {
@@ -66,7 +66,7 @@ registerHooks({
     if (specifier.endsWith("/lib/confirm")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export async function confirmDialog(){return true}",
+        url: "data:text/javascript,export async function confirmDialog(){const s=globalThis.__gridStale;s.confirms++;return s.confirmNext}",
       };
     }
     if (specifier.endsWith("/lib/prompt")) {
@@ -135,6 +135,8 @@ const PICKERS = {
 async function mountGrid() {
   script.refreshed = 0;
   script.putBodies = [];
+  script.confirms = 0;
+  script.confirmNext = false;
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -235,4 +237,26 @@ test("a refused save shows the named 409 with a reload path and keeps local edit
     await tick(60);
   });
   assert.equal(script.refreshed, 1, "Reload re-runs the server loader");
+});
+
+test("closing a dirty weekly grid asks before discarding and keeps it open when declined", async (t) => {
+  const { cleanup } = await mountGrid();
+  t.after(cleanup);
+
+  const addLine = buttonsNamed("Add line")[0];
+  assert.ok(addLine);
+  await act(async () => {
+    addLine.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick(60);
+  });
+
+  const close = document.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
+  assert.ok(close, "the drawer close control is present");
+  await act(async () => {
+    close.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick(60);
+  });
+
+  assert.equal(script.confirms, 1, "the dirty-close guard asks for confirmation");
+  assert.ok(document.querySelector('[role="dialog"]'), "declining the confirmation keeps the drawer open");
 });
