@@ -15,7 +15,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '../../../lib/authz'
-import { mergeHref, parseListParams, pickString } from '../../../lib/list-params'
+import { mergeHref, pagedListVisibility, parseListParams, pickString } from '../../../lib/list-params'
 import type { NotificationRow } from './NotificationsInbox'
 
 /**
@@ -64,6 +64,7 @@ export interface NotificationsData {
   unread: number
   rows: NotificationRow[]
   hasRows: boolean
+  hasScopedRows: boolean
   isEmpty: boolean
   emptyTitle: string
   emptyDescription: string
@@ -114,6 +115,7 @@ export async function loadNotifications(
   ])
 
   const unread = counts.rows[0]?.unread ?? 0
+  const visibility = pagedListVisibility(counts.rows[0]?.scoped ?? 0, rows.rows.length)
   const kindText = (code: string) =>
     KNOWN_KINDS.has(code) ? t(`kinds.${code}` as never) : humanize(code)
 
@@ -145,8 +147,9 @@ export async function loadNotifications(
       }),
       read: row.readAt !== null,
     })),
-    hasRows: rows.rows.length > 0,
-    isEmpty: rows.rows.length === 0,
+    hasRows: visibility.hasRows,
+    hasScopedRows: visibility.hasResults,
+    isEmpty: visibility.isEmpty,
     emptyTitle: scope === 'unread' ? t('emptyUnreadTitle') : t('emptyTitle'),
     emptyDescription: scope === 'unread' ? t('emptyUnreadDescription') : t('emptyDescription'),
     total: counts.rows[0]?.scoped ?? 0,
@@ -201,7 +204,7 @@ export function notificationsSpec(data: NotificationsData): PageSpec {
           page: f('currentPage'),
           perPage: f('perPage'),
         }),
-        when: f('hasRows'),
+        when: f('hasScopedRows'),
       },
     ],
   })

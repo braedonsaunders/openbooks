@@ -90,6 +90,11 @@ export function hasActiveListFilters(args: {
   return args.savedViewFilterCount > 0
 }
 
+/** Keep an empty page window distinct from a truly empty result set. */
+export function pagedListVisibility(total: number, pageRows: number) {
+  return { hasRows: pageRows > 0, hasResults: total > 0, isEmpty: total === 0 }
+}
+
 export function pickString(v: string | string[] | undefined): string | undefined {
   if (Array.isArray(v)) return v[0]
   return v
@@ -184,5 +189,4 @@ export function buildListDrawerHref(
     drawerReturn: returnHref,
   })
 }
-
 
