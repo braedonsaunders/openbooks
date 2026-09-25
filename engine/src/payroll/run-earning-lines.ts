@@ -58,13 +58,13 @@ export async function appendPeriodicEarnings(
       ? payRate!.rate
       : divideMoney(payRate!.rate, String(payRate!.annualHours), 4);
     const time = (await tx.execute<{
-        id: string; hours: string; project_id: string | null; department_id: string | null;
+        id: string; hours: string; worked_on: string; project_id: string | null; department_id: string | null;
         time_type_id: string | null; item_id: string | null;
         classification: string; multiplier: string; type_name: string;
         item_name: string | null; item_account_id: string | null;
         item_account_number: string | null; item_account_name: string | null;
       }>(sql`
-      select te.id, te.hours, te.project_id, te.department_id, te.time_type_id, te.item_id,
+      select te.id, te.hours, te.worked_on, te.project_id, te.department_id, te.time_type_id, te.item_id,
              coalesce(tt.classification, 'regular') as classification,
              coalesce(tt.cost_multiplier, 1) as multiplier, coalesce(tt.name, 'Regular') as type_name,
              i.name as item_name, i.payroll_expense_account_id as item_account_id,
@@ -80,16 +80,20 @@ export async function appendPeriodicEarnings(
          and coalesce(tt.exclude_from_wages, false) = false
     `));
     const otComponent = need("overtime", "earning");
-    const groups = new Map<string, { hours: string; rate: string; row: (typeof time.rows)[0] }>();
+    const groups = new Map<string, {
+      hours: string; rate: string; row: (typeof time.rows)[0]; days: Map<string, string>;
+    }>();
     for (const t of time.rows) {
-      // Hours on different service items never merge: each item may declare
-      // its own expense account, so one line per (time type, project,
-      // department, item). Entries with no item keep the historical grouping.
+      // Keep the historical dimension-level rounding, then allocate its exact
+      // cent total over dated lines so lookbacks get day evidence without
+      // changing gross pay through per-day rounding.
       const key = [t.time_type_id ?? "", t.project_id ?? "", t.department_id ?? "", t.item_id ?? ""].join("|");
       const rate = roundMoney(mulDecimal(hourlyWage, t.multiplier), 4);
       const existing = groups.get(key);
-      if (existing) existing.hours = add(existing.hours, t.hours);
-      else groups.set(key, { hours: t.hours, rate, row: t });
+      if (existing) {
+        existing.hours = add(existing.hours, t.hours);
+        existing.days.set(t.worked_on, add(existing.days.get(t.worked_on) ?? "0", t.hours));
+      } else groups.set(key, { hours: t.hours, rate, row: t, days: new Map([[t.worked_on, t.hours]]) });
     }
     let sequence = 10;
     for (const group of groups.values()) {
@@ -111,12 +115,19 @@ export async function appendPeriodicEarnings(
         },
         wageDefaultAccountId: wageExpenseAccountId,
       });
-      lines.push({
+      const totalAmount = roundMoney(mulDecimal(group.rate, group.hours), 2);
+      const datedAmounts = allocateProportionally(totalAmount,
+        [...group.days].map(([day, hours]) => ({
+          weight: cmp(hours, "0") < 0 ? neg(hours) : hours,
+          target: day,
+        })));
+      for (const part of datedAmounts) lines.push({
         componentId: String(componentRow.id),
         kind: "earning",
         description: group.row.type_name,
-        hours: group.hours, rate: group.rate,
-        amount: roundMoney(mulDecimal(group.rate, group.hours), 2),
+        hours: group.days.get(part.target)!, rate: group.rate,
+        earnedFrom: part.target, earnedTo: part.target,
+        amount: part.amount,
         projectId: group.row.project_id, departmentId: group.row.department_id,
         timeTypeId: group.row.time_type_id, itemId: group.row.item_id,
         expenseAccountId: stamp?.accountId ?? null,

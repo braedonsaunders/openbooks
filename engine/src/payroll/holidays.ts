@@ -1246,21 +1246,22 @@ const commissionWindowOf = (
   rule: PayrollHolidayPayRule, holidayDate: string, weeks: number, employerWeekStartsOn?: number,
 ) => spanBefore(lookbackWindowEnd(rule, holidayDate, employerWeekStartsOn), weeks * 7);
 
-/** Earnings from committed stubs, pro-rated where a pay period straddles the
- *  window. Categories follow the components' system keys, which is what makes
- *  "regular wages exclude overtime and other public holidays" (Ontario) a
- *  transcription rather than a guess. */
+/** Earnings from committed stubs. A partial pay period is included only when
+ *  each earning line carries enough dated evidence to place its whole amount
+ *  inside or outside the statutory window. Categories follow component keys,
+ *  which makes Ontario's wage exclusions a transcription rather than a guess. */
 async function lookbackEarnings(
   tx: Pick<typeof db, "execute">,
   input: StatutoryHolidayPayInput,
   window: { from: string; to: string },
 ): Promise<HolidayLookbackEarnings> {
   const rows = (await tx.execute<{
-      system_key: string; amount: string;
+      system_key: string; amount: string; earned_from: string | Date | null;
+      earned_to: string | Date | null;
       period_start: string | Date; period_end: string | Date;
     }>(sql`
-    select coalesce(c.system_key, '') as system_key,
-           sum(l.amount) as amount,
+    select coalesce(c.system_key, '') as system_key, l.amount,
+           l.earned_from, l.earned_to,
            r.period_start, r.period_end
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -1270,7 +1271,6 @@ async function lookbackEarnings(
        and l.kind = 'earning'
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
-     group by c.system_key, r.period_start, r.period_end
   `));
 
   const totals = emptyLookbackEarnings();
@@ -1279,14 +1279,29 @@ async function lookbackEarnings(
       String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
     const periodStart = day(row.period_start);
     const periodEnd = day(row.period_end);
-    const periodDays = daysBetween(periodStart, periodEnd) + 1;
     const overlapFrom = periodStart > window.from ? periodStart : window.from;
     const overlapTo = periodEnd < window.to ? periodEnd : window.to;
     const overlapDays = daysBetween(overlapFrom, overlapTo) + 1;
-    if (overlapDays <= 0 || periodDays <= 0) continue;
-    const amount = overlapDays >= periodDays
-      ? roundMoney(row.amount, 4)
-      : fromUnits(roundDiv(toUnits(row.amount) * BigInt(overlapDays), BigInt(periodDays)));
+    if (overlapDays <= 0) continue;
+    const earnedFrom = row.earned_from == null ? null : day(row.earned_from);
+    const earnedTo = row.earned_to == null ? null : day(row.earned_to);
+    const periodIsInside = periodStart >= window.from && periodEnd <= window.to;
+    if (earnedFrom === null || earnedTo === null) {
+      if (!periodIsInside) {
+        throw new PayrollHolidayError(
+          `${input.employeeName}: statutory holiday lookback earnings overlap ${window.from} through ${window.to}, but a committed pay stub has no dated earning evidence; record the earning dates or correct the pay stub before calculating holiday pay`,
+        );
+      }
+    } else {
+      const earningOverlaps = earnedFrom <= window.to && earnedTo >= window.from;
+      if (!earningOverlaps) continue;
+      if (earnedFrom < window.from || earnedTo > window.to) {
+        throw new PayrollHolidayError(
+          `${input.employeeName}: a pay-stub earning dated ${earnedFrom} through ${earnedTo} crosses the statutory holiday lookback boundary; split the earning into day-resolved pay-stub lines before calculating holiday pay`,
+        );
+      }
+    }
+    const amount = roundMoney(row.amount, 4);
 
     const bucket: keyof HolidayLookbackEarnings =
       row.system_key === "overtime" ? "overtime"

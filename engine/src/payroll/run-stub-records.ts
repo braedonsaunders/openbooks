@@ -48,6 +48,8 @@ export interface Line {
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
   description: string; hours?: string; rate?: string; amount: string;
+  /** Civil dates that substantiate when an earning amount was earned. */
+  earnedFrom?: string | null; earnedTo?: string | null;
   projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
   /** Service item the hours were worked on; only time-driven earning lines
    * carry one. Absent everywhere else — never inferred, never defaulted. */
@@ -272,11 +274,13 @@ export async function insertPayStubLineRows(
     // and post through the unchanged component-then-default fallback.
     await tx.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, rate,
+                                  earned_from, earned_to,
                                   amount, project_id, department_id, time_type_id, item_id, sequence,
                                   expense_account_id, expense_account_source, expense_account_evidence,
                                   created_by, updated_by)
       values (${args.orgId}, ${args.stubId}, ${line.componentId}, ${line.kind}, ${line.description},
-              ${line.hours ?? null}, ${line.rate ?? null}, ${line.amount},
+              ${line.hours ?? null}, ${line.rate ?? null},
+              ${line.earnedFrom ?? null}, ${line.earnedTo ?? null}, ${line.amount},
               ${line.projectId ?? null}, ${line.departmentId ?? null}, ${line.timeTypeId ?? null},
               ${line.itemId ?? null}, ${line.sequence},
               ${line.expenseAccountId ?? null}, ${line.expenseAccountSource ?? "unknown"},
