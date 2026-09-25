@@ -144,7 +144,7 @@ test("INPS 2026 pre-1996 at 60.000: 9,19% plus 1% over 56.224", () => {
     ...BASE, annualGrossEmployment: "60000", annualPensionable: "60000",
   });
   assert.equal(r.inpsWorker, "5551.7600");
-  assert.equal(r.inpsEmployer, "14286.0000");
+  assert.equal(r.inpsEmployer, "14286.0000"); assert.throws(() => calculateIt2026({ ...BASE, annualGrossEmployment: "14400", annualPensionable: "14400" }), /daily-minimum base.*contribution days.*CCNL minimum/);
 });
 
 test("INPS 2026 post-1995 at 130.000: capped at the 122.295 massimale", () => {
