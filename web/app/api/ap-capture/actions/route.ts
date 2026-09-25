@@ -2,7 +2,8 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { apCaptureReprocessJobId, enqueueApCapture } from '@openbooks/jobs'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
@@ -33,6 +34,29 @@ function apCaptureVisibleExists(orgId: string, id: string, allowed: ReadonlySet<
   )`
 }
 
+async function lockApCaptureScope(
+  tx: SqlExecutor,
+  orgId: string,
+  id: string,
+  allowed: ReadonlySet<string> | null,
+): Promise<boolean> {
+  const capture = (await tx.execute<{ vendorId: string | null; purchaseOrderId: string | null }>(sql`
+    select vendor_candidate_id as "vendorId", purchase_order_id as "purchaseOrderId"
+      from ap_capture_items where org_id = ${orgId} and id = ${id} for update
+  `)).rows[0]
+  if (!capture) return false
+  try {
+    await lockScopeRows(tx, orgId, [
+      ...(capture.vendorId ? [{ kind: 'party' as const, id: capture.vendorId }] : []),
+      ...(capture.purchaseOrderId ? [{ kind: 'document' as const, id: capture.purchaseOrderId }] : []),
+    ], allowed, 'share', { orgWideNull: true })
+    return true
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return false
+    throw error
+  }
+}
+
 export async function POST(request: Request) {
   const gate = await guardPermission('ap.create')
   if (gate instanceof NextResponse) return gate
@@ -49,6 +73,9 @@ export async function POST(request: Request) {
     try {
       if (body.action === 'reject') {
         await db.transaction(async (tx) => {
+          if (!await lockApCaptureScope(tx, gate.user.orgId, id, gate.allowedSubsidiaryIds)) {
+            throw new Error('not_rejectable')
+          }
           const changed = (await tx.execute<{ id: string }>(sql`
             update ap_capture_items set status = 'rejected', updated_at = now(), updated_by = ${gate.user.id}
              where org_id = ${gate.user.orgId} and id = ${id} and status <> 'materialized'
@@ -70,6 +97,9 @@ export async function POST(request: Request) {
         // confirmed queue records how many corrections it discarded.
         const confirmDiscard = (parsedBody.data as { confirmDiscardCorrections?: unknown }).confirmDiscardCorrections === true
         const queued = await db.transaction(async (tx) => {
+          if (!await lockApCaptureScope(tx, gate.user.orgId, id, gate.allowedSubsidiaryIds)) {
+            throw new Error('not_reprocessable')
+          }
           const corrected = (await tx.execute<{ n: number }>(sql`
             select count(*)::int as n from ap_capture_corrections
              where org_id = ${gate.user.orgId} and capture_item_id = ${id}

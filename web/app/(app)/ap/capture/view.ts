@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 import { getDocumentCaptureSettings } from '@openbooks/engine/src/payables/ap-capture-config.ts'
 import {
@@ -83,6 +84,7 @@ export async function loadApCapture(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ApCaptureData> {
   const authz = await requirePermission('ap.read')
+  return withScopeSnapshot(authz.user.orgId, async () => {
   const canCreate = can(authz, 'ap.create')
   const t = await getTranslations('ap.capture')
   const tc = await getTranslations('common')
@@ -246,6 +248,7 @@ export async function loadApCapture(
     drawerOpen: Boolean(drawer),
     drawer,
   }
+  })
 }
 
 const f = ref<ApCaptureData>()
