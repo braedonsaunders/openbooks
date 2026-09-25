@@ -291,34 +291,34 @@ test("the clone flag outside a clone transaction unlocks nothing", { skip: !DB }
     await closeGl(org.orgId, org.periodId, org.bookId, actor, "OM-13: flag-scope probe");
     const entry = (await db.execute<{ id: string }>(sql`
       select id from journal_entries where org_id = ${org.orgId} and status = 'posted' limit 1`)).rows[0]!.id;
-
+    // Party-attribution moves are the posted-line writes the closed-period fence governs (0380 admits only these).
+    const otherParty = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${otherParty}, ${org.orgId}, 'customer', 'Flag probe counterparty', true, '{}'::jsonb)`);
+    const attemptAttributionMove = async (withClone: boolean): Promise<void> => {
+      if (withClone) await db.execute(sql`select set_config('openbooks.clone', 'on', true)`);
+      await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
+      await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+      await db.execute(sql`
+        update journal_lines set party_id = ${otherParty}
+         where org_id = ${org.orgId} and entry_id = ${entry} and line_number = 1`);
+    };
+    const stillClosed = (error: unknown) => errorChainMatches(error, /period is closed for GL posting/);
     // All three flags asserted in a normal tenant transaction: the authority
     // additionally requires RLS bypass, which a tenant transaction never
     // holds, so the closed-period raise still fires.
     await assert.rejects(
-      withOrgTransaction(org.orgId, async () => {
-        await db.execute(sql`select set_config('openbooks.clone', 'on', true)`);
-        await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
-        await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-        await db.execute(sql`
-          insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
-          values (${org.orgId}, ${entry}, 99, ${org.accounts.bank}, ${org.subsidiaryId}, '1.0000', 'CAD', '1.0000', '1', '')`);
-      }),
-      (error: unknown) => errorChainMatches(error, /period is closed for GL posting/),
+      withOrgTransaction(org.orgId, () => attemptAttributionMove(true)),
+      stillClosed,
       "the clone flag in a tenant transaction must not open a closed period",
     );
 
     // Maintenance bypass with migration+amend but WITHOUT the clone flag:
     // bypass alone is not the authority either.
     await assert.rejects(
-      withOrg(null, async () => {
-        await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
-        await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-        await db.execute(sql`
-          insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
-          values (${org.orgId}, ${entry}, 99, ${org.accounts.bank}, ${org.subsidiaryId}, '1.0000', 'CAD', '1.0000', '1', '')`);
-      }),
-      (error: unknown) => errorChainMatches(error, /period is closed for GL posting/),
+      withOrg(null, () => attemptAttributionMove(false)),
+      stillClosed,
       "bypass without the clone flag must not open a closed period",
     );
   } finally {
