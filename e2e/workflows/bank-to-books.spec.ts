@@ -565,7 +565,7 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       // The customer record agrees: open 300.00 with the unpaid invoice.
       await page.goto('/ar');
       await dismissSetupWizard(page);
-      await page.locator('tr', { hasText: S.customerName }).first().click();
+      await page.locator('tr', { hasText: S.customerName }).first().getByRole('button', { name: S.customerName }).click();
       const drawer = page.locator('[role="dialog"]').first();
       await expect(drawer).toBeVisible();
       await expect(drawer.getByText('$300').first()).toBeVisible({ timeout: 15000 });
