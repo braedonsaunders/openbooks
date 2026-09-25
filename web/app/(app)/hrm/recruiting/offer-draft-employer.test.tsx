@@ -103,7 +103,7 @@ test('scorecard choices and field names are translated labels, not enum keys or 
   const markup = renderToStaticMarkup(
     provider(
       <ScorecardFormIsland
-        interviewId="interview-1"
+        interviewId="interview-1" criteria={[{ id: 'attr-1', label: 'Communication' }]}
         labels={{
           overall: 'Overall', submit: 'Submit', failed: 'Save failed', ratings: 'Ratings',
           privateNotes: 'Private notes', sharedNotes: 'Shared notes',
@@ -116,7 +116,7 @@ test('scorecard choices and field names are translated labels, not enum keys or 
   assert.match(markup, />Strongly yes</)
   assert.doesNotMatch(markup, />strong_no</)
   assert.doesNotMatch(markup, />strong_yes</)
-  assert.match(markup, /for="[^"]+-ratings">Ratings<\/label>/)
+  assert.match(markup, /for="[^"]+-rating-attr-1">Communication<\/label>/)
   assert.match(markup, />Shared notes</)
 })
 

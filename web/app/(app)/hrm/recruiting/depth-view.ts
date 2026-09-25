@@ -268,6 +268,9 @@ export interface InterviewDrawer {
   candidate: string
   requisition: string
   kit: { name: string; instructions: string | null; questions: { question: string; attribute: string | null }[] } | null
+  /** Kit rating criteria (id + label) for the scorecard form's per-criterion
+   * inputs; empty while the interview names no kit. */
+  criteria: { id: string; label: string }[]
   slots: { id: string; startsAt: string; endsAt: string; kind: string }[]
   /** Pools the propose picker can book from (managers only — readers get []). */
   pools: { id: string; name: string; windowCount: number }[]
@@ -315,6 +318,7 @@ export async function loadInterviewDrawer(
          order by starts_at`)
     ).rows
     let kit: InterviewDrawer['kit'] = null
+    let criteria: InterviewDrawer['criteria'] = []
     if (interview.kitId) {
       const kitRow = await loadKit(db, authz.user.orgId, interview.kitId)
       if (kitRow) {
@@ -322,6 +326,7 @@ export async function loadInterviewDrawer(
           listKitAttributes(db, authz.user.orgId, kitRow.id),
           listKitQuestions(db, authz.user.orgId, kitRow.id),
         ])
+        criteria = attributes.map((attr) => ({ id: attr.id, label: attr.attribute }))
         const names = new Map(attributes.map((attr) => [attr.id, attr.attribute] as const))
         kit = {
           name: kitRow.name,
@@ -360,6 +365,7 @@ export async function loadInterviewDrawer(
       candidate: interview.candidate,
       requisition: interview.requisition,
       kit,
+      criteria,
       slots: slotRows.map((row) => ({
         id: row.id,
         startsAt: row.startsAt.slice(0, 16).replace('T', ' '),
