@@ -326,7 +326,14 @@ export async function pushItSurtaxSaldoInstallments(input: {
     const cents = fromUnits(roundDiv(toUnits(installment), 100n) * 100n);
     factors[leg.key] = cents;
     if (cmp(cents, "0") === 0) continue;
-    pushStatutory(leg.systemKey, "deduction", leg.label, cents, leg.sequence);
+    // Literal keys: the push-coverage guard enumerates call sites statically,
+    // so the leg's key cannot travel through a variable even though both legs
+    // are declared components (regional_surtax/municipal_surtax, deduction).
+    if (leg.key === IT_SALDO_INSTALLMENT_FACTORS.regionale) {
+      pushStatutory("regional_surtax", "deduction", leg.label, cents, leg.sequence);
+    } else {
+      pushStatutory("municipal_surtax", "deduction", leg.label, cents, leg.sequence);
+    }
   }
   return factors;
 }
