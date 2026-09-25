@@ -41,7 +41,7 @@ async function seedPostedEntry(org: { orgId: string; bookId: string; subsidiaryI
 }
 
 async function seedBill(
-  org: { orgId: string; periodId: string },
+  org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; accounts: Record<string, string> },
   entryId: string,
   partyId: string,
   number: string,
@@ -51,16 +51,34 @@ async function seedBill(
   opts: { status?: string; open?: string } = {},
 ): Promise<string> {
   const id = randomUUID();
+  const status = opts.status ?? "posted";
   const open = opts.open ?? total;
+  // open_balance is a maintained projection (0100/0338): a fully open bill
+  // gets its own posted entry with an open AP line so the trigger computes
+  // the seeded balance instead of nulling it. Paid/draft bills reuse the
+  // shared stub entry and project to null (closed).
+  let billEntryId = entryId;
+  if (status === "posted" && open === total) {
+    billEntryId = randomUUID();
+    const neg = total.startsWith("-") ? total.slice(1) : `-${total}`;
+    await withBypassContext(() => db.execute(sql`insert into journal_entries
+      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${billEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${billEntryId}, ${docDate}, ${org.periodId}, 'draft', 'manual')`));
+    await withBypassContext(() => db.execute(sql`insert into journal_lines
+      (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+      values (${org.orgId}, ${billEntryId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${total}, 'CAD', ${total}, 1, ${partyId}, true),
+             (${org.orgId}, ${billEntryId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${neg}, 'CAD', ${neg}, 1, null, false)`));
+    await withBypassContext(() => db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${billEntryId}`));
+  }
   await withBypassContext(
     () => db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, document_date, due_date,
          currency, subtotal, tax_total, total, open_balance, party_id,
          posted_entry_id, posting_period_id)
-      values (${id}, ${org.orgId}, 'vendor_bill', ${opts.status ?? "posted"}, ${number}, ${docDate}, ${dueDate},
+      values (${id}, ${org.orgId}, 'vendor_bill', ${status}, ${number}, ${docDate}, ${dueDate},
               'CAD', ${total}, '0', ${total}, ${open}, ${partyId},
-              ${entryId}, ${org.periodId})`),
+              ${billEntryId}, ${org.periodId})`),
   );
   return id;
 }
