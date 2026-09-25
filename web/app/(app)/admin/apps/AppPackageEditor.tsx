@@ -1,7 +1,7 @@
 "use client";
 
 import { nextActionName } from "@/lib/apps/endpoint-names";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -64,6 +64,7 @@ export function AppPackageEditor({
   const upload = useRef<HTMLInputElement>(null);
   const directoryUpload = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState(() => packageSourceFiles(bundle));
+  const filesRef = useRef(files);
   const [selected, setSelected] = useState("manifest.json");
   const [tab, setTab] = useState<string>(initialTab);
   const [reason, setReason] = useState("");
@@ -86,6 +87,10 @@ export function AppPackageEditor({
   const [manifest, setManifest] = useState<AppManifest | undefined>(
     () => parseManifest(bundle.manifest).manifest,
   );
+  const packageSessionKey = `${sourceDraft?.id ?? manifest?.key ?? ""}:${baseVersionId ?? "new"}:${sourceDraft?.contentHash ?? ""}`;
+  const packageSessionRef = useRef(packageSessionKey);
+  useLayoutEffect(() => { filesRef.current = files; }, [files]);
+  useLayoutEffect(() => { packageSessionRef.current = packageSessionKey; }, [packageSessionKey]);
   const [grants, setGrants] = useState<string[]>(
     () =>
       bundle.grantedPermissions ??
@@ -104,6 +109,7 @@ export function AppPackageEditor({
   const selectedFile = files.find((file) => file.path === selected);
   function change(next: AppPackageFile[]) {
     setFiles(next);
+    filesRef.current = next;
     setDirty(true);
     onDirtyChange?.(true);
     setError(null);
@@ -190,6 +196,7 @@ export function AppPackageEditor({
   }
   async function uploadFiles(list: FileList | null, directory = false) {
     if (!list?.length) return;
+    const uploadSession = packageSessionKey;
     try {
       const additions: AppPackageFile[] = [];
       const folder = selected.includes("/")
@@ -201,6 +208,7 @@ export function AppPackageEditor({
         if (!validPackagePath(path)) throw new Error(t("invalidPath"));
         const binary = contentTypeFor(path).binary;
         const bytes = new Uint8Array(await file.arrayBuffer());
+        if (packageSessionRef.current !== uploadSession) return;
         let content = "";
         if (binary) {
           for (const byte of bytes) content += String.fromCharCode(byte);
@@ -212,7 +220,7 @@ export function AppPackageEditor({
         additions.push({ path, content, isBinary: binary });
       }
       const replaced = additions.filter((file) =>
-        files.some((existing) => existing.path === file.path),
+        filesRef.current.some((existing) => existing.path === file.path),
       );
       if (
         replaced.length &&
@@ -223,15 +231,22 @@ export function AppPackageEditor({
         }))
       )
         return;
-      change([
-        ...files.filter(
-          (file) => !additions.some((addition) => addition.path === file.path),
+      if (packageSessionRef.current !== uploadSession) return;
+      const paths = new Set(additions.map((file) => file.path));
+      setFiles((current) => [
+        ...current.filter(
+          (file) => !paths.has(file.path),
         ),
         ...additions,
       ]);
+      setDirty(true);
+      onDirtyChange?.(true);
+      setError(null);
       setSelected(additions[0]!.path);
+      setTab("files");
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("failed"));
+      if (packageSessionRef.current === uploadSession)
+        setError(e instanceof Error ? e.message : t("failed"));
     }
   }
   async function save() {
