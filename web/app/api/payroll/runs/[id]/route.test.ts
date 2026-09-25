@@ -75,6 +75,7 @@ const mockSources = new Map<string, string>([
       // registered ZERO tests rather than failing loudly — which is why the
       // mock-surface guard exists.
       export async function acknowledgePayRunRefusals() { throw new Error('not under test') }
+      export async function attributePayRunEntity() { throw new Error('not under test') }
       export async function discardPayRun(input) {
         state.discardCalls.push(input)
         if (state.discardBehavior === 'committed') {

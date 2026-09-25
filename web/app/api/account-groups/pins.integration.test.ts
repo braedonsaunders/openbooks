@@ -216,7 +216,9 @@ test(
       };
       const deniedB = await pin(accountB, scopeA);
       assert.equal(deniedB.status, 404);
-      assert.deepEqual(await deniedB.json(), { error: 'not found' });
+      // The pins route names the missing account (both hidden and absent
+      // flow through the same lock arm, so they stay indistinguishable).
+      assert.deepEqual(await deniedB.json(), { error: 'account not found' });
       const deniedShared = await pin(sharedAccount, scopeA);
       assert.equal(deniedShared.status, 403);
       assert.deepEqual(await deniedShared.json(), { error: 'requires unrestricted subsidiary access' });
