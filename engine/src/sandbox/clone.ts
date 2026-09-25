@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withMaintenanceTransaction } from "../platform/db.ts";
+import { db, orgContext, withMaintenanceTransaction } from "../platform/db.ts";
 import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 import { rebaseClonedJsonReferences } from "./json-references.ts";
@@ -378,7 +378,12 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   // copies and invisible to others, and the torn set dies at commit on a
   // deferred FK (or worse, commits FK-consistent but incomplete). The clone
   // only writes sandbox rows, so the pinned snapshot cannot conflict with
-  // concurrent production writers.
+  // concurrent production writers. A refresh already runs inside
+  // inRefreshTransaction's own REPEATABLE READ unit: re-requesting the level
+  // on reuse is refused by name (it cannot apply mid-transaction), so the
+  // level is requested only when opening the outermost transaction here and
+  // the outer unit's snapshot stands otherwise.
+  const joinsOuterSnapshot = !!orgContext.getStore()?.txDb;
   const { cutoff, sourceSettings } = await withMaintenanceTransaction(null, async () => {
     let cutoff: AsOfCutoff | null = null;
     let sourceSettings: Record<string, unknown> | null = null;
@@ -478,7 +483,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           scope: "INSERT of posted/reversed history into closed periods only; UPDATE and DELETE of posted history stay blocked",
         })}::jsonb, null)`);
     return { cutoff, sourceSettings };
-  }, { isolationLevel: "REPEATABLE READ" });
+  }, joinsOuterSnapshot ? {} : { isolationLevel: "REPEATABLE READ" });
 
   return {
     tablesCopied: perTable.length,
