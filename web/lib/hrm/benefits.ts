@@ -353,6 +353,6 @@ export async function loadBenefitsPanel(authz: Authz): Promise<BenefitsPanelData
     pendingLabel: t('overview.benefits.pendingSub'),
     missingCount: cockpit.missingInputs.length,
     missingLabel: t('overview.benefits.missingSub'),
-    queueHref: '/hrm/benefits?segment=enrolments',
+    queueHref: '/hrm/benefits?view=enrolments',
   }
 }
