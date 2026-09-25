@@ -296,6 +296,7 @@
     "overridePlaceholder": "Automático",
     "overrideHint": "Vacío = costo sobre costo automático. Un cambio es un cambio de estimación: el ajuste acumulado (al alza o a la baja) se contabiliza en el período actual en la próxima ejecución.",
     "overrideSaved": "Porcentaje de avance actualizado",
+    "recognitionWarning": "Valor guardado; el reconocimiento no se actualizó por completo",
     "clearOverride": "Quitar ajuste",
     "mapAccountsHint": "Asigne las cuentas de control Facturación pendiente e Ingresos de proyecto en Compañía y Contabilidad para activar el reconocimiento de ingresos de proyectos."
   },

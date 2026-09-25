@@ -296,6 +296,7 @@
     "overridePlaceholder": "自动",
     "overrideHint": "留空 = 自动成本比例法。变更属于会计估计变更：追补金额（增或减）将在下次确认运行时计入当期。",
     "overrideSaved": "完工百分比已更新",
+    "recognitionWarning": "覆盖值已保存；收入确认未完全更新",
     "clearOverride": "清除覆盖",
     "mapAccountsHint": "请在公司与会计中设置未开票应收和项目收入统制科目，以启用项目收入确认。"
   },
