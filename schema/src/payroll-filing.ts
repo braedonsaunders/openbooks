@@ -173,7 +173,9 @@ export const payrollStatutoryRates = pgTable(
 /**
  * Pack-declared employer facts whose legal value changes over time. These
  * are not rates: headcount bands, sector classifications and employer status
- * live here with an effective date and append-only supersession history.
+ * live here with an effective date and append-only supersession history
+ * (a scheduled expiry uses the exclusive supersession boundary documented
+ * on supersededOn below).
  */
 export const payrollEmployerFacts = pgTable(
   "payroll_employer_facts",
@@ -189,6 +191,7 @@ export const payrollEmployerFacts = pgTable(
     /** Decimal canonical text; integer/choice/boolean are also stored as text. */
     factValue: text("fact_value").notNull(),
     valueScale: integer("value_scale"),
+    /** Exclusive successor/expiry boundary; planned expiry is end date + one day. */
     supersededOn: date("superseded_on"),
     changeReason: text("change_reason").notNull(),
     ...auditColumns,

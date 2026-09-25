@@ -419,6 +419,8 @@ const SUB_REGION_ENGINE_CODE: Readonly<Record<string, string>> = {
 export interface UsWithholdingInput {
   levy: ResolvedWithholdingLevy;
   payDate: string;
+  /** Utah only: the Commission's effective-dated employer waiver covers the payroll period. */
+  employerWithholdingWaiver?: boolean;
   /** First day of the payroll period; Utah's tables key to this date. */
   periodStart?: string;
   /** Employer headcount for state-specific statutory thresholds. */
@@ -512,12 +514,26 @@ export interface UsWithholdingResult {
   additionalLines?: { code: string; label: string; tax: string; factors: Record<string, string> }[];
 }
 
+export function utahEmployerWaiverResult(): UsWithholdingResult {
+  return {
+    code: "UT",
+    label: "Utah income tax",
+    tax: "0.0000",
+    factors: { UT_EMPLOYER_WAIVER: "approved", UT_TAX: "0.0000" },
+  };
+}
+
 /**
  * The withholding for ONE resolved levy, or null where the jurisdiction levies
  * no wage income tax.
  */
 export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingResult | null {
   const { levy } = input;
+  // A Commission-approved waiver suppresses Utah withholding entirely: no
+  // wage bases are required and no state engine runs for this levy.
+  if (input.employerWithholdingWaiver === true && levy.level === "region" && levy.region === "UT") {
+    return utahEmployerWaiverResult();
+  }
   const regionalEngine = levy.level === "region" ? requireUsStateWithholding(levy.region) : null;
   const declaredBase = (kind: "income" | "nonPeriodic", fallback: string): string => {
     const key = regionalEngine?.taxableWageBases?.[kind];

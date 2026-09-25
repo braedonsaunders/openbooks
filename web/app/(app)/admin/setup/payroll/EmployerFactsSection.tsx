@@ -16,6 +16,7 @@ interface Fact {
   refusalReason: string
   required: boolean
   effectivePeriod?: 'date' | 'calendar_year'
+  effectiveThroughRequiredFor?: string[]
   scale?: number
   min?: string
   max?: string
@@ -29,6 +30,7 @@ interface Row {
   country: string
   factKey: string
   effectiveFrom: string
+  effectiveThrough: string | null
   factValue: string
   changeReason: string
 }
@@ -44,6 +46,7 @@ export function EmployerFactsSection() {
   const [subsidiaryId, setSubsidiaryId] = useState('')
   const [factKey, setFactKey] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState(today)
+  const [effectiveThrough, setEffectiveThrough] = useState('')
   const [value, setValue] = useState('')
   const [reason, setReason] = useState('')
   const [failure, setFailure] = useState<string | null>(null)
@@ -77,7 +80,7 @@ export function EmployerFactsSection() {
     await saveAction.execute(() => fetchAction('/api/payroll/settings/employer-facts', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ country: selectedCountry, factKey: fact.key, subsidiaryId: selectedSubsidiaryId, effectiveFrom: fact.effectivePeriod === 'calendar_year' ? `${effectiveFrom.slice(0, 4)}-01-01` : effectiveFrom, value, changeReason: reason }),
+        body: JSON.stringify({ country: selectedCountry, factKey: fact.key, subsidiaryId: selectedSubsidiaryId, effectiveFrom: fact.effectivePeriod === 'calendar_year' ? `${effectiveFrom.slice(0, 4)}-01-01` : effectiveFrom, ...(fact.effectiveThroughRequiredFor?.includes(value) && effectiveThrough ? { effectiveThrough } : {}), value, changeReason: reason }),
       }), {
         fallbackMessage: t('saveFailed'),
         onRefused: (error) => setFailure(error.displayMessage(t('saveFailed'))),
@@ -85,6 +88,7 @@ export function EmployerFactsSection() {
           setFailure(null)
           toast.success(t('saved'))
           setValue('')
+          setEffectiveThrough('')
           setReason('')
           void load()
         },
@@ -107,19 +111,19 @@ export function EmployerFactsSection() {
           <div className="space-y-4">
             <div className="space-y-1">
               <Label htmlFor="employer-fact-country">{t('country')}</Label>
-              <Select id="employer-fact-country" value={selectedCountry} onChange={(event) => { setCountry(event.target.value); setFactKey(''); setValue('') }}>
+              <Select id="employer-fact-country" value={selectedCountry} onChange={(event) => { setCountry(event.target.value); setFactKey(''); setValue(''); setEffectiveThrough('') }}>
                 {data.packs.map((entry) => <option key={entry.country} value={entry.country}>{entry.country}</option>)}
               </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="employer-fact-subsidiary">{t('subsidiary')}</Label>
-              <Select id="employer-fact-subsidiary" value={selectedSubsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)}>
+              <Select id="employer-fact-subsidiary" value={selectedSubsidiaryId} onChange={(event) => { setSubsidiaryId(event.target.value); setEffectiveThrough('') }}>
                 {data.subsidiaries.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{entry.country ? ` · ${entry.country}` : ''}</option>)}
               </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="employer-fact-name">{t('fact')}</Label>
-              <Select id="employer-fact-name" value={fact?.key ?? ''} onChange={(event) => { setFactKey(event.target.value); setValue('') }}>
+              <Select id="employer-fact-name" value={fact?.key ?? ''} onChange={(event) => { setFactKey(event.target.value); setValue(''); setEffectiveThrough('') }}>
                 {pack?.facts.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
               </Select>
             </div>
@@ -128,21 +132,27 @@ export function EmployerFactsSection() {
               <Label htmlFor="employer-fact-effective">{t('effectiveFrom')}</Label>
               <Input id="employer-fact-effective" type={fact?.effectivePeriod === 'calendar_year' ? 'number' : 'date'} min={fact?.effectivePeriod === 'calendar_year' ? '2000' : undefined} max={fact?.effectivePeriod === 'calendar_year' ? '2100' : undefined} value={fact?.effectivePeriod === 'calendar_year' ? effectiveFrom.slice(0, 4) : effectiveFrom} onChange={(event) => setEffectiveFrom(fact?.effectivePeriod === 'calendar_year' ? `${event.target.value}-01-01` : event.target.value)} />
             </div>
+            {fact?.effectiveThroughRequiredFor?.includes(value) && (
+              <div className="space-y-1">
+                <Label htmlFor="employer-fact-through">Effective through (inclusive)</Label>
+                <Input id="employer-fact-through" type="date" min={effectiveFrom} value={effectiveThrough} onChange={(event) => setEffectiveThrough(event.target.value)} required />
+              </div>
+            )}
             {fact?.kind === 'choice' ? (
-              <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact.label}</Label><Select id="employer-fact-value" value={value} onChange={(event) => setValue(event.target.value)}><option value="">{t('selectPlaceholder')}</option>{fact.choices?.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</Select></div>
+              <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact.label}</Label><Select id="employer-fact-value" value={value} onChange={(event) => { setValue(event.target.value); setEffectiveThrough('') }}><option value="">{t('selectPlaceholder')}</option>{fact.choices?.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</Select></div>
             ) : fact?.kind === 'boolean' ? (
               <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact.label}</Label><Select id="employer-fact-value" value={value} onChange={(event) => setValue(event.target.value)}><option value="">{t('selectPlaceholder')}</option><option value="true">{t('yes')}</option><option value="false">{t('no')}</option></Select></div>
             ) : (
               <div className="space-y-1"><Label htmlFor="employer-fact-value">{fact?.label}</Label><Input id="employer-fact-value" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value)} placeholder={fact?.kind === 'decimal' ? t('decimalPlaces', { scale: fact.scale ?? 0 }) : t('wholeNumber')} /></div>
             )}
             <div className="space-y-1"><Label htmlFor="employer-fact-reason">{t('reason')}</Label><Input id="employer-fact-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} required /></div>
-            <Button onClick={() => void save()} disabled={saveAction.busy || !fact || !value || !reason.trim() || !selectedSubsidiaryId}>{saveAction.busy ? t('saving') : t('save')}</Button>
+            <Button onClick={() => void save()} disabled={saveAction.busy || !fact || !value || !reason.trim() || !selectedSubsidiaryId || (fact.effectiveThroughRequiredFor?.includes(value) === true && (!effectiveThrough || effectiveThrough < effectiveFrom))}>{saveAction.busy ? t('saving') : t('save')}</Button>
           </div>
           <div className="space-y-3" aria-label={t('currentFacts', { name: entity?.name ?? t('employerFallback') })}>
             <h3 className="font-medium">{t('currentValues', { name: entityName })}</h3>
             {visibleRows.length === 0 ? <p className="text-sm text-muted-foreground">{t('noRows')}</p> : visibleRows.map((row) => {
               const declaration = pack?.facts.find((entry) => entry.key === row.factKey)
-              return <article key={row.id} className="rounded-md border p-3"><h4 className="font-medium">{declaration?.label ?? row.factKey}</h4><p>{row.factValue} · {t('effectiveOn', { date: row.effectiveFrom })}</p><p className="text-sm text-muted-foreground">{row.changeReason}</p></article>
+              return <article key={row.id} className="rounded-md border p-3"><h4 className="font-medium">{declaration?.label ?? row.factKey}</h4><p>{row.factValue} · {t('effectiveOn', { date: row.effectiveFrom })}{row.effectiveThrough ? ` – ${row.effectiveThrough}` : ''}</p><p className="text-sm text-muted-foreground">{row.changeReason}</p></article>
             })}
           </div>
         </div>

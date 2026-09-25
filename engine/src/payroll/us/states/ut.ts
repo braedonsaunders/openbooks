@@ -351,6 +351,7 @@ export const UT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   UT_EDITION: "Utah edition in force",
   UT_RATE: "Utah withholding rate",
   UT_EXEMPT: "Exempt from Utah withholding",
+  UT_EMPLOYER_WAIVER: "Utah Commission waiver covers the full payroll period",
   UT_SCHEDULE: "Utah schedule (filing status)",
   UT_PERIOD: "Utah payroll period",
   UT_WAGES: "Utah wages subject to federal withholding",

@@ -13,6 +13,8 @@ export interface PayrollEmployerFact {
   required: boolean;
   /** Whether the fact changes on any date or only at calendar-year boundaries. */
   effectivePeriod?: "date" | "calendar_year";
+  /** These values require an inclusive end date, stored via the supersession boundary. */
+  effectiveThroughRequiredFor?: readonly string[];
   /** Decimal precision for decimal facts; required only for that kind. */
   scale?: number;
   min?: string;

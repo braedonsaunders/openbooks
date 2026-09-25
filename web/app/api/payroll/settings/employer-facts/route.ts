@@ -51,6 +51,7 @@ export async function PUT(req: Request) {
   const factKey = typeof body.factKey === "string" ? body.factKey : "";
   const subsidiaryId = typeof body.subsidiaryId === "string" ? body.subsidiaryId : "";
   const effectiveFrom = typeof body.effectiveFrom === "string" ? body.effectiveFrom : "";
+  const effectiveThrough = typeof body.effectiveThrough === "string" ? body.effectiveThrough : null;
   const value = typeof body.value === "string" ? body.value : "";
   const changeReason = typeof body.changeReason === "string" ? body.changeReason : "";
   if (!country || !factKey || !effectiveFrom || !value || !changeReason || !subsidiaryId) {
@@ -82,6 +83,7 @@ export async function PUT(req: Request) {
       country,
       factKey,
       effectiveFrom,
+      effectiveThrough,
       value,
       changeReason,
     });
