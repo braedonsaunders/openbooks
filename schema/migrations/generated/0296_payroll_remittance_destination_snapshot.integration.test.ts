@@ -87,7 +87,7 @@ async function runMigration(): Promise<void> {
     true,
     "0296 declares the no-transaction runner path",
   );
-  const client = await connectMigrationClient();
+  const client = await connectMigrationClient({ bypass: true });
   try {
     await executeMigrationBody(client, content, {
       transactional: false,
