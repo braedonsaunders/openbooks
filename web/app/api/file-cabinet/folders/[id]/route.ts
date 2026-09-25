@@ -89,6 +89,16 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     ? await purgeFolder(gate.user.orgId, id, audit)
     : await deleteFolder(gate.user.orgId, id, audit)
   if (!result.ok) {
+    if (result.reason === 'retained') {
+      return NextResponse.json(
+        {
+          error: 'retained_evidence_cannot_be_trashed',
+          detail:
+            'this folder contains retained evidence for a posted or active record, a live payment artifact, or a lifecycle-governed HR document; release those files through their owning records first',
+        },
+        { status: 409 },
+      )
+    }
     const status =
       result.reason === 'not found'
         ? 404
