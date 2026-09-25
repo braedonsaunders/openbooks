@@ -55,7 +55,7 @@ export function SessionActionsShell({ detail }: { detail: CalibrationDetail }) {
   )
 }
 
-export function SessionDialogShell({ create }: { create: NonNullable<CalibrationDetail['create']> }) {
+export function SessionDialogShell({ create }: { create: NonNullable<NonNullable<ContinuousData['calibration']>['create']> }) {
   return (
     <SessionCreateForm
       cycles={create.cycles}
