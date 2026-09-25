@@ -112,7 +112,13 @@ test("property workspace snapshot does not tear across a concurrent rehome", asy
         client.release();
       }
     };
-    const seen = await withBypass(() => withScopeSnapshot(fx.orgId, async () => {
+    // No withBypass wrapper: withScopeSnapshot opens its own REPEATABLE READ
+    // tenant transaction, and nesting it inside a bypass unit would
+    // silently join that unit's READ COMMITTED transaction instead (the
+    // snapshot reads would then see the concurrent rehome). The reads below
+    // carry explicit org filters and the snapshot sets its own tenant
+    // context, so no bypass is needed.
+    const seen = await withScopeSnapshot(fx.orgId, async () => {
       const first = (await db.execute<{ id: string }>(sql`
         select id from managed_properties where org_id = ${fx.orgId}
           and subsidiary_id = ${fx.subA} order by id`)).rows.map((row) => row.id);
@@ -121,7 +127,7 @@ test("property workspace snapshot does not tear across a concurrent rehome", asy
         select id from managed_properties where org_id = ${fx.orgId}
           and subsidiary_id = ${fx.subA} order by id`)).rows.map((row) => row.id);
       return { first, second };
-    }));
+    });
     assert.deepEqual(seen.first, [fx.propA]);
     assert.deepEqual(seen.second, [fx.propA], "the snapshot must not see the concurrent rehome");
     // The move did commit: a fresh scoped read no longer sees the property.
