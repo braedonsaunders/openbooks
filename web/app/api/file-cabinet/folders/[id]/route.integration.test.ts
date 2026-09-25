@@ -105,6 +105,41 @@ test('compound folder edits validate and audit as one transaction', async () => 
     `)).rows[0]!
     assert.equal(successAudit.n, 2, 'move and rename evidence commit with the compound edit')
 
+    // An explicit move to the cabinet root publishes to every documents.read
+    // user: a Manager grant on the folder alone must not allow it.
+    const scopedId = randomUUID()
+    await db.execute(sql`
+      insert into folders (id, org_id, parent_folder_id, name, is_system)
+      values (${scopedId}, ${org.orgId}, ${destinationId}, 'Scoped child', false)
+    `)
+    await db.execute(sql`
+      insert into resource_grants (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by)
+      values (${org.orgId}, 'folder', ${scopedId}, 'user', ${actorId}, 'manager', ${actorId})
+    `)
+    state.authz = {
+      user: { id: actorId, orgId: org.orgId },
+      permissions: new Set(['documents.read']),
+      allowedSubsidiaryIds: null,
+    }
+    const rooted = await PATCH(
+      new Request('http://openbooks.test/api/file-cabinet/folders/x', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ parentId: null, name: 'Renamed' }),
+      }),
+      { params: Promise.resolve({ id: scopedId }) },
+    )
+    assert.equal(rooted.status, 403)
+    const stayed = (await db.execute<{ parentId: string | null }>(sql`
+      select parent_folder_id as "parentId" from folders where id = ${scopedId} and org_id = ${org.orgId}
+    `)).rows[0]!
+    assert.equal(stayed.parentId, destinationId, 'a refused root move leaves the folder parented')
+    state.authz = {
+      user: { id: actorId, orgId: org.orgId },
+      permissions: new Set(['*']),
+      allowedSubsidiaryIds: null,
+    }
+
     const cascadeRequired = await PATCH(
       new Request('http://openbooks.test/api/file-cabinet/folders/x', {
         method: 'PATCH',

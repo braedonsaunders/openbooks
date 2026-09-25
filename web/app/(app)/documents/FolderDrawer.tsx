@@ -139,9 +139,13 @@ export function FolderDrawer({
         router.refresh()
       } else if (folder) {
         fallback = tt('folderRenameFailed')
+        const nextParent = parent || null
         const body: Record<string, unknown> = {
           name: name.trim(),
-          parentId: parent || null,
+          // A rename is not a move: omit an unchanged parent so the server
+          // never re-gates the destination — and a parent masked to null by
+          // a foreign private boundary can never pull the folder to the root.
+          ...(nextParent !== (folder.parentId ?? null) ? { parentId: nextParent } : null),
           isPrivate,
         }
         const res = await fetch(`/api/file-cabinet/folders/${folder.id}`, {

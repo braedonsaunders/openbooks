@@ -7,7 +7,7 @@ import {
   purgeFolder,
 } from '../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../lib/list-params'
-import { guardPermission } from '../../../../../lib/authz'
+import { can, guardPermission } from '../../../../../lib/authz'
 import { fileViewer, requireFolderAccess, requireSession } from '../../lib'
 
 export const runtime = 'nodejs'
@@ -50,12 +50,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     isPrivate?: boolean
   } = {}
   if (typeof body.parentId === 'string' || body.parentId === null) {
-    // Moving also needs Editor+ on the destination parent.
-    if (typeof body.parentId === 'string') {
-      const destGate = await requireFolderAccess(gate, body.parentId, 'editor')
-      if (destGate) return destGate
+    // A missing key is "no move". An unchanged value is also no move: compare
+    // against the stored (unmasked) parent, so a pure rename never re-gates
+    // the destination — and a parent the viewer cannot see can never drag a
+    // rename out to the cabinet root.
+    const current = await getFolder(gate.user.orgId, id)
+    if (!current || (body.parentId ?? null) !== current.parentId) {
+      if (typeof body.parentId === 'string') {
+        // Moving also needs Editor+ on the destination parent.
+        const destGate = await requireFolderAccess(gate, body.parentId, 'editor')
+        if (destGate) return destGate
+      } else if (!can(gate, 'documents.manage') && !can(gate, '*')) {
+        // Moving to the cabinet root publishes the subtree to every
+        // documents.read user: the same bar as creating a top-level folder.
+        return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+      }
+      patch.parentId = body.parentId
     }
-    patch.parentId = body.parentId
   }
   if (typeof body.name === 'string' && body.name.trim()) {
     patch.name = body.name.trim()
