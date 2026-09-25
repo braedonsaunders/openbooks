@@ -913,3 +913,11 @@ export async function runScenario(
     controlTieOut, inventoryTieOut, checks, timings, pass,
   };
 }
+
+/** Run the golden checks with the selected tenant's RLS context active. */
+export function runScenarioForOrg(
+  orgId: string,
+  opts: { at: string; gitSha?: string | null; runId?: string | null } = { at: "" },
+): Promise<Checkpoint> {
+  return withOrgContext(orgId, () => runScenario(orgId, opts));
+}
