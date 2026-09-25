@@ -529,20 +529,28 @@ export async function POST(req: Request) {
         }
         // Scope columns are immutable on this path: locate first for the
         // scope decision and lock key, then re-read authoritatively under it.
-        const located = await db.execute<WageScope & { id: string; employeeSubsidiaryId: string | null }>(sql`
+        // The department anchor carries its own subsidiary, exactly as
+        // save-rate resolves it; without it a department rate is 404 to the
+        // restricted actors save-rate admits.
+        const located = await db.execute<WageScope & { id: string; employeeSubsidiaryId: string | null; departmentSubsidiaryId: string | null }>(sql`
           select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
                  r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId",
-                 p.subsidiary_id as "employeeSubsidiaryId"
+                 p.subsidiary_id as "employeeSubsidiaryId", d.subsidiary_id as "departmentSubsidiaryId"
             from labor_cost_rates r
             left join parties p on p.org_id = r.org_id and p.id = r.employee_party_id
+            left join departments d on d.org_id = r.org_id and d.id = r.department_id
            where r.org_id = ${orgId} and r.id = ${body.id}`)
         const row = located.rows[0]
         if (!row) return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
         if (isOrgWideWageScope(row)) {
           const denied = guardUnrestrictedScope(gate)
           if (denied) return { ok: false, response: denied }
+        } else if (row.employeePartyId !== null && row.employeeSubsidiaryId == null) {
+          // A null-subsidiary employee is org-wide on save-rate; end matches it.
+          const denied = guardUnrestrictedScope(gate)
+          if (denied) return { ok: false, response: denied }
         } else {
-          const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? null)
+          const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? row.departmentSubsidiaryId ?? null)
           if (denied) return { ok: false, response: denied }
         }
 
@@ -586,20 +594,26 @@ export async function POST(req: Request) {
         if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
           return { ok: false, response: projectsDisabledResponse() }
         }
-        const located = await db.execute<WageScope & { id: string; employeeSubsidiaryId: string | null }>(sql`
+        // Same anchor resolution as end-rate: department subsidiary included,
+        // null-subsidiary employees treated org-wide as on save-rate.
+        const located = await db.execute<WageScope & { id: string; employeeSubsidiaryId: string | null; departmentSubsidiaryId: string | null }>(sql`
           select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
                  r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId",
-                 p.subsidiary_id as "employeeSubsidiaryId"
+                 p.subsidiary_id as "employeeSubsidiaryId", d.subsidiary_id as "departmentSubsidiaryId"
             from labor_cost_rates r
             left join parties p on p.org_id = r.org_id and p.id = r.employee_party_id
+            left join departments d on d.org_id = r.org_id and d.id = r.department_id
            where r.org_id = ${orgId} and r.id = ${body.id}`)
         const row = located.rows[0]
         if (!row) return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
         if (isOrgWideWageScope(row)) {
           const denied = guardUnrestrictedScope(gate)
           if (denied) return { ok: false, response: denied }
+        } else if (row.employeePartyId !== null && row.employeeSubsidiaryId == null) {
+          const denied = guardUnrestrictedScope(gate)
+          if (denied) return { ok: false, response: denied }
         } else {
-          const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? null)
+          const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? row.departmentSubsidiaryId ?? null)
           if (denied) return { ok: false, response: denied }
         }
 
