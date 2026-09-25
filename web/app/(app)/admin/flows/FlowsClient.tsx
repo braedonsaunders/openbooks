@@ -13,10 +13,11 @@ import { confirmDialog } from '../../../../lib/confirm'
  * from the profiles API) and per-row enable/delete controls.
  */
 
-type ProfileOption = { subjectKind: string; label: string }
+type ProfileOption = { subjectKind: string; label?: string; labelKey?: string }
 
 export function NewFlowButton() {
   const t = useTranslations('admin.flows')
+  const tSubjects = useTranslations('customization.recordTypes')
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -34,6 +35,7 @@ export function NewFlowButton() {
             (d.profiles ?? []).map((p: ProfileOption) => ({
               subjectKind: p.subjectKind,
               label: p.label,
+              labelKey: p.labelKey,
             })),
           ),
         )
@@ -95,7 +97,12 @@ export function NewFlowButton() {
             <Label>{t('new.subject')}</Label>
             <SearchSelect
               value={subjectKind}
-              options={(profiles ?? []).map((p) => ({ value: p.subjectKind, label: p.label }))}
+              options={(profiles ?? []).map((p) => ({
+                value: p.subjectKind,
+                label: p.labelKey && tSubjects.has(p.labelKey as never)
+                  ? tSubjects(p.labelKey as never)
+                  : p.label ?? p.subjectKind,
+              }))}
               placeholder={t('new.subjectPlaceholder')}
               loading={profiles === null}
               onChange={setSubjectKind}

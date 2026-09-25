@@ -155,6 +155,7 @@ export function documentSubjectProfile(kind: string): FlowSubjectProfile {
   return {
     subjectKind: kind,
     label: titleize(kind),
+    labelKey: kind,
     triggers: [
       "on_create",
       "on_update",

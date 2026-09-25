@@ -49,6 +49,8 @@ export type FlowSubjectProfile = {
   subjectKind: string
   /** Human label used in lint messages + canvas chrome. */
   label: string
+  /** Stable message key for localized UI labels, when the subject has one. */
+  labelKey?: string
   /** Trigger kinds the subject dispatches (its lifecycle hook sites). */
   triggers: TriggerKind[]
   /** Action kinds the subject's adapter can execute. */
