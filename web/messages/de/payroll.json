@@ -1161,7 +1161,8 @@
       "comment": "Kommentar",
       "notIncluded": "Nicht in der Datei enthalten",
       "included": "In der Datei enthalten — Grund {code}",
-      "commentRequired": "Für diesen Grundcode ist ein Kommentar erforderlich."
+      "commentRequired": "Für diesen Grundcode ist ein Kommentar erforderlich.",
+      "selectionLimit": "Wählen Sie für diese Meldung höchstens {maxSelection} Mitarbeiter aus"
     },
     "lifecycle": {
       "title": "Meldungsstatus",

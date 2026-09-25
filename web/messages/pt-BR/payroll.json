@@ -1161,7 +1161,8 @@
       "comment": "Comentário",
       "notIncluded": "Fora do arquivo",
       "included": "No arquivo — motivo {code}",
-      "commentRequired": "Comentário obrigatório para este código de motivo."
+      "commentRequired": "Comentário obrigatório para este código de motivo.",
+      "selectionLimit": "Não selecione mais de {maxSelection} funcionários para esta declaração"
     },
     "lifecycle": {
       "title": "Situação da declaração",

@@ -1161,7 +1161,8 @@
       "comment": "Comment",
       "notIncluded": "Not included in the file",
       "included": "Included in the file — reason {code}",
-      "commentRequired": "A comment is required for this reason code."
+      "commentRequired": "A comment is required for this reason code.",
+      "selectionLimit": "Select no more than {maxSelection} employees for this filing"
     },
     "lifecycle": {
       "title": "Filing status",
