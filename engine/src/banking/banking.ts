@@ -1678,6 +1678,7 @@ async function loadReconciliation(
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.id = ${reconciliationId} and r.org_id = ${orgId}
        ${subsidiaryScopeSql(scope, sql`a.subsidiary_id`)}
+     for share of a
   `));
   const recon = r.rows[0];
   // Missing and out-of-scope sessions refuse identically (uniform not-found).
