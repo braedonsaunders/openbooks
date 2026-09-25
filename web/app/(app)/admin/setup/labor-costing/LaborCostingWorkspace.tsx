@@ -921,9 +921,9 @@ function RateDrawer({
         departmentId: scope === 'department' ? departmentId : null,
         subsidiaryId: scope === 'subsidiary' ? subsidiaryId : null,
         currency,
-        rate: Number(rate),
+        rate,
         basis,
-        annualHours: Number(annualHours) || defaultAnnualHours,
+        annualHours: annualHours || String(defaultAnnualHours),
         effectiveFrom,
         notes: notes.trim() || null,
       })
