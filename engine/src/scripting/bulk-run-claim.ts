@@ -11,7 +11,10 @@ import { db } from "../platform/db.ts";
  *
  * Lifecycle per client key:
  *   claimed    — this caller owns the run; enqueue (or run inline) now.
- *   inflight   — a rival owns it; the route answers 409 instead of running.
+ *   inflight   — a rival owns it; the route answers 409 instead of running,
+ *                unless the queue proves the job failed without starting,
+ *                in which case the claim is released for one retry via
+ *                releaseAbandonedBulkRunKey.
  *   completed  — the run finished; the stored response is replayed, nothing
  *                runs again. The worker also checks this before running, so
  *                a redelivered or ambiguous-enqueue duplicate reconciles
@@ -55,6 +58,42 @@ export type BulkRunClaim =
   | { status: "inflight" }
   | { status: "completed"; response: unknown }
   | { status: "mismatched" };
+
+/**
+ * Release a stranded in-flight claim so the intent can be retried. The
+ * caller must first prove, from the queue's own record, that the
+ * deterministic job failed without ever starting (BullMQ processedOn
+ * unset): a job that may have executed keeps its claim, because bulk
+ * journal namespaces are per-run and a retry would double-post. Deletes
+ * only the observed abandoned row while it is still incomplete — a rival's
+ * fresh claim never matches — so concurrent recoveries serialize on the
+ * row. Returns true when this call released the claim.
+ */
+export async function releaseAbandonedBulkRunKey(args: {
+  orgId: string;
+  actorId: string;
+  scriptId: string;
+  key: string;
+}): Promise<boolean> {
+  const hash = requestHash(args.scriptId);
+  const rival = (await db.execute<{ id: string }>(sql`
+    select id
+      from application_idempotency_keys
+     where org_id = ${args.orgId} and actor_id = ${args.actorId}
+       and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
+       and idempotency_key = ${args.key}
+       and request_hash = ${hash}
+       and completed_at is null
+  `)).rows[0];
+  if (!rival) return false;
+  const deleted = (await db.execute<{ id: string }>(sql`
+    delete from application_idempotency_keys
+     where id = ${rival.id}
+       and completed_at is null
+    returning id
+  `));
+  return (deleted.rows?.length ?? 0) > 0;
+}
 
 /**
  * Insert the run claim, or reconcile against the rival's row. Insert and
