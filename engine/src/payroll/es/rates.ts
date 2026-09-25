@@ -121,6 +121,11 @@
  *   5.101,20 / 3 … 1.435,20 5.101,20 / 4 … 1.424,40 5.101,20 / 5 …
  *   1.424,40 5.101,20 / 6 … 1.424,40 5.101,20 / 7 … 1.424,40 5.101,20";
  *   grupos 8–11 (€/día): "47,48 170,04" for all four.
+ * - Tiempo parcial (arts. 38–39): contribution on the remuneration for the
+ *   hours worked (art. 38.1–2); the monthly CC minimum is hours actually
+ *   worked × the grupo's hourly minimum (art. 39.2), capped by the general
+ *   grupo maxima (art. 38.2 Tercera). Hourly minima (€/hora): "1 … 11,98 /
+ *   2 … 9,94 / 3 … 8,65 / 4–11 … 8,58".
  * - Contingencias comunes (art. 4.a): "el 28,30 por ciento, del que el
  *   23,60 por ciento será a cargo de la empresa y el 4,70 por ciento, a
  *   cargo de la persona trabajadora".
@@ -312,6 +317,25 @@ export const ES_GRUPOS_2026: readonly EsGrupoCotizacion[] = [
   { grupo: 9, regimen: "diaria", minima: "47.48", maxima: "170.04" },
   { grupo: 10, regimen: "diaria", minima: "47.48", maxima: "170.04" },
   { grupo: 11, regimen: "diaria", minima: "47.48", maxima: "170.04" },
+];
+
+/**
+ * Base mínima por hora by grupo for part-time contracts (art. 39.1 Orden
+ * PJC/297/2026, €/hora). The monthly minimum is hours actually worked times
+ * the grupo's hourly minimum (art. 39.2).
+ */
+export const ES_BASE_MINIMA_HORA_2026: readonly { grupo: number; minimaHora: string }[] = [
+  { grupo: 1, minimaHora: "11.98" },
+  { grupo: 2, minimaHora: "9.94" },
+  { grupo: 3, minimaHora: "8.65" },
+  { grupo: 4, minimaHora: "8.58" },
+  { grupo: 5, minimaHora: "8.58" },
+  { grupo: 6, minimaHora: "8.58" },
+  { grupo: 7, minimaHora: "8.58" },
+  { grupo: 8, minimaHora: "8.58" },
+  { grupo: 9, minimaHora: "8.58" },
+  { grupo: 10, minimaHora: "8.58" },
+  { grupo: 11, minimaHora: "8.58" },
 ];
 
 /** Tope máximo mensual Régimen General (art. 2.1). */

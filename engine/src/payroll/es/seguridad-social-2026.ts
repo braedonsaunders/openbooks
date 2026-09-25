@@ -7,7 +7,9 @@
  * tranches above the tope máximo, and the horas-extra adicionales. AT/EP is
  * rated by activity (tarifa de primas, DA 61ª LGSS) so its rate is
  * tenant-entered, never transcribed: pass `atEpRate` to compute the employer
- * line from it, or omit it and the line is absent (not zero).
+ * line from it, or omit it and the line is absent (not zero). Part-time
+ * contracts (arts. 38–39) pass `horasTiempoParcial` and price the hourly
+ * floor; without it the full-period grupo minimum applies.
  *
  * Money discipline: decimal strings in, bigint 1e4 units inside (money.ts),
  * never floats. Each cuota rounds half-up to the cent — ENGINE-STATED, not
@@ -19,6 +21,7 @@
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
+  ES_BASE_MINIMA_HORA_2026,
   ES_GRUPOS_2026,
   ES_SOLIDARIDAD_2026,
   ES_TIPOS_2026,
@@ -47,6 +50,14 @@ export interface EsSeguridadSocialInput {
   readonly base: string;
   /** Days in alta with contribution duty (required for grupos 8–11). */
   readonly dias?: number;
+  /**
+   * Part-time art. 38–39 basis: hours actually worked in the month, as a
+   * decimal ("100", "97.5"). Present → the grupo minimum is hours × the
+   * art. 39 hourly minimum (art. 39.2) instead of the full-period floor.
+   * Absent → full-period floor (full-time). Maxima are unchanged either way
+   * (art. 38.2 Tercera: the general grupo maxima).
+   */
+  readonly horasTiempoParcial?: string;
   /** Temporal contract → 8,30% desempleo; default indefinido 7,05%. */
   readonly contratoTemporal?: boolean;
   /** Monthly gross for the solidaridad tranches (defaults to the base). */
@@ -120,7 +131,12 @@ export function calculateEsSeguridadSocial2026(
   }
   if (base < 0n) fail(`base must be non-negative, got "${input.base}"`);
   const mensual = diaria ? base * BigInt(dias) : base;
-  const minima = U(grupo!.minima) * BigInt(dias);
+  // Full-period floor, replaced below by the art. 39 hourly floor when the
+  // part-time hours basis is supplied. Maxima never move (art. 38.2 Tercera).
+  let minima = U(grupo!.minima) * BigInt(dias);
+  if (input.horasTiempoParcial !== undefined) {
+    minima = partTimeMinima(input.grupo, input.horasTiempoParcial);
+  }
   let maxima = U(grupo!.maxima) * BigInt(dias);
   const tope = U(ES_TOPE_MAXIMO_2026);
   if (maxima > tope) maxima = tope;
@@ -216,6 +232,33 @@ export function calculateEsSeguridadSocial2026(
     trabajadorTotal: D(trabajadorTotal),
     empresaTotal: D(empresaTotal),
   };
+}
+
+/**
+ * Art. 39.2 monthly floor for a part-time contract: hours actually worked
+ * times the grupo's art. 39.1 hourly minimum, exact to the unit (hours are
+ * decimal, so the product rounds half-up once — the module's cuota rule).
+ * A month holds at most 744 hours; anything above is a data error, never a
+ * longer month. Zero hours is a floor of zero, not a refusal — the base
+ * itself still prices.
+ */
+function partTimeMinima(grupo: number, horasRaw: string): bigint {
+  let horas: bigint;
+  try {
+    horas = U(horasRaw);
+  } catch {
+    fail(`horasTiempoParcial is not a decimal hour count: "${horasRaw}"`);
+  }
+  if (horas < 0n) fail(`horasTiempoParcial must be non-negative, got "${horasRaw}"`);
+  if (horas > U("744")) {
+    fail(
+      `horasTiempoParcial "${horasRaw}" exceeds the 744 hours a month can hold — `
+      + "enter the hours actually worked in this month, not an annual or contract total",
+    );
+  }
+  const fila = ES_BASE_MINIMA_HORA_2026.find((entry) => entry.grupo === grupo);
+  if (!fila) fail(`grupo de cotización ${grupo} has no art. 39 hourly minimum: engine defect`);
+  return roundDiv(horas * U(fila.minimaHora), 10000n);
 }
 
 function parseExtra(value: string | undefined, what: string): bigint {
