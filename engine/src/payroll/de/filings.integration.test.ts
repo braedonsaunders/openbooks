@@ -14,6 +14,7 @@ import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../../platform/db.ts";
+import { sealSecret } from "../../platform/secrets.ts";
 import { add, cmp } from "../../money/money.ts";
 import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
@@ -55,6 +56,7 @@ async function makeEmployee(
   name: string,
   land: string,
   annualSalary: string,
+  idNr: string,
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
@@ -65,9 +67,9 @@ async function makeEmployee(
   await db.execute(sql`
     insert into employee_payroll_profiles
       (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
-       created_by, updated_by)
+       sin_encrypted, sin_last3, created_by, updated_by)
     values (${orgId}, ${id}, ${scheduleId}, 'DE', ${land}, 'salary', true,
-            ${actorId}, ${actorId})`);
+            ${sealSecret(idNr)}, ${idNr.slice(-3)}, ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into labor_cost_rates
       (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from, is_active,
@@ -165,11 +167,8 @@ test(
         values (${scheduleId}, ${org.orgId}, 'DE monthly', 'monthly', 12, '2026-01-31', 0,
                 ${org.subsidiaryId}, true, ${actorId}, ${actorId})`);
 
-      // BY (8% KiSt) Steuerklasse I, no children; NW (9% KiSt)
-      // Steuerklasse III with two Kinderfreibeträge — per-Land, per-employee
-      // facts the certificate must carry, never a national default.
       const maria = await makeEmployee(
-        org.orgId, org.subsidiaryId, actorId, scheduleId, "Maria Muster", "BY", "74400",
+        org.orgId, org.subsidiaryId, actorId, scheduleId, "Maria Muster", "BY", "74400", "12345678901",
       );
       await fileCertificate(org.orgId, maria, actorId, "de_elstam", {
         steuerklasse: "I", kinderfreibetrag_anzahl: "0", konfession: "rk",
@@ -178,7 +177,7 @@ test(
         kinderlosenzuschlag: "true", abschlag_kinder: "0",
       });
       const jan = await makeEmployee(
-        org.orgId, org.subsidiaryId, actorId, scheduleId, "Jan Beispiel", "NW", "60000",
+        org.orgId, org.subsidiaryId, actorId, scheduleId, "Jan Beispiel", "NW", "60000", "23456789012",
       );
       await fileCertificate(org.orgId, jan, actorId, "de_elstam", {
         steuerklasse: "III", kinderfreibetrag_anzahl: "2", konfession: "ev",
@@ -284,9 +283,9 @@ test(
       assert.equal(filing.parseRowId("not-a-row"), null);
       assert.equal(filing.parseRowId(`${maria}:${jan}`), null);
 
-      // The slip renders the BMF Zeilen for a real row and refuses an unknown one.
       const slipData = await filing.slip!.build(org.orgId, 2026, maria);
       const codes = slipData.boxes.map((box) => box.code);
+      assert.ok(slipData.headerFields.some((field) => field.label.includes("IdNr") && field.value === "12345678901"));
       for (const code of ["3", "4", "5", "6", "23a", "25", "26", "27", "22a", "24a", "24c"]) {
         assert.ok(codes.includes(code), `Zeile ${code} renders`);
       }
@@ -294,6 +293,9 @@ test(
         () => filing.slip!.build(org.orgId, 2026, randomUUID()),
         /no 2026 Lohnsteuerbescheinigung matches/,
       );
+      await db.execute(sql`update employee_payroll_profiles set sin_encrypted = null, sin_last3 = null
+        where org_id = ${org.orgId} and employee_party_id = ${maria}`);
+      await assert.rejects(() => lohnsteuerbescheinigungSlips(org.orgId, 2026), /IdNr is missing.*Maria Muster.*EStG §41b/);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

@@ -56,6 +56,7 @@ test("2026 is the only published Ausdruck year; any other year refuses by name",
 function sampleSlip(): DeLohnsteuerbescheinigungSlip {
   return {
     employeePartyId: EMPLOYEE,
+    idNr: "12345678901",
     employeeName: "Maria Muster",
     land: "BY",
     steuerklasse: "I",
@@ -117,7 +118,8 @@ test("the spouse church-tax line prints only bei Konfessionsverschiedenheit", ()
   assert.ok(!codes.includes("7"), "Zeile 7 must be absent when nothing was withheld for a spouse");
 });
 
-test("ELStAM Merkmale print as declared facts, and the IdNr gap names its remedy", () => {
+test("ELStAM Merkmale print as declared facts, including the employee IdNr", () => {
+  // EStG §41b requires the employee's IdNr on the certificate: https://www.gesetze-im-internet.de/estg/__41b.html
   const slip = lohnsteuerbescheinigungSlipData(sampleSlip());
   const headers = new Map(slip.headerFields.map((field) => [field.label, field.value]));
   assert.equal(headers.get("Steuerklasse/Faktor"), "I");
@@ -125,7 +127,7 @@ test("ELStAM Merkmale print as declared facts, and the IdNr gap names its remedy
   assert.equal(headers.get("Beschäftigungsland"), "BY");
   const idNr = headers.get("Steuerliche Identifikationsnummer (IdNr)");
   assert.ok(idNr, "the IdNr header must exist so it cannot be silently empty");
-  assert.ok(/ELSTER/i.test(idNr), `the IdNr gap must name its remedy, got: ${idNr}`);
+  assert.equal(idNr, "12345678901");
   // The scope note states what this printout does NOT cover.
   assert.ok(
     (slip.notes ?? []).some((note) => /Versorgungsbezüge|Progressionsvorbehalt/i.test(note)),
@@ -149,11 +151,7 @@ test("the Faktor prints for Steuerklasse IV Faktorverfahren", () => {
 test("unsupported Zeilen are declared gaps naming the Zeile, never silent", () => {
   assert.ok(LOHNSTEUERBESCHEINIGUNG_GAPS.length > 0);
   for (const gap of LOHNSTEUERBESCHEINIGUNG_GAPS) {
-    // Every gap names its Zeile — except the IdNr gap, which is a header
-    // block, not a Zeile, and names the identifier plus its remedy instead.
-    const namesZeile = /Zeile \d/.test(gap);
-    const namesIdNr = /IdNr/.test(gap) && /ELSTER/.test(gap);
-    assert.ok(namesZeile || namesIdNr, `gap names neither a Zeile nor the IdNr remedy: ${gap}`);
+    assert.ok(/Zeile \d/.test(gap), `gap names no unsupported Zeile: ${gap}`);
   }
   const joined = LOHNSTEUERBESCHEINIGUNG_GAPS.join("\n");
   for (const zeile of ["2", "7", "8", "15", "16", "28"]) {
