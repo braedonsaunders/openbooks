@@ -31,9 +31,11 @@ export function isTemporal(entity: ReportEntity, key: string): boolean {
   return kind === 'date' || kind === 'timestamp'
 }
 
-/** Columns valid as an aggregate target for a given fn (numbers for sum/avg). */
+/** Columns valid as an aggregate target for a given fn (numbers and money
+ * for sum/avg — the engine aggregates money measures with its blending
+ * disclosure; the builder offered only numbers). */
 export function measureColumns(entity: ReportEntity, fn: ReportAggFn) {
-  if (fn === 'sum' || fn === 'avg') return entity.columns.filter((c) => c.kind === 'number')
+  if (fn === 'sum' || fn === 'avg') return entity.columns.filter((c) => c.kind === 'number' || c.kind === 'money')
   return entity.columns.filter((c) => c.kind !== 'uuid')
 }
 
