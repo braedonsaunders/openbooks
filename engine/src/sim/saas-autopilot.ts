@@ -3,6 +3,7 @@ import { db } from "../platform/db.ts";
 import { addDays, dayOfMonth, isMonthEnd } from "./manifest.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { add, cmp, mulPercent, neg } from "../money/money.ts";
+import { parseQuantity } from "../money/brands.ts";
 import { runDueSubscriptions, changeSubscription } from "../billing/subscription-billing.ts";
 import { createObligationsFromInvoice, runRevenueRecognition } from "../revenue/recognition.ts";
 import { runDunningForOrg } from "../receivables/dunning.ts";
@@ -32,6 +33,27 @@ interface SaasResult {
 }
 
 /** Make a subscription invoice collectible so the AR cycle remits against it. */
+/**
+ * Exact integer bump of a stored subscription quantity on the 8dp grid.
+ * parseQuantity refuses scientific notation and non-decimals by name;
+ * the render trims to minimal text, matching the old float toString for
+ * every value the float path rendered exactly.
+ */
+function bumpQuantity(stored: string, bump: number): string {
+  const SCALE8 = 100_000_000n;
+  const canonical = parseQuantity(stored);
+  const negative = canonical.startsWith("-");
+  const [whole = "0", frac = ""] = canonical.replace(/^-/, "").split(".");
+  const magnitude = BigInt(whole) * SCALE8 + BigInt((frac + "00000000").slice(0, 8));
+  let units = (negative ? -magnitude : magnitude) + BigInt(bump) * SCALE8;
+  const sign = units < 0n ? "-" : "";
+  if (units < 0n) units = -units;
+  const digits = units.toString().padStart(9, "0");
+  const wholeOut = digits.slice(0, -8).replace(/^0+(?=\d)/, "");
+  const fracOut = digits.slice(-8).replace(/0+$/, "");
+  return `${sign}${wholeOut}${fracOut ? `.${fracOut}` : ""}`;
+}
+
 async function stampCollectible(world: SimOrg, invoiceId: string, today: string): Promise<void> {
   await db.execute(sql`
     update documents
@@ -115,10 +137,14 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
     const active = (await db.execute<{ id: string; quantity: string }>(sql`
       select id, quantity from subscriptions where org_id = ${world.orgId} and status = 'active' order by id`));
     if (active.rows.length > 0) {
-      // Expansion: bump seats on one subscription.
+      // Expansion: bump seats on one subscription. Exact integer bump on the
+      // 8dp quantity grid (same rendered text as the old float path for every
+      // value the float path rendered exactly); an unreadable stored quantity
+      // throws here and is skipped below, where the old NaN string died in
+      // the subscription validator instead.
       const up = active.rows[seed % active.rows.length]!;
       try {
-        await changeSubscription(up.id, { quantity: (Number(up.quantity) + 1 + (seed % 3)).toString() }, today, undefined, null);
+        await changeSubscription(up.id, { quantity: bumpQuantity(up.quantity, 1 + (seed % 3)) }, today, undefined, null);
         res.changed++;
       } catch (e) { console.error(`[saas ${today}] expansion skipped: ${(e as Error).message}`); }
       // Churn: cancel one subscription a few times a year (when the date hashes to it).
