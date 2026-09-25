@@ -360,7 +360,7 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         // required inputs, so without a fixture the contract harness
         // measures zod rather than the tool.
         hrm_explain_pay: { employmentId: randomUUID() },
-        payroll_anomalies: { action: "list" },
+        payroll_anomalies: { action: "scan", periodFrom: "2026-07-01", periodTo: "2026-07-31" },
         ai_draft: { kind: "job_description", subjectId: randomUUID() },
         nl_report: {
           action: "preview",

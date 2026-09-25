@@ -52,21 +52,21 @@ test("custom ledger reports default to the primary book and keep explicit cross-
   const scratch = await withBypass(() => createScratchOrg());
   const taxBookId = randomUUID();
   try {
-    // No first-row fallback: zero or several active primaries throw. Runs on
-    // the pristine org (before postings) because the ledger itself refuses
-    // primary reassignment once journal history exists. Writes and reads
-    // alternate as separate top-level contexts so every read observes
-    // committed state.
+    // No first-row fallback: zero active primaries throw, and a second
+    // primary is refused at the write boundary, so the several-primaries
+    // state is unconstructable. Runs on the pristine org; writes and reads
+    // alternate so every read observes committed state.
     const unscopedPlan: ReportCustomQuery = { entity: "ledger_lines", mode: "rows", columns: ["amount"] };
     const resolveDefault = () =>
       withOrg(scratch.orgId, () => resolveCustomReportBookScope(scratch.orgId, unscopedPlan));
     assert.deepEqual(await resolveDefault(), [scratch.bookId]);
     const extraPrimary = randomUUID();
-    await withBypass(() => db.execute(sql`
-      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-      values (${extraPrimary}, ${scratch.orgId}, 'ALT', 'Alternate', true, true, true)`));
-    await assert.rejects(resolveDefault(), /exactly one active primary/);
-    await withBypass(() => db.execute(sql`delete from accounting_books where id = ${extraPrimary}`));
+    await assert.rejects(
+      withBypass(() => db.execute(sql`
+        insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+        values (${extraPrimary}, ${scratch.orgId}, 'ALT', 'Alternate', true, true, true)`)),
+      (error: unknown) => /one_primary_per_org/.test(String((error as { cause?: unknown })?.cause ?? error)),
+    );
     await withBypass(() => db.execute(sql`
       update accounting_books set is_primary = false where org_id = ${scratch.orgId}`));
     await assert.rejects(resolveDefault(), /exactly one active primary/);
