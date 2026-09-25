@@ -9,7 +9,7 @@ import {
   orgYearEndFilings,
 } from "./yearend.ts";
 import { payrollFilingYearOptions } from "./packs.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * The year-end picker must offer the tax year of any posted run — even when
@@ -116,10 +116,11 @@ async function seedAuCommittedRun(): Promise<{ orgId: string }> {
   await db.execute(sql`
     insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
     values (${org.orgId}, ${employeeId}, '2024-01-01', true, ${actorId}, ${actorId})`);
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country,
                                            province, pay_basis, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'AU', 'NSW', 'salary', true,
+    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'AU', 'NSW', 'salary', true,
             ${actorId}, ${actorId})`);
   const documentId = randomUUID();
   await db.execute(sql`
@@ -133,10 +134,10 @@ async function seedAuCommittedRun(): Promise<{ orgId: string }> {
     values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-09-01', '2026-09-15', '2026-09-15',
             2027, 'committed', now(), ${actorId}, ${actorId})`);
   await db.execute(sql`
-    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                            periods_per_year, pay_date, tax_year, country, country_source,
                            currency_code, gross, net_pay, created_by, updated_by)
-    values (${randomUUID()}, ${org.orgId}, ${documentId}, ${employeeId}, 'NSW',
+    values (${randomUUID()}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'NSW',
             12, '2026-09-15', 2027, 'AU', 'calculation',
             'AUD', '9000.0000', '7000.0000', ${actorId}, ${actorId})`);
   return { orgId: org.orgId };

@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { resolveStatutoryHolidayPay } from "./holidays.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /** End-to-end coverage for paid-leave evidence and effective-dated employer facts. */
 
@@ -46,6 +46,7 @@ async function seedPaidVacationBeforeCanadaDay(options: {
   await db.execute(sql`
     insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
     values (${org.orgId}, ${employeeId}, '2024-01-01', true, ${actorId}, ${actorId})`);
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
 
   const component = async (code: string, systemKey: string) => {
     const id = randomUUID();
@@ -76,10 +77,10 @@ async function seedPaidVacationBeforeCanadaDay(options: {
               2026, 'committed', now(), ${actorId}, ${actorId})`);
     const stubId = randomUUID();
     await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
                              periods_per_year, pay_date, tax_year, currency_code, gross,
                              created_by, updated_by)
-      values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, 'BC', 26, ${payDate}, 2026,
+      values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'BC', 26, ${payDate}, 2026,
               'CAD', ${periodStart === "2026-05-25" ? "1000.00" : "2000.00"}, ${actorId}, ${actorId})`);
     const insertLine = (amount: string, from: string | null, to: string | null) => db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount,
@@ -88,7 +89,12 @@ async function seedPaidVacationBeforeCanadaDay(options: {
               null, ${amount}, ${from}, ${to}, 40, ${actorId}, ${actorId})`);
     if (periodStart === "2026-05-25") {
       await insertLine("100.00", "2026-05-25", "2026-05-31");
-      await insertLine("900.00", "2026-06-01", "2026-06-07");
+      // Day-resolved like the engine's own producers emit: the $900 June
+      // week counts its 5 weekdays as earned days in the lookback.
+      for (const [day, amount] of [["2026-06-01", "180.00"], ["2026-06-02", "180.00"],
+           ["2026-06-03", "180.00"], ["2026-06-04", "180.00"], ["2026-06-05", "180.00"]]) {
+        await insertLine(amount, day, day);
+      }
     } else await insertLine("2000.00", null, null);
     return documentId;
   };
@@ -163,8 +169,9 @@ test(
       const lines = await resolveStatutoryHolidayPay(db, holidayInput(fx));
       const holidayPay = lines.find((line) => line.componentId === fx.holidayComponentId);
       assert.ok(holidayPay, "Canada Day is paid");
-      // $900 of the boundary stub is in the lookback; BC s. 45(1) yields $2,900 ÷ 15 scheduled weekdays.
-      assert.equal(holidayPay.amount, "193.3333");
+      // $900 of the boundary stub is in the lookback; BC s. 45(1) yields $2,900 ÷ 15 scheduled weekdays,
+      // rounded once at cents like every earning line.
+      assert.equal(holidayPay.amount, "193.3300");
       assert.match(holidayPay.basis, /÷ 15 days worked or earned wages/);
       assert.equal(holidayPay.holidayDate, "2026-07-01");
       // Not worked, so no premium line.
@@ -192,7 +199,9 @@ test(
         ...holidayInput(fx), country: "CA", subsidiaryId: fx.subsidiaryId,
         jurisdiction: "CA-ON", absentWithoutConsent: false,
       });
-      assert.equal(ontario.find((line) => line.componentId === fx.holidayComponentId)?.amount, "200.0000");
+      // ESA s. 24(1)(a): regular wages (none here) plus vacation payable for
+      // the four work weeks before the holiday week — $2,900 ÷ 20.
+      assert.equal(ontario.find((line) => line.componentId === fx.holidayComponentId)?.amount, "145.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

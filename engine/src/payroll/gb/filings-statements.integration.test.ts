@@ -31,6 +31,7 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
+import { seedGbLevyAllowanceFixture, seedHiredEmployee } from "../filing-test-fixtures.ts";
 import { gbP45Leavers, gbP60Slips, gbTaxYearBounds } from "../yearend.ts";
 import { gbPackFilings } from "./filings.ts";
 import {
@@ -65,26 +66,12 @@ async function makeEmployee(
   name: string,
   nation: string,
 ): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (id, org_id, party_id, employee_number)
-    values (${randomUUID()}, ${orgId}, ${id}, ${`GB-${name}`})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
-       created_by, updated_by)
-    values (${orgId}, ${id}, ${scheduleId}, 'GB', ${nation}, 'salary', true,
-            ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into labor_cost_rates
-      (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from, is_active,
-       created_by, updated_by)
-    values (${orgId}, ${id}, 'GBP', '36000', 'year', '2080', '2026-01-01', true,
-            ${actorId}, ${actorId})`);
-  return id;
+  const { employeeId } = await seedHiredEmployee(orgId, actorId, {
+    scheduleId, subsidiaryId, name, country: "GB", province: nation, payBasis: "salary",
+    currency: "GBP", rate: "36000", rateBasis: "year", annualHours: "2080",
+    partySubsidiaryId: subsidiaryId, employeeNumber: `GB-${name}`,
+  });
+  return employeeId;
 }
 
 async function fileCertificate(
@@ -170,6 +157,8 @@ test(
         update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts}',
           jsonb_build_object('payrollDeductions', ${deductionsId}::text)) where id = ${org.orgId}`);
       await seedPayrollComponents(org.orgId, actorId, "GB");
+      // The Apprenticeship Levy leg refuses by name without the allowance.
+      await seedGbLevyAllowanceFixture(org.orgId, actorId, org.subsidiaryId);
       // Statutory slots declare no liabilityAccountRole, so seeding alone leaves
       // every deduction unmapped and run-commit refuses the run. Map them all to
       // the payroll-deductions control account, as the IT settlement fixture does.
@@ -194,9 +183,16 @@ test(
       const amy = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Stayer", "ENG");
       const hamish = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Hamish Stayer", "SCT");
       const larry = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Larry Leaver", "ENG");
-      await fileCertificate(org.orgId, amy, actorId, "gb_nic_category", { category_letter: "A" });
-      await fileCertificate(org.orgId, hamish, actorId, "gb_nic_category", { category_letter: "A" });
-      await fileCertificate(org.orgId, larry, actorId, "gb_nic_category", { category_letter: "A" });
+      await fileCertificate(org.orgId, amy, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
+      await fileCertificate(org.orgId, hamish, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
+      // Outside automatic-enrolment age: no pension contributions price here.
+      for (const employee of [amy, hamish, larry]) {
+        await fileCertificate(org.orgId, employee, actorId, "gb_workplace_pension", {
+          age_band: "under_16_or_other_exclusion", worker_status: "noneligible_jobholder",
+          enrolment_status: "not_enrolled",
+        });
+      }
+      await fileCertificate(org.orgId, larry, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
       await fileCertificate(org.orgId, amy, actorId, "gb_tax_code_notice", { tax_code: "1257L" });
       await fileCertificate(org.orgId, amy, actorId, "gb_starter_checklist", {
         starter_declaration: "A", student_loan_plan: "plan_2", student_loan_postgraduate: "true",

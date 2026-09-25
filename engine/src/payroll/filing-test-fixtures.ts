@@ -6,6 +6,8 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
+import { setPackSlotAccount } from "./packs.ts";
 
 export interface AdoptionFixture {
   orgId: string;
@@ -26,6 +28,167 @@ export async function seedOntarioEhtFixture(orgId: string, actorId: string, annu
             ${JSON.stringify({ rate: "1.95", annualExemption })}::jsonb,
             ${actorId}, ${actorId})
   `);
+}
+
+/** Standalone GB legal employer holding the whole £15,000 Apprenticeship Levy allowance. */
+export async function seedGbLevyAllowanceFixture(
+  orgId: string, actorId: string, subsidiaryId: string,
+): Promise<void> {
+  await upsertPayrollEmployerFact({ orgId, actorId, subsidiaryId, country: "GB",
+    factKey: "gb_apprenticeship_levy_allowance", effectiveFrom: "2026-04-06",
+    value: "15000.00", changeReason: "test employer holds the whole allowance" });
+}
+
+/** Ten-strong ordinary-sector FR employer under the mainland TA regime, plus an explicit zero AT/MP rate. */
+export async function seedFrRecapEmployerFixture(
+  orgId: string, actorId: string, subsidiaryId: string,
+): Promise<void> {
+  const fact = (factKey: string, value: string) => upsertPayrollEmployerFact({ orgId, actorId,
+    subsidiaryId, country: "FR", factKey, effectiveFrom: "2026-01-01", value,
+    changeReason: "recap fixture classifies the test employer" });
+  await fact("effectif_moyen_annuel", "10.00");
+  await fact("fr_ags_employer_type", "ordinary");
+  await fact("fr_apprentissage_regime", "droit_commun");
+  await db.execute(sql`
+    insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                         rate_values, created_by, updated_by)
+    values (${orgId}, 'FR', 'fr_atmp', 'FR', 2026, '{"taux": "0.0000"}',
+            ${actorId}, ${actorId})`);
+}
+
+/** 35-hour week per employee: RGDU adjusts the SMIC to contractual hours. */
+export async function seedFullTimeWorkScheduleFixture(
+  orgId: string, actorId: string, employeeId: string,
+): Promise<void> {
+  const workScheduleId = randomUUID();
+  await db.execute(sql`
+    insert into work_schedules (id, org_id, name, employee_party_id, pattern, cycle_days,
+                                cycle_anchor, effective_from, is_active, created_by, updated_by)
+    values (${workScheduleId}, ${orgId}, 'Temps plein', ${employeeId}, 'cycle', 7, '2026-01-05',
+            '2026-01-01', true, ${actorId}, ${actorId})`);
+  await db.execute(sql`
+    insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by)
+    values (${orgId}, ${workScheduleId}, 1, '7', ${actorId}, ${actorId}),
+           (${orgId}, ${workScheduleId}, 2, '7', ${actorId}, ${actorId}),
+           (${orgId}, ${workScheduleId}, 3, '7', ${actorId}, ${actorId}),
+           (${orgId}, ${workScheduleId}, 4, '7', ${actorId}, ${actorId}),
+           (${orgId}, ${workScheduleId}, 5, '7', ${actorId}, ${actorId})`);
+}
+
+/**
+ * Canonical test hire: parties row, minimal role, HRM employment, labor
+ * rate, payroll profile, and optional approved time entries. Replaces the
+ * per-file hire closures that each hand-rolled the same five inserts and
+ * drifted apart (most quietly dropped the employment link 0374 requires).
+ * Every field is explicit — no country or rate defaults to inherit.
+ */
+export interface HiredEmployeeSeed {
+  scheduleId: string;
+  subsidiaryId: string;
+  name: string;
+  country: string;
+  province: string;
+  payBasis: string;
+  currency: string;
+  rate: string;
+  rateBasis: string;
+  rateEffectiveFrom?: string;
+  annualHours?: string | null;
+  federalClaimCode?: number | null;
+  provincialClaimCode?: number | null;
+  vacationPercent?: string | null;
+  vacationMethod?: string | null;
+  filingStatus?: string | null;
+  partySubsidiaryId?: string | null;
+  employeeNumber?: string | null;
+  hiredOn?: string | null;
+  timeEntries?: { workedOn: string; hours?: string; projectId?: string }[];
+}
+
+export async function seedHiredEmployee(
+  orgId: string, actorId: string, seed: HiredEmployeeSeed,
+): Promise<{ employeeId: string; employmentId: string }> {
+  const employeeId = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+    values (${employeeId}, ${orgId}, 'person', ${seed.name}, ${seed.partySubsidiaryId ?? null},
+            true, '{}'::jsonb)`);
+  // hired_on is omitted when the hire states none: like annual_hours above,
+  // the column rejects a guessed value, so there is one insert per shape.
+  if (seed.hiredOn != null) {
+    await db.execute(sql`
+      insert into employee_roles (id, org_id, party_id, employee_number, hired_on, is_active)
+      values (${randomUUID()}, ${orgId}, ${employeeId}, ${seed.employeeNumber ?? null},
+              ${seed.hiredOn}, true)`);
+  } else {
+    await db.execute(sql`
+      insert into employee_roles (id, org_id, party_id, employee_number)
+      values (${randomUUID()}, ${orgId}, ${employeeId}, ${seed.employeeNumber ?? null})`);
+  }
+  const employmentId = await seedWorkerEmployment(orgId, employeeId, seed.subsidiaryId);
+  // annual_hours is omitted when the hire states none: the column rejects an
+  // explicit null, so there is one insert per shape, never a guessed default.
+  if (seed.annualHours != null) {
+    await db.execute(sql`
+      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
+                                    effective_from, is_active, created_by, updated_by)
+      values (${orgId}, ${employeeId}, ${seed.currency}, ${seed.rate}, ${seed.rateBasis},
+              ${seed.annualHours}, ${seed.rateEffectiveFrom ?? "2026-01-01"}, true,
+              ${actorId}, ${actorId})`);
+  } else {
+    await db.execute(sql`
+      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                    effective_from, is_active, created_by, updated_by)
+      values (${orgId}, ${employeeId}, ${seed.currency}, ${seed.rate}, ${seed.rateBasis},
+              ${seed.rateEffectiveFrom ?? "2026-01-01"}, true, ${actorId}, ${actorId})`);
+  }
+  // Optional profile columns are appended only when the hire states them:
+  // several reject an explicit null, so omission (not null) is the absent
+  // shape — the same reason annual_hours above has two inserts.
+  const profileCols = [
+    "org_id", "employee_party_id", "employment_id", "pay_schedule_id", "country",
+    "province", "pay_basis", "is_active", "created_by", "updated_by",
+  ];
+  const profileVals: unknown[] = [
+    orgId, employeeId, employmentId, seed.scheduleId, seed.country,
+    seed.province, seed.payBasis, true, actorId, actorId,
+  ];
+  const profileExtra: [string, unknown][] = [
+    ["federal_claim_code", seed.federalClaimCode ?? undefined],
+    ["provincial_claim_code", seed.provincialClaimCode ?? undefined],
+    ["vacation_percent", seed.vacationPercent ?? undefined],
+    ["vacation_method", seed.vacationMethod ?? undefined],
+    ["filing_status", seed.filingStatus ?? undefined],
+  ];
+  for (const [col, val] of profileExtra) {
+    if (val !== undefined) {
+      profileCols.push(col);
+      profileVals.push(val);
+    }
+  }
+  await db.execute(sql`
+    insert into employee_payroll_profiles (${sql.join(profileCols.map((c) => sql.raw(c)), sql`, `)})
+    values (${sql.join(profileVals.map((v) => sql`${v}`), sql`, `)})`);
+  for (const entry of seed.timeEntries ?? []) {
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id,
+                                status, is_billable, billing_status, costing_basis,
+                                created_by, updated_by)
+      values (${orgId}, ${employeeId}, ${entry.workedOn}, ${entry.hours ?? "20"},
+              ${entry.projectId ?? null}, 'approved', false, 'unbilled', 'actual',
+              ${actorId}, ${actorId})`);
+  }
+  return { employeeId, employmentId };
+}
+
+/** Québec CNT-subject employer: classify for CNT and point the slot at the given payable. */
+export async function seedCntSubjectEmployerFixture(
+  orgId: string, actorId: string, subsidiaryId: string, payableAccountId: string,
+): Promise<void> {
+  await upsertPayrollEmployerFact({ orgId, actorId, subsidiaryId, country: "CA",
+    factKey: "cnt_exemption", effectiveFrom: "2026-01-01", value: "none",
+    changeReason: "test employer subject to CNT" });
+  await setPackSlotAccount(orgId, actorId, "CA", "cnt", payableAccountId);
 }
 
 export async function seedCanadianPayrollComponentsForTest(

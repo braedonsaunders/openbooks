@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
-import { createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { createScratchUser, dropScratchOrgReporting, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -56,17 +56,18 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
   await db.execute(sql`
     insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeB}, '2020-01-06', true, ${fx.actorId}, ${fx.actorId})`);
+  const employmentB = await seedWorkerEmployment(fx.orgId, employeeB, entityB);
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                   is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeB}, 'CAD', '30', 'hour', '2020-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, province,
                                            pay_basis, country, federal_claim_code,
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeB}, ${scheduleB}, 'ON', 'hourly', 'CA', 1, 1,
+    values (${fx.orgId}, ${employeeB}, ${employmentB}, ${scheduleB}, 'ON', 'hourly', 'CA', 1, 1,
             '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
 
   // Entity A's run through the shared adoption helper, entity B's on its own

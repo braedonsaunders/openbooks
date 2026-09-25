@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { setPackSlotAccount } from "../packs.ts";
+import { seedFrRecapEmployerFixture, seedFullTimeWorkScheduleFixture, seedHiredEmployee } from "../filing-test-fixtures.ts";
 import { yearEndFiling } from "../filing-registry.ts";
 import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
@@ -76,6 +77,9 @@ async function frPayrollOrg(): Promise<Fixture> {
   await setPackSlotAccount(org.orgId, actorId, "FR", "salariales", urssafPayable);
   await setPackSlotAccount(org.orgId, actorId, "FR", "retraite_comp", caissePayable);
   await setPackSlotAccount(org.orgId, actorId, "FR", "patronales", urssafPayable);
+  // Classified employer plus an explicit zero AT/MP rate: unclassified or
+  // missing-regime employers refuse by name instead.
+  await seedFrRecapEmployerFixture(org.orgId, actorId, org.subsidiaryId);
   // AGIRC-ARRCO/CEG/CET are declared `external`: the org names its own
   // caisse on the components (the QC/Revenu-Québec precedent).
   const caisseId = randomUUID();
@@ -97,22 +101,10 @@ async function frPayrollOrg(): Promise<Fixture> {
             ${actorId}, ${actorId})`);
 
   const employee = async (name: string, annualSalary: string): Promise<string> => {
-    const id = randomUUID();
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${id}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-    await db.execute(sql`
-      insert into employee_roles (id, org_id, party_id)
-      values (${randomUUID()}, ${org.orgId}, ${id})`);
-    await db.execute(sql`
-      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
-                                    is_active, created_by, updated_by)
-      values (${org.orgId}, ${id}, 'EUR', ${annualSalary}, 'year', '2026-01-01', true,
-              ${actorId}, ${actorId})`);
-    await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                             province, pay_basis, is_active, created_by, updated_by)
-      values (${org.orgId}, ${id}, ${scheduleId}, 'FR', 'FR', 'salary', true, ${actorId}, ${actorId})`);
+    const { employeeId: id } = await seedHiredEmployee(org.orgId, actorId, {
+      scheduleId, subsidiaryId: org.subsidiaryId, name, country: "FR", province: "FR",
+      payBasis: "salary", currency: "EUR", rate: annualSalary, rateBasis: "year",
+    });
     // Métropole domicile, no transmitted rate: the statutory default grille
     // prices PAS. Without the domicile the engine refuses by name.
     await db.execute(sql`
@@ -120,7 +112,10 @@ async function frPayrollOrg(): Promise<Fixture> {
                                              region, sub_region, answers, effective_from,
                                              created_by, updated_by)
       values (${org.orgId}, ${id}, 'FR', 'fr_pas_option', null, null,
-              '{"domicile": "metropole"}'::jsonb, '2026-01-01', ${actorId}, ${actorId})`);
+              '{"domicile": "metropole", "rgdu_eligibility": "eligible"}'::jsonb, '2026-01-01', ${actorId}, ${actorId})`);
+    // RGDU adjusts the SMIC to contractual hours: a 35-hour week per
+    // employee, or the run refuses by name (CSS D.241-7 IV).
+    await seedFullTimeWorkScheduleFixture(org.orgId, actorId, id);
     return id;
   };
   const camille = await employee("Camille Martin", "24000");

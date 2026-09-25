@@ -9,7 +9,8 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { seedCntSubjectEmployerFixture } from "./filing-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -79,11 +80,14 @@ test(
                                              rate_values, created_by, updated_by)
         values (${org.orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
                 ${actorId}, ${actorId})`);
+      // The QC stub prices CNT too (asserted nowhere here; QPIP only).
+      await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, qcPayable);
 
       const employeeId = randomUUID();
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${employeeId}, ${org.orgId}, 'person', 'Jean Tremblay', true, '{}'::jsonb)`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
         insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                       is_active, created_by, updated_by)
@@ -95,10 +99,10 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, vacation_percent,
                                                vacation_method, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'QC', 'hourly', 1,
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'QC', 'hourly', 1,
                 '0', 'accrue', true, ${actorId}, ${actorId})`);
 
       const employerQpip: string[] = [];
