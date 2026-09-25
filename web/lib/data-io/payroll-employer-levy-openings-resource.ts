@@ -189,6 +189,15 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
           continue
         }
         if (ctx.dryRun) {
+          // Mirror the commit exactly: a zero base over a stored opening
+          // deletes it, and a zero base over nothing is a no-op — neither is
+          // a create or an update.
+          if (cmp(row.baseYtd, '0') === 0) {
+            if (existingByYear.get(row.taxYear)!.has(row.key)) {
+              outcome.deleted = (outcome.deleted ?? 0) + 1
+            }
+            continue
+          }
           if (action === 'update') outcome.updated++
           else outcome.created++
           continue
@@ -202,7 +211,8 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
             rows: [{ country: row.country, levyKey: row.levyKey, region: row.region, baseYtd: row.baseYtd }],
           })
           outcome.created += result.created
-          outcome.updated += result.updated + result.deleted
+          outcome.updated += result.updated
+          outcome.deleted = (outcome.deleted ?? 0) + result.deleted
           if (result.created > 0) existingByYear.get(row.taxYear)!.add(row.key)
           if (result.deleted > 0) existingByYear.get(row.taxYear)!.delete(row.key)
         } catch (error) {

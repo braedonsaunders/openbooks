@@ -102,6 +102,13 @@ export interface WriteOutcome {
   failed: number
   errors: RowError[]
   /**
+   * Rows the run removes (a zero amount over an existing record deletes it).
+   * Optional so resources without delete semantics keep their existing shape;
+   * set it whenever a preview or commit can remove, so effect counts never
+   * hide a removal inside updated.
+   */
+  deleted?: number
+  /**
    * Non-blocking row advisories (a warning never fails its row). Optional so
    * resources without advisories keep their existing outcome shape; the
    * import route passes the outcome through untouched, so anything set here
