@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { markEntryReversed, postEntry } from "./post-entry.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -366,32 +367,14 @@ test(
         await tx.execute(sql`set constraints all immediate`);
       }));
 
-      const reversalId = await draftEntry(org, "REV-AMEND-REVERSAL");
-      await withBypassContext(() => db.execute(sql`
-        update journal_entries
-           set reverses_entry_id = ${originalId}
-         where id = ${reversalId}
+      const before = await withOrgContext(org.orgId, () => db.execute<{
+        amount: string;
+        memo: string | null;
+      }>(sql`
+        select amount::text as amount, memo from journal_lines where id = ${originalDebit}
       `));
-      let reversalCredit = "";
-      await withBypassContext(() => db.transaction(async (tx) => {
-        reversalCredit = await line(
-          tx,
-          org,
-          reversalId,
-          1,
-          org.accounts.bank,
-          "-10",
-        );
-        await line(tx, org, reversalId, 2, org.accounts.cogs, "10");
-        await tx.execute(
-          sql`update journal_entries set status = 'posted' where id = ${reversalId}`,
-        );
-        await tx.execute(
-          sql`update journal_entries set status = 'reversed' where id = ${originalId}`,
-        );
-        await tx.execute(sql`set constraints all immediate`);
-      }));
 
+      // Posted history is immutable in place, with or without the old amend flag.
       await assert.rejects(
         withOrgContext(org.orgId, () => db.execute(
           sql`update journal_lines set memo = 'unguarded' where id = ${originalDebit}`,
@@ -399,7 +382,7 @@ test(
         (error: unknown) =>
           errorChainMatches(
             error,
-            /lines of a reversed journal entry are immutable/,
+            /lines of a posted journal entry are immutable/,
           ),
       );
 
@@ -411,6 +394,7 @@ test(
           'gl', 'closed', 'Kernel reversed-history amendment test'
         )
       `));
+      // The removed amend escape admits nothing now: not even a memo edit.
       await assert.rejects(
         withOrgContext(org.orgId, () => db.transaction(async (tx) => {
           await tx.execute(sql`set local openbooks.amend = 'on'`);
@@ -419,8 +403,41 @@ test(
           );
         })),
         (error: unknown) =>
-          errorChainMatches(error, /period is closed for GL posting/),
+          errorChainMatches(error, /lines of a posted journal entry are immutable/),
       );
+      // The guarded correction path names the closed period instead.
+      const closedNumber = `REV-AMEND-CLOSED-${randomUUID().slice(0, 8)}`;
+      await assert.rejects(
+        withOrgContext(org.orgId, () => postEntry(db, {
+          orgId: org.orgId,
+          bookId: org.bookId,
+          subsidiaryId: org.subsidiaryId,
+          entryNumber: closedNumber,
+          postingDate: org.date,
+          periodId: org.periodId,
+          memo: "reversal refused: period closed",
+          origin: "manual",
+          reversesEntryId: originalId,
+          currency: "CAD",
+          closeModules: ["gl"],
+          lines: [
+            { accountId: org.accounts.bank, amount: "-10" },
+            { accountId: org.accounts.cogs, amount: "10" },
+          ],
+        })),
+        (error: unknown) =>
+          errorChainMatches(error, /GL is closed for this period and accounting book/),
+      );
+      // The refused correction leaves no draft behind and touches nothing.
+      const untouched = await withOrgContext(org.orgId, () => db.execute<{
+        status: string;
+        strays: number;
+      }>(sql`
+        select (select status from journal_entries where id = ${originalId}) as status,
+               (select count(*)::int from journal_entries
+                 where org_id = ${org.orgId} and entry_number = ${closedNumber}) as strays
+      `));
+      assert.deepEqual(untouched.rows, [{ status: "posted", strays: 0 }]);
 
       await withBypassContext(() => db.execute(sql`
         update period_locks
@@ -431,33 +448,73 @@ test(
            and subsidiary_id = ${org.subsidiaryId}
            and module = 'gl'
       `));
-      await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`set local openbooks.amend = 'on'`);
-        await tx.execute(
-          sql`update journal_lines set memo = 'controlled-pair-amendment' where id in (${originalDebit}, ${reversalCredit})`,
-        );
-        await tx.execute(sql`set constraints all immediate`);
+      // Correction through the ledger API: reversal plus repost, then the
+      // governed posted -> reversed lifecycle marker on the original.
+      const reversalNumber = `REV-AMEND-${randomUUID().slice(0, 8)}`;
+      const posted = await withOrgContext(org.orgId, () => postEntry(db, {
+        orgId: org.orgId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        entryNumber: reversalNumber,
+        postingDate: org.date,
+        periodId: org.periodId,
+        memo: `Reversal of REV-AMEND-ORIGINAL`,
+        origin: "manual",
+        reversesEntryId: originalId,
+        currency: "CAD",
+        closeModules: ["gl"],
+        lines: [
+          { accountId: org.accounts.bank, amount: "-10" },
+          { accountId: org.accounts.cogs, amount: "10" },
+        ],
       }));
+      await withOrgContext(org.orgId, () =>
+        markEntryReversed(db, { orgId: org.orgId, entryId: originalId }));
 
-      const amended = await withOrgContext(org.orgId, () => db.execute(sql`
-        select je.status, jl.amount::text, jl.memo
-          from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id
-         where jl.id in (${originalDebit}, ${reversalCredit})
-         order by jl.amount
+      // The original's financial content is byte-identical; only the
+      // lifecycle marker moved. The reversal is posted and balanced, so the
+      // books still balance across both entries.
+      const history = await withOrgContext(org.orgId, () => db.execute<{
+        id: string;
+        status: string;
+        balance: string;
+      }>(sql`
+        select je.id, je.status,
+               (select coalesce(sum(amount), 0)::text from journal_lines
+                 where entry_id = je.id and org_id = je.org_id) as balance
+          from journal_entries je
+         where je.id in (${originalId}, ${posted.entryId}) and je.org_id = ${org.orgId}
       `));
-      assert.deepEqual(amended.rows, [
-        {
-          status: "posted",
-          amount: "-10.0000",
-          memo: "controlled-pair-amendment",
-        },
-        {
-          status: "reversed",
-          amount: "10.0000",
-          memo: "controlled-pair-amendment",
-        },
-      ]);
+      const byId = new Map(history.rows.map((row) => [row.id, row]));
+      assert.deepEqual(byId.get(originalId), {
+        id: originalId,
+        status: "reversed",
+        balance: "0.0000",
+      });
+      assert.deepEqual(byId.get(posted.entryId), {
+        id: posted.entryId,
+        status: "posted",
+        balance: "0.0000",
+      });
+      const after = await withOrgContext(org.orgId, () => db.execute<{
+        amount: string;
+        memo: string | null;
+      }>(sql`
+        select amount::text as amount, memo from journal_lines where id = ${originalDebit}
+      `));
+      assert.deepEqual(after.rows, before.rows);
+
+      // Reversed history is immutable in place too.
+      await assert.rejects(
+        withOrgContext(org.orgId, () => db.execute(
+          sql`update journal_lines set memo = 'reversed-unguarded' where id = ${originalDebit}`,
+        )),
+        (error: unknown) =>
+          errorChainMatches(
+            error,
+            /lines of a reversed journal entry are immutable/,
+          ),
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -469,16 +526,45 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    const postLines = async (tx: SqlExecutor, entryId: string) => {
+      const debitId = await line(tx, org, entryId, 1, org.accounts.bank, "10");
+      await line(tx, org, entryId, 2, org.accounts.cogs, "-10");
+      await tx.execute(
+        sql`update journal_entries set status = 'posted' where id = ${entryId}`,
+      );
+      await tx.execute(sql`set constraints all immediate`);
+      return debitId;
+    };
+    const replayCorrection = (
+      tx: SqlExecutor,
+      entryNumber: string,
+      reversesEntryId: string,
+    ) =>
+      postEntry(tx, {
+        orgId: org.orgId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        entryNumber,
+        postingDate: org.date,
+        periodId: org.periodId,
+        memo: `Source replay of ${reversesEntryId}`,
+        origin: "migration",
+        reversesEntryId,
+        currency: "CAD",
+        closeModules: ["gl"],
+        allowImportedLocks: true,
+        lines: [
+          { accountId: org.accounts.bank, amount: "-10" },
+          { accountId: org.accounts.cogs, amount: "10" },
+        ],
+      });
     try {
-      const entryId = await draftEntry(org, "SOURCE-LOCK-REPLAY");
-      let debitId = "";
+      const firstId = await draftEntry(org, "SOURCE-LOCK-REPLAY-1");
+      const secondId = await draftEntry(org, "SOURCE-LOCK-REPLAY-2");
+      let firstDebit = "";
       await withBypassContext(() => db.transaction(async (tx) => {
-        debitId = await line(tx, org, entryId, 1, org.accounts.bank, "10");
-        await line(tx, org, entryId, 2, org.accounts.cogs, "-10");
-        await tx.execute(
-          sql`update journal_entries set status = 'posted' where id = ${entryId}`,
-        );
-        await tx.execute(sql`set constraints all immediate`);
+        firstDebit = await postLines(tx, firstId);
+        await postLines(tx, secondId);
       }));
       await withBypassContext(() => db.execute(sql`
         insert into period_locks
@@ -489,24 +575,39 @@ test(
         )
       `));
 
+      // History edits refuse even with both source-replay flags: the amend
+      // escape is gone, so connector ownership only matters on the API path.
       await assert.rejects(
         withOrgContext(org.orgId, () => db.transaction(async (tx) => {
           await tx.execute(sql`set local openbooks.amend = 'on'`);
+          await tx.execute(sql`set local openbooks.migration = 'on'`);
           await tx.execute(
-            sql`update journal_lines set memo = 'not-source-replay' where id = ${debitId}`,
+            sql`update journal_lines set memo = 'not-source-replay' where id = ${firstDebit}`,
           );
         })),
         (error: unknown) =>
-          errorChainMatches(error, /period is closed for GL posting/),
+          errorChainMatches(error, /lines of a posted journal entry are immutable/),
       );
 
-      await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`set local openbooks.amend = 'on'`);
+      // Source replay through the ledger API crosses the connector-owned
+      // imported lock: reversal plus repost, then the lifecycle marker.
+      const replayNumber = `SOURCE-REPLAY-${randomUUID().slice(0, 8)}`;
+      const replay = await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
         await tx.execute(sql`set local openbooks.migration = 'on'`);
-        await tx.execute(
-          sql`update journal_lines set memo = 'exact-source-replay' where id = ${debitId}`,
-        );
+        return replayCorrection(tx, replayNumber, firstId);
       }));
+      await withOrgContext(org.orgId, () =>
+        markEntryReversed(db, { orgId: org.orgId, entryId: firstId }));
+      const replayed = await withOrgContext(org.orgId, () => db.execute<{
+        id: string;
+        status: string;
+      }>(sql`
+        select id, status from journal_entries
+         where id in (${firstId}, ${replay.entryId}) and org_id = ${org.orgId}
+      `));
+      const replayedById = new Map(replayed.rows.map((row) => [row.id, row.status]));
+      assert.equal(replayedById.get(firstId), "reversed");
+      assert.equal(replayedById.get(replay.entryId), "posted");
 
       await withBypassContext(() => db.execute(sql`
         update period_locks
@@ -517,17 +618,26 @@ test(
            and subsidiary_id = ${org.subsidiaryId}
            and module = 'gl'
       `));
+      // A controller-owned lock holds against the same replay, and the
+      // refused correction leaves no draft behind.
+      const refusedNumber = `SOURCE-REPLAY-REFUSED-${randomUUID().slice(0, 8)}`;
       await assert.rejects(
         withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          await tx.execute(sql`set local openbooks.amend = 'on'`);
           await tx.execute(sql`set local openbooks.migration = 'on'`);
-          await tx.execute(
-            sql`update journal_lines set memo = 'controller-lock-bypass' where id = ${debitId}`,
-          );
+          await replayCorrection(tx, refusedNumber, secondId);
         })),
         (error: unknown) =>
-          errorChainMatches(error, /period is closed for GL posting/),
+          errorChainMatches(error, /GL is closed for this period and accounting book/),
       );
+      const held = await withOrgContext(org.orgId, () => db.execute<{
+        status: string;
+        strays: number;
+      }>(sql`
+        select (select status from journal_entries where id = ${secondId}) as status,
+               (select count(*)::int from journal_entries
+                 where org_id = ${org.orgId} and entry_number = ${refusedNumber}) as strays
+      `));
+      assert.deepEqual(held.rows, [{ status: "posted", strays: 0 }]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
