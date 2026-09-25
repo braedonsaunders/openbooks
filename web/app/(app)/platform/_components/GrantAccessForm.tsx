@@ -37,17 +37,17 @@ export function GrantAccessForm({
   function submit(formData: FormData) {
     startTransition(async () => {
       try {
-        await grantAccessAction(formData);
+        const result = await grantAccessAction(formData);
+        if (!result.ok) {
+          toast.error(result.message);
+          return;
+        }
         setOrgId("");
         setActingUserId("");
         if (!defaultMemberUserId) setMemberUserId("");
         toast.success("Cross-organization access granted");
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Access could not be granted",
-        );
+      } catch {
+        toast.error("Access could not be granted");
       }
     });
   }

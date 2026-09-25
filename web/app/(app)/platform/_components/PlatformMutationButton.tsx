@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { Button, type ButtonProps } from "@openbooks/ui";
+import type { PlatformMutationResult } from "../actions";
 
 export function PlatformMutationButton({
   action,
@@ -10,7 +11,10 @@ export function PlatformMutationButton({
   children,
   ...props
 }: Omit<ButtonProps, "onClick"> & {
-  action: () => Promise<void>;
+  // Server actions resolve their refusal as { ok: false }: a thrown error
+  // would surface in production as a generic React Flight digest, so the
+  // action never throws and the named message toasts here instead.
+  action: () => Promise<PlatformMutationResult>;
   success: string;
 }) {
   const [pending, startTransition] = useTransition();
@@ -21,14 +25,11 @@ export function PlatformMutationButton({
       onClick={() =>
         startTransition(async () => {
           try {
-            await action();
-            toast.success(success);
-          } catch (error) {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "The platform change could not be completed",
-            );
+            const result = await action();
+            if (result.ok) toast.success(success);
+            else toast.error(result.message);
+          } catch {
+            toast.error("The platform change could not be completed");
           }
         })
       }
