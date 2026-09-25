@@ -28,6 +28,19 @@ interface ProgramDescriptor {
   packs: string[]
 }
 
+interface SuiStateDescriptor {
+  key: string
+  label: string
+  help: string
+  packs: string[]
+}
+
+/**
+ * Engine 0403 adds suiStateAmounts to OpeningBalanceRow; it reads optional
+ * here so this grid links both before and after the engine lands.
+ */
+type SuiCarryRow = OpeningBalanceRow & { suiStateAmounts?: Record<string, string> }
+
 interface ComponentDescriptor {
   componentId: string
   code: string
@@ -69,6 +82,8 @@ type OpeningBalancesViewProps = {
   fields: FieldDescriptor[]
   /** One carry-in column per pack-declared contribution program. */
   programs: ProgramDescriptor[]
+  /** One carry-in column per US state for SUI-insurable wages. */
+  suiStates?: SuiStateDescriptor[]
   components: ComponentDescriptor[]
   canManage: boolean
 }
@@ -83,6 +98,7 @@ function OpeningBalancesYearView({
   initial,
   fields,
   programs,
+  suiStates = [],
   components,
   canManage,
 }: OpeningBalancesViewProps) {
@@ -99,6 +115,9 @@ function OpeningBalancesYearView({
   // Program carry-ins get the same treatment: a third table, a third key
   // space (pack-declared program keys), a third draft.
   const [programDraft, setProgramDraft] = useState<Record<string, Record<string, string>>>({})
+  // State SUI carry-ins get the same treatment again: a fourth table keyed
+  // by US state code, so a state code can never be read as a program key.
+  const [suiDraft, setSuiDraft] = useState<Record<string, Record<string, string>>>({})
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<SaveError[]>([])
   const [skipped, setSkipped] = useState<SaveError[]>([])
@@ -137,6 +156,12 @@ function OpeningBalancesYearView({
   const visiblePrograms = useMemo(
     () => programs.filter((p) => p.packs.some((pack) => packs.has(pack))),
     [programs, packs],
+  )
+  // State SUI columns follow the same pack rule: they appear only where a
+  // US (or orphan) row can carry them, like the program columns.
+  const visibleSuiStates = useMemo(
+    () => suiStates.filter((s) => s.packs.some((pack) => packs.has(pack))),
+    [suiStates, packs],
   )
 
   const valueOf = (row: OpeningBalanceRow, key: string): string => {
@@ -194,7 +219,24 @@ function OpeningBalancesYearView({
     }))
   }
 
-  const dirtyIds = [...new Set([...Object.keys(draft), ...Object.keys(componentDraft), ...Object.keys(programDraft)])]
+  const suiValueOf = (row: SuiCarryRow, key: string): string => {
+    const edited = suiDraft[row.employeePartyId]?.[key]
+    if (edited !== undefined) return edited
+    const stored = row.suiStateAmounts?.[key]
+    if (stored === undefined) return ''
+    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+      ? ''
+      : trimZeros(stored)
+  }
+
+  const setSuiValue = (employeePartyId: string, key: string, value: string) => {
+    setSuiDraft((current) => ({
+      ...current,
+      [employeePartyId]: { ...(current[employeePartyId] ?? {}), [key]: value },
+    }))
+  }
+
+  const dirtyIds = [...new Set([...Object.keys(draft), ...Object.keys(componentDraft), ...Object.keys(programDraft), ...Object.keys(suiDraft)])]
   const rows = onlyMissing
     ? initial.rows.filter((r) => r.amounts === null && !r.locked)
     : initial.rows
@@ -209,7 +251,7 @@ function OpeningBalancesYearView({
     setSkipped([])
     try {
       const payload = dirtyIds.map((employeePartyId) => {
-        const row = initial.rows.find((r) => r.employeePartyId === employeePartyId)
+        const row: SuiCarryRow | undefined = initial.rows.find((r) => r.employeePartyId === employeePartyId)
         const amounts: Record<string, string> = {}
         for (const field of fields) {
           const edited = draft[employeePartyId]?.[field.key]
@@ -249,6 +291,19 @@ function OpeningBalancesYearView({
               : (row?.programAmounts?.[program.key] ?? '0')
           }
         }
+        // Only VISIBLE states are sent, edited or not (same replace-the-set
+        // rule as programs). A state hidden by the pack filter is omitted
+        // entirely so the service keeps what is stored.
+        let suiStateAmounts: Record<string, string> | undefined
+        if (visibleSuiStates.length > 0) {
+          suiStateAmounts = {}
+          for (const sui of visibleSuiStates) {
+            const edited = suiDraft[employeePartyId]?.[sui.key]
+            suiStateAmounts[sui.key] = edited !== undefined
+              ? edited.trim()
+              : (row?.suiStateAmounts?.[sui.key] ?? '0')
+          }
+        }
         // The row's loader-served version: a carry-in someone else saved
         // after this snapshot refuses with a named 409 instead of being
         // silently overwritten by these replayed full-row amounts.
@@ -258,6 +313,7 @@ function OpeningBalancesYearView({
           amounts,
           components: componentAmounts,
           programs: programAmounts,
+          suiStates: suiStateAmounts,
         }
       })
       // Client-side decimal gate: every EDITED non-blank value is classified
@@ -289,6 +345,14 @@ function OpeningBalancesYearView({
           const edited = programDraft[employeePartyId]?.[program.key]
           if (edited === undefined || edited.trim() === '') continue
           const refusal = moneyFieldError(program.label, 'a money amount', edited, 4)
+          if (refusal !== null) {
+            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+          }
+        }
+        for (const sui of visibleSuiStates) {
+          const edited = suiDraft[employeePartyId]?.[sui.key]
+          if (edited === undefined || edited.trim() === '') continue
+          const refusal = moneyFieldError(sui.label, 'a money amount', edited, 4)
           if (refusal !== null) {
             clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
           }
@@ -344,6 +408,7 @@ function OpeningBalancesYearView({
       setDraft({})
       setComponentDraft({})
       setProgramDraft({})
+      setSuiDraft({})
       // A non-strict bulk load leaves locked employees untouched: their
       // carry-in is already inside a committed run. The save still succeeds
       // for everyone else, so the skipped rows are listed by name rather than
@@ -493,6 +558,17 @@ function OpeningBalancesYearView({
                   </span>
                 </th>
               ))}
+              {visibleSuiStates.map((sui) => (
+                <th
+                  key={sui.key}
+                  className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {sui.label}
+                    <FieldHelp help={sui.help} />
+                  </span>
+                </th>
+              ))}
               {components.map((component, index) => (
                 <th
                   key={component.componentId}
@@ -525,7 +601,7 @@ function OpeningBalancesYearView({
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={visibleFields.length + visiblePrograms.length + components.length + 1}
+                  colSpan={visibleFields.length + visiblePrograms.length + visibleSuiStates.length + components.length + 1}
                   className="px-3 py-8 text-center text-slate-400 dark:text-slate-500"
                 >
                   {text('empty', 'No employees have an active payroll profile yet.')}
@@ -608,6 +684,33 @@ function OpeningBalancesYearView({
                             setProgramValue(row.employeePartyId, program.key, value)
                           }
                           field={program.label}
+                          noun="a money amount"
+                          maxScale={4}
+                          placeholder="0.00"
+                          disabled={row.locked || !canManage || saving}
+                          className="w-32 text-right tabular-nums"
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
+                      )}
+                    </td>
+                  )
+                })}
+                {visibleSuiStates.map((sui) => {
+                  // Same pack rule as the statutory and program columns (see
+                  // above): an orphan row keeps every state's column rather
+                  // than defaulting to any country's.
+                  const applies = row.country == null || sui.packs.includes(row.country)
+                  return (
+                    <td key={sui.key} className="px-2 py-1.5 text-right">
+                      {applies ? (
+                        <MoneyInput
+                          ariaLabel={`${row.employeeName} — ${sui.label}`}
+                          value={suiValueOf(row, sui.key)}
+                          onChange={(value) =>
+                            setSuiValue(row.employeePartyId, sui.key, value)
+                          }
+                          field={sui.label}
                           noun="a money amount"
                           maxScale={4}
                           placeholder="0.00"
