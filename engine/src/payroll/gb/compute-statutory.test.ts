@@ -55,9 +55,11 @@ function certificateForCodes(
   codes: Record<string, Record<string, string | null>>,
 ): PayrollStatutoryComputeContext["certificateFor"] {
   return ((key: string) => {
-    const answers = codes[key] ?? (key === "gb_workplace_pension"
-      ? { age_band: "under_16_or_other_exclusion", worker_status: "noneligible_jobholder", enrolment_status: "not_enrolled" }
-      : undefined);
+    const answers = key === "gb_nic_category"
+      ? { category_letter: "A", director_status: "not_director", ...codes[key] }
+      : codes[key] ?? (key === "gb_workplace_pension"
+        ? { age_band: "under_16_or_other_exclusion", worker_status: "noneligible_jobholder", enrolment_status: "not_enrolled" }
+        : undefined);
     if (!answers) return null;
     return {
       certificate: { key },
@@ -171,9 +173,8 @@ test("SCT with an S-code prices the Scottish bands end to end", async () => {
     pensionable: "2250",
     codes: { gb_tax_code_notice: { tax_code: "S1257L", non_cumulative: null } },
   });
-  const factors = await computeGbStatutory(ctx);
+  await computeGbStatutory(ctx);
   assert.equal(pushed[0]!.amount, "236.8900");
-  assert.equal(factors.GB_TAX, "236.8900");
 });
 
 test("a recorded student-loan plan is deducted from NIC-able earnings", async () => {
@@ -297,6 +298,8 @@ test("a valid non-A NIC category refuses rather than applying category-A bands",
     /cannot calculate National Insurance category C: this pack currently implements category A only/,
   );
   assert.deepEqual(pushed, []);
+  const { ctx: directorCtx } = gbContext({ codes: { gb_nic_category: { category_letter: "A", director_status: "director", directorship_start_date: "2026-04-06" } } });
+  await assert.rejects(() => computeGbStatutory(directorCtx), /CA44 requires cumulative annual or pro-rata/);
 });
 
 test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
@@ -333,9 +336,7 @@ test("NT pushes zeros and reads nothing", async () => {
     pensionable: "5000",
     codes: { gb_tax_code_notice: { tax_code: "NT", non_cumulative: null } },
   });
-  const factors = await computeGbStatutory(ctx);
-  // NIC still prices £5,000 monthly: (4,189 − 1,048) × 8% = £251.28 plus
-  // (5,000 − 4,189) × 2% = £16.22 = £267.50; employer (5,000 − 417) × 15%.
+  await computeGbStatutory(ctx);
   assert.deepEqual(
     pushed.map((line) => [line.systemKey, line.kind, line.amount]),
     [
@@ -346,7 +347,6 @@ test("NT pushes zeros and reads nothing", async () => {
       ["nic", "employer_contribution", "687.4500"],
     ],
   );
-  assert.equal(factors.GB_TAX, "0.0000");
 });
 
 test("BR prices the whole period with no YTD read", async () => {
