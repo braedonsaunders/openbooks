@@ -12,14 +12,16 @@ import { promptDialog } from '../../../lib/prompt'
 export function SaveViewButton() {
   const t = useTranslations('reports.saveView')
   const tc = useTranslations('common')
-  const [saved, setSaved] = useState(false)
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null)
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const params = Object.fromEntries([...searchParams.entries()].sort(([a], [b]) => a.localeCompare(b)))
+  const snapshot = JSON.stringify([pathname, params])
+  const saved = savedSnapshot === snapshot
 
   async function save() {
     const name = await promptDialog({ title: t('namePrompt') })
     if (!name) return
-    const params = Object.fromEntries(searchParams.entries())
     const res = await fetch('/api/saved-reports', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -31,7 +33,7 @@ export function SaveViewButton() {
       toast.error(await readApiErrorMessage(res, t('saveFailed')))
       return
     }
-    setSaved(true)
+    setSavedSnapshot(snapshot)
     toast.success(t('savedToast', { name }))
   }
 
