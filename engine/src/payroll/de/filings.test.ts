@@ -28,9 +28,9 @@ test("row grammar is a bare employee id — the inverse of what population build
 test("row grammar refuses everything that is not one of its rows", () => {
   assert.equal(parseLohnsteuerbescheinigungRowId("anything"), null);
   assert.equal(parseLohnsteuerbescheinigungRowId(""), null);
-  // Foreign grammars — the W-2's employee:account and the T4's
-  // employee:province:account — must not authorize a byte here.
-  assert.equal(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:${OTHER}`), null);
+  // Foreign grammars — the T4's employee:province:account — must not authorize a byte here.
+  // A W-2 employee:account SHAPE parses (a well-formed DE slice too) yet matches no DE slip.
+  assert.deepEqual(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:${OTHER}`), { employees: [EMPLOYEE], accounts: [OTHER] });
   assert.equal(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:BY:${OTHER}`), null);
   assert.equal(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:extra`), null);
   assert.equal(parseLohnsteuerbescheinigungRowId(` ${EMPLOYEE}`), null);
@@ -58,6 +58,7 @@ function sampleSlip(): DeLohnsteuerbescheinigungSlip {
     employeePartyId: EMPLOYEE,
     idNr: "12345678901",
     employeeName: "Maria Muster",
+    filingAccountId: null,
     land: "BY",
     steuerklasse: "I",
     faktor: null,

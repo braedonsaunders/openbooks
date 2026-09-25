@@ -276,12 +276,12 @@ test(
       assert.equal(cmp(String(totals.get("Lohnsteuer (Zeile 4)")), add(mariaSlip.lst, janSlip.lst)), 0);
       for (const row of population.rows) {
         const rowId = String(row[population.rowKey]);
-        const scope = filing.parseRowId(rowId);
-        assert.deepEqual(scope, { employees: [rowId], accounts: [] });
+        const [employee, account] = rowId.split(":");
+        assert.deepEqual(filing.parseRowId(rowId), { employees: [employee], accounts: account ? [account] : [] });
         assert.ok(parseLohnsteuerbescheinigungRowId(rowId), "grammar round-trips");
       }
       assert.equal(filing.parseRowId("not-a-row"), null);
-      assert.equal(filing.parseRowId(`${maria}:${jan}`), null);
+      assert.deepEqual(filing.parseRowId(`${maria}:${jan}`), { employees: [maria], accounts: [jan] });
 
       const slipData = await filing.slip!.build(org.orgId, 2026, maria);
       const codes = slipData.boxes.map((box) => box.code);
