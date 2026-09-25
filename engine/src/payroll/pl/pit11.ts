@@ -252,13 +252,19 @@ export async function pit11Slip(
       + "for employees with committed PL pay stubs in that year",
     );
   }
-  await loadValidPesel(orgId, rowId);
+  // The validated identifier is rendered, not just checked: the operator
+  // transmits the information through e-Deklaracje from this screen, and
+  // section C position 12 cannot be filed without it. Employment payers
+  // (art. 31) always identify a natural person, so the applicable branch is
+  // PESEL — the pack holds no NIP source for employees to branch to.
+  const pesel = await loadValidPesel(orgId, rowId);
   return {
     formCode: "PL_PIT11",
     formName: "PIT-11 — Informacja o przychodach z innych źródeł oraz o dochodach i pobranych zaliczkach na podatek dochodowy",
     formNumber: "PIT-11",
     headerFields: [
       { label: "Employee (podatnik)", value: slip.employeeName },
+      { label: "Taxpayer ID — PESEL (poz. 12)", value: pesel },
       { label: "Tax year (rok, poz. 4)", value: String(taxYear) },
       {
         label: "Form edition",
@@ -330,10 +336,10 @@ export async function pit11CorrectionSlip(row: PayrollFilingCorrectionRow): Prom
 /**
  * The identity fact a PIT-11 amendment must compare but must never print.
  * A wrong PESEL is one of the commonest reasons an employer corrects, and
- * the operator has to see that it moved. The PESEL itself is sealed on the
- * payroll profile (the pack's employeeIdentifier writer) and stays there:
- * what the snapshot holds is a keyed fingerprint, which proves a change
- * and discloses nothing — the T4 SIN precedent.
+ * the operator has to see that it moved. The sealed profile copy stays
+ * sealed: what the snapshot holds is a keyed fingerprint, which proves a
+ * change and discloses nothing — the T4 SIN precedent. The live slip
+ * renders the validated PESEL in poz. 12 for filing; the snapshot never does.
  */
 export async function pit11ConfidentialFields(
   orgId: string,
