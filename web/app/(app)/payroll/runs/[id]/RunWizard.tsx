@@ -48,6 +48,7 @@ import { HolidayAttestations } from './HolidayAttestations'
 import { SeparationIssuePanel } from '../../_ui/filing-workspace'
 import { BankFilePanel } from './BankFilePanel'
 import { confirmDialog } from '../../../../../lib/confirm'
+import { useDirtyClose } from '../../../../../lib/use-dirty-close'
 import { decimalAbs, decimalCmp, decimalNeg, decimalPercentChange, decimalSum } from '../../../../../lib/statement-format'
 import { bucketAmounts, type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
 
@@ -2130,10 +2131,22 @@ export function StubDrawer({
   // every SUCCESSFUL add only — a failed attempt keeps its key, so the retry
   // replays instead of duplicating.
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID())
+  // A half-typed Add-adjustment draft never closes silently: Escape, the
+  // backdrop, the X and Close all funnel through the shared guard, which
+  // also refuses to dismiss while the parent mutation is in flight. A clean
+  // drawer still closes without prompting; the successful-exclude path below
+  // keeps the direct onClose (its work already landed).
+  const adjustGuard = useDirtyClose({
+    dirty: adjComponent !== '' || adjAmount !== '' || adjNote !== '' || adjReplace,
+    busy,
+    onClose,
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
   return (
     <Drawer
       open
-      onClose={onClose}
+      onClose={adjustGuard.close}
       title={stub.employee_name}
       description={t('wizard.review.drawerDescription')}
       footer={
@@ -2163,7 +2176,7 @@ export function StubDrawer({
                 {t('wizard.adjust.exclude')}
               </Button>
             )}
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={adjustGuard.close}>
               {t('wizard.review.close')}
             </Button>
           </span>
