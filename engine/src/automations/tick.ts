@@ -49,6 +49,13 @@ export type TickSummary = {
  */
 export const MAX_AUTOMATION_EVENT_ATTEMPTS = 8;
 
+/** Claim lease: a drain that dies between claim and completion leaves the row
+ * 'claimed' with no worker to finish it. The next drain reclaims rows older
+ * than this back to 'pending' (rows already at the attempt ceiling go 'dead'
+ * instead of crash-looping). Same 15-minute stale window as
+ * recoverStaleSchedulerOutbox — one lease shape for durable work, not two. */
+export const STALE_AUTOMATION_EVENT_CLAIM_MS = 15 * 60_000;
+
 /** Cross-replica identity for the automation scan (distinct from the web
  *  scheduler's key so the two duty sets never suppress each other). */
 export const AUTOMATION_TICK_LOCK_KEY = "openbooks:automation-tick";
@@ -354,6 +361,21 @@ type ClaimedEvent = {
 };
 
 async function drainEventQueue(now: Date): Promise<{ drained: number; failed: number; errors: string[] }> {
+  // Reclaim crash-orphaned claims before taking new ones: a dead worker never
+  // parks or completes, so without this its rows stay 'claimed' forever and
+  // the work stalls. The crash consumes an attempt, bounding poison events at
+  // the same ceiling ordinary failures park dead at.
+  await db.execute(sql`
+    update automation_event_queue
+       set status = case when attempt_count + 1 >= ${MAX_AUTOMATION_EVENT_ATTEMPTS} then 'dead' else 'pending' end,
+           attempt_count = attempt_count + 1,
+           next_attempt_at = case when attempt_count + 1 >= ${MAX_AUTOMATION_EVENT_ATTEMPTS} then next_attempt_at else ${now} end,
+           error = case when attempt_count + 1 >= ${MAX_AUTOMATION_EVENT_ATTEMPTS}
+             then 'automation event claim lease expired without a completion mark — worker likely crashed; at the attempt ceiling, parked dead'
+             else 'automation event claim lease expired without a completion mark — worker likely crashed; re-queued for retry' end
+     where status = 'claimed'
+       and claimed_at < ${new Date(now.getTime() - STALE_AUTOMATION_EVENT_CLAIM_MS)}
+  `);
   const claimed = await db.execute<ClaimedEvent>(sql`
     update automation_event_queue
        set status = 'claimed', claimed_at = now()
