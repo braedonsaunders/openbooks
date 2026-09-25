@@ -212,6 +212,51 @@ export const FR_FNAL_ER_2026 = {
   },
 } as const;
 
+/**
+ * "Contribution à la formation professionnelle (CFP) 0,55 % / 1 %" —
+ * employer levy on the brut, no ceiling (CUFPA; URSSAF formation pages).
+ * Under 11 salariés the 0,55 % rate applies, 1 % at 11 and above, read
+ * off the same declared effectif as FNAL — never assumed.
+ */
+export const FR_CFP_ER_2026 = {
+  moins11: {
+    rate: "0.0055",
+    quote: "CFP (effectif de moins de 11 salariés) 0,55 %",
+  },
+  onzeEtPlus: {
+    rate: "0.01",
+    quote: "CFP (effectif de 11 salariés et plus) 1 %",
+  },
+} as const;
+
+/**
+ * "Taxe d'apprentissage 0,68 %" (0,44 % in Bas-Rhin, Haut-Rhin and
+ * Moselle) — employer levy on the brut, no ceiling. The establishment's
+ * regime is a required employer fact: mainland France must not silently
+ * price the Alsace-Moselle rate, nor the reverse.
+ */
+export const FR_APPRENTISSAGE_ER_2026 = {
+  droitCommun: {
+    rate: "0.0068",
+    quote: "Taxe d'apprentissage 0,68 %",
+  },
+  alsaceMoselle: {
+    rate: "0.0044",
+    quote: "Taxe d'apprentissage Alsace-Moselle 0,44 %",
+  },
+} as const;
+
+/**
+ * "Contribution CPF-CDD 1 %" — employer levy on fixed-term (CDD) gross
+ * wages. Priced only when the contract is declared CDD; CDI versements
+ * carry none, and an undeclared contract is read as CDI (the
+ * es_contrato_temporal precedent) until the contract-type channel lands.
+ */
+export const FR_CPF_CDD_ER_2026: FrCotisationRate = {
+  rate: "0.01",
+  quote: "Contribution CPF-CDD 1 %",
+};
+
 // ---------------------------------------------------------------------------
 // Taux salariaux (employee)
 // ---------------------------------------------------------------------------

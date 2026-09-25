@@ -109,6 +109,12 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
       { code: "CHOM-ER", name: "Assurance chômage (employeur)", systemKey: "chomage_er", kind: "employer_contribution", sequence: 225, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "AGS-ER", name: "Cotisation AGS (employeur)", systemKey: "ags_er", kind: "employer_contribution", sequence: 226, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "CDN-ER", name: "FNAL, CSA et dialogue social (employeur)", systemKey: "cdn_er", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
+      // Training levies collected by URSSAF: CFP (effectif-dependent),
+      // taxe d'apprentissage (Alsace-Moselle variant) and the CDD-only
+      // CPF contribution. Rate × salary, no ceiling.
+      { code: "CFP-ER", name: "Contribution à la formation professionnelle (employeur)", systemKey: "cfp_er", kind: "employer_contribution", sequence: 227, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "TA-ER", name: "Taxe d'apprentissage (employeur)", systemKey: "apprentissage_er", kind: "employer_contribution", sequence: 228, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "CPFC-DD-ER", name: "Contribution CPF-CDD (employeur)", systemKey: "cpf_cdd_er", kind: "employer_contribution", sequence: 229, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "RGDU-URSSAF", name: "Réduction générale (part Urssaf)", systemKey: "rgdu_urssaf", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "RGDU-ARRCO", name: "Réduction générale (part Agirc-Arrco)", systemKey: "rgdu_arrco", kind: "employer_contribution", sequence: 251, assessedOn: "earnings", remittance: "external" },
     ],

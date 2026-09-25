@@ -247,6 +247,8 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
   const ctx: PayrollStatutoryComputeContext = {
     tx: { execute: async () => ++query === 1
       ? ({ rows: [{ fact_value: "70.00" }] })
+      : query === 3
+      ? ({ rows: [{ fact_value: "droit_commun" }] })
       : ({ rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
@@ -306,6 +308,7 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
   assert.equal(pushed.find((line) => line.systemKey === "atmp")?.amount, "22.0000");
   assert.equal(pushed.find((line) => line.systemKey === "versement_mobilite_er")?.amount, "50.0000");
   assert.equal(pushed.find((line) => line.systemKey === "cdn_er")?.amount, "16.3200");
+  assert.equal(pushed.find((line) => line.systemKey === "cfp_er")?.amount, "20.0000");
   assert.equal(
     pushed.filter((line) => line.systemKey.startsWith("rgdu_")).reduce((sum, line) => add(sum, line.amount), "0"),
     "-635.6000",
