@@ -69,14 +69,24 @@ const SG_CPF_STATUS: PayrollCertificate = {
         {
           value: "spr_1st_year",
           label: "Singapore Permanent Resident, 1st year",
-          help: "Graduated rates (Tables 2/4) apply unless the Board approves a joint application for "
-            + "higher rates. Refused by name — not transcribed.",
+          help: "Graduated employer/employee rates (Table 2); select the distinct full-employer option only "
+            + "when CPF Board approved the joint application (Table 4).",
         },
         {
           value: "spr_2nd_year",
           label: "Singapore Permanent Resident, 2nd year",
-          help: "Graduated rates (Tables 3/5) apply unless the Board approves a joint application for "
-            + "higher rates. Refused by name — not transcribed.",
+          help: "Graduated employer/employee rates (Table 3); select the distinct full-employer option only "
+            + "when CPF Board approved the joint application (Table 5).",
+        },
+        {
+          value: "spr_1st_year_full_employer",
+          label: "Singapore Permanent Resident, 1st year (approved full employer rate)",
+          help: "Table 4 applies only after CPF Board approves the joint application for full employer rates.",
+        },
+        {
+          value: "spr_2nd_year_full_employer",
+          label: "Singapore Permanent Resident, 2nd year (approved full employer rate)",
+          help: "Table 5 applies only after CPF Board approves the joint application for full employer rates.",
         },
         {
           value: "foreigner",

@@ -45,13 +45,6 @@ import type { PayrollEditionScaffold, PayrollTaxYearSupport } from "../tax-years
  *   listed under "Who is exempted from receiving CPF contributions".
  *
  * Deliberately NOT transcribed, each refused by name in the engine:
- *
- * - The other four Table 1 age bands (Above 55–60, 60–65, 65–70, Above 70):
- *   their rows are quoted in the engine's refusal, but only the 55-and-
- *   below row is wired. A second band is a second transcription, not an
- *   index into this one.
- * - Tables 2–5 (SPR 1st/2nd-year graduated rates, G/G and F/G): the
- *   graduated employer/employee rates are a different table per SPR year.
  * - The Additional Wage ceiling: "$102,000 - Total OW subject to CPF for
  *   the year" is YEAR-dependent — it needs the employee's year-to-date OW,
  *   which no compute-context channel carries. Any non-periodic (AW) pay is
@@ -68,10 +61,21 @@ export type SgCpfStatus =
   | "spr_3rd_year"
   | "spr_1st_year"
   | "spr_2nd_year"
+  | "spr_1st_year_full_employer"
+  | "spr_2nd_year_full_employer"
   | "foreigner";
 
 /** Table 1 age bands, exactly as printed ("55 & below" … "Above 70"). */
 export type SgAgeBand = "le55" | "b55_60" | "b60_65" | "b65_70" | "gt70";
+
+export interface SgCpfBandRates {
+  readonly phaseTotalPct: string;
+  readonly phaseSlope: string;
+  readonly totalPct: string;
+  readonly employeePct: string;
+  readonly maxTotalOw: string;
+  readonly maxEmployeeOw: string;
+}
 
 /**
  * One transcribed year's CPF/SDL parameters — the unit the engine selects on.
@@ -81,8 +85,8 @@ export type SgAgeBand = "le55" | "b55_60" | "b60_65" | "b65_70" | "gt70";
  * `./tax-year-2025.ts` and `./tax-year-2024.ts` in the
  * `tax-year-{year}.ts` convention. The Table 1 le55 ROW SHAPE (17% phase,
  * 0.6 slope, 37%/20% above $750) is identical in all three years — each
- * year module quotes its own PDF to that effect — so only the OW ceiling,
- * the OW-leg maxima, and the informational AW-ceiling estimate move.
+ * year module quotes its own PDF to that effect. Age/status schedules are
+ * declared separately per effective year when published.
  */
 export interface SgYearTables {
   readonly year: number;
@@ -99,6 +103,8 @@ export interface SgYearTables {
     readonly maxTotalOw: string;
     readonly maxEmployeeOw: string;
   };
+  /** Effective-dated age/status rates; absent only for years not transcribed. */
+  readonly cpfByStatusAge?: Partial<Record<SgCpfStatus, Partial<Record<SgAgeBand, SgCpfBandRates>>>>;
   /** SDL rate/floor/cap — frozen across the transcribed window (see each year module). */
   readonly sdl: {
     readonly ratePct: string;
@@ -152,6 +158,56 @@ export const SG_CPF_2026_LE55 = {
   /** "* Max. of $1,600" — maximum employee-share contribution on OW. */
   maxEmployeeOw: "1600.00",
 } as const;
+
+/** CPF Board 2026 Tables 1–5 (all age bands):
+ * https://www.cpf.gov.sg/content/dam/web/employer/employer-obligations/documents/CPFcontributionratesfrom1Jan2026.pdf
+ * Each entry transcribes the table's total/employee OW rates, dollar phase
+ * and OW maxima. SPR full-employer rows are distinct from graduated rows.
+ */
+const cpfBand = (phaseTotalPct: string, phaseSlope: string, totalPct: string, employeePct: string,
+  maxTotalOw: string, maxEmployeeOw: string): SgCpfBandRates => ({
+  phaseTotalPct, phaseSlope, totalPct, employeePct, maxTotalOw, maxEmployeeOw,
+});
+const cpfTable1 = {
+  le55: SG_CPF_2026_LE55,
+  b55_60: cpfBand("16", "0.54", "34", "18", "2720.00", "1440.00"),
+  b60_65: cpfBand("12.5", "0.375", "25", "12.5", "2000.00", "1000.00"),
+  b65_70: cpfBand("9", "0.225", "16.5", "7.5", "1320.00", "600.00"),
+  gt70: cpfBand("7.5", "0.15", "12.5", "5", "1000.00", "400.00"),
+} satisfies Record<SgAgeBand, SgCpfBandRates>;
+const cpfSpr1Gg = {
+  le55: cpfBand("4", "0.15", "9", "5", "720.00", "400.00"),
+  b55_60: cpfBand("4", "0.15", "9", "5", "720.00", "400.00"),
+  b60_65: cpfBand("3.5", "0.15", "8.5", "5", "680.00", "400.00"),
+  b65_70: cpfBand("3.5", "0.15", "8.5", "5", "680.00", "400.00"),
+  gt70: cpfBand("3.5", "0.15", "8.5", "5", "680.00", "400.00"),
+} satisfies Record<SgAgeBand, SgCpfBandRates>;
+const cpfSpr2Gg = {
+  le55: cpfBand("9", "0.45", "24", "15", "1920.00", "1200.00"),
+  b55_60: cpfBand("6", "0.375", "18.5", "12.5", "1480.00", "1000.00"),
+  b60_65: cpfBand("3.5", "0.225", "11", "7.5", "880.00", "600.00"),
+  b65_70: cpfBand("3.5", "0.15", "8.5", "5", "680.00", "400.00"),
+  gt70: cpfBand("3.5", "0.15", "8.5", "5", "680.00", "400.00"),
+} satisfies Record<SgAgeBand, SgCpfBandRates>;
+const cpfSpr1Fg = {
+  le55: cpfBand("17", "0.15", "22", "5", "1760.00", "400.00"),
+  b55_60: cpfBand("16", "0.15", "21", "5", "1680.00", "400.00"),
+  b60_65: cpfBand("12.5", "0.15", "17.5", "5", "1400.00", "400.00"),
+  b65_70: cpfBand("9", "0.15", "14", "5", "1120.00", "400.00"),
+  gt70: cpfBand("7.5", "0.15", "12.5", "5", "1000.00", "400.00"),
+} satisfies Record<SgAgeBand, SgCpfBandRates>;
+const cpfSpr2Fg = {
+  le55: cpfBand("17", "0.45", "32", "15", "2560.00", "1200.00"),
+  b55_60: cpfBand("16", "0.375", "28.5", "12.5", "2280.00", "1000.00"),
+  b60_65: cpfBand("12.5", "0.225", "20", "7.5", "1600.00", "600.00"),
+  b65_70: cpfBand("9", "0.15", "14", "5", "1120.00", "400.00"),
+  gt70: cpfBand("7.5", "0.15", "12.5", "5", "1000.00", "400.00"),
+} satisfies Record<SgAgeBand, SgCpfBandRates>;
+export const SG_CPF_2026_BY_STATUS_AGE: NonNullable<SgYearTables["cpfByStatusAge"]> = {
+  citizen: cpfTable1, spr_3rd_year: cpfTable1,
+  spr_1st_year: cpfSpr1Gg, spr_2nd_year: cpfSpr2Gg,
+  spr_1st_year_full_employer: cpfSpr1Fg, spr_2nd_year_full_employer: cpfSpr2Fg,
+};
 
 /**
  * Skills Development Levy, 2026: "0.25% of the monthly total wages",
@@ -207,9 +263,8 @@ import { UNFILLED } from "../unfilled.ts";
  *   $11.25 cap. SDL is frozen since 1 Oct 2008 — if it still is, say so and
  *   pin the freeze in tax-year-{year}.test.ts; if it moved, this year
  *   diverges here.
- * - The other four Table 1 age bands: quote them in the deliberately-NOT-
- *   transcribed note (they move in January steps — a carry-back is wrong
- *   money for everyone over 55) and keep refusing them by name.
+ * - All five age bands and the SPR schedules are carried by each year's own
+ *   effective-dated tables; never carry a band from another year.
  *
  * Singapore levies no monthly income-tax withholding: this module carries CPF
  * and SDL figures only. Establish whether the {year} OW-ceiling step took

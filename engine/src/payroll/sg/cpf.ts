@@ -6,18 +6,20 @@ import type {
 import {
   SG_2026_AW_CEILING_AT_FULL_OW,
   SG_CPF_2026_LE55,
+  SG_CPF_2026_BY_STATUS_AGE,
   SG_OW_CEILING_MONTHLY_2026,
   SG_SDL_2026,
   SG_TRANSCRIBED_YEARS,
   type SgAgeBand,
   type SgCpfStatus,
+  type SgCpfBandRates,
   type SgYearTables,
 } from "./rates.ts";
 import { SG_2024_TABLES } from "./tax-year-2024.ts";
 import { SG_2025_TABLES } from "./tax-year-2025.ts";
 
 /**
- * The 2024–2026 CPF/SDL engine: Table 1 (55 & below, OW only) plus the Skills
+ * The 2024–2026 CPF/SDL engine: CPF status/age tables (OW only) plus the Skills
  * Development Levy as pure functions over integer cents (bigint). No
  * floating point anywhere; every rounding below is the Board's own rule,
  * quoted at the step. The tax year selects the OW ceiling, the OW-leg maxima
@@ -102,6 +104,7 @@ const SG_TABLES_BY_YEAR: Record<2024 | 2025 | 2026, SgYearTables> = {
     year: 2026,
     owCeilingMonthly: SG_OW_CEILING_MONTHLY_2026,
     cpfLe55: SG_CPF_2026_LE55,
+    cpfByStatusAge: SG_CPF_2026_BY_STATUS_AGE,
     sdl: SG_SDL_2026,
     awCeilingAtFullOw: SG_2026_AW_CEILING_AT_FULL_OW,
   },
@@ -142,7 +145,8 @@ export interface SgStatutoryResult {
   sdlCents: bigint;
 }
 
-const STATUSES: readonly string[] = ["citizen", "spr_3rd_year", "spr_1st_year", "spr_2nd_year", "foreigner"];
+const STATUSES: readonly string[] = ["citizen", "spr_3rd_year", "spr_1st_year", "spr_2nd_year",
+  "spr_1st_year_full_employer", "spr_2nd_year_full_employer", "foreigner"];
 const AGE_BANDS: readonly string[] = ["le55", "b55_60", "b60_65", "b65_70", "gt70"];
 
 const AGE_BAND_LABELS: Record<SgAgeBand, string> = {
@@ -165,7 +169,8 @@ export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand, tables:
   if (!STATUSES.includes(status)) {
     throw new PayrollError(
       `the SG payroll pack cannot price CPF status "${status}" — declare "citizen", "spr_3rd_year", `
-      + `"spr_1st_year", "spr_2nd_year" or "foreigner"`,
+      + `"spr_1st_year", "spr_2nd_year", "spr_1st_year_full_employer", `
+      + `"spr_2nd_year_full_employer" or "foreigner"`,
     );
   }
   // Foreign workers are outside CPF by statute. Their work-permit levy, if
@@ -177,26 +182,37 @@ export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand, tables:
       + `"b65_70" or "gt70"`,
     );
   }
-  if (status === "spr_1st_year" || status === "spr_2nd_year") {
+  const rates = tables.cpfByStatusAge?.[status]?.[ageBand]
+    ?? (ageBand === "le55" && (status === "citizen" || status === "spr_3rd_year") ? tables.cpfLe55 : undefined);
+  if (!rates) {
     throw new PayrollError(
-      `the SG payroll pack refuses ${status === "spr_1st_year" ? "1st-year" : "2nd-year"} SPR graduated rates by name — `
-      + "Tables 2–5 (graduated G/G and F/G rates) are not transcribed; only Table 1 (citizens and "
-      + "3rd-year SPRs) computes",
+      `the SG payroll pack has no ${tables.year} CPF rates for ${status} at "${AGE_BAND_LABELS[ageBand]}"; `
+      + "provide a CPF status and age band covered by the published, effective-dated tables",
     );
   }
-  if (ageBand !== "le55") {
-    const le55 = tables.cpfLe55;
-    throw new PayrollError(
-      `the SG payroll pack refuses the "${AGE_BAND_LABELS[ageBand]}" age band by name — only the Table 1 `
-      + `"55 & below" row for ${tables.year} (${le55.totalPct}% total / ${le55.employeePct}% employee, max `
-      + `${formatDollars(le55.maxTotalOw)} / ${formatDollars(le55.maxEmployeeOw)}) is transcribed`,
-    );
-  }
+}
+
+function hundredths(value: string): bigint {
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
+}
+
+function thousandths(value: string): bigint {
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole!) * 1000n + BigInt(fraction.padEnd(3, "0"));
+}
+
+function ratesFor(status: SgCpfStatus, ageBand: SgAgeBand, tables: SgYearTables): SgCpfBandRates {
+  const rates = tables.cpfByStatusAge?.[status]?.[ageBand]
+    ?? (ageBand === "le55" && (status === "citizen" || status === "spr_3rd_year") ? tables.cpfLe55 : undefined);
+  if (!rates) throw new PayrollError(`the SG ${tables.year} CPF table does not price ${status}/${ageBand}`);
+  return rates;
 }
 
 export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult {
   const tables = sgTablesForTaxYear(input.taxYear);
   assertSgCovered(input.cpfStatus, input.ageBand, tables);
+  const cpfRates = input.cpfStatus === "foreigner" ? null : ratesFor(input.cpfStatus, input.ageBand, tables);
 
   const aw = parseCents(input.additionalWages ?? "0", "Additional Wages");
   const cpfApplicable = input.cpfStatus !== "foreigner";
@@ -223,29 +239,22 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
     owSubject = ow > ceiling ? ceiling : ow;
   }
 
-  // Table 1, 55 & below. With no AW, TW = OW and the rows price on owSubject.
+  // The selected published row prices OW; CPF dollars round half-up and
+  // employee dollars round down. AW remains separately refused without YTD.
   // "$50 or less: Nil / Nil". Foreigners have no CPF OW base or contribution.
   if (cpfApplicable && owSubject > 5000n) {
     if (owSubject <= 50000n) {
-      // "> $50 to $500: 17% (TW)" total, employee "Nil".
-      totalDollars = (owSubject * 17n + 5000n) / 10000n;
+      totalDollars = (owSubject * hundredths(cpfRates!.phaseTotalPct) + 500000n) / 1000000n;
     } else if (owSubject <= 75000n) {
-      // "> $500 to $750: 17% (TW) + 0.6 (TW - $500)" total,
-      // "0.6 (TW - $500)" employee. Common denominator $/10000:
-      // 17% = 17/10000 per cent; 0.6¢ = 60/10000 $ per cent.
       const over = owSubject - 50000n;
-      totalDollars = (owSubject * 17n + over * 60n + 5000n) / 10000n;
-      employeeDollars = (over * 6n) / 1000n;
+      totalDollars = (owSubject * hundredths(cpfRates!.phaseTotalPct)
+        + over * thousandths(cpfRates!.phaseSlope) * 10n + 500000n) / 1000000n;
+      employeeDollars = (over * thousandths(cpfRates!.phaseSlope) * 10n) / 1000000n;
     } else {
-      // "> $750: [37% (OW)]*" total ("* Max. of ..." per year), "[20%
-      // (OW)]*" employee ("* Max. of ..." per year). The maxima cap the OW
-      // leg, which is the whole contribution with no AW. The 37%/20% row
-      // shape is identical in every transcribed year (each year module
-      // quotes its own Table 1); the year selects the ceiling and maxima.
-      totalDollars = (owSubject * 37n + 5000n) / 10000n;
-      employeeDollars = (owSubject * 20n) / 10000n;
-      const maxTotal = parseCents(tables.cpfLe55.maxTotalOw, "maximum total on OW") / 100n;
-      const maxEmployee = parseCents(tables.cpfLe55.maxEmployeeOw, "maximum employee share on OW") / 100n;
+      totalDollars = (owSubject * hundredths(cpfRates!.totalPct) + 500000n) / 1000000n;
+      employeeDollars = (owSubject * hundredths(cpfRates!.employeePct)) / 1000000n;
+      const maxTotal = parseCents(cpfRates!.maxTotalOw, "maximum total on OW") / 100n;
+      const maxEmployee = parseCents(cpfRates!.maxEmployeeOw, "maximum employee share on OW") / 100n;
       if (totalDollars > maxTotal) totalDollars = maxTotal;
       if (employeeDollars > maxEmployee) employeeDollars = maxEmployee;
     }

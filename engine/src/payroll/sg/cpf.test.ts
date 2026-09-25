@@ -131,23 +131,24 @@ test("any Additional Wages are refused — the AW ceiling is year-dependent", ()
   );
 });
 
-test("foreigners are outside CPF; graduated SPR years and other age bands are refused by name", () => {
+test("foreigners remain outside CPF while all 2026 published age and SPR schedules price", () => {
   const tables2026 = sgTablesForTaxYear(2026);
   // CPF Board exempts foreigners from CPF contributions:
   // https://www.cpf.gov.sg/member/growing-your-savings/cpf-contributions/saving-as-an-employee
   assert.doesNotThrow(() => assertSgCovered("foreigner", "le55", tables2026));
-  assert.throws(
-    () => assertSgCovered("spr_1st_year", "le55", tables2026),
-    /graduated rates by name/,
-  );
-  assert.throws(
-    () => assertSgCovered("spr_2nd_year", "le55", tables2026),
-    /graduated rates by name/,
-  );
-  for (const band of ["b55_60", "b60_65", "b65_70", "gt70"] as const) {
-    assert.throws(() => assertSgCovered("citizen", band, tables2026), /refuses the ".*" age band by name/, band);
-  }
   assert.throws(() => assertSgCovered("citizen" as never, "xx" as never, tables2026), /age band/);
+  // CPF Board 2026 tables 1–5: https://www.cpf.gov.sg/content/dam/web/employer/employer-obligations/documents/CPFcontributionratesfrom1Jan2026.pdf
+  for (const [cpfStatus, ageBand, wages, total, employee] of [
+    ["citizen", "b55_60", "3000.00", 102000n, 54000n], ["citizen", "b60_65", "3000.00", 75000n, 37500n],
+    ["citizen", "b65_70", "3000.00", 49500n, 22500n], ["citizen", "gt70", "3000.00", 37500n, 15000n],
+    ["spr_1st_year", "le55", "600.00", 3900n, 1500n], ["spr_1st_year", "le55", "3000.00", 27000n, 15000n],
+    ["spr_2nd_year", "b60_65", "3000.00", 33000n, 22500n],
+    ["spr_1st_year_full_employer", "b55_60", "3000.00", 63000n, 15000n],
+    ["spr_2nd_year_full_employer", "b65_70", "3000.00", 42000n, 15000n],
+  ] as const) {
+    const result = calculateSgStatutory({ taxYear: 2026, cpfStatus, ageBand, ordinaryWages: wages });
+    assert.deepEqual([result.totalCents, result.employeeCents], [total, employee], `${cpfStatus}/${ageBand}`);
+  }
   const foreigner = calculateSgStatutory({
     taxYear: 2026, cpfStatus: "foreigner", ageBand: "le55", ordinaryWages: "2000.00",
   });
@@ -156,35 +157,4 @@ test("foreigners are outside CPF; graduated SPR years and other age bands are re
   assert.equal(foreigner.employeeCents, 0n);
   assert.equal(foreigner.employerCents, 0n);
   assert.equal(foreigner.sdlCents, 500n);
-});
-
-test("the over-55 refusal names the calling year's own maxima (2024 vs 2026)", () => {
-  // The 55-and-below OW-leg maxima move with the OW ceiling: 2024 prints
-  // $2,516 / $1,360, 2025 $2,738 / $1,480, 2026 $2,960 / $1,600 (each year
-  // module quotes its own Table 1). A refusal citing 2026 figures for a
-  // 2024 run would misstate the year's own table.
-  assert.throws(
-    () => calculateSgStatutory({ taxYear: 2024, cpfStatus: "citizen", ageBand: "b55_60", ordinaryWages: "4500.00" }),
-    (error: Error) => {
-      assert.ok(error instanceof PayrollError);
-      assert.match(error.message, /\$2,516\.00/);
-      assert.match(error.message, /\$1,360\.00/);
-      assert.doesNotMatch(error.message, /\$2,960/);
-      return true;
-    },
-  );
-  assert.throws(
-    () => calculateSgStatutory({ taxYear: 2026, cpfStatus: "citizen", ageBand: "b60_65", ordinaryWages: "4500.00" }),
-    (error: Error) => {
-      assert.ok(error instanceof PayrollError);
-      assert.match(error.message, /\$2,960\.00/);
-      assert.match(error.message, /\$1,600\.00/);
-      return true;
-    },
-  );
-  // The guard reads the same tables object the calculation prices from.
-  assert.throws(
-    () => assertSgCovered("citizen", "b65_70", sgTablesForTaxYear(2025)),
-    /\$2,738\.00/,
-  );
 });
