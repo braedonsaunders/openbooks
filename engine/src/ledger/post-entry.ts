@@ -294,7 +294,7 @@ export async function postEntry(
         values (${input.id}, ${orgId}, ${input.bookId}, ${input.subsidiaryId}, ${input.entryNumber},
                 ${input.postingDate}, ${input.periodId}, ${input.memo ?? null}, 'draft',
                 ${input.origin}, ${input.reversesEntryId ?? null}, ${input.sourceDocumentId ?? null},
-                ${custom === null ? null : JSON.stringify(custom)}::jsonb,
+                ${custom === null ? "{}" : JSON.stringify(custom)}::jsonb,
                 ${input.actorId ?? null}, ${input.actorId ?? null})
         returning id`
       : sql`insert into journal_entries
@@ -303,7 +303,7 @@ export async function postEntry(
         values (${orgId}, ${input.bookId}, ${input.subsidiaryId}, ${input.entryNumber},
                 ${input.postingDate}, ${input.periodId}, ${input.memo ?? null}, 'draft',
                 ${input.origin}, ${input.reversesEntryId ?? null}, ${input.sourceDocumentId ?? null},
-                ${custom === null ? null : JSON.stringify(custom)}::jsonb,
+                ${custom === null ? "{}" : JSON.stringify(custom)}::jsonb,
                 ${input.actorId ?? null}, ${input.actorId ?? null})
         returning id`,
   )).rows[0];
@@ -321,7 +321,7 @@ export async function postEntry(
       ${JSON.stringify(line.extraDims ?? {})}::jsonb,
       ${line.quantity ?? null}, ${line.unit ?? null}, ${line.dueDate ?? null},
       ${line.isOpenItem ?? false}, ${line.taxCodeId ?? null},
-      ${line.custom === undefined ? null : JSON.stringify(line.custom)}::jsonb,
+      ${line.custom === undefined ? "{}" : JSON.stringify(line.custom)}::jsonb,
       ${line.contributorKind ?? null}, ${line.contributorRef ?? null})`,
   );
   const insertedLines = (await executor.execute<{ id: string; line_number: number }>(sql`
