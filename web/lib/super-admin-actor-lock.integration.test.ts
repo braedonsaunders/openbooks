@@ -1,13 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
-
-registerHooks({
-  resolve(specifier, _context, nextResolve) {
-    if (specifier === "server-only") return { format: "module", source: "", shortCircuit: true, url: "data:text/javascript,export {}" };
-    return nextResolve(specifier);
-  },
-});
 
 const { db, env, withBypass, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");

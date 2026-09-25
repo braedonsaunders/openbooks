@@ -3,18 +3,11 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 /**
- * The global SFTP daemon is a singleton row (id=default, no org) feeding one
- * in-process listener for EVERY tenant. Its mutation therefore belongs to the
- * platform super-admin authority at /api/platform/sftp/daemon — never to an
- * organization feature write on /api/banking/sftp/daemon.
- *
- * This suite pins the boundary end to end:
- *   - a tenant org admin (admin.setup.manage + Bank Feeds ON) is 403 on the
- *     platform mutation with no global config write, while the old tenant
- *     daemon route exports no PATCH at all and stays read-only;
- *   - ordinary tenant-owned SFTP server management remains available and
- *     org-scoped under its Bank Feeds gate;
- *   - a platform super-admin succeeds on the platform mutation.
+ * The global SFTP daemon (singleton id=default, no org) feeds one listener
+ * for EVERY tenant, so only the platform super-admin authority mutates it.
+ * This suite pins: tenant admins 403 with no write (old tenant route
+ * read-only); tenant servers stay org-scoped under Bank Feeds; super-admin
+ * success; mid-write revocation gets the named 403 with no write, not a 500.
  */
 
 interface DaemonPatch {
@@ -156,7 +149,7 @@ const mockSources = new Map<string, string>([
       export const db = {
         execute(query) {
           const text = sqlText(query); state.inserts.push({ text })
-          return Promise.resolve({ rows: text.includes('from users') ? [{ id: 'user-platform', orgId: 'org-platform', isActive: true, isSuperAdmin: true }] : [{ id: 'server-1' }] })
+          return Promise.resolve({ rows: text.includes('from users') ? [{ id: state.identity?.user?.id ?? 'user-platform', orgId: 'org-platform', isActive: true, isSuperAdmin: state.identity?.user?.id === 'user-platform' }] : [{ id: 'server-1' }] })
         },
         transaction(fn) {
           return fn(db)
@@ -332,4 +325,17 @@ test('a platform super-admin can configure the global daemon', async () => {
     patch: { enabled: true, port: 2222, advertisedHost: 'sftp.example.com' },
     userId: 'user-platform',
   }])
+})
+
+test('a super-admin revoked before the write gets the named refusal, not a 500', async () => {
+  reset()
+  routeState.identity = { ...SUPER_ADMIN_AUTHZ, user: { ...SUPER_ADMIN_AUTHZ.user, id: 'user-revoked' } }
+  const response = await platformPATCH(new Request('http://openbooks.test/api/platform/sftp/daemon', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled: true }),
+  }))
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: 'Platform super-admin access was revoked — reload and retry with an active super administrator' })
+  assert.equal(routeState.updates.length, 0)
 })
