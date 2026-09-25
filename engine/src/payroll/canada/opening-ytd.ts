@@ -1,4 +1,4 @@
-import type { PayrollOpeningYtdField } from "../packs.ts";
+import type { PayrollOpeningYtdField } from "../pack-types.ts";
 
 /**
  * Canada's second-order opening year-to-date fields: history a mid-year

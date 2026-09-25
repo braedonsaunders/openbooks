@@ -19,7 +19,7 @@
 import type {
   PayrollCountryPack,
   PayrollRegionCoverage,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import { AU_CERTIFICATES, AU_KNOWN_REGIONS, AU_STATE_NAMES, AU_WITHHOLDING } from "./jurisdictions.ts";
 import { AU_FACTOR_LABELS, computeAuStatutory } from "./compute-statutory.ts";
 import { applyAuEmployerLevies } from "./employer-levies.ts";

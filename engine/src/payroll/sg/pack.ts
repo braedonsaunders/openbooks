@@ -50,7 +50,7 @@ import type { PayrollFilingData, PayrollPackFilings } from "../filing-registry.t
 import type {
   PayrollCountryPack,
   PayrollRemittanceSchedule,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { SG_CERTIFICATES } from "./certificates.ts";
 import { computeSgStatutory, SG_FACTOR_LABELS } from "./cpf.ts";

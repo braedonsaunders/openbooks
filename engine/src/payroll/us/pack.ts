@@ -3,7 +3,7 @@ import type {
   PayrollHoliday,
   PayrollJurisdiction,
   PayrollRegionCoverage,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import { computeUsStatutory, US_COMPUTE_FACTOR_LABELS } from "./compute-statutory.ts";
 import { usPackFilings } from "./filings.ts";
 import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./jurisdictions.ts";

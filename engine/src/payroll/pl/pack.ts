@@ -18,7 +18,7 @@
  * named (`remittanceVendorSettingsKey: null`); `tax_authority` withholdings
  * surface unassigned until configured, as with the FR and US packs.
  */
-import type { PayrollCountryPack } from "../packs.ts";
+import type { PayrollCountryPack } from "../pack-types.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
 import { PL_CERTIFICATES } from "./certificates.ts";
 import { computePlStatutory, PL_FACTOR_LABELS } from "./compute-statutory.ts";

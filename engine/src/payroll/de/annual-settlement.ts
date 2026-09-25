@@ -46,7 +46,7 @@ import {
   type PayrollAnnualSettlement,
   type PayrollAnnualSettlementContext,
 } from "../annual-settlement.ts";
-import type { PayrollTaxYearDefinition } from "../packs.ts";
+import type { PayrollTaxYearDefinition } from "../pack-types.ts";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
 import { STKL_BY_ROMAN } from "./compute-statutory.ts";

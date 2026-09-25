@@ -8,7 +8,7 @@
  * 25 and 26 grudnia. Holiday pay is undeclared (null): no computation is
  * transcribed.
  */
-import type { PayrollCountryPack } from "../packs.ts";
+import type { PayrollCountryPack } from "../pack-types.ts";
 
 const PL_NATIONAL_HOLIDAYS: PayrollCountryPack["jurisdictions"][number]["holidays"] = [
   { key: "pl_new_year", name: "Nowy Rok (1 stycznia)", rule: { kind: "fixed", month: 1, day: 1 }, observance: "none" },

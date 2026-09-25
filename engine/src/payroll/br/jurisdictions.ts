@@ -25,7 +25,7 @@
  * transcribe — and férias pay is a named refusal. Null refuses until a
  * sourced formula lands.
  */
-import type { PayrollJurisdiction } from "../packs.ts";
+import type { PayrollJurisdiction } from "../pack-types.ts";
 
 export const BR_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {

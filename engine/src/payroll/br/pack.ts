@@ -19,7 +19,7 @@
  * REGISTERED: `PayrollCountry` is `keyof typeof PAYROLL_COUNTRY_PACKS`, so
  * this pack is in the registry, wired to its settings keys, and installable.
  */
-import type { PayrollCountryPack } from "../packs.ts";
+import type { PayrollCountryPack } from "../pack-types.ts";
 import { BR_CERTIFICATES } from "./certificates.ts";
 import { BR_FACTOR_LABELS, computeBrStatutory } from "./compute-statutory.ts";
 import { brPackFilings } from "./filings.ts";

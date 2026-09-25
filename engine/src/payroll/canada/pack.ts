@@ -1,7 +1,7 @@
 import type {
   PayrollCountryPack,
   PayrollRegionCoverage,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import { CA_COMPUTE_FACTOR_LABELS, computeCaStatutory } from "./compute-statutory.ts";
 import { T4127_FACTOR_LABELS } from "./t4127.ts";
 import { TP1015_FACTOR_LABELS } from "./quebec/tp1015.ts";

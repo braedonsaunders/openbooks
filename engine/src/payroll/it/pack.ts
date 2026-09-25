@@ -23,7 +23,7 @@
  * typechecks directly. (Written while the union was closed, typed as the full
  * `PayrollCountryPack` minus that member to prove conformance.)
  */
-import type { PayrollCountryPack } from "../packs.ts";
+import type { PayrollCountryPack } from "../pack-types.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";
 import { itAnnualSettlement } from "./conguaglio.ts";
 import { computeItStatutory, IT_FACTOR_LABELS } from "./compute-statutory.ts";

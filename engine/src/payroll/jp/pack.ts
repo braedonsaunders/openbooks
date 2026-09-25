@@ -26,7 +26,7 @@
 import type {
   PayrollCountryPack,
   PayrollRegionCoverage,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import { JP_CERTIFICATES } from "./certificates.ts";
 import { computeJpStatutory, JP_FACTOR_LABELS } from "./compute-statutory.ts";
 import { jpPackFilings } from "./filings.ts";

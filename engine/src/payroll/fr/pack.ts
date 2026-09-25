@@ -1,4 +1,4 @@
-import type { PayrollCountryPack } from "../packs.ts";
+import type { PayrollCountryPack } from "../pack-types.ts";
 import type {
   PayrollCertificate,
   PayrollPackCertificates,
