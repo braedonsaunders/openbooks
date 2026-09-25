@@ -1682,7 +1682,8 @@
       "title": "件名",
       "kind": "種別",
       "fte": "常勤換算",
-      "start": "開始"
+      "start": "開始",
+      "action": "アクション"
     },
     "placement": {
       "below_min": "下限未満",

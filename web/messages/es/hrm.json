@@ -1682,7 +1682,8 @@
       "title": "Título",
       "kind": "Tipo",
       "fte": "ETC",
-      "start": "Inicio"
+      "start": "Inicio",
+      "action": "Acción"
     },
     "placement": {
       "below_min": "Bajo el mínimo",

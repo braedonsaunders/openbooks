@@ -1682,7 +1682,8 @@
       "title": "Titre",
       "kind": "Nature",
       "fte": "ETP",
-      "start": "Début"
+      "start": "Début",
+      "action": "Action"
     },
     "placement": {
       "below_min": "Sous le minimum",
