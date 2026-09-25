@@ -1767,7 +1767,21 @@
       "at": "时间"
     },
     "emptyHistory": "暂无事件。",
+    "move": {
+      "title": "生命周期",
+      "open": "开启",
+      "submit": "提交",
+      "push": "推送",
+      "close": "关闭",
+      "cancel": "取消"
+    },
     "settings": {
+      "title": "薪酬设置",
+      "attribute": "比较属性",
+      "threshold": "差距阈值（%）",
+      "responseDays": "回复天数",
+      "roundingLabel": "FTE 舍入",
+      "burden": "负担率",
       "rounding": {
         "upToWhole": "向上取整为整数",
         "nearestTenth": "精确到小数点后一位",

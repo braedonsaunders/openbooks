@@ -51,6 +51,11 @@ import {
   PlacementBar,
   PlacementSummary,
 } from '../../app/(app)/hrm/compensation/sections'
+import {
+  CompensationSettingsForm,
+  CycleMoveButtons,
+  PlanLineApproveButton,
+} from '../../app/(app)/hrm/compensation/islands'
 import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 import { num, str, type WidgetRenderer } from './widget-props'
 
@@ -505,4 +510,82 @@ export const HRM_WIDGETS = {
       cancel={str(props, 'cancel') ?? ''}
     />
   ),
+  /** The merit cycle lifecycle block: open/submit/push/close/cancel over
+   *  loader-resolved labels, rendered only while the loader arms it (null
+   *  for readers — the POST endpoint requires hrm.compensation.manage). */
+  'hrm-comp-cycle-move': (props) => {
+    const move = props.move as {
+      openLabel: string
+      submitLabel: string
+      pushLabel: string
+      closeLabel: string
+      cancelLabel: string
+      cancelReasonLabel: string
+      cancelReasonRequired: string
+      failed: string
+      submit: string
+      cancel: string
+    } | null
+    const cycleId = str(props, 'cycleId')
+    if (!move || !cycleId) return null
+    return (
+      <CycleMoveButtons
+        cycleId={cycleId}
+        labels={{ failed: move.failed, submit: move.submit, cancel: move.cancel }}
+        openLabel={move.openLabel}
+        submitLabel={move.submitLabel}
+        pushLabel={move.pushLabel}
+        closeLabel={move.closeLabel}
+        cancelLabel={move.cancelLabel}
+        cancelReasonLabel={move.cancelReasonLabel}
+        cancelReasonRequired={move.cancelReasonRequired}
+      />
+    )
+  },
+  /** One headcount plan line's approve button: the island itself renders
+   *  nothing unless the line is proposed; null labels (readers) render
+   *  nothing. The approve endpoint owns the grant and the transition. */
+  'hrm-plan-line-approve': (props) => {
+    const approve = props.approve as ComponentProps<typeof PlanLineApproveButton>['labels'] & { approve: string } | null
+    if (!approve) return null
+    return (
+      <PlanLineApproveButton
+        planId={str(props, 'planId') ?? ''}
+        lineId={str(props, 'lineId') ?? ''}
+        lineStatus={str(props, 'lineStatus') ?? ''}
+        labels={{ failed: approve.failed, submit: approve.submit, cancel: approve.cancel }}
+        approveLabel={approve.approve}
+      />
+    )
+  },
+  /** The compensation settings form (gap threshold, burden rate, FTE
+   *  rounding): rendered only while the loader arms it (null unless an
+   *  unrestricted compensation manager). The PUT endpoint owns the grant. */
+  'hrm-comp-settings': (props) => {
+    const settings = props.settings as {
+      initial: ComponentProps<typeof CompensationSettingsForm>['initial']
+      attributeLabel: string
+      thresholdLabel: string
+      responseDaysLabel: string
+      roundingLabel: string
+      roundingOptions: ComponentProps<typeof CompensationSettingsForm>['roundingOptions']
+      burdenLabel: string
+      failed: string
+      submit: string
+      cancel: string
+    } | null
+    if (!settings) return null
+    return (
+      <CompensationSettingsForm
+        labels={{ failed: settings.failed, submit: settings.submit, cancel: settings.cancel }}
+        initial={settings.initial}
+        attributeLabel={settings.attributeLabel}
+        thresholdLabel={settings.thresholdLabel}
+        responseDaysLabel={settings.responseDaysLabel}
+        roundingLabel={settings.roundingLabel}
+        roundingOptions={settings.roundingOptions}
+        burdenLabel={settings.burdenLabel}
+      />
+    )
+  },
 } satisfies Record<string, WidgetRenderer>

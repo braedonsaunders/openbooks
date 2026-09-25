@@ -1767,7 +1767,21 @@
       "at": "Zeitpunkt"
     },
     "emptyHistory": "Noch keine Ereignisse.",
+    "move": {
+      "title": "Lebenszyklus",
+      "open": "Öffnen",
+      "submit": "Einreichen",
+      "push": "Übertragen",
+      "close": "Schließen",
+      "cancel": "Abbrechen"
+    },
     "settings": {
+      "title": "Vergütungseinstellungen",
+      "attribute": "Vergleichsmerkmal",
+      "threshold": "Lückenschwelle (%)",
+      "responseDays": "Antworttage",
+      "roundingLabel": "VZÄ-Rundung",
+      "burden": "Gemeinkostensatz",
       "rounding": {
         "upToWhole": "Auf ganze Zahl aufrunden",
         "nearestTenth": "Nächstes Zehntel",
