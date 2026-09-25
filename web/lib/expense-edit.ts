@@ -116,6 +116,9 @@ export async function prepareExpenseEdit(
   // so without an org-scoped check this save would persist another tenant's
   // party on the draft (submit and post refuse it later, but the reference
   // itself must never be stored). A null body value keeps the current party.
+  // A party anchored to a subsidiary outside the caller's scope — or to a
+  // different subsidiary than the report — reads as missing, exactly like
+  // the picker that only offers visible employees.
   if (body.partyId !== undefined && body.partyId !== null) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.partyId)) {
       throw new DocumentEditError(404, 'party not found in this organization')

@@ -18,8 +18,9 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import { canRecallExpenseReport, loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { customSegmentOptions } from '../../../../lib/segments'
+import { dimensionOptions } from '../../../../lib/reports/filters'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { cardOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import type { ExpenseDrawer } from '../ExpenseDrawer'
 
 /**
@@ -105,12 +106,31 @@ export async function loadExpenseReports(
              and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
              ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
            order by p.display_name`),
-        db.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`),
-        cardOptions(authz.user.orgId),
+        db.execute<{ id: string; number: string | null; name: string }>(sql`
+          select id, number, name from accounts
+           where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId}
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+           order by number nulls last`),
+        db.execute<{ id: string; label: string; last_four: string | null; network: string | null; liability_account_id: string | null; holder: string | null }>(sql`
+          select pc.id, pc.label, pc.last_four, pc.network, pc.liability_account_id, p.display_name as holder
+            from payment_cards pc
+            join parties p on p.id = pc.holder_party_id and p.org_id = pc.org_id
+            join accounts a on a.id = pc.liability_account_id and a.org_id = pc.org_id
+           where pc.org_id = ${authz.user.orgId} and pc.is_active
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+           order by pc.label
+        `).then((r) => r.rows.map((card) => ({
+          id: card.id,
+          label: card.label,
+          display_name: card.last_four ? `${card.network ?? ''} •••• ${card.last_four} — ${card.holder ?? ''}`.trim() : card.label,
+          last_four: card.last_four,
+          network: card.network,
+          liability_account_id: card.liability_account_id,
+        }))),
         taxCodeOptions(authz.user.orgId),
         taxGroupOptions(authz.user.orgId),
-        db.execute<{ id: string; name: string }>(sql`select id, name from departments where is_active and org_id = ${authz.user.orgId} order by name`),
-        db.execute<{ id: string; name: string }>(sql`select id, name from projects where is_active and org_id = ${authz.user.orgId} order by name`),
+        dimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
         loadFieldDefs('documents', 'expense_report'),
         loadFieldDefs('document_lines', 'expense_report'),
         customSegmentOptions(authz.user.orgId),
@@ -123,8 +143,8 @@ export async function loadExpenseReports(
           userId: authz.user.id,
           recordType: 'expense_report',
           userRoles: authz.user.roles.map(({ key }) => key),
-          headerDefs: pickers[7],
-          lineDefs: pickers[8],
+          headerDefs: pickers[6],
+          lineDefs: pickers[7],
           explicitLayoutId: pickString(sp.form),
         })
       : null
@@ -148,11 +168,11 @@ export async function loadExpenseReports(
           cards: pickers[2] as unknown as ExpenseDrawerProps['cards'],
           taxCodes: pickers[3],
           taxGroups: pickers[4],
-          departments: (pickers[5] as { rows: unknown }).rows,
-          projects: (pickers[6] as { rows: unknown }).rows,
-          headerDefs: pickers[7] as unknown as ExpenseDrawerProps['headerDefs'],
-          lineDefs: pickers[8] as unknown as ExpenseDrawerProps['lineDefs'],
-          segments: pickers[9] as unknown as ExpenseDrawerProps['segments'],
+          departments: pickers[5].departments,
+          projects: pickers[5].projects,
+          headerDefs: pickers[6] as unknown as ExpenseDrawerProps['headerDefs'],
+          lineDefs: pickers[7] as unknown as ExpenseDrawerProps['lineDefs'],
+          segments: pickers[8] as unknown as ExpenseDrawerProps['segments'],
           canSubmit,
           canPost,
           canRecall,
