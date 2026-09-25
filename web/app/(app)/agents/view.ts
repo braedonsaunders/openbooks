@@ -20,7 +20,7 @@ import {
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
+import { can, guardRootSubsidiaryScope, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
 import { parseAgentFindingsParams } from '../../../lib/list/agent-findings'
@@ -275,7 +275,7 @@ export async function loadAgents(
   // Owner/role candidates stay behind the write gate: readers see names, not
   // the org directory.
   let assigneeOptions: WorkItemAssigneeOptions | null = null
-  if (selected && canWrite) {
+  if (selected && canWrite && !(await guardRootSubsidiaryScope(authz))) {
     const targets = await listAgentNotificationTargets(authz.user.orgId)
     assigneeOptions = { users: targets.users, roles: targets.roles }
   }

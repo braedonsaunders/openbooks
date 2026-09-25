@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
+// Loader regression for /admin/setup/agents/[agentKey].
 const stateKey = Symbol.for("openbooks.agent-policy-loader-test");
 interface LoaderState {
   user: { orgId: string; id: string } | null;
