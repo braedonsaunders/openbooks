@@ -12,7 +12,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -68,6 +68,11 @@ async function seedTexasHarness(): Promise<UsHarness> {
         netPayAccountId: netPayable,
         wagesTo: "expense",
         countries: ["US"],
+        // Presence-only FUTA: the 2026 Schedule A is not transcribed, so an
+        // unconfigured FUTA refuses by name; the ordinary 0.6% full-credit
+        // figure is the TEST entering a number as an employer would, and no
+        // expectation below asserts a FUTA amount.
+        us: { futaRate: "0.006" },
       },
     })}::jsonb where id = ${org.orgId}`);
 
@@ -115,13 +120,25 @@ async function seedTexasHarness(): Promise<UsHarness> {
                                created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3,
             ${usSubId}, true, ${actorId}, ${actorId})`);
+  // Stub calculation refuses employees without an HRM employment, so the hire
+  // carries one and the profile points at it.
+  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, usSubId);
+  // The federal calculation refuses payroll without a tax-residency status,
+  // so the synthetic US employee states one — U.S. person.
+  await db.execute(sql`
+    insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
+                                           region, sub_region, answers, effective_from,
+                                           created_by, updated_by)
+    values (${org.orgId}, ${employeeId}, 'US', 'us_w4_tax_residency', null, null,
+            '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+            ${actorId}, ${actorId})`);
   // Assigned to the EIN account — NOT to any state SUI account.
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                           province, pay_basis, filing_status, filing_account_id,
-                                           is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'US', 'TX', 'hourly', 'single',
-            ${einAccountId}, true, ${actorId}, ${actorId})`);
+    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                           country, province, pay_basis, filing_status,
+                                           filing_account_id, is_active, created_by, updated_by)
+    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'US', 'TX', 'hourly',
+            'single', ${einAccountId}, true, ${actorId}, ${actorId})`);
   // 160 hours in the period: 160 × 45 = 7,200 gross, past the $7,000 FUTA base.
   for (const [workedOn, hours] of [
     ["2026-07-06", 40], ["2026-07-08", 40], ["2026-07-10", 40], ["2026-07-14", 40],
@@ -322,12 +339,15 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
+      // Stub calculation refuses employees without an HRM employment, so the
+      // hire carries one and the profile points at it.
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
                                                is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '0', 'accrue', true, ${actorId}, ${actorId})`);
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await db.execute(sql`
