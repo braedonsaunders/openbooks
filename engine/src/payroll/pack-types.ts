@@ -1394,6 +1394,32 @@ export interface PayrollHolidayPayRule {
    * engine never invents one.
    */
   weeklyCap?: PayrollOccupationWeeklyCap;
+  /**
+   * Occupations the statute excludes from holiday-pay entitlement outright,
+   * keyed by the `statutory_occupation_class` value the employee answers —
+   * the repealed Prince Edward Island Act's elect-to-work contracts
+   * (RSPEI 1988 c E-6.2 s. 7(1)(e)) are the first. A member of a named class
+   * is denied the day by name; an unanswered class fails the run closed;
+   * any other class runs the general rule. Omitted where the statute names
+   * no excluded class.
+   */
+  excludedOccupations?: Readonly<Record<string, PayrollHolidayExcludedOccupation>>;
+}
+
+/**
+ * One occupation a holiday-pay rule excludes from entitlement, in the
+ * statute's own words — the pack's declaration, never a hardcoded list in a
+ * consumer. The engine denies a member the day (reason + citation on the
+ * trace); the resolver refuses an unanswered class by name with the
+ * profile/run remedy, exactly like an unanswered commission status.
+ */
+export interface PayrollHolidayExcludedOccupation {
+  /** English class label, shown where no locale key exists. */
+  label: string;
+  /** The statute section imposing the exclusion. */
+  citation: string;
+  /** Why the class is not entitled, for the denial and the refusal. */
+  reason: string;
 }
 
 /**

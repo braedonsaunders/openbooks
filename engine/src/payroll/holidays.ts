@@ -5,9 +5,11 @@ import { MB_CONSTRUCTION_HOLIDAY } from "./canada/employment-standards.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, prorateDays, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
 import {
+  countryOfJurisdiction,
   employmentJurisdictionsOf,
   holidayPayLookbackBasis,
   jurisdictionKey,
+  occupationCapValues,
   payrollJurisdiction,
   payrollJurisdictionDeclared,
   type PayrollHoliday,
@@ -619,6 +621,16 @@ export interface HolidayPayContext {
   employmentDays: number | null;
   /** The employee is paid in whole or in part on commission. */
   paidOnCommission?: boolean;
+  /**
+   * The employee's standing statutory occupation class (the profile column's
+   * raw value), read only where the rule declares an occupation arm — a
+   * weekly cap or an excluded occupation. A named excluded class denies the
+   * day outright; any other class runs the general rule below. Undefined
+   * (probes, callers that never present the question) skips the arms; the
+   * resolver refuses a presented-but-unrecorded null by name first, so the
+   * pure calculation never answers the general rule on a guess.
+   */
+  occupationClass?: string | null;
   /** Complete weeks of continuous employment, for the commission windows. */
   employmentWeeks?: number | null;
   /** Earnings over the commission lookback, when the rule declares one. */
@@ -740,6 +752,19 @@ export function computeStatutoryHolidayPay(
 
   if (!context.holiday.paid) {
     return deny("the day is configured as an unpaid closure");
+  }
+
+  // The statute's own excluded occupation. A named class is not entitled to
+  // the day at all — denied before qualifying, pricing, and premium alike,
+  // so a member never receives the day's pay in any form. A class the rule
+  // does not name runs the general rule below; the arms are special cases,
+  // never a second general rule. (An UNANSWERED class never reaches here
+  // from a real run: the resolver refuses it by name first.)
+  const excluded = context.occupationClass == null
+    ? undefined
+    : rule.excludedOccupations?.[context.occupationClass];
+  if (excluded !== undefined) {
+    return deny(`${excluded.reason} (${excluded.citation})`);
   }
 
   const { qualifying } = rule;
@@ -1059,9 +1084,10 @@ export interface StatutoryHolidayPayInput {
   /**
    * The presented statutory occupation class (the profile column's raw
    * value). Undefined means the caller never presented the question — probes
-   * and tests get the uncapped rule. Null means presented but unrecorded,
-   * which a rule with a weekly cap refuses by name. The run always presents
-   * it, straight off the employment's profile row.
+   * and tests get the general rule. Null means presented but unrecorded,
+   * which a rule declaring an occupation arm (weekly cap or exclusion)
+   * refuses by name. The run always presents it, straight off the
+   * employment's profile row.
    */
   occupationClass?: string | null;
   /**
@@ -1177,6 +1203,53 @@ async function resolveMbConstructionHolidayPay(
  * when their dated lines establish which side of the window earned them.
  */
 /**
+ * Whether a holiday-pay rule depends on the standing occupation answer — the
+ * one predicate every consumer of occupation arms reads, so "declares arms"
+ * never drifts between the resolver, the cap, and the profile UI.
+ */
+export function ruleDeclaresOccupationArms(rule: PayrollHolidayPayRule): boolean {
+  return rule.weeklyCap !== undefined
+    || (rule.excludedOccupations !== undefined && Object.keys(rule.excludedOccupations).length > 0);
+}
+
+/**
+ * Fail-closed gate for the presented occupation class, shared by the weekly
+ * cap and the excluded-occupation denial so both enforce the identical gate.
+ * Pure (no database) so the goldens pin it directly; the resolver calls it
+ * before pricing each holiday.
+ *
+ * Silence (the general rule) where the rule declares no arm, or where the
+ * caller never presented the question (probes and tests). Refusal by name
+ * with the profile remedy where the question was presented but the class is
+ * unrecorded (null), or where the answer is outside the country pack's own
+ * closed vocabulary (a typo, or a class no rule prices — never a guess). A
+ * vocabulary value the rule does not name runs the general rule: the arms
+ * are special cases, never a second general rule.
+ */
+export function assertOccupationClass(
+  rule: PayrollHolidayPayRule,
+  country: string,
+  occupationClass: string | null | undefined,
+  employeeName: string,
+): void {
+  if (!ruleDeclaresOccupationArms(rule) || occupationClass === undefined) return;
+  if (occupationClass === null) {
+    throw new PayrollHolidayError(
+      `${employeeName} may be priced under an occupation holiday-pay arm, but their statutory `
+      + "occupation class is not recorded — the run will not guess whether an arm applies. "
+      + "Record it on the employee's payroll profile, then recalculate",
+    );
+  }
+  const vocabulary = occupationCapValues(country);
+  if (!vocabulary.includes(occupationClass)) {
+    throw new PayrollHolidayError(
+      `${employeeName} carries unrecognized occupation class "${occupationClass}" — `
+      + `record one of ${vocabulary.join(", ")} on the employee's payroll profile, then recalculate`,
+    );
+  }
+}
+
+/**
  * An occupation weekly cap (New Brunswick ESA s. 21(2)): a route
  * salesperson's pay for an UNWORKED holiday shall not push the week's
  * earnings above their average weekly wages for the preceding four weeks.
@@ -1193,10 +1266,12 @@ async function resolveMbConstructionHolidayPay(
  *
  * Skips (returns the computed pay) where the rule declares no cap, where the
  * caller never presented the occupation question, where the occupation is not
- * the capped one, or where the holiday was worked. Refuses by name where the
- * question was presented but the class is unrecorded.
+ * the capped one, or where the holiday was worked. The presented-answer gate
+ * (`assertOccupationClass`) runs in the resolver before pricing, so this
+ * function meets only answered, vocabulary-valid classes. Exported for the
+ * week-total goldens.
  */
-async function applyOccupationWeeklyCap(
+export async function applyOccupationWeeklyCap(
   tx: Pick<typeof db, "execute">,
   args: {
     orgId: string;
@@ -1221,19 +1296,9 @@ async function applyOccupationWeeklyCap(
   const cap = args.rule.weeklyCap;
   if (!cap || args.occupationClass === undefined) return unchanged;
   if (cmp(args.hoursWorked, "0") > 0) return unchanged;
-  if (args.occupationClass === null) {
-    throw new PayrollHolidayError(
-      `${args.employeeName} may be priced under an occupation weekly cap, but their statutory `
-      + "occupation class is not recorded — the run will not guess whether the cap applies. "
-      + "Record it on the employee's payroll profile, then recalculate",
-    );
-  }
-  if (!cap.values.includes(args.occupationClass)) {
-    throw new PayrollHolidayError(
-      `${args.employeeName} carries unrecognized occupation class "${args.occupationClass}" — `
-      + `record one of ${cap.values.join(", ")} on the employee's payroll profile, then recalculate`,
-    );
-  }
+  // The resolver's `assertOccupationClass` gate already refused unrecorded
+  // and out-of-vocabulary answers; a vocabulary value this rule does not
+  // name runs the general rule below.
   if (args.occupationClass !== cap.cappedValue) return unchanged;
 
   const stubInput = {
@@ -1434,6 +1499,17 @@ export async function resolveStatutoryHolidayPay(
       }
     }
 
+    // A rule that names an occupation arm depends on the answer, exactly
+    // like a commission window depends on commission status: a presented
+    // but unrecorded (or out-of-vocabulary) class fails closed by name
+    // rather than running the general rule. The demand follows the rule's
+    // own declaration, never a list of jurisdiction keys.
+    assertOccupationClass(
+      rule,
+      countryOfJurisdiction(input.jurisdiction),
+      input.occupationClass,
+      input.employeeName,
+    );
     const hoursWorked = await hoursOn(tx, input, holiday.date);
     const result = computeStatutoryHolidayPay(rule, {
       employee: input.employeeName,
@@ -1451,6 +1527,7 @@ export async function resolveStatutoryHolidayPay(
         : undefined,
       paidOnCommission: input.paidOnCommission,
       absentWithoutConsent: input.absentWithoutConsent,
+      occupationClass: input.occupationClass,
       averagingAgreement: input.averagingAgreement,
       hoursWorked,
       hourlyRate: input.hourlyRate,
