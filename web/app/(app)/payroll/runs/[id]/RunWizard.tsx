@@ -2754,12 +2754,31 @@ function PrintChequesButton({ documentId, count }: { documentId: string; count: 
   const [busy, setBusy] = useState(false)
   async function print() {
     setBusy(true)
+    // Reserve the print surface synchronously inside the click: a tab opened
+    // after the POST awaits loses transient activation and is blocked
+    // silently, after the server already allocated the cheque numbers.
+    const tab = window.open('about:blank', '_blank')
     try {
       const url = URL.createObjectURL(await fetchChequePdf(documentId, t('wizard.finish.chequesFailed')))
-      window.open(url, '_blank', 'noopener')
+      if (tab && !tab.closed) {
+        tab.location.href = url
+        tab.opener = null
+      } else {
+        // Popup blocked: fall back to an in-page download, which blockers
+        // allow, and say so — the numbers are allocated either way.
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `cheques-${documentId}.pdf`
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        toast.warning(t('wizard.finish.chequesPopupBlocked'))
+      }
       // Revoked late so the new tab has finished reading the blob.
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (e) {
+      // Never strand the reserved blank tab on a failed POST.
+      tab?.close()
       toast.error((e as Error).message)
     } finally {
       setBusy(false)

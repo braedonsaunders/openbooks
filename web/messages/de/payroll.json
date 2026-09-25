@@ -306,6 +306,7 @@
       "stubsEmailedPartial": "{sent} versendet; übersprungen (keine E-Mail oder fehlgeschlagen): {skipped}",
       "printCheques": "{count, plural, one {# Scheck} other {# Schecks}} drucken",
       "chequesFailed": "Das Scheck-PDF konnte nicht erstellt werden.",
+      "chequesPopupBlocked": "Der neue Tab wurde blockiert, daher wurde das Scheck-PDF stattdessen heruntergeladen.",
       "partialTitle": "{count, plural, one {Teillauf — # Mitarbeiter per Entscheidung ausgenommen} other {Teillauf — # Mitarbeiter per Entscheidung ausgenommen}}",
       "partialRecorded": "Bestätigt am {date}. Diese Entscheidung ist im Lauf aufgezeichnet.",
       "partialRecovery": "Um die ausgenommenen Mitarbeiter zu bezahlen: Liefern Sie die fehlenden Eingaben nach, sobald deren Erfassungsmaske verfügbar ist, und zahlen Sie sie dann in einem Sonderlauf. Ein gebuchter Lauf wird niemals nachträglich geändert.",
