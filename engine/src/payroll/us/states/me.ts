@@ -309,8 +309,12 @@ export const ME_REGION: PayrollRegionWithholding = {
   label: "Maine income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // 36 M.R.S. § 5250 requires withholding on wages paid to a resident
+  // individual that are subject to Maine tax — and Maine taxes residents on
+  // all income wherever earned. The other-jurisdiction credit (1040ME
+  // Schedule A) is return-level only, so the full resident tax is withheld.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_me_w4me",
   subRegions: [],
   subRegionConflictRule: "both",

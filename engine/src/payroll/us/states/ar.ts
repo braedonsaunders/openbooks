@@ -335,8 +335,13 @@ export const AR_REGION: PayrollRegionWithholding = {
   label: "Arkansas income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // DFA Withholding Instructions: no withholding for employees who do not
+  // work in Arkansas UNLESS the employee is an Arkansas resident. The Other
+  // State Tax Credit (AR1000NR / Rule 1.26-51-435(c)) is return-level only —
+  // no employer withholding-credit mechanism — so the full resident tax
+  // is withheld.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_ar_ar4ec",
   subRegions: [],
   subRegionConflictRule: "both",

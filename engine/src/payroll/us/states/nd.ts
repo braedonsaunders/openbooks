@@ -463,8 +463,12 @@ export const ND_REGION: PayrollRegionWithholding = {
   label: "North Dakota income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // The ND Withholding Guideline requires a North Dakota-based employer to
+  // withhold from a resident working in another state, except when required
+  // to withhold the other state's tax — a conditional waiver, not a credit.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "waive_when_work_region_withheld" },
   certificateKey: "us_nd_w4",
   subRegions: [],
   subRegionConflictRule: "both",

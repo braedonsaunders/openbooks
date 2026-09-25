@@ -462,10 +462,11 @@ export const DE_REGION: PayrollRegionWithholding = {
   // resident annualized method on total wages, then apportions the computed
   // tax to the Delaware work-day share.
   taxesNonresidentWages: true,
-  // Section 1 reaches residents. A resident working entirely outside Delaware
-  // is not given a credit-offset formula in Section 17. Declared unknown.
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // 30 Del.C. § 1151 reaches Delaware residents regardless of where they
+  // work, and no employer withholding-credit mechanism exists (the other-
+  // state credit is return-level), so the full resident tax is withheld.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_de_sdw4a",
   subRegions: [
     {
@@ -483,5 +484,5 @@ export const DE_REGION: PayrollRegionWithholding = {
   citation:
     "Delaware Division of Revenue, Employer's Guide, Section 17 Withholding Methods "
     + "Based on Annualized Wages, Tax Computation Table Effective January 1, 2025; "
-    + "Section 15 Withholding Exemption and Allowances",
+    + "Section 15 Withholding Exemption and Allowances; 30 Del.C. § 1151",
 };

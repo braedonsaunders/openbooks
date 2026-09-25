@@ -307,8 +307,12 @@ export const MO_REGION: PayrollRegionWithholding = {
   label: "Missouri income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // 12 CSR 10-2.015(10): without a MO W-4C affidavit the employer withholds
+  // Missouri tax on a resident's wages for all services, regardless of where
+  // performed. No employer withholding-credit mechanism exists (MO-CR is
+  // return-level), so the full resident tax is withheld.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_mo_mow4",
   subRegions: [],
   subRegionConflictRule: "both",

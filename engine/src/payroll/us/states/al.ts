@@ -365,12 +365,16 @@ export const AL_REGION: PayrollRegionWithholding = {
   label: "Alabama income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // ALDOR Withholding Booklet: an Alabama employer withholds from Alabama
+  // residents regardless of where the wages are earned, except when already
+  // withholding for the work state — a conditional waiver, not a credit.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
+  residentWithholdingMethod: { kind: "waive_when_work_region_withheld" },
   certificateKey: "us_al_a4",
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
     "Alabama Department of Revenue, Withholding Tax Tables and Instructions for "
-    + "Employers and Withholding Agents, Revised August 2024; Ala. Admin. Code r. 810-3-71-.02",
+    + "Employers and Withholding Agents (Booklet 1-26); Ala. Admin. Code r. 810-3-71-.02",
 };

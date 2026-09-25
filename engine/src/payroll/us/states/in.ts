@@ -578,11 +578,12 @@ export const IN_REGION: PayrollRegionWithholding = {
   label: "Indiana income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  // NOT ESTABLISHED by Departmental Notice #1: whether an Indiana resident's
-  // wages earned entirely outside Indiana must be withheld on by an Indiana
-  // employer. Declared unknown rather than guessed.
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // IC 6-3-4-8(a): withhold on wages earned by an employee working in
+  // Indiana OR an Indiana resident — residents are covered wherever they
+  // work, at the residence-county rate. The other-state credit (IT-40) is
+  // return-level only, so the full resident tax is withheld.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_in_wh4",
   subRegions: IN_COUNTY_LEVIES,
   // Departmental Notice #1: withhold the January-1 RESIDENCE county when the

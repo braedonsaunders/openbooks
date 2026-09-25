@@ -347,8 +347,11 @@ export const ID_REGION: PayrollRegionWithholding = {
   label: "Idaho income tax",
   implemented: true,
   taxesNonresidentWages: true,
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // IDAPA 35.01.01.871: withholding is not required on Idaho residents who
+  // work in another state — voluntary withholding is permitted, never
+  // required.
+  residentWithholding: "not_required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_id_idw4",
   subRegions: [],
   subRegionConflictRule: "both",

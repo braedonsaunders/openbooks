@@ -678,13 +678,12 @@ export const OR_REGION: PayrollRegionWithholding = {
   // part-year and nonresident filers. Nonresident wages earned in Oregon
   // are withheld under the same computer formula.
   taxesNonresidentWages: true,
-  // NOT ESTABLISHED by 150-206-436: whether an Oregon resident's wages
-  // earned entirely outside Oregon must be withheld on (and whether any
-  // other-state credit reduces that withholding). Other DOR pages discuss
-  // out-of-state employers; the formulas publication does not. Declared
-  // unknown rather than guessed.
-  residentWithholding: "unknown",
-  residentWithholdingImplemented: false,
+  // OAR 150-316-0255 / ORS 316.167: resident income-tax withholding is
+  // required from wages regardless of the state in which they were earned.
+  // The other-state credit is return-level only — no employer
+  // withholding-credit mechanism — so the full resident tax is withheld.
+  residentWithholding: "required",
+  residentWithholdingImplemented: true,
   certificateKey: "us_or_orw4",
   subRegions: [
     {
