@@ -115,7 +115,7 @@ test('restricted Accounting home scopes legal-entity metrics and fails closed fo
   const all = state.calls.join('\n')
   assert.match(all, /je\.subsidiary_id = any/)
   assert.match(all, /f\.subsidiary_id = any/)
-  assert.ok(!state.calls.find((query) => query.includes('from ai_work_items'))?.includes('a.subsidiary_id is null'), 'shared accounts fail closed in restricted work-item counts')
+  assert.ok(!/(?<![\w])a\.subsidiary_id is null/.test(state.calls.find((query) => query.includes('from ai_work_items')) ?? ''), 'shared accounts fail closed in restricted work-item counts')
   assert.ok(state.calls.find((query) => query.includes('from close_runs'))?.includes('and false'))
   assert.match(all, /from budget_scenarios[\s\S]*budget_lines[\s\S]*not exists/)
   assert.match(all, /from ai_work_items[\s\S]*subject_type[\s\S]*subsidiary_id/)
