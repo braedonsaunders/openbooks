@@ -562,6 +562,12 @@ export async function executeBackupRun(runId: string): Promise<void> {
         },
       });
       const pipeDone = pipeline(gzip, hasher, createWriteStream(tmpFile));
+      // Attach the sink's rejection BEFORE awaiting the producer: on export
+      // failure the producer destroys the sink and throws, which rejects the
+      // pipeline with no other waiter — an unhandled rejection that kills
+      // the shared worker process. Awaiting pipeDone below still surfaces a
+      // sink-side failure to this scope.
+      pipeDone.catch(() => {});
       stats = await streamOrgBackup(run.org_id, gzip);
       await pipeDone;
       byteSize = (await stat(tmpFile)).size;
