@@ -151,6 +151,32 @@ async function assertProjectInScope(
   }
 }
 
+/**
+ * Line-employee scope inside the write transaction (canonical shape 1, the
+ * party twin of assertProjectInScope): lock every distinct line worker FOR
+ * SHARE in deterministic id order and assert the caller's subsidiary scope
+ * against the locked rows, so a concurrent party rehome cannot move the
+ * write onto another entity's worker mid-transaction. Unknown and
+ * out-of-scope workers refuse identically, like projects above. A null
+ * (shared) party fails closed for restricted callers, matching employment
+ * scope elsewhere; unrestricted callers pass.
+ */
+async function assertLineEmployeesInScope(
+  orgId: string,
+  employeePartyIds: readonly string[],
+  scope: ReadonlySet<string> | null,
+): Promise<void> {
+  const ids = [...new Set(employeePartyIds)].sort();
+  for (const id of ids) {
+    const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id::text as subsidiary_id from parties
+       where org_id = ${orgId} and id = ${id} for share`)).rows[0];
+    if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
+      refuse("employee_unknown", "A line worker is unknown in this organization — pick the worker from the crew roster and retry");
+    }
+  }
+}
+
 async function loadBatch(orgId: string, batchId: string): Promise<BatchStatusRow> {
   const row = (await db.execute<BatchStatusRow>(sql`
     select id::text as id, status, project_id::text as project_id,
@@ -420,6 +446,9 @@ export async function setBatchLines(input: {
   const cleaned = await validateLines(input.orgId, input.lines, equipmentOn, settings.equipmentToleranceHours);
   await withOrgTransaction(input.orgId, async () => {
     await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
+    // The stored ids are the write: a foreign employee id saved here would
+    // post B-owned time from this project workflow below.
+    await assertLineEmployeesInScope(input.orgId, cleaned.map((line) => line.employeePartyId), input.allowedSubsidiaryIds);
     const still = (await db.execute<{ status: string }>(sql`
       select status from crew_time_batches
        where org_id = ${input.orgId} and id = ${input.batchId} for update`)).rows[0];
@@ -766,6 +795,13 @@ export async function postBatch(input: {
     if (!postingBatch || postingBatch.status !== batch.status) {
       refuse("batch_moved", "The batch changed while posting — reload the approval status and retry");
     }
+    // Recheck the employees AS STORED: lines are read pre-transaction, so a
+    // save that landed after the read must not post unchecked workers. The
+    // row lock also serializes against a concurrent line replace.
+    const stored = (await db.execute<{ employee_party_id: string }>(sql`
+      select employee_party_id from crew_time_batch_lines
+       where org_id = ${input.orgId} and batch_id = ${input.batchId} for update`)).rows;
+    await assertLineEmployeesInScope(input.orgId, stored.map((line) => line.employee_party_id), input.allowedSubsidiaryIds);
     const project = (await db.execute<{ subsidiary_id: string }>(sql`
       select subsidiary_id::text as subsidiary_id from projects
        where org_id = ${input.orgId} and id = ${batch.project_id}`)).rows[0];
