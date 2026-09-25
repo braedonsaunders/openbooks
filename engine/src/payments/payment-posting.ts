@@ -140,6 +140,12 @@ export async function postPaymentWithApplications(
     } else if (liveClaims.length > 0) {
       throw new PaymentError("payment is claimed by a payment run; post it through that run");
     }
+    // Organization before book lock order: a setup reassignment holds the org
+    // row FOR SHARE across its edit, so wait on it here — before the fence
+    // and any book lock — or the kernel's book lock below can deadlock the
+    // setup's book fence. FOR NO KEY UPDATE conflicts with that FOR SHARE
+    // while staying compatible with concurrent posts' FK checks.
+    await db.execute(sql`select id from orgs where id = ${preflight.orgId} for no key update`);
     // Acquire the shared ledger-setup side before touching GL; the kernel takes
     // the same side and the payment row remains the per-document mutex.
     await lockLedgerSetupFence(db, preflight.orgId, "shared");

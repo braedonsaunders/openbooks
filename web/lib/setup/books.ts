@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import { claimSetupCreate } from '../api/idempotency'
 import { auditSetupChange as audit } from './audit'
 import { coerceBoolean } from './coerce'
@@ -45,6 +46,11 @@ export async function saveSetupBook(
   const field = accounting ? 'isPrimary' : 'isDefault'
   const table = sql.identifier(entity.table)
   const source = options.source ? { source: options.source } : {}
+  // A primary reassignment reinterprets the posting authority: exclude posting
+  // (shared side) across the demote/promote unit, so a concurrent first post
+  // waits here and then resolves the committed primary. Scoped to accounting
+  // books; rate-book edits never reinterpret posted ledgers.
+  if (accounting) await lockLedgerSetupFence(tx, orgId, 'exclusive')
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${entity.key}:${orgId}`}, 0))`)
   // The idempotent claim resolves BEFORE any create effect below (demotion,
   // insert, audit), so an exact retry returns here having written nothing.
