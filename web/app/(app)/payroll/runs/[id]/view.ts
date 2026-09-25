@@ -371,7 +371,7 @@ export async function loadPayRunWizard(
       db.execute(sql`
         select id, code, name, kind from pay_components
          where org_id = ${orgId} and is_active
-           and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
+           and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout'))
          order by sequence, code`),
     ]))
     const adjustmentRows = adjustmentsRes.rows as unknown as AdjustmentRow[]

@@ -289,7 +289,7 @@ export async function mutatePayRunAdjustment(input: {
         select 1
           from pay_components
          where org_id = ${orgId} and id = ${mutation.componentId} and is_active
-           and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
+           and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout'))
          limit 1
       `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");

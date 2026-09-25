@@ -25,11 +25,14 @@
  * guidelines, "Reporting the amounts you have paid: Disaggregation of
  * gross": all remuneration not separately itemised is reported as gross).
  * The subledger classifies earning lines by component system_key, so
- * overtime, bonuses and paid leave are split out of the gross total and
- * everything else stays in gross. Categories the subledger cannot see —
- * allowances, directors' fees, employment termination payments (the pack
- * refuses Schedule 12, see AU_REFUSED_2027), lump sums — are declared
- * unsupported on the filing, never guessed.
+ * overtime, bonuses, paid leave and allowances are split out of the gross
+ * total and everything else stays in gross. Allowances must travel on the
+ * seeded allowance component to be itemised: an allowance paid through any
+ * other component sits in gross unclassified, and the filing says so
+ * instead of calling itself complete. Categories the subledger cannot see —
+ * directors' fees, employment termination payments (the pack refuses
+ * Schedule 12, see AU_REFUSED_2027), lump sums — are declared unsupported
+ * on the filing, never guessed.
  *
  * Cycle discipline (the ES-pack TDZ lesson): this module takes NO runtime
  * edge to `../packs.ts` or `../filing-registry.ts`. The tax-year coverage
@@ -89,6 +92,10 @@ export async function auStpFinalisationRows(
                   and pc.system_key = 'vacation_payout')) as paid_leave,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
+                  and pc.system_key = 'allowance')) as allowances,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
                   and pc.system_key = 'payg_withholding')) as payg,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -122,6 +129,7 @@ export async function auStpFinalisationRows(
     overtime: num(row.overtime),
     bonusesCommissions: num(row.bonuses),
     paidLeave: num(row.paid_leave),
+    allowances: num(row.allowances),
     paygWithheld: num(row.payg),
     sgLiability: num(row.sg),
     salarySacrifice: num(row.sacrifice),

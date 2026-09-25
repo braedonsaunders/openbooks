@@ -21,6 +21,8 @@ export interface AuStpFinalisationRow {
   overtime: string;
   /** …of which paid through the bonus component (bonuses and commissions). */
   bonusesCommissions: string;
+  /** …of which paid through the allowance component (STP Phase 2 allowances). */
+  allowances: string;
   /** …of which paid through the vacation-payout component. */
   paidLeave: string;
   /** YTD PAYG withholding (income tax + Medicare + STSL, one withholding). */
@@ -39,9 +41,9 @@ export interface AuStpFinalisationRow {
  * guidelines, "Disaggregation of gross"). Pure money.ts arithmetic.
  */
 export function stpReportableGross(row: Pick<
-  AuStpFinalisationRow, "gross" | "overtime" | "bonusesCommissions" | "paidLeave"
+  AuStpFinalisationRow, "gross" | "overtime" | "bonusesCommissions" | "paidLeave" | "allowances"
 >): string {
-  return add(add(add(row.gross, neg(row.overtime)), neg(row.bonusesCommissions)), neg(row.paidLeave));
+  return add(add(add(add(row.gross, neg(row.overtime)), neg(row.bonusesCommissions)), neg(row.paidLeave)), neg(row.allowances));
 }
 
 /**

@@ -278,7 +278,7 @@ test(
       assert.equal(
         money(box.get("GROSS-STP")!),
         money(stpReportableGross({
-          gross: "5250", overtime: "450", bonusesCommissions: "0", paidLeave: "0",
+          gross: "5250", overtime: "450", bonusesCommissions: "0", paidLeave: "0", allowances: "0",
         })),
         "STP-reportable gross is the total less separately-itemised overtime",
       );
