@@ -573,6 +573,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // register + GL preview) onto the run, then route it through Flows. A
     // tenant with no pay_run flow gets `gated: false` and nothing is parked.
     if (body.action === 'submit-approval') {
+      // A tab left open across an edit must not route superseded figures to
+      // approvers: re-check calculation freshness here, immediately before
+      // evidence assembly, exactly as the commit branch does. A stale run is
+      // refused with the named stale-calculation error instead of parking
+      // evidence the commit gate would later reject.
+      await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
       const evidence = await assemblePayRunEvidence(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
       const submission = await submitForApproval('pay_run', id, gate.user.id)
       if (submission.flowError) {
