@@ -18,6 +18,7 @@ import {
   MN_CERTIFICATE, MN_MWR, MN_REGION, MN_RATES_2026, MN_WITHHOLDING, mnAnnualTax, mnScheduleFor,
   mnSupplementalFlat,
 } from "./mn.ts";
+import { computeUsEmployerWithholding } from "../withholding.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
@@ -194,6 +195,18 @@ test("MN nonresident expected pay under $15,300 withholds nothing", () => {
     }],
   });
   assert.equal(result.tax, money("0"));
+});
+
+test("MN Paid Leave prices the assessed premium on covered wages", () => {
+  // $10,000 of Minnesota work at the designated 0.88% prices $88 of employer
+  // premium; the full Social Security base is still room (no history), and
+  // the DEED small-employer answer is recorded for the quarterly report.
+  const levy = { level: "sub_region", region: "MN", subRegion: "PL", label: "Minnesota Paid Leave premium (employer)",
+    basis: "nonresident", side: "work", reach: "nonresident", certificateKey: null } as const;
+  const employer = computeUsEmployerWithholding({ levy: { ...levy }, payDate: "2026-03-15", wages: "10000.00",
+    ytdWages: "0", tenantRates: () => ({ rate: "0.0088", small_employer: "false" }) });
+  assert.equal(employer.tax, money("88"));
+  assert.equal(employer.factors.MNPL_SMALL_EMPLOYER, "false");
 });
 
 test("MN refuses a year it has not transcribed", () => {

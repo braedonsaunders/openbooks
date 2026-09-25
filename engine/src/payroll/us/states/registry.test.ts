@@ -883,7 +883,7 @@ test("every implemented sub-region levy posts to the pocket its declaration stat
   // only the figure is employer-entered, so an arbitrary valid figure proves the routing).
   const stubRates = () => ({
     rate: "0.008", residentRate: "0.008", nonresidentRate: "0.008",
-    exemptionPerYear: "600.00",
+    exemptionPerYear: "600.00", small_employer: "false",
   });
   const failures: string[] = [];
   for (const region of packWithholding("US").regions) {
@@ -921,6 +921,7 @@ test("every implemented sub-region levy posts to the pocket its declaration stat
             { region: region.region, subRegion: null, workShare: "1", source: "registry pocket probe" },
             { region: region.region, subRegion: levy.code, workShare: "1", source: "registry pocket probe", sourceWagesCurrentPeriod: "2000.00" },
           ],
+          ytdWages: "0",
           tenantRates: (_rateKey, _subRegion) => stubRates(),
         });
         assert.ok(employer.tax, `${region.region}:${levy.code} computes on the employer path`);

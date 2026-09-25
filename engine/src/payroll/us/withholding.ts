@@ -54,7 +54,7 @@ import { PayrollError } from "../error.ts";
 import type { PayrollTaxBases } from "../packs.ts";
 import { D, mulRateCents, rate6, U } from "../canada/decimal.ts";
 import type { UsSupplementalWageAmount, UsSupplementalWageCategory } from "../supplemental-wages.ts";
-import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
+import { NO_WITHHOLDING_STATES, US_STATES, ratesForPayDate } from "./rates.ts";
 import {
   miCityWithholding,
   ohMunicipalWithholding,
@@ -365,6 +365,7 @@ export const US_LOCAL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   PA_EIT_TAX: "PA local earned income tax",
   OR_TRANSIT_DISTRICT: "Oregon transit district (code)",
   OR_TRANSIT_RATE: "Oregon transit payroll-tax rate (employer-entered)",
+  MNPL_SMALL_EMPLOYER: "Minnesota Paid Leave small-employer qualification (DEED-notified)",
   OR_TRANSIT_TAX: "Oregon transit payroll tax (employer)",
 };
 
@@ -571,6 +572,12 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       : undefined);
   if (levyMethod?.kind === "flat_rate") {
     const method = levyMethod;
+    if (method.effectiveFrom !== undefined && input.payDate < method.effectiveFrom) {
+      // The levy did not exist yet on the pay date (Minnesota Paid Leave
+      // before January 1, 2026): nothing is owed, so no line prices — never
+      // a refusal, and never a backdated rate.
+      return null;
+    }
     const declared = levy.level === "sub_region" && levy.subRegion
       ? subRegionLevy("US", levy.region, levy.subRegion)
       : undefined;
@@ -639,6 +646,23 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       const allocation = requireUsWageAllocation(input.wageAllocations, levy.region, null);
       base = mulRatio(base, rate6(allocation.workShare), 1_000_000n);
     }
+    if (method.wageBase === "social_security") {
+      // A base-capped levy (Minnesota Paid Leave) prices only the remaining
+      // room under the year's Social Security wage base — the federal rates'
+      // figure, never a transcribed copy. No supplied history means the
+      // caller never established it, which refuses; an exhausted base prices
+      // zero, a fact, not a refusal.
+      const history = input.ytd?.wages;
+      if (history == null || history === "") {
+        throw new UsWithholdingError(
+          `${levy.label} needs the employee's priced base history this year to enforce its wage base; `
+          + "recalculate with the year-to-date base before calculating — refused by name",
+        );
+      }
+      const room = U(ratesForPayDate(input.payDate).fica.ssWageBase) - U(history);
+      const covered = U(base);
+      base = D(room <= 0n ? 0n : (covered < room ? covered : room));
+    }
     const tax = D(mulRateCents(U(base), rate));
     return {
       code: levy.subRegion ?? levy.region,
@@ -648,6 +672,9 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         STATUTORY_LEVY_RATE: rate,
         STATUTORY_LEVY_BASE: base,
         STATUTORY_LEVY_TAX: tax,
+        // The priced base under the levy's own posting key, so year-to-date
+        // history accumulates on wages (rate-invariant) rather than on tax.
+        ...(levy.statutoryComponent ? { [`${levy.statutoryComponent.systemKey}_BASE`]: base } : {}),
       },
     };
   }
@@ -1371,6 +1398,12 @@ export function computeUsEmployerWithholding(input: {
    * levies price their entered figure datelessly.
    */
   payDate?: string;
+  /**
+   * Priced base history this year for a wage-based levy (Minnesota Paid
+   * Leave), from committed stubs. Required where the declaration caps the
+   * base; absent refuses, exhausted prices zero.
+   */
+  ytdWages?: string;
   /** Total state-taxable compensation this period (periodic plus supplemental). */
   wages: string;
   /** Verified district-source work wages for location-specific employer levies. */
@@ -1417,6 +1450,12 @@ export function computeUsEmployerWithholding(input: {
   // owed when it resolves, so a missing tenant rate refuses — never skips.
   const method = declared.withholdingMethod;
   if (method?.kind === "flat_rate") {
+    if (method.effectiveFrom !== undefined && (input.payDate ?? "") < method.effectiveFrom) {
+      throw new UsWithholdingError(
+        `${levy.label} starts ${method.effectiveFrom} and nothing is owed before then; `
+        + "run it on or after its start date in a transcribed tax year",
+      );
+    }
     let rate: string;
     if (declared.rateSource.kind === "tenant") {
       const entered = input.tenantRates(declared.rateSource.rateKey, subRegion)?.rate;
@@ -1460,14 +1499,44 @@ export function computeUsEmployerWithholding(input: {
       const allocation = requireUsWageAllocation(input.wageAllocations, levy.region, null);
       base = mulRatio(base, rate6(allocation.workShare), 1_000_000n);
     }
+    if (method.wageBase === "social_security") {
+      // As the employee leg: price only the remaining room under the year's
+      // Social Security wage base from the supplied base history.
+      const history = input.ytdWages;
+      if (history == null || history === "") {
+        throw new UsWithholdingError(
+          `${levy.label} needs the employee's priced base history this year to enforce its wage base; `
+          + "recalculate with the year-to-date base before calculating — refused by name",
+        );
+      }
+      const room = U(ratesForPayDate(input.payDate ?? "").fica.ssWageBase) - U(history);
+      const covered = U(base);
+      base = D(room <= 0n ? 0n : (covered < room ? covered : room));
+    }
     const tax = D(mulRateCents(U(base), rate));
+    const factors: Record<string, string> = {
+      STATUTORY_LEVY_RATE: rate,
+      STATUTORY_LEVY_BASE: base,
+      STATUTORY_LEVY_TAX: tax,
+      ...(levy.statutoryComponent ? { [`${levy.statutoryComponent.systemKey}_BASE`]: base } : {}),
+    };
+    if (levy.region === "MN" && subRegion === "PL") {
+      // Minnesota records the DEED-notified small-employer qualification
+      // with the premium facts: the quarterly wage-detail report prices the
+      // reduced rate off it, so a run without it refuses rather than
+      // reporting an unqualified figure.
+      const small = input.tenantRates("us_mn_pl", subRegion)?.small_employer;
+      if (small !== "true" && small !== "false") {
+        throw new UsWithholdingError(
+          "Minnesota Paid Leave needs the employer's DEED-notified small-employer qualification; "
+          + "record whether the employer qualifies before calculating — refused by name",
+        );
+      }
+      factors.MNPL_SMALL_EMPLOYER = small;
+    }
     return {
       code: `${levy.region}-${subRegion}`, label: declared.label, tax,
-      factors: {
-        STATUTORY_LEVY_RATE: rate,
-        STATUTORY_LEVY_BASE: base,
-        STATUTORY_LEVY_TAX: tax,
-      },
+      factors,
     };
   }
   throw new UsWithholdingError(

@@ -472,6 +472,19 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       ],
     },
     {
+      key: "mn_paid_leave",
+      regions: ["MN"],
+      components: [
+        // Minnesota Paid Leave (Minn. Stat. ch. 268B): the employer premium
+        // and the elected employee share post separately — the quarterly
+        // wage-detail report and premium reconcile employer and employee
+        // figures as distinct amounts, and netting them would hide an
+        // over-deducted employee share inside the employer's cost.
+        { code: "MN-PL", name: "Minnesota Paid Leave (employer)", systemKey: "mn_paid_leave", kind: "employer_contribution", sequence: 262, assessedOn: "earnings", remittance: "external" },
+        { code: "MN-PLE", name: "Minnesota Paid Leave (employee)", systemKey: "mn_paid_leave_employee", kind: "deduction", sequence: 143, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
       key: "local_income_tax",
       components: [
         // The taxing unit BELOW the state: New York City, Yonkers,

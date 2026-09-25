@@ -220,10 +220,85 @@ const US_VT_CCCE_SLOT: PayrollStatutoryRateSlot = {
   ],
 };
 
+/**
+ * Minnesota Paid Leave assessed premium, per employer.
+ *
+ * DEED designates each employer's premium (0.88% of covered wages to the
+ * Social Security wage base for 2026; 0.66% for notified small employers),
+ * so the employer enters its designation here with its small-employer
+ * qualification. Everything is required: a run without the assessed rate
+ * or the coverage facts refuses rather than accruing zero.
+ */
+const US_MN_PL_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_mn_pl",
+  label: "Minnesota Paid Leave premium rate",
+  scope: "sub_region",
+  systemKeys: ["mn_paid_leave"],
+  regions: ["MN"],
+  whenUnconfigured: "refuse",
+  citation:
+    "Minnesota DEED, 2026 Small Employer Premium Rate Designation; quarterly wage detail and "
+    + "premium (UIMN Taxes and Premiums)",
+  variesBecause:
+    "DEED designates the premium per employer (standard versus small-employer rate). No "
+    + "publication carries an individual employer's designation, so a release-carried figure would "
+    + "price one employer's designation onto another employer's payroll.",
+  fields: [
+    {
+      key: "rate", label: "Assessed premium rate", kind: "rate", decimals: 6,
+      min: "0", max: "0.02", required: true,
+      help: "As a decimal from the DEED designation: 0.0088 is the 2026 standard 0.88% premium, "
+        + "0.0066 the small-employer 0.66%. The employer pays at least half; the rest is the "
+        + "elected employee share below.",
+    },
+    {
+      key: "small_employer", label: "DEED-notified small employer", kind: "flag", decimals: 0,
+      min: "0", max: "1", required: true,
+      help: "Whether DEED notified the employer as a small employer for Paid Leave (30 or fewer "
+        + "employees and average wages under the threshold). Record the notice: the quarterly "
+        + "wage-detail report prices the reduced rate off it.",
+    },
+  ],
+};
+
+/**
+ * Minnesota Paid Leave elected employee share, per employer.
+ *
+ * The employer deducts at most half the premium (0.44% for 2026) and pays
+ * the rest itself; entering 0 means the employer pays the whole premium.
+ * Required alongside the assessed rate above: the even statutory split is
+ * not a default the engine may assume, so an unentered share refuses.
+ */
+const US_MN_PLE_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_mn_ple",
+  label: "Minnesota Paid Leave employee share",
+  scope: "sub_region",
+  systemKeys: ["mn_paid_leave_employee"],
+  regions: ["MN"],
+  whenUnconfigured: "refuse",
+  citation:
+    "Minnesota Paid Leave (Minn. Stat. ch. 268B): the employer pays at least half the premium "
+    + "and deducts at most 0.44% from employee wages",
+  variesBecause:
+    "Each employer elects its own employee share (or nothing) for its own workforce. No "
+    + "publication carries that election, so a release-carried figure would withhold one "
+    + "employer's choice from another employer's people.",
+  fields: [
+    {
+      key: "rate", label: "Employee share of the premium", kind: "rate", decimals: 6,
+      min: "0", max: "0.0044", required: true,
+      help: "As a decimal: 0.0044 deducts the 0.44% maximum from employee wages. Enter 0 when the "
+        + "employer pays the whole premium.",
+    },
+  ],
+};
+
 export const US_LOCAL_RATE_SLOTS: readonly PayrollStatutoryRateSlot[] = [
   US_OH_MUNICIPAL_SLOT,
   US_MI_CITY_SLOT,
   US_OR_TRIMET_SLOT,
   US_OR_LTD_SLOT,
   US_VT_CCCE_SLOT,
+  US_MN_PL_SLOT,
+  US_MN_PLE_SLOT,
 ];
