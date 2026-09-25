@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   addScheduleLine,
   createSchedule,
+  listScheduleLines,
   listSchedules,
   resolveWage,
   updateScheduleScope,
@@ -16,13 +17,22 @@ import { addScheduleLineBody, createScheduleBody, resolveWageBody, updateSchedul
 export const runtime = "nodejs";
 
 /** Rate schedules: prevailing-wage, union-agreement, org-declared. */
-export async function GET() {
+export async function GET(req: Request) {
   const gate = await guardPermission("hrm.construction.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   try {
+    const scheduleId = new URL(req.url).searchParams.get("scheduleId");
+    if (scheduleId) {
+      const editor = await listScheduleLines(db, {
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        scheduleId,
+      });
+      return NextResponse.json(editor);
+    }
     const schedules = await listSchedules(db, gate.user.orgId, gate.user.id);
     return NextResponse.json({ schedules });
   } catch (e) {

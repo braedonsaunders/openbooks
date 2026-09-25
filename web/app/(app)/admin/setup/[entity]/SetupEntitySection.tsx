@@ -22,8 +22,11 @@ import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-opt
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 import { RateBookDrawer, type RateBookLine, type RateBookItemOption } from './RateBookDrawer'
+import { ConstructionRateScheduleEditor } from './ConstructionRateScheduleEditor'
+import { listScheduleLines } from '@openbooks/engine/src/hrm/construction/rates.ts'
 
 /**
  * Registry-driven list + drawer for one configuration entity, mountable under
@@ -87,6 +90,7 @@ export function renderCell(
 export async function SetupEntitySection({
   entity: baseEntity,
   orgId,
+  actorId,
   searchParams: sp,
   basePath,
   canManage,
@@ -97,6 +101,7 @@ export async function SetupEntitySection({
 }: {
   entity: SetupEntity
   orgId: string
+  actorId?: string
   searchParams: Record<string, string | string[] | undefined>
   basePath: string
   canManage: boolean
@@ -251,6 +256,39 @@ export async function SetupEntitySection({
       })()
     : null
 
+  const rateScheduleScopeOptions = open && !open.creating && entity.key === 'construction-rate-schedules'
+    ? await (async () => {
+        const [subsidiaries, departments, projects, locations] = await Promise.all([
+          db.execute<{ value: string; label: string }>(sql`
+            select id::text as value, name as label from subsidiaries
+             where org_id = ${orgId} and is_active
+             ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name`),
+          db.execute<{ value: string; label: string }>(sql`
+            select id::text as value, coalesce(nullif(code, ''), name) as label from departments
+             where org_id = ${orgId} and is_active
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`),
+          db.execute<{ value: string; label: string }>(sql`
+            select id::text as value, case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label from projects
+             where org_id = ${orgId} and is_active
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`),
+          db.execute<{ value: string; label: string }>(sql`
+            select id::text as value, coalesce(nullif(code, ''), name) as label from locations
+             where org_id = ${orgId} and is_active
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`),
+        ])
+        return {
+          subsidiaries: subsidiaries.rows,
+          departments: departments.rows,
+          projects: projects.rows,
+          locations: locations.rows,
+        }
+      })()
+    : null
+
+  const rateScheduleEditorData = open && !open.creating && entity.key === 'construction-rate-schedules' && actorId
+    ? await listScheduleLines(db, { orgId, actorId, scheduleId: String(open.row?.id ?? '') })
+    : null
+
   return (
     <div className="space-y-4">
       {!hideHeader ? <div className="flex items-start justify-between gap-3">
@@ -345,6 +383,19 @@ export async function SetupEntitySection({
           baseCurrency={rateBookDrawerData.baseCurrency}
           multiCurrency={multiCurrency}
           closeHref={closeHref}
+        />
+      ) : open && canManage && entity.key === 'construction-rate-schedules' && open.row && rateScheduleScopeOptions && rateScheduleEditorData ? (
+        <SetupDrawer
+          entity={entity}
+          row={open.row}
+          members={[]}
+          refOptions={refOptions}
+          closeHref={closeHref}
+          nestedTab={{
+            key: 'schedule-rates',
+            label: t('constructionRateEditor.tab'),
+            content: <ConstructionRateScheduleEditor row={open.row} scopeOptions={rateScheduleScopeOptions} initialData={rateScheduleEditorData} />,
+          }}
         />
       ) : open && canManage ? (
         <SetupDrawer
