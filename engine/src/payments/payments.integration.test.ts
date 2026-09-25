@@ -485,7 +485,7 @@ test("run posting is bound to stored cash and credit targets", { skip: !DB }, as
       await db.execute(sql`update documents set status = 'approved' where id = ${creditId}`);
       await postDocument(creditId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
 
-      const run = await createPaymentRun({
+      const run = await createPaymentRun({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         createdBy: options.actorId,
         paymentBankProfileId: options.profileId,
@@ -574,7 +574,7 @@ test("an open item can be reserved by only one live payment run at a time", { sk
       `)).rows[0]!.id;
 
       const createRun = () =>
-        createPaymentRun({
+        createPaymentRun({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: options.actorId,
           paymentBankProfileId: options.profileId,
@@ -648,7 +648,7 @@ test("a duplicate-bill run refusal names the bill and the holding run", { skip: 
 
     await withOrgContext(org.orgId, async () => {
       const createRun = () =>
-        createPaymentRun({
+        createPaymentRun({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: options.actorId,
           paymentBankProfileId: options.profileId,
@@ -686,7 +686,7 @@ test("one run's instruction lifecycle cannot release another run's live reservat
       `)).rows[0]!.id;
 
       const createRun = () =>
-        createPaymentRun({
+        createPaymentRun({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: options.actorId,
           paymentBankProfileId: options.profileId,
@@ -1107,7 +1107,7 @@ test("run creation turns a storage source-claim conflict into its domain failure
            and je.status = 'posted' and jl.is_open_item and jl.amount < 0
       `)).rows[0]!.id;
       const createRun = () =>
-        createPaymentRun({
+        createPaymentRun({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: options.actorId,
           paymentBankProfileId: options.profileId,
