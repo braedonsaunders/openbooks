@@ -183,7 +183,7 @@ export interface CustomerRow {
   frictionPoints: number;
   frictionLevel: RiskLevel;
   creditCount: number;
-  creditValue: number;
+  creditValue: string;
   returnRate: number;
   // velocity
   avgOrderCycle: number;
@@ -1102,7 +1102,7 @@ export async function customerData(
     cur.creditValue = add(cur.creditValue, mulDecimal(String(r.credit_value ?? 0), frictionCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
     frictionByParty.set(r.id, cur);
   }
-  const frictionMap = new Map<string, { points: number; level: RiskLevel; credits: number; creditValue: number; returnRate: number }>();
+  const frictionMap = new Map<string, { points: number; level: RiskLevel; credits: number; creditValue: string; returnRate: number }>();
   for (const [id, f] of frictionByParty) {
     const credits = f.credits;
     const orders = f.orders;
@@ -1112,7 +1112,7 @@ export async function customerData(
     if (points >= 10 || returnRate >= 20) level = "critical";
     else if (points >= 5 || returnRate >= 10) level = "high";
     else if (points >= 2 || returnRate >= 5) level = "medium";
-    if (points > 0) frictionMap.set(id, { points, level, credits, creditValue: Math.round(Number(f.creditValue)), returnRate: Math.round(returnRate * 10) / 10 });
+    if (points > 0) frictionMap.set(id, { points, level, credits, creditValue: f.creditValue, returnRate: Math.round(returnRate * 10) / 10 });
   }
 
   const paymentMap = new Map<string, { score: number; rating: CustomerRow["paymentRating"]; avgDays: number | null; overdue: number; rate: number }>();
@@ -1259,7 +1259,7 @@ export async function customerData(
       frictionPoints: friction?.points ?? 0,
       frictionLevel: friction?.level ?? "low",
       creditCount: friction?.credits ?? 0,
-      creditValue: friction?.creditValue ?? 0,
+      creditValue: friction?.creditValue ?? "0",
       returnRate: friction?.returnRate ?? 0,
       avgOrderCycle: vel.hasPattern ? vel.cycle : 0,
       daysOverdue: velOverdue,
