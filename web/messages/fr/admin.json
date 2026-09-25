@@ -388,6 +388,9 @@
     "save": "Enregistrer la navigation",
     "saved": "Navigation enregistrée",
     "saveFailed": "Impossible d’enregistrer",
+    "saveConflict": "Un autre utilisateur a modifié la navigation. Rechargez la page et appliquez à nouveau vos modifications.",
+    "invalidConfig": "La configuration de la navigation est invalide.",
+    "unknownApp": "La navigation fait référence à une application non installée.",
     "resetDefaults": "Rétablir les valeurs par défaut"
   },
   "roles": {

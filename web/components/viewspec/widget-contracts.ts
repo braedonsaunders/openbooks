@@ -295,7 +295,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'narrative-drawer': { props: ['drawer'] },
   'narrative-entry': { props: ['href', 'labels', 'narrative'] },
   'native-extension': { props: ['appKey', 'sp'] },
-  'nav-editor': { props: ['apps', 'initial'] },
+  'nav-editor': { props: ['apps', 'initial', 'revision'] },
   'new-account': { props: ['currentParams', 'label'] },
   'new-api-key': { props: [] },
   'new-asset': { props: ['currentParams'] },

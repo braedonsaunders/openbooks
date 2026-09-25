@@ -388,6 +388,9 @@
     "save": "Salvar navegação",
     "saved": "Navegação salva",
     "saveFailed": "Não foi possível salvar",
+    "saveConflict": "Outro usuário alterou a navegação. Recarregue a página e aplique suas alterações novamente.",
+    "invalidConfig": "A configuração de navegação é inválida.",
+    "unknownApp": "A navegação faz referência a um aplicativo não instalado.",
     "resetDefaults": "Restaurar padrões"
   },
   "roles": {
