@@ -6,6 +6,7 @@ import { roundCurrencyMoney, settleCumulativeRetainage } from "../fx/currencies.
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "../money/money.ts";
+import { parseMoney, type Money } from "../money/brands.ts";
 
 /**
  * Construction progress billing engine (AIA G702/G703). An Application for
@@ -39,11 +40,9 @@ export function requireIsoDate(value: unknown, label: string): string {
 }
 
 /** Persist retainage-release amount through exact decimal then ledger money. Fail closed. */
-function persistRetainageReleaseAmount(value: unknown): string {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new ConstructionBillingError("retainage release amount must be an exact decimal");
+function persistRetainageReleaseAmount(value: unknown): Money {
   try {
-    return normalizeMoney(exact);
+    return parseMoney(value);
   } catch {
     throw new ConstructionBillingError("retainage release amount must be an exact decimal");
   }
@@ -62,11 +61,9 @@ function persistRetainagePercent(value: unknown): string {
 
 /** Persist a revised schedule-of-values input through exact decimal then ledger
  * money. Fail closed: these feed the persisted sov_lines.scheduled_value. */
-function persistRevisedScheduleValueInput(value: unknown): string {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new ConstructionBillingError("schedule value must be an exact decimal");
+function persistRevisedScheduleValueInput(value: unknown): Money {
   try {
-    return normalizeMoney(exact);
+    return parseMoney(value);
   } catch {
     throw new ConstructionBillingError("schedule value must be an exact decimal");
   }
@@ -74,11 +71,9 @@ function persistRevisedScheduleValueInput(value: unknown): string {
 
 /** Persist a draw line's previous-completed input through exact decimal
  * then ledger money. Fail closed: it is written onto pay_application_lines. */
-function persistPreviousCompleted(value: unknown): string {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new ConstructionBillingError("previous completed must be an exact decimal");
+function persistPreviousCompleted(value: unknown): Money {
   try {
-    return normalizeMoney(exact);
+    return parseMoney(value);
   } catch {
     throw new ConstructionBillingError("previous completed must be an exact decimal");
   }
@@ -86,11 +81,9 @@ function persistPreviousCompleted(value: unknown): string {
 
 /** Persist a draw line's this-period-completed input through exact decimal
  * then ledger money. Fail closed: it is written onto pay_application_lines. */
-function persistThisPeriodCompleted(value: unknown): string {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new ConstructionBillingError("this period completed must be an exact decimal");
+function persistThisPeriodCompleted(value: unknown): Money {
   try {
-    return normalizeMoney(exact);
+    return parseMoney(value);
   } catch {
     throw new ConstructionBillingError("this period completed must be an exact decimal");
   }
@@ -98,11 +91,9 @@ function persistThisPeriodCompleted(value: unknown): string {
 
 /** Persist a draw line's materials-stored input through exact decimal
  * then ledger money. Fail closed: it is written onto pay_application_lines. */
-function persistMaterialsStored(value: unknown): string {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new ConstructionBillingError("materials stored must be an exact decimal");
+function persistMaterialsStored(value: unknown): Money {
   try {
-    return normalizeMoney(exact);
+    return parseMoney(value);
   } catch {
     throw new ConstructionBillingError("materials stored must be an exact decimal");
   }
@@ -110,11 +101,9 @@ function persistMaterialsStored(value: unknown): string {
 
 /** Persist a draw line's previous-materials-stored input through exact decimal
  * then ledger money. Fail closed: it is written onto pay_application_lines. */
-function persistPreviousMaterialsStored(value: unknown): string {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new ConstructionBillingError("previous materials stored must be an exact decimal");
+function persistPreviousMaterialsStored(value: unknown): Money {
   try {
-    return normalizeMoney(exact);
+    return parseMoney(value);
   } catch {
     throw new ConstructionBillingError("previous materials stored must be an exact decimal");
   }
@@ -187,7 +176,7 @@ export function revisedScheduleValue(
   currentScheduledValue: string,
   changeAmount: string,
   billedToDate: string,
-): string {
+): Money {
   const current = persistRevisedScheduleValueInput(currentScheduledValue);
   const change = persistRevisedScheduleValueInput(changeAmount);
   const billed = persistRevisedScheduleValueInput(billedToDate);
@@ -198,7 +187,8 @@ export function revisedScheduleValue(
   if (cmp(revised, "0") < 0 || cmp(revised, billed) < 0) {
     throw new ConstructionBillingError("The change order would reduce the schedule line below its already-billed value");
   }
-  return revised;
+  // add() emits fromUnits-fixed 4dp: the revised value is canonical Money.
+  return revised as Money;
 }
 
 /**
