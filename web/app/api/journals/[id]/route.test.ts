@@ -140,6 +140,9 @@ const STORED_REVISION = '2026-08-24T12:00:00.200001Z'
 const NEXT_REVISION = '2026-08-24T12:00:00.200002Z'
 const JOURNAL_ID = '00000000-0000-4000-8000-00000000j001'.replace('j', 'a')
 const ACCOUNT_ID = '00000000-0000-4000-8000-00000000a001'
+// I1-refix-217: every edited leg resolves a subsidiary (line, else header).
+// The locked-row double carries the header one, like a stored draft.
+const SUBSIDIARY_ID = '00000000-0000-4000-8000-00000000b001'
 
 function reset(): void {
   routeState.calls.length = 0
@@ -208,7 +211,7 @@ test('PATCH saves lines and header atomically under an exact matching revision',
       : { rows: [{ updatedAt: storedRevision }] }
   routeState.respondTxExecute = (text) => {
     if (text.includes('for update')) {
-      return { rows: [{ status: 'draft', updatedAt: storedRevision }] }
+      return { rows: [{ status: 'draft', updatedAt: storedRevision, subsidiaryId: SUBSIDIARY_ID }] }
     }
     if (text.includes('update documents')) {
       assert.match(text, /greatest\(/, 'the token advances monotonically inside the lock')
