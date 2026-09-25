@@ -41,6 +41,15 @@ export function divideMoney(amount: string, divisor: string, decimalPlaces = 4):
  * zero (a job with no hours is never paid); every share keeps the amount's
  * sign; every share is within one cent of its exact proportional target.
  *
+ * Decision (ARCH-MONEY-BRAND): this is NOT the kernel's
+ * allocateLargestRemainder under another name, and cannot be a thin caller
+ * of it. The kernel reconciles per-line rounded values to a rounded total
+ * (ties to earlier lines); this is a weighted split of one amount (ties to
+ * LATER buckets, so historical last-bucket remainders are unchanged), it
+ * throws on sub-cent dust instead of parking it, and a negative weight
+ * means "emit one unsplit line". Collapsing the tie-break or the dust rule
+ * would move cents between jobs.
+ *
  * `amount` must be cent-exact (both call sites pass stub money already rounded
  * with `roundMoney(..., 2)` / `mulPercent(..., 2)`); a sub-cent input throws
  * `PayrollError` rather than silently misallocating, because parking the
