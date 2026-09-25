@@ -111,6 +111,7 @@ export function parseToolInput(
 /** Installed-app shape the renderer needs; the store's AppRow satisfies it. */
 export interface AppToolSource {
   key: string
+  activeVersionId?: string | null
   name: string
   status: 'installed' | 'disabled'
   grantedPermissions: string[]
@@ -136,6 +137,7 @@ export interface AppToolActor {
 
 export interface AppToolView {
   appKey: string
+  activeVersionId: string | null
   appName: string
   toolKey: string
   /** Assistant/MCP-facing snake_case name: app_<appKey>_<toolKey>. */
@@ -177,6 +179,7 @@ export function renderAppToolViews(
       }
       views.push({
         appKey: source.key,
+        activeVersionId: source.activeVersionId ?? null,
         appName: source.name,
         toolKey: spec.key,
         name: appToolAssistantName(source.key, spec.key),

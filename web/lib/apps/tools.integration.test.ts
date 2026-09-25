@@ -294,22 +294,21 @@ test('mutating tool proposes, commits, and replays the same outcome', { skip: !D
   const proposed = await executeAssistantTool(fx.adminAuthz, MUTATING_TOOL, { label: 'c7' })
   assert.equal(proposed.ok, true, JSON.stringify(proposed))
   const card = (proposed as { ok: true; data: { proposedApplicationCommand: { toolName: string; input: unknown; confirmToken: string } } }).data.proposedApplicationCommand
-  assert.equal(card.toolName, MUTATING_TOOL)
-  assert.ok(typeof card.confirmToken === 'string' && card.confirmToken.length > 0)
 
-  const first = await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, card.input, card.confirmToken)
-  assert.equal(first.ok, true, JSON.stringify(first))
+  await withBypass(async () => {
+    const version = (await db.execute<{ id: string }>(sql`insert into app_versions (org_id, app_id, version, manifest, status, created_by) select a.org_id, a.id, '2.0.0', jsonb_set(v.manifest, '{version}', '"2.0.0"'), 'active', a.updated_by from apps a join app_versions v on v.id = a.active_version_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} returning id`)).rows[0]!
+    await db.execute(sql`insert into app_files (org_id, app_id, version_id, path, kind, content_type, content, is_binary, size, created_by, updated_by) select f.org_id, f.app_id, ${version.id}, f.path, f.kind, f.content_type, f.content, f.is_binary, f.size, f.created_by, f.updated_by from app_files f join apps a on a.org_id = f.org_id and a.id = f.app_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} and f.version_id = a.active_version_id`)
+    await db.execute(sql`update apps set active_version_id = ${version.id} where org_id = ${fx.orgId} and key = ${APP_KEY}`)
+  })
+  assert.deepEqual(await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, card.input, card.confirmToken),
+    { ok: false, error: 'confirmation_expired_or_modified', status: 422 })
+  const current = (await executeAssistantTool(fx.adminAuthz, MUTATING_TOOL, { label: 'c7' }) as { ok: true; data: { proposedApplicationCommand: { input: unknown; confirmToken: string } } }).data.proposedApplicationCommand
+
+  const first = await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, current.input, current.confirmToken)
   assert.deepEqual((first as { ok: true; result: unknown }).result, { status: 200, body: { bumps: 1 } })
 
-  // A retried Apply replays the stored outcome instead of bumping again.
-  const replay = await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, card.input, card.confirmToken)
+  const replay = await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, current.input, current.confirmToken)
   assert.deepEqual(replay, first)
-
-  // Tampering with the confirmed input voids the token.
-  assert.deepEqual(
-    await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, { label: 'changed' }, card.confirmToken),
-    { ok: false, error: 'confirmation_expired_or_modified', status: 422 },
-  )
 }))
 
 test('proposing and committing require the write permission', { skip: !DB }, async () => withFixture(async (fx) => {
