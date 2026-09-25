@@ -75,7 +75,8 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   remittanceRegionalCalendars: {},
   // ATO arrears and lump-sum payments are taxed outside ordinary period
   // annualisation (lump sum payment in arrears treatment, Schedule 5 back
-  // payments). Provisional: confirm against the transcribed schedules.
+  // payments). Untranscribed: any such amount refuses by name (see
+  // AU_REFUSED_2027) instead of pricing through Schedule 1.
   retroactivePayTreatment: "non_periodic",
   contributoryBases: {
     // Super Guarantee is assessed on ordinary time earnings (12% from
