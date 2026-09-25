@@ -8,6 +8,7 @@ import { CA_PACK_RATES } from "./canada/rates.ts";
 import {
   buildResolution,
   listStatutoryRates,
+  lockStatutoryRatesForPayRun,
   resolveStatutoryRates,
   upsertStatutoryRate,
   type StatutoryRateRow,
@@ -22,14 +23,10 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../te
 /**
  * Statutory rate HISTORY (0183).
  *
- * The old writer updated `rate_values` in place on the same row id while the
- * remover refused every delete "to protect reproduction" — so the refusal
- * protected nothing and no prior period could be replayed. Now a re-save
- * supersedes the open row and inserts its successor, a remove retires the
- * open row, and the resolver answers the row in force on the PAY DATE.
+ * Rate rows are immutable point histories; writes supersede or retire rows,
+ * and reads answer which row was in force on a given date.
  *
- * Each test names the money it protects. The committed-run test below is the
- * one that matters: a committed run recalculated after a re-save must answer
+ * A committed run recalculated after a re-save must answer
  * to the cent what it answered when it committed — a real committed run, not
  * a synthetic row.
  */
@@ -208,9 +205,6 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
-  // A QC employer always owes the HSF at its own rate: a live-but-
-  // unconfigured slot refuses by name at calculate, so the fixture carries a
-  // rate and a mapping (inert for every ON run).
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                          rate_values, created_by, updated_by)
@@ -219,8 +213,6 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
   await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}
      where org_id = ${org.orgId} and system_key = 'hsf'`);
-  // The EHT employer line posts its liability here; without the mapping the
-  // run calculates but cannot commit.
   await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}
      where org_id = ${org.orgId} and system_key = 'eht'`);
@@ -252,9 +244,6 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
     values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
             '4', 'accrue', true, ${actorId}, ${actorId})`);
 
-  // Ontario EHT at 1.95% above a 1,000.00 exemption: 80h × $30 = 2,400.00 of
-  // earnings leaves 1,400.00 taxable, so the run accrues 27.30 of employer
-  // health tax — the figure the re-save must not move.
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
     region: "ON", filingAccountId: null, taxYear: 2026,
@@ -306,18 +295,8 @@ test(
     try {
       const committed = await ehtLine(fx.orgId, fx.documentId);
       assert.equal(committed.gross, "2400.0000");
-      // cmp, not string equality: the stored line is numeric(19,4) ("27.3000")
-      // while the replay carries the pushed "27.30" — same cents, and cents
-      // are what this test is about.
       assert.equal(cmp(committed.eht, "27.30"), 0);
 
-      // Mid-year correction: the province's notice was wrong, or the
-      // employer's remuneration crossed into a higher rate. The open row is
-      // superseded; the committed period must not move. The correction takes
-      // effect 25 July — after the committed run's pay date (21 July) and
-      // before the next period's (4 Aug) — pinned explicitly, because the
-      // writer stamps the recording date and the test's pay dates are
-      // deliberately earlier than today.
       const corrected = await upsertStatutoryRate({
         orgId: fx.orgId, actorId: fx.actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
         region: "ON", filingAccountId: null, taxYear: 2026,
@@ -334,8 +313,6 @@ test(
         "the new rate is live for new periods",
       );
 
-      // Recalculate the COMMITTED run as it would calculate today, rolled
-      // back: every figure must match the committed one to the cent.
       const replay = await calculatePayRun({
         orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId, simulate: true,
       });
@@ -349,9 +326,6 @@ test(
       assert.equal(stub.employerCost, committed.employerCost);
       assert.equal(cmp(replayEht.amount, committed.eht), 0);
 
-      // Control: a LATER period genuinely reads the new rate. The 1,000.00
-      // exemption is consumed by the committed run's 2,400.00 of EHT_EARN, so
-      // the new period accrues the full 2,400.00 × 2.95% = 70.80.
       for (const workedOn of ["2026-07-20", "2026-07-22", "2026-07-24", "2026-07-28"]) {
         await db.execute(sql`
           insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
@@ -367,6 +341,33 @@ test(
         orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId,
       });
       assert.deepEqual(calc2.errors, []);
+
+      let releaseRateWriter!: () => void;
+      let rateWriterLocked!: () => void;
+      const writerLocked = new Promise<void>((resolve) => { rateWriterLocked = resolve; });
+      const releaseWriter = new Promise<void>((resolve) => { releaseRateWriter = resolve; });
+      const rateWriter = db.transaction(async (tx) => {
+        await lockStatutoryRatesForPayRun(tx, fx.orgId, 2026, [CA_PACK_RATES]);
+        rateWriterLocked();
+        await releaseWriter;
+      });
+      await writerLocked;
+      const committing = commitPayRun({
+        orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId,
+      });
+      let commitQueuedOnRateFence = false;
+      const waitUntil = Date.now() + 2_000;
+      while (!commitQueuedOnRateFence && Date.now() < waitUntil) {
+        const locks = await db.execute<{ waiting: boolean }>(sql`
+          select exists (select 1 from pg_locks where locktype = 'advisory' and not granted) as waiting
+        `);
+        commitQueuedOnRateFence = locks.rows[0]?.waiting ?? false;
+        if (!commitQueuedOnRateFence) await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      releaseRateWriter();
+      await rateWriter;
+      await committing;
+      assert.equal(commitQueuedOnRateFence, true, "commit waits for the shared statutory-rate fence");
       assert.equal(cmp((await ehtLine(fx.orgId, run2.documentId)).eht, "70.80"), 0);
     } finally {
       await dropScratchOrgReporting(fx.orgId);

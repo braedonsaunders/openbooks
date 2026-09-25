@@ -402,6 +402,101 @@ export interface StatutoryRateRow {
   supersededOn: string | null;
 }
 
+/** A statutory rate point's stable transaction lock identity. */
+export interface StatutoryRateScopePoint {
+  orgId: string;
+  country: string;
+  rateKey: string;
+  taxYear: number;
+  region: string | null;
+  subRegion: string | null;
+  filingAccountId: string | null;
+}
+
+function statutoryRateSlotFenceKey(point: Pick<StatutoryRateScopePoint,
+  "orgId" | "country" | "rateKey" | "taxYear">): string {
+  return JSON.stringify(["payroll-statutory-rate-slot", point.orgId, point.country, point.rateKey, point.taxYear]);
+}
+
+function statutoryRateScopePointKey(point: StatutoryRateScopePoint): string {
+  return JSON.stringify([
+    "payroll-statutory-rate-point", point.orgId, point.country, point.rateKey, point.taxYear,
+    point.region, point.subRegion, point.filingAccountId,
+  ]);
+}
+
+async function takeStatutoryRateAdvisoryLocks(
+  tx: Pick<typeof db, "execute">,
+  keys: readonly string[],
+): Promise<void> {
+  for (const key of [...new Set(keys)].sort()) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+  }
+}
+
+/**
+ * Fence a rate slot before changing any scope point in it. The slot fence
+ * closes the absent-row race: a commit must be able to serialize against a
+ * point being created that has no row it could discover and lock. The point
+ * lock then gives writers and commits the same identity for the exact row.
+ */
+async function lockStatutoryRatePoint(
+  tx: Pick<typeof db, "execute">,
+  point: StatutoryRateScopePoint,
+): Promise<void> {
+  await takeStatutoryRateAdvisoryLocks(tx, [statutoryRateSlotFenceKey(point)]);
+  await takeStatutoryRateAdvisoryLocks(tx, [statutoryRateScopePointKey(point)]);
+}
+
+/**
+ * Hold every statutory-rate slot and current scope point consumed by a pay
+ * run through its final freshness read and commit. Slot fences serialize
+ * against inserts at not-yet-configured points; point locks make the lock
+ * shared with the exact writer that retires or replaces each existing point.
+ */
+export async function lockStatutoryRatesForPayRun(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  taxYear: number,
+  packs: readonly PayrollPackRates[],
+): Promise<void> {
+  const packsByCountry = [...new Map(packs.map((pack) => [pack.country, pack])).values()]
+    .sort((a, b) => a.country.localeCompare(b.country));
+  const slotPoints = packsByCountry.flatMap((pack) => pack.slots.map((slot) => ({
+    orgId,
+    country: pack.country,
+    rateKey: slot.key,
+    taxYear,
+  })));
+  await takeStatutoryRateAdvisoryLocks(tx, slotPoints.map(statutoryRateSlotFenceKey));
+  if (packsByCountry.length === 0) return;
+
+  const countries = packsByCountry.map((pack) => pack.country);
+  const rows = await tx.execute<{
+    country: string;
+    rate_key: string;
+    region: string | null;
+    sub_region: string | null;
+    filing_account_id: string | null;
+  }>(sql`
+    select country, rate_key, region, sub_region, filing_account_id
+      from payroll_statutory_rates
+     where org_id = ${orgId} and tax_year = ${taxYear}
+       and country = any(${countries}::text[]) and superseded_on is null
+     order by country, rate_key, region nulls first, sub_region nulls first,
+              filing_account_id nulls first
+  `);
+  await takeStatutoryRateAdvisoryLocks(tx, rows.rows.map((row) => statutoryRateScopePointKey({
+    orgId,
+    country: row.country,
+    rateKey: row.rate_key,
+    taxYear,
+    region: row.region,
+    subRegion: row.sub_region,
+    filingAccountId: row.filing_account_id,
+  })));
+}
+
 /**
  * The org's configured rate rows, newest scope first for stable rendering.
  *
@@ -546,18 +641,11 @@ export async function upsertStatutoryRate(input: {
     region, subRegion, filingAccountId,
   });
   if (scopeProblem) throw new PayrollPackError(scopeProblem);
-  // The unique index protects the final write, but it cannot serialize two
-  // transactions that both observe a missing scope point before either inserts
-  // it. An advisory lock keyed by the complete point closes that gap, including
-  // the otherwise-unlockable missing-row case. The row lock below then protects
-  // the before-image for updates.
-  const lockKey = [
-    input.orgId, country, input.rateKey, input.taxYear,
-    region ?? "", subRegion ?? "", filingAccountId ?? "",
-  ].join("\u001f");
   return await inDbTransaction(async (tx) => {
-    await tx.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+    await lockStatutoryRatePoint(tx, {
+      orgId: input.orgId, country, rateKey: input.rateKey, taxYear: input.taxYear,
+      region, subRegion, filingAccountId,
+    });
     const existing = (await tx.execute<{ id: string; rate_values: Record<string, string> }>(sql`
       select id, rate_values from payroll_statutory_rates
        where org_id = ${input.orgId} and country = ${country}
@@ -629,6 +717,20 @@ export async function deleteStatutoryRate(
   id: string,
 ): Promise<boolean> {
   return await inDbTransaction(async (tx) => {
+    const candidate = (await tx.execute<{
+      id: string; country: string; rate_key: string; tax_year: number;
+      region: string | null; sub_region: string | null; filing_account_id: string | null;
+    }>(sql`
+      select id, country, rate_key, tax_year, region, sub_region, filing_account_id
+        from payroll_statutory_rates
+       where org_id = ${orgId} and id = ${id}
+    `)).rows[0];
+    if (!candidate) return false;
+    await lockStatutoryRatePoint(tx, {
+      orgId, country: candidate.country, rateKey: candidate.rate_key,
+      taxYear: candidate.tax_year, region: candidate.region,
+      subRegion: candidate.sub_region, filingAccountId: candidate.filing_account_id,
+    });
     const row = (await tx.execute<{ id: string; superseded_on: string | null }>(sql`
       select id, superseded_on::text as superseded_on from payroll_statutory_rates
        where org_id = ${orgId} and id = ${id}
