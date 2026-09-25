@@ -17,11 +17,7 @@ import {
   pit11Slips,
   pit11Slip,
 } from "./pl/pit11.ts";
-import {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import "../testing/database-bypass.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -66,13 +62,13 @@ async function makeEmployee(
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values (${id}, ${orgId}, 'person', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+  await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
+  const employmentId = await seedWorkerEmployment(orgId, id, subsidiaryId);
   await db.execute(sql`
     insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
+      (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, pay_basis, is_active,
        pl_rok_urodzenia, created_by, updated_by)
-    values (${orgId}, ${id}, ${scheduleId}, 'PL', 'PL', 'salary', true,
+    values (${orgId}, ${id}, ${employmentId}, ${scheduleId}, 'PL', 'PL', 'salary', true,
             ${birthYear}, ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into labor_cost_rates
