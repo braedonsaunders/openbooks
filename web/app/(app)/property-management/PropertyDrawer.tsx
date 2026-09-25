@@ -5,9 +5,11 @@ import { useTranslations } from "next-intl";
 import { Drawer, Button, Input, Select } from "@openbooks/ui";
 import type { Option } from "./workspace-ui";
 import { Field, PROPERTY_TYPE_OPTIONS } from "./workspace-ui";
+import { CustomFieldInput } from "../../../components/custom-field-input";
+import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import type { SaveAction, WorkspaceOptions } from "./types";
 
-export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabled = false, multiCurrency = false }: { open: boolean; onClose: () => void; options: WorkspaceOptions; busy: boolean; onSave: SaveAction; fixedAssetsEnabled?: boolean; multiCurrency?: boolean }) {
+export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabled = false, multiCurrency = false, fieldDefs = [] }: { open: boolean; onClose: () => void; options: WorkspaceOptions; busy: boolean; onSave: SaveAction; fixedAssetsEnabled?: boolean; multiCurrency?: boolean; fieldDefs?: CustomFieldDefClient[] }) {
   const initial = useMemo(
     () => ({
       code: "",
@@ -25,6 +27,7 @@ export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAsse
       city: "",
       region: "",
       postalCode: "",
+      custom: {} as Record<string, unknown>,
     }),
     [options],
   );
@@ -42,7 +45,7 @@ export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAsse
     if (open) setForm(initial);
   }
   const submit = () => {
-    const { currency, ...fields } = form;
+    const { currency, custom, ...fields } = form;
     onSave({
       ...fields,
       ...(multiCurrency ? { currency } : {}),
@@ -51,6 +54,9 @@ export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAsse
       camIncomeAccountId: form.camIncomeAccountId || null,
       depositLiabilityAccountId: form.depositLiabilityAccountId || null,
       defaultBankAccountId: form.defaultBankAccountId || null,
+      // A required managed_properties custom field blocks creation
+      // server-side: the bag rides along so it can be satisfied here.
+      custom,
       address: {
         street: form.street,
         city: form.city,
@@ -250,6 +256,20 @@ export function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAsse
             />
           </Field>
         </div>
+        {fieldDefs.length ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {fieldDefs.map((def) => (
+              <CustomFieldInput
+                key={def.key}
+                def={def}
+                value={form.custom[def.key]}
+                onChange={(value) =>
+                  setForm({ ...form, custom: { ...form.custom, [def.key]: value } })
+                }
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     </Drawer>
   );
