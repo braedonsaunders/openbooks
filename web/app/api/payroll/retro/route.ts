@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import {
   createRetroPayRun,
@@ -33,8 +34,6 @@ export const runtime = 'nodejs'
  * how "exactly once" is enforced) lives in the engine. This route only
  * translates HTTP, so no second caller can reach a different answer.
  */
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 interface Body {
   action?: unknown
@@ -149,8 +148,8 @@ export async function POST(req: Request) {
   if (typeof body.payScheduleId !== 'string' || !isUuid(body.payScheduleId)) {
     return NextResponse.json({ error: 'payScheduleId must be a pay schedule' }, { status: 422 })
   }
-  if (typeof body.payDate !== 'string' || !ISO_DATE.test(body.payDate)) {
-    return NextResponse.json({ error: 'payDate must be a date' }, { status: 422 })
+  if (!isIsoCalendarDate(body.payDate)) {
+    return NextResponse.json({ error: 'payDate must be a real calendar date (YYYY-MM-DD)' }, { status: 422 })
   }
 
   // An explicitly empty list is the workspace's default state (no

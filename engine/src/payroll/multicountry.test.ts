@@ -274,10 +274,6 @@ test("an unknown country string is a refusal, not a cast to Canada", () => {
   }
 });
 
-/* ------------------------------------------------------------------ */
-/* Defect 7 — the tax year is the PACK's answer                        */
-/* ------------------------------------------------------------------ */
-
 test("both current packs declare a calendar tax year — as a declaration, not a hardcode", () => {
   for (const country of ["CA", "US"] as const) {
     assert.equal(PAYROLL_COUNTRY_PACKS[country]!.taxYear.basis, "calendar");
@@ -288,22 +284,20 @@ test("both current packs declare a calendar tax year — as a declaration, not a
 });
 
 test("the tax-year mechanism handles a non-calendar year, so the declaration is real", () => {
-  // Neither current pack exercises this, which is exactly why it is tested
-  // directly: a "declaration" that only ever answers `payDate.slice(0, 4)` is
-  // indistinguishable from the hardcode it replaced.
   const hmrc: PayrollTaxYearDefinition = {
     basis: "fiscal", startMonth: 4, startDay: 6, namedBy: "opening_year",
   };
-  assert.equal(taxYearFor(hmrc, "2026-04-05"), 2025); // last day of 2025/26
-  assert.equal(taxYearFor(hmrc, "2026-04-06"), 2026); // first day of 2026/27
+  assert.equal(taxYearFor(hmrc, "2026-04-05"), 2025);
+  assert.equal(taxYearFor(hmrc, "2026-04-06"), 2026);
   assert.equal(taxYearFor(hmrc, "2026-12-31"), 2026);
-  assert.equal(taxYearFor(hmrc, "2027-01-01"), 2026); // still 2026/27
+  assert.equal(taxYearFor(hmrc, "2027-01-01"), 2026);
+  assert.throws(() => taxYearFor(hmrc, "2026-02-31"), /invalid pay date/);
 
   const ato: PayrollTaxYearDefinition = {
     basis: "fiscal", startMonth: 7, startDay: 1, namedBy: "closing_year",
   };
-  assert.equal(taxYearFor(ato, "2026-06-30"), 2026); // last day of 2025/26
-  assert.equal(taxYearFor(ato, "2026-07-01"), 2027); // first day of 2026/27
+  assert.equal(taxYearFor(ato, "2026-06-30"), 2026);
+  assert.equal(taxYearFor(ato, "2026-07-01"), 2027);
 });
 
 /* ------------------------------------------------------------------ */
