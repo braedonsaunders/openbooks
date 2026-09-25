@@ -30,7 +30,7 @@ export default async function SetupLayout({ children }: { children: ReactNode })
   const t = await getTranslations('admin')
   const canExport = can(authz, 'data.export')
   const canImport = can(authz, 'data.import')
-  const features = canManageSetup ? await resolvedFeatureState(authz.user.orgId) : {}
+  const features = await resolvedFeatureState(authz.user.orgId)
   const hiddenEntityKeys = SETUP_ENTITIES.filter(
     (entity) => entity.featureKey && !featureEnabled(features, entity.featureKey),
   ).map((entity) => entity.key)
