@@ -54,6 +54,15 @@ export async function GET() {
            started_at as "startedAt", finished_at as "finishedAt",
            synced_through as "syncedThrough", stats, progress, error_message as "errorMessage", triggered_by as "triggeredBy"
       from sync_runs where org_id = ${orgId} order by started_at desc limit 200`));
+  const latestRuns = (await db.execute<Record<string, unknown>>(sql`
+    select distinct on (connection_id, kind)
+           id, connection_id as "connectionId", source, kind, status,
+           started_at as "startedAt", finished_at as "finishedAt",
+           synced_through as "syncedThrough", stats, progress,
+           error_message as "errorMessage", triggered_by as "triggeredBy"
+      from sync_runs
+     where org_id = ${orgId} and connection_id is not null
+     order by connection_id, kind, started_at desc, id desc`));
   // Configured currencies power any `optionsSource: 'currencies'` config field.
   const currencies = (await db.execute<{ code: string; name: string }>(sql`
     select code, name from currencies order by code`));
@@ -79,7 +88,7 @@ export async function GET() {
     string,
     { mirror?: Record<string, unknown>; attachments?: Record<string, unknown> }
   >();
-  for (const run of runs.rows) {
+  for (const run of latestRuns.rows) {
     const connectionId =
       typeof run.connectionId === "string" ? run.connectionId : null;
     if (!connectionId) continue;
