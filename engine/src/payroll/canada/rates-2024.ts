@@ -128,11 +128,11 @@ const PROVINCES_2024_JAN: Partial<Record<Province, ProvincialRates>> = {
       { upTo: null, rate: "0.21", k: "8863" },
     ],
     lowestRate: "0.0879",
-    // Flat 11,481 (the maximum BPANS): the engine models no BPANS formula in
-    // any year — the same level as the landed 2025/2026 modules. The 2024
-    // BPANS formula (11,481 − (A−25,000)×6%, floor 8,481) refines high
-    // earners only.
+    // 119th ed.: BPANS = 11,481 − (A−25,000)×6%, floored at 8,481.
     tcpDefault: "11481",
+    tcpIncomePhaseOut: {
+      max: "11481", min: "8481", phaseStart: "25000", phaseEnd: "75000", rate: "0.06",
+    },
     claimCodes: [
       "11481.00", "12281.00", "13881.00", "15481.00", "17081.00",
       "18681.00", "20281.00", "21881.00", "23481.00", "25081.00",

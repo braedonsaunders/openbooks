@@ -283,7 +283,7 @@ test("tax-exempt (claim code E) still pays the Ontario Health Premium", () => {
   assert.equal(result.ei, "32.6000");
 });
 
-test("Manitoba BPAMB and Nova Scotia flat BPA defaults", () => {
+test("Manitoba BPAMB and Nova Scotia BPA income phase-out editions", () => {
   const mb = calculateT4127({
     payDate: "2026-01-30", province: "MB", periodsPerYear: 12,
     income: "20000.00", federalClaimCode: 1,
@@ -291,11 +291,10 @@ test("Manitoba BPAMB and Nova Scotia flat BPA defaults", () => {
   // NI = 237,635.04 > 200,000 → BPAMB = 15780 − 37,635.04×15780/200000
   //   = 15780 − 2969.40 = 12,810.60
   assert.equal(mb.factors.TCP, "12810.6000");
-  const ns = calculateT4127({
-    payDate: "2026-01-30", province: "NS", periodsPerYear: 12,
-    income: "20000.00", federalClaimCode: 1,
-  });
-  assert.equal(ns.factors.TCP, "11932.0000"); // BPANS formula removed for 2026
+  assert.deepEqual(["2024-01-30", "2025-01-30", "2025-07-30", "2026-01-30"].map((payDate) =>
+    calculateT4127({ payDate, province: "NS", periodsPerYear: 2, income: "25000.00",
+      pensionable: "0", insurable: "0", federalClaimCode: 1 }).factors.TCP),
+  ["9981.0000", "10244.0000", "11744.0000", "11932.0000"]);
 });
 
 test("Alberta K5P supplemental credit", () => {
