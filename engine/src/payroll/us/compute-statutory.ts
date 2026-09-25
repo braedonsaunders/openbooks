@@ -139,6 +139,7 @@ export const US_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   STATUTORY_LEVY_TAX: "Tax from the declared flat rate",
   US_RESIDENT_WITHHOLDING_OUTCOME: "Resident withholding outcome vs work-region tax",
   US_RESIDENT_WORK_REGION_TAX_CREDIT: "Work-region tax credited to the residence state",
+  US_RESIDENT_WAIVED_WAGES: "Wages excluded from residence withholding as covered by work-region tax",
 };
 
 /**

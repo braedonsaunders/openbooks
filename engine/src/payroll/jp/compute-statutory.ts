@@ -62,6 +62,7 @@ export interface JpStatutoryRates {
 export const JP_FACTOR_LABELS: Readonly<Record<string, string>> = {
   JP_GENSEN_BASE: "源泉徴収 basis (resident net pay or nonresident source payment)",
   JP_GENSEN: "源泉徴収 income tax",
+  JP_GENSEN_BONUS: "源泉徴収 income tax on bonus pay",
   JP_PENSION_W: "厚生年金 (employee share)",
   JP_PENSION_ER: "厚生年金 (employer share)",
   JP_HEALTH_W: "健康保険 (employee share)",
