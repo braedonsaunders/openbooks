@@ -52,7 +52,11 @@ const mockSources = new Map<string, string>([
         // The fenced recheck reads the flag the disable may just have written.
         if (text.includes('for share') && text.includes('from orgs')) return { rows: [{ features: state.txFeatures }] }
         if (text.includes("as f from orgs")) return { rows: [{ f: state.entryFeatures }] }
-        if (text.includes('as time_zone from orgs')) return { rows: [] }
+        // A real org row answers (possibly null → UTC default); an empty
+        // answer simulates a MISSING org, which businessTimeZone refuses by
+        // name before the fence is ever reached — the double would then test
+        // the missing-org refusal, not the fence refusal below.
+        if (text.includes('as time_zone from orgs')) return { rows: [{ time_zone: null }] }
         // Billing-request entry preflight: the project lookup, the type
         // default (no configured type, so the built-in T&M answers), and the
         // invoicing-preference cascade. Keyword order is specific-first:
