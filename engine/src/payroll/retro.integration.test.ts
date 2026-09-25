@@ -16,7 +16,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { acknowledgePayRunRefusals, commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -94,12 +94,14 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
                 ${actorId}, ${actorId})`);
+      // Hires carry an HRM employment or stub calculation refuses them.
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       // Three committed periods, 60 h on job A and 20 h on job B in each.
@@ -468,12 +470,14 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
                 ${actorId}, ${actorId})`);
+      // Hires carry an HRM employment or stub calculation refuses them.
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       // One committed period: 30 h on job A at $30.00/h = $900.00.
@@ -665,12 +669,14 @@ test(
                                    pay_date_offset_days, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
                 ${actorId}, ${actorId})`);
+      // Hires carry an HRM employment or stub calculation refuses them.
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
-                                               pay_basis, federal_claim_code, provincial_claim_code,
-                                               vacation_percent, vacation_method, is_active,
-                                               created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, vacation_percent, vacation_method,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       // One committed period: 20 h + 10 h on job A at $30.00/h = $900.00.
@@ -837,12 +843,14 @@ test(
             values (${org.orgId}, ${employeeId}, 'CAD', '30', ${rateBasis}, '2026-01-01', true,
                     ${actorId}, ${actorId})`);
         }
+        // Hires carry an HRM employment or stub calculation refuses them.
+        const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
-                                                 province, pay_basis, federal_claim_code,
+          insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                                 country, province, pay_basis, federal_claim_code,
                                                  provincial_claim_code, vacation_method, is_active,
                                                  created_by, updated_by)
-          values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', ${payBasis}, 1, 1,
+          values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', ${payBasis}, 1, 1,
                   'accrue', true, ${actorId}, ${actorId})`);
         await db.execute(sql`
           insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
