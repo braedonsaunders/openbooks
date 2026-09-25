@@ -102,8 +102,8 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
     let waiting = 0;
     const deadline = Date.now() + 10_000;
     while (waiting === 0 && Date.now() < deadline) {
-      waiting = (await holder.query(`select count(*)::int as n from pg_stat_activity
-        where datname = current_database() and pid <> pg_backend_pid() and wait_event_type = 'Lock'`)).rows[0].n as number;
+      waiting = (await holder.query(`select count(*)::int as n from pg_locks blocked
+        where not blocked.granted and blocked.pid <> pg_backend_pid() and exists (select 1 from pg_locks mine where mine.granted and mine.pid = pg_backend_pid() and mine.locktype = blocked.locktype and mine.transactionid is not distinct from blocked.transactionid)`)).rows[0].n as number;
       if (waiting === 0) await new Promise((resolve) => setTimeout(resolve, 100));
     }
     assert.equal(settled, false, "POST must wait on the locked project row");
