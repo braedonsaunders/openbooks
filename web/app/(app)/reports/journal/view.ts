@@ -182,7 +182,7 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
         docId: e.docId,
         entryNumber: e.entryNumber,
         date: e.date,
-        originLabel: t.has(`journal.origins.${e.origin}`) ? t(`journal.origins.${e.origin}`) : e.origin,
+        originLabel: t.has(`journal.origins.${e.origin}`) ? t(`journal.origins.${e.origin}`) : t('journal.otherOrigin'),
         memo: e.memo,
         lines: e.lines.map((l, i) => ({
           key: String(i),

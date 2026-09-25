@@ -2143,6 +2143,8 @@
     "title": "Libro diario",
     "empty": "Sin asientos registrados en este período.",
     "truncated": "Mostrando las primeras 4.000 líneas — reduzca el período para ver todo.",
+    "otherOrigin": "Otro",
+    "origins": { "document": "Documento", "manual": "Manual", "payroll": "Nómina", "labor_burden": "Costes laborales indirectos", "depreciation": "Depreciación", "disposal": "Baja", "revaluation": "Revalorización", "revenue_recognition": "Reconocimiento de ingresos", "inventory": "Inventario", "lease": "Arrendamiento", "allocation": "Asignación", "intercompany": "Intercompañía", "fx_settlement": "Liquidación de divisas", "fx_revaluation": "Revalorización de divisas", "translation": "Conversión de divisas", "closing": "Cierre", "migration": "Migración", "tax_provision": "Provisión fiscal" },
     "columns": {
       "detail": "Tercero / nota"
     }

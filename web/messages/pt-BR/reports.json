@@ -2163,6 +2163,8 @@
     "title": "Livro Diário",
     "empty": "Nenhum lançamento lançado neste período.",
     "truncated": "Mostrando as primeiras 4.000 linhas — restrinja o período para ver tudo.",
+    "otherOrigin": "Outro",
+    "origins": { "document": "Documento", "manual": "Manual", "payroll": "Folha de pagamento", "labor_burden": "Encargos trabalhistas", "depreciation": "Depreciação", "disposal": "Baixa", "revaluation": "Reavaliação", "revenue_recognition": "Reconhecimento de receita", "inventory": "Estoque", "lease": "Arrendamento", "allocation": "Alocação", "intercompany": "Entre empresas", "fx_settlement": "Liquidação cambial", "fx_revaluation": "Reavaliação cambial", "translation": "Conversão cambial", "closing": "Encerramento", "migration": "Migração", "tax_provision": "Provisão tributária" },
     "columns": {
       "detail": "Parte / memorando"
     }

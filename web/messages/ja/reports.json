@@ -2163,6 +2163,8 @@
     "title": "仕訳帳",
     "empty": "この期間に記帳済みの仕訳はありません。",
     "truncated": "最初の4,000明細を表示中 — 期間を絞り込むとすべて表示されます。",
+    "otherOrigin": "その他",
+    "origins": { "document": "書類", "manual": "手動", "payroll": "給与", "labor_burden": "労務負担", "depreciation": "減価償却", "disposal": "除却", "revaluation": "再評価", "revenue_recognition": "収益認識", "inventory": "在庫", "lease": "リース", "allocation": "配賦", "intercompany": "会社間", "fx_settlement": "為替決済", "fx_revaluation": "為替再評価", "translation": "通貨換算", "closing": "決算", "migration": "移行", "tax_provision": "税金引当" },
     "columns": {
       "detail": "取引先／摘要"
     }

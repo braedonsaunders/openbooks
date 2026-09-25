@@ -2143,6 +2143,8 @@
     "title": "Journal",
     "empty": "Aucune écriture comptabilisée sur cette période.",
     "truncated": "Affichage des 4 000 premières lignes — réduisez la période pour tout voir.",
+    "otherOrigin": "Autre",
+    "origins": { "document": "Document", "manual": "Manuel", "payroll": "Paie", "labor_burden": "Charges de main-d’œuvre", "depreciation": "Amortissement", "disposal": "Sortie d’actif", "revaluation": "Réévaluation", "revenue_recognition": "Constatation du revenu", "inventory": "Stock", "lease": "Contrat de location", "allocation": "Affectation", "intercompany": "Intercompagnie", "fx_settlement": "Règlement de change", "fx_revaluation": "Réévaluation de change", "translation": "Conversion de devises", "closing": "Clôture", "migration": "Migration", "tax_provision": "Provision fiscale" },
     "columns": {
       "detail": "Tiers / mémo"
     }
