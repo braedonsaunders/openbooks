@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { newAsyncContext } from "../platform/quickjs.ts";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
-import type { ContributedLine } from "../allocations/types.ts";
+import type { ContributedLine } from "../journal/contributed-lines.ts";
 import type { CustomGlLineRunEvidence } from "../journal/posting-contracts.ts";
 import { db, schema } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
