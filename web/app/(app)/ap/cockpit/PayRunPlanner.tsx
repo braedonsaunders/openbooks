@@ -28,6 +28,9 @@ export interface PayRunPlannerProps {
   startingCash: string
   restrictToSafe: boolean
   deferredThisWeek: string
+  /** ap.pay — gates the pay-run handoff, as the AR twin gates on canCollect.
+   * Optional so existing renders stay compiling; absent hides the button. */
+  canPay?: boolean
 }
 
 
@@ -131,10 +134,12 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
       {/* action bar */}
       <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 dark:border-slate-800">
         <span className="text-xs text-slate-500 dark:text-slate-400">{t('selected', { count: selectedEntries.length })}</span>
-        <Button size="sm" disabled={selectedEntries.length === 0} onClick={build}>
-          {t('build')}
-          <ArrowRight size={15} />
-        </Button>
+        {props.canPay ? (
+          <Button size="sm" disabled={selectedEntries.length === 0} onClick={build}>
+            {t('build')}
+            <ArrowRight size={15} />
+          </Button>
+        ) : null}
       </div>
     </div>
   )

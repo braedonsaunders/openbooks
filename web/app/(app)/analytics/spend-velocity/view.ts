@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { spendVelocityData } from '../../../../lib/analytics/spend-velocity-data'
@@ -31,6 +31,9 @@ export interface SpendVelocityData {
   backLabel: string
   periodLabel: string
   data: ViewProps['data']
+  /** Threshold editing needs admin.setup.manage with unrestricted scope (the
+   * config PUT's gate); reports.read-only and scoped callers get read-only. */
+  canConfigure: boolean
 }
 
 export async function loadSpendVelocity(sp: Record<string, string | undefined>): Promise<SpendVelocityData> {
@@ -52,6 +55,7 @@ export async function loadSpendVelocity(sp: Record<string, string | undefined>):
     backLabel: t('backToHub'),
     periodLabel: period.label,
     data,
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }
 
@@ -66,6 +70,6 @@ export function spendVelocitySpec(data: SpendVelocityData): PageSpec {
         backLabel: data.backLabel,
       }),
     ],
-    body: [widgetBlock('spend-velocity-view', { data: data.data })],
+    body: [widgetBlock('spend-velocity-view', { data: data.data, canConfigure: data.canConfigure })],
   })
 }

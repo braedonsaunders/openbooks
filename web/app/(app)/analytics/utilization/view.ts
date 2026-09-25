@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
@@ -34,6 +34,9 @@ export interface UtilizationData {
   backLabel: string
   periodLabel: string
   data: ViewProps['data']
+  /** Threshold editing needs admin.setup.manage with unrestricted scope (the
+   * config PUT's gate); reports.read-only and scoped callers get read-only. */
+  canConfigure: boolean
 }
 
 export async function loadUtilization(sp: Record<string, string | undefined>): Promise<UtilizationData> {
@@ -55,6 +58,7 @@ export async function loadUtilization(sp: Record<string, string | undefined>): P
     backLabel: t('backToHub'),
     periodLabel: period.label,
     data,
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }
 
@@ -69,6 +73,6 @@ export function utilizationSpec(data: UtilizationData): PageSpec {
         backLabel: data.backLabel,
       }),
     ],
-    body: [widgetBlock('utilization-view', { data: data.data })],
+    body: [widgetBlock('utilization-view', { data: data.data, canConfigure: data.canConfigure })],
   })
 }

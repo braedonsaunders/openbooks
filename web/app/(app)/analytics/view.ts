@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../lib/authz'
+import { sentinelAccessDenied } from '../../../lib/analytics/sentinel-access'
 import { isFeatureEnabled } from '../../../lib/features'
 import type { AnalyticsGroup } from './AnalyticsHub'
 
@@ -79,7 +80,9 @@ export async function loadAnalytics(): Promise<AnalyticsData> {
       label: t('groups.forensics'),
       accent: 'amber',
       cards: [
-        card('sentinel', '/analytics/sentinel', 'ShieldAlert'),
+        // Sentinel needs admin.audit.read with unrestricted scope on top of
+        // reports.read: a card that only 403s is a dead end, so hide it.
+        ...(sentinelAccessDenied(authz) ? [] : [card('sentinel', '/analytics/sentinel', 'ShieldAlert')]),
         card('spendVelocity', '/analytics/spend-velocity', 'Zap'),
       ],
     },

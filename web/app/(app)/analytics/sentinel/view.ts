@@ -3,7 +3,7 @@ import 'server-only'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { redirect } from 'next/navigation'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { accessDeniedHref } from '../../../../lib/gate-targets'
 import { sentinelAccessDenied } from '../../../../lib/analytics/sentinel-access'
 import { resolvePeriod } from '../../../../lib/periods'
@@ -42,6 +42,9 @@ export interface SentinelData {
   backLabel: string
   periodLabel: string
   data: ViewProps['data']
+  /** Threshold editing needs admin.setup.manage with unrestricted scope (the
+   * config PUT's gate); reports.read-only and scoped callers get read-only. */
+  canConfigure: boolean
 }
 
 export async function loadSentinel(sp: Record<string, string | undefined>): Promise<SentinelData> {
@@ -67,6 +70,7 @@ export async function loadSentinel(sp: Record<string, string | undefined>): Prom
     backLabel: t('backToHub'),
     periodLabel: period.label,
     data,
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
   }
 }
 
@@ -81,6 +85,6 @@ export function sentinelSpec(data: SentinelData): PageSpec {
         backLabel: data.backLabel,
       }),
     ],
-    body: [widgetBlock('sentinel-view', { data: data.data })],
+    body: [widgetBlock('sentinel-view', { data: data.data, canConfigure: data.canConfigure })],
   })
 }

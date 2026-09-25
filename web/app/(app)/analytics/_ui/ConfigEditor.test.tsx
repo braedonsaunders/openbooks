@@ -15,7 +15,6 @@ declare global {
 }
 
 globalThis.__configRouter = { refresh() {} }
-globalThis.__configToasts = []
 const { registerHooks } = await import('node:module')
 registerHooks({
   resolve(specifier, context, next) {
@@ -60,6 +59,7 @@ test('a rejected save request surfaces failure and releases the save button', as
         fields={[{ key: 'weeklyApCap', label: 'Weekly cap', help: 'Limit', min: 0, max: 20, step: 1 }]}
         values={{ weeklyApCap: 10 }}
         defaults={{ weeklyApCap: 5 }}
+        canEdit
       />,
     )
     await tick()

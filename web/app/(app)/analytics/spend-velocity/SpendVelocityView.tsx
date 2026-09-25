@@ -104,7 +104,7 @@ type Drill = { kind: 'account' | 'vendor'; id: string; name: string } | null
 
 /* ------------------------------------------------------------------- shell */
 
-export function SpendVelocityView({ data }: { data: SpendVelocityData }) {
+export function SpendVelocityView({ data, canConfigure }: { data: SpendVelocityData; canConfigure?: boolean }) {
   const t = useTranslations('analytics.spendVelocity')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
@@ -140,7 +140,7 @@ export function SpendVelocityView({ data }: { data: SpendVelocityData }) {
         {tab === 'detectors' ? <DetectorsTab data={data} onDrill={setDrill} /> : null}
         {tab === 'accounts' ? <AccountsTab data={data} onDrill={setDrill} /> : null}
         {tab === 'trends' ? <TrendsTab data={data} /> : null}
-        {tab === 'config' ? <ConfigTab data={data} /> : null}
+        {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
 
       <DrillDrawer
@@ -706,7 +706,7 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
 
 /* ----------------------------------------------------------- Configuration */
 
-function ConfigTab({ data }: { data: SpendVelocityData }) {
+function ConfigTab({ data, canEdit }: { data: SpendVelocityData; canEdit: boolean }) {
   const t = useTranslations('analytics.spendVelocity')
   const fmtMoney = useAnalyticsMoney()
   const c = data.config
@@ -723,6 +723,7 @@ function ConfigTab({ data }: { data: SpendVelocityData }) {
       <div className="space-y-5">
         <ConfigEditor
           dashboard="spendVelocity"
+          canEdit={canEdit}
           fields={[
             { key: 'velocityHighThreshold', label: t('config.fields.highVelocity.label'), help: t('config.fields.highVelocity.help'), min: 1, max: 100, step: 1 },
             { key: 'velocityMediumThreshold', label: t('config.fields.mediumVelocity.label'), help: t('config.fields.mediumVelocity.help'), min: 0, max: 50, step: 1 },

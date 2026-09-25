@@ -151,10 +151,12 @@ export function CustomerView({
   data,
   profitability,
   projectsEnabled = true,
+  canConfigure,
 }: {
   data: CustomerData
   profitability: Profitability
   projectsEnabled?: boolean
+  canConfigure?: boolean
 }) {
   const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
@@ -227,7 +229,7 @@ export function CustomerView({
         {tab === 'churn' ? <ChurnTab data={data} /> : null}
         {tab === 'growth' ? <GrowthTab data={data} /> : null}
         {tab === 'profitability' && projectsEnabled ? <ProfitabilityTab p={profitability} /> : null}
-        {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
+        {tab === 'configuration' ? <ConfigurationTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
@@ -1108,7 +1110,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
 }
 
 /* ---------------------------------------------------------- Configuration */
-function ConfigurationTab({ data }: { data: CustomerData }) {
+function ConfigurationTab({ data, canEdit }: { data: CustomerData; canEdit: boolean }) {
   const t = useTranslations('analytics.customer')
   const item = (label: string, value: string) => (
     <div className="flex items-center justify-between border-b border-slate-50 py-2 text-sm last:border-0 dark:border-slate-800/60">
@@ -1122,6 +1124,7 @@ function ConfigurationTab({ data }: { data: CustomerData }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <ConfigEditor
           dashboard="customerIntelligence"
+          canEdit={canEdit}
           fields={[
             { key: 'churnCriticalScore', label: t('config.fields.churnCritical.label'), help: t('config.fields.churnCritical.help'), min: 1, max: 100, step: 1 },
             { key: 'churnHighScore', label: t('config.fields.churnHigh.label'), help: t('config.fields.churnHigh.help'), min: 1, max: 100, step: 1 },

@@ -109,6 +109,7 @@ export const HOME_WIDGETS = {
       ratios={props.ratios as ComponentProps<typeof HealthHero>['ratios']}
       ratioLabels={props.ratioLabels as ComponentProps<typeof HealthHero>['ratioLabels']}
       fullAnalysisLabel={str(props, 'fullAnalysisLabel') ?? ''}
+      showFullAnalysisLink={props.showFullAnalysisLink === true}
     />
   ),
   /** The build hub's card. NOT `admin-hub-card`: the shells match but the icon

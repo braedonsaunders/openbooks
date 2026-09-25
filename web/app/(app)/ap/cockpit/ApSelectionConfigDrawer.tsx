@@ -29,6 +29,7 @@ export function ApSelectionConfigDrawer({
   restrictToSafe,
   dpo,
   currencyCode,
+  canEdit,
 }: {
   onClose: () => void
   title: string
@@ -37,6 +38,9 @@ export function ApSelectionConfigDrawer({
   restrictToSafe: boolean
   dpo: number
   currencyCode: string
+  /** Setup permission with unrestricted scope — the drawer only opens behind
+   * the gated gear, and the editor must never assume it. */
+  canEdit: boolean
 }) {
   const t = useTranslations('ap.cockpit.config')
   const tc = useTranslations('common')
@@ -63,6 +67,7 @@ export function ApSelectionConfigDrawer({
       <div className="space-y-5">
         <ConfigEditor
           dashboard="cashflow"
+          canEdit={canEdit}
           onDirtyChange={setEditorDirty}
           fields={[
             { key: 'weeklyApCap', label: t('weeklyCapLabel', { currency: currencyCode }), help: t('weeklyCapHelp'), min: 0, max: 100_000_000, step: 1000 },
