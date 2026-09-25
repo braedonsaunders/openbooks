@@ -1510,7 +1510,8 @@
       "missing_rate": "Tarifa faltante",
       "class_unresolved": "Clase sin resolver",
       "registration_missing": "Registro faltante",
-      "fringe_mismatch": "Diferencia de beneficios"
+      "fringe_mismatch": "Diferencia de beneficios",
+      "all": "Todo"
     },
     "findingStatus": {
       "open": "Abierto",

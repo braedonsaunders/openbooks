@@ -80,7 +80,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
               currentParams: data.currentParams,
               paramKey: 'kind',
               label: '',
-              allLabel: 'All',
+              allLabel: data.kindAllLabel,
               options: data.kinds,
             }),
             panel({

@@ -1510,7 +1510,8 @@
       "missing_rate": "Taxa ausente",
       "class_unresolved": "Classe sem solução",
       "registration_missing": "Registro ausente",
-      "fringe_mismatch": "Divergência de benefícios"
+      "fringe_mismatch": "Divergência de benefícios",
+      "all": "Tudo"
     },
     "findingStatus": {
       "open": "Aberto",

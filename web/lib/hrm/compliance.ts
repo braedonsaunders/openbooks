@@ -85,6 +85,7 @@ export interface ComplianceData {
   sections: Array<{ value: string; label: string }>
   kindFilter: string | null
   kinds: Array<{ value: string; label: string; count: number }>
+  kindAllLabel: string
   stats: Array<{ label: string; value: string; sub: string }>
   findings: ComplianceFindingRow[]
   schedules: ComplianceScheduleRow[]
@@ -172,6 +173,7 @@ export async function loadCompliancePage(
     sections: SECTIONS.map((value) => ({ value, label: t(`compliance.sections.${value}`) })),
     kindFilter,
     kinds: [],
+    kindAllLabel: t('compliance.kinds.all'),
     stats: [],
     findings: [],
     schedules: [],

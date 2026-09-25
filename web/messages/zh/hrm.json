@@ -1510,7 +1510,8 @@
       "missing_rate": "缺少工资标准",
       "class_unresolved": "类别未解决",
       "registration_missing": "缺少登记",
-      "fringe_mismatch": "附加福利不符"
+      "fringe_mismatch": "附加福利不符",
+      "all": "全部"
     },
     "findingStatus": {
       "open": "待处理",
