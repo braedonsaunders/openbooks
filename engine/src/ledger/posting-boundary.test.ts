@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const files = [
   "posting-document.ts", "posting-prepare.ts", "posting-commit.ts",
-  "posting-replay.ts", "posting-projection.ts", "posting-dispatch.ts", "posting-accounts.ts",
+  "posting-replay.ts", "posting-replay-applications.ts", "posting-projection.ts", "posting-dispatch.ts", "posting-accounts.ts",
   "posting-provider-tax.ts", "posting-subsidiaries.ts", "posting-period.ts",
   "posting-contracts.ts", "posting-rules.ts", "posting-tax-policy.ts", "posting-invariants.ts",
 ];
