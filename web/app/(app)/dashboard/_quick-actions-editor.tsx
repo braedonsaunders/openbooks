@@ -56,6 +56,8 @@ export function QuickActionsEditor({
   const [view, setView] = useState<View>('list')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [options, setOptions] = useState<QuickActionOptions | null>(null)
+  const [optionsError, setOptionsError] = useState(false)
+  const [optionsAttempt, setOptionsAttempt] = useState(0)
   const [saving, setSaving] = useState(false)
   const [pickerTab, setPickerTab] = useState<PickerTab>('common')
   const [search, setSearch] = useState('')
@@ -66,6 +68,7 @@ export function QuickActionsEditor({
     setItems(nextItems.map((a) => ({ ...a })))
     setView('list')
     setEditingId(null)
+    setOptionsError(false)
     setSearch('')
     setPickerTab('common')
     setCustomLabel('')
@@ -98,12 +101,20 @@ export function QuickActionsEditor({
         if (!cancelled) setOptions(nextOptions)
       })
       .catch(() => {
-        if (!cancelled) toast.error(t('quickActions.editor.loadFailed'))
+        if (!cancelled) {
+          setOptionsError(true)
+          toast.error(t('quickActions.editor.loadFailed'))
+        }
       })
     return () => { cancelled = true }
-  }, [open, options, t])
+  }, [open, options, optionsAttempt, t])
 
-  const loadingOptions = open && !options
+  function retryOptions() {
+    setOptionsError(false)
+    setOptionsAttempt((n) => n + 1)
+  }
+
+  const loadingOptions = open && !options && !optionsError
   const hidden = new Set(hiddenActionIds)
   const visibleItems = visibleQuickActions(items, hidden)
   const editing = editingId ? items.find((a) => a.id === editingId) : null
@@ -235,6 +246,8 @@ export function QuickActionsEditor({
           setSearch={setSearch}
           options={options}
           loading={loadingOptions}
+          optionsError={optionsError}
+          onRetry={retryOptions}
           customLabel={customLabel}
           customHref={customHref}
           setCustomLabel={setCustomLabel}
@@ -356,6 +369,8 @@ function PickerView({
   setSearch,
   options,
   loading,
+  optionsError,
+  onRetry,
   customLabel,
   customHref,
   setCustomLabel,
@@ -370,6 +385,8 @@ function PickerView({
   setSearch: (s: string) => void
   options: QuickActionOptions | null
   loading: boolean
+  optionsError: boolean
+  onRetry: () => void
   customLabel: string
   customHref: string
   setCustomLabel: (s: string) => void
@@ -379,6 +396,7 @@ function PickerView({
   onBack: () => void
 }) {
   const t = useTranslations('dashboard')
+  const tCommon = useTranslations('common')
   const tabs: { key: PickerTab; label: string }[] = [
     { key: 'common', label: t('quickActions.editor.common') },
     { key: 'custom', label: t('quickActions.editor.customUrl') },
@@ -472,6 +490,15 @@ function PickerView({
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
               <Loader2 size={16} className="animate-spin" />
               {t('quickActions.editor.loading')}
+            </div>
+          ) : optionsError ? (
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t('quickActions.editor.loadFailed')}
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+                {tCommon('actions.retry')}
+              </Button>
             </div>
           ) : filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
