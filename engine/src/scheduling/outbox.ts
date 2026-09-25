@@ -513,6 +513,112 @@ export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<num
   return recovered.rowCount ?? 0;
 }
 
+/**
+ * Named scan-failure notice kinds: one unread notice per org per scan until
+ * an admin reads it or a clean scan resolves it. Hrefs are the operable
+ * domain pages, like the overhead C-55 notice's setup href.
+ */
+export const DUNNING_SCAN_FAILED_NOTICE_KIND = "dunning_scan_failed";
+export const PROPERTY_BILLING_SCAN_FAILED_NOTICE_KIND = "property_billing_scan_failed";
+const COLLECTIONS_HREF = "/collections";
+const PROPERTY_MANAGEMENT_HREF = "/property-management";
+
+/**
+ * Raise the named scan-failure notice for one org: active super-admins and
+ * holders of a role directly granting admin.setup.manage (the SFTP
+ * unbound-schedule convention — a notification target is not an authz
+ * decision). Idempotent: a second pass finds the unread notice and writes
+ * nothing. Raw SQL, not the inbox helper, so the scheduling module gains no
+ * inbox edge. Runs under bypass: the scan row itself is cross-org.
+ */
+async function ensureScanOrgFailureNotice(
+  orgId: string,
+  kind: string,
+  title: string,
+  body: string,
+  href: string,
+): Promise<number> {
+  return withBypassContext(async () => {
+    const recipients = (await db.execute<{ id: string }>(sql`
+      select distinct u.id::text as id
+        from users u
+        left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
+        left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+       where u.org_id = ${orgId} and u.is_active
+         and (u.is_super_admin or (r.permissions ? 'admin.setup.manage'))
+    `)).rows;
+    let written = 0;
+    for (const recipient of recipients) {
+      const existing = (await db.execute<{ one: number }>(sql`
+        select 1 as one from notifications
+         where org_id = ${orgId} and user_id = ${recipient.id}::uuid
+           and kind = ${kind} and href = ${href} and read_at is null
+         limit 1
+      `)).rows[0];
+      if (existing) continue;
+      const inserted = (await db.execute<{ id: string }>(sql`
+        insert into notifications (org_id, user_id, kind, title, body, href)
+        values (${orgId}, ${recipient.id}::uuid, ${kind}, ${title}, ${body}, ${href})
+        returning id
+      `)).rows[0]?.id;
+      if (!inserted) throw new Error("the scan-failure notice was not stored — no row was written; retry the action");
+      written += 1;
+    }
+    return written;
+  });
+}
+
+/** Resolve a scan's failure notices after a fully clean pass, so a later failure re-fires. */
+async function resolveScanFailureNotices(kind: string): Promise<void> {
+  await withBypassContext(() => db.execute(sql`
+    update notifications set read_at = now(), updated_at = now()
+     where kind = ${kind} and read_at is null
+  `));
+}
+
+/**
+ * Surface per-org scan failures where the operator looks: one deduped
+ * notice per failed org, and a thrown summary the outbox claim records on
+ * the row (visible failure with backoff, terminal evidence at the ceiling).
+ * A clean scan resolves the kind's notices instead. A notice that cannot be
+ * stored is logged, never fatal — the thrown row error still carries every
+ * failure.
+ */
+async function surfaceScanOrgFailures(args: {
+  scan: string;
+  noticeKind: string;
+  href: string;
+  remedy: string;
+  problems: Map<string, string[]>;
+  unattributed: string[];
+}): Promise<void> {
+  if (args.problems.size === 0 && args.unattributed.length === 0) {
+    await resolveScanFailureNotices(args.noticeKind);
+    return;
+  }
+  const parts: string[] = [];
+  for (const [orgId, errors] of args.problems) {
+    const detail = errors.join("; ");
+    try {
+      await ensureScanOrgFailureNotice(
+        orgId,
+        args.noticeKind,
+        `${args.scan} scan failed for your organization`,
+        `${args.scan} scan failed: ${detail}. ${args.remedy}`,
+        args.href,
+      );
+    } catch (noticeError) {
+      console.error(
+        `[scheduler-outbox] ${args.scan} failure notice for org ${orgId} could not be stored:`,
+        noticeError instanceof Error ? noticeError.message : noticeError,
+      );
+    }
+    parts.push(`org ${orgId}: ${detail}`);
+  }
+  parts.push(...args.unattributed);
+  throw new Error(`${args.scan} scan completed with failures: ${parts.join(" | ")}`.slice(0, 2000));
+}
+
 async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "flow_email") {
     await deliverFlowEmail(row);
@@ -520,7 +626,51 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   }
   if (row.kind === "dunning") {
     const { runDunning } = await import("../receivables/dunning.ts");
-    await runDunning();
+    const result = await runDunning();
+    // The tick isolates per org and reports by name instead of throwing, so
+    // without this the outbox row reads success while tenants fail. Attribute
+    // every failure to its org (policies and letters carry no org in the
+    // aggregated result, so map them back explicitly) and surface them on
+    // the row and as notices.
+    const problems = new Map<string, string[]>();
+    const unattributed: string[] = [];
+    const add = (orgId: string | null, detail: string) => {
+      if (!orgId) {
+        unattributed.push(detail);
+        return;
+      }
+      problems.set(orgId, [...(problems.get(orgId) ?? []), detail]);
+    };
+    for (const failure of result.orgErrors) add(failure.orgId, failure.error);
+    if (result.skippedPolicies.length > 0) {
+      const orgByPolicy = (await withBypassContext(() => db.execute<{ id: string; orgId: string }>(sql`
+        select id, org_id as "orgId" from dunning_policies
+         where id in (${sql.join(result.skippedPolicies.map((p) => sql`${p.policyId}::uuid`), sql`, `)})
+      `))).rows;
+      const orgOf = new Map(orgByPolicy.map((r) => [r.id, r.orgId]));
+      for (const policy of result.skippedPolicies) {
+        add(orgOf.get(policy.policyId) ?? null, `policy "${policy.policyName}": ${policy.reason}`);
+      }
+    }
+    const failedLetters = result.notices.filter((notice) => notice.status === "failed");
+    if (failedLetters.length > 0) {
+      const orgByDocument = (await withBypassContext(() => db.execute<{ id: string; orgId: string }>(sql`
+        select id, org_id as "orgId" from documents
+         where id in (${sql.join(failedLetters.map((n) => sql`${n.documentId}::uuid`), sql`, `)})
+      `))).rows;
+      const orgOf = new Map(orgByDocument.map((r) => [r.id, r.orgId]));
+      for (const notice of failedLetters) {
+        add(orgOf.get(notice.documentId) ?? null, `dunning letter for document ${notice.documentId} failed to stage`);
+      }
+    }
+    await surfaceScanOrgFailures({
+      scan: "dunning",
+      noticeKind: DUNNING_SCAN_FAILED_NOTICE_KIND,
+      href: COLLECTIONS_HREF,
+      remedy: "Review collection ladders and calendars in Collections; the scan retries automatically.",
+      problems,
+      unattributed,
+    });
     return;
   }
   if (row.kind === "subscription_billing") {
@@ -530,7 +680,19 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   }
   if (row.kind === "property_billing") {
     const { runDuePropertyBilling } = await import("../property/management.ts");
-    await runDuePropertyBilling();
+    const result = await runDuePropertyBilling();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "property billing",
+      noticeKind: PROPERTY_BILLING_SCAN_FAILED_NOTICE_KIND,
+      href: PROPERTY_MANAGEMENT_HREF,
+      remedy: "Review leases and billing setup in Property Management; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
     return;
   }
   if (row.kind === "fx_providers") {
