@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { Button, Drawer, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useDirtyClose } from '../../../../lib/use-dirty-close'
 
 export interface ProcessCreateData {
   closeHref: string
@@ -35,6 +36,21 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [templateStatus, setTemplateStatus] = useState<string | undefined>()
   const [saving, setSaving] = useState(false)
+  const dirty = create !== null && (
+    employmentId !== '' || kind !== 'onboarding' || effectiveDate !== create.effectiveDate || templateId !== ''
+  )
+  const discard = useCallback(() => {
+    if (!create) return
+    router.push(create.closeHref as never)
+    router.refresh()
+  }, [create, router])
+  const { close: guardedClose, beforeClose } = useDirtyClose({
+    dirty,
+    busy: saving,
+    onClose: discard,
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
 
   useEffect(() => {
     if (!create) return
@@ -125,10 +141,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
 
   if (!create) return null
 
-  function close() {
-    router.push(create!.closeHref as never)
-    router.refresh()
-  }
+  const close = () => void guardedClose()
 
   async function save() {
     if (!employmentId || !effectiveDate || !templateId) return
@@ -210,7 +223,10 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
           {templateStatus ? (
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {templateStatus}{' '}
-              <Link href={create.templatesHref} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+              <Link href={create.templatesHref} onClick={(event) => {
+                event.preventDefault()
+                void beforeClose().then((allowed) => { if (allowed) router.push(create.templatesHref as never) })
+              }} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                 {t('processes.templates.createTemplate')}
               </Link>
             </p>
