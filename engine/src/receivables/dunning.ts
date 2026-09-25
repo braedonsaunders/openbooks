@@ -3,7 +3,7 @@ import { db, withBypass, withOrg } from "../platform/db.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { documentBalanceDueLateral } from "../records/balance-due.ts";
 import { cmp } from "../money/money.ts";
-import { enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS } from "../scheduling/outbox.ts";
+import { enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS } from "../delivery/outbox-enqueue.ts";
 
 /**
  * Dunning — automated collections over the AR subledger. For each active policy

@@ -20,7 +20,7 @@ import {
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockRecord, unlockRecord } from "./locks.ts";
 import { flowPdfTemplateMeta, renderFlowPdf } from "./pdf-hook.ts";
-import { enqueueFlowEmail } from "../scheduling/outbox.ts";
+import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { flowSubjectProfileForOrg } from "./registry.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";

@@ -51,6 +51,7 @@
     "automations": {
       "description": "HRM automation recipes: triggers, rules, conditions, actions, exception-only approval, simulator, run log, action reasons and change event verbs.",
       "dependsOn": [
+        "delivery",
         "flows",
         "hrm",
         "money",
@@ -193,6 +194,7 @@
       "dependsOn": [
         "allocations",
         "close",
+        "delivery",
         "hrm",
         "ledger",
         "organization",
@@ -201,7 +203,6 @@
         "periods",
         "platform",
         "records",
-        "scheduling",
         "scripting"
       ]
     },
@@ -419,10 +420,10 @@
     "receivables": {
       "description": "Collections: dunning and the live balance-due subquery.",
       "dependsOn": [
+        "delivery",
         "money",
         "platform",
-        "records",
-        "scheduling"
+        "records"
       ]
     },
     "records": {
@@ -620,11 +621,8 @@
   },
   "cycles": [
     [
-      "agents",
       "allocations",
-      "billing",
       "close",
-      "continuous-close",
       "flows",
       "hrm",
       "ledger",
@@ -632,12 +630,8 @@
       "payments",
       "payroll",
       "projects",
-      "property",
-      "receivables",
       "revenue",
-      "scheduling",
-      "scripting",
-      "sftp"
+      "scripting"
     ],
     [
       "harness",

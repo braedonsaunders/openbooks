@@ -13,14 +13,16 @@ import { loadEmailAttachments } from "../delivery/email-attachments.ts";
 import {
   enqueueApprovalEscalation,
   enqueueFlowEmail,
-  flowEmailJobId,
-  listFailedSchedulerOutbox,
   MAX_SCHEDULER_OUTBOX_ATTEMPTS,
   parseFlowEmailPayload,
+  STALE_SCHEDULER_OUTBOX_MS,
+} from "../delivery/outbox-enqueue.ts";
+import {
+  flowEmailJobId,
+  listFailedSchedulerOutbox,
   processDueSchedulerOutbox,
   recoverStaleSchedulerOutbox,
   replayTerminalSchedulerOutbox,
-  STALE_SCHEDULER_OUTBOX_MS,
   deliverFlowEmail,
   type FlowEmailQueueEnqueuer,
 } from "./outbox.ts";
