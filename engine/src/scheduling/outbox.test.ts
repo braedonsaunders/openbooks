@@ -4,12 +4,11 @@ import {
   MAX_SCHEDULER_OUTBOX_ATTEMPTS,
   SCHEDULER_OUTBOX_RETRY_HORIZON_MS,
   STALE_SCHEDULER_OUTBOX_MS,
-  deliverFlowEmail,
   enqueueFlowEmail,
   parseFlowEmailPayload,
   schedulerOutboxBackoffMs,
-  type OutboxRow,
-} from "./outbox.ts";
+} from "../delivery/outbox-enqueue.ts";
+import { deliverFlowEmail, type OutboxRow } from "./outbox.ts";
 
 
 test("scheduler outbox backoff doubles then caps at one hour", () => {

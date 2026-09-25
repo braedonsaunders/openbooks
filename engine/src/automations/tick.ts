@@ -4,7 +4,7 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
 import { db, schema, withBypassContext, withOrg } from "../platform/db.ts";
 import { addCalendarDays } from "../platform/business-date.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
-import { schedulerOutboxBackoffMs } from "../scheduling/outbox.ts";
+import { schedulerOutboxBackoffMs } from "../delivery/outbox-enqueue.ts";
 import { lastCronOccurrenceBetween } from "../flows/scheduled.ts";
 import { executeAutomation } from "./execute.ts";
 import { automationsFeatureOn } from "./services.ts";

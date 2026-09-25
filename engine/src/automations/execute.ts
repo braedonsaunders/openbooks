@@ -4,7 +4,7 @@ import { db, schema, withOrg, withTransactionSavepoint } from "../platform/db.ts
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { getFlowAdapter } from "../flows/registry.ts";
-import { enqueueFlowEmail } from "../scheduling/outbox.ts";
+import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { openProcessInTx } from "../hrm/processes.ts";
 import { automationsFeatureOn } from "./services.ts";
 import {

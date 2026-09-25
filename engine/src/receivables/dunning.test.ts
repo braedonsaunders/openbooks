@@ -100,7 +100,7 @@ test("dunning defers mail through the durable outbox inside the staged-claim tra
   // The rendered notice must instead ride this org's transaction through the
   // durable scheduler_outbox (enqueueFlowEmail), keyed by the round identity
   // so replays collapse onto one row, and no direct queue call may remain.
-  assert.match(source, /import \{ enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS \} from "\.\.\/scheduling\/outbox\.ts";/);
+  assert.match(source, /import \{ enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS \} from "\.\.\/delivery\/outbox-enqueue\.ts";/);
   assert.match(source, /enqueueFlowEmail\(\{/);
   // Fresh claims defer under the rung's base identity…
   assert.match(source, /let occurrenceKey = `dunning:\$\{doc\.id\}:\$\{stage\.id\}`/);

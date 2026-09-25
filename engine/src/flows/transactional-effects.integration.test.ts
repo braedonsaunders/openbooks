@@ -14,11 +14,8 @@ import {
 } from "../testing/fixtures.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
-import {
-  enqueueFlowEmail,
-  processDueSchedulerOutbox,
-  type OutboxRow,
-} from "../scheduling/outbox.ts";
+import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
+import { processDueSchedulerOutbox, type OutboxRow } from "../scheduling/outbox.ts";
 
 /**
  * Transactional flow-email effects. Flows dispatched from inside a caller's

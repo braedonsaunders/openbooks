@@ -5,6 +5,7 @@ import { db, pool, schema, withOrg, withBypassContext, withOrgContext, withTrans
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
+import { enqueueApprovalEscalation, enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { parseFlowGraph } from "./run.ts";
 import { resolveQuorumOutcome, type SiblingGate } from "./quorum.ts";
 import {
@@ -898,7 +899,6 @@ async function notifySubmitterOfDecision(args: {
   });
 
   try {
-    const { enqueueFlowEmail } = await import("../scheduling/outbox.ts");
     const { flowNotificationEmail } = await import("@openbooks/emails");
     const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, gate.orgId));
     const mail = flowNotificationEmail({
@@ -1517,7 +1517,6 @@ export async function processGateTimers(
   // --- Escalations -----------------------------------------------------------
   // Enqueue a durable outbox row per due gate. The runner claims that row;
   // a throw leaves status=failed + error so the next tick retries.
-  const { enqueueApprovalEscalation } = await import("../scheduling/outbox.ts");
   const dueEscalations = await withBypassContext(() =>
     db.execute<{ id: string; orgId: string }>(sql`
     select gate.id, gate.org_id as "orgId" from flow_gates gate
