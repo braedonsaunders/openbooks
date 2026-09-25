@@ -17,6 +17,7 @@ import { loadParty } from '../../../api/parties/_lib'
 import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { loadTeamEmploymentPayload } from '../../../../lib/hrm/self-service'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { listScopedAccountOptions } from '../../../../lib/scoped-options'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import type { PartyDrawer, PartyTab } from '../../parties/PartyDrawer'
 
@@ -159,7 +160,9 @@ export async function loadEntityRole(
           subsidiaryUiOptions(orgId).then((options) => authz.allowedSubsidiaryIds
             ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
             : options),
-          db.execute<ElementOf<PartyDrawerProps['accounts']>>(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
+          listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({
+            rows: rows.map(({ id, name, type, number }) => ({ id, name, type, label: [number, name].filter(Boolean).join(' · ') })),
+          })),
           db.execute<ElementOf<PartyDrawerProps['taxCodes']>>(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`),
           db.execute<ElementOf<PartyDrawerProps['salesReps']>>(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active
             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`),
