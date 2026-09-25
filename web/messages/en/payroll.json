@@ -747,7 +747,8 @@
           "vacation": "Vacation payable",
           "wcb": "Workers' compensation payable (WCB/WSIB)",
           "eht": "Employer Health Tax payable",
-          "hsf": "Health Services Fund payable (Quebec)"
+          "hsf": "Health Services Fund payable (Quebec)",
+          "cnt": "CNT payable (Québec labour-standards contribution)"
         }
       },
       "US": {
@@ -766,7 +767,10 @@
           "dc_opfl_employer": "DC paid family leave (employer) payable",
           "co_famli_employee": "Colorado FAMLI (employee) payable",
           "co_famli_employer": "Colorado FAMLI (employer) payable",
-          "ca_ett": "California Employment Training Tax (employer) payable"
+          "ca_ett": "California Employment Training Tax (employer) payable",
+          "ct_pl_employee": "Connecticut Paid Leave (employee) payable",
+          "vt_child_care_contribution": "Vermont Child Care Contribution payable",
+          "mn_paid_leave": "Minnesota Paid Leave payable"
         }
       },
       "NL": {
@@ -803,7 +807,8 @@
           "irpef": "IRPEF payable (national personal income tax)",
           "addizionale_regionale": "Regional IRPEF surcharge payable",
           "addizionale_comunale": "Municipal IRPEF surcharge payable",
-          "inps": "INPS payable (employee + employer IVS contributions)"
+          "inps": "INPS payable (employee + employer IVS contributions)",
+          "sostitutive": "Substitute taxes payable (imposte sostitutive)"
         }
       },
       "AU": {

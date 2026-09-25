@@ -747,7 +747,8 @@
           "vacation": "Férias a pagar",
           "wcb": "Seguro de acidentes de trabalho a pagar (WCB/WSIB)",
           "eht": "Imposto de saúde do empregador a recolher",
-          "hsf": "Fundo de serviços de saúde a recolher (Quebec)"
+          "hsf": "Fundo de serviços de saúde a recolher (Quebec)",
+          "cnt": "CNT a recolher (contribuição do Quebec para normas trabalhistas)"
         }
       },
       "US": {
@@ -766,7 +767,10 @@
           "dc_opfl_employer": "Licença familiar remunerada do Distrito de Colúmbia (empregador) a recolher",
           "co_famli_employee": "FAMLI do Colorado (empregado) a recolher",
           "co_famli_employer": "FAMLI do Colorado (empregador) a recolher",
-          "ca_ett": "Imposto de Treinamento de Emprego da Califórnia (empregador) a recolher"
+          "ca_ett": "Imposto de Treinamento de Emprego da Califórnia (empregador) a recolher",
+          "ct_pl_employee": "Licença remunerada de Connecticut (empregado) a recolher",
+          "vt_child_care_contribution": "Contribuição de Vermont para creches a recolher",
+          "mn_paid_leave": "Licença remunerada de Minnesota a recolher"
         }
       },
       "NL": {
@@ -803,7 +807,8 @@
           "irpef": "IRPEF a recolher (imposto de renda nacional)",
           "addizionale_regionale": "Addizionale regionale a recolher (sobretaxa regional do IRPEF)",
           "addizionale_comunale": "Addizionale comunale a recolher (sobretaxa municipal do IRPEF)",
-          "inps": "INPS a recolher (contribuições IVS de funcionário e empregador)"
+          "inps": "INPS a recolher (contribuições IVS de funcionário e empregador)",
+          "sostitutive": "Impostos substitutivos a recolher (imposte sostitutive)"
         }
       },
       "AU": {

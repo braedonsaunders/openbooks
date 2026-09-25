@@ -747,7 +747,8 @@
           "vacation": "休暇給未払金",
           "wcb": "労災保険料未払金（WCB/WSIB）",
           "eht": "雇用主医療税未払金",
-          "hsf": "医療サービス基金未払金（ケベック州）"
+          "hsf": "医療サービス基金未払金（ケベック州）",
+          "cnt": "CNT未払金（ケベック州労働基準拠出金）"
         }
       },
       "US": {
@@ -766,7 +767,10 @@
           "dc_opfl_employer": "コロンビア特別区有給家族休暇（事業主分）未払金",
           "co_famli_employee": "コロラド州FAMLI（従業員分）未払金",
           "co_famli_employer": "コロラド州FAMLI（事業主分）未払金",
-          "ca_ett": "カリフォルニア州雇用訓練税（事業主分）未払金"
+          "ca_ett": "カリフォルニア州雇用訓練税（事業主分）未払金",
+          "ct_pl_employee": "コネチカット州有給休暇（従業員分）未払金",
+          "vt_child_care_contribution": "バーモント州保育拠出金未払金",
+          "mn_paid_leave": "ミネソタ州有給休暇未払金"
         }
       },
       "NL": {
@@ -803,7 +807,8 @@
           "irpef": "IRPEF未払金（国の所得税）",
           "addizionale_regionale": "Addizionale regionale未払金（IRPEF地域付加税）",
           "addizionale_comunale": "Addizionale comunale未払金（IRPEF市町村付加税）",
-          "inps": "INPS未払金（従業員・事業主負担IVS掛金）"
+          "inps": "INPS未払金（従業員・事業主負担IVS掛金）",
+          "sostitutive": "代替税未払金（imposte sostitutive）"
         }
       },
       "AU": {

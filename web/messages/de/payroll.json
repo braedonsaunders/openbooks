@@ -747,7 +747,8 @@
           "vacation": "Verbindlichkeiten aus Urlaub",
           "wcb": "Verbindlichkeiten aus Unfallversicherung (WCB/WSIB)",
           "eht": "Verbindlichkeiten aus Arbeitgeber-Gesundheitssteuer",
-          "hsf": "Verbindlichkeiten aus Health Services Fund (Quebec)"
+          "hsf": "Verbindlichkeiten aus Health Services Fund (Quebec)",
+          "cnt": "Verbindlichkeiten aus CNT (Quebec-Beitrag für Arbeitsnormen)"
         }
       },
       "US": {
@@ -766,7 +767,10 @@
           "dc_opfl_employer": "Verbindlichkeiten aus bezahltem Familienurlaub District of Columbia (Arbeitgeber)",
           "co_famli_employee": "Verbindlichkeiten aus FAMLI Colorado (Arbeitnehmer)",
           "co_famli_employer": "Verbindlichkeiten aus FAMLI Colorado (Arbeitgeber)",
-          "ca_ett": "Verbindlichkeiten aus Beschäftigungsbildungssteuer Kalifornien (Arbeitgeber)"
+          "ca_ett": "Verbindlichkeiten aus Beschäftigungsbildungssteuer Kalifornien (Arbeitgeber)",
+          "ct_pl_employee": "Verbindlichkeiten aus bezahltem Urlaub Connecticut (Arbeitnehmer)",
+          "vt_child_care_contribution": "Verbindlichkeiten aus Kinderbetreuungsbeitrag Vermont",
+          "mn_paid_leave": "Verbindlichkeiten aus bezahltem Urlaub Minnesota"
         }
       },
       "NL": {
@@ -803,7 +807,8 @@
           "irpef": "Verbindlichkeiten aus IRPEF (nationale Einkommensteuer)",
           "addizionale_regionale": "Verbindlichkeiten aus regionaler IRPEF-Zusatzsteuer",
           "addizionale_comunale": "Verbindlichkeiten aus kommunaler IRPEF-Zusatzsteuer",
-          "inps": "Verbindlichkeiten aus INPS (IVS-Beiträge Arbeitnehmer + Arbeitgeber)"
+          "inps": "Verbindlichkeiten aus INPS (IVS-Beiträge Arbeitnehmer + Arbeitgeber)",
+          "sostitutive": "Verbindlichkeiten aus Ersatzsteuern (imposte sostitutive)"
         }
       },
       "AU": {

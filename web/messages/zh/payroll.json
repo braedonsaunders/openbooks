@@ -747,7 +747,8 @@
           "vacation": "假期工资应付",
           "wcb": "工伤赔偿应付(WCB/WSIB)",
           "eht": "雇主健康税应付",
-          "hsf": "健康服务基金应付(魁北克)"
+          "hsf": "健康服务基金应付(魁北克)",
+          "cnt": "CNT应付（魁北克劳动标准缴款）"
         }
       },
       "US": {
@@ -766,7 +767,10 @@
           "dc_opfl_employer": "哥伦比亚特区带薪家庭假（雇主部分）应付",
           "co_famli_employee": "科罗拉多州FAMLI（雇员部分）应付",
           "co_famli_employer": "科罗拉多州FAMLI（雇主部分）应付",
-          "ca_ett": "加利福尼亚州就业培训税（雇主部分）应付"
+          "ca_ett": "加利福尼亚州就业培训税（雇主部分）应付",
+          "ct_pl_employee": "康涅狄格州带薪假（雇员部分）应付",
+          "vt_child_care_contribution": "佛蒙特州儿童保育缴款应付",
+          "mn_paid_leave": "明尼苏达州带薪假应付"
         }
       },
       "NL": {
@@ -803,7 +807,8 @@
           "irpef": "IRPEF应付（国家个人所得税）",
           "addizionale_regionale": "Addizionale regionale应付（IRPEF大区附加税）",
           "addizionale_comunale": "Addizionale comunale应付（IRPEF市镇附加税）",
-          "inps": "INPS应付（雇员和雇主IVS缴款）"
+          "inps": "INPS应付（雇员和雇主IVS缴款）",
+          "sostitutive": "替代税应付（imposte sostitutive）"
         }
       },
       "AU": {
