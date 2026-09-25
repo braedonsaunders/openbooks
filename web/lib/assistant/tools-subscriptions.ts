@@ -369,6 +369,21 @@ const getSubscription: AssistantToolDef = {
         `)
         : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
     ]);
+    // The child reads above resolve by org + subscription id after the
+    // header's scope check. A customer rehome landing between the two would
+    // leak the new subsidiary's payload, so re-resolve the customer
+    // subsidiary on a fresh read and discard the whole result when it left
+    // the caller's scope (or the subscription vanished).
+    const scopeRecheck = await db.execute<{ customerSubsidiaryId: string | null }>(sql`
+      select c.subsidiary_id as "customerSubsidiaryId"
+        from subscriptions s
+        left join parties c on c.id = s.customer_id and c.org_id = s.org_id
+       where s.id = ${a.subscriptionId} and s.org_id = ${authz.user.orgId}
+    `);
+    const fresh = scopeRecheck.rows[0];
+    if (!fresh || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, fresh.customerSubsidiaryId, { orgWideNull: true })) {
+      return { ok: false, error: "subscription_not_found" };
+    }
     return {
       ok: true,
       data: {
