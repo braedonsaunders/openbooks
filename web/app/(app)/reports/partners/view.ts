@@ -25,7 +25,7 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { buildHref, parseListParams } from '../../../../lib/list-params'
 import { partnerBalances } from '../../../../lib/reports'
@@ -138,7 +138,7 @@ export async function loadPartners(
     subView = await reportSubsidiaryView(subsidiaryParam, asOf)
     all = await partnerBalances(kind, authz.user.orgId, asOf, selectedBook.id, {
       subsidiaryIds: subView.subsidiary?.ids,
-    })
+    }, can(authz, 'payroll.read'))
   } catch (e) {
     // A multi-currency viewed set is a NAMED refusal, not a defect: the
     // banner carries the remedy (choose a single-currency subsidiary view)
