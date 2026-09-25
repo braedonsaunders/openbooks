@@ -145,6 +145,10 @@ export function FilePreview({ file, canManage }: { file: PreviewFile; canManage:
         const err = (await res.json().catch(() => ({}))) as { error?: string }
         toast.error(err.error ?? tt('fileReplaceFailed'))
       }
+    } catch {
+      // Transport failure: fetch rejects, so the !res.ok branch above
+      // never runs — the save must still report instead of idling.
+      toast.error(tt('fileReplaceFailed'))
     } finally {
       setSaving(false)
     }

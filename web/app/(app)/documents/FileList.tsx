@@ -174,6 +174,10 @@ export function FileList({
       a.download = 'files.zip'
       a.click()
       URL.revokeObjectURL(url)
+    } catch {
+      // Transport failure (offline, reset connection): fetch rejects, so
+      // the !res.ok branch above never runs — name it instead of going inert.
+      toast.error(tb('downloadFailed'))
     } finally {
       setBulkBusy(false)
     }
@@ -226,6 +230,8 @@ export function FileList({
         toast.error(tb('partialDeleted', { done, skipped: failures.length, reasons }))
       }
       router.refresh()
+    } catch {
+      toast.error(tb('deleteFailed'))
     } finally {
       setBulkBusy(false)
     }
@@ -271,15 +277,19 @@ export function FileList({
       confirmLabel: tc('actions.rename'),
     })
     if (!name || name === row.name) return
-    const res = await fetch(`/api/file-cabinet/files/${row.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
-    if (res.ok) {
-      toast.success(tt('fileRenamed'))
-      router.refresh()
-    } else {
+    try {
+      const res = await fetch(`/api/file-cabinet/files/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (res.ok) {
+        toast.success(tt('fileRenamed'))
+        router.refresh()
+      } else {
+        toast.error(tt('fileRenameFailed'))
+      }
+    } catch {
       toast.error(tt('fileRenameFailed'))
     }
   }
@@ -292,15 +302,19 @@ export function FileList({
       confirmLabel: tc('actions.rename'),
     })
     if (!name || name === row.name) return
-    const res = await fetch(`/api/file-cabinet/folders/${row.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
-    if (res.ok) {
-      toast.success(tt('folderRenamed'))
-      router.refresh()
-    } else {
+    try {
+      const res = await fetch(`/api/file-cabinet/folders/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (res.ok) {
+        toast.success(tt('folderRenamed'))
+        router.refresh()
+      } else {
+        toast.error(tt('folderRenameFailed'))
+      }
+    } catch {
       toast.error(tt('folderRenameFailed'))
     }
   }
@@ -312,17 +326,21 @@ export function FileList({
       tone: 'danger',
     })
     if (!ok) return
-    const res = await fetch(`/api/file-cabinet/files/${row.id}`, { method: 'DELETE' })
-    if (res.ok) {
-      toast.success(tt('fileDeleted'))
-      // If the deleted file's flyout is open, close it.
-      if (search.get('file') === row.id) {
-        const p = new URLSearchParams(search.toString())
-        p.delete('file')
-        router.push(p.toString() ? `/documents?${p.toString()}` : '/documents')
+    try {
+      const res = await fetch(`/api/file-cabinet/files/${row.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success(tt('fileDeleted'))
+        // If the deleted file's flyout is open, close it.
+        if (search.get('file') === row.id) {
+          const p = new URLSearchParams(search.toString())
+          p.delete('file')
+          router.push(p.toString() ? `/documents?${p.toString()}` : '/documents')
+        }
+        router.refresh()
+      } else {
+        toast.error(tt('fileDeleteFailed'))
       }
-      router.refresh()
-    } else {
+    } catch {
       toast.error(tt('fileDeleteFailed'))
     }
   }
@@ -334,15 +352,19 @@ export function FileList({
       tone: 'danger',
     })
     if (!ok) return
-    const res = await fetch(`/api/file-cabinet/folders/${row.id}`, { method: 'DELETE' })
-    if (res.ok) {
-      toast.success(tt('folderDeleted'))
-      router.refresh()
-    } else {
-      const err = (await res.json().catch(() => ({}))) as { error?: string }
-      toast.error(
-        err.error === 'has attached files' ? t('folder.deleteBlocked') : tt('folderDeleteFailed'),
-      )
+    try {
+      const res = await fetch(`/api/file-cabinet/folders/${row.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success(tt('folderDeleted'))
+        router.refresh()
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        toast.error(
+          err.error === 'has attached files' ? t('folder.deleteBlocked') : tt('folderDeleteFailed'),
+        )
+      }
+    } catch {
+      toast.error(tt('folderDeleteFailed'))
     }
   }
 
@@ -357,13 +379,17 @@ export function FileList({
   async function handleReplace(id: string, fileInput: File) {
     const form = new FormData()
     form.append('file', fileInput)
-    const res = await fetch(`/api/file-cabinet/files/${id}/replace`, { method: 'POST', body: form })
-    if (res.ok) {
-      toast.success(tt('fileReplaced'))
-      router.refresh()
-    } else {
-      const err = (await res.json().catch(() => ({}))) as { error?: string }
-      toast.error(err.error ?? tt('fileReplaceFailed'))
+    try {
+      const res = await fetch(`/api/file-cabinet/files/${id}/replace`, { method: 'POST', body: form })
+      if (res.ok) {
+        toast.success(tt('fileReplaced'))
+        router.refresh()
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        toast.error(err.error ?? tt('fileReplaceFailed'))
+      }
+    } catch {
+      toast.error(tt('fileReplaceFailed'))
     }
   }
 
