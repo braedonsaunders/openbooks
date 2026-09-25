@@ -2723,6 +2723,7 @@
       "programExclusions": "Exclusões de programas",
       "supplementalWageCategory": "Categoria de remuneração suplementar",
       "statutoryReportingCategory": "Categoria de declaração legal",
+      "statutoryExemptionCategory": "Categoria de isenção legal",
       "taxTreatment": "Tratamento fiscal",
       "expenseAccountId": "Conta de despesa",
       "liabilityAccountId": "Conta de passivo",

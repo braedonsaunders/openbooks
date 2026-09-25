@@ -2897,6 +2897,7 @@
       "programExclusions": "Programmausschlüsse",
       "supplementalWageCategory": "Kategorie der zusätzlichen Lohnzahlung",
       "statutoryReportingCategory": "Gesetzliche Meldekategorie",
+      "statutoryExemptionCategory": "Gesetzliche Befreiungskategorie",
       "ownershipPercent": "Beteiligung %",
       "parentSubsidiaryId": "Mutter-Tochtergesellschaft",
       "payDateOffsetDays": "Zahltagsversatz (Tage)",

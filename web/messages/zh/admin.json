@@ -2723,6 +2723,7 @@
       "programExclusions": "计划排除项",
       "supplementalWageCategory": "补充工资类别",
       "statutoryReportingCategory": "法定申报类别",
+      "statutoryExemptionCategory": "法定豁免类别",
       "taxTreatment": "税务处理",
       "expenseAccountId": "费用科目",
       "liabilityAccountId": "负债科目",

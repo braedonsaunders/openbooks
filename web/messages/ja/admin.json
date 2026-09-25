@@ -2897,6 +2897,7 @@
       "programExclusions": "プログラムの除外",
       "supplementalWageCategory": "追加賃金の分類",
       "statutoryReportingCategory": "法定報告の分類",
+      "statutoryExemptionCategory": "法定免除の分類",
       "ownershipPercent": "持分％",
       "parentSubsidiaryId": "親子会社",
       "payDateOffsetDays": "支給日オフセット（日数）",

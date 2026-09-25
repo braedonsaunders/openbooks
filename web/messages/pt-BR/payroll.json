@@ -768,6 +768,7 @@
           "co_famli_employee": "FAMLI do Colorado (empregado) a recolher",
           "co_famli_employer": "FAMLI do Colorado (empregador) a recolher",
           "ca_ett": "Imposto de Treinamento de Emprego da Califórnia (empregador) a recolher",
+          "ca_sdi_employee": "SDI da Califórnia (empregado) a recolher",
           "ct_pl_employee": "Licença remunerada de Connecticut (empregado) a recolher",
           "vt_child_care_contribution": "Contribuição de Vermont para creches a recolher",
           "mn_paid_leave": "Licença remunerada de Minnesota a recolher"
@@ -789,7 +790,8 @@
           "paye": "PAYE a recolher (imposto de renda)",
           "nic": "National Insurance a recolher (classe 1 de funcionário e empregador)",
           "student-loans": "Deduções de empréstimo estudantil e de pós-graduação a recolher",
-          "apprenticeship-levy": "Apprenticeship Levy a recolher (empregador)"
+          "apprenticeship-levy": "Apprenticeship Levy a recolher (empregador)",
+          "workplace-pension": "Contribuições de previdência corporativa a recolher (empregado + empregador)"
         }
       },
       "IE": {

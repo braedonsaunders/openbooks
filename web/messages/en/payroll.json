@@ -768,6 +768,7 @@
           "co_famli_employee": "Colorado FAMLI (employee) payable",
           "co_famli_employer": "Colorado FAMLI (employer) payable",
           "ca_ett": "California Employment Training Tax (employer) payable",
+          "ca_sdi_employee": "California SDI (employee) payable",
           "ct_pl_employee": "Connecticut Paid Leave (employee) payable",
           "vt_child_care_contribution": "Vermont Child Care Contribution payable",
           "mn_paid_leave": "Minnesota Paid Leave payable"
@@ -789,7 +790,8 @@
           "paye": "PAYE payable (income tax)",
           "nic": "National Insurance payable (employee + employer Class 1)",
           "student-loans": "Student loan and postgraduate loan deductions payable",
-          "apprenticeship-levy": "Apprenticeship Levy payable (employer)"
+          "apprenticeship-levy": "Apprenticeship Levy payable (employer)",
+          "workplace-pension": "Workplace pension contributions payable (employee + employer)"
         }
       },
       "IE": {
