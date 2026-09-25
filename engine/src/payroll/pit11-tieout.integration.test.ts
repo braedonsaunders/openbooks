@@ -122,6 +122,12 @@ test(
       for (const slot of PAYROLL_COUNTRY_PACKS.PL!.statutorySlots) {
         await setPackSlotAccount(org.orgId, actorId, "PL", slot.key, deductionsId);
       }
+      // Employer-configured accident-insurance rate (ZUS notification, 1.67% like the goldens).
+      await db.execute(sql`
+        insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                             rate_values, created_by, updated_by)
+        values (${org.orgId}, 'PL', 'pl_wypadkowe', null, 2026, '{"stopa": "1.67"}',
+                ${actorId}, ${actorId})`);
 
       const scheduleId = randomUUID();
       await db.execute(sql`
