@@ -19,6 +19,7 @@ import { Donut, Chart } from '../_ui/charts'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { useSort } from '../_ui/useSort'
 import { escapeTooltipHtml, useAnalyticsMoney } from '../_ui/format'
+import { refusalMessage } from '../_ui/fetch-refusal'
 import { countLabel } from '@/lib/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
@@ -145,7 +146,8 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [moreError, setMoreError] = useState<string | null>(null)
   const [view, setView] = useState<'entries' | 'byItem' | 'byCustomer'>('entries')
   // Reset the drill state when its inputs change, during render (same
   // committed values, no extra render — and no one-commit flash of the
@@ -165,13 +167,20 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
     setCustServerGroups([])
     setNextCursor(null)
     setHasMore(false)
-    setError(false)
+    setError(null)
+    setMoreError(null)
     setView('entries')
   }
   useEffect(() => {
     let live = true
     fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(async (r) => {
+        // The entries route refuses with a NAMED 422 (e.g. "no spot rate
+        // for EUR to USD on or before DATE"): surface the refusal body, not
+        // just a generic load failure.
+        if (!r.ok) throw new Error(await refusalMessage(r))
+        return r.json()
+      })
       .then((j: EntriesResponse) => {
         if (!live) return
         setEntries(j.entries)
@@ -181,22 +190,28 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
         setNextCursor(j.page.nextCursor)
         setHasMore(j.page.hasMore)
       })
-      .catch(() => { if (live) setError(true) })
+      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : String(e)) })
     return () => { live = false }
   }, [kind, id, from, to])
 
   const loadMore = () => {
     if (!nextCursor || loadingMore) return
     setLoadingMore(true)
+    setMoreError(null)
     fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}&cursor=${encodeURIComponent(nextCursor)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await refusalMessage(r))
+        return r.json()
+      })
       .then((j: EntriesResponse) => {
         setEntries((prev) => [...(prev ?? []), ...j.entries])
         setNextCursor(j.page.nextCursor)
         setHasMore(j.page.hasMore)
         setLoadingMore(false)
       })
-      .catch(() => { setError(true); setLoadingMore(false) })
+      // A failed load-more must not hide the rows already loaded: keep the
+      // table and report the page failure inline with a retry.
+      .catch((e: unknown) => { setMoreError(e instanceof Error ? e.message : String(e)); setLoadingMore(false) })
   }
 
   // Headline and shares read the server aggregates over the FULL population —
@@ -239,7 +254,7 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p className="p-6 text-center text-sm text-slate-400">{t('error.loadFailed')}</p>
+          <p className="p-6 text-center text-sm text-red-500">{t('error.loadFailed')}: {error}</p>
         ) : !entries ? (
           <p className="p-6 text-center text-sm text-slate-400">{t('loading')}</p>
         ) : view !== 'entries' ? (
@@ -294,14 +309,28 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
         {view === 'entries' && hasMore && entries ? (
           <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
             <span className="tabular-nums">{t('entries.loaded', { loaded: entries.length, total: total?.count ?? entries.length })}</span>
-            <button
-              type="button"
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="rounded-full border border-teal-500 px-3 py-1 font-medium text-teal-700 disabled:opacity-40 dark:text-teal-300"
-            >
-              {loadingMore ? t('loading') : t('entries.loadMore')}
-            </button>
+            {moreError ? (
+              <span className="flex items-center gap-2">
+                <span className="text-red-500">{moreError}</span>
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="rounded-full border border-teal-500 px-3 py-1 font-medium text-teal-700 disabled:opacity-40 dark:text-teal-300"
+                >
+                  {t('entries.loadMore')}
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="rounded-full border border-teal-500 px-3 py-1 font-medium text-teal-700 disabled:opacity-40 dark:text-teal-300"
+              >
+                {loadingMore ? t('loading') : t('entries.loadMore')}
+              </button>
+            )}
           </div>
         ) : null}
       </div>

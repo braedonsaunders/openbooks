@@ -5,6 +5,7 @@ import { Drawer, cn } from '@openbooks/ui'
 import { Gauge as GaugeIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { TxnLink } from '../../reports/TxnLink'
 import { useAnalyticsMoney } from './format'
+import { refusalMessage } from './fetch-refusal'
 import { useLocale, useTranslations } from 'next-intl'
 import { dateLabel } from '@/lib/format'
 const PER_PAGE = 25
@@ -67,16 +68,10 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
     let live = true
     fetch(`/api/analytics/cashflow/entity?party=${party}&side=${side}`)
       .then(async (r) => {
-        // The endpoint refuses by name (e.g. the 422 missing-rate refusal):
-        // check ok first, then surface its remedy instead of a generic line.
-        if (!r.ok) {
-          let message: string | null = null
-          try {
-            const problem = (await r.json()) as { message?: unknown }
-            if (typeof problem.message === 'string' && problem.message.length > 0) message = problem.message
-          } catch { message = null }
-          throw new Error(message ?? t('historyUnavailable', { status: r.status }))
-        }
+        // The endpoint refuses by name (e.g. the 422 missing-rate refusal)
+        // in an `{error}` body (apiErrorResponse): check ok first, then
+        // surface its remedy instead of a generic line.
+        if (!r.ok) throw new Error(await refusalMessage(r, t('historyUnavailable', { status: r.status })))
         return r.json()
       })
       .then((j) => { if (live) setData(j) })

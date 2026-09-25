@@ -85,8 +85,12 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
         `/api/consolidation/interests/${interestId}/loss-of-control`,
       );
       if (!r.ok) {
-        await r.json().catch(() => null);
-        throw new Error(t("loadFailed"));
+        // The route refuses by name in an `{error}` body (invalid interest,
+        // unmet proposal preconditions): surface the refusal, not a generic
+        // load failure.
+        const problem = (await r.json().catch(() => null)) as { error?: unknown } | null;
+        const refusal = typeof problem?.error === "string" && problem.error ? problem.error : null;
+        throw new Error(refusal ?? t("loadFailed"));
       }
       const s = (await r.json()) as Setup;
       setSetup(s);
@@ -96,8 +100,8 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
         equityIncomeAccountId: s.interest.equity_income_account_id,
       }));
       setOpen(true);
-    } catch {
-      toast.error(t("loadFailed"));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("loadFailed"));
     } finally {
       setBusy(false);
     }
@@ -168,14 +172,17 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
         },
       );
       if (!r.ok) {
-        await r.json().catch(() => null);
-        throw new Error(t("prepareFailed"));
+        // The POST refuses by name in an `{error}` body (engine refusal):
+        // surface the refusal instead of discarding it for prepareFailed.
+        const problem = (await r.json().catch(() => null)) as { error?: unknown } | null;
+        const refusal = typeof problem?.error === "string" && problem.error ? problem.error : null;
+        throw new Error(refusal ?? t("prepareFailed"));
       }
       const result = (await r.json()) as { changeId: string };
       closeDrawer();
       router.push(`/accounting/changes?change=${result.changeId}`);
-    } catch {
-      setError(t("prepareFailed"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("prepareFailed"));
     } finally {
       setBusy(false);
     }
