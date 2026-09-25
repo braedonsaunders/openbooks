@@ -14,10 +14,19 @@ import { validateXML } from "xmllint-wasm";
 // This is the schema linked from Service Canada's current ROE Web Appendix D.
 // Keep it local and validate offline; no employee payroll data is sent to a
 // third-party validation service and schema availability is not a runtime risk.
-const PAYROLL_EXTRACT_V2_XSD = readFileSync(
-  fileURLToPath(new URL("./schemas/PayrollExtractXmlV2.xsd", import.meta.url)),
-  "utf8",
-);
+// Loaded lazily on first validation: a module-scope filesystem read breaks
+// module evaluation under bundler SSR runtimes (their URL realm rejects the
+// resolved file URL), which crashed every page importing the pack registry.
+let cachedPayrollExtractV2Xsd: string | null = null;
+function payrollExtractV2Xsd(): string {
+  if (cachedPayrollExtractV2Xsd === null) {
+    cachedPayrollExtractV2Xsd = readFileSync(
+      fileURLToPath(new URL("./schemas/PayrollExtractXmlV2.xsd", import.meta.url)),
+      "utf8",
+    );
+  }
+  return cachedPayrollExtractV2Xsd;
+}
 
 /**
  * Service Canada ROE Web bulk-upload XML — the same shape as the CRA T4 file
@@ -187,7 +196,7 @@ export async function buildRoeXml(
 export async function validateRoeXml(xml: string): Promise<string> {
   const result = await validateXML({
     xml: [{ fileName: "roe-payroll-extract.xml", contents: xml }],
-    schema: [{ fileName: "PayrollExtractXmlV2.xsd", contents: PAYROLL_EXTRACT_V2_XSD }],
+    schema: [{ fileName: "PayrollExtractXmlV2.xsd", contents: payrollExtractV2Xsd() }],
   });
   if (!result.valid) {
     const detail = result.errors.map((error) => error.message).join("; ");
