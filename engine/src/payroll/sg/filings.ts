@@ -266,8 +266,10 @@ async function ir8aSlip(orgId: string, taxYear: number, rowId: string): Promise<
  */
 export const IR8A_DOWNLOAD_REFUSAL =
   "the SG pack produces no AIS submission file — the IRAS AIS interface file specification "
-  + "is not transcribed; submit the slip figures electronically via AIS payroll software or "
-  + "the IRAS myTax Portal by 1 Mar";
+  + "is not transcribed. AIS employers submit the slip figures electronically via AIS payroll "
+  + "software or the IRAS myTax Portal by 1 Mar; employers not on AIS must instead provide each "
+  + "employee the hardcopy Form IR8A (and applicable appendices) by 1 Mar and must not submit "
+  + "those hardcopies to IRAS (IRAS, Reporting Employee Earnings)";
 
 /**
  * How a wrong IR8A is corrected, as the Notes define it (§6): AIS

@@ -371,7 +371,8 @@ function buildNlPackFilings(): PayrollPackFilings {
         slip: { build: (orgId, taxYear, rowId) => jaaropgaafSlip(orgId, taxYear, rowId) },
         downloadRefusal:
           "the NL payroll pack produces no jaaropgaaf file — no jaaropgaaf file builder exists "
-          + "(the 2026 withholding figures it would print are transcribed; the file is not)",
+          + "(the 2026 withholding figures it would print are transcribed; the file is not). Issue "
+          + "each employee's statement from the year-end slip view, which carries every transcribed box",
         // A wrong jaaropgaaf is corrected where the wrong number IS: the
         // loonaangifte is corrected with a correctiebericht (Handboek
         // Loonheffingen 2026, hoofdstuk 14, Correctie), and the employee gets
