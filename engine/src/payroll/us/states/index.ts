@@ -32,7 +32,7 @@ import { CA_WITHHOLDING } from "./ca.ts";
 import { CO_WITHHOLDING } from "./co.ts";
 import { CT_WITHHOLDING } from "./ct.ts";
 import { DC_WITHHOLDING } from "./dc.ts";
-import { DE_WITHHOLDING } from "./de.ts";
+import { DE_WITHHOLDING, WILMINGTON_WITHHOLDING } from "./de.ts";
 import { GA_WITHHOLDING } from "./ga.ts";
 import { HI_WITHHOLDING } from "./hi.ts";
 import { IA_WITHHOLDING } from "./ia.ts";
@@ -145,6 +145,7 @@ const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   YONKERS_WITHHOLDING,
   PHILADELPHIA_WITHHOLDING,
   DETROIT_WITHHOLDING,
+  WILMINGTON_WITHHOLDING,
 ];
 
 const BY_STATE = new Map<string, UsStateWithholdingEngine>(
@@ -250,7 +251,7 @@ export {
 } from "./dc.ts";
 export { AL_WITHHOLDING, AL_RATES_2026 } from "./al.ts";
 export { AR_WITHHOLDING, AR_RATES_2026 } from "./ar.ts";
-export { DE_WITHHOLDING, DE_RATES_2026 } from "./de.ts";
+export { DE_WITHHOLDING, DE_RATES_2026, WILMINGTON_WITHHOLDING, wilmingtonRateFor } from "./de.ts";
 export { ME_WITHHOLDING, ME_RATES_2026 } from "./me.ts";
 export { RI_WITHHOLDING, RI_RATES_2026 } from "./ri.ts";
 export { SC_WITHHOLDING, SC_RATES_2026 } from "./sc.ts";

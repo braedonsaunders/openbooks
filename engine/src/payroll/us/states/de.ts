@@ -12,7 +12,8 @@
  * The live guide still prints the January 1, 2025 table. 2026 pay dates use
  * that published table; they do not invent a 2026 reprint.
  *
- * Wilmington city wage tax is refused rather than invented; the Form W-4NR
+ * Wilmington's 1.25% city wage tax is computed below (residents on all
+ * wages, nonresidents on verified city-source wages). The Form W-4NR
  * nonresident day-count proration is implemented below.
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
@@ -28,6 +29,7 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   refuseUntranscribedYear,
+  requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
@@ -216,6 +218,12 @@ export const DE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   DE_WITHHELD: "Delaware tax withheld this period",
   DE_PRORATION: "Delaware nonresident W-4NR day share",
   DE_PRORATED_TAX: "Delaware tax apportioned to Delaware work days",
+  WILM_BASIS: "Wilmington basis (resident or nonresident)",
+  WILM_RATE: "Wilmington city wage tax rate",
+  WILM_RATE_EFFECTIVE: "Wilmington rate in force since",
+  WILM_WORK_ALLOCATION: "Wilmington nonresident city work share",
+  WILM_TAXABLE_WAGES: "Wilmington taxable wages",
+  WILM_TAX: "Wilmington city wage tax",
 };
 
 export const DE_WITHHOLDING: UsStateWithholdingEngine = {
@@ -227,6 +235,96 @@ export const DE_WITHHOLDING: UsStateWithholdingEngine = {
   printedPeriods: null,
   supportingCertificateKeys: [DE_W4NR_KEY],
   compute,
+};
+
+// ---------------------------------------------------------------------------
+// Wilmington — city wage tax, 1.25% of taxable wages
+// ---------------------------------------------------------------------------
+
+/**
+ * Wilmington city wage-tax rate periods. Wilmington Code §44-121 requires
+ * employers to deduct 1-1/4% from taxable wages; the FY2026 published rates
+ * confirm 1.25% for residents (all wages) and nonresidents (city work).
+ */
+const WILMINGTON_RATES_2026: readonly {
+  effectiveFrom: string; effectiveTo: string | null; resident: string; nonresident: string;
+}[] = [{
+  effectiveFrom: "2026-01-01",
+  effectiveTo: null,
+  resident: "0.0125",
+  nonresident: "0.0125",
+}];
+
+export function wilmingtonRateFor(
+  payDate: string,
+  basis: "resident" | "nonresident",
+): { rate: string; effectiveFrom: string } {
+  const period = WILMINGTON_RATES_2026.find((entry) =>
+    payDate >= entry.effectiveFrom && (entry.effectiveTo == null || payDate < entry.effectiveTo));
+  if (!period) {
+    throw new PayrollError(
+      `no Wilmington city wage tax rate is loaded for a pay date of ${payDate} — Transcribe the period `
+      + `from the City of Wilmington's published tax rates into ${RATES_MODULE}.`,
+    );
+  }
+  return {
+    rate: basis === "resident" ? period.resident : period.nonresident,
+    effectiveFrom: period.effectiveFrom,
+  };
+}
+
+/**
+ * The Wilmington city wage tax: 1.25% of taxable wages for residents, and
+ * for nonresidents 1.25% of the verified Wilmington work share. There is no
+ * exemption, allowance or floor. A nonresident calculation without the
+ * city-share allocation refuses by name rather than pricing total wages.
+ */
+function computeWilmington(input: UsStateWithholdingInput): UsStateWithholdingResult {
+  const rates = deRatesForPayDate(input.payDate);
+  const { rate, effectiveFrom } = wilmingtonRateFor(input.payDate, input.basis);
+  let compensation = U(input.wages) + U(input.supplemental ?? "0");
+  let allocation = "1";
+  if (input.basis === "nonresident") {
+    try {
+      const work = requireUsWageAllocation(input.wageAllocations, "DE", "WILMINGTON");
+      allocation = work.workShare;
+      compensation = mulRateCents(compensation, allocation);
+    } catch (error) {
+      if (error instanceof PayrollError) {
+        throw new PayrollError(
+          "Wilmington nonresident wage tax needs the employee's verified share of services performed "
+          + "in Wilmington; record approved work-location dates or HR allocation for DE/WILMINGTON "
+          + "before calculating; refused by name",
+        );
+      }
+      throw error;
+    }
+  }
+  const tax = mulRateCents(compensation, rate);
+  return {
+    state: "DE-WILM",
+    year: rates.year,
+    tax: D(tax),
+    taxSupplemental: D(0n),
+    factors: {
+      WILM_BASIS: input.basis,
+      WILM_RATE: rate,
+      WILM_RATE_EFFECTIVE: effectiveFrom,
+      WILM_WORK_ALLOCATION: allocation,
+      WILM_TAXABLE_WAGES: D(compensation),
+      WILM_TAX: D(tax),
+    },
+  };
+}
+
+export const WILMINGTON_WITHHOLDING: UsStateWithholdingEngine = {
+  state: "DE-WILM",
+  label: "Wilmington city wage tax",
+  certificateKey: null,
+  ratesModule: RATES_MODULE,
+  editions: DE_TAX_YEAR_EDITIONS,
+  printedPeriods: null,
+  compute: computeWilmington,
 };
 
 // ===========================================================================
@@ -369,9 +467,18 @@ export const DE_REGION: PayrollRegionWithholding = {
   residentWithholding: "unknown",
   residentWithholdingImplemented: false,
   certificateKey: "us_de_sdw4a",
-  // Wilmington's city wage tax is a separate levy this pack has not
-  // transcribed a rate for. No sub-region, no invented 1.25%.
-  subRegions: [],
+  subRegions: [
+    {
+      code: "WILMINGTON",
+      label: "Wilmington city wage tax",
+      kind: "city",
+      // §44-121: 1.25% on residents' wages and on nonresidents' city work.
+      reaches: ["resident", "nonresident"],
+      rateSource: { kind: "pack" },
+      citation: "Wilmington Code of Ordinances §44-121; City of Wilmington FY2026 published tax rates",
+      implemented: true,
+    },
+  ],
   subRegionConflictRule: "both",
   citation:
     "Delaware Division of Revenue, Employer's Guide, Section 17 Withholding Methods "
