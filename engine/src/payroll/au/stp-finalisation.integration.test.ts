@@ -22,7 +22,7 @@ import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
 import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const money = (value: string): string => normalizeMoney(value);
@@ -95,15 +95,16 @@ test(
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
           values (${employeeId}, ${org.orgId}, 'person', ${name}, ${auSubId}, true, '{}'::jsonb)`);
+        const employmentId = await seedWorkerEmployment(org.orgId, employeeId, auSubId);
         await db.execute(sql`
           insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                         is_active, created_by, updated_by)
           values (${org.orgId}, ${employeeId}, 'AUD', '30', 'hour', '2026-07-01', true, ${actorId}, ${actorId})`);
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+          insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country,
                                                  province, pay_basis, vacation_percent,
                                                  vacation_method, is_active, created_by, updated_by)
-          values (${org.orgId}, ${employeeId}, ${scheduleId}, 'AU', ${province}, 'hourly', '0',
+          values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'AU', ${province}, 'hourly', '0',
                   'accrue', true, ${actorId}, ${actorId})`);
         await db.execute(sql`
           insert into employee_tax_certificates (id, org_id, employee_party_id, country, certificate_key,
@@ -116,6 +117,14 @@ test(
                     tax_free_threshold: "true",
                     stsl_debt: "false",
                   })}::jsonb, ${actorId}, ${actorId})`);
+        // SG prices only the remaining headroom under the annual maximum
+        // contributions base: July opens the financial year, so verified
+        // qualifying YTD is zero — an undeclared YTD refuses by name.
+        await db.execute(sql`
+          insert into employee_tax_certificates (id, org_id, employee_party_id, country, certificate_key,
+                                                 answers, created_by, updated_by)
+          values (${randomUUID()}, ${org.orgId}, ${employeeId}, 'AU', 'au_sg_administration',
+                  '{"qualifying_ytd": "0"}'::jsonb, ${actorId}, ${actorId})`);
         return employeeId;
       };
       const sydneyId = await seedEmployee("Sydney Worker", "NSW");
