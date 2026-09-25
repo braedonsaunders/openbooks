@@ -223,6 +223,7 @@ test("NetSuite bulk export assembles partition chunks and always cleans up", asy
         contents: JSON.stringify({ schemaVersion: 1, jobId, partId, pageIndex: 0, rows: [{ id: partId }] }),
       } as T;
     }
+    if (action === "exportTaskStatus") return { schemaVersion: 1, taskId: params.taskId, status: "complete" } as T;
     if (action === "deleteExport") {
       cleanupCalls += 1;
       return {
@@ -240,7 +241,7 @@ test("NetSuite bulk export assembles partition chunks and always cleans up", asy
     { id: "b", sql: "SELECT 2 AS id FROM DUAL" },
   ]);
   assert.deepEqual(rows, new Map([["a", [{ id: "a" }]], ["b", [{ id: "b" }]]]));
-  assert.deepEqual(actions, ["startExport", "exportStatus", "readChunk", "readChunk", "readChunk", "deleteExport", "deleteExport"]);
+  assert.deepEqual(actions, ["startExport", "exportStatus", "exportTaskStatus", "readChunk", "readChunk", "readChunk", "deleteExport", "deleteExport"]);
 });
 
 test("NetSuite bulk export fails closed on conflicting duplicate chunks", async () => {
@@ -289,6 +290,7 @@ test("NetSuite bulk export fails closed on conflicting duplicate chunks", async 
           rows: [{ id: String(params.fileId) }],
         }),
     } as T;
+    if (action === "exportTaskStatus") return { schemaVersion: 1, taskId: params.taskId, status: "complete" } as T;
     if (action === "deleteExport") return { schemaVersion: 1, jobId, deleted: 2, remaining: 0 } as T;
     throw new Error(`unexpected action ${action}`);
   });
@@ -345,6 +347,7 @@ test("NetSuite bulk export fails closed when the summary names a missing chunk",
         contents: JSON.stringify({ schemaVersion: 1, jobId, partId: "a", pageIndex: 0, rows: [{ id: "a" }] }),
       } as T;
     }
+    if (action === "exportTaskStatus") return { schemaVersion: 1, taskId: params.taskId, status: "complete" } as T;
     if (action === "deleteExport") {
       cleanupCalls += 1;
       return { schemaVersion: 1, jobId, deleted: 1, remaining: 0 } as T;
