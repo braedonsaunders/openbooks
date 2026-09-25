@@ -208,6 +208,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return resultOrDenied instanceof NextResponse ? resultOrDenied : NextResponse.json(resultOrDenied);
   }
   if (body.action === "sync") {
+    // Gate the connection's account exactly like PATCH, DELETE, and test:
+    // without this, an out-of-scope id falls through to syncBankFeedNow,
+    // which throws instead of answering the uniform 404.
+    const scoped = await db.transaction(async (tx) => lockScopedConnection(tx, authz, id));
+    if (scoped instanceof NextResponse) return scoped;
     // The interactive operator is the audit actor for everything this sync
     // imports; dropping user.id here would persist system provenance for a
     // human-triggered import.
