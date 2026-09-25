@@ -35,6 +35,7 @@ export function AppScreens({
   onPendingChange: (pending: boolean) => void
 }) {
   const t = useTranslations('apps.screens')
+  const labels = useTranslations('apps.management.labels')
   const [kind, setKind] = useState('page')
   const [key, setKey] = useState('')
   const [edit, updateEdit] = useState<{ index: number; source: string } | null>(
@@ -94,7 +95,7 @@ export function AppScreens({
                 {
                   id: 'details',
                   fields: [
-                    { id: 'name', type: 'text', label: 'Name', required: true },
+                    { id: 'name', type: 'text', label: labels('name'), required: true },
                   ],
                 },
               ],
