@@ -728,7 +728,7 @@ async function writeMaster(
         })
         if (warning) {
           if (!outcome.warnings) outcome.warnings = []
-          outcome.warnings.push({ row: rowNo, message: warning, field: 'type' })
+          outcome.warnings.push({ row: rowNo, message: warning.message, field: 'type' })
         }
       }
     } catch (e) {

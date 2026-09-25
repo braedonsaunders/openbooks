@@ -41,6 +41,9 @@
     "income": "Produits",
     "expense": "Charges"
   },
+  "hygiene": {
+    "assetBankUncorroborated": "« {name} » est typé comme compte bancaire mais n’a ni nom bancaire ni rapprochement possible ; il sera donc compté comme trésorerie partout. Vérifiez le type (les comptes de compensation, de provision et de crédit sont souvent mal typés) ou activez le rapprochement."
+  },
   "drawer": {
     "saved": "Compte enregistré",
     "created": "Compte créé",

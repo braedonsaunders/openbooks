@@ -41,6 +41,9 @@
     "income": "Receita",
     "expense": "Despesas"
   },
+  "hygiene": {
+    "assetBankUncorroborated": "“{name}” está classificada como conta bancária, mas não tem nome bancário nem é conciliável, por isso será contada como caixa em todos os lugares. Confirme o tipo (contas de compensação, provisão e crédito costumam ser classificadas incorretamente) ou ative a conciliação."
+  },
   "drawer": {
     "saved": "Conta salva",
     "typeLocked": "O tipo não pode ser alterado depois que a conta tem movimentação no razão.",

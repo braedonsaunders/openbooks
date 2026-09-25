@@ -41,6 +41,9 @@
     "income": "收入",
     "expense": "费用"
   },
+  "hygiene": {
+    "assetBankUncorroborated": "“{name}”被归类为银行科目，但没有银行类名称且不可对账，因此将在所有地方被计入现金。请确认科目类型（清算、准备金和授信科目经常被误分类），或启用对账。"
+  },
   "drawer": {
     "saved": "科目已保存",
     "created": "科目已创建",
