@@ -633,6 +633,15 @@ export interface UsStateWithholdingEngine {
   printedPeriods: readonly UsStatePayPeriod[] | null;
   /** Final whole-dollar convention, applied only after all elected additions. */
   finalRounding?: UsFinalWithholdingRounding;
+  /**
+   * Approved dollars the dispatcher removes from a separately paid flat-rate
+   * supplemental base before the rate applies. The state engine's formula
+   * carve-out shares the same gate, so both paths enforce it identically;
+   * engines without an approved exclusion omit it and price the full base.
+   */
+  separateFlatExclusion?: (
+    supportingCertificates: NonNullable<UsStateWithholdingInput["supportingCertificates"]>,
+  ) => string;
   compute(input: UsStateWithholdingInput): UsStateWithholdingResult;
 }
 
