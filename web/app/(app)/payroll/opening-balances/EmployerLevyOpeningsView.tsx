@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle, Download, Plus, Upload } from 'lucide-react'
 import { Button, FieldHelp, Input } from '@openbooks/ui'
+import { isZeroDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 
 interface DeclaredLevy {
   country: string
@@ -103,7 +104,7 @@ export function EmployerLevyOpeningsView({
         (row.region ?? null) === (region ?? null),
     )?.baseYtd
     if (stored === undefined) return ''
-    return Number(stored) === 0 ? '' : trimZeros(stored)
+    return isZeroDecimal(stored) ? '' : trimZeros(stored)
   }
 
   const setAmount = (country: string, levyKey: string, region: string | null, value: string) => {
