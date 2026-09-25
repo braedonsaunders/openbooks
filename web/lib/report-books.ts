@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { isReportUuidParam } from './report-filters'
 
 export class ReportBookSelectionError extends Error {
+  readonly status = 422;
   constructor() {
     super('Accounting book is unavailable. Choose an active accounting book.')
     this.name = 'ReportBookSelectionError'
