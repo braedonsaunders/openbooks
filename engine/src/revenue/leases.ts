@@ -27,7 +27,7 @@ import {
 import { addCalendarDays, civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { apportion } from "./recognition.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import {
   accreteToZero,
   periodRateFromAnnualPercent,

@@ -3,7 +3,7 @@ import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { providerBindingMismatch, providerEvidenceMismatch, readTaxRateProviderConfigForPosting, readTaxQuoteForDocumentLine, sumComponentTax, type Address, type PersistedTaxQuote } from "../tax/rate-providers.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
-import { type Doc, type DocLine, type PostingDeps, type TaxPostingComponent, PostingError } from "./posting-contracts.ts";
+import { type Doc, type DocLine, type PostingDeps, type TaxPostingComponent, PostingError } from "../journal/posting-contracts.ts";
 type ProviderTaxPlan = {
   line: DocLine;
   components: TaxPostingComponent[];

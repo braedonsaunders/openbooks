@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, pool, schema } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { PostingError, type PostingDeps } from "../ledger/posting-contracts.ts";
+import { PostingError, type PostingDeps } from "../journal/posting-contracts.ts";
 import { ensureReadRole, runUserSql } from "../platform/sqlapi.ts";
 import { selectOnlyOrg } from "./org-selection.ts";
 

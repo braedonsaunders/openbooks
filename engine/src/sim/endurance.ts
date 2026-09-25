@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { regenerateGlImpactTx } from "../ledger/posting-replay.ts";
-import { type PostingDeps } from "../ledger/posting-contracts.ts";
+import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { paymentControlDeps } from "../payments/payment-accounts.ts";
 import { Rng } from "./rng.ts";
 import { getProfile } from "./profiles/index.ts";

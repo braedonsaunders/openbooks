@@ -3,7 +3,7 @@ import { db, schema, withOrg } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { evaluateBillsForRelease, recordReleaseCheck } from "../compliance/compliance.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";

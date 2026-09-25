@@ -9,7 +9,7 @@ import { sealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { ScopeNotFoundError, assertUnrestrictedScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./acceptance.ts";
 
 /**

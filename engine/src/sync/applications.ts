@@ -2,7 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { PoolClient } from "pg";
 import { db, pool, type SqlExecutor } from "../platform/db.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import { divRate, fromUnits, mulRate, toUnits } from "../money/money.ts";
 import { lockApplicationEvidenceWithQuery } from "../records/application-lock.ts";
 import type { SourceApplicationLink } from "./source.ts";

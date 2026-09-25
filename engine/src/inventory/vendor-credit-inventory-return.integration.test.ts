@@ -10,7 +10,7 @@ import { issueInventory, receiveInventory } from "./movements.ts";
 import { applyInventoryReturnsForVendorCredit, parseVendorCreditInventoryReturnSelection } from "./documents-vendor-credits.ts";
 import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { PostingError } from "../ledger/posting-contracts.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

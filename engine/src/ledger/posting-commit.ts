@@ -14,15 +14,15 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../reco
 import { allocateEntryNumber, nextFreeEntryNumber } from "../records/entry-number.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { enqueuePostingEffects } from "./posting-effects.ts";
-import { PostingError } from "./posting-contracts.ts";
-import { assertFinalKernelBalance } from "./posting-invariants.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
+import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { validateRequiredDimensions } from "./posting-accounts.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod, assertPayRunConsolidatedRateCoverage } from "./posting-period.ts";
 
-import type { PostDocumentOptions } from "./posting-contracts.ts";
+import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
 import type { prepareDocumentPosting } from "./posting-prepare.ts";
 
 /** Owns the accounting transaction; every journal, stock effect, audit and outbox write uses its executor. */

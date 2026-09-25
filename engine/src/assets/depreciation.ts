@@ -9,8 +9,8 @@ import { add, cmp, fromUnits, isZero, mulRatio, neg, normalizeMoney, toUnits } f
 import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";
 import { bookConventionWindow } from "./depreciation-conventions.ts";
 import type { BookDepreciationConvention } from "@openbooks/schema";
-import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 

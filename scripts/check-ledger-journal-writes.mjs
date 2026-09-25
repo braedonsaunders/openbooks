@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // check-ledger-journal-writes.mjs — every journal write routes through the
-// ONE ledger API (engine/src/ledger/post-entry.ts postEntry /
-// markEntryReversed, plus the document-posting kernel in the same module).
+// journal kernel (engine/src/journal/post-entry.ts postEntry /
+// markEntryReversed, extracted from ledger in ARCH-MODULE-CYCLE C02; the
+// document-posting sibling writer posting-commit.ts stays in ledger).
+// Owner approved this widening under "everything lands in alpha24".
 // Fails if any other engine module issues INSERT / UPDATE / DELETE on
 // journal_entries or journal_lines, in raw SQL or through the drizzle
 // schema handles. Derived from the source tree on every run — never a hand
 // list of allowed files: the only structural allowances are (a) anything
-// inside engine/src/ledger/ and (b) UPDATEs of journal_lines whose SET
+// inside engine/src/ledger/ or engine/src/journal/ and (b) UPDATEs of journal_lines whose SET
 // clause touches only governed non-financial columns — reconciliation
 // evidence (reconciled_at, reconciliation_id, source_cleared_date,
 // source_cleared_connector), which the jl_guard storage trigger holds
@@ -25,6 +27,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(fileURLToPath(import.meta.url), "..", "..");
 const ENGINE_SRC = join(ROOT, "engine", "src");
 const LEDGER_DIR = join(ENGINE_SRC, "ledger") + "/";
+const JOURNAL_DIR = join(ENGINE_SRC, "journal") + "/";
 
 // Mirrors the test/type exclusions of check-engine-boundaries.mjs.
 const TEST =
@@ -87,7 +90,7 @@ function* sourceFiles() {
 const violations = [];
 for (const file of sourceFiles()) {
   const rel = relative(ROOT, file).replace(/\\/g, "/");
-  if (file.startsWith(LEDGER_DIR)) continue;
+  if (file.startsWith(LEDGER_DIR) || file.startsWith(JOURNAL_DIR)) continue;
   const text = stripNoise(readFileSync(file, "utf8"));
   for (const match of text.matchAll(RAW_WRITE)) {
     const verb = match[1].toLowerCase().replace(/\s+/g, " ");
@@ -99,14 +102,14 @@ for (const file of sourceFiles()) {
       if (columns && columns.every((column) => NON_FINANCIAL_LINE_COLUMNS.has(column))) continue;
     }
     violations.push(
-      `${rel}:${line}: ${verb} on ${table} outside engine/src/ledger/ — route it through the ledger API (engine/src/ledger/post-entry.ts)`,
+      `${rel}:${line}: ${verb} on ${table} outside engine/src/ledger/ — route it through the ledger API (engine/src/journal/post-entry.ts)`,
     );
   }
   for (const match of text.matchAll(DRIZZLE_WRITE)) {
     const before = text.slice(0, match.index);
     const line = before.split("\n").length;
     violations.push(
-      `${rel}:${line}: drizzle .${match[1].toLowerCase()}(schema.journal${match[2]}) outside engine/src/ledger/ — route it through the ledger API (engine/src/ledger/post-entry.ts)`,
+      `${rel}:${line}: drizzle .${match[1].toLowerCase()}(schema.journal${match[2]}) outside engine/src/ledger/ — route it through the ledger API (engine/src/journal/post-entry.ts)`,
     );
   }
 }

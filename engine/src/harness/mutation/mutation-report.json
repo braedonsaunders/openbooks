@@ -885,7 +885,7 @@
       ]
     },
     {
-      "target": "engine/src/ledger/posting-invariants.ts",
+      "target": "engine/src/journal/posting-invariants.ts",
       "needsDb": false,
       "status": "measured",
       "killed": 13,
@@ -898,25 +898,25 @@
       "ratio": 0.7647058823529411,
       "topSurvivors": [
         {
-          "key": "engine/src/ledger/posting-invariants.ts:50:boundary-shift:76:2",
+          "key": "engine/src/journal/posting-invariants.ts:50:boundary-shift:76:2",
           "line": 50,
           "operator": "boundary-shift",
           "description": "boundary '0n' -> '1n'"
         },
         {
-          "key": "engine/src/ledger/posting-invariants.ts:50:comparison-flip:74:1",
+          "key": "engine/src/journal/posting-invariants.ts:50:comparison-flip:74:1",
           "line": 50,
           "operator": "comparison-flip",
           "description": "comparison '<' -> '<='"
         },
         {
-          "key": "engine/src/ledger/posting-invariants.ts:55:boundary-shift:74:2",
+          "key": "engine/src/journal/posting-invariants.ts:55:boundary-shift:74:2",
           "line": 55,
           "operator": "boundary-shift",
           "description": "boundary '0n' -> '1n'"
         },
         {
-          "key": "engine/src/ledger/posting-invariants.ts:55:comparison-flip:72:1",
+          "key": "engine/src/journal/posting-invariants.ts:55:comparison-flip:72:1",
           "line": 55,
           "operator": "comparison-flip",
           "description": "comparison '<' -> '<='"

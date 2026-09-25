@@ -1,6 +1,25 @@
 import type { schema } from "../platform/db.ts";
-import type { CustomGlLineRunEvidence } from "../scripting/scripting.ts";
 import type { Money } from "../money/brands.ts";
+
+/**
+ * One completed custom_gl_lines execution, captured in memory so its
+ * script_runs evidence can be re-recorded after a refused post rolls the
+ * in-transaction row back (PA1 made prepare+commit one unit). The row the
+ * runner inserted is byte-identical to this except id/at, which the
+ * re-record mints fresh. A run that SUCCEEDED before a later refusal keeps
+ * status "ok": the script executed fine, the post is what was refused.
+ */
+export interface CustomGlLineRunEvidence {
+  orgId: string;
+  scriptId: string;
+  targetKind: string;
+  targetId: string;
+  status: "ok" | "aborted" | "error" | "timeout";
+  logs: string[];
+  errorMessage: string | null;
+  durationMs: number;
+  createdBy: string | null;
+}
 /** Posting input contracts and the shared refusal identity; no runtime database dependency. */
 
 export type PostingDocument = typeof schema.documents.$inferSelect;

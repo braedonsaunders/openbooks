@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
-import { PostingError } from "../../ledger/posting-contracts.ts";
+import { PostingError } from "../../journal/posting-contracts.ts";
 import { runScenario, type Checkpoint } from "../../harness/scenario.ts";
 import { postingDeps } from "../activities/documents.ts";
 import type { SimOrg, SimPeriod } from "../world.ts";

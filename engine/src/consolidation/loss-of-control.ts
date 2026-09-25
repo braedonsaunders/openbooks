@@ -24,8 +24,8 @@ import {
   validateSubsidiaryRestrictions,
 } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
-import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
-import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
+import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import {
   assertFinancialChangeApproved,
   completeFinancialChange,

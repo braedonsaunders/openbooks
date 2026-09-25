@@ -21,7 +21,7 @@ import {
   reconcileAssetDepreciationStatusWithRunner,
 } from "./depreciation.ts";
 import { lockAssetRow, postAssetLifecycleEntry } from "./asset-lifecycle.ts";
-import { markEntryReversed } from "../ledger/post-entry.ts";
+import { markEntryReversed } from "../journal/post-entry.ts";
 interface ReversalInput {
   sourceChangeId: string;
   effectiveOn: string;

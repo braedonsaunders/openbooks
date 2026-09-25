@@ -21,7 +21,7 @@ import {
   runOwnershipConsolidation,
 } from "../../consolidation/consolidation.ts";
 import { db } from "../../platform/db.ts";
-import { postEntry } from "../../ledger/post-entry.ts";
+import { postEntry } from "../../journal/post-entry.ts";
 import { capture, setSpotRate } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 

@@ -8,7 +8,7 @@ import { loadControlAccounts } from "../records/control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { postEntry } from "../journal/post-entry.ts";
 
 /**
  * Period-end UNREALIZED FX revaluation.

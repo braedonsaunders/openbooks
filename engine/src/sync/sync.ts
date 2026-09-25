@@ -7,7 +7,7 @@ import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money/m
 import { postDocument } from "../ledger/posting-document.ts";
 import { regenerateGlImpactTx } from "../ledger/posting-replay.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
-import { type PostingDeps } from "../ledger/posting-contracts.ts";
+import { type PostingDeps } from "../journal/posting-contracts.ts";
 import {
   buildNativeContext,
   type NativeContext,

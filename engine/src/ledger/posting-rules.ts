@@ -1,7 +1,7 @@
 /** Pure document-to-ledger projection rules. Posting phases are coordinated by posting-document.ts. */
 import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
 import { addMoney, negMoney, parseMoney, sumMoney, type Money } from "../money/brands.ts";
-import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "./posting-contracts.ts";
+import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "../journal/posting-contracts.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
 /**
  * An AR/AP journal line participates in the subledger only when it identifies

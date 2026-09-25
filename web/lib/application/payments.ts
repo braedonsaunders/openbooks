@@ -10,7 +10,7 @@ import { postPaymentWithApplications } from "@openbooks/engine/src/payments/paym
 import { type AllocationInput } from "@openbooks/engine/src/payments/settlement-policy.ts";
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
 import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import {

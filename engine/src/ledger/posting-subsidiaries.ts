@@ -4,7 +4,7 @@ import { normalizeDecimal } from "../money/money.ts";
 import { mulMoneyRate, type Money } from "../money/brands.ts";
 import { lookupSpotRate } from "../fx/spot-rate.ts";
 import { absorbFxRoundingResidual, intercompanyBalancingLegs, loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { type Doc, type KernelLine, PostingError } from "./posting-contracts.ts";
+import { type Doc, type KernelLine, PostingError } from "../journal/posting-contracts.ts";
 /**
  * Application-layer proof for the storage trigger `jl_check_account`
  * (F-t06-002): every final line inserts in its line currency, so a target

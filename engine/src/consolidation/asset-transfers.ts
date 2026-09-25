@@ -23,8 +23,8 @@ import {
   neg,
   toUnits,
 } from "../money/money.ts";
-import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import {
   loadSubsidiaryContext,

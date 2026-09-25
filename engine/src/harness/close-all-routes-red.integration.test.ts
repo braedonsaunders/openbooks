@@ -8,7 +8,7 @@ import { setPeriodLockState } from "../periods/period-locks.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { InventoryError } from "../inventory/contracts.ts";
-import { PostingError } from "../ledger/posting-contracts.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,

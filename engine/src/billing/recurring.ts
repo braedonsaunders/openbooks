@@ -12,7 +12,7 @@ import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { type PostingDeps } from "../ledger/posting-contracts.ts";
+import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { advanceAnchoredMonth } from "./cadence.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";

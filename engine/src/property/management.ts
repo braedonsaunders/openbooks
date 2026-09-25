@@ -14,7 +14,7 @@ import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter, wit
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
-import { postEntry } from "../ledger/post-entry.ts";
+import { postEntry } from "../journal/post-entry.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 

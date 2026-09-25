@@ -3,7 +3,7 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import { PaymentError } from "@openbooks/engine/src/payments/payment-errors.ts";
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
-import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'

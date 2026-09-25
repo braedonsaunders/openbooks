@@ -6,10 +6,10 @@ import { resolveBillInventoryAccounts } from "../inventory/documents-purchasing.
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
-import { markEntryReversed, postEntry } from "./post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { transferCorrectionApplications } from "./posting-replay-applications.ts";
-import { type PostingDeps, PostingError } from "./posting-contracts.ts";
-import { assertFinalKernelBalance } from "./posting-invariants.ts";
+import { type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
+import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";

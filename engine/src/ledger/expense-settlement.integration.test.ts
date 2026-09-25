@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "./posting-document.ts";
 import { regenerateGlImpactTx } from "./posting-replay.ts";
-import { type PostingDeps } from "./posting-contracts.ts";
+import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { createPaymentRun } from "../payments/run-creation.ts";
 import { openItemsForParty } from "../payments/payment-queries.ts";
 import {
