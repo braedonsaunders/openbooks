@@ -778,6 +778,34 @@ async function assertPriorRegisterInScope(
           where s.org_id = r.org_id and s.register_id = r.id
             and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)})
        )
+       -- Findings name their own employee, independent of stubs: a stub-less
+       -- register whose verdicts belong to another subsidiary refuses too.
+       and not exists (
+         select 1
+           from payroll_parallel_findings f
+           join payroll_parallel_comparisons c on c.id = f.comparison_id and c.org_id = f.org_id
+           left join parties p on p.id = f.employee_party_id and p.org_id = f.org_id
+          where f.org_id = r.org_id and c.register_id = r.id
+            and f.employee_party_id is not null
+            and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)})
+       )
+       -- The compared run side counts as well: destroying the comparison
+       -- destroys evidence about that run's employees.
+       and not exists (
+         select 1
+           from payroll_parallel_comparisons c
+           join pay_runs pr on pr.org_id = c.org_id and pr.document_id = c.pay_run_document_id
+           join documents d on d.id = pr.document_id and d.org_id = pr.org_id
+          where c.org_id = r.org_id and c.register_id = r.id
+            and (${payrollSubsidiaryOutsideScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+              or exists (
+                select 1
+                  from pay_stubs s
+                  left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+                 where s.org_id = pr.org_id and s.pay_run_document_id = pr.document_id
+                   and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)})
+              ))
+       )
   `));
   if (!row.rows[0]) throw new ParallelRunStoreError("that prior register does not exist");
 }

@@ -60,7 +60,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   // A discard naming nothing is a named 404 with no audit row — never
   // {ok:true} over zero matched rows, and never a 500 carrying the refusal.
   try {
-    await deletePriorRegister(gate.user.orgId, id, gate.user.id)
+    // The probe above reads scoped; the engine fence re-checks under the
+    // parallel-run input lock inside the delete transaction, so a register
+    // rehomed between probe and delete still refuses instead of cascading.
+    await deletePriorRegister(gate.user.orgId, id, gate.user.id, gate.allowedSubsidiaryIds)
   } catch (error) {
     if (error instanceof PriorRegisterNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 })
