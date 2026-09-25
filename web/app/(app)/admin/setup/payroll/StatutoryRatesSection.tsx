@@ -9,6 +9,7 @@ import { PagedTable } from '../../../../../components/paged-table'
 import { countryName } from '../../../../../lib/countries'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { formatRateFieldValue } from './statutory-rates-format'
+import { useDirtyClose } from '../../../../../lib/use-dirty-close'
 
 /**
  * Statutory rates the employer supplies — at the scope the country pack says
@@ -129,6 +130,24 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
   const [year, setYear] = useState<number | null>(initialYear ?? null)
   const [draft, setDraft] = useState<DraftRate | null>(null)
   const [busy, setBusy] = useState(false)
+  const tc = useTranslations('common')
+  const [baseline, setBaseline] = useState<string | null>(null)
+  const dirty = draft !== null && JSON.stringify(draft) !== baseline
+  const discardDraft = useCallback(() => {
+    setBaseline(null)
+    setDraft(null)
+  }, [])
+  const { close } = useDirtyClose({
+    dirty,
+    busy,
+    onClose: discardDraft,
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
+  const openDraft = (next: DraftRate) => {
+    setBaseline(JSON.stringify(next))
+    setDraft(next)
+  }
   const [failure, setFailure] = useState<string | null>(null)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
@@ -192,7 +211,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
       // The status is checked before the body is parsed (see load above).
       if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(label('saved', 'Saved'))
-      setDraft(null)
+      discardDraft()
       await load(year)
     } catch (error) {
       const message = (error as Error).message
@@ -221,7 +240,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
         throw new Error(message)
       }
       toast.success(label('saved', 'Saved'))
-      setDraft(null)
+      discardDraft()
       await load(year)
     } catch (error) {
       toast.error((error as Error).message)
@@ -342,7 +361,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
             const pack = data?.packs[0]
             const slot = pack?.slots[0]
             if (!pack || !slot || year == null) return
-            setDraft({
+            openDraft({
               country: pack.country,
               rateKey: slot.key,
               region: '',
@@ -382,7 +401,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
             {label('rates.empty', 'No statutory rates are entered for this year.')}
           </div>
         }
-        onRowClick={(row) => setDraft({
+        onRowClick={(row) => openDraft({
           country: row.country,
           rateKey: row.rateKey,
           region: row.region ?? '',
@@ -436,7 +455,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
         label={label}
         saveError={saveError}
         onChange={setDraft}
-        onClose={() => setDraft(null)}
+        onClose={close}
         onSave={save}
         onRemove={remove}
       />
@@ -480,14 +499,14 @@ function RateDrawer({
             </Button>
           ) : <span />}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>{label('cancel', 'Cancel')}</Button>
+            <Button variant="outline" disabled={busy} onClick={onClose}>{label('cancel', 'Cancel')}</Button>
             <Button disabled={busy} onClick={onSave}>{label('save', 'Save')}</Button>
           </div>
         </div>
       ) : undefined}
     >
       {draft && data ? (
-        <div className="space-y-4">
+        <div className="space-y-4" inert={busy}>
           {saveError ? <Alert variant="destructive">{saveError}</Alert> : null}
           <div className="grid gap-3 sm:grid-cols-2">
             {data.packs.length > 1 ? (

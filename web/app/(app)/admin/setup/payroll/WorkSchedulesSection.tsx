@@ -15,6 +15,7 @@ import {
 } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
+import { useDirtyClose } from '../../../../../lib/use-dirty-close'
 
 /**
  * Work schedules — the hours and days an employee is normally scheduled to
@@ -111,6 +112,23 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState<Schedule | null>(null)
   const [busy, setBusy] = useState(false)
+  const [baseline, setBaseline] = useState<string | null>(null)
+  const dirty = draft !== null && JSON.stringify(draft) !== baseline
+  const discardDraft = useCallback(() => {
+    setBaseline(null)
+    setDraft(null)
+  }, [])
+  const { close } = useDirtyClose({
+    dirty,
+    busy,
+    onClose: discardDraft,
+    message: tc('feedback.unsavedChanges'),
+    confirmLabel: tc('confirm.discardChanges'),
+  })
+  const openDraft = (next: Schedule) => {
+    setBaseline(JSON.stringify(next))
+    setDraft(next)
+  }
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body. The loading reset lives
@@ -212,7 +230,7 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'failed')
       toast.success(tc('feedback.saved'))
-      setDraft(null)
+      discardDraft()
       setLoading(true)
       await load()
     } catch (error) {
@@ -232,7 +250,7 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'failed')
-      setDraft(null)
+      discardDraft()
       setLoading(true)
       await load()
     } catch (error) {
@@ -254,7 +272,7 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
           </p>
         </div>
         {canManage ? (
-          <Button onClick={() => setDraft(blank(today))}>{t('add')}</Button>
+          <Button onClick={() => openDraft(blank(today))}>{t('add')}</Button>
         ) : null}
       </header>
 
@@ -264,12 +282,12 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
         searchable
         rowKey={(row) => row.id}
         empty={loading ? tc('feedback.loading') : t('empty')}
-        onRowClick={canManage ? (row) => setDraft({ ...row, days: [...row.days] }) : undefined}
+        onRowClick={canManage ? (row) => openDraft({ ...row, days: [...row.days] }) : undefined}
       />
 
       <Drawer
         open={draft !== null}
-        onClose={() => setDraft(null)}
+        onClose={close}
         size="lg"
         title={draft?.id ? t('editTitle') : t('add')}
         description={t('drawerDescription')}
@@ -281,7 +299,7 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
               </Button>
             ) : <span />}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setDraft(null)}>
+              <Button variant="outline" onClick={close}>
                 {tc('actions.cancel')}
               </Button>
               <Button disabled={busy} onClick={() => void save()}>{tc('actions.save')}</Button>
@@ -294,6 +312,7 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
             draft={draft}
             options={options}
             onChange={setDraft}
+            disabled={busy}
           />
         ) : null}
       </Drawer>
@@ -305,10 +324,12 @@ function ScheduleForm({
   draft,
   options,
   onChange,
+  disabled,
 }: {
   draft: Schedule
   options: Options
   onChange: (next: Schedule) => void
+  disabled: boolean
 }) {
   const t = useTranslations('payroll.workSchedules')
   const today = useBusinessToday()
@@ -343,7 +364,7 @@ function ScheduleForm({
   const weekAligned = anchorIsSunday && cycleDays % 7 === 0
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" inert={disabled}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <FieldLabel fieldName="workScheduleName">{t('fields.name')}</FieldLabel>
