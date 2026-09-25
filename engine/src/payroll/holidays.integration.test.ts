@@ -24,9 +24,7 @@ interface Fixture {
 }
 
 /**
- * A BC employee, hired long ago, paid twice in June 2026 with money and no
- * hours: 2026-06-01 → 06-14 and 06-15 → 06-28, $2,000 of vacation pay each.
- * Monday-to-Friday, eight hours, so the two periods carry twenty working days.
+ * A BC employee with June vacation pay and no hours recorded.
  */
 async function seedPaidVacationBeforeCanadaDay(options: {
   workSchedule?: boolean;
@@ -88,16 +86,20 @@ async function seedPaidVacationBeforeCanadaDay(options: {
                              periods_per_year, pay_date, tax_year, currency_code, gross,
                              created_by, updated_by)
       values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, 'BC', 26, ${payDate}, 2026,
-              'CAD', '2000.00', ${actorId}, ${actorId})`);
-    await db.execute(sql`
+              'CAD', ${periodStart === "2026-05-25" ? "1000.00" : "2000.00"}, ${actorId}, ${actorId})`);
+    const insertLine = (amount: string, from: string | null, to: string | null) => db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, amount,
-                                  sequence, created_by, updated_by)
+                                  earned_from, earned_to, sequence, created_by, updated_by)
       values (${org.orgId}, ${stubId}, ${vacationComponentId}, 'earning', 'Vacation payout',
-              null, '2000.00', 40, ${actorId}, ${actorId})`);
+              null, ${amount}, ${from}, ${to}, 40, ${actorId}, ${actorId})`);
+    if (periodStart === "2026-05-25") {
+      await insertLine("100.00", "2026-05-25", "2026-05-31");
+      await insertLine("900.00", "2026-06-01", "2026-06-07");
+    } else await insertLine("2000.00", null, null);
     return documentId;
   };
-  await committed("2026-06-01", "2026-06-14", "2026-06-17");
-  await committed("2026-06-15", "2026-06-28", "2026-07-01");
+  await committed("2026-05-25", "2026-06-07", "2026-06-10");
+  await committed("2026-06-08", "2026-06-21", "2026-06-24");
 
   if (options.workSchedule !== false) {
     const workScheduleId = randomUUID();
@@ -169,11 +171,9 @@ test(
       const lines = await resolveStatutoryHolidayPay(db, holidayInput(fx));
       const holidayPay = lines.find((line) => line.componentId === fx.holidayComponentId);
       assert.ok(holidayPay, "Canada Day is paid");
-      // $4,000 of vacation pay in the 30 days (BC includes it: s. 45(1)) over
-      // the twenty days on which wages were earned — the twenty working days of
-      // June 1–5, 8–12, 15–19 and 22–26.
-      assert.equal(holidayPay.amount, "200.0000");
-      assert.match(holidayPay.basis, /÷ 20 days worked or earned wages/);
+      // $900 of the boundary stub is in the lookback; BC s. 45(1) yields $2,900 ÷ 15 scheduled weekdays.
+      assert.equal(holidayPay.amount, "193.3333");
+      assert.match(holidayPay.basis, /÷ 15 days worked or earned wages/);
       assert.equal(holidayPay.holidayDate, "2026-07-01");
       // Not worked, so no premium line.
       assert.equal(lines.some((line) => line.componentId === fx.premiumComponentId), false);

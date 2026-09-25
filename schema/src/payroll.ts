@@ -732,6 +732,8 @@ export const payStubLines = pgTable(
     description: text("description").notNull(),
     hours: numeric("hours", { precision: 12, scale: 2 }),
     rate: money("rate"),
+    earnedFrom: date("earned_from", { mode: "string" }),
+    earnedTo: date("earned_to", { mode: "string" }),
     amount: money("amount").notNull(),
     projectId: uuid("project_id"),
     departmentId: uuid("department_id"),
@@ -766,6 +768,10 @@ export const payStubLines = pgTable(
   (t) => [
     index("pay_stub_lines_stub").on(t.stubId, t.sequence),
     index("pay_stub_lines_project").on(t.orgId, t.projectId),
+    check("pay_stub_lines_earning_dates_pair", sql`
+      (${t.earnedFrom} is null and ${t.earnedTo} is null) or
+      (${t.earnedFrom} is not null and ${t.earnedTo} is not null and ${t.earnedFrom} <= ${t.earnedTo})
+    `),
     foreignKey({ name: "pay_stub_lines_remittance_party_tenant_fkey",
       columns: [t.orgId, t.remittancePartyId],
       foreignColumns: [parties.orgId, parties.id],
