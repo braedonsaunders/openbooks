@@ -7,10 +7,13 @@ export const runtime = 'nodejs'
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** US economic-nexus status by state for a period: where the business has met or
- *  is approaching a sales-tax registration threshold. `subsidiary` (repeat or
- *  comma-separated) scopes to one filing entity's ledger in its working
- *  currency; `currency` (+ `rateType`/`rateDate`) declares the working currency
- *  and threshold-translation policy for a mixed entity. */
+ *  is approaching a sales-tax registration threshold. Thresholds are measured
+ *  over the statutory trailing-12-month window ending at `to` (returned as
+ *  `measuredFrom`/`measuredTo`), never over the display period alone.
+ *  `subsidiary` (repeat or comma-separated) scopes to one filing entity's
+ *  ledger in its working currency; `currency` (+ `rateType`/`rateDate`)
+ *  declares the working currency and threshold-translation policy for a
+ *  mixed entity. */
 export async function GET(req: Request) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate

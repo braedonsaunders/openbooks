@@ -3,7 +3,7 @@ import { db } from '../platform/db.ts'
 import { add, cmp, mulRate, normalizeDecimal, roundMoney } from '../money/money.ts'
 import { IncomeTaxProvisionError, spotRateToPresentation } from './income-tax-provision.ts'
 import { uuidArray } from '../organization/subsidiaries.ts'
-import { evaluateUsNexus, thresholdForState, type NexusEvaluation, type StateNexusThreshold, type StateSales } from '../tax/us-nexus.ts'
+import { evaluateUsNexus, thresholdForState, US_NEXUS_MEASUREMENT_MONTHS, type NexusEvaluation, type StateNexusThreshold, type StateSales } from '../tax/us-nexus.ts'
 
 /** Role-derived subsidiary visibility; null/undefined means unrestricted. */
 export type UsNexusSubsidiaryScope = ReadonlySet<string> | null | undefined
@@ -127,6 +127,13 @@ async function resolveEntityScope(
 export interface UsNexusResult {
   from: string
   to: string
+  /**
+   * Statutory measurement window the thresholds were evaluated over: the
+   * trailing policy months ending at `to`, independent of the display
+   * period (`from`/`to`).
+   */
+  measuredFrom: string
+  measuredTo: string
   /** Working currency: `states`/`unattributed` amounts are denominated here. */
   currency: string
   /** The filing entity measured, or null for the org-wide ledger. */
@@ -147,6 +154,13 @@ export async function computeUsNexusStatus(
 ): Promise<UsNexusResult> {
   const rateType = opts.rateType ?? 'spot'
   const rateDate = opts.rateDate ?? to
+  // Thresholds measure the statutory trailing window ending at the as-of
+  // date, never the caller's display period: a quarter query must still see
+  // the preceding twelve months of receipts. Month arithmetic stays in SQL
+  // so month-end as-of dates land exactly (JS month rollback would shift
+  // Feb-29 windows by a day).
+  const measuredFrom = (await db.execute<{ from: string }>(sql`
+    select ((${to}::date - (${US_NEXUS_MEASUREMENT_MONTHS}::int * interval '1 month') + interval '1 day'))::text as "from"`)).rows[0]!.from
   const entity = await resolveEntityScope(orgId, opts)
   const target = entity.currency
   const entityFilter =
@@ -192,7 +206,7 @@ export async function computeUsNexusStatus(
      where d.org_id = ${orgId}
        and d.kind in ('customer_invoice', 'customer_credit')
        and d.status = 'posted'
-       and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
+       and coalesce(d.posting_date, d.document_date) between ${measuredFrom} and ${to}
        ${subsidiaryScopeFilter(allowedSubsidiaryIds)}
        ${entityFilter}
        -- Foreign destinations are outside US nexus. A document whose frozen
@@ -265,7 +279,7 @@ export async function computeUsNexusStatus(
   // the coarse whole-dollar figures round to cents for the numeric threshold
   // field while the measured sales keep full ledger precision.
   if (target === 'USD') {
-    return { from, to, currency: target, subsidiaryIds: entity.subsidiaryIds, states: evaluateUsNexus(attributed, { asOf: to }), unattributed, translation: null }
+    return { from, to, measuredFrom, measuredTo: to, currency: target, subsidiaryIds: entity.subsidiaryIds, states: evaluateUsNexus(attributed, { asOf: to }), unattributed, translation: null }
   }
   let policyRate: string
   let policyAsOf: string
@@ -292,6 +306,8 @@ export async function computeUsNexusStatus(
   return {
     from,
     to,
+    measuredFrom,
+    measuredTo: to,
     currency: target,
     subsidiaryIds: entity.subsidiaryIds,
     states: evaluateUsNexus(attributed, { thresholds }),

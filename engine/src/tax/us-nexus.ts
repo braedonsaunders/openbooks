@@ -23,6 +23,16 @@ import { cmp, toUnits } from '../money/money.ts'
 
 export type NexusMeasure = 'none' | 'sales_only' | 'sales_or_txn' | 'sales_and_txn'
 
+/**
+ * Statutory measurement pattern for economic-nexus thresholds: the trailing
+ * N months ending at the as-of date (the prevailing rule — e.g. Missouri
+ * directs remote sellers to check the preceding 12-month receipts at each
+ * quarter end). Thresholds are evaluated over this window, never over an
+ * arbitrary display period. A state with a different statutory window needs
+ * a per-state entry here, not a caller-supplied date range.
+ */
+export const US_NEXUS_MEASUREMENT_MONTHS = 12
+
 export interface StateNexusThreshold {
   state: string
   /** Exact decimal string (whole USD for the statutory reference table; the working-currency translation of an entity ledger). Never a Number. */
