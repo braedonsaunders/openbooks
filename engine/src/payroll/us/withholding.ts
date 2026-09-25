@@ -400,6 +400,7 @@ const SUB_REGION_ENGINE_CODE: Readonly<Record<string, string>> = {
   "PA:PHILADELPHIA": "PA-PHILA",
   "MI:DETROIT": "MI-DETROIT",
   "DE:WILMINGTON": "DE-WILM",
+  "KY:LOUISVILLE": "KY-LOU",
 };
 
 export interface UsWithholdingInput {

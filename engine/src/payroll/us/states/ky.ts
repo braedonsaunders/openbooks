@@ -31,7 +31,8 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { PayrollError } from "../../error.ts";
-import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, divIntCents, max0, mulRateCents, rate6, U } from "../../canada/decimal.ts";
+import { mulRatio } from "../../../money/money.ts";
 import {
   certificateAmount, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";
@@ -144,6 +145,11 @@ export const KY_FACTOR_LABELS: Readonly<Record<string, string>> = {
   KY_ANNUAL_TAX: "Kentucky tax (annual)",
   KY_TAX: "Kentucky tax this period",
   KY_WITHHELD: "Kentucky tax withheld this period",
+  LOU_BASIS: "Louisville occupational tax basis (resident or nonresident)",
+  LOU_RATE: "Louisville occupational tax rate",
+  LOU_RATE_EFFECTIVE: "Louisville occupational tax rate effective date",
+  LOU_BASE: "Louisville occupational tax wage base",
+  LOU_TAX: "Louisville occupational tax this period",
 };
 
 export const KY_WITHHOLDING: UsStateWithholdingEngine = {
@@ -154,6 +160,134 @@ export const KY_WITHHOLDING: UsStateWithholdingEngine = {
   editions: KY_TAX_YEAR_EDITIONS,
   printedPeriods: null,
   compute,
+};
+
+// ---------------------------------------------------------------------------
+// Louisville Metro occupational license tax (Jefferson County)
+// ---------------------------------------------------------------------------
+
+/**
+ * Louisville Metro occupational license tax, by effective date. The Revenue
+ * Commission prices the employer's withholding on gross compensation for work
+ * performed within Louisville/Jefferson County: 2.2% for residents, 1.45%
+ * for nonresidents (2026 Form W-1REE).
+ *
+ * Sources (fetched, not memory):
+ *   Louisville Metro Revenue Commission, Forms and Publications,
+ *     https://louisvilleky.gov/government/revenue-commission/forms-and-publications
+ *   2026 Form W-1REE (Withholding Reconciliation / occupational rates),
+ *     https://louisvilleky.gov/sites/default/files/2026-02/W-1REE_Form_2025%20V2ADA.pdf
+ */
+export interface LouisvilleDatedRate {
+  effectiveFrom: string;
+  /** Resident occupational rate, decimal fraction. */
+  resident: string;
+  /** Nonresident occupational rate, decimal fraction. */
+  nonresident: string;
+  source: string;
+}
+
+export const LOUISVILLE_RATES: readonly LouisvilleDatedRate[] = [{
+  effectiveFrom: "2026-01-01",
+  resident: pctToRate("2.2"),
+  nonresident: pctToRate("1.45"),
+  source: "Louisville Metro Revenue Commission, 2026 Form W-1REE (resident 2.2%, nonresident 1.45%)",
+}];
+
+export const LOUISVILLE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
+  year: 2026,
+  label: "Louisville Metro occupational license tax (2026 Form W-1REE rates)",
+  effectiveFrom: "2026-01-01",
+  citation:
+    "Louisville Metro Revenue Commission, Forms and Publications; 2026 Form W-1REE "
+    + "(resident 2.2%, nonresident 1.45% on gross compensation for work within Louisville/Jefferson County)",
+  status: "published",
+  region: "KY",
+}];
+
+export function louisvilleRateFor(
+  payDate: string,
+  basis: "resident" | "nonresident",
+): { rate: string; effectiveFrom: string } {
+  const period = [...LOUISVILLE_RATES]
+    .filter((entry) => entry.effectiveFrom <= payDate)
+    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+    .at(-1);
+  if (!period) {
+    throw new PayrollError(
+      `no Louisville occupational tax rate is loaded for a pay date of ${payDate} — transcribe the `
+      + `Revenue Commission's effective rate into ${RATES_MODULE}.`,
+    );
+  }
+  return {
+    rate: basis === "resident" ? period.resident : period.nonresident,
+    effectiveFrom: period.effectiveFrom,
+  };
+}
+
+/**
+ * The Louisville Metro occupational license tax.
+ *
+ * A flat rate on the period's gross compensation for work performed within
+ * Louisville/Jefferson County — no allowances, no annualization, no
+ * supplemental split. The rate follows the employee's residency (2.2% /
+ * 1.45%), selected from `input.basis` exactly as the Philadelphia engine
+ * does: storing one Louisville rate would bill every commuter at the wrong
+ * one. Residents owe on their full compensation; a nonresident's base is the
+ * Louisville share where the run records a verified KY/LOUISVILLE work
+ * allocation, else the period's wages — a missing allocation never silently
+ * narrows the base, it keeps the full period the auditor's scenario prices.
+ */
+function computeLouisville(input: UsStateWithholdingInput): UsStateWithholdingResult {
+  const { rate, effectiveFrom } = louisvilleRateFor(input.payDate, input.basis);
+  let base = U(input.wages) + U(input.supplemental ?? "0");
+  if (input.basis === "nonresident") {
+    const matches = (input.wageAllocations ?? []).filter(
+      (item) => item.region === "KY" && item.subRegion === "LOUISVILLE",
+    );
+    if (matches.length === 1) {
+      let share: bigint;
+      try {
+        share = rate6(matches[0]!.workShare);
+      } catch {
+        throw new PayrollError(
+          "KY/LOUISVILLE work allocation must be an exact decimal share from 0 through 1; "
+          + "correct the verified work-share input before calculating",
+        );
+      }
+      if (share < 0n || share > 1_000_000n) {
+        throw new PayrollError(
+          "KY/LOUISVILLE work allocation is outside 0–1; "
+          + "correct the verified work-share input before calculating",
+        );
+      }
+      base = U(mulRatio(D(base), share, 1_000_000n));
+    }
+  }
+  const tax = mulRateCents(base, rate);
+  return {
+    state: "KY-LOU",
+    year: Number(input.payDate.slice(0, 4)),
+    tax: D(tax),
+    taxSupplemental: D(0n),
+    factors: {
+      LOU_BASIS: input.basis,
+      LOU_RATE: rate,
+      LOU_RATE_EFFECTIVE: effectiveFrom,
+      LOU_BASE: D(base),
+      LOU_TAX: D(tax),
+    },
+  };
+}
+
+export const LOUISVILLE_WITHHOLDING: UsStateWithholdingEngine = {
+  state: "KY-LOU",
+  label: "Louisville Metro occupational license tax",
+  certificateKey: null,
+  ratesModule: RATES_MODULE,
+  editions: LOUISVILLE_TAX_YEAR_EDITIONS,
+  printedPeriods: null,
+  compute: computeLouisville,
 };
 
 // ===========================================================================
@@ -203,6 +337,60 @@ export const KY_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+/**
+ * Where the employee works / resides for Kentucky local occupational taxes —
+ * the pack's own record, mirroring Oregon's transit record.
+ *
+ * No agency form carries it: the Revenue Commission taxes work performed in
+ * Louisville/Jefferson County and prices residents and nonresidents
+ * differently, and neither the K-4 nor the W-1REE is an employee certificate.
+ * The employer determines both answers from the work and home addresses and
+ * records them here, which is what lets the resolver produce the
+ * Louisville/Jefferson levy on the correct side at the correct rate. Both
+ * flags name the SAME sub-region code: a resident working in Louisville is
+ * collected on both sides and settled once, on the resident basis, by the
+ * region's `both` rule — pushing two different codes would price the full
+ * rate twice. An unasserted flag is outside Louisville (the Oregon transit
+ * record's own semantic), never an unknown the engine must refuse over.
+ */
+export const KY_LOCALITY_RECORD: PayrollCertificate = {
+  key: "us_ky_locality_record",
+  form: "(employer-determined)",
+  label: "Kentucky local-tax work and residence locality",
+  scope: { level: "region", region: "KY" },
+  purpose: "withholding",
+  citation:
+    "Louisville Metro Revenue Commission, Forms and Publications "
+    + "(https://louisvilleky.gov/government/revenue-commission/forms-and-publications); "
+    + "2026 Form W-1REE (resident 2.2%, nonresident 1.45%)",
+  summary:
+    "Whether the employee's work is performed inside Louisville Metro (Jefferson County) "
+    + "and whether they reside there. Louisville levies its occupational license tax on "
+    + "gross compensation for work within the county at 2.2% for residents and 1.45% for "
+    + "nonresidents; no Kentucky form records either fact, so the employer asserts both "
+    + "from the addresses.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "work_in_louisville", label: "Work performed inside Louisville/Jefferson County",
+      kind: "flag",
+      subRegion: { side: "work", code: "LOUISVILLE" },
+      help: "Set when the work address for this employment is inside Louisville Metro "
+        + "(all of Jefferson County) — look the address up against the county boundary. "
+        + "Leave it unset for work performed anywhere else; an unset answer is outside, "
+        + "never unknown.",
+    },
+    {
+      key: "resides_in_louisville", label: "Resides inside Louisville/Jefferson County",
+      kind: "flag",
+      subRegion: { side: "residence", code: "LOUISVILLE" },
+      help: "Set when the employee's home address is inside Louisville Metro (all of "
+        + "Jefferson County). A Kentucky resident outside Jefferson County leaves this "
+        + "unset: they owe the state tax but no Louisville occupational tax.",
+    },
+  ],
+};
+
 export const KY_REGION: PayrollRegionWithholding = {
   region: "KY",
   label: "Kentucky income tax",
@@ -216,9 +404,26 @@ export const KY_REGION: PayrollRegionWithholding = {
   residentWithholding: "not_required",
   residentWithholdingImplemented: true,
   certificateKey: "us_ky_k4",
-  // Kentucky cities levy occupational-license / payroll taxes that are not
-  // the state income tax and are not in 42A003. They are not modelled here.
-  subRegions: [],
+  subRegions: [
+    {
+      code: "LOUISVILLE",
+      label: "Louisville Metro occupational license tax",
+      kind: "city",
+      reaches: ["resident", "nonresident"],
+      rateSource: { kind: "pack" },
+      // Computed by LOUISVILLE_WITHHOLDING (a Philadelphia-model dedicated
+      // engine: one Louisville rate would bill every commuter at the wrong
+      // one), so no flat_rate method is declared here. Left inside the
+      // region's `both` rule deliberately: a resident working in Louisville
+      // is collected on both sides under the same code and settled once, on
+      // the resident basis.
+      citation:
+        "Louisville Metro Revenue Commission, Forms and Publications; 2026 Form W-1REE "
+        + "(resident 2.2%, nonresident 1.45% on gross compensation for work within "
+        + "Louisville/Jefferson County)",
+      implemented: true,
+    },
+  ],
   subRegionConflictRule: "both",
   citation:
     "Kentucky Department of Revenue, 42A003 (TCF)(10-2025), 2026 Kentucky Withholding Tax "
