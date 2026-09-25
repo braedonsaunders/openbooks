@@ -166,6 +166,9 @@ for (const scenario of ["parallel-book", "secondary-open-book", "other-entity", 
       });
       await closeGlModule(fixture, actor);
       if (scenario === "foreign-property-currency") {
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,propertyManagement}','false'::jsonb) where id=${fixture.org.orgId}`);
+        await assert.rejects(() => finalizeCamPool(fixture.org.orgId, actor, null, created.id), /Property management feature is disabled/u);
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,propertyManagement}','true'::jsonb) where id=${fixture.org.orgId}`);
         await assert.rejects(() => finalizeCamPool(fixture.org.orgId, actor, null, created.id), /CAM.*functional currency/u);
         const row = (await db.execute<{ status: string; actual: string | null; allocations: number }>(sql`
           select status,actual_amount::text as actual,(select count(*)::int from cam_allocations
