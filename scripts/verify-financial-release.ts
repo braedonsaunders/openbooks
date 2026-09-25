@@ -253,7 +253,7 @@ export function assertReleaseGatePassed(output: string): ReleaseGateCounts {
 // Return type is inferred (not annotated): drizzle rows are
 // Assume<T, QueryResultRow>, which resolves to T for concrete callers but is
 // not assignable back to a bare T inside a generic helper — the same reason
-// engine/src/harness/scenario.ts leaves its one/all helpers unannotated.
+// engine/src/golden/scenario.ts leaves its one/all helpers unannotated.
 async function queryOne<T extends Record<string, unknown>>(query: ReturnType<typeof sql>) {
   const result = await db.execute<T>(query);
   const row = result.rows[0];

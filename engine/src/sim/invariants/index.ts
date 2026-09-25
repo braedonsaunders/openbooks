@@ -5,13 +5,13 @@ import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
 import { PostingError } from "../../journal/posting-contracts.ts";
-import { runScenario, type Checkpoint } from "../../harness/scenario.ts";
+import { runScenario, type Checkpoint } from "../../golden/scenario.ts";
 import { postingDeps } from "../activities/documents.ts";
 import type { SimOrg, SimPeriod } from "../world.ts";
 
 /**
  * The oracle. Cheap checks run after every persona action; the full golden-
- * fixture suite (engine/src/harness/scenario.ts) and the closed-period
+ * fixture suite (engine/src/golden/scenario.ts) and the closed-period
  * immutability probe run at each period boundary. Any failure is a HALT: the
  * runner writes a defect bundle and stops so the operator fixes the product.
  */

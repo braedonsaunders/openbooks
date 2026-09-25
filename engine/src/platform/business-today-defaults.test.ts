@@ -28,7 +28,7 @@ const CALLERS = [
   "engine/src/allocations/match.ts",
   "engine/src/automations/event-verbs.ts",
   "engine/src/automations/execute.ts",
-  "engine/src/harness/scenario.ts",
+  "engine/src/golden/scenario.ts",
 ];
 
 test("server today-defaults come from the org business day, not the UTC day", () => {

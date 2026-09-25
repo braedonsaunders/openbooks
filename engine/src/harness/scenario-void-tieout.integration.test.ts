@@ -12,7 +12,7 @@ import {
 import { postDocument } from "../ledger/posting-document.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
-import { runScenario } from "./scenario.ts";
+import { runScenario } from "../golden/scenario.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

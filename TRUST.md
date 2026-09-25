@@ -61,7 +61,7 @@ conformance JSON and the harness checkpoint.
 ## The invariants
 
 These are the properties the ledger must hold at all times. They are checked by
-the golden harness (`engine/src/harness/scenario.ts`), by the business simulator
+the golden harness (`engine/src/golden/scenario.ts`), by the business simulator
 after every simulated action, and — for the ones marked *kernel* — by PostgreSQL
 itself on every single write, including direct SQL.
 

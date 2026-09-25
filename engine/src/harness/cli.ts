@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext } from "../platform/db.ts";
 import { runId, sourceSha } from "../platform/provenance.ts";
-import { runScenarioForOrg } from "./scenario.ts";
+import { runScenarioForOrg } from "../golden/scenario.ts";
 
 /**
  * Golden-fixture harness runner.

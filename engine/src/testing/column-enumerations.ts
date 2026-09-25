@@ -74,7 +74,7 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
-    file: "engine/src/harness/scenario.ts",
+    file: "engine/src/golden/scenario.ts",
     sites: [
       { stance: "presence-probe", note: "RLS census over tables that carry org_id" },
     ],
