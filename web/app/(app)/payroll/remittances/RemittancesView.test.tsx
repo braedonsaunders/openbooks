@@ -69,7 +69,7 @@ async function mountInteractive(t: import('node:test').TestContext, group: Remit
   })
 }
 
-test('bill creation submits the operator-edited date range', async (t) => {
+test('bill creation refuses an unapplied date draft', async (t) => {
   const group: RemittanceGroup = {
     partyId: '11111111-1111-4111-8111-111111111111',
     partyName: 'Receiver General',
@@ -115,21 +115,12 @@ test('bill creation submits the operator-edited date range', async (t) => {
     button.textContent?.includes(messages.remittances.createBill),
   )
   assert.ok(create, 'the bill action is available to a caller with create permission')
+  // I4-webui-197: the cards bill the applied July period, never a draft.
   await act(async () => {
     create.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await tick()
   })
-  assert.deepEqual(requests, [{
-    url: '/api/payroll/remittances',
-    body: {
-      action: 'create-bill',
-      partyId: group.partyId,
-      filingAccountId: group.filingAccount.id,
-      subsidiaryId: null,
-      from: '2026-08-01',
-      to: '2026-08-31',
-    },
-  }])
+  assert.deepEqual(requests, [], 'an unapplied date draft never bills')
 })
 
 test('refused remittance view renders an alert and date form, without an empty balance or bill action', () => {

@@ -132,7 +132,8 @@ async function parsedWorkbookRow(): Promise<Record<string, unknown>> {
     101,
     { formula: '101+101', result: 202 },
     7.5,
-    42.25,
+    // I5-platform-187: currency arrives as exact decimal text, never a float.
+    '42.25',
   ])
   const buffer = await workbook.xlsx.writeBuffer()
   const parsed = await parseImportFile('xlsx', {
@@ -150,7 +151,7 @@ test('custom-record XLSX import coerces schema-owned text and choice fields to d
   assert.equal(typeof row.category, 'number')
   assert.equal(typeof row.priority, 'number')
   assert.equal(typeof row.quantity, 'number')
-  assert.equal(typeof row.amount, 'number')
+  assert.equal(typeof row.amount, 'string')
   assert.deepEqual(row[CELL_PROVENANCE_KEY], { priority: 'formula' })
 
   const outcome = await recordResource('org-1', 'inventory-tag', sections, 'Inventory tag').write(
@@ -167,11 +168,11 @@ test('custom-record XLSX import coerces schema-owned text and choice fields to d
     category: '101',
     priority: '202',
     quantity: 7.5,
-    amount: 42.25,
+    amount: '42.25',
   })
   assert.equal(typeof searchData.external_id, 'string')
   assert.equal(typeof searchData.category, 'string')
   assert.equal(typeof searchData.priority, 'string')
   assert.equal(typeof searchData.quantity, 'number')
-  assert.equal(typeof searchData.amount, 'number')
+  assert.equal(typeof searchData.amount, 'string')
 })
