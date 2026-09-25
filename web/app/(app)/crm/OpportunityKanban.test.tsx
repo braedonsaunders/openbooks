@@ -98,7 +98,11 @@ function opp(id: string, expectedCloseDate: string | null, overrides?: Partial<K
   };
 }
 
-async function renderBoard(t: TestContext, opportunities: KanbanOpportunity[]) {
+async function renderBoard(
+  t: TestContext,
+  opportunities: KanbanOpportunity[],
+  extra?: { undatedOnly?: boolean; undatedLabel?: string; showAllLabel?: string },
+) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -110,6 +114,9 @@ async function renderBoard(t: TestContext, opportunities: KanbanOpportunity[]) {
             statuses={[STATUS]}
             opportunities={opportunities}
             canManage={false}
+            undatedOnly={extra?.undatedOnly}
+            undatedLabel={extra?.undatedLabel}
+            showAllLabel={extra?.showAllLabel}
           />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
@@ -127,30 +134,7 @@ async function renderBoard(t: TestContext, opportunities: KanbanOpportunity[]) {
 }
 
 test("a deal due on the business day is not flagged overdue; yesterday is", async (t) => {
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  await act(async () => {
-    root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <BusinessDateProvider today="2026-09-17">
-          <OpportunityKanbanBoard
-            statuses={[STATUS]}
-            opportunities={[opp("today", "2026-09-17"), opp("past", "2026-09-16"), opp("future", "2026-09-18")]}
-            canManage={false}
-          />
-        </BusinessDateProvider>
-      </NextIntlClientProvider>,
-    );
-    await tick();
-  });
-  await tick();
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
+  const host = await renderBoard(t, [opp("today", "2026-09-17"), opp("past", "2026-09-16"), opp("future", "2026-09-18")]);
   const overdue = [...host.querySelectorAll(".text-rose-600")].filter((el) =>
     el.textContent?.includes("2026-09"),
   );
@@ -233,62 +217,17 @@ test("the win/loss reason dialog uses translated copy", async (t) => {
 // The filtered board must name the filter and offer the way back; the
 // unfiltered board must not carry the chip.
 test("undated-only board names the filter with a show-all route", async (t) => {
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  await act(async () => {
-    root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <BusinessDateProvider today="2026-09-17">
-          <OpportunityKanbanBoard
-            statuses={[STATUS]}
-            opportunities={[opp("dated", "2026-09-20")]}
-            canManage={false}
-            undatedOnly
-            undatedLabel="Undated only"
-            showAllLabel="Show all"
-          />
-        </BusinessDateProvider>
-      </NextIntlClientProvider>,
-    );
-    await tick();
-  });
-  await tick();
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
+  const host = await renderBoard(t, [opp("dated", "2026-09-20")], {
+    undatedOnly: true,
+    undatedLabel: "Undated only",
+    showAllLabel: "Show all",
   });
   assert.ok(host.textContent?.includes("Undated only"), "the filter chip must render");
   assert.ok(host.textContent?.includes("Show all"), "the clear route must render");
 });
 
 test("unfiltered board carries no undated chip", async (t) => {
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  await act(async () => {
-    root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <BusinessDateProvider today="2026-09-17">
-          <OpportunityKanbanBoard
-            statuses={[STATUS]}
-            opportunities={[opp("dated", "2026-09-20")]}
-            canManage={false}
-          />
-        </BusinessDateProvider>
-      </NextIntlClientProvider>,
-    );
-    await tick();
-  });
-  await tick();
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
+  const host = await renderBoard(t, [opp("dated", "2026-09-20")]);
   assert.ok(!host.textContent?.includes("Show all"), "no chip without the undated filter");
 });
 

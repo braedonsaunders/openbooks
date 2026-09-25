@@ -447,62 +447,70 @@ test("home tables head their columns from the resolved catalog, never literals",
   );
 });
 
-test("the team grid heads its seven columns from the resolved catalog, never literals", async () => {
-  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
-  (gap as Record<string, unknown>).__compDlgDetail = true;
-  try {
-    const data = await loadCompCycleDetail(MANAGER, "cycle-1", {});
-    assert.ok(data, "the cycle detail loader resolves the canned round");
-    for (const [key, value] of Object.entries(data.columns)) assertProse(value, `columns.${key}`);
-    assert.equal(data.columns.employee, "Employee", "the employee header resolves from the en catalog");
-    const { compCycleSpec } = await import("./cycles/[id]/view.ts");
-    assert.deepEqual(
-      tableHeaders(compCycleSpec(data!)),
+for (const [name, load, loadedMessage, header, loadSpec, expected, specMessage] of [
+  [
+    "the team grid heads its seven columns from the resolved catalog, never literals",
+    () => loadCompCycleDetail(MANAGER, "cycle-1", {}),
+    "the cycle detail loader resolves the canned round",
+    ["employee", "Employee", "the employee header resolves from the en catalog"],
+    async () => (await import("./cycles/[id]/view.ts")).compCycleSpec,
+    [
       [
-        [
-          { $: "columns.employee" },
-          { $: "columns.current" },
-          { $: "columns.placement" },
-          { $: "columns.rating" },
-          { $: "columns.guideline" },
-          { $: "columns.proposed" },
-          { $: "columns.status" },
-        ],
+        { $: "columns.employee" },
+        { $: "columns.current" },
+        { $: "columns.placement" },
+        { $: "columns.rating" },
+        { $: "columns.guideline" },
+        { $: "columns.proposed" },
+        { $: "columns.status" },
       ],
-      "the team grid heads all seven columns from the loader-resolved fields",
-    );
-  } finally {
-    (gap as Record<string, unknown>).__compDlgDetail = false;
-  }
-});
-
-test("the plan lines head their six columns from the resolved catalog, never literals", async () => {
-  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
-  (gap as Record<string, unknown>).__compDlgDetail = true;
-  try {
-    const data = await loadHeadcountPlanDetail(MANAGER, "plan-1");
-    assert.ok(data, "the plan detail loader resolves the canned plan");
-    for (const [key, value] of Object.entries(data.columns)) assertProse(value, `columns.${key}`);
-    assert.equal(data.columns.title, "Title", "the title header resolves from the en catalog");
-    const { compPlanSpec } = await import("./plans/[id]/view.ts");
-    assert.deepEqual(
-      tableHeaders(compPlanSpec(data!)),
+    ],
+    "the team grid heads all seven columns from the loader-resolved fields",
+  ],
+  [
+    "the plan lines head their six columns from the resolved catalog, never literals",
+    () => loadHeadcountPlanDetail(MANAGER, "plan-1"),
+    "the plan detail loader resolves the canned plan",
+    ["title", "Title", "the title header resolves from the en catalog"],
+    async () => (await import("./plans/[id]/view.ts")).compPlanSpec,
+    [
       [
-        [
-          { $: "columns.title" },
-          { $: "columns.kind" },
-          { $: "columns.fte" },
-          { $: "columns.start" },
-          { $: "columns.cost" },
-          { $: "columns.status" },
-        ],
+        { $: "columns.title" },
+        { $: "columns.kind" },
+        { $: "columns.fte" },
+        { $: "columns.start" },
+        { $: "columns.cost" },
+        { $: "columns.status" },
       ],
-      "the plan lines head all six columns from the loader-resolved fields",
-    );
-  } finally {
-    (gap as Record<string, unknown>).__compDlgDetail = false;
-  }
-});
+    ],
+    "the plan lines head all six columns from the loader-resolved fields",
+  ],
+] as Array<
+  [
+    string,
+    () => Promise<{ columns: Record<string, string> } | null>,
+    string,
+    [string, string, string],
+    () => Promise<(data: never) => unknown>,
+    unknown,
+    string,
+  ]
+>) {
+  test(name, async () => {
+    features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+    (gap as Record<string, unknown>).__compDlgDetail = true;
+    try {
+      const data = await load();
+      assert.ok(data, loadedMessage);
+      for (const [key, value] of Object.entries(data.columns)) assertProse(value, `columns.${key}`);
+      assert.equal(data.columns[header[0]], header[1], header[2]);
+      const spec = await loadSpec();
+      assert.deepEqual(tableHeaders(spec(data as never)), expected, specMessage);
+    } finally {
+      (gap as Record<string, unknown>).__compDlgDetail = false;
+    }
+  });
+}
 
 test("the line drawer arms only the actions the transition table allows", () => {
   // F3-38: propose while the round is live and the line is undecided;
