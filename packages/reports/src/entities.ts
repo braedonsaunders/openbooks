@@ -651,7 +651,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     from: `equipment_units eu
       LEFT JOIN subsidiaries sub ON sub.id = eu.subsidiary_id AND sub.org_id = eu.org_id
       LEFT JOIN items it ON it.id = eu.charge_item_id AND it.org_id = eu.org_id
-      LEFT JOIN fixed_assets fa ON fa.id = eu.fixed_asset_id AND fa.org_id = eu.org_id
+      LEFT JOIN fixed_assets fa ON fa.id = eu.fixed_asset_id AND fa.org_id = eu.org_id AND fa.subsidiary_id = eu.subsidiary_id
       LEFT JOIN item_rate_books rb ON rb.id = eu.rate_book_id AND rb.org_id = eu.org_id`,
     orgColumn: 'eu.org_id',
     subsidiaryScope: { column: 'eu.subsidiary_id' },
@@ -674,7 +674,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'cost_recovery', label: 'Cost recovery', kind: 'money', expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))` },
       { key: 'billable_value', label: 'Billable value', kind: 'money', expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))` },
       { key: 'billed_revenue', label: 'Billed revenue', kind: 'money', expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='customer_invoice' and d.status='posted')` },
-      { key: 'depreciation', label: 'Posted depreciation', kind: 'money', expr: `(select coalesce(sum(dsl.posted_amount),0) from depreciation_schedules ds join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id and dsl.org_id=ds.org_id where ds.asset_id=eu.fixed_asset_id and ds.org_id=eu.org_id and dsl.posted_amount is not null)` },
+      { key: 'depreciation', label: 'Posted depreciation', kind: 'money', expr: `(select coalesce(sum(dsl.posted_amount),0) from fixed_assets fa join depreciation_schedules ds on ds.asset_id=fa.id and ds.org_id=fa.org_id join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id and dsl.org_id=ds.org_id where fa.id=eu.fixed_asset_id and fa.org_id=eu.org_id and fa.subsidiary_id=eu.subsidiary_id and dsl.posted_amount is not null)` },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'eu.created_at' },
       { key: 'id', label: 'Equipment (id)', kind: 'uuid', expr: 'eu.id' },
     ],

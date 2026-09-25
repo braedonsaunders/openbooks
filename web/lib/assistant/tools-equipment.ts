@@ -68,7 +68,7 @@ const searchEquipment: AssistantToolDef = {
         from equipment_units e
         left join items i on i.id = e.charge_item_id and i.org_id = e.org_id
         left join item_rate_books b on b.id = e.rate_book_id and b.org_id = e.org_id
-        left join fixed_assets f on f.id = e.fixed_asset_id and f.org_id = e.org_id
+        left join fixed_assets f on f.id = e.fixed_asset_id and f.org_id = e.org_id and f.subsidiary_id = e.subsidiary_id
         ${chargeAggregates}
        where ${where}
        order by e.unit_number nulls last, e.name

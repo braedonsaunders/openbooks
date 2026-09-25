@@ -248,6 +248,35 @@ export async function lockEquipmentProjectScope(
   return { id: project.id, subsidiaryId: project.subsidiaryId };
 }
 
+/** Refusal raised when moving one side would split a fixed asset/equipment pair. */
+export class FixedAssetEquipmentLinkConflict extends Error {
+  constructor() {
+    super("A fixed asset linked to equipment cannot be moved to another subsidiary. Keep the pair in its current subsidiary.");
+    this.name = "FixedAssetEquipmentLinkConflict";
+  }
+}
+
+/**
+ * The fixed_assets row is the shared lock for writers of either side of this
+ * link. Equipment link edits hold the asset row while validating ownership;
+ * fixed-asset rehome writers hold it while checking for linked equipment.
+ */
+export async function refuseFixedAssetRehomeWithEquipment(
+  tx: SqlExecutor,
+  orgId: string,
+  assetId: string,
+  fromSubsidiaryId: string | null,
+  toSubsidiaryId: string | null,
+): Promise<void> {
+  if (fromSubsidiaryId === toSubsidiaryId) return;
+  await lockScopeRow(tx, orgId, "fixed_asset", assetId, null, "update");
+  const linked = await tx.execute<{ id: string }>(sql`
+    select id from equipment_units
+     where org_id = ${orgId} and fixed_asset_id = ${assetId}
+     limit 1`);
+  if (linked.rows.length > 0) throw new FixedAssetEquipmentLinkConflict();
+}
+
 /**
  * Shape (1), project instance: lock a project row and recheck the caller's
  * subsidiary scope inside the transaction, closing the rehome race where an

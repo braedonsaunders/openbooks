@@ -15,7 +15,7 @@ async function loadEquipmentRows(
       from equipment_units e
       left join items i on i.id = e.charge_item_id and i.org_id = e.org_id
       left join item_rate_books b on b.id = e.rate_book_id and b.org_id = e.org_id
-      left join fixed_assets f on f.id = e.fixed_asset_id and f.org_id = e.org_id
+      left join fixed_assets f on f.id = e.fixed_asset_id and f.org_id = e.org_id and f.subsidiary_id = e.subsidiary_id
      where e.id = ${id} and e.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, allowedSubsidiaryIds)}
      for share of e
@@ -37,6 +37,7 @@ async function loadEquipmentRows(
         where jl.equipment_unit_id = ${id} and jl.org_id = ${orgId} and je.org_id = ${orgId} and je.status in ('posted', 'reversed')
           and a.type in ('expense','expense_other','cogs') and coalesce(d.kind, '') <> 'project_charge'), 0) as direct_costs,
       coalesce((select sum(dsl.posted_amount) from equipment_units eu
+        join fixed_assets fa on fa.id = eu.fixed_asset_id and fa.org_id = eu.org_id and fa.subsidiary_id = eu.subsidiary_id
         join depreciation_schedules ds on ds.asset_id = eu.fixed_asset_id and ds.org_id = eu.org_id
         join depreciation_schedule_lines dsl on dsl.schedule_id = ds.id and dsl.org_id = ds.org_id
         where eu.id = ${id} and eu.org_id = ${orgId} and dsl.posted_amount is not null), 0) as depreciation
