@@ -221,6 +221,39 @@ export async function computeEsStatutory(
   if (temporal !== undefined && temporal !== null && temporal !== "true" && temporal !== "false") {
     fail(`employee es_contrato_temporal "${temporal}" is not "true"/"false"`);
   }
+  // Orden PJC/297/2026 art. 28: a fixed-term contract under thirty days owes
+  // €33.62 at termination unless it is an art. 28.2 exclusion. Duration and
+  // class are required for temporal contracts and refuse by name; the ends
+  // flag defaults to a continuing contract.
+  let cortaDuracionAplicable = false;
+  if (temporal === "true") {
+    const duracionRaw = empFact("ES", emp, "es_contrato_duracion_dias");
+    if (duracionRaw == null || duracionRaw === "") {
+      fail(
+        "employee es_contrato_duracion_dias is missing: art. 28 prices only contracts under thirty "
+        + "days, so a temporal contract needs its effective duration in days",
+      );
+    }
+    const duracion = Number(duracionRaw);
+    if (!Number.isInteger(duracion) || duracion < 1) {
+      fail(`employee es_contrato_duracion_dias "${duracionRaw}" is not a positive integer number of days`);
+    }
+    const tipo = empFact("ES", emp, "es_contrato_tipo");
+    if (tipo == null || tipo === "") {
+      fail(
+        "employee es_contrato_tipo is missing: art. 28.2 excludes sustitución, formación, agrario, "
+        + "hogar, minería del carbón and artistas — file the contract class before calculating",
+      );
+    }
+    if (!["ordinario", "sustitucion", "formacion", "agrario", "hogar", "minero", "artista"].includes(tipo)) {
+      fail(`employee es_contrato_tipo "${tipo}" is not a declared art. 28.2 contract class`);
+    }
+    const fin = empFact("ES", emp, "es_contrato_fin_periodo");
+    if (fin !== undefined && fin !== null && fin !== "" && fin !== "true" && fin !== "false") {
+      fail(`employee es_contrato_fin_periodo "${fin}" is not "true"/"false"`);
+    }
+    cortaDuracionAplicable = duracion < 30 && tipo === "ordinario" && fin === "true";
+  }
 
   const periodPay = dec(income, "income") + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   if (periodPay < 0n) fail("period pay must be non-negative");
@@ -287,6 +320,7 @@ export async function computeEsStatutory(
     retribucionMensual: D(insurableUnits),
     contratoTemporal: temporal === "true",
     atEpRate,
+    cortaDuracionAplicable,
   });
   const ssRecurrente = pensionableNonPeriodicUnits === 0n
     ? ss
@@ -297,6 +331,7 @@ export async function computeEsStatutory(
       retribucionMensual: D(insurableUnits - pensionableNonPeriodicUnits),
       contratoTemporal: temporal === "true",
       atEpRate,
+      cortaDuracionAplicable,
     });
   const cotizacionesAnual = D(
     U(ssRecurrente.trabajadorTotal) * BigInt(periodosAnuales)
@@ -336,6 +371,9 @@ export async function computeEsStatutory(
   pushStatutory("ss_mei_er", "employer_contribution", "MEI (employer)", ss.meiEmpresa, 214);
   if (ss.atEpEmpresa != null) {
     pushStatutory("ss_atep_er", "employer_contribution", "AT/EP (employer)", ss.atEpEmpresa, 215);
+  }
+  if (ss.cortaDuracionEmpresa != null) {
+    pushStatutory("ss_corta_er", "employer_contribution", "Cotización adicional contratos corta duración (employer)", ss.cortaDuracionEmpresa, 216);
   }
   return {
     ES_TIPO_IRPF: irpf.tipo,
