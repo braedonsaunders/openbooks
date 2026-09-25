@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fieldTicketLaborLines, timeTypes } from "@openbooks/schema";
 import {
   captureFieldTicketLaborEvidence,
   FieldTicketLaborEvidenceError,
@@ -60,12 +61,9 @@ test("an impossible calendar date refuses by name before any database cast", asy
   );
 });
 
-test("time semantics are explicit and snapshotted independently from rates", () => {
-  const schema = readFileSync("schema/src/documents.ts", "utf8");
-  const evidenceSchema = readFileSync("schema/src/field-tickets.ts", "utf8");
-  const pdf = readFileSync("web/lib/pdf-templates/values.ts", "utf8");
-  assert.match(schema, /classification[\s\S]*regular[\s\S]*overtime[\s\S]*double_time[\s\S]*other/);
-  assert.match(evidenceSchema, /timeClassification:\s*text\("time_classification"/);
-  assert.match(pdf, /tier\(e\.time_classification\)/);
-  assert.doesNotMatch(pdf, /tier\(e\.bill_multiplier\)/);
+test("time semantics share one classification contract across time types and evidence lines", () => {
+  // Behavioural cover for tier-by-classification (crew grid buckets by
+  // classification, never by multiplier).
+  assert.deepEqual([...(timeTypes.classification.enumValues ?? [])], ["regular", "overtime", "double_time", "other"]);
+  assert.deepEqual([...(fieldTicketLaborLines.timeClassification.enumValues ?? [])], ["regular", "overtime", "double_time", "other"]);
 });

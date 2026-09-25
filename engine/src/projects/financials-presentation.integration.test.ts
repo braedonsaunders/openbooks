@@ -110,6 +110,19 @@ test("project financials translate every measure to presentation", { skip: !DB }
     const labor = await resolveProjectFinancials(org.orgId, projectId, laborProfile);
     // Labour at cost rates: 500 CAD + 675 CAD.
     assert.equal(labor.measures.labor_cost, "1175.0000");
+
+    // A CAD 50 vendor credit negates inside billable cost (direction rule).
+    const creditId = randomUUID();
+    await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
+      values (${creditId}, ${org.orgId}, 'vendor_credit', 'CR-CAD', ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', '1', 'draft', '50', 0, '50', '50')`);
+    await db.execute(sql`insert into document_lines (id, org_id, document_id, line_number, project_id, account_id, amount, is_billable)
+      values (${randomUUID()}, ${org.orgId}, ${creditId}, 1, ${projectId}, ${org.accounts.cogs}, '50', true)`);
+    await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${creditId}`);
+    const credited = await resolveProjectFinancials(org.orgId, projectId, {
+      ...tmProfile,
+      billableValue: { ...tmProfile.billableValue, costSourceKinds: ["vendor_bill", "vendor_credit"] },
+    });
+    assert.equal(credited.measures.billable_cost_value, "152.5000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

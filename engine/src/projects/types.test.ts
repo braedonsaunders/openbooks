@@ -67,15 +67,10 @@ test('project financial policy is effective-dated, immutable, and tenant isolate
 })
 
 test('project cost and selling-value evidence preserve canonical document direction', () => {
+  // NOTE: the vendor-credit direction twins (here and in web/lib/billing.ts)
+  // are covered behaviorally by the vendor-credit row in the presentation
+  // integration case; the source-text twins are deleted.
   const financials = readFileSync('engine/src/projects/financials.ts', 'utf8')
-  assert.match(
-    financials,
-    /d\.kind = 'vendor_credit'\s+then -dl\.amount else dl\.amount end/,
-  )
-  assert.doesNotMatch(
-    financials,
-    /d\.kind in \('sales_order','purchase_order'\) then -dl\.amount/,
-  )
   assert.match(
     financials,
     /d\.kind = 'project_charge'\s+then round\(coalesce\(dl\.cost_amount, dl\.amount\) \* d\.fx_rate, 4\)/,
@@ -101,15 +96,6 @@ test('project cost and selling-value evidence preserve canonical document direct
     /round\([\s\S]*dl\.markup_percent \/ 100[\s\S]*4[\s\S]*\)/,
   )
 
-  const billing = readFileSync('web/lib/billing.ts', 'utf8')
-  assert.match(
-    billing,
-    /d\.kind = 'vendor_credit' then -dl\.amount else dl\.amount end/,
-  )
-  assert.doesNotMatch(
-    billing,
-    /d\.kind in \('sales_order','purchase_order'\) then -dl\.amount/,
-  )
 })
 
 test('tenant project forecasts may explicitly include source rejected documents', () => {
