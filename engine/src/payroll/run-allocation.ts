@@ -1,5 +1,6 @@
 import { PayrollError } from "./error.ts";
 import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
+import type { Money } from "../money/brands.ts";
 /**
  * Exact `amount ÷ divisor`, rounded ONCE to `decimalPlaces`.
  *
@@ -13,14 +14,15 @@ import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
  * once, so no intermediate rounding can carry a half-cent across a boundary
  * either.
  */
-export function divideMoney(amount: string, divisor: string, decimalPlaces = 4): string {
+export function divideMoney(amount: string, divisor: string, decimalPlaces = 4): Money {
   if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
     throw new PayrollError("decimalPlaces must be an integer from 0 through 4");
   }
   const divisorUnits = toUnits(divisor);
   if (divisorUnits <= 0n) throw new PayrollError(`cannot divide pay by ${divisor}`);
   const quantum = 10n ** BigInt(4 - decimalPlaces);
-  return fromUnits(roundDiv(toUnits(amount) * 10_000n, divisorUnits * quantum) * quantum);
+  // fromUnits always emits fixed 4dp: the result is canonical Money.
+  return fromUnits(roundDiv(toUnits(amount) * 10_000n, divisorUnits * quantum) * quantum) as Money;
 }
 
 /**
@@ -55,7 +57,7 @@ export function divideMoney(amount: string, divisor: string, decimalPlaces = 4):
 export function allocateProportionally<T>(
   amount: string,
   buckets: readonly { weight: string; target: T }[],
-): { amount: string; target: T }[] {
+): { amount: Money; target: T }[] {
   if (buckets.length === 0) return [];
   const weights: bigint[] = [];
   let totalWeight = 0n;
@@ -104,7 +106,8 @@ export function allocateProportionally<T>(
   // so a zero-remainder bucket (including every zero weight) never receives a
   // cent here.
   return buckets.map((bucket, index) => ({
-    amount: fromUnits(sign * shares[index]! * 100n),
+    // fromUnits always emits fixed 4dp: each share is canonical Money.
+    amount: fromUnits(sign * shares[index]! * 100n) as Money,
     target: bucket.target,
   }));
 }
