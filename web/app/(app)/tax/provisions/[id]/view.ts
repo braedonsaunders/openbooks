@@ -12,6 +12,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../../../lib/authz'
+import { isUuid } from '../../../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { orgInfo } from '../../../../../lib/data'
 import { getProvisionRun } from '@openbooks/engine/src/tax-returns/income-tax-provision.ts'
@@ -77,6 +78,9 @@ export async function loadProvisionDetail(
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('tax.provisions')
   const org = await orgInfo()
+  // A malformed id never reaches the read: it renders not-found, never a
+  // 500 out of the query.
+  if (!isUuid(id)) notFound()
   // Same entity projection as the REST twin: a run with no visible entity is
   // indistinguishable from a missing one.
   const run = await getProvisionRun(authz.user.orgId, id, authz.allowedSubsidiaryIds)
