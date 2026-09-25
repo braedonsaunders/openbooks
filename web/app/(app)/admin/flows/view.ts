@@ -141,7 +141,14 @@ export async function loadFlows(
     db.execute<{ n: string }>(sql`select count(*) as n from flows f where ${where}`),
   ])
 
-  const subjectLabel = new Map(listFlowSubjectProfiles().map((p) => [p.subjectKind, p.label]))
+  const tSubjects = await getTranslations('customization.recordTypes')
+  const subjectLabel = new Map(
+    listFlowSubjectProfiles().map((p) => [p.subjectKind, p.labelKey ? p.labelKey : p.label]),
+  )
+  const subjectName = (kind: string) => {
+    const key = subjectLabel.get(kind) ?? kind
+    return tSubjects.has(key as never) ? tSubjects(key as never) : key
+  }
   const total = Number(totalRow.rows[0]?.n ?? 0)
 
   return {
@@ -153,7 +160,7 @@ export async function loadFlows(
     subjectLabel: t('subjectFilter'),
     subjectOptions: subjects.rows.map((r) => ({
       value: r.subject_kind,
-      label: subjectLabel.get(String(r.subject_kind)) ?? String(r.subject_kind),
+      label: subjectName(String(r.subject_kind)),
       count: Number(r.n),
     })),
     currentParams: sp,
@@ -172,7 +179,7 @@ export async function loadFlows(
       name: String(f.name),
       href: `/admin/flows/${f.id}`,
       subjectKind: String(f.subject_kind),
-      subjectLabel: subjectLabel.get(String(f.subject_kind)) ?? String(f.subject_kind),
+      subjectLabel: subjectName(String(f.subject_kind)),
       nodeCount: String(f.node_count),
       lastRunStatus: f.last_run_status != null ? String(f.last_run_status) : null,
       lastRunVariant: RUN_BADGE[String(f.last_run_status)] ?? 'outline',

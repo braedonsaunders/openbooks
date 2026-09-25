@@ -12,5 +12,11 @@ export const runtime = 'nodejs'
 export async function GET() {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
-  return NextResponse.json({ profiles: listFlowSubjectProfiles() })
+  return NextResponse.json({
+    profiles: listFlowSubjectProfiles().map((profile) => {
+      if (!profile.labelKey) return profile
+      const { label: _label, ...stableProfile } = profile
+      return stableProfile
+    }),
+  })
 }
