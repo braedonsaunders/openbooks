@@ -11,17 +11,21 @@ import {
   type ComparableSlot,
   type PriorStubWrite,
 } from '@openbooks/engine/src/payroll/parallel-run-store.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import {
   SOURCE_COLUMNS_KEY,
   UNMAPPED_COLUMNS_KEY,
   type CellValue,
+  type ImportMode,
   type ResourceDescriptor,
   type ResourceField,
   type WriteOutcome,
 } from './types'
 import type { DataResource, WriteCtx } from './resources'
 import {
+  duplicateImportRowIndexes,
   enforceExportRowLimit,
+  importRowAction,
   MAX_EXPORT_ROWS,
   subsidiaryReadFilterWithUnassigned,
   type ReadCtx,
@@ -281,8 +285,14 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
         }),
       }
     },
-    async write(rows, _mode, ctx: WriteCtx) {
+    async write(rows, mode: ImportMode, ctx: WriteCtx) {
+      return db.transaction(async (tx) => {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+      if (!(await lockAndCheckOrgFeature(tx, ctx.orgId, 'payroll'))) {
+        outcome.failed = rows.length
+        outcome.errors.push(...rows.map((_, index) => ({ row: index + 1, message: 'Payroll feature is disabled' })))
+        return outcome
+      }
       const allowedSubsidiaryIds = ctx.allowedSubsidiaryIds
       if (allowedSubsidiaryIds === undefined) {
         throw new Error('prior payroll register import requires an explicit subsidiary scope')
@@ -319,12 +329,62 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
         }
       }
 
+      // Resolve natural keys and one-header-per-name consistency for the
+      // entire file before any row can create a register or replace a stub.
+      const resolvedKeys: (string | null)[] = []
+      const tuplesByName = new Map<string, Set<string>>()
+      for (const src of rows) {
+        const registerName = String(src.register ?? '').trim()
+        if (!registerName) {
+          resolvedKeys.push(null)
+          continue
+        }
+        const employee = await resolveEmployee(ctx.orgId, src.employee)
+        if ('error' in employee) {
+          resolvedKeys.push(null)
+          continue
+        }
+        if (await employeeWriteScopeError(ctx.orgId, employee.id, allowedSubsidiaryIds)) {
+          resolvedKeys.push(null)
+          continue
+        }
+        resolvedKeys.push(`${registerName}\0${employee.id}`)
+        const tuple = [src.periodStart, src.periodEnd, src.payDate].map((value) => String(value ?? '').trim()).join('\0')
+        const tuples = tuplesByName.get(registerName) ?? new Set<string>()
+        tuples.add(tuple)
+        tuplesByName.set(registerName, tuples)
+      }
+      const duplicateRows = duplicateImportRowIndexes(resolvedKeys)
+      const conflictingNames = new Set([...tuplesByName].filter(([, tuples]) => tuples.size > 1).map(([name]) => name))
+      const refusedRows = new Set<number>()
+      for (let index = 0; index < rows.length; index++) {
+        const name = String(rows[index]!.register ?? '').trim()
+        if (conflictingNames.has(name)) {
+          refusedRows.add(index)
+          outcome.failed++
+          outcome.errors.push({
+            row: index + 1,
+            field: 'register',
+            message: `register "${name}" has conflicting period start, period end, or pay date values in this load — use one period tuple per register name`,
+          })
+        } else if (duplicateRows.has(index)) {
+          refusedRows.add(index)
+          outcome.failed++
+          outcome.errors.push({
+            row: index + 1,
+            field: 'employee',
+            message: 'this register and employee appear more than once in this load — keep one row per register and employee',
+          })
+        }
+      }
+
       // Registers are per (name, period); cache so a 400-row file is not 400
       // upserts of the same header.
       const registerCache = new Map<string, string>()
       const touchedRegisters = new Set<string>()
 
       for (let index = 0; index < rows.length; index++) {
+        if (refusedRows.has(index)) continue
         const rowNo = index + 1
         const src = rows[index]!
         try {
@@ -399,43 +459,46 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
             amounts: checked.amounts,
           }
 
+          // Classify before touching the header: insert mode must not mutate an
+          // existing register before the stub writer refuses its duplicate.
+          const existing = (await db.execute(sql`
+            select 1 from payroll_prior_stubs s
+              join payroll_prior_registers g on g.id = s.register_id and g.org_id = s.org_id
+             where s.org_id = ${ctx.orgId} and g.name = ${registerName}
+               and s.employee_party_id = ${employee.id}
+             limit 1`)) as { rows: unknown[] }
+          const action = importRowAction(mode, existing.rows.length > 0)
+          if (action === 'conflict') {
+            outcome.failed++
+            outcome.errors.push({ row: rowNo, message: 'a prior register row already exists for this employee — choose upsert to replace it' })
+            continue
+          }
           // A dry run validates everything and writes nothing, so the wizard's
           // preview is a real preview rather than a row count.
           if (ctx.dryRun) {
-            const existing = (await db.execute(sql`
-              select 1 from payroll_prior_stubs s
-                join payroll_prior_registers g on g.id = s.register_id and g.org_id = s.org_id
-               where s.org_id = ${ctx.orgId} and g.name = ${registerName}
-                 and s.employee_party_id = ${employee.id}
-               limit 1`)) as { rows: unknown[] }
-            if (existing.rows.length > 0) outcome.updated++
+            if (action === 'update') outcome.updated++
             else outcome.created++
             continue
           }
 
-          if (!registerCache.has(registerName)) {
-            registerCache.set(
-              registerName,
-              await upsertPriorRegister({
-                orgId: ctx.orgId,
-                actorId: ctx.actorId,
-                name: registerName,
-                providerName: String(src.providerName ?? '').trim() || null,
-                periodStart: checked.periodStart,
-                periodEnd: checked.periodEnd,
-                payDate: checked.payDate,
-                allowedSubsidiaryIds,
-              }),
+          const registerId = registerCache.get(registerName) ?? await upsertPriorRegister({
+              orgId: ctx.orgId,
+              actorId: ctx.actorId,
+              name: registerName,
+              providerName: String(src.providerName ?? '').trim() || null,
+              periodStart: checked.periodStart,
+              periodEnd: checked.periodEnd,
+              payDate: checked.payDate,
+              allowedSubsidiaryIds,
+            }, tx)
+          const saved = await savePriorStub(
+              { orgId: ctx.orgId, actorId: ctx.actorId, registerId, row: stub, allowedSubsidiaryIds },
+              all,
+              { mode, runner: tx },
             )
-          }
-          const registerId = registerCache.get(registerName)!
+          registerCache.set(registerName, registerId)
           touchedRegisters.add(registerId)
-
-          const result = await savePriorStub(
-            { orgId: ctx.orgId, actorId: ctx.actorId, registerId, row: stub, allowedSubsidiaryIds },
-            all,
-          )
-          if (result.created) outcome.created++
+          if (saved.created) outcome.created++
           else outcome.updated++
         } catch (error) {
           outcome.failed++
@@ -457,7 +520,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
             valuedRows,
           }))
           for (const registerId of touchedRegisters) {
-            await recordUnmappedColumns(ctx.orgId, registerId, columns, allowedSubsidiaryIds)
+            await recordUnmappedColumns(ctx.orgId, registerId, columns, allowedSubsidiaryIds, tx)
           }
         }
         for (const [column, valuedRows] of [...unmappedCounts.entries()].sort()) {
@@ -482,6 +545,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
       }
 
       return outcome
+      })
     },
   }
 }

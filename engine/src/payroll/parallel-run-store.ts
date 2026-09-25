@@ -3,6 +3,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { db, inDbTransaction } from "../platform/db.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { cmp, isZero, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { payrollSubsidiaryOutsideScopeFilter, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
@@ -56,7 +57,7 @@ import {
  *     parallel run exists to prevent.
  */
 
-type ParallelRunExecutor = Pick<typeof db, "execute">;
+export type ParallelRunExecutor = Pick<typeof db, "execute">;
 
 /**
  * One transaction fence for every mutable prior-register/tolerance input in
@@ -267,6 +268,9 @@ export async function upsertPriorRegister(
   );
 
   const write = async (tx: ParallelRunExecutor): Promise<string> => {
+    if (!(await lockAndCheckOrgFeature(tx, input.orgId, "payroll"))) {
+      throw new ParallelRunStoreError("Payroll feature is disabled");
+    }
     await lockParallelRunInputs(tx, input.orgId);
     const result = (await tx.execute<{ id: string }>(sql`
       insert into payroll_prior_registers
@@ -312,8 +316,12 @@ export async function recordUnmappedColumns(
   registerId: string,
   columns: readonly UnmappedSourceColumn[],
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+  runner?: ParallelRunExecutor,
 ): Promise<void> {
-  await inDbTransaction(async (tx) => {
+  const write = async (tx: ParallelRunExecutor) => {
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) {
+      throw new ParallelRunStoreError("Payroll feature is disabled");
+    }
     await lockParallelRunInputs(tx, orgId);
     await assertPriorRegisterInScope(tx, orgId, registerId, allowedSubsidiaryIds);
     await tx.execute(sql`
@@ -334,7 +342,9 @@ export async function recordUnmappedColumns(
       update payroll_prior_registers
          set unmapped_columns = ${JSON.stringify(payload)}::jsonb, updated_at = now()
        where org_id = ${orgId} and id = ${registerId}`);
-  });
+  };
+  if (runner) await write(runner);
+  else await inDbTransaction(write);
 }
 
 async function priorRegisterUnmappedColumns(
@@ -511,6 +521,7 @@ export async function savePriorStub(
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   },
   slots: readonly ComparableSlot[],
+  options: { mode?: "insert" | "upsert"; runner?: ParallelRunExecutor } = {},
 ): Promise<{ created: boolean }> {
   const label = input.row.employeeLabel.trim() || input.row.employeePartyId;
 
@@ -520,7 +531,10 @@ export async function savePriorStub(
 
   const amounts = parsePriorStubAmounts(input.row.amounts, slots);
 
-  return inDbTransaction(async (tx) => {
+  const write = async (tx: ParallelRunExecutor): Promise<{ created: boolean }> => {
+    if (!(await lockAndCheckOrgFeature(tx, input.orgId, "payroll"))) {
+      throw new ParallelRunStoreError("Payroll feature is disabled");
+    }
     await lockParallelRunInputs(tx, input.orgId);
     await assertPriorRegisterInScope(
       tx,
@@ -544,7 +558,20 @@ export async function savePriorStub(
        where org_id = ${input.orgId} and register_id = ${input.registerId}
          and employee_party_id = ${input.row.employeePartyId}`));
     const created = existing.rows.length === 0;
+    if (!created && options.mode === "insert") {
+      throw new ParallelRunStoreError("a prior register row already exists for this employee — choose upsert to replace it");
+    }
 
+    const conflictAction = options.mode === "insert"
+      ? sql`on conflict (register_id, employee_party_id) do nothing`
+      : sql`on conflict (register_id, employee_party_id) do update set
+          employee_label = excluded.employee_label,
+          gross = excluded.gross,
+          net_pay = excluded.net_pay,
+          employer_cost = excluded.employer_cost,
+          updated_at = now(),
+          updated_by = excluded.updated_by
+        where payroll_prior_stubs.org_id = ${input.orgId}`;
     const upserted = (await tx.execute<{ id: string }>(sql`
       insert into payroll_prior_stubs
         (org_id, register_id, employee_party_id, employee_label, gross, net_pay,
@@ -552,16 +579,15 @@ export async function savePriorStub(
       values (${input.orgId}, ${input.registerId}, ${input.row.employeePartyId}, ${label},
               ${gross}, ${netPay}, ${employerCost},
               ${input.actorId}, ${input.actorId})
-      on conflict (register_id, employee_party_id) do update set
-        employee_label = excluded.employee_label,
-        gross = excluded.gross,
-        net_pay = excluded.net_pay,
-        employer_cost = excluded.employer_cost,
-        updated_at = now(),
-        updated_by = excluded.updated_by
-      where payroll_prior_stubs.org_id = ${input.orgId}
+      ${conflictAction}
       returning id`));
-    const stubId = upserted.rows[0]!.id;
+    const stubId = upserted.rows[0]?.id;
+    if (!stubId) {
+      // A concurrent insert may win after the existence read above. In insert
+      // mode the conflict is intentionally ignored by SQL only to avoid an
+      // overwrite; the missing RETURNING row becomes a typed refusal.
+      throw new ParallelRunStoreError("a prior register row already exists for this employee — choose upsert to replace it");
+    }
 
     await tx.execute(sql`
       delete from payroll_prior_amounts
@@ -602,7 +628,8 @@ export async function savePriorStub(
               })}, ${input.actorId})`);
 
     return { created };
-  });
+  };
+  return options.runner ? write(options.runner) : inDbTransaction(write);
 }
 
 /** Every imported register, newest period first, with what it actually holds. */
