@@ -811,5 +811,9 @@
     "commitFailed": "无法指定记账期间。",
     "committed": "{count, plural, one {已指定 # 个记账期间。} other {已指定 # 个记账期间。}}",
     "needsBook": "请从某次结账运行中打开本页，以选择账簿并指定记账期间。"
+  },
+  "problems": {
+    "subsidiaryMissing": "子公司 {subsidiaryId} 不存在。",
+    "entityFailed": "{name}：{detail}"
   }
 }

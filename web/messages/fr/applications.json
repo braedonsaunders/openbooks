@@ -11,7 +11,7 @@
     "action": "Échec de l’action",
     "notFound": "Le projet ou l'enregistrement est introuvable. Il est peut-être hors de votre accès — rechargez et réessayez.",
     "notApplicationsBilling": "Ce projet n'utilise pas les demandes de paiement. Activez un type de projet avec demandes de paiement et assignez-le au projet.",
-    "featureOff": "La fonctionnalité Projets est désactivée. Activez-la dans Company Settings → Features avant de facturer.",
+    "featureOff": "La fonctionnalité Projets est désactivée. Activez-la dans Configuration → Fonctionnalités avant de facturer.",
     "incomeAccountNotFound": "Le compte de produits est introuvable. Choisissez un autre compte et réessayez.",
     "sovDescriptionValueRequired": "Saisissez une description et une valeur planifiée positive.",
     "retainageRange": "Le pourcentage de retenue doit être compris entre 0 et 100.",

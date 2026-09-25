@@ -252,7 +252,7 @@
       "snapValue": "Ativado",
       "snapNote": "Datas previstas no fim de semana passam para o próximo dia útil",
       "dpoLabel": "Dias médios de pagamento (DPO)",
-      "dpoValue": "{dpo}d",
+      "dpoValue": "{dpo} dias",
       "dpoNote": "Valor alternativo quando um fornecedor não tem histórico de pagamentos",
       "footerPre": "Fluxos recorrentes (folha, aluguel, empréstimos) moldam a capacidade segura — configure-os no",
       "footerLink": "Painel de caixa"

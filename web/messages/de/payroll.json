@@ -759,7 +759,9 @@
           "suta": "Verbindlichkeiten aus staatlicher Arbeitslosenversicherung",
           "state_income_tax": "Verbindlichkeiten aus staatlicher Einkommensteuer",
           "local_income_tax": "Verbindlichkeiten aus kommunaler Einkommensteuer",
-          "transit_payroll_tax": "Verbindlichkeiten aus Nahverkehrs-Lohnsteuer"
+          "transit_payroll_tax": "Verbindlichkeiten aus Nahverkehrs-Lohnsteuer",
+          "or_statewide_transit_tax": "Landesweite Nahverkehrssteuer von Oregon",
+          "pa_uc_employee": "Verbindlichkeiten aus Arbeitslosenversicherung Pennsylvania (Arbeitnehmer)"
         }
       },
       "NL": {

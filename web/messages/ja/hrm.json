@@ -1966,6 +1966,7 @@
       "pending": "保留中",
       "viewed": "既読",
       "missing": "この文書は利用できません。",
+      "loadFailed": "この文書を読み込めませんでした。もう一度お試しください。",
       "retention": "保存",
       "eventCreated": "作成",
       "eventSent": "送信",

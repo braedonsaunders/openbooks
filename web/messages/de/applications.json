@@ -11,7 +11,7 @@
     "action": "Aktion fehlgeschlagen",
     "notFound": "Das Projekt oder der Datensatz wurde nicht gefunden. Es liegt möglicherweise außerhalb Ihres Zugriffs — laden Sie neu und versuchen Sie es erneut.",
     "notApplicationsBilling": "Dieses Projekt verwendet keine Zahlungsanträge. Aktivieren Sie einen Projekttyp mit Zahlungsanträgen und weisen Sie ihn dem Projekt zu.",
-    "featureOff": "Die Projektfunktion ist ausgeschaltet. Schalten Sie sie unter Company Settings → Features ein, bevor Sie abrechnen.",
+    "featureOff": "Die Projektfunktion ist ausgeschaltet. Schalten Sie sie unter Einrichtung → Funktionen ein, bevor Sie abrechnen.",
     "incomeAccountNotFound": "Das Erlöskonto wurde nicht gefunden. Wählen Sie ein anderes Konto und versuchen Sie es erneut.",
     "sovDescriptionValueRequired": "Geben Sie eine Beschreibung und einen positiven Vertragswert ein.",
     "retainageRange": "Der Einbehalt muss zwischen 0 und 100 Prozent liegen.",

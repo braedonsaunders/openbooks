@@ -759,7 +759,9 @@
           "suta": "Desempleo estatal por pagar",
           "state_income_tax": "Impuesto estatal sobre la renta por pagar",
           "local_income_tax": "Impuesto local sobre la renta por pagar",
-          "transit_payroll_tax": "Impuesto de nómina de transporte público por pagar"
+          "transit_payroll_tax": "Impuesto de nómina de transporte público por pagar",
+          "or_statewide_transit_tax": "Impuesto estatal de transporte de Oregón",
+          "pa_uc_employee": "Seguro de desempleo de Pensilvania (empleado) por pagar"
         }
       },
       "NL": {

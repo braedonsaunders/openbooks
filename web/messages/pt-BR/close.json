@@ -811,5 +811,9 @@
     "commitFailed": "Não foi possível atribuir períodos contábeis.",
     "committed": "{count, plural, one {# período contábil atribuído.} other {# períodos contábeis atribuídos.}}",
     "needsBook": "Abra esta página a partir de uma execução de fechamento para escolher um livro e atribuir períodos contábeis."
+  },
+  "problems": {
+    "subsidiaryMissing": "A subsidiária {subsidiaryId} não existe.",
+    "entityFailed": "{name}: {detail}"
   }
 }

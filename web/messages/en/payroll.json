@@ -759,7 +759,9 @@
           "suta": "State unemployment payable",
           "state_income_tax": "State income tax payable",
           "local_income_tax": "Local income tax payable",
-          "transit_payroll_tax": "Transit payroll tax payable"
+          "transit_payroll_tax": "Transit payroll tax payable",
+          "or_statewide_transit_tax": "Oregon statewide transit tax",
+          "pa_uc_employee": "Pennsylvania UC (employee) payable"
         }
       },
       "NL": {

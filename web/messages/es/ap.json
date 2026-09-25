@@ -166,7 +166,7 @@
       "snapValue": "Activado",
       "snapNote": "Las fechas previstas en fin de semana se mueven al siguiente día hábil",
       "dpoLabel": "Días promedio de pago (DPO)",
-      "dpoValue": "{dpo}d",
+      "dpoValue": "{dpo} días",
       "dpoNote": "Valor alternativo cuando un proveedor no tiene historial de pagos",
       "footerPre": "Los flujos recurrentes (nómina, alquiler, préstamos) determinan la capacidad segura — configúrelos en el",
       "footerLink": "Panel de tesorería"

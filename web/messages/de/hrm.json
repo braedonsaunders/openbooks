@@ -1966,6 +1966,7 @@
       "pending": "Ausstehend",
       "viewed": "Gelesen",
       "missing": "Dieses Dokument ist nicht mehr verfügbar.",
+      "loadFailed": "Dieses Dokument konnte nicht geladen werden. Versuchen Sie es erneut.",
       "retention": "Aufbewahrung",
       "eventCreated": "Erstellt",
       "eventSent": "Versendet",
