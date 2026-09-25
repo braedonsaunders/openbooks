@@ -188,6 +188,9 @@ export function buildErpPayment(ctx: NativeContext, p: ErpPayment): NativeDocume
       lines: [{ ...line(from, num(p.base_paid_amount), 1), ...evidence }],
     };
   }
+  if (p.payment_type === "Internal Transfer" && num(p.base_paid_amount) !== num(p.base_received_amount)) {
+    return { skip: `cross-currency internal transfer ${p.name} has different base-paid and base-received amounts; import it with explicit FX legs` };
+  }
   // Internal Transfer: DR paid_to, CR paid_from.
   return {
     ...base,
