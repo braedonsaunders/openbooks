@@ -9,6 +9,7 @@ import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { PagedTable } from '../../../../components/paged-table'
 import { promptDialog } from '../../../../lib/prompt'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useMoney } from '@/components/money-provider'
 
 export interface WorkBreakdownTask {
@@ -121,8 +122,11 @@ export function WorkBreakdownTab({
     setRefreshing(true)
     try {
       const response = await fetch(`/api/projects/${projectId}/tasks`, { cache: 'no-store' })
-      const data = (await response.json()) as { tasks?: WorkBreakdownTask[]; error?: string }
-      if (!response.ok || !data.tasks) throw new Error(data.error ?? t('drawer.taskRefreshFailed'))
+      // The status is checked before the body parses: a non-JSON error page
+      // must name the translated failure, never throw out of .json().
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('drawer.taskRefreshFailed')))
+      const data = (await response.json()) as { tasks?: WorkBreakdownTask[] }
+      if (!data.tasks) throw new Error(t('drawer.taskRefreshFailed'))
       setTasks(sortTasks(data.tasks))
       toast.success(t('drawer.tasksRefreshed'))
     } catch (refreshError) {
@@ -187,8 +191,10 @@ export function WorkBreakdownTab({
           }),
         },
       )
-      const data = (await response.json()) as { task?: WorkBreakdownTask; error?: string }
-      if (!response.ok || !data.task) throw new Error(data.error ?? t('drawer.taskSaveFailed'))
+      // The status is checked before the body parses, like refresh above.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('drawer.taskSaveFailed')))
+      const data = (await response.json()) as { task?: WorkBreakdownTask }
+      if (!data.task) throw new Error(t('drawer.taskSaveFailed'))
       setTasks((current) =>
         sortTasks(
           creating
