@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
+import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
 
 /**
  * PAYCONF-c/d/e (collapse semantics): payroll legs arrive pre-collapsed per
@@ -197,9 +198,8 @@ test('restricted and granted money tie out; the grant restores detail (control)'
     const q = { entity: LEDGER, mode: 'rows', columns: ['posting_date', 'party_name', 'amount'] }
     const restricted = await runCustomQuery(pool, q, baseOpts(org, false))
     const granted = await runCustomQuery(pool, q, baseOpts(org, true))
-    const sum = (groups: unknown): number =>
-      JSON.stringify(groups).match(/-?\d+\.\d+/g)?.reduce((n, v) => n + Number(v), 0) ?? 0
-    assert.equal(sum(restricted.groups), sum(granted.groups), 'restricted money must tie to granted money')
+    const moneyTotal = (groups: unknown): string => sum(JSON.stringify(groups).match(/-?\d+\.\d+/g) ?? [])
+    assert.equal(cmp(moneyTotal(restricted.groups), moneyTotal(granted.groups)), 0, 'restricted money must tie to granted money')
     const text = JSON.stringify(granted.groups)
     assert.ok(text.includes(NET_A) && text.includes(NAME_A), 'granted control must see both employees')
   } finally {
