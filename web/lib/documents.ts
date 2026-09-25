@@ -24,7 +24,7 @@ import { cmp, fitsLedgerRange, ledgerSideTotals, normalizeDecimal, normalizeMone
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { resolveDraftSubsidiary, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { allowedSubsidiaryIds } from './subsidiaries'
 import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
 
@@ -2341,7 +2341,11 @@ export type Opt = {
   tax_components?: import('@openbooks/engine/src/tax/tax.ts').TaxComponentConfig[]
 };
 
-export async function partyOptions(role: 'vendor' | 'customer', orgId?: string): Promise<Opt[]> {
+export async function partyOptions(
+  role: 'vendor' | 'customer',
+  orgId?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const filter =
     role === 'vendor'
@@ -2356,12 +2360,17 @@ export async function partyOptions(role: 'vendor' | 'customer', orgId?: string):
   const r = (await db.execute<Opt>(sql`
     select p.id, p.display_name, p.subsidiary_id from parties p
      where p.org_id = ${resolvedOrgId} and ${filter} and p.is_active
+       ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by p.display_name limit 2000
   `))
   return r.rows
 }
 
-export async function accountOptions(cfg: DocKindConfig, orgId?: string): Promise<Opt[]> {
+export async function accountOptions(
+  cfg: DocKindConfig,
+  orgId?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const typeFilter = cfg.accountTypes
     ? sql` and a.type in (${sql.join(cfg.accountTypes.map((ty) => sql`${ty}`), sql`, `)})`
@@ -2369,6 +2378,7 @@ export async function accountOptions(cfg: DocKindConfig, orgId?: string): Promis
   const r = (await db.execute<Opt>(sql`
     select id, number, name, currency_restriction from accounts a
      where a.org_id = ${resolvedOrgId} and a.is_active and not a.is_summary ${typeFilter}
+       ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by a.number nulls last
   `))
   return r.rows
@@ -2399,14 +2409,18 @@ export async function taxGroupOptions(orgId?: string): Promise<Opt[]> {
   return result.rows.map((row) => ({ ...row, tax_components: profiles.groups.get(row.id) ?? [] }))
 }
 
-export async function dimensionOptions(orgId?: string) {
+export async function dimensionOptions(
+  orgId?: string,
+  _documentId?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+) {
   const resolvedOrgId = await resolveOrgId(orgId)
   const [departments, projects, locations, classes, registry] = await Promise.all([
-    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active order by name`),
-    db.execute(sql`select id, name from projects where org_id = ${resolvedOrgId} and is_active order by name limit 2000`),
-    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active order by name`),
-    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active order by name`),
-    segmentRegistry(resolvedOrgId),
+    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`),
+    db.execute(sql`select id, name from projects where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name limit 2000`),
+    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`),
+    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`),
+    segmentRegistry(resolvedOrgId, allowedSubsidiaryIds),
   ])
   return {
     departments: departments.rows as Opt[],
