@@ -13,7 +13,6 @@ import {
 } from "./filing.ts";
 import {
   declaredPayrollFilings,
-  separationPaymentKeys,
   type PayrollFilingCadence,
   type PayrollFilingData,
   type PayrollFilingIssue,
@@ -606,6 +605,14 @@ export interface RoePeriod {
   insurableHours: string;
 }
 
+export interface RoeSeparationAmount {
+  block: "17A" | "17C";
+  code: string;
+  amount: string;
+  expectedPaymentOn: string;
+  paymentStatus: "paid" | "will_pay";
+}
+
 /** ROE worksheet: recent committed periods, newest first (blocks 15A–15C). */
 export async function roeWorksheet(
   orgId: string,
@@ -748,9 +755,11 @@ export interface RoeRecord {
   totalInsurableHours: string;
   totalInsurableEarnings: string;
   periods: RoePeriod[];
-  /** Block 17A — vacation pay in the final pay period. */
+  /** Block 17A and 17C — individually declared paid or payable separation amounts. */
+  separationAmounts: RoeSeparationAmount[];
+  /** Block 17A total, kept for the worksheet display. */
   vacationPayOnSeparation: string;
-  /** Block 17C — other monies (bonus/retiring allowance) in the final period. */
+  /** Block 17C total, kept for the worksheet display. */
   otherMoniesOnSeparation: string;
 }
 
@@ -827,25 +836,128 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   }
   const worksheet = await roeWorksheet(orgId, employeePartyId, periodCount);
   const finalPeriod = worksheet.periods[0] ?? null;
+  if (!finalPeriod) {
+    throw new PayrollError(`${row.display_name} has no committed pay periods for the ROE reporting window`);
+  }
 
-  // Block 17: monies paid because employment ended, taken from the final
-  // committed stub's own lines. WHICH component system_keys count as
-  // vacation pay vs other monies is the pack's declaration
-  // (engine/src/payroll/canada/filings.ts), not a literal in this query — a
-  // pack with different keys must refuse or declare, never silently file 0.00.
-  const separation17 = separationPaymentKeys("CA");
-  const separation = (await db.execute<{ vacation: string; other: string }>(sql`
-    select
-      coalesce(sum(case when pc.system_key = any(${`{${separation17.vacationPay.join(",")}}`}::text[]) then l.amount else 0 end), 0) as vacation,
-      coalesce(sum(case when pc.system_key = any(${`{${separation17.otherMonies.join(",")}}`}::text[]) then l.amount else 0 end), 0) as other
-      from pay_stub_lines l
-      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      left join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-       and l.kind = 'earning'
-       and (${finalPeriod?.payDate ?? null}::date is null or s.pay_date = ${finalPeriod?.payDate ?? null})
-  `));
+  const event = (await db.execute<{
+    id: string; interruption_on: string; last_insurable_earnings_on: string;
+    salary_continuance_end_on: string | null;
+  }>(sql`
+    select id, interruption_on::text as interruption_on,
+           last_insurable_earnings_on::text as last_insurable_earnings_on,
+           salary_continuance_end_on::text as salary_continuance_end_on
+      from payroll_roe_separation_events
+     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+       and status = 'confirmed'
+     order by interruption_on desc, id desc
+     limit 1
+  `)).rows[0];
+  if (!event) {
+    throw new PayrollError(
+      `${row.display_name} has no confirmed Record of Employment separation facts — `
+      + "record the interruption date, last insurable earnings date, and any salary-continuance or paid-leave end before issuing the ROE",
+    );
+  }
+  const earningComponents = (await db.execute<{
+    component_id: string; component_name: string; pay_date: string; block: "none" | "17A" | "17C" | null;
+  }>(sql`
+    select distinct component.id as component_id, component.name as component_name,
+           stub.pay_date::text as pay_date, classification.block
+      from pay_stub_lines line
+      join pay_stubs stub on stub.org_id = line.org_id and stub.id = line.stub_id
+      join pay_runs run on run.org_id = stub.org_id
+        and run.document_id = stub.pay_run_document_id and run.run_status = 'committed'
+      join pay_components component
+        on component.org_id = line.org_id and component.id = line.component_id
+      left join lateral (
+        select block
+          from payroll_roe_component_classifications
+         where org_id = line.org_id and pay_component_id = line.component_id
+           and effective_from <= stub.pay_date
+           and (effective_to is null or effective_to >= stub.pay_date)
+         order by effective_from desc
+         limit 1
+      ) classification on true
+     where line.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
+       and line.kind = 'earning' and stub.pay_date in (
+         ${sql.join(worksheet.periods.map((period) => sql`${period.payDate}::date`), sql`, `)}
+       )
+  `)).rows;
+  const unmapped = earningComponents.filter((component) => component.block == null);
+  if (unmapped.length) {
+    const names = [...new Set(unmapped.map((component) => component.component_name))].sort();
+    throw new PayrollError(
+      `ROE Block 17 classification is missing for earning components paid in ${row.display_name}'s reporting window: `
+      + `${names.join(", ")} — classify each component in Payroll Setup as Block 17A, Block 17C, or not separation-related`,
+    );
+  }
+  const separationRows = (await db.execute<{
+    component_id: string; component_name: string; amount: string; payment_status: "paid" | "will_pay";
+    expected_payment_on: string; block: "none" | "17A" | "17C" | null; category_code: string | null;
+  }>(sql`
+    select payment.pay_component_id as component_id, component.name as component_name,
+           payment.amount::text as amount, payment.payment_status,
+           payment.expected_payment_on::text as expected_payment_on,
+           classification.block, classification.category_code
+      from payroll_roe_separation_payments payment
+      join pay_components component
+        on component.org_id = payment.org_id and component.id = payment.pay_component_id
+      left join lateral (
+        select block, category_code
+          from payroll_roe_component_classifications
+         where org_id = payment.org_id and pay_component_id = payment.pay_component_id
+           and effective_from <= payment.expected_payment_on
+           and (effective_to is null or effective_to >= payment.expected_payment_on)
+         order by effective_from desc
+         limit 1
+      ) classification on true
+     where payment.org_id = ${orgId} and payment.separation_event_id = ${event.id}
+     order by payment.expected_payment_on, payment.id
+  `)).rows;
+  const missingCategories = separationRows
+    .filter((payment) => payment.block !== "17A" && payment.block !== "17C")
+    .map((payment) => payment.component_name);
+  if (missingCategories.length) {
+    throw new PayrollError(
+      `ROE separation amounts for ${row.display_name} have no effective Block 17 category for `
+      + `${[...new Set(missingCategories)].join(", ")} — classify each component in Payroll Setup before issuing the ROE`,
+    );
+  }
+  const groupedAmounts = new Map<string, RoeSeparationAmount>();
+  for (const payment of separationRows) {
+    if (payment.block !== "17A" && payment.block !== "17C") continue;
+    const key = `${payment.block}:${payment.category_code}`;
+    const previous = groupedAmounts.get(key);
+    if (!previous) {
+      groupedAmounts.set(key, {
+        block: payment.block,
+        code: payment.category_code!,
+        amount: payment.amount,
+        expectedPaymentOn: payment.expected_payment_on,
+        paymentStatus: payment.payment_status,
+      });
+    } else {
+      groupedAmounts.set(key, {
+        ...previous,
+        amount: add(previous.amount, payment.amount),
+        expectedPaymentOn: payment.expected_payment_on > previous.expectedPaymentOn
+          ? payment.expected_payment_on
+          : previous.expectedPaymentOn,
+        paymentStatus: previous.paymentStatus === "paid" && payment.payment_status === "paid" ? "paid" : "will_pay",
+      });
+    }
+  }
+  const separationAmounts = [...groupedAmounts.values()];
+  const vacationAmounts = separationAmounts.filter((amount) => amount.block === "17A");
+  const otherAmounts = separationAmounts.filter((amount) => amount.block === "17C");
+  if (vacationAmounts.length > 1 || otherAmounts.length > 3) {
+    throw new PayrollError(
+      `${row.display_name}'s ROE separation amounts exceed Service Canada's Block 17 category limits — correct the component classifications or payment declarations`,
+    );
+  }
+  const vacation = vacationAmounts.reduce((total, amount) => add(total, amount.amount), "0");
+  const other = otherAmounts.reduce((total, amount) => add(total, amount.amount), "0");
 
   const accounts = await filingAccountsById(orgId);
   return {
@@ -859,16 +971,17 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
     payPeriodType: periodType,
     sinLast3: row.sin_last3,
     firstDayWorked: row.hired_on,
-    // The last day for which paid: the employee's termination date when the
-    // record carries one, else the final committed period end.
-    lastDayPaid: row.terminated_on ?? finalPeriod?.periodEnd ?? null,
+    // Block 11 is an explicit event fact, including the end of salary
+    // continuance or paid leave when that extends beyond termination.
+    lastDayPaid: event.salary_continuance_end_on ?? event.last_insurable_earnings_on,
     finalPayPeriodEnd: finalPeriod?.periodEnd ?? null,
     occupation: row.job_title,
     totalInsurableHours: worksheet.totalInsurableHours,
     totalInsurableEarnings: worksheet.totalInsurableEarnings,
     periods: worksheet.periods,
-    vacationPayOnSeparation: num(separation.rows[0]?.vacation),
-    otherMoniesOnSeparation: num(separation.rows[0]?.other),
+    separationAmounts,
+    vacationPayOnSeparation: vacation,
+    otherMoniesOnSeparation: other,
   };
 }
 
