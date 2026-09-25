@@ -227,7 +227,10 @@ requirePattern(
 );
 requirePattern(
   databaseRuntime,
-  /const bypass = ctx\?\.bypass === true;[\s\S]*?const org = bypass \? "" : ctx\?\.orgId \?\? "";/,
+  // ARCH-RLS-ROLE: the runtime pool can no longer switch bypass on at all,
+  // so the named bypass const is gone. Fail-closed now reads: unscoped
+  // context resolves to the empty org, and app.bypass_rls is hardcoded off.
+  /const org = ctx\?\.bypass \? "" : ctx\?\.orgId \?\? "";[\s\S]*?set_config\('app\.bypass_rls', 'off', false\)/,
   "unscoped application database access does not fail closed",
 );
 if (devDeploy) {
