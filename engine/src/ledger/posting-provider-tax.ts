@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { providerBindingMismatch, providerEvidenceMismatch, readTaxRateProviderConfigForPosting, readTaxQuoteForDocumentLine, sumComponentTax, type Address, type PersistedTaxQuote } from "../tax/rate-providers.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
@@ -117,18 +116,11 @@ export function taxConfigsFromEvidence(
     taxCodeId: component.taxCodeId,
     sequence: component.sequence,
     ratePercent: component.ratePercent ?? "0",
-    // The stored ratio arrives through SQL numeric division, which scales exact
-    // quotients to 20 fractional digits ("100.00000000000000000000") that the
-    // percentage validator refuses. Trim trailing zeros exactly (cap 20 is
-    // numeric division's scale): trimming is value-preserving, while
-    // round(...,4) would drift 1/3-recoverable lines by a cent. Input beyond
-    // the division scale passes through to refuse downstream.
-    recoverablePercent: component.recoverablePercent == null
-      ? (toUnits(component.taxAmount) === 0n
+    recoverablePercent: component.recoverablePercent ??
+      (toUnits(component.taxAmount) === 0n
         ? "100"
         : fromUnits((toUnits(component.recoverableAmount) * 1_000_000n + toUnits(component.taxAmount) / 2n) /
-            toUnits(component.taxAmount)))
-      : (canonicalDecimal(component.recoverablePercent, 20) ?? component.recoverablePercent),
+            toUnits(component.taxAmount))),
     calculationType: component.calculationType,
     priceIncludesTax: component.priceIncludesTax ?? false,
     compoundOnPrevious: component.compoundOnPrevious ?? false,

@@ -159,8 +159,12 @@ export async function resolveTaxComponents(
            c.calculation_type, c.price_includes_tax, c.compound_on_previous,
            c.rounding_scale, c.collected_account_id, c.paid_account_id,
            c.withholding_account_id,
+           -- Numeric division scales exact quotients to 20 fractional digits, which
+           -- the percentage validator refuses. trim_scale strips padding zeros
+           -- exactly (value-preserving; round() would drift 1/3-recoverable
+           -- lines by a cent).
            case when c.tax_amount = 0 then tc.recoverable_percent::text
-                else (c.recoverable_amount / c.tax_amount * 100)::text end as recoverable_percent
+                else trim_scale(c.recoverable_amount / c.tax_amount * 100)::text end as recoverable_percent
       from document_line_tax_components c
       join tax_codes tc on tc.id = c.tax_code_id and tc.org_id = c.org_id
       join document_lines dl on dl.id = c.document_line_id and dl.org_id = c.org_id
