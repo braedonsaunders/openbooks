@@ -584,9 +584,14 @@ class SyncVerificationError extends Error {
  */
 export class SyncRunAlreadyActiveError extends Error {
   constructor(kind: string) {
-    super(`a ${kind} run is already active for this connection`);
+    super(`a mutating sync run is already active for this connection (requested ${kind})`);
     this.name = "SyncRunAlreadyActiveError";
   }
+}
+
+/** Shared advisory-lock identity for every mutating run on one connection. */
+export function syncConnectionRunLockKey(connectionId: string): string {
+  return `sync-run:${connectionId}`;
 }
 
 /**
@@ -1127,7 +1132,7 @@ async function setProgress(
 }
 
 /**
- * Take exclusive ownership of a connection for one run kind, or refuse.
+ * Take exclusive ownership of a connection for one mutating run, or refuse.
  *
  * The platform API guards ENQUEUE, but a BullMQ stalled re-delivery never
  * passes through it: when a worker's lock lapses (a deploy rollout, or a tick
@@ -1135,14 +1140,15 @@ async function setProgress(
  * while the first may still be writing. That is how one connection ended up
  * running two concurrent full migrations over the same documents.
  *
- * The advisory lock serializes competing claims so two callers cannot both read
- * "nothing running"; the status check then rejects the loser. The stale-run
+ * The advisory lock serializes different run kinds as well as same-kind
+ * retries, so they cannot race while reconciling shared source references.
+ * The explicit kind set leaves full_preflight read-only. The stale-run
  * reaper releases a claim whose owner died without writing a terminal status.
  */
 export async function claimSyncRun(opts: {
   orgId: string;
   connectionId: string;
-  kind: string;
+  kind: "incremental" | "full_migration" | "targeted_repair" | "project_financials" | "attachments";
   sourceName: string;
   triggeredBy: string;
 }): Promise<{ id: string }[]> {
@@ -1154,12 +1160,14 @@ export async function claimSyncRun(opts: {
     await tx.execute(sql`
       select pg_advisory_xact_lock(
         hashtext(${opts.orgId}),
-        hashtext(${`sync-run:${opts.connectionId}:${qbd ? "qbd" : opts.kind}`})
+        hashtext(${qbd ? `sync-run:${opts.connectionId}:qbd` : syncConnectionRunLockKey(opts.connectionId)})
       )`);
     const live = await tx.execute(sql`
       select 1 from sync_runs
        where org_id = ${opts.orgId} and connection_id = ${opts.connectionId}
-         and (${qbd} or kind = ${opts.kind}) and status = 'running'
+         and (${qbd} or kind = ${opts.kind}
+              or kind in ('incremental', 'full_migration', 'targeted_repair', 'project_financials', 'attachments'))
+         and status = 'running'
        limit 1`);
     if (live.rows.length > 0) throw new SyncRunAlreadyActiveError(opts.kind);
     return tx
@@ -1168,7 +1176,7 @@ export async function claimSyncRun(opts: {
         orgId: opts.orgId,
         connectionId: opts.connectionId,
         source: opts.sourceName,
-        kind: opts.kind as "incremental" | "full_migration" | "targeted_repair",
+        kind: opts.kind,
         triggeredBy: opts.triggeredBy,
       })
       .returning();
