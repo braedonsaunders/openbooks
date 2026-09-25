@@ -101,6 +101,11 @@ export type UsSeparateSupplementalMethod =
   | { kind: "not_applicable" }
   | { kind: "aggregate"; source: string }
   | { kind: "differential"; source: string }
+  // The state engine prices the separately paid supplement itself from the
+  // timed input (a YTD-, county- or basis-dependent rule no static rate can
+  // carry). The dispatch hands the full timed input to the engine instead
+  // of computing a flat leg around it.
+  | { kind: "engine"; source: string }
   | (UsSupplementalFlatMethod & {
     subRegionMethods?: Readonly<Record<string, UsSeparateSupplementalSubRegionMethod>>;
   });
@@ -195,6 +200,16 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
       source: "https://tax.idaho.gov/taxes/income-tax/withholding/computing/",
     }],
     rounding: "whole_dollar",
+  } as const,
+  MA: {
+    kind: "engine",
+    // Massachusetts Circular M (Rev. 12/25), section G, p. 13: a
+    // supplemental payment takes 5%, except the slice of (payment plus
+    // annualized regular wages plus prior supplemental pay) above the
+    // $1,107,750 surtax threshold, which takes 9%. The YTD-dependent rule
+    // cannot be a static rate, so the MA engine prices it from the timed
+    // input (prior supplemental via the run's YTD) instead.
+    source: "Massachusetts Circular M: Income Tax Withholding Tables at 5.0%, Effective January 1, 2026 (Rev. 12/25), section G",
   } as const,
   MI: {
     kind: "flat",
@@ -581,6 +596,44 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         `${levy.label} separately paid supplemental wages require a declared state method; ${method.detail}. `
         + "Record the jurisdiction's official method and required inputs before calculating — refused by name",
       );
+    }
+    if (method.kind === "engine") {
+      if (input.levy.level !== "region") {
+        throw new UsWithholdingError(
+          `${levy.label} separately paid supplemental wages route to the state engine, `
+          + "which prices region-level supplements only — refused by name",
+        );
+      }
+      const stateEngine = requireUsStateWithholding(input.levy.region);
+      if (!stateEngine) return null;
+      const routed = stateEngine.compute({
+        payDate: input.payDate,
+        periodStart: input.periodStart,
+        employerEmployeeCount: input.employerEmployeeCount,
+        periodEnd: input.periodEnd,
+        periodsPerYear: input.periodsPerYear,
+        wages: input.wages,
+        federalFilingStatus: input.federalFilingStatus,
+        federalLegacyW4: input.federalLegacyW4,
+        federalTaxExempt: input.federalTaxExempt,
+        supplemental: input.supplemental,
+        supplementalPaymentTiming: input.supplementalPaymentTiming,
+        federalIncomeTax: input.federalIncomeTax,
+        federalWithholdingExempt: input.federalWithholdingExempt,
+        taxQualifiedDeductions: input.taxQualifiedDeductions,
+        certificate,
+        supportingCertificates: supportingCertificates(stateEngine.supportingCertificateKeys),
+        basis: levy.reach,
+        wageAllocations: input.wageAllocations,
+        residentWithholdingFacts,
+        regionTax: input.regionTax,
+        socialInsuranceDeducted: input.socialInsuranceDeducted,
+        ytd: input.ytd,
+      });
+      return {
+        code: stateEngine.state, label: stateEngine.label, tax: routed.tax,
+        factors: routed.factors, ...localWageTrace,
+      };
     }
     if (method.kind === "flat") {
       const hasRegularWithholding = input.levy.level === "region"
