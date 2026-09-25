@@ -48,7 +48,7 @@ const { packCertificates } = await import('@openbooks/engine/src/payroll/certifi
 // through the API.
 test('declared NL certificates render their fields with stored answers', () => {
   const declared = packCertificates('NL').certificates
-  assert.equal(declared.length, 2)
+  assert.equal(declared.length, 4)
   for (const certificate of declared) {
     const html = renderReadOnly(
       React.createElement(CertificateForm, {

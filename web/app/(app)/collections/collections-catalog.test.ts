@@ -44,6 +44,8 @@ const LOCALE_INVARIANT = new Set([
   'subscriptions.subsTable.plan',
   'subscriptions.subsTable.mrr',
   'subscriptions.planPlaceholder',
+  'subscriptions.advanced.colVersion',
+  'subscriptions.advanced.colNumber',
   'dunning.tokensHint',
 ])
 for (const [locale, sections] of Object.entries(sectionsByLocale)) {

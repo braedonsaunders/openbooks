@@ -92,6 +92,10 @@ async function fixture() {
   // the project crew through scheduling, which the batch POST requires.
   await db.execute(sql`insert into schedule_resources(org_id,project_id,party_id,name,kind)
     values (${org.orgId},${project},${foremanParty},'Crew Foreman','crew')`)
+  // Batch POST requires the actor's own party (H-CREW ownership): link the
+  // foreman login to the picked foreman party, otherwise the POST under test
+  // is impersonation and is refused by name.
+  await db.execute(sql`update users set party_id=${foremanParty} where org_id=${org.orgId} and id=${foremanUser}`)
   const load = (userId: string, sp: Record<string, string | undefined>) => {
     session.user = asUser(userId, org.orgId)
     return withOrgContext(org.orgId, () => loadCrewPage(sp))
