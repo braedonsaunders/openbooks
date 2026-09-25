@@ -119,6 +119,9 @@ export function sgTablesForTaxYear(year: number): SgYearTables {
 // Input / output
 // ---------------------------------------------------------------------------
 
+/** MOM work-pass type, routing the foreign-worker levy for `foreigner` statuses. */
+export type SgPermitType = "work_permit" | "s_pass" | "employment_pass" | "other";
+
 export interface SgStatutoryInput {
   /** The calendar tax year selecting the CPF tables — required, never defaulted. */
   taxYear: number;
@@ -128,11 +131,26 @@ export interface SgStatutoryInput {
   additionalWages?: string | null;
   cpfStatus: SgCpfStatus;
   ageBand: SgAgeBand;
+  /**
+   * The foreign employee's MOM work-pass type, or null when undeclared.
+   * A Work Permit holder attracts the foreign-worker levy whose sector/tier
+   * schedule is not transcribed, so the run refuses by name; S Pass and
+   * Employment Pass holders owe no levy; anything else prices SDL with the
+   * levy marked uncomputed. Ignored for CPF-covered statuses.
+   */
+  permitType?: SgPermitType | null;
 }
 
 export interface SgStatutoryResult {
   /** False for foreigners, who are outside CPF but remain subject to SDL. */
   cpfApplicable: boolean;
+  /**
+   * True when a foreign employee's MOM levy position is undetermined (pass
+   * undeclared or another pass type): SDL prices and the stub trace must
+   * carry the uncomputed-levy marker. False for Work Permit holders (they
+   * refuse instead) and for passes with no levy.
+   */
+  fwlUncomputed: boolean;
   /** OW subject to CPF after the $8,000 monthly ceiling, cents. */
   owSubjectCents: bigint;
   /** Total CPF contribution, whole dollars as cents. */
@@ -220,6 +238,23 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
   assertSgCovered(input.cpfStatus, input.ageBand, tables);
   const cpfRates = input.cpfStatus === "foreigner" ? null : ratesFor(input.cpfStatus, input.ageBand, tables);
 
+  // The MOM foreign-worker levy is an employer charge outside CPF/SDL whose
+  // sector/tier schedule is not transcribed. A declared Work Permit holder
+  // certainly attracts it, so the run refuses by name — arrange and pay it
+  // outside payroll (MOM WP Online) instead of posting SDL-only silence.
+  // S Pass and Employment Pass holders attract no levy; an undeclared or
+  // other pass prices SDL with the levy marked uncomputed on the stub.
+  if (input.cpfStatus === "foreigner" && input.permitType === "work_permit") {
+    throw new PayrollError(
+      "the SG payroll pack cannot price a Work Permit holder — the MOM foreign-worker levy applies "
+      + "on top of SDL and its sector/tier schedule is not transcribed. Arrange the levy outside "
+      + "payroll (MOM WP Online) or price this run in payroll software that implements the schedule",
+    );
+  }
+  const fwlUncomputed = input.cpfStatus === "foreigner"
+    && input.permitType !== "s_pass"
+    && input.permitType !== "employment_pass";
+
   const aw = parseCents(input.additionalWages ?? "0", "Additional Wages");
   const cpfApplicable = input.cpfStatus !== "foreigner";
   if (cpfApplicable && aw > 0n) {
@@ -304,6 +339,7 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
 
   return {
     cpfApplicable,
+    fwlUncomputed,
     owSubjectCents: owSubject,
     totalCents: totalDollars * 100n,
     employeeCents: employeeDollars * 100n,
@@ -358,6 +394,7 @@ export const SG_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CPF_ER: "CPF — employer share",
   CPF_TOTAL: "CPF — total",
   SDL: "Skills Development Levy",
+  FWL_UNCOMPUTED: "MOM foreign-worker levy not computed — permit undeclared or another pass; arrange via MOM WP Online",
 };
 
 export async function computeSgStatutory(
@@ -383,6 +420,7 @@ export async function computeSgStatutory(
   }
   const status = (certificate.answers["cpf_status"] ?? "") as SgCpfStatus;
   const ageBand = (certificate.answers["age_band"] ?? "") as SgAgeBand;
+  const permitType = (certificate.answers["permit_type"] ?? null) as SgPermitType | null;
 
   // IR21 tax-clearance hold (I6-payroll-220): cessation of a non-citizen's
   // employment withholds ALL monies due — the monthly engine must not settle
@@ -413,6 +451,7 @@ export async function computeSgStatutory(
     additionalWages: nonPeriodic,
     cpfStatus: status,
     ageBand,
+    permitType,
   });
 
   if (result.cpfApplicable) {
@@ -429,5 +468,8 @@ export async function computeSgStatutory(
       CPF_TOTAL: d4(result.totalCents),
     } : {}),
     SDL: d4(result.sdlCents),
+    // The MOM levy position rides the stub trace wherever it is undetermined:
+    // a named marker on the calculation, never SDL-only silence.
+    ...(result.fwlUncomputed ? { FWL_UNCOMPUTED: "1" } : {}),
   };
 }
