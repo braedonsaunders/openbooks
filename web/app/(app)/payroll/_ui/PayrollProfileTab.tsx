@@ -34,6 +34,7 @@ export function PayrollProfileTab({
   partyName,
   readOnly = false,
   section = 'general',
+  onDirtyChange,
 }: {
   partyId: string
   partyName: string
@@ -41,6 +42,12 @@ export function PayrollProfileTab({
   readOnly?: boolean
   /** Which sub-tab the drawer shows; the editor half follows it. */
   section?: PayrollSubTab
+  /**
+   * Unsaved-draft signal for the embedding drawer guard: true while the
+   * profile editor or any certificate draft differs from its last saved
+   * state. Clears on either save.
+   */
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const t = useTranslations('payroll.profiles')
   const [state, setState] = useState<{
@@ -61,6 +68,14 @@ export function PayrollProfileTab({
     defaultCountry: '',
   })
   const [version, setVersion] = useState(0)
+  const [editorDirty, setEditorDirty] = useState(false)
+  const [certificatesDirty, setCertificatesDirty] = useState(false)
+
+  // Combine the two draft signals for the drawer guard. Boolean setState
+  // with the same value bails out, so reporting every render cannot loop.
+  useEffect(() => {
+    onDirtyChange?.(editorDirty || certificatesDirty)
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -209,13 +224,19 @@ export function PayrollProfileTab({
           derivedColumns={state.derivedColumns}
           onClose={() => {}}
           onSaved={() => setVersion((v) => v + 1)}
+          onDirtyChange={setEditorDirty}
         />
       </div>
       {/* Row-backed certificate answers for the profile's pack (the NL opgaaf
         and SV facts, the DE ELStAM, the FR PAS option): rendered from the
         pack declarations, never a per-country form in this file. */}
       <div hidden={section !== 'tax'}>
-        <PackCertificateForms partyId={partyId} country={profile.country} readOnly={readOnly} />
+        <PackCertificateForms
+          partyId={partyId}
+          country={profile.country}
+          readOnly={readOnly}
+          onDirtyChange={setCertificatesDirty}
+        />
       </div>
     </>
   )

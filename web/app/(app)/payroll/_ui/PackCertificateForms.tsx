@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
@@ -158,8 +158,15 @@ export function CertificateForm(props: {
   onSaved?: () => void
   /** Values only: no inputs, no save. The employee drawer read mode. */
   readOnly?: boolean
+  /**
+   * Unsaved-draft signal for embedding drawers (the employee drawer's close
+   * guard). The parent remounts this form whenever the underlying row
+   * changes, so the mount-time draft is the baseline and a save clears the
+   * signal through the remount — no manual reset here.
+   */
+  onDirtyChange?: (dirty: boolean) => void
 }) {
-  const { partyId, country, certificate, stored, onSaved, readOnly } = props
+  const { partyId, country, certificate, stored, onSaved, readOnly, onDirtyChange } = props
   const tc = useTranslations('common')
   const tp = useTranslations('payroll.profiles.certificates')
   // The parent remounts this form (via `key`) whenever the underlying row
@@ -171,6 +178,19 @@ export function CertificateForm(props: {
   )
   const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? '')
   const [busy, setBusy] = useState(false)
+
+  // Unsaved-draft signal (see onDirtyChange): the mount-time draft is the
+  // baseline because the parent remounts on every underlying row change.
+  const snapshot = JSON.stringify([answers, effectiveFrom])
+  const [baseline] = useState(snapshot)
+  const reportedRef = useRef<boolean | null>(null)
+  useEffect(() => {
+    const dirty = snapshot !== baseline
+    if (reportedRef.current !== dirty) {
+      reportedRef.current = dirty
+      onDirtyChange?.(dirty)
+    }
+  })
 
   // Certificate amounts are classified before the save posts: an unreadable
   // value names its cause and remedy under the field, and the save stays
@@ -280,16 +300,24 @@ export function CertificateForm(props: {
   )
 }
 
-export function PackCertificateForms(props: { partyId: string; country: string; readOnly?: boolean }) {
+export function PackCertificateForms(props: {
+  partyId: string
+  country: string
+  readOnly?: boolean
+  /** OR of every certificate draft's unsaved state, for the drawer guard. */
+  onDirtyChange?: (dirty: boolean) => void
+}) {
   const tp = useTranslations('payroll.profiles.certificates')
   const commonActions = useTranslations('common.actions')
-  const { partyId, country, readOnly } = props
+  const { partyId, country, readOnly, onDirtyChange } = props
   const [state, setState] = useState<{
     status: 'loading' | 'ready' | 'error'
     certificates: DeclaredRowCertificate[]
     stored: StoredCertificateRow[]
   }>({ status: 'loading', certificates: [], stored: [] })
   const [version, setVersion] = useState(0)
+  const [dirtyFlags, setDirtyFlags] = useState<Record<string, boolean>>({})
+  const reportedRef = useRef<boolean | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -321,6 +349,17 @@ export function PackCertificateForms(props: { partyId: string; country: string; 
       cancelled = true
     }
   }, [partyId, country, version])
+
+  // OR-combine the per-certificate drafts (scoped to the certificates
+  // currently declared, so a removed form cannot hold the guard dirty).
+  // Reports only on flip; same-value reports are dropped.
+  useEffect(() => {
+    const dirty = state.certificates.some((certificate) => dirtyFlags[certificate.key] === true)
+    if (reportedRef.current !== dirty) {
+      reportedRef.current = dirty
+      onDirtyChange?.(dirty)
+    }
+  })
 
   if (!country) return null
   if (state.status === 'loading') {
@@ -356,6 +395,9 @@ export function PackCertificateForms(props: { partyId: string; country: string; 
             stored={rows}
             readOnly={readOnly}
             onSaved={() => setVersion((v) => v + 1)}
+            onDirtyChange={(dirty) =>
+              setDirtyFlags((prev) => (prev[certificate.key] === dirty ? prev : { ...prev, [certificate.key]: dirty }))
+            }
           />
         )
       })}

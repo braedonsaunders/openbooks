@@ -674,6 +674,9 @@ export function PartyDrawer({
   const [dirty, setDirty] = useState(false)
   const [prevSavePayload, setPrevSavePayload] = useState(savePayload)
   const [skipDirty, setSkipDirty] = useState(false)
+  // Nested payroll profile / certificate drafts keep their own local state
+  // outside savePayload; the tab reports their dirtiness here.
+  const [payrollDirty, setPayrollDirty] = useState(false)
   if (prevSavePayload !== savePayload) {
     setPrevSavePayload(savePayload)
     if (skipDirty) setSkipDirty(false)
@@ -690,7 +693,7 @@ export function PartyDrawer({
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
-    if (mode !== 'edit' || !dirty) return true
+    if (mode !== 'edit' || (!dirty && !payrollDirty)) return true
     return confirmDialog({
       message: tc('feedback.unsavedChanges'),
       confirmLabel: tc('confirm.discardChanges'),
@@ -2001,6 +2004,7 @@ export function PartyDrawer({
             partyName={String(p.display_name ?? '')}
             readOnly={!editable}
             section={payrollSubTab}
+            onDirtyChange={setPayrollDirty}
           />
           {/* Pay banks (banked time, vacation, benefit recoup) belong beside
               the payroll profile — one home for this person's compensation. */}
