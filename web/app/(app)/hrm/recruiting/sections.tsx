@@ -608,7 +608,7 @@ export function PostingDrawerBody({
   posting,
   extra,
 }: {
-  posting: { id: string; boardKey: string; status: string; requisitionId: string };
+  posting: { id: string; boardKey: string; status: string; statusCode: string; requisitionId: string };
   extra: PostingDrawerExtra;
 }) {
   return (
