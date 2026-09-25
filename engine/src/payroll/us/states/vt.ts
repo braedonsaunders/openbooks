@@ -376,6 +376,20 @@ export const VT_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+/**
+ * Child Care Contribution (Act 76 of 2023): a 0.44% employer payroll tax on
+ * wages earned in Vermont, effective July 1, 2024, remitted with withholding
+ * and reconciled on Form WHT-436 Part III. The employer may elect to
+ * withhold at most 25% of the levy (0.11%) from employee wages; with no
+ * election the employer pays the whole levy and no employee line prices.
+ * A wage subject to Vermont withholding is subject to the CCC, so both legs
+ * price the period's Vermont-taxable compensation.
+ *
+ * Sources: Vermont Department of Taxes, June 2024 CCC update
+ * (https://tax.vermont.gov/press-release/june-2024-update-child-care-contribution-payroll-tax-begins-vermont-employers-and);
+ * Form WHT-436 2024 instructions, Part III
+ * (https://tax.vermont.gov/sites/tax/files/documents/WHT-436-2024%20Instr.pdf).
+ */
 export const VT_REGION: PayrollRegionWithholding = {
   region: "VT",
   label: "Vermont income tax",
@@ -385,7 +399,54 @@ export const VT_REGION: PayrollRegionWithholding = {
   residentWithholdingImplemented: true,
   residentWithholdingMethod: { kind: "net_of_work_region_tax" },
   certificateKey: "us_vt_w4vt",
-  subRegions: [],
+  subRegions: [
+    {
+      code: "CCC",
+      label: "Vermont Child Care Contribution (employer)",
+      kind: "child_care_contribution",
+      // Employer liability follows Vermont work, like Oregon transit: only
+      // the work side resolves, and it never leaves the employee's cheque.
+      reaches: ["nonresident"],
+      rateSource: { kind: "pack" },
+      automatic: true,
+      pocket: "employer",
+      statutoryComponent: { systemKey: "vt_child_care_contribution", kind: "employer_contribution" },
+      withholdingMethod: {
+        kind: "flat_rate",
+        rates: [{
+          effectiveFrom: "2024-07-01",
+          rate: "0.0044",
+          source: "Vermont Department of Taxes, Child Care Contribution 0.44% on Vermont wages from July 1, 2024 (WHT-436 instructions)",
+        }],
+      },
+      implemented: true,
+      citation:
+        "Vermont Department of Taxes, Child Care Contribution: 0.44% employer payroll tax on wages "
+        + "earned in Vermont from July 1, 2024 (Act 76 of 2023); Form WHT-436 Part III",
+    },
+    {
+      code: "CCCE",
+      label: "Vermont Child Care Contribution (employee share)",
+      kind: "child_care_contribution",
+      // The employer's elected withholding, at most 25% of the levy. It
+      // resolves automatically but prices nothing until the employer enters
+      // its election: no election is employer-pays-all, a fact, not a gap.
+      reaches: ["nonresident"],
+      rateSource: { kind: "tenant", rateKey: "us_vt_ccce" },
+      automatic: true,
+      statutoryComponent: { systemKey: "vt_child_care_contribution_employee", kind: "deduction" },
+      withholdingMethod: {
+        kind: "flat_rate",
+        rates: [],
+        maxRate: "0.0011",
+        absentTenantRate: "skip",
+      },
+      implemented: true,
+      citation:
+        "Vermont Department of Taxes, Child Care Contribution: employers may withhold a maximum of "
+        + "25% of the required 0.44% contribution (0.11%) from employee wages (WHT-436 instructions)",
+    },
+  ],
   subRegionConflictRule: "both",
   citation:
     "Vermont Department of Taxes, GB-1210, 2026 Income Tax Withholding "

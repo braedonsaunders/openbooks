@@ -370,6 +370,7 @@ export async function computeUsStatutory(
       // name when absent.
       const employerTax = computeUsEmployerWithholding({
         levy,
+        payDate: run.pay_date!,
         wages: sum([income, nonPeriodic]),
         wageAllocations: ctx.workAllocations,
         tenantRates: (rateKey, subRegion) =>

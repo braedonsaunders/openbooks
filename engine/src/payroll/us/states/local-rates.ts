@@ -186,9 +186,44 @@ const US_OR_LTD_SLOT: PayrollStatutoryRateSlot = {
   ],
 };
 
+/**
+ * Vermont Child Care Contribution employee-share election, per employer.
+ *
+ * The 0.44% levy itself is pack-published, but the employee's share of it is
+ * the employer's own election: up to 25% (0.11%), or nothing (the statutory
+ * default — the employer pays all). No Department publication carries an
+ * individual employer's election, so the employer enters it here. Absent
+ * means employer-pays-all, which prices no employee line rather than
+ * refusing: `whenUnconfigured: "zero"`, and the dispatch skips the levy.
+ */
+const US_VT_CCCE_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_vt_ccce",
+  label: "Vermont Child Care Contribution employee share",
+  scope: "sub_region",
+  systemKeys: ["vt_child_care_contribution_employee"],
+  regions: ["VT"],
+  whenUnconfigured: "zero",
+  citation:
+    "Vermont Department of Taxes, Child Care Contribution: employers may withhold a maximum of "
+    + "25% of the required 0.44% contribution (0.11%) from employee wages (Form WHT-436 instructions)",
+  variesBecause:
+    "Each employer elects its own employee share (or none) for its own workforce. No publication "
+    + "carries that election, so a release-carried figure would withhold one employer's choice from "
+    + "another employer's people.",
+  fields: [
+    {
+      key: "rate", label: "Employee share of the contribution", kind: "rate", decimals: 6,
+      min: "0", max: "0.0011", required: false,
+      help: "As a decimal: 0.0011 withholds the 25% maximum (0.11%) from employee wages. Leave it "
+        + "empty and the employer pays the whole 0.44% levy with no employee withholding.",
+    },
+  ],
+};
+
 export const US_LOCAL_RATE_SLOTS: readonly PayrollStatutoryRateSlot[] = [
   US_OH_MUNICIPAL_SLOT,
   US_MI_CITY_SLOT,
   US_OR_TRIMET_SLOT,
   US_OR_LTD_SLOT,
+  US_VT_CCCE_SLOT,
 ];
