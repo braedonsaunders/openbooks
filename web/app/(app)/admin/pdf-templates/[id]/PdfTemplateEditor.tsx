@@ -218,7 +218,7 @@ export default function PdfTemplateEditor({
   )
 
   return (
-    <div className="flex h-[calc(100vh-6.5rem)] min-h-[540px] flex-col gap-3">
+    <div className="flex h-[calc(100vh-6.5rem)] min-h-[540px] flex-col gap-3" inert={busy}>
       {/* ---- Top bar ---- */}
       <div className="flex flex-wrap items-center gap-2">
         <Link
