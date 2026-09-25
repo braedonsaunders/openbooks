@@ -370,10 +370,19 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
         } else if (duplicateRows.has(index)) {
           refusedRows.add(index)
           outcome.failed++
+          // Name every row sharing this key (I5-platform-149): the operator
+          // sees all copies to delete, not just the one being refused.
+          // (Null keys never match: only rows in duplicateRows reach here,
+          // and duplicateImportRowIndexes skips nulls.)
+          const key = resolvedKeys[index]!
+          const rowsForKey = resolvedKeys
+            .map((other, otherIndex) => (other === key ? otherIndex + 1 : -1))
+            .filter((rowNo) => rowNo > 0)
+            .join(', ')
           outcome.errors.push({
             row: index + 1,
             field: 'employee',
-            message: 'this register and employee appear more than once in this load — keep one row per register and employee',
+            message: `this register and employee appear more than once in this load (rows ${rowsForKey}) — keep one row per register and employee`,
           })
         }
       }
