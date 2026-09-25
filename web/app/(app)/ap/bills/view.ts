@@ -19,7 +19,7 @@ import { loadDocument } from "../../../../../engine/src/ledger/document-service.
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
-import { pickString } from '../../../../lib/list-params'
+import { isUuid, pickString } from '../../../../lib/list-params'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 
 /**
@@ -100,7 +100,10 @@ export async function loadApBills(
     isFeatureEnabled(authz.user.orgId, 'equipment'),
   ])
   const t = await getTranslations('ap')
-  const docId = typeof sp.doc === 'string' ? sp.doc : undefined
+  const rawDocId = typeof sp.doc === 'string' ? sp.doc : undefined
+  // Only a real document id (or 'new') reaches the loader: a malformed
+  // ?doc= must never bind to a uuid column and render a 500.
+  const docId = rawDocId === 'new' || (typeof rawDocId === 'string' && isUuid(rawDocId)) ? rawDocId : undefined
 
   const newItems = [
     { kind: 'vendor_bill', label: t('actions.newBill') },

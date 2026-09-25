@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { pickString } from '../../../../lib/list-params'
+import { isUuid, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { BANK_KINDS, DOC_KINDS, createPermission, isDocumentCreateKind, postPermission } from "../../../../lib/document-kinds.ts";
@@ -122,7 +122,10 @@ export async function loadBankingTransactions(
   const basePath = '/banking/transactions'
 
   // -- open document drawer (?doc=<id>) -------------------------------------
-  const docId = typeof sp.doc === 'string' ? sp.doc : undefined
+  const rawDocId = typeof sp.doc === 'string' ? sp.doc : undefined
+  // Only a real document id (or 'new') reaches the loader: a malformed
+  // ?doc= must never bind to a uuid column and render a 500.
+  const docId = rawDocId === 'new' || (typeof rawDocId === 'string' && isUuid(rawDocId)) ? rawDocId : undefined
   // Resolve tenant, kind and subsidiary before loading lines or other
   // disclosure-bearing document fields.
   const docSummary = docId && docId !== 'new'
