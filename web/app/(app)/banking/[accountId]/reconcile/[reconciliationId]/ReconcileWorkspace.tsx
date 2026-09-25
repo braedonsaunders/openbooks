@@ -30,6 +30,7 @@ import { SortTh } from '../../../../../../components/sortable-th'
 import { confirmDialog } from '../../../../../../lib/confirm'
 import { isZeroAmount } from './DifferenceBadge'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
+import { useDirtyClose } from '../../../../../../lib/use-dirty-close'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type Search = Record<string, string | string[] | undefined>
@@ -158,6 +159,16 @@ function ReconcileWorkspaceForId({
   const [statementBalance, setStatementBalance] = useState(() =>
     reconciliation.statementBalance,
   )
+  const closeAdjust = () => {
+    setAdjustOpen(false)
+    setThroughDate(reconciliation.throughDate)
+    setStatementBalance(reconciliation.statementBalance)
+  }
+  const adjustCloseGuard = useDirtyClose({
+    dirty: throughDate !== reconciliation.throughDate || statementBalance !== reconciliation.statementBalance,
+    busy, onClose: closeAdjust,
+    message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   const signedOff = reconciliation.status === 'signed_off'
   const zero = isZeroAmount(difference)
@@ -499,13 +510,13 @@ function ReconcileWorkspaceForId({
       {/* -------- adjust drawer -------- */}
       <Drawer
         open={adjustOpen}
-        onClose={() => setAdjustOpen(false)}
+        onClose={adjustCloseGuard.close}
         size="sm"
         title={t('adjustTitle')}
         description={t('adjustDescription')}
         headerActions={
           <>
-            <Button variant="outline" onClick={() => setAdjustOpen(false)}>
+            <Button variant="outline" disabled={busy} onClick={adjustCloseGuard.close}>
               {tCommon('actions.cancel')}
             </Button>
             <Button disabled={busy || !throughDate || canonicalDecimal(statementBalance, 4) === null} onClick={saveAdjust}>
@@ -517,12 +528,13 @@ function ReconcileWorkspaceForId({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor={adjustThroughDateId}>{tBanking('labels.reconcileThrough')}</Label>
-            <Input id={adjustThroughDateId} type="date" value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
+            <Input id={adjustThroughDateId} type="date" disabled={busy} value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={adjustStatementBalanceId}>{tBanking('labels.statementBalance')}</Label>
             <Input
               id={adjustStatementBalanceId}
+              disabled={busy}
               inputMode="decimal"
               value={statementBalance}
               onChange={(e) => setStatementBalance(e.target.value)}
