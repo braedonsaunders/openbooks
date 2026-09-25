@@ -263,6 +263,106 @@ export const payComponentEarningClassifications = pgTable(
   ],
 );
 
+/** Effective-dated, employer-authored ROE Block 17 classification per earning component. */
+export const payrollRoeComponentClassifications = pgTable(
+  "payroll_roe_component_classifications",
+  {
+    id: id(),
+    orgId: orgRef(),
+    payComponentId: uuid("pay_component_id").notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    block: text("block", { enum: ["none", "17A", "17C"] }).notNull(),
+    categoryCode: text("category_code"),
+    changeReason: text("change_reason").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    foreignKey({
+      name: "payroll_roe_component_classifications_component_fkey",
+      columns: [t.orgId, t.payComponentId],
+      foreignColumns: [payComponents.orgId, payComponents.id],
+    }).onDelete("restrict"),
+    check("payroll_roe_component_classifications_window",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check("payroll_roe_component_classifications_code",
+      sql`(${t.block} = 'none' and ${t.categoryCode} is null)
+        or (${t.block} = '17A' and ${t.categoryCode} in ('1', '2', '3', '4'))
+        or (${t.block} = '17C' and ${t.categoryCode} ~ '^[A-Z][0-9]{2}$')`),
+    check("payroll_roe_component_classifications_reason", sql`length(btrim(${t.changeReason})) > 0`),
+    index("payroll_roe_component_classifications_component_date").on(t.orgId, t.payComponentId, t.effectiveFrom),
+    // The migration owns the GIST exclusion constraint that prevents overlapping
+    // daterange(effective_from, effective_to, '[]') windows per component.
+  ],
+);
+
+/** Audited interruption-of-earnings facts and Block 11 salary-continuance end. */
+export const payrollRoeSeparationEvents = pgTable(
+  "payroll_roe_separation_events",
+  {
+    id: id(),
+    orgId: orgRef(),
+    employeePartyId: uuid("employee_party_id").notNull(),
+    interruptionOn: date("interruption_on").notNull(),
+    lastInsurableEarningsOn: date("last_insurable_earnings_on").notNull(),
+    salaryContinuanceEndOn: date("salary_continuance_end_on"),
+    status: text("status", { enum: ["draft", "confirmed", "issued", "cancelled"] }).notNull().default("draft"),
+    changeReason: text("change_reason").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    foreignKey({
+      name: "payroll_roe_separation_events_employee_fkey",
+      columns: [t.orgId, t.employeePartyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }).onDelete("restrict"),
+    check("payroll_roe_separation_events_dates",
+      sql`${t.lastInsurableEarningsOn} <= ${t.interruptionOn}
+        and (${t.salaryContinuanceEndOn} is null or (${t.salaryContinuanceEndOn} >= ${t.lastInsurableEarningsOn}
+          and ${t.salaryContinuanceEndOn} <= ${t.interruptionOn}))`),
+    check("payroll_roe_separation_events_status",
+      sql`${t.status} in ('draft', 'confirmed', 'issued', 'cancelled')`),
+    check("payroll_roe_separation_events_reason", sql`length(btrim(${t.changeReason})) > 0`),
+    uniqueIndex("payroll_roe_separation_events_org_id_unique").on(t.orgId, t.id),
+    uniqueIndex("payroll_roe_separation_events_one_open_per_employee")
+      .on(t.orgId, t.employeePartyId)
+      .where(sql`${t.status} in ('draft', 'confirmed')`),
+    index("payroll_roe_separation_events_employee_date").on(t.orgId, t.employeePartyId, t.interruptionOn),
+  ],
+);
+
+/** Paid and declared future separation amounts attached to a single ROE event. */
+export const payrollRoeSeparationPayments = pgTable(
+  "payroll_roe_separation_payments",
+  {
+    id: id(),
+    orgId: orgRef(),
+    separationEventId: uuid("separation_event_id").notNull(),
+    payComponentId: uuid("pay_component_id").notNull(),
+    amount: numeric("amount", { precision: 19, scale: 4 }).notNull(),
+    paymentStatus: text("payment_status", { enum: ["paid", "will_pay"] }).notNull(),
+    expectedPaymentOn: date("expected_payment_on").notNull(),
+    changeReason: text("change_reason").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    foreignKey({
+      name: "payroll_roe_separation_payments_event_fkey",
+      columns: [t.orgId, t.separationEventId],
+      foreignColumns: [payrollRoeSeparationEvents.orgId, payrollRoeSeparationEvents.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "payroll_roe_separation_payments_component_fkey",
+      columns: [t.orgId, t.payComponentId],
+      foreignColumns: [payComponents.orgId, payComponents.id],
+    }).onDelete("restrict"),
+    check("payroll_roe_separation_payments_amount", sql`${t.amount} >= 0`),
+    check("payroll_roe_separation_payments_status", sql`${t.paymentStatus} in ('paid', 'will_pay')`),
+    check("payroll_roe_separation_payments_reason", sql`length(btrim(${t.changeReason})) > 0`),
+    index("payroll_roe_separation_payments_event").on(t.orgId, t.separationEventId, t.expectedPaymentOn),
+  ],
+);
+
 /** Per-employee payroll facts: TD1/W-4 claims, jurisdiction, schedule, exemptions. */
 export const employeePayrollProfiles = pgTable(
   "employee_payroll_profiles",
