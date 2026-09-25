@@ -641,8 +641,9 @@ function DimensionSelect({ label, value, options, allLabel, allowEmpty = true, o
 
 function BudgetMoreActions({ scenario, canManage, canApprove, canExport, busy, onAction, onDelete }: { scenario: BudgetWorkspace['scenario']; canManage: boolean; canApprove: boolean; canExport: boolean; busy: boolean; onAction: (action: string) => Promise<void>; onDelete: () => Promise<void> }) {
   const t = useTranslations('budgets')
+  const tc = useTranslations('common')
   const [open, setOpen] = useState(false)
-  return <Popover open={open} onOpenChange={setOpen} align="end" className="w-56 p-1" trigger={<Button variant="outline" size="sm" aria-label={t('actions.copy')} onClick={() => setOpen((value) => !value)}><MoreHorizontal size={16} /></Button>}>
+  return <Popover open={open} onOpenChange={setOpen} align="end" className="w-56 p-1" trigger={<Button variant="outline" size="sm" aria-label={tc('actions.more')} aria-expanded={open} onClick={() => setOpen((value) => !value)}><MoreHorizontal size={16} /></Button>}>
     <div className="grid gap-1">
       {canManage ? <Button variant="ghost" size="sm" className="justify-start" disabled={busy} onClick={() => void onAction('copy')}>{t('actions.copy')}</Button> : null}
       {canExport ? <><Button variant="ghost" size="sm" className="justify-start" asChild><a href={`/api/budgets/${scenario.id}/export?format=xlsx`}><Download size={15} />{t('actions.exportXlsx')}</a></Button><Button variant="ghost" size="sm" className="justify-start" asChild><a href={`/api/budgets/${scenario.id}/export?format=csv`}><Download size={15} />{t('actions.exportCsv')}</a></Button></> : null}
