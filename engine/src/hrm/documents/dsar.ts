@@ -8,8 +8,11 @@ import {
   requirePartyInScope,
 } from "../authorization.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { subsidiaryVisibleFilter, withScopeSnapshot } from "../../organization/subsidiary-scope.ts";
 import { HrmDocumentsError } from "./errors.ts";
+import { HRM_FEATURE_KEY } from "../employment-read.ts";
+import { HRM_DOCUMENTS_FEATURE_KEY } from "./documents.ts";
 import { storeCabinetFile } from "./cabinet.ts";
 import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
 import { decryptRespondentLink } from "../../hrm/surveys/responses.ts";
@@ -306,6 +309,37 @@ async function claimSpecificExport(
   return rows.length > 0;
 }
 
+/**
+ * Feature fence for the export worker and the download service. The API
+ * routes gate on these flags, but a disable between request and build (or
+ * between build and download) must stop the worker inside its own
+ * transaction — the org row lock serializes against the disable, so a
+ * build can never assemble a subject's whole data zip for a switched-off
+ * feature. Existing export rows are preserved, only gated until re-enable.
+ */
+export const HRM_DATA_SUBJECT_EXPORT_FEATURE_KEY = "hrmDataSubjectExport";
+
+async function assertDataSubjectExportFeature(exec: SqlExecutor, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
+    throw new HrmDocumentsError(
+      "REFUSED",
+      "exports are unavailable while the hrm feature is off — enable it under Company Settings → Features; existing exports are preserved",
+    );
+  }
+  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_DOCUMENTS_FEATURE_KEY))) {
+    throw new HrmDocumentsError(
+      "REFUSED",
+      "exports are unavailable while the hrmDocuments feature is off — enable it under Company Settings → Features; existing exports are preserved",
+    );
+  }
+  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_DATA_SUBJECT_EXPORT_FEATURE_KEY))) {
+    throw new HrmDocumentsError(
+      "REFUSED",
+      "exports are unavailable while the hrmDataSubjectExport feature is off — enable it under Company Settings → Features; existing exports are preserved",
+    );
+  }
+}
+
 async function failExport(
   exec: SqlExecutor,
   orgId: string,
@@ -378,6 +412,10 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     // anything else here means the claim moved on without us — walk away
     // rather than building over whoever holds it now.
     if (row.status !== "building" || row.claimed_by !== owner) return;
+    // A disable between request and build must fail the build inside this
+    // transaction rather than assemble the zip anyway; the catch below
+    // records the refusal on the row instead of throwing to the worker.
+    await assertDataSubjectExportFeature(db, orgId);
     const partyId = row.party_id;
     const requesterId = row.requested_by;
     const included: { module: string; status: string; detail?: string }[] = [];
@@ -1282,6 +1320,10 @@ export async function downloadExport(query: {
   exportId: string;
 }): Promise<{ bytes: Buffer; filename: string }> {
   return withOrgTransaction(query.orgId, async () => {
+    // Same disable race as the build: the route gates, but a direct caller
+    // must not download a subject's whole data zip for a switched-off
+    // feature. The org row lock serializes against the disable.
+    await assertDataSubjectExportFeature(db, query.orgId);
     const row = (await db.execute<ExportRow>(sql`
       ${EXPORT_COLS} where org_id = ${query.orgId} and id = ${query.exportId}
     `)).rows[0];
