@@ -22,7 +22,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toUnits } from "../../money/money.ts";
+import { add, toUnits } from "../../money/money.ts";
 import {
   calculateGbNic,
   calculateGbPaye,
@@ -157,8 +157,8 @@ test("hand-worked: full 2026/27 on £27,000 S1257L telescopes to £2,844.33", ()
     // telescopes to the annual £2,844.33 (Tn £14,420 at starter/basic).
     if (index === 0) assert.equal(result.tax, "236.8900");
     total += BigInt(result.tax.replace(".", ""));
-    priorTaxable = `${(Number(priorTaxable) + 2250).toFixed(4)}`;
-    priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
+    priorTaxable = add(priorTaxable, "2250");
+    priorPaid = add(priorPaid, result.tax);
   });
   assert.equal(total, 284_433_00n);
 });
