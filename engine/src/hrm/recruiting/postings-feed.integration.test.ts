@@ -80,6 +80,15 @@ test("public feed lists published postings with no ambient org scope", async () 
     assert.equal(jobs.length, 1, "the public feed serves the published posting under deny-by-default RLS");
     assert.equal(jobs[0]!.postingId, posting.id);
     assert.equal(jobs[0]!.title, "Backend engineer");
+    // I3-people-102: switching the job board off must stop the feed.
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmJobBoards}', 'false'::jsonb, true)
+       where id = ${org.orgId}`);
+    await assert.rejects(
+      orgContext.run({ orgId: null, bypass: false }, () => listFeedPostings(resolved)),
+      /Job boards is off/,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
