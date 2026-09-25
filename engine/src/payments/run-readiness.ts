@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
+import { lockScopeRows } from "../organization/subsidiary-scope.ts";
 import { evaluateBillsForRelease, recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { decryptAccountNumber, isValidBic, isValidIban, loadEftSettings, type EftSettings, type EftSettingsResult } from "./rail-settings.ts";
@@ -187,6 +188,7 @@ export async function lockRunBankEvidence(
   method: RailBankMethod,
   runId: string,
   orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<Array<{ id: string; amount: string; payee: string; documentNumber: string | null; detail: Extract<RailBankDetail, { ok: true }> }>> {
   return withOrgTransaction(orgId, async () => {
     const instructions = (await db.execute<{
@@ -194,11 +196,12 @@ export async function lockRunBankEvidence(
         amount: string;
         currency: string;
         payee: string;
+        payee_party_id: string;
         payee_bank_account_id: string | null;
         document_number: string | null;
       }>(sql`
       select i.id, i.amount, i.currency, p.display_name as payee,
-             i.payee_bank_account_id, d.document_number
+             i.payee_party_id, i.payee_bank_account_id, d.document_number
         from payment_instructions i
         join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
         left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
@@ -206,6 +209,17 @@ export async function lockRunBankEvidence(
        order by p.display_name, i.id
     `));
     if (instructions.rows.length === 0) throw new PaymentError("run has no payable instructions");
+    // Locking party_bank_accounts does not block a party rehome: the scope
+    // owner is the party row. Hold every payee party through evidence
+    // rendering so a rehome racing generation either waits behind this
+    // snapshot or committed first (and then fails the scope check below).
+    await lockScopeRows(
+      db,
+      orgId,
+      [...new Set(instructions.rows.map((r) => r.payee_party_id))].map((id) => ({ kind: "party" as const, id })),
+      allowedSubsidiaryIds ?? null,
+      "share",
+    );
 
     // Deterministic lock acquisition (single statement) keeps concurrent
     // exports of one run from deadlocking each other.
@@ -259,6 +273,51 @@ export async function lockRunBankEvidence(
     }
     return evidence;
   });
+}
+
+/**
+ * Hold every payee party row for a render that does not go through
+ * lockRunBankEvidence (registers, debit rails, custom formatters): the
+ * payment rows were read before this check, so no post-check party read can
+ * disclose a rehome that commits later — and a rehome that already committed
+ * fails the scope check under the lock. A scoped caller outside its payees
+ * fails uniformly; unrestricted callers (null scope) only take the locks.
+ */
+export async function assertPaymentPartiesInScope(
+  orgId: string,
+  partyIds: readonly string[],
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<void> {
+  const unique = [...new Set(partyIds)];
+  if (unique.length === 0) return;
+  return withOrgTransaction(orgId, async () => {
+    await lockScopeRows(
+      db,
+      orgId,
+      unique.map((id) => ({ kind: "party" as const, id })),
+      allowedSubsidiaryIds ?? null,
+      "share",
+    );
+  });
+}
+
+/**
+ * Same party-scope gate for artifact re-downloads: the stored bytes are a
+ * point-in-time artifact, but serving them re-discloses the payees' current
+ * bank coordinates, so a payee rehomed out of the caller's scope refuses
+ * exactly like generation.
+ */
+export async function assertRunPayeesInScope(
+  orgId: string,
+  runId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<void> {
+  const rows = (await db.execute<{ payee_party_id: string }>(sql`
+    select distinct i.payee_party_id
+      from payment_instructions i
+     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
+  `)).rows;
+  await assertPaymentPartiesInScope(orgId, rows.map((r) => r.payee_party_id), allowedSubsidiaryIds);
 }
 
 /**

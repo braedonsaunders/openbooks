@@ -29,6 +29,7 @@ import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
  */
 export interface RunFileOptions {
   fileCreatedAt?: Date;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }
 
 /**
@@ -53,6 +54,7 @@ export async function loadCpa005RunFile(
   orgId: string,
   opts?: RunFileOptions,
 ): Promise<{ filename: string; content: string; runNumber: string }> {
+  const allowedSubsidiaryIds = opts?.allowedSubsidiaryIds;
   await assertNotSandbox(orgId, "generate EFT payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
@@ -75,7 +77,7 @@ export async function loadCpa005RunFile(
   // effects (compliance release checks); the file itself is built ONLY from
   // evidence locked and re-validated atomically here, so an edit landing
   // between the two stages can never steer the file.
-  const evidence = await lockRunBankEvidence("eft", runId, orgId);
+  const evidence = await lockRunBankEvidence("eft", runId, orgId, allowedSubsidiaryIds);
 
   const today = await businessToday(orgId);
   // The pay date is already a civil day (scheduled-for or the org's today) —
@@ -125,6 +127,7 @@ export async function loadNachaRunFile(
   orgId: string,
   opts?: RunFileOptions,
 ): Promise<{ filename: string; content: string; runNumber: string }> {
+  const allowedSubsidiaryIds = opts?.allowedSubsidiaryIds;
   await assertNotSandbox(orgId, "generate ACH payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
@@ -137,7 +140,7 @@ export async function loadNachaRunFile(
   // feeds the file: a concurrent maker edit either waits behind this snapshot
   // (the file carries the approved revision) or committed first (this
   // hard-blocks on its unapproved state). It can never steer the entry data.
-  const evidence = await lockRunBankEvidence("ach", runId, orgId);
+  const evidence = await lockRunBankEvidence("ach", runId, orgId, allowedSubsidiaryIds);
 
   const entries: NachaEntry[] = evidence.map((e) => {
     const units = toUnits(e.amount);
@@ -180,6 +183,7 @@ export async function loadSepaRunFile(
   orgId: string,
   opts?: RunFileOptions,
 ): Promise<{ filename: string; content: string; runNumber: string }> {
+  const allowedSubsidiaryIds = opts?.allowedSubsidiaryIds;
   await assertNotSandbox(orgId, "generate SEPA payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
@@ -191,7 +195,7 @@ export async function loadSepaRunFile(
   // Same locked-evidence mechanism as the ACH and EFT writers: the creditor
   // IBAN/BIC are resolved from bank rows that were approved and active at the
   // instant of export, or the export fails outright.
-  const evidence = await lockRunBankEvidence("sepa", runId, orgId);
+  const evidence = await lockRunBankEvidence("sepa", runId, orgId, allowedSubsidiaryIds);
 
   const payments = evidence.map((e) => ({
     endToEndId: e.documentNumber ?? e.id,

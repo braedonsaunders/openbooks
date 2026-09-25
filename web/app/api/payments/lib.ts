@@ -27,6 +27,11 @@ export function paymentErrorResponse(e: unknown): NextResponse {
   if (isMaskedFileContentError(e)) {
     return NextResponse.json({ error: (e as Error).message }, { status: 403 })
   }
+  // Scope denials are record denials: the uniform 404, never a 500 and never
+  // a message naming the hidden subsidiary.
+  if (e instanceof ScopeNotFoundError) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const status = e instanceof PaymentError || e instanceof PostingError ? 422 : 500
   return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
 }
