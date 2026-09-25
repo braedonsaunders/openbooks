@@ -46,10 +46,11 @@ export * from './banking-rules-core'
  * resolve null here so each caller keeps its own not-found contract; scope
  * denials always refuse the uniform not-found.
  */
-async function bankAccountSubsidiary(orgId: string, accountId: string): Promise<string | null | undefined> {
+async function bankAccountSubsidiary(orgId: string, accountId: string, lock = false): Promise<string | null | undefined> {
   const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from accounts
      where id = ${accountId} and org_id = ${orgId}
+     ${lock ? sql`for share` : sql``}
   `)).rows[0]
   return row?.subsidiaryId
 }
@@ -353,51 +354,58 @@ export async function previewRules(
     allowedSubsidiaryIds: ReadonlySet<string> | null
   } = { allowedSubsidiaryIds: null },
 ): Promise<PreviewResult> {
-  requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), opts.allowedSubsidiaryIds ?? null)
-  const windowDays = opts.windowDays ?? 90
-  const lines = await loadLines(orgId, accountId, opts.onlyUnmatched ? 'unmatched' : 'any', windowDays)
-  const saved = await loadActiveRules(orgId)
+  return withOrgTransaction(orgId, async () => {
+    // Keep the account's ownership stable while collecting its statement
+    // lines; account rehome takes an incompatible row lock.
+    requireBankAccountInScope(
+      await bankAccountSubsidiary(orgId, accountId, true),
+      opts.allowedSubsidiaryIds ?? null,
+    )
+    const windowDays = opts.windowDays ?? 90
+    const lines = await loadLines(orgId, accountId, opts.onlyUnmatched ? 'unmatched' : 'any', windowDays)
+    const saved = await loadActiveRules(orgId)
 
-  const matches: PreviewMatch[] = []
-  let conflicts = 0
+    const matches: PreviewMatch[] = []
+    let conflicts = 0
 
-  for (const line of lines) {
-    if (opts.draftRule) {
-      const applies = ruleAppliesToAccount(opts.draftRule.criteria, accountId)
-      if (!applies || !lineMatchesRule(line, opts.draftRule.criteria)) continue
-      // Would a higher-priority saved rule claim it first?
-      const draftPriority = opts.draftRule.priority ?? 100
-      const stealer = saved.find(
-        (r) =>
-          r.id !== opts.draftRule?.id &&
-          r.priority <= draftPriority &&
-          ruleAppliesToAccount(r.criteria, accountId) &&
-          lineMatchesRule(line, r.criteria),
-      )
-      if (stealer) conflicts++
-      matches.push({
-        ...toPreviewLine(line),
-        ruleId: opts.draftRule.id ?? null,
-        ruleName: null,
-        stolenBy: stealer?.name ?? null,
-        splitPreview: previewSplit(line, opts.draftRule.outcome),
-      })
-    } else {
-      const rule = firstMatchingRule(line, accountId, saved)
-      if (!rule) continue
-      matches.push({
-        ...toPreviewLine(line),
-        ruleId: rule.id,
-        ruleName: rule.name,
-        action: rule.outcome.action,
-        ruleMode: isCategorizeOutcome(rule.outcome) ? rule.outcome.mode : null,
-        splitPreview: previewSplit(line, rule.outcome),
-      })
+    for (const line of lines) {
+      if (opts.draftRule) {
+        const applies = ruleAppliesToAccount(opts.draftRule.criteria, accountId)
+        if (!applies || !lineMatchesRule(line, opts.draftRule.criteria)) continue
+        // Would a higher-priority saved rule claim it first?
+        const draftPriority = opts.draftRule.priority ?? 100
+        const stealer = saved.find(
+          (r) =>
+            r.id !== opts.draftRule?.id &&
+            r.priority <= draftPriority &&
+            ruleAppliesToAccount(r.criteria, accountId) &&
+            lineMatchesRule(line, r.criteria),
+        )
+        if (stealer) conflicts++
+        matches.push({
+          ...toPreviewLine(line),
+          ruleId: opts.draftRule.id ?? null,
+          ruleName: null,
+          stolenBy: stealer?.name ?? null,
+          splitPreview: previewSplit(line, opts.draftRule.outcome),
+        })
+      } else {
+        const rule = firstMatchingRule(line, accountId, saved)
+        if (!rule) continue
+        matches.push({
+          ...toPreviewLine(line),
+          ruleId: rule.id,
+          ruleName: rule.name,
+          action: rule.outcome.action,
+          ruleMode: isCategorizeOutcome(rule.outcome) ? rule.outcome.mode : null,
+          splitPreview: previewSplit(line, rule.outcome),
+        })
+      }
+      if (opts.limit && matches.length >= opts.limit) break
     }
-    if (opts.limit && matches.length >= opts.limit) break
-  }
 
-  return { scanned: lines.length, matched: matches.length, conflicts, matches }
+    return { scanned: lines.length, matched: matches.length, conflicts, matches }
+  })
 }
 
 function toPreviewLine(line: BankLine): Omit<PreviewMatch, 'ruleId' | 'ruleName'> {
