@@ -63,6 +63,9 @@ export async function PUT(req: Request) {
   const nextRunAt = enabled ? computeNextRunAt(shape, new Date()).toISOString() : null;
 
   await withOrgTransaction(orgId, async () => {
+    // Serialize absent-row creation as well as updates: FOR UPDATE alone has
+    // nothing to lock when this organization has not configured a policy yet.
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'backup-policy:' + orgId}, 0))`);
     const existing = (await db.execute<{
       enabled: boolean;
       frequency: string;
@@ -72,7 +75,7 @@ export async function PUT(req: Request) {
       max_keep: number;
     }>(sql`
     select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
-      from backup_policies where org_id = ${orgId}`));
+      from backup_policies where org_id = ${orgId} for update`));
     const before = existing.rows[0];
 
     await db.execute(sql`
@@ -93,7 +96,17 @@ export async function PUT(req: Request) {
         updated_by = excluded.updated_by
       where backup_policies.org_id = ${orgId}`);
 
-    const after = { enabled, frequency, hour_utc: hourUtc, day_of_week: dayOfWeek, day_of_month: dayOfMonth, max_keep: maxKeep };
+    const after = (await db.execute<{
+      enabled: boolean;
+      frequency: string;
+      hour_utc: number;
+      day_of_week: number;
+      day_of_month: number;
+      max_keep: number;
+    }>(sql`
+      select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
+        from backup_policies where org_id = ${orgId} for update`)).rows[0];
+    if (!after) throw new Error('backup policy upsert matched no row');
     const changes: Record<string, unknown> = { event: "backup_policy_updated" };
     const fields = [
       ["enabled", before?.enabled ?? null, after.enabled],
