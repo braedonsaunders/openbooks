@@ -102,3 +102,19 @@ test('setup import refuses a pay-component treatment the country pack does not d
       assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`)).rows.length,0);
     } finally {await dropScratchOrg(org.orgId);}
   });
+
+test('setup import refuses a filing account under a program type its pack does not declare',
+  {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+    const org=await createScratchOrg();
+    try {
+      const actorId=(await seedFlowActors(org.orgId)).adminId;
+      const resource=setupResource(SETUP_ENTITY_BY_KEY.get('payroll-filing-accounts')!,org.orgId);
+      // us_ein is shape-valid but the CA pack files only under ca_rp: the
+      // import must name the pack's program types, not store an unfillable account.
+      const rows=[{accountNumber:'CAUNDECL',name:'Undeclared program',country:'CA',programType:'us_ein'}];
+      const preview=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true});
+      assert.equal(preview.created,0);assert.equal(preview.failed,1);
+      assert.match(preview.errors[0]!.message,/does not file under program type/);
+      assert.equal((await db.execute(sql`select id from payroll_filing_accounts where org_id=${org.orgId}`)).rows.length,0);
+    } finally {await dropScratchOrg(org.orgId);}
+  });
