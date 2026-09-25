@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { unsealSecret } from "../../platform/secrets.ts";
 import { add } from "../../money/money.ts";
 import { assertPayrollCountryKnown } from "../country.ts";
 import {
@@ -129,6 +130,8 @@ export interface BrInformeRow {
   employeePartyId: string;
   employeeName: string;
   filingAccountId: string | null;
+  /** Unsealed CPF as stored on the payroll profile (null when never recorded). */
+  cpf: string | null;
   /** Dependent count on record (the profile column the monthly IRRF read). */
   dependentes: number | null;
   /** Quadro 3, Linha 1 — total taxable income paid in the year. */
@@ -187,10 +190,23 @@ export async function brInformeRows(orgId: string, taxYear: number): Promise<BrI
       + "on a statutory filing",
     );
   }
+  // No ANY($array): a bare JavaScript array interpolates as a row
+  // constructor, not a PostgreSQL array — filter in JS instead.
+  const wanted = new Set(rows.rows.map((row) => String(row.employee_party_id)));
+  const profiles = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
+    select employee_party_id, sin_encrypted from employee_payroll_profiles
+     where org_id = ${orgId}
+  `));
+  const cpfByEmployee = new Map(
+    profiles.rows
+      .filter((row) => wanted.has(String(row.employee_party_id)))
+      .map((row) => [String(row.employee_party_id), unsealSecret(row.sin_encrypted)]),
+  );
   return rows.rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     filingAccountId: (row.filing_account_id as string | null) ?? null,
+    cpf: cpfByEmployee.get(String(row.employee_party_id)) ?? null,
     dependentes: row.dependentes == null ? null : Number(row.dependentes),
     rendimentos: num(row.rendimentos),
     inss: num(row.inss),
@@ -264,12 +280,25 @@ export async function brInformeSlip(
   }
   const account = filingAccountRef(slip.filingAccountId, await filingAccountsById(orgId));
   const dependente = brDependenteValue(taxYear);
+  // Anexo I identifies the beneficiary by CPF: the sealed profile value,
+  // digits only (the pack accepts the dotted presentation as given, but the
+  // number is what the statement carries). A missing or malformed CPF
+  // refuses the slip — an unidentified Comprovante is a wrong one.
+  const cpfDigits = (slip.cpf ?? "").replace(/\D/g, "");
+  if (!/^\d{11}$/.test(cpfDigits)) {
+    throw new PayrollError(
+      `cannot furnish the ${taxYear} Comprovante de Rendimentos for ${slip.employeeName}: `
+      + `the beneficiary CPF is ${slip.cpf ? "invalid" : "missing"} — record or correct the 11-digit CPF `
+      + "on the employee payroll profile before furnishing (IN RFB nº 2.060/2021, Anexo I).",
+    );
+  }
   return {
     formCode: "BR_INFORME",
     formName: "Comprovante de Rendimentos Pagos e de Imposto sobre a Renda Retido na Fonte",
     formNumber: "IN RFB nº 2.060/2021 · Anexo I",
     headerFields: [
       { label: "Beneficiário", value: slip.employeeName },
+      { label: "CPF do beneficiário", value: cpfDigits },
       {
         label: "CNPJ do estabelecimento",
         value: account.accountNumber
@@ -303,9 +332,6 @@ export async function brInformeSlip(
       },
     ],
     notes: [
-      "The beneficiary's CPF (the Anexo I identification) is not printed — the pack holds no "
-      + "CPF column (its identifier declaration is a validation pattern for eSocial, not "
-      + "storage); complete it from the eSocial cadastro before furnishing.",
       "Each month was priced through the IRRF table in force for its pay month; the annual "
       + "figures add months, never reprice them.",
       "The dependent deduction (R$ 189,59 per dependent per month, Lei 9.250/1995 art. 4º) "
