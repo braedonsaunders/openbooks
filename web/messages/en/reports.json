@@ -73,7 +73,8 @@
     "currentYearEarnings": "Current year earnings",
     "translationAdjustment": "Cumulative translation adjustment",
     "ratesBlockedTitle": "Consolidated rates are not derived yet",
-    "ratesBlockedAction": "Derive rates in period close"
+    "ratesBlockedAction": "Derive rates in period close",
+    "currencyBasisBlockedTitle": "This view spans multiple currencies"
   },
   "saveView": {
     "namePrompt": "Name this view:",

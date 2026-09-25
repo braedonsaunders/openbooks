@@ -73,7 +73,8 @@
     "currentYearEarnings": "Resultado do exercício",
     "translationAdjustment": "Ajuste acumulado de conversão",
     "ratesBlockedTitle": "Taxas de câmbio consolidadas ainda não foram derivadas",
-    "ratesBlockedAction": "Derivar as taxas no fechamento do período"
+    "ratesBlockedAction": "Derivar as taxas no fechamento do período",
+    "currencyBasisBlockedTitle": "Esta visualização abrange várias moedas"
   },
   "saveView": {
     "namePrompt": "Nomeie esta visualização:",

@@ -35,6 +35,20 @@ export interface RatesBlockedNotice {
 }
 
 /**
+ * Multi-currency refusal (ReportCurrencyBasisError): the viewed set spans
+ * more than one functional currency, so no single-currency figure can be
+ * stated. The description carries the kernel message verbatim (it names the
+ * remedy: choose a single-currency subsidiary view). Unlike the rates
+ * refusal there is no derive link — the subsidiary picker beside the banner
+ * IS the remedy, so views rendering this must offer that choice.
+ */
+export interface CurrencyBasisNotice {
+  code: 'multi-currency-basis'
+  title: string
+  description: string
+}
+
+/**
  * Pure root-owned rule shared by every subsidiary-context consumer: the
  * viewed set reads null-subsidiary (root-owned) rows alongside attributed
  * rows exactly when the caller is unrestricted AND the viewed set contains

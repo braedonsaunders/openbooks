@@ -18,6 +18,8 @@ import {
   type BaseCurrencyNotice,
 } from '../../../../lib/reports/base-currency'
 import { orgInfo } from '../../../../lib/data'
+import { reportSubsidiaryView, type CurrencyBasisNotice } from '../../../../lib/consolidation'
+import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, REPORT_PARAM_KEYS, toSearchParams } from '../../../../lib/report-filters'
 import { orgBranding } from '../../../../lib/report-pdf'
@@ -75,6 +77,7 @@ export interface ProjectProfitabilityData {
   emptyLabel: string
   emptyHint: string
   currency: string
+  subsidiaries: unknown
   /**
    * Set exactly when the org has no base currency: the page renders the
    * named refusal (with the Company settings link) instead of numbers or
@@ -82,6 +85,11 @@ export interface ProjectProfitabilityData {
    * is data, not an exception. Mirrors the trial-balance ratesBlocked pair.
    */
   baseCurrencyNotice: BaseCurrencyNotice | null
+  /** Set when the viewed set spans more than one functional currency: the
+   * page renders the named refusal (whose remedy is the subsidiary picker
+   * beside it) instead of numbers or a generic error page. */
+  currencyBasisBlocked: CurrencyBasisNotice | null
+  /** False when either refusal is set; the table hides with either. */
   baseCurrencyReady: boolean
   columns: string[]
   groups: ProjectProfitabilityGroup[]
@@ -100,7 +108,12 @@ export async function loadProjectProfitability(
   const search = sp.q?.trim() || undefined
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
-  const dims = { ...q.dims, subsidiaryIds: authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds] }
+  // Legal-entity scope resolves through the subsidiary view — the same
+  // contract as the statement pages: a restricted reader's view resolves to
+  // the subsidiaries they may see, and the picker offers the
+  // single-currency choice a multi-currency viewed set refuses with.
+  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   // The base currency gates every money figure below: refuse before the
   // expensive report queries run, never after them, and never by throwing —
   // the app boundary renders a generic failure for exceptions.
@@ -125,6 +138,7 @@ export async function loadProjectProfitability(
       dateRange: { from: period.from, to: period.to },
       customers: [],
       dimensions: null,
+      subsidiaries: [],
       scheduleDefId: scheduleDefId ?? null,
       scheduleParams: scheduleParamsFrom(sp),
       exportParams: sp,
@@ -138,6 +152,7 @@ export async function loadProjectProfitability(
         description: t('baseCurrency.description'),
         actionLabel: t('baseCurrency.action'),
       }),
+      currencyBasisBlocked: null,
       baseCurrencyReady: false,
       columns: [],
       groups: [],
@@ -156,18 +171,31 @@ export async function loadProjectProfitability(
       },
     }
   }
-  const [result, opts, customers, branding] = await Promise.all([
-    projectProfitability(period.from, period.to, {
+  const optsPromise = dimensionOptions(authz.user.orgId, undefined, dims.subsidiaryIds)
+  const customersPromise = projectProfitabilityCustomerOptions(authz.user.orgId, authz.allowedSubsidiaryIds)
+  const brandingPromise = orgBranding(authz.user.orgId)
+  // A multi-currency viewed set is a NAMED refusal, not a defect: the
+  // banner carries the remedy (choose a single-currency subsidiary view)
+  // and the filter-bar picker beside it offers that choice.
+  let result: Awaited<ReturnType<typeof projectProfitability>> | null = null
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  try {
+    result = await projectProfitability(period.from, period.to, {
       dims,
       customerId: q.customerId,
       search,
       projectScope: q.projectScope,
       orgId: authz.user.orgId,
-    }),
-    dimensionOptions(authz.user.orgId, undefined, dims.subsidiaryIds),
-    projectProfitabilityCustomerOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
-    orgBranding(authz.user.orgId),
-  ])
+    })
+  } catch (e) {
+    if (!(e instanceof ReportCurrencyBasisError)) throw e
+    currencyBasisBlocked = {
+      code: 'multi-currency-basis',
+      title: t('statement.currencyBasisBlockedTitle'),
+      description: e.message,
+    }
+  }
+  const [opts, customers, branding] = await Promise.all([optsPromise, customersPromise, brandingPromise])
 
   // Each project drills into the P&L filtered on that project (period + basis +
   // other dims preserved). Link only the project-name cell.
@@ -221,7 +249,9 @@ export async function loadProjectProfitability(
     margin: null,
     hours: null,
   }
-  const groups: ProjectProfitabilityGroup[] = result.customers.map((customer) => {
+  // Null exactly when the multi-currency refusal is set; the table hides
+  // with it, so these read as the same empty shape the refused path uses.
+  const groups: ProjectProfitabilityGroup[] = (result?.customers ?? []).map((customer) => {
     if (isUnassignedProjectGroup(customer)) {
       const name = t('projectProfitability.unassignedProject')
       return {
@@ -283,6 +313,7 @@ export async function loadProjectProfitability(
     dateRange: { from: period.from, to: period.to },
     customers,
     dimensions: opts,
+    subsidiaries: subView?.picker ?? [],
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
@@ -292,7 +323,8 @@ export async function loadProjectProfitability(
     emptyHint: t('projectProfitability.emptyHint', { period: t('pnl.dateRange', { from: period.from, to: period.to }) }),
     currency: org.base_currency,
     baseCurrencyNotice: null,
-    baseCurrencyReady: true,
+    currencyBasisBlocked,
+    baseCurrencyReady: currencyBasisBlocked === null,
     columns: [
       t('projectProfitability.columns.customerJob'),
       t('projectProfitability.columns.revenue'),
@@ -305,7 +337,9 @@ export async function loadProjectProfitability(
     ],
     groups,
     totalLabel,
-    totals: result.totals,
+    // Dead when refused (the table hides with the notice) but typed: the
+    // refusal is the rendered state, never an exception.
+    totals: result?.totals ?? { revenue: '0', cogs: '0', grossProfit: '0', expenses: '0', net: '0', margin: null, hours: 0 },
     totalDrills: profitDrills(totalLabel, { customerId: q.customerId, search }),
   }
 }
@@ -335,12 +369,13 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
       // `customers` binds on both bars already; the dropdown itself needs
       {
         ...filterBar(
-          { search: true, dateRange: true, customer: true, dimensions: true, sections: true },
+          { search: true, dateRange: true, customer: true, dimensions: true, subsidiary: true, sections: true },
           {
             searchPlaceholder: f('searchPlaceholder'),
             primaryFilter: f('primaryFilter'),
             customers: f('customers'),
             dimensions: f('dimensions'),
+            subsidiaries: f('subsidiaries'),
             dateRange: f('dateRange'),
             actions,
           },
@@ -349,12 +384,13 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
       },
       {
         ...filterBar(
-          { search: true, dateRange: true, customer: true, dimensions: true },
+          { search: true, dateRange: true, customer: true, dimensions: true, subsidiary: true },
           {
             searchPlaceholder: f('searchPlaceholder'),
             primaryFilter: f('primaryFilter'),
             customers: f('customers'),
             dimensions: f('dimensions'),
+            subsidiaries: f('subsidiaries'),
             dateRange: f('dateRange'),
             actions,
           },
@@ -380,6 +416,20 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
                 },
               }),
               when: f('baseCurrencyNotice'),
+            },
+          ]
+        : []),
+      // The multi-currency refusal renders without an action: the remedy is
+      // the subsidiary picker in the filter bar above, not a link. Included
+      // only while refused so healthy specs carry no dead empty-state node.
+      ...(data.currencyBasisBlocked
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.currencyBasisBlocked?.title ?? '',
+                description: data.currencyBasisBlocked?.description,
+              }),
+              when: f('currencyBasisBlocked'),
             },
           ]
         : []),

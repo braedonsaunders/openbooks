@@ -29,6 +29,8 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { partnerStatement, type AgingSide } from '../../../../../lib/reports'
+import { reportSubsidiaryView, type CurrencyBasisNotice } from '../../../../../lib/consolidation'
+import { ReportCurrencyBasisError } from '../../../../../lib/reports/currency-basis'
 import { orgInfo } from '../../../../../lib/data'
 import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../../lib/report-filters'
@@ -102,7 +104,16 @@ export interface StatementData {
   columnBalance: string
   lines: StatementLine[]
   exportParams: Record<string, string>
+  subsidiaries: SubsidiaryPicker
+  /** Set when the viewed set spans more than one functional currency: the
+   * page renders the named refusal (whose remedy is the subsidiary picker
+   * beside it) instead of numbers or a generic error page. */
+  currencyBasisBlocked: CurrencyBasisNotice | null
+  /** False exactly when the multi-currency refusal is set. */
+  currencyBasisReady: boolean
 }
+
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
 
 export async function loadStatement(
   partyId: string,
@@ -120,20 +131,38 @@ export async function loadStatement(
   const { books, selectedBook } = await reportBookSelection(authz.user.orgId, sp.book)
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-  const [st, org] = await Promise.all([
-    partnerStatement(partyId, authz.user.orgId, {
+  // Legal-entity scope resolves through the subsidiary view — the same
+  // contract as the statement pages: a restricted reader's view resolves to
+  // the subsidiaries they may see, and the picker offers the
+  // single-currency choice a multi-currency viewed set refuses with.
+  const orgPromise = orgInfo()
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let st: Awaited<ReturnType<typeof partnerStatement>> | null = null
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    st = await partnerStatement(partyId, authz.user.orgId, {
       bookId: selectedBook.id,
       from: period.from,
       to: period.to,
       side,
       dims: {
-        subsidiaryIds:
-          authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds],
+        subsidiaryIds: subView.subsidiary?.ids,
       },
       canSeePayroll: can(authz, 'payroll.read'),
-    }),
-    orgInfo(),
-  ])
+    })
+  } catch (e) {
+    // A multi-currency viewed set is a NAMED refusal, not a defect: the
+    // banner carries the remedy (choose a single-currency subsidiary view)
+    // and the filter-bar picker beside it offers that choice.
+    if (!(e instanceof ReportCurrencyBasisError)) throw e
+    currencyBasisBlocked = {
+      code: 'multi-currency-basis',
+      title: t('statement.currencyBasisBlockedTitle'),
+      description: e.message,
+    }
+  }
+  const org = await orgPromise
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
   const keepParams = toSearchParams(q)
   keepParams.set('book', selectedBook.id)
@@ -142,7 +171,9 @@ export async function loadStatement(
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
   const openingDate = openingTo.toISOString().slice(0, 10)
-  const name = st.party.name ?? t('statements.title')
+  // Null exactly when the multi-currency refusal is set; the paper hides
+  // with it, so these read as zeros that never render.
+  const name = st?.party.name ?? t('statements.title')
   const openingLabel = t('statements.opening')
   const closingLabel = t('statements.closing')
 
@@ -171,7 +202,7 @@ export async function loadStatement(
     agingCells: BUCKETS.map((b) => ({
       key: b,
       label: bucketLabels[b],
-      value: m(st.aging[b]),
+      value: m(st?.aging[b] ?? '0.0000'),
       drill: {
         kind: 'aging',
         label: `${name} · ${bucketLabels[b]}`,
@@ -183,10 +214,10 @@ export async function loadStatement(
     })),
     agingAsOfLabel: t('statements.agingAsOf', { date: period.to }),
     agingTotalLabel: t('aging.columns.total'),
-    agingTotal: m(st.aging.total),
+    agingTotal: m(st?.aging.total ?? '0.0000'),
     agingTotalDrill: { kind: 'aging', label: name, side, asOf: period.to, partyId },
     openingLabel,
-    opening: m(st.opening),
+    opening: m(st?.opening ?? '0.0000'),
     openingDrill: {
       kind: 'ledger', bookId: selectedBook.id,
       label: openingLabel,
@@ -196,8 +227,8 @@ export async function loadStatement(
       mode: 'balance',
     },
     closingLabel,
-    closing: m(st.closing),
-    closingTone: decimalCmp(st.closing, '0') < 0 ? 'negative' : 'default',
+    closing: m(st?.closing ?? '0.0000'),
+    closingTone: decimalCmp(st?.closing ?? '0.0000', '0') < 0 ? 'negative' : 'default',
     closingDrill: {
       kind: 'ledger', bookId: selectedBook.id,
       label: closingLabel,
@@ -212,7 +243,7 @@ export async function loadStatement(
     columnDebits: t('trialBalance.columns.debits'),
     columnCredits: t('trialBalance.columns.credits'),
     columnBalance: tc('labels.balance'),
-    lines: st.lines.map((l, i) => ({
+    lines: (st?.lines ?? []).map((l, i) => ({
       key: `${l.entryId}-${i}`,
       date: l.date,
       entryId: l.entryId,
@@ -228,6 +259,9 @@ export async function loadStatement(
     })),
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     exportParams: { ...stringParams(sp), party: partyId, side },
+    subsidiaries: subView?.picker ?? [],
+    currencyBasisBlocked,
+    currencyBasisReady: currencyBasisBlocked === null,
   }
 }
 
@@ -277,8 +311,9 @@ export function statementSpec(data: StatementData): PageSpec {
     header: [
       pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),
       filterBar(
-        { period: true },
+        { period: true, subsidiary: true },
         {
+          subsidiaries: f('subsidiaries'),
           leading: {
             ...toggleLinks([
               { href: f('receivablesHref'), label: f('receivablesLabel'), activeWhen: f('isReceivable') },
@@ -295,11 +330,25 @@ export function statementSpec(data: StatementData): PageSpec {
       ),
     ],
     body: [
+      // The multi-currency refusal renders without an action: the remedy is
+      // the subsidiary picker in the filter bar above, not a link.
+      ...(data.currencyBasisBlocked
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.currencyBasisBlocked?.title ?? '',
+                description: data.currencyBasisBlocked?.description,
+              }),
+              when: f('currencyBasisBlocked'),
+            },
+          ]
+        : []),
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         wide: true,
+        when: f('currencyBasisReady'),
         blocks: [
           widgetBlock('aging-strip', {
             cells: data.agingCells,

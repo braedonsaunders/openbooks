@@ -73,7 +73,8 @@
     "currentYearEarnings": "当期純利益",
     "translationAdjustment": "累積換算調整額",
     "ratesBlockedTitle": "連結為替レートはまだ導出されていません",
-    "ratesBlockedAction": "決算でレートを導出する"
+    "ratesBlockedAction": "決算でレートを導出する",
+    "currencyBasisBlockedTitle": "このビューには複数の通貨が含まれています"
   },
   "saveView": {
     "namePrompt": "このビューに名前を付けてください：",

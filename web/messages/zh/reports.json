@@ -73,7 +73,8 @@
     "currentYearEarnings": "本年净利润",
     "translationAdjustment": "累计外币折算调整",
     "ratesBlockedTitle": "合并汇率尚未推导",
-    "ratesBlockedAction": "在期间结账中推导汇率"
+    "ratesBlockedAction": "在期间结账中推导汇率",
+    "currencyBasisBlockedTitle": "此视图包含多种货币"
   },
   "saveView": {
     "namePrompt": "为此视图命名：",
