@@ -60,7 +60,7 @@ export type GbTaxCode =
      * so 1257L's month-1 free pay is £1,048.26, not £12,570/12. The engine
      * never pro-rates an annual figure.
      */
-    number: number;
+    number: bigint;
     /** Welsh C-prefix alias: identical rUK arithmetic, Welsh taxpayer. */
     welsh: boolean;
     /** Scottish S-prefix: prices through GB_SCT_BANDS, never the rUK bands. */
@@ -85,14 +85,14 @@ export type GbTaxCode =
      * +9 top-up (the code note: each K unit is £10 of additional pay), so
      * K475's month-1 addition is ceiling(4,750/12) = £395.84.
      */
-    number: number;
+    number: bigint;
     welsh: boolean;
     /** K codes are never Scottish: SK-numbers are refused by name. */
     scottish: false;
     nonCumulative: boolean;
   };
 
-const STANDARD_ALLOWANCE_NUMBER = 1257;
+const STANDARD_ALLOWANCE_NUMBER = 1257n;
 
 function refuse(code: string, reason: string): never {
   throw new PayrollPackError(
@@ -137,7 +137,7 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
     return { kind: "flat", rate: "0.45", welsh, scottish: false };
   }
   if (rest === "0T") {
-    return { kind: "suffix", number: 0, welsh, scottish: false, nonCumulative };
+    return { kind: "suffix", number: 0n, welsh, scottish: false, nonCumulative };
   }
   if (rest === "NT") {
     if (nonCumulative) refuse(raw, "NT carries no W1/M1/X marker — it already deducts nothing");
@@ -149,14 +149,14 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
 
   const k = rest.match(/^K(\d+)$/);
   if (k) {
-    const number = Number(k[1]);
-    if (!Number.isSafeInteger(number) || number <= 0) refuse(raw, "a K code carries a positive number");
+    const number = BigInt(k[1]!);
+    if (number <= 0n) refuse(raw, "a K code carries a positive number");
     return { kind: "k", number, welsh, scottish: false, nonCumulative };
   }
 
   const suffix = rest.match(/^(\d+)([LMN])$/);
   if (suffix) {
-    const number = Number(suffix[1]);
+    const number = BigInt(suffix[1]!);
     const letter = suffix[2];
     if (letter === "M" || letter === "N") {
       refuse(raw, "marriage-allowance transfer codes adjust the allowance by an amount this pack "
@@ -215,7 +215,7 @@ function parseScottishCode(raw: string, rest: string, nonCumulative: boolean): G
   }
   const suffix = rest.match(/^(\d+)([LMN])$/);
   if (suffix) {
-    const number = Number(suffix[1]);
+    const number = BigInt(suffix[1]!);
     const letter = suffix[2];
     if (letter === "M" || letter === "N") {
       refuse(raw, "Scottish marriage-allowance transfer codes adjust the allowance by an amount "

@@ -369,19 +369,19 @@ export function gbCvalueUnits(annualUpTo: string, periodsPerYear: number, elapse
  * tables (§13 defers to the CWG2 week/month mapping).
  */
 export function gbTablesAValueUnits(
-  codeNumber: number,
+  codeNumber: bigint,
   periodsPerYear: number,
   elapsed: number,
   kind: "free" | "additional",
 ): bigint {
   gbSpecPeriodGuard(periodsPerYear, elapsed);
-  if (!Number.isSafeInteger(codeNumber) || codeNumber < 0) {
+  if (codeNumber < 0n) {
     throw new PayrollPackError(`GB Tables-A value needs a non-negative code number, got ${codeNumber}`);
   }
-  if (codeNumber === 0) return 0n;
-  const quotient = Math.floor((codeNumber - 1) / 500);
-  const remainder = ((codeNumber - 1) % 500) + 1;
-  const remainderAnnual = BigInt(remainder * 10 + (kind === "free" ? 9 : 0)) * 10_000n;
+  if (codeNumber === 0n) return 0n;
+  const quotient = (codeNumber - 1n) / 500n;
+  const remainder = ((codeNumber - 1n) % 500n) + 1n;
+  const remainderAnnual = (remainder * 10n + (kind === "free" ? 9n : 0n)) * 10_000n;
   const chunk = periodsPerYear === 52 ? 9_616_00n : 41_667_00n;
   const first = gbCeilPennyQuotientUnits(remainderAnnual, BigInt(periodsPerYear))
     + BigInt(quotient) * chunk;
