@@ -617,11 +617,13 @@ async function postRevaluationEntry(
       reversesEntryId: string | null,
       entryLines: RevaluationLine[],
       auditChanges: Record<string, unknown>,
+      entryId?: string,
     ): Promise<string> => {
       const posted = await postEntry(tx, {
         orgId,
         bookId,
         subsidiaryId,
+        id: entryId,
         entryNumber,
         postingDate,
         periodId: periodIdForEntry,
@@ -647,6 +649,11 @@ async function postRevaluationEntry(
     // journal number, so every physical journal —
     // adjustment and its -R mirror alike — carries its own number.
     const entryNumber = `FXREVAL-${periodName}-${randomUUID().slice(0, 8)}`;
+    // The incremental audit must name its reversal mirror, but the mirror is
+    // posted second. Pre-generate its id (audit JSON carries no FK) and pin
+    // the mirror to it, so both audit rows link the pair without ever
+    // updating append-only audit_log.
+    const reversalEntryId = randomUUID();
     const entryId = await insertEntry(
       entryNumber,
       `Unrealized FX revaluation — ${periodName}`,
@@ -660,6 +667,7 @@ async function postRevaluationEntry(
         subsidiaryId,
         periodId,
         asOfDate,
+        reversalEntryId,
         nextPeriodId,
         basis: "assigned_period_open_item_residuals_and_nonopen_gl_less_effective_fx_by_account",
         positions,
@@ -669,7 +677,7 @@ async function postRevaluationEntry(
       },
     );
 
-    const reversalEntryId = await insertEntry(
+    const postedReversalEntryId = await insertEntry(
       `${entryNumber}-R`,
       `Unrealized FX revaluation reversal — ${periodName}`,
       nextStartsOn,
@@ -683,7 +691,9 @@ async function postRevaluationEntry(
         periodId: nextPeriodId,
         reversedEntryId: entryId,
       },
+      reversalEntryId,
     );
+    if (postedReversalEntryId !== reversalEntryId) throw new RevaluationError("fx revaluation mirror was not posted under its evidenced id");
 
     return { entryId, reversalEntryId, netDelta };
   }));
