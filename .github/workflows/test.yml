@@ -204,6 +204,9 @@ jobs:
       # cannot read a superuser session's pg_temp context table.
       OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
+      # Cross-tenant (bypass) work runs on its own login (engine/src/platform/db.ts);
+      # the service superuser holds BYPASSRLS.
+      OPENBOOKS_BYPASS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
       # A handful of migration-replay suites provision a throwaway database of
       # their own (CREATE DATABASE, CREATE ROLE). That is bootstrap-superuser
       # work; openbooks_app deliberately cannot do it and fails 42501. Those
@@ -370,6 +373,9 @@ jobs:
     env:
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
+      # Cross-tenant (bypass) work runs on its own login (engine/src/platform/db.ts);
+      # the service superuser holds BYPASSRLS.
+      OPENBOOKS_BYPASS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       OPENBOOKS_REDIS_URL: redis://localhost:6379/0
       PGPASSWORD: openbooks
@@ -551,6 +557,9 @@ jobs:
     env:
       OPENBOOKS_DB_URL: postgres://openbooks_owner:openbooks-owner-restore-test-password@localhost:5433/openbooks_restore
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-restore-test-password@localhost:5433/openbooks_restore
+      # Cross-tenant (bypass) work runs on its own login (engine/src/platform/db.ts);
+      # the service superuser holds BYPASSRLS.
+      OPENBOOKS_BYPASS_DB_URL: postgres://openbooks_owner:openbooks-owner-restore-test-password@localhost:5433/openbooks_restore
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-restore-test-password
       PGPASSWORD: openbooks-owner-restore-test-password
     steps:
@@ -625,6 +634,9 @@ jobs:
     env:
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_e2e
+      # Cross-tenant (bypass) work runs on its own login (engine/src/platform/db.ts);
+      # the service superuser holds BYPASSRLS.
+      OPENBOOKS_BYPASS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
       OPENBOOKS_REDIS_URL: redis://localhost:6379/0
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       PGPASSWORD: openbooks
@@ -761,6 +773,9 @@ jobs:
     env:
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_e2e
+      # Cross-tenant (bypass) work runs on its own login (engine/src/platform/db.ts);
+      # the service superuser holds BYPASSRLS.
+      OPENBOOKS_BYPASS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
       OPENBOOKS_REDIS_URL: redis://localhost:6379/0
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       PGPASSWORD: openbooks

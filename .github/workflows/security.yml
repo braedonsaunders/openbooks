@@ -100,6 +100,9 @@ jobs:
     env:
       OPENBOOKS_DB_URL: postgres://openbooks_owner:openbooks-owner-security-test-password@localhost:5433/openbooks_security
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-security-test-password@localhost:5433/openbooks_security
+      # Cross-tenant (bypass) work runs on its own login (engine/src/platform/db.ts);
+      # the service superuser holds BYPASSRLS.
+      OPENBOOKS_BYPASS_DB_URL: postgres://openbooks_owner:openbooks-owner-security-test-password@localhost:5433/openbooks_security
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-security-test-password
       OPENBOOKS_REDIS_URL: redis://localhost:6379
       SESSION_SECRET: openbooks-security-test-secret-not-production
