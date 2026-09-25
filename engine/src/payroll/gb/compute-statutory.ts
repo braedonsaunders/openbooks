@@ -126,6 +126,8 @@ export const GB_FACTOR_LABELS: Readonly<Record<string, string>> = {
   GB_TAX: "PAYE income tax this period",
   GB_STUDENT_LOAN: "Student loan deduction this period",
   GB_POSTGRADUATE_LOAN: "Postgraduate loan deduction this period",
+  GB_LEVY: "Apprenticeship Levy this stub (report year-to-date on the EPS)",
+  GB_LEVY_EARN: "Apprenticeship Levy paybill this stub",
 };
 
 export async function computeGbStatutory(

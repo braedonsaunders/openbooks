@@ -1,4 +1,4 @@
-import { add, cmp, mulPercent, neg, sum } from "../money/money.ts";
+import { add, cmp, fromUnits, mulPercent, neg, roundDiv, sum, toUnits } from "../money/money.ts";
 import { PayrollPackError } from "./packs.ts";
 import type { PayrollEmployerAggregateLevy } from "./packs.ts";
 
@@ -54,6 +54,17 @@ export interface AggregateStubPriors {
   employeePriorBase: string;
   /** Tenant-entered values by slot key (org-scope class flags, spend). */
   tenantValues: Record<string, Record<string, string>>;
+  /**
+   * Accruing-allowance inputs, resolved per stub by the priors layer: levy
+   * already paid in scope, the annual allocated share, and the elapsed tax
+   * months. Present exactly when the levy accrues an allowance; the
+   * assessor refuses a levy that accrues without them.
+   */
+  accruing?: {
+    priorAmount: string;
+    allowanceAnnual: string;
+    monthsElapsed: number;
+  };
 }
 
 /** One stub's share of an aggregate levy. */
@@ -111,11 +122,22 @@ function assertAggregateLevyValid(levy: PayrollEmployerAggregateLevy): void {
       + "the levy must point at a seeded employer-contribution component",
     );
   }
-  if (levy.base?.source !== "gross" && levy.base?.source !== "taxable") {
+  if (levy.base?.source !== "gross" && levy.base?.source !== "taxable" && levy.base?.source !== "pensionable") {
     throw new PayrollPackError(
       `employer-aggregate levy "${levy.key}" declares base source "${levy.base?.source ?? "none"}" — `
-      + 'the generic layer accumulates "gross" or "taxable" earnings, nothing else',
+      + 'the generic layer accumulates "gross", "taxable" or "pensionable" earnings, nothing else',
     );
+  }
+  if (levy.base?.source === "pensionable") {
+    for (const period of ["weekly", "monthly", "annual"] as const) {
+      const floor = levy.base.periodFloor?.[period];
+      if (floor === undefined || !/^\d+(\.\d+)?$/.test(floor)) {
+        throw new PayrollPackError(
+          `employer-aggregate levy "${levy.key}" prices a pensionable base with no ${period} `
+          + "period floor — declare the year's weekly, monthly and annual floors",
+        );
+      }
+    }
   }
   if (levy.base?.scope !== "org" && levy.base?.scope !== "region") {
     throw new PayrollPackError(
@@ -163,6 +185,29 @@ function assertAggregateLevyValid(levy: PayrollEmployerAggregateLevy): void {
       `employer-aggregate levy "${levy.key}" settles annually against a per-employee cap — `
       + "a personal cap is enforced stub by stub, per run",
     );
+  }
+  if (levy.allowance?.kind === "accruing_allowance") {
+    if (levy.rate?.kind !== "flat_percent") {
+      throw new PayrollPackError(
+        `employer-aggregate levy "${levy.key}" accrues its allowance at rate kind `
+        + `"${(levy.rate as { kind?: unknown } | null | undefined)?.kind ?? "none"}" — `
+        + "an accruing allowance prices the cumulative base at a flat percent",
+      );
+    }
+    if (levy.timing !== "per_run") {
+      throw new PayrollPackError(
+        `employer-aggregate levy "${levy.key}" accrues its allowance annually — `
+        + "an accruing allowance prices stub by stub against the months elapsed",
+      );
+    }
+    const { yearStartMonth: month, yearStartDay: day } = levy.allowance;
+    if (!Number.isInteger(month) || month < 1 || month > 12
+      || !Number.isInteger(day) || day < 1 || day > 31) {
+      throw new PayrollPackError(
+        `employer-aggregate levy "${levy.key}" accrues from tax-year start ${month}/${day} — `
+        + "declare the month 1–12 and the day 1–31 the agency's year opens on",
+      );
+    }
   }
 }
 
@@ -262,9 +307,18 @@ function assertAllowanceValid(levy: PayrollEmployerAggregateLevy): void {
     }
     return;
   }
+  if (kind === "accruing_allowance") {
+    if (!levy.allowance.factKey) {
+      throw new PayrollPackError(
+        `employer-aggregate levy "${levy.key}" accrues an allowance with no fact — `
+        + "name the subsidiary-scoped employer fact holding the annual allocated share",
+      );
+    }
+    return;
+  }
   throw new PayrollPackError(
     `employer-aggregate levy "${levy.key}" declares allowance "${kind ?? "none"}" — `
-    + 'an allowance is "none", "employer_allowance" or "per_employee_cap"',
+    + 'an allowance is "none", "employer_allowance", "per_employee_cap" or "accruing_allowance"',
   );
 }
 
@@ -298,6 +352,13 @@ export function assessAggregateLevyStub(
   assertAggregateLevyValid(levy);
   if (isExcluded(levy, priors)) return ZERO_ASSESSMENT;
 
+  // An accruing allowance prices nothing marginally: the stub pays the
+  // cumulative amount due on the whole year-to-date base less what is
+  // already paid (HMRC's month-by-month Apprenticeship Levy method), so it
+  // branches before the shelter/ceiling slice below.
+  if (levy.allowance?.kind === "accruing_allowance") {
+    return assessAccruingAllowance(levy, stubBase, priors);
+  }
   // A shelter (employer allowance) and a ceiling (per-employee cap) consume
   // room in opposite directions: the shelter prices what lands ABOVE the
   // remaining exempt slice, the ceiling prices what fits BELOW the remaining
@@ -331,6 +392,76 @@ export function assessAggregateLevyStub(
   };
 }
 
+/**
+ * One stub's share of a levy with an accruing annual allowance: the flat
+ * percent of the whole year-to-date base (priors plus this stub) less the
+ * allowance accrued to the elapsed tax month less levy already paid, floored
+ * at zero. Pure: allowance, months and paid arrive resolved in `priors`.
+ *
+ * In-run sequencing partitions the month exactly: each stub in calculation
+ * order sees the earlier stubs' stamped base and amounts in its priors, so
+ * the month's shares sum to the month's liability no matter how the roster
+ * splits across stubs.
+ */
+function assessAccruingAllowance(
+  levy: PayrollEmployerAggregateLevy,
+  stubBase: string,
+  priors: AggregateStubPriors,
+): AggregateStubAssessment {
+  const accruing = priors.accruing;
+  if (!accruing) {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levy.key}" prices an accruing allowance with no resolved `
+      + "accrual inputs — engine defect",
+    );
+  }
+  if (levy.rate.kind !== "flat_percent") {
+    throw new PayrollPackError(
+      `employer-aggregate levy "${levy.key}" prices an accruing allowance at rate kind `
+      + `"${(levy.rate as { kind?: unknown }).kind ?? "none"}" — an accruing allowance prices `
+      + "the cumulative base at a flat percent",
+    );
+  }
+  const billIncl = add(priors.employerPriorBase, stubBase);
+  const levyPart = mulPercent(billIncl, levy.rate.percent, 2);
+  // One twelfth of the annual share per elapsed tax month, half-up to the
+  // cent in a single step — never rounded to ledger units first.
+  const accrued = fromUnits(
+    roundDiv(toUnits(accruing.allowanceAnnual) * BigInt(accruing.monthsElapsed), 1200n) * 100n,
+  );
+  const due = add(add(levyPart, neg(accrued)), neg(accruing.priorAmount));
+  const amount = cmp(due, "0") > 0 ? due : "0";
+  // The full stub base stamps toward the total even when the allowance
+  // covers this stub: without the stamp the next stub's priors would forget
+  // this stub's base and price the sheltered slice twice.
+  return {
+    amount,
+    assessable: stubBase,
+    factors: { [levy.factorKey]: amount, [`${levy.factorKey}_EARN`]: stubBase },
+  };
+}
+
+/**
+ * Tax months elapsed in the agency's year at the pay date, from the year's
+ * opening month/day: a date on or after the opening day counts its tax
+ * month, a date before it belongs to the prior tax month (April 5 is month
+ * 12 of the year that opened the previous April 6).
+ */
+export function taxMonthsElapsed(payDate: string, yearStartMonth: number, yearStartDay: number): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(payDate);
+  if (!match) {
+    throw new PayrollPackError(`cannot count elapsed tax months for pay date "${payDate}"`);
+  }
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const sinceStart = (month - yearStartMonth + 12) % 12;
+  const elapsed = day >= yearStartDay ? sinceStart + 1 : sinceStart || 12;
+  if (elapsed < 1 || elapsed > 12) {
+    throw new PayrollPackError(`elapsed tax months fell outside 1–12 for pay date "${payDate}" — engine defect`);
+  }
+  return elapsed;
+}
+
 /** The [priceFrom, priceFrom + priced] slice of this stub the levy reaches. */
 function pricedSlice(
   levy: PayrollEmployerAggregateLevy,
@@ -348,11 +479,20 @@ function pricedSlice(
       priceBase: cmp(end, priceFrom) > 0 ? add(end, neg(priceFrom)) : "0",
     };
   }
-  const headroom = cmp(allowance.amount, prior) > 0 ? add(allowance.amount, neg(prior)) : "0";
-  return {
-    priceFrom: prior,
-    priceBase: cmp(stubBase, headroom) <= 0 ? stubBase : headroom,
-  };
+  if (allowance.kind === "per_employee_cap") {
+    const headroom = cmp(allowance.amount, prior) > 0 ? add(allowance.amount, neg(prior)) : "0";
+    return {
+      priceFrom: prior,
+      priceBase: cmp(stubBase, headroom) <= 0 ? stubBase : headroom,
+    };
+  }
+  // An accruing allowance never prices marginally — assessAggregateLevyStub
+  // branches it to the cumulative method before the slice below. Reaching
+  // here is an engine defect, refused rather than mispriced.
+  throw new PayrollPackError(
+    `employer-aggregate levy "${levy.key}" prices allowance kind "${allowance.kind}" marginally — `
+    + "engine defect",
+  );
 }
 
 function isExcluded(

@@ -224,7 +224,7 @@ export interface PayrollStatutoryReportingCode {
  * the taxable subset — reusing the same line flags the per-employee engine
  * already stamps, so a pack cannot invent a base the run cannot see.
  */
-export type PayrollAggregateBaseSource = "gross" | "taxable";
+export type PayrollAggregateBaseSource = "gross" | "taxable" | "pensionable";
 
 /**
  * Whose total the base is: the whole employer (`org`) or the employer's
@@ -285,7 +285,13 @@ export type PayrollAggregateRate =
  *   exemption, a threshold);
  * - `per_employee_cap` — each employee's first `amount` of base prices; the
  *   stub prices what fits under the remaining headroom (a per-employee
- *   earnings cap with year-to-date carry).
+ *   earnings cap with year-to-date carry);
+ * - `accruing_allowance` — an annual allowance held as a subsidiary-scoped
+ *   employer fact (`factKey`) that accrues 1/12 per elapsed tax month: the
+ *   stub pays the cumulative amount due on the whole year-to-date base less
+ *   what is already paid. `yearStartMonth`/`yearStartDay` open the agency's
+ *   tax year (April 6 for HMRC). Missing fact value refuses by name through
+ *   the fact's own required flag.
  *
  * A shelter and a ceiling consume in opposite directions; the assessor
  * implements both and the threshold test pins the difference.
@@ -293,7 +299,15 @@ export type PayrollAggregateRate =
 export type PayrollAggregateAllowance =
   | { kind: "none" }
   | { kind: "employer_allowance"; amount: string }
-  | { kind: "per_employee_cap"; amount: string };
+  | { kind: "per_employee_cap"; amount: string }
+  | {
+    kind: "accruing_allowance";
+    /** Subsidiary-scoped employer fact holding the annual allocated share. */
+    factKey: string;
+    /** Tax-year start the monthly accrual counts from (HMRC: April 6). */
+    yearStartMonth: number;
+    yearStartDay: number;
+  };
 
 /**
  * One contribution levied on the employer aggregate. The stub lines it
@@ -313,7 +327,17 @@ export interface PayrollEmployerAggregateLevy {
   description: string;
   /** Stub presentation order. */
   sequence: number;
-  base: { source: PayrollAggregateBaseSource; scope: PayrollAggregateScope };
+  base: {
+    source: PayrollAggregateBaseSource;
+    scope: PayrollAggregateScope;
+    /**
+     * Per-period floor subtracted from a pensionable-source base before it
+     * accumulates (a secondary-threshold-style floor: weekly/monthly/annual
+     * figures from the year's transcribed tables, prorated to the penny for
+     * other periodicities). Required exactly when source is pensionable.
+     */
+    periodFloor?: { weekly: string; monthly: string; annual: string };
+  };
   timing: PayrollAggregateTiming;
   rate: PayrollAggregateRate;
   allowance: PayrollAggregateAllowance;

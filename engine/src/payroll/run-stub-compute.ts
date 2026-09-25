@@ -463,6 +463,7 @@ export async function calculateStub(
   const aggregateFactors = await assessStubAggregateLevies({
     tx, orgId, documentId, employeePartyId, taxYear, country, region: province,
     gross, taxableGross: earning((l) => l.taxable ?? true),
+    pensionable, periodsPerYear: P, subsidiaryId: ctx.runContext.subsidiaryId,
     lines, pushStatutory, payDate: run.pay_date!,
   });
 
