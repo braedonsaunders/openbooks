@@ -14,14 +14,14 @@ import type { SessionUser } from '../../../../lib/auth'
  * reprocess untouched.
  */
 const root = pathToFileURL(process.cwd() + '/').href
-const session: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __captureReprocessConfirm: session })
+const session: { user: SessionUser | null; scope: Set<string> | null } = { user: null, scope: null }
+Object.assign(globalThis, { __captureReprocessConfirm: session, __captureEnqueued: [] })
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/api/ap-capture/')) {
-    return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return {user:globalThis.__captureReprocessConfirm.user,permissions:new Set(["ap.create"]),allowedSubsidiaryIds:null}};export function guardSubsidiaryScope(){return null}' }
+    return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return {user:globalThis.__captureReprocessConfirm.user,permissions:new Set(["ap.create"]),allowedSubsidiaryIds:globalThis.__captureReprocessConfirm.scope}};export function guardSubsidiaryScope(){return null}' }
   }
   if (specifier === '@openbooks/jobs') {
-    return { shortCircuit: true, url: 'data:text/javascript,export async function enqueueApCapture(){return null};export function apCaptureReprocessJobId(id,attempts){return `ap-capture|${id}|reprocess|a${attempts}`}' }
+    return { shortCircuit: true, url: 'data:text/javascript,export async function enqueueApCapture(data){globalThis.__captureEnqueued.push(data);return null};export function apCaptureReprocessJobId(id,attempts){return `ap-capture|${id}|reprocess|a${attempts}`}' }
   }
   if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
   return next(specifier, context)
@@ -100,4 +100,22 @@ test('reprocessing an uncorrected capture needs no confirmation', async () => {
     assert.equal(first.ok, true, JSON.stringify(first))
     assert.equal((await f.state()).status, 'queued')
   } finally { await f.close() }
+})
+
+// I1-refix-28: the reprocess enqueue must freeze the operator's subsidiary
+// scope on the job — the worker re-derives scope from the actor when the
+// job carries none, so an omitted field would let a later expansion widen
+// what the reprocess may auto-materialize.
+test('reprocess freezes the operator subsidiary scope on the job', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await fixture()
+  try {
+    const scopeId = randomUUID()
+    session.scope = new Set([scopeId])
+    ;(globalThis as unknown as { __captureEnqueued: Array<{ allowedSubsidiaryIds?: unknown }> }).__captureEnqueued = []
+    const queued = await f.reprocess()
+    const first = ((await queued.json()) as { results: Array<{ ok: boolean; error?: string }> }).results[0]!
+    assert.equal(first.ok, true, JSON.stringify(first))
+    const enqueued = (globalThis as unknown as { __captureEnqueued: Array<{ allowedSubsidiaryIds?: unknown }> }).__captureEnqueued
+    assert.deepEqual(enqueued[0]?.allowedSubsidiaryIds, [scopeId])
+  } finally { session.scope = null; await f.close() }
 })
