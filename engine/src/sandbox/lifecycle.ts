@@ -660,6 +660,48 @@ export async function resetSandbox(sandboxId: string): Promise<void> {
   await refreshSandbox(sandboxId, { keepCustomizations: false });
 }
 
+interface SandboxS3CleanupManifest { id: string; versionIds: string[] }
+
+async function pendingSandboxS3Cleanup(
+  productionOrgId: string,
+  sandboxId: string,
+): Promise<SandboxS3CleanupManifest | null> {
+  return withOrg(productionOrgId, async () => {
+    const row = (await db.execute<{ id: string; version_ids: string[] }>(sql`
+      select manifest.changes->>'manifest_id' as id,
+             array(select jsonb_array_elements_text(manifest.changes->'version_ids')) as version_ids
+        from audit_log manifest
+       where manifest.org_id = ${productionOrgId}
+         and manifest.table_name = 'sandbox_s3_cleanup'
+         and manifest.row_id = ${sandboxId}
+         and manifest.changes->>'event' = 'manifest'
+         and not exists (
+           select 1 from audit_log consumed
+            where consumed.org_id = manifest.org_id
+              and consumed.table_name = manifest.table_name
+              and consumed.row_id = manifest.row_id
+              and consumed.changes->>'event' = 'consumed'
+              and consumed.changes->>'manifest_id' = manifest.changes->>'manifest_id'
+         )
+       order by manifest.at desc limit 1`)).rows[0];
+    return row ? { id: row.id, versionIds: row.version_ids } : null;
+  });
+}
+
+async function recordSandboxS3Cleanup(
+  productionOrgId: string,
+  sandboxId: string,
+  manifest: SandboxS3CleanupManifest,
+  event: "manifest" | "consumed",
+): Promise<void> {
+  await withOrg(productionOrgId, async () => {
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes)
+      values (${productionOrgId}, 'sandbox_s3_cleanup', ${sandboxId}, ${event === "manifest" ? "insert" : "update"},
+              ${JSON.stringify({ event, manifest_id: manifest.id, version_ids: event === "manifest" ? manifest.versionIds : undefined })}::jsonb)`);
+  });
+}
+
 /** Permanently delete a sandbox: wipe all its rows, then drop the org (which
  * cascades the sandboxes row). */
 export async function deleteSandbox(sandboxId: string): Promise<void> {
@@ -667,6 +709,9 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
   await withSandboxRefreshLock(id, async () => {
   const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`));
   const orgId = requireFoundSandbox(sandboxId, row.rows[0]?.org_id as string | undefined);
+  const productionOrgId = (await db.execute<{ production_org_id: string }>(sql`
+    select production_org_id from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0]?.production_org_id;
+  if (!productionOrgId) throw new Error(`sandbox not found: ${sandboxId}`);
   // A refresh that already marked 'refreshing' owns this sandbox: wiping
   // under its clone unit corrupts the refresh and strands the status. The
   // conditional mark makes the race atomic — the loser refuses loudly.
@@ -687,11 +732,16 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
   }
   try {
     const { tenantTables } = await loadCatalog();
-    // S3 objects live outside the row wipe: snapshot the keys first so the
-    // sandbox's objects die with its rows instead of orphaning in the bucket.
-    const s3VersionIds = await listSandboxS3VersionIds(orgId);
+    // Persist object keys in the production org before wiping tenant rows. If
+    // S3 deletion fails, the retry can recover these ids after file rows vanish.
+    let manifest = await pendingSandboxS3Cleanup(productionOrgId, sandboxId);
+    if (!manifest) {
+      manifest = { id: randomUUID(), versionIds: await listSandboxS3VersionIds(orgId) };
+      await recordSandboxS3Cleanup(productionOrgId, sandboxId, manifest, "manifest");
+    }
     await wipeSandbox(orgId, new Set(tenantTables.map((t) => t.name)));
-    await deleteS3Blobs(s3VersionIds);
+    await deleteS3Blobs(manifest.versionIds);
+    await recordSandboxS3Cleanup(productionOrgId, sandboxId, manifest, "consumed");
     await withOrg(null, async () => {
       await db.execute(sql`delete from orgs where id = ${orgId}`);
     });
