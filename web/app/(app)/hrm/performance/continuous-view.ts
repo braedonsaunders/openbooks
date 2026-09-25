@@ -163,6 +163,11 @@ export interface ContinuousData {
 
 const f = item
 
+function calibrationStatusLabel(t: (key: string) => string, status: string): string {
+  const known = new Set(['draft', 'open', 'closed'])
+  return t(known.has(status) ? `performance.continuous.calibration.status.${status}` : 'performance.continuous.calibration.status.unknown')
+}
+
 export async function loadContinuousTab(
   authz: Authz,
   sp: Record<string, string | undefined>,
@@ -226,7 +231,7 @@ export async function loadContinuousTab(
           id: session.id,
           name: session.name,
           status: session.status,
-          statusLabel: session.status,
+          statusLabel: calibrationStatusLabel(t, session.status),
           gridTitle: t('performance.continuous.calibration.gridTitle'),
           gridCols: {
             review: t('performance.continuous.calibration.colReview'),
@@ -294,7 +299,7 @@ export async function loadContinuousTab(
         id: s.id,
         name: s.name,
         status: s.status,
-        statusLabel: s.status,
+        statusLabel: calibrationStatusLabel(t, s.status),
         href: `/hrm/performance?tab=calibration&session=${s.id}`,
       })),
       detail,

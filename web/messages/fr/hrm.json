@@ -949,6 +949,7 @@
         "description": "La grille des notes sur un cycle d'évaluation : proposé face à calibré, avec piste d'audit.",
         "newSession": "Nouvelle session",
         "sessionsEmpty": "Aucune session de calibrage pour l'instant.",
+        "status": { "draft": "Brouillon", "open": "Ouverte", "closed": "Clôturée", "unknown": "Statut inconnu" },
         "colSession": "Session",
         "colStatus": "Statut",
         "colOpened": "Ouverte",

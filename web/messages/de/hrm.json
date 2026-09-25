@@ -949,6 +949,7 @@
         "description": "Das Bewertungsraster über einen Beurteilungszyklus: vorgeschlagen neben kalibriert, mit Prüfpfad.",
         "newSession": "Neue Sitzung",
         "sessionsEmpty": "Noch keine Kalibrierungssitzungen.",
+        "status": { "draft": "Entwurf", "open": "Offen", "closed": "Geschlossen", "unknown": "Unbekannter Status" },
         "colSession": "Sitzung",
         "colStatus": "Status",
         "colOpened": "Geöffnet",

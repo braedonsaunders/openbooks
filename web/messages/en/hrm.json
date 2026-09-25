@@ -1004,6 +1004,7 @@
         "description": "The rating grid over a review cycle: proposed beside calibrated, with the audit trail.",
         "newSession": "New session",
         "sessionsEmpty": "No calibration sessions yet.",
+        "status": { "draft": "Draft", "open": "Open", "closed": "Closed", "unknown": "Unknown status" },
         "colSession": "Session",
         "colStatus": "Status",
         "colOpened": "Opened",
