@@ -179,6 +179,7 @@ export interface DerivedComponent {
   vacationable: boolean;
   nonPeriodic: boolean;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
+  statutoryReportingCategory?: string | null;
 }
 
 /** An earning line shaped for calculateStub's line set. */
@@ -198,6 +199,7 @@ export interface DerivedEarningLine {
   vacationable: boolean;
   nonPeriodic: boolean;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
+  statutoryReportingCategory?: string | null;
   /** Provenance: which rule paid this, for the stub trace and the preview. */
   ruleId: string;
   ruleCode: string;
@@ -857,6 +859,7 @@ export function applyDerivedRule(
       vacationable: component.vacationable,
       nonPeriodic: component.nonPeriodic,
       supplementalWageCategory: component.supplementalWageCategory ?? null,
+      statutoryReportingCategory: component.statutoryReportingCategory ?? null,
       ruleId: rule.id,
       ruleCode: rule.code,
     });
@@ -927,9 +930,10 @@ async function loadComponents(
       id: string; name: string; value: string | null; kind: string;
       taxable: boolean; pensionable: boolean; insurable: boolean;
       vacationable: boolean; non_periodic: boolean; supplemental_wage_category: string | null;
+      statutory_reporting_category: string | null;
     }>(sql`
     select c.id, c.name, c.value, c.kind, c.taxable, c.pensionable, c.insurable, c.vacationable, c.non_periodic,
-           ec.supplemental_wage_category
+           ec.supplemental_wage_category, ec.statutory_reporting_category
       from pay_components c
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
@@ -948,6 +952,7 @@ async function loadComponents(
       insurable: row.insurable === true, vacationable: row.vacationable === true,
       nonPeriodic: row.non_periodic === true,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
+      statutoryReportingCategory: row.statutory_reporting_category,
     });
   }
   return map;

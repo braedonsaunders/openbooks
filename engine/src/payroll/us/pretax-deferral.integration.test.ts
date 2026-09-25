@@ -154,6 +154,7 @@ async function assign401k(fx: Fixture, employeePartyId: string): Promise<void> {
                                          effective_from, is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeePartyId}, ${componentId}, ${DEFERRAL}, '2026-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
+  await db.execute(sql`update pay_component_earning_classifications set statutory_reporting_category = 'us_401k_elective_deferral' where org_id = ${fx.orgId} and pay_component_id = ${componentId}`);
 }
 
 /** Union dues are withheld from net pay but stay in federal taxable wages. */
@@ -232,7 +233,6 @@ test(
       // IRS Pub. 525, "Union benefits and dues": employee-paid dues cannot be
       // excluded from income. Published guidance: https://www.irs.gov/publications/p525
       assert.equal(ulaFactors.FIT, "156.1500");
-      assert.equal(ulaFactors.FIT, carlFactors.FIT);
       assert.equal(ulaFactors.I, PERIOD_WAGES);
       assert.notEqual(
         danFactors.FIT, carlFactors.FIT,
@@ -260,8 +260,8 @@ test(
       assert.ok(carlSlip && danSlip && ulaSlip, "all three Texans have W-2 slips");
       assert.equal(carlSlip.box1Wages, "2000.0000");
       assert.equal(danSlip.box1Wages, "1800.0000");
+      assert.equal(danSlip.box12Lines?.find((line) => line.code === "D")?.value, "200.0000"); // IRS 2026 W-2 instructions, Box 12: https://www.irs.gov/instructions/iw2w3
       assert.equal(ulaSlip.box1Wages, "2000.0000");
-      assert.equal(ulaSlip.box1Wages, carlSlip.box1Wages);
       assert.notEqual(
         danSlip.box1Wages, carlSlip.box1Wages,
         "Box 1 must reflect the deferral — identical figures are the defect",

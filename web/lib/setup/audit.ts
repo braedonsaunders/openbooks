@@ -25,13 +25,18 @@ export async function loadSetupAuditRow(
     return { ...row, members: members.rows.map(member => member.tax_code_id) }
   }
   if (entity.key === 'pay-components') {
-    const classification = await runner.execute<{ supplemental_wage_category: string | null }>(sql`
-      select supplemental_wage_category
+    const classification = await runner.execute<{
+      supplemental_wage_category: string | null; statutory_reporting_category: string | null;
+    }>(sql`
+      select supplemental_wage_category, statutory_reporting_category
         from pay_component_earning_classifications
        where org_id = ${orgId} and pay_component_id = ${rowId}`)
     const value = classification.rows[0]
     if (!value) throw new Error('pay component classification is missing')
-    return { ...row, earningClassification: { supplementalWageCategory: value.supplemental_wage_category } }
+    return { ...row, earningClassification: {
+      supplementalWageCategory: value.supplemental_wage_category,
+      statutoryReportingCategory: value.statutory_reporting_category,
+    } }
   }
   return row
 }

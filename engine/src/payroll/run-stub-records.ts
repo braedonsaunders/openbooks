@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { add, sum } from "../money/money.ts";
-import { jurisdictionKey, labourJurisdictionProblem, PayrollJurisdictionError, payrollJurisdictionDeclared, payrollPack, type PayrollAssessedOn } from "./packs.ts";
+import { jurisdictionKey, labourJurisdictionProblem, PayrollJurisdictionError, payrollJurisdictionDeclared, payrollPack, resolvePayrollStatutoryReportingCode, type PayrollAssessedOn } from "./packs.ts";
 import { resolveStatutoryHolidayPay, undeclaredJurisdictionHolidayConflict, type StatutoryHolidayEligibilityFacts, type StatutoryHolidayEarningLine } from "./holidays.ts";
 import { planMovementsForStub, recordEntitlementMovements } from "./entitlements.ts";
 import { type EarningsAssessedLine } from "./limits.ts";
@@ -79,6 +79,8 @@ export interface Line {
   programApplicability?: Record<string, boolean>;
   vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
+  statutoryReportingCategory?: string | null;
+  statutoryReportingCode?: { formCode: string; boxCode: string; code: string; label: string } | null;
   accrualOnly?: boolean;
   /**
    * Set on every pack-emitted statutory line: what the country pack declares
@@ -264,10 +266,13 @@ export async function insertPayStubRow(
 /** Insert one row per stub line, in the order the phases appended them. */
 export async function insertPayStubLineRows(
   tx: Pick<typeof db, "execute">,
-  args: { orgId: string; stubId: string; actorId: string },
+  args: { orgId: string; stubId: string; actorId: string; country: string; payDate: string },
   lines: readonly Line[],
 ): Promise<void> {
   for (const line of lines) {
+    const reporting = line.statutoryReportingCode ?? resolvePayrollStatutoryReportingCode(
+      args.country, line.statutoryReportingCategory, args.payDate,
+    );
     // The expense stamp rides with the line it was resolved for: re-deriving
     // a draft deletes and reinserts these rows, so the expense immutability
     // guard (migration 0180) only ever fires on a committed run's history.
@@ -278,6 +283,7 @@ export async function insertPayStubLineRows(
                                   earned_from, earned_to,
                                   amount, project_id, department_id, time_type_id, item_id, sequence,
                                   expense_account_id, expense_account_source, expense_account_evidence,
+                                  statutory_reporting_code,
                                   created_by, updated_by)
       values (${args.orgId}, ${args.stubId}, ${line.componentId}, ${line.kind}, ${line.description},
               ${line.hours ?? null}, ${line.rate ?? null},
@@ -286,6 +292,10 @@ export async function insertPayStubLineRows(
               ${line.itemId ?? null}, ${line.sequence},
               ${line.expenseAccountId ?? null}, ${line.expenseAccountSource ?? "unknown"},
               ${line.expenseAccountEvidence ? JSON.stringify(line.expenseAccountEvidence) : null}::jsonb,
+              ${reporting ? JSON.stringify({
+                formCode: reporting.formCode, boxCode: reporting.boxCode,
+                code: reporting.code, label: reporting.label,
+              }) : null}::jsonb,
               ${args.actorId}, ${args.actorId})
     `);
   }

@@ -246,6 +246,8 @@ export const payComponentEarningClassifications = pgTable(
     supplementalWageCategory: text("supplemental_wage_category", {
       enum: ["bonus_or_stock_option", "other"],
     }),
+    /** Pack-declared semantic category used to resolve effective-dated tax-form reporting codes. */
+    statutoryReportingCategory: text("statutory_reporting_category"),
   },
   (t) => [
     primaryKey({ name: "pay_component_earning_classifications_pkey", columns: [t.orgId, t.payComponentId] }),
@@ -256,6 +258,8 @@ export const payComponentEarningClassifications = pgTable(
     }).onDelete("cascade"),
     check("pay_component_earning_classifications_supplemental_category",
       sql`${t.supplementalWageCategory} is null or ${t.supplementalWageCategory} in ('bonus_or_stock_option', 'other')`),
+    check("pay_component_earning_classifications_reporting_category",
+      sql`${t.statutoryReportingCategory} is null or ${t.statutoryReportingCategory} ~ '^[a-z][a-z0-9_]{0,63}$'`),
   ],
 );
 
@@ -751,6 +755,10 @@ export const payStubLines = pgTable(
       enum: ["unknown", "item", "component", "org_default"],
     }).notNull().default("unknown"),
     expenseAccountEvidence: jsonb("expense_account_evidence").$type<{ reason: string; reference: string }>(),
+    /** Effective-date-resolved pack reporting code, snapshotted at payroll calculation. */
+    statutoryReportingCode: jsonb("statutory_reporting_code").$type<{
+      formCode: string; boxCode: string; code: string; label: string;
+    }>(),
     /** Snapshot at commit: the vendor this line accrued to. Remittances route
      * by this, never the component's current vendor (migration 0296). A
      * union agreement needs no separate column: its destination reaches the

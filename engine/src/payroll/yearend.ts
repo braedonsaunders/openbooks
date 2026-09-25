@@ -1042,6 +1042,7 @@ export interface W2Slip {
   box4SsTax: string;
   box5MedicareWages: string;
   box6MedicareTax: string;
+  box12Lines?: { boxCode: string; code: string; label: string; value: string }[];
   /**
    * Boxes 15–20, one entry per work state that withheld state or local income
    * tax on committed stubs — the paper W-2's own shape is a repeating state
@@ -1276,6 +1277,55 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       -- under more than one EIN needs a deterministic order, not just name.
      order by p.display_name, min(s.pay_date), s.province
    `));
+  const missingReportCodes = (await db.execute<{ employee_name: string; component_name: string }>(sql`
+    select p.display_name as employee_name, pc.name as component_name
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+       and r.run_status = 'committed'
+      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+      join pay_stub_lines l on l.org_id = s.org_id and l.stub_id = s.id
+      join pay_components pc on pc.org_id = l.org_id and pc.id = l.component_id
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
+       and l.kind = 'deduction' and pc.tax_treatment = 'pension_f'
+       and l.statutory_reporting_code is null
+     order by p.display_name, pc.name
+  `));
+  if (missingReportCodes.rows.length > 0) {
+    const affected = missingReportCodes.rows
+      .map((row) => `${row.employee_name} (${row.component_name})`).join(", ");
+    throw new PayrollError(
+      `W-2 box 12 cannot be prepared for ${affected}: a reportable pension deferral has no `
+      + "effective-dated pack reporting code on its committed pay-stub line. Classify the pay component "
+      + "with the applicable plan category and correct the payroll evidence before generating the W-2.",
+    );
+  }
+  const reportingRows = (await db.execute<{
+    employee_party_id: string; filing_account_id: string | null;
+    box_code: string; code: string; label: string; amount: string;
+  }>(sql`
+    select s.employee_party_id, s.filing_account_id,
+           l.statutory_reporting_code->>'boxCode' as box_code,
+           l.statutory_reporting_code->>'code' as code,
+           l.statutory_reporting_code->>'label' as label,
+           sum(l.amount) as amount
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+       and r.run_status = 'committed'
+      join pay_stub_lines l on l.org_id = s.org_id and l.stub_id = s.id
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
+       and l.statutory_reporting_code->>'formCode' = 'US_W2'
+     group by s.employee_party_id, s.filing_account_id,
+              l.statutory_reporting_code->>'boxCode', l.statutory_reporting_code->>'code',
+              l.statutory_reporting_code->>'label'
+     order by l.statutory_reporting_code->>'code'
+  `));
+  const box12BySlip = new Map<string, { boxCode: string; code: string; label: string; value: string }[]>();
+  for (const row of reportingRows.rows) {
+    const key = `${row.employee_party_id}:${row.filing_account_id ?? ""}`;
+    const entries = box12BySlip.get(key) ?? [];
+    entries.push({ boxCode: row.box_code, code: row.code, label: row.label, value: num(row.amount) });
+    box12BySlip.set(key, entries);
+  }
   // Boxes 18–20, one row per (employee, EIN account, work state, locality):
   // the locality is the withheld line's own description and the wages are the
   // taxable earnings of the stubs in this state carrying that locality's line.
@@ -1419,6 +1469,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       box4SsTax: total(slip.groups, (group) => group.ssTax),
       box5MedicareWages: total(slip.groups, (group) => group.medicareWages),
       box6MedicareTax: total(slip.groups, (group) => group.medicareTax),
+      box12Lines: box12BySlip.get(`${slip.employeePartyId}:${slip.filingAccountId ?? ""}`) ?? [],
       stateLines: toStateLines(slip.employeePartyId, slip.filingAccountId, slip.groups),
     };
   });
@@ -1438,6 +1489,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       box4SsTax: "0",
       box5MedicareWages: "0",
       box6MedicareTax: "0",
+      box12Lines: [],
       stateLines: [],
     };
   });
