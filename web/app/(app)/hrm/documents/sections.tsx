@@ -240,11 +240,28 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
   const [templateId, setTemplateId] = useState('')
   const [partyId, setPartyId] = useState('')
   const [title, setTitle] = useState('')
-  const [preview, setPreview] = useState<Record<string, string> | null>(null)
+  // The preview is fingerprinted by the exact subject (and template) that
+  // produced it (I4-webui-165): changing the person or template drops the
+  // prior preview immediately, and a late response for a superseded subject
+  // is discarded instead of rendering beside the new selection.
+  const [preview, setPreview] = useState<{ partyId: string; templateId: string; values: Record<string, string> } | null>(null)
+  const previewRequest = useRef(0)
   const [failed, setFailed] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
   const idempotencyKey = useRef<string | null>(null)
+  // Merge inputs invalidate the preview: a preview for Ari must never stay
+  // visible beside Bo's selection, and superseded fetches must not publish.
+  const selectTemplate = (value: string) => {
+    setTemplateId(value)
+    setPreview(null)
+    previewRequest.current += 1
+  }
+  const selectParty = (value: string) => {
+    setPartyId(value)
+    setPreview(null)
+    previewRequest.current += 1
+  }
   if (!generate) return null
   const labels = generate.labels
   const template = generate.templates.find((t) => t.value === templateId) ?? null
@@ -252,16 +269,20 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
   async function loadPreview() {
     setFailed(null)
     if (!partyId) return
+    const request = ++previewRequest.current
+    const requestPartyId = partyId
+    const requestTemplateId = templateId
     const res = await fetch('/api/hrm/documents?mode=preview', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ partyId }),
     })
+    if (request !== previewRequest.current) return
     if (!res.ok) {
       setFailed(await readApiErrorMessage(res, msg(labels, 'failed')))
       return
     }
-    setPreview((await res.json()).mergeValues as Record<string, string>)
+    setPreview({ partyId: requestPartyId, templateId: requestTemplateId, values: (await res.json()).mergeValues as Record<string, string> })
   }
 
   async function submit() {
@@ -308,7 +329,7 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
           <>
             <div>
               <Label id={`${fieldId}-template-label`}>{msg(labels, 'template')}</Label>
-              <Select id={`${fieldId}-template`} aria-labelledby={`${fieldId}-template-label`} aria-label={msg(labels, 'template')} value={templateId} onChange={(e) => { idempotencyKey.current = null; setTemplateId(e.target.value) }}>
+              <Select id={`${fieldId}-template`} aria-labelledby={`${fieldId}-template-label`} aria-label={msg(labels, 'template')} value={templateId} onChange={(e) => { idempotencyKey.current = null; selectTemplate(e.target.value) }}>
                 {generate.templates.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label} — {t.category}
@@ -318,7 +339,7 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
             </div>
             <div>
               <Label id={`${fieldId}-person-label`}>{msg(labels, 'person')}</Label>
-              <Select id={`${fieldId}-person`} aria-labelledby={`${fieldId}-person-label`} aria-label={msg(labels, 'person')} value={partyId} onChange={(e) => { idempotencyKey.current = null; setPartyId(e.target.value) }}>
+              <Select id={`${fieldId}-person`} aria-labelledby={`${fieldId}-person-label`} aria-label={msg(labels, 'person')} value={partyId} onChange={(e) => { idempotencyKey.current = null; selectParty(e.target.value) }}>
                 {generate.people.map((p) => (
                   <option key={p.value} value={p.value}>
                     {p.label}
@@ -343,10 +364,10 @@ export function DocumentsGenerateDialog({ generate }: { generate: Home['generate
                 {msg(labels, 'submit')}
               </Button>
             </div>
-            {preview && (
+            {preview && preview.partyId === partyId && preview.templateId === templateId && (
               <Table>
                 <TableBody>
-                  {Object.entries(preview).map(([key, value]) => (
+                  {Object.entries(preview.values).map(([key, value]) => (
                     <TableRow key={key}>
                       <TableCell>{key}</TableCell>
                       <TableCell>{value}</TableCell>
