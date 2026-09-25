@@ -95,6 +95,10 @@ export interface ComplianceData {
   runs: ComplianceRunRow[]
   classes: ComplianceClassRow[]
   entries: ComplianceEntryRow[]
+  /** Truncation notes when a 200-capped table sits beside full-list tiles; null when complete. */
+  findingsTruncatedNote: string | null
+  runsTruncatedNote: string | null
+  entriesTruncatedNote: string | null
   policiesCount: number
   formatsEmpty: boolean
   packName: string | null
@@ -188,6 +192,9 @@ export async function loadCompliancePage(
     runs: [],
     classes: [],
     entries: [],
+    findingsTruncatedNote: null,
+    runsTruncatedNote: null,
+    entriesTruncatedNote: null,
     policiesCount: 0,
     formatsEmpty: false,
     packName: null,
@@ -280,6 +287,12 @@ export async function loadCompliancePage(
       }),
     )
     const visible = kindFilter ? findings.filter((finding) => finding.kind === kindFilter) : findings
+    // The tiles above count the full lists while the tables cap at 200:
+    // each table names its truncation instead of presenting a slice as
+    // the population.
+    const truncatedNote = (shown: number, total: number): string | null =>
+      total > shown ? t('compliance.truncatedNote', { limit: shown, total }) : null
+    const findingsTruncatedNote = truncatedNote(200, visible.length)
     const findingRows: ComplianceFindingRow[] = visible.slice(0, 200).map((finding) => ({
       id: finding.id,
       kind: finding.kind,
@@ -328,6 +341,7 @@ export async function loadCompliancePage(
       formatsError = error instanceof HrmConstructionError ? error.message : t('compliance.loadFailed')
     }
     const formatLabels = new Map(formatOptions.map((format) => [format.value, format.label]))
+    const runsTruncatedNote = truncatedNote(200, runs.length)
     const runRows: ComplianceRunRow[] = runs.slice(0, 200).map((run) => ({
       id: run.id,
       projectLabel: run.projectId ? (projectName.get(run.projectId) ?? run.projectId) : '—',
@@ -347,6 +361,7 @@ export async function loadCompliancePage(
       rulesLabel: String(rules.filter((rule) => rule.compClassId === compClass.id).length),
     }))
     const entries = perdiemOn ? await listEntries(db, orgId, actorId, null) : []
+    const entriesTruncatedNote = truncatedNote(200, entries.length)
     const entryRows: ComplianceEntryRow[] = entries.slice(0, 200).map((entry) => ({
       id: entry.id,
       dayLabel: entry.workedOn,
@@ -378,6 +393,9 @@ export async function loadCompliancePage(
       runs: runRows,
       classes: classRows,
       entries: entryRows,
+      findingsTruncatedNote,
+      runsTruncatedNote,
+      entriesTruncatedNote,
       policiesCount: policies.length,
       formatsEmpty,
       packName,

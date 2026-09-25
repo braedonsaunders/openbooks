@@ -1537,6 +1537,7 @@
     "unknownFormat": "未知格式",
     "empty": "此处暂无内容。",
     "emptyAction": "请在下方“设置”中配置。",
+    "truncatedNote": "共 {total} 行，仅显示前 {limit} 行。",
     "sectionOffTitle": "此部分已关闭",
     "sectionOffMessage": "请在公司设置 → 功能中启用对应功能。",
     "active": "启用",

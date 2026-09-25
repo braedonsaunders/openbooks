@@ -1537,6 +1537,7 @@
     "unknownFormat": "Unbekanntes Format",
     "empty": "Noch nichts vorhanden.",
     "emptyAction": "Unten unter Setup konfigurieren.",
+    "truncatedNote": "Die ersten {limit} von {total} Zeilen werden angezeigt.",
     "sectionOffTitle": "Dieser Bereich ist ausgeschaltet",
     "sectionOffMessage": "Aktivieren Sie die zugehörige Funktion unter Unternehmenseinstellungen → Funktionen.",
     "active": "Aktiv",
