@@ -25,7 +25,7 @@ const scenarios = ["exact read", "missing patch revision", "truncated patch revi
 for (const scenario of scenarios) {
   test(`flow configuration controls: ${scenario}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await createScratchOrg();
-    const writer = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+    const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
     let connected = false;
     let pending: Promise<Response> | undefined;
     try {
@@ -58,7 +58,7 @@ for (const scenario of scenarios) {
         await db.execute(sql`insert into flow_runs(id,org_id,flow_id,subject_kind,subject_id,trigger,status,context) values (${runId},${org.orgId},${id},'vendor_bill',${subjectId},'on_submit','completed','{"evidence":"retained"}'::jsonb)`);
         const insertGate = () => writer.query("insert into flow_gates(org_id,flow_id,run_id,node_id,subject_kind,subject_id,title,assignee_user_id,group_key,status) values ($1,$2,$3,'gate','vendor_bill',$4,'Pending approval',$5,'group','pending')", [org.orgId,id,runId,subjectId,actor]);
         await writer.connect(); connected = true;
-        await writer.query('begin'); await writer.query("select set_config('app.bypass_rls','on',true)");
+        await writer.query('begin'); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
         if (scenario === 'gate race') {
           await writer.query('select id from flows where id=$1 for key share', [id]);
           await writer.query('lock table flow_gates in share mode');

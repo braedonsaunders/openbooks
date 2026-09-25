@@ -37,7 +37,7 @@ const { featureGateLockKey, resolvedFeatureState } = await import('./features');
 for(const entity of ['asset-categories','item-rate-books','pay-derived-rules'] as const){
  for(const method of ['POST','PATCH','DELETE'] as const){
   test(`setup ${entity} ${method} refuses a feature disabled while its write waits`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-   const org=await createScratchOrg();const writer=new pg.Client({connectionString:env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
+   const org=await createScratchOrg();const writer=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
    try{
     const actorId=await authenticate(org);const feature=entity==='asset-categories'?'fixedAssets':entity==='item-rate-books'?'projects':'payroll';const table=entity.replaceAll('-','_');
     let body:Record<string,unknown>=entity==='asset-categories'
@@ -55,10 +55,7 @@ for(const entity of ['asset-categories','item-rate-books','pay-derived-rules'] a
     }
     const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows;
     await writer.connect();await writer.query('begin');
-    // Raw pg sessions carry no test bypass: without this the disable UPDATE
-    // below matches zero rows under FORCE RLS, the flag never lands, and the
-    // write under test sails through with 200 instead of blocking.
-    await writer.query("select set_config('app.bypass_rls','on',true)");
+    // 0399 gates the bypass GUC by session role, so the writer connects as the privileged test login above.
     await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
     if(entity==='item-rate-books')await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`item-rate-books:${org.orgId}`]);
     else await writer.query(`lock table ${table} in share row exclusive mode`);
@@ -97,7 +94,7 @@ test('resolved feature defaults use the supplied transaction for uncommitted set
 for(const capability of ['equipment trigger','subsidiary scope','currency','field ticket'] as const){
  for(const method of ['POST','PATCH'] as const){
  test(`setup ${method} rejects ${capability} disabled while its write waits`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-  const org=await createScratchOrg();const writer=new pg.Client({connectionString:env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
+  const org=await createScratchOrg();const writer=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
   try{
    const actorId=await authenticate(org);const entity=capability==='equipment trigger'?'pay-derived-rules':capability==='currency'?'item-rate-books':capability==='field ticket'?'time-types':'departments';const table=entity.replaceAll('-','_');const feature=capability==='equipment trigger'?'equipment':capability==='currency'?'multiCurrency':capability==='field ticket'?'fieldTickets':'multiSubsidiary';
    let body:Record<string,unknown>={code:'FIELD-FENCE',name:'Fenced scope',subsidiaryId:org.subsidiaryId,isActive:true};
@@ -114,9 +111,7 @@ for(const capability of ['equipment trigger','subsidiary scope','currency','fiel
    }
    const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows;
    await writer.connect();await writer.query('begin');
-   // Raw pg sessions carry no test bypass: without this the disable UPDATE
-   // below matches zero rows under FORCE RLS and the flag never lands.
-   await writer.query("select set_config('app.bypass_rls','on',true)");
+   // 0399 gates the bypass GUC by session role, so the writer connects as the privileged test login above.
    await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
    await writer.query(`lock table ${table} in share row exclusive mode`);
    const disabled=await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object($1::text,false)) where id=$2",[feature,org.orgId]);
