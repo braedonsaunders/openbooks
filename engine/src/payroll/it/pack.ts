@@ -146,6 +146,18 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
       ],
     },
     {
+      // 2026 substitute taxes (L. 199/2025 c. 7 / c. 10–11, L. 208/2015
+      // c. 182–189 at the 2026–2027 rates): flat-rate lines on carved-out
+      // bases, computed once per period like TI — never re-derived by the
+      // protection fixpoint. They REDUCE net pay (deductions).
+      key: "sostitutive",
+      components: [
+        { code: "SOST-RINNOVI", name: "Sostitutiva 5% aumenti rinnovo CCNL (L. 199/2025)", systemKey: "sostitutiva_rinnovi", kind: "deduction", sequence: 111, assessedOn: "earnings", remittance: "tax_authority" },
+        { code: "SOST-TURNI", name: "Sostitutiva 15% indennità notturne/festive/turni (L. 199/2025)", systemKey: "sostitutiva_turni", kind: "deduction", sequence: 112, assessedOn: "earnings", remittance: "tax_authority" },
+        { code: "SOST-PREMI", name: "Sostitutiva 1% premi di risultato (L. 208/2015)", systemKey: "sostitutiva_premi", kind: "deduction", sequence: 113, assessedOn: "earnings", remittance: "tax_authority" },
+      ],
+    },
+    {
       key: "addizionale_regionale",
       components: [
         // Same base as IRPEF (the domicile region's surcharge on the IRPEF

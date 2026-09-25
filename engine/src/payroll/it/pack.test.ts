@@ -47,11 +47,14 @@ test("statutory slots name IRPEF, both addizionali, and both INPS shares", () =>
   const slots = IT_PAYROLL_PACK.statutorySlots;
   assert.deepEqual(slots.map((slot) => slot.key), [
     "irpef",
+    "sostitutive",
     "addizionale_regionale",
     "addizionale_comunale",
     "inps",
   ]);
   const byKey = new Map(slots.map((slot) => [slot.key, slot]));
+  const sostitutive = byKey.get("sostitutive")?.components ?? [];
+  assert.deepEqual(sostitutive.map((c) => [c.systemKey, c.kind, c.assessedOn]), [["sostitutiva_rinnovi", "deduction", "earnings"], ["sostitutiva_turni", "deduction", "earnings"], ["sostitutiva_premi", "deduction", "earnings"]]);
   assert.equal(byKey.get("irpef")?.components[0]?.systemKey, "income_tax");
   assert.equal(byKey.get("addizionale_regionale")?.components[0]?.systemKey, "regional_surtax");
   assert.equal(byKey.get("addizionale_comunale")?.components[0]?.systemKey, "municipal_surtax");
