@@ -73,7 +73,9 @@ export function NlAskPanel({ ask, canCreate }: { ask: NlAskLabels | null; canCre
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          // The draft id remains stable across retries, so a failed status
+          // transition cannot create a second report on the next attempt.
+          'Idempotency-Key': draft.id,
         },
         body: JSON.stringify({
           name: draft.question.slice(0, 120),
@@ -88,11 +90,16 @@ export function NlAskPanel({ ask, canCreate }: { ask: NlAskLabels | null; canCre
       }
       const body = (await created.json()) as { definition?: { id?: unknown } }
       const id = typeof body.definition?.id === 'string' ? body.definition.id : null
-      await fetch('/api/reports/nl', {
+      const transitioned = await fetch('/api/reports/nl', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ draftId: draft.id, status: 'saved' }),
-      }).catch(() => undefined)
+      })
+      if (!transitioned.ok) {
+        setError(await readApiErrorMessage(transitioned, ask.failed))
+        setBusy(false)
+        return
+      }
       setBusy(false)
       if (id) router.push(`/reports/custom/builder/${id}`)
       else setDrafts((current) => (current ?? []).filter((d) => d.id !== draft.id))
