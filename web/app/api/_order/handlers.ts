@@ -320,6 +320,10 @@ export function makePATCH(cfg: OrderHandlerConfig) {
             reversalDate: body.reversalDate,
             source: 'ui',
             expectedUpdatedAt: body.expectedUpdatedAt,
+            // Recheck scope on the engine's locked source row — the
+            // route pre-check above ran unlocked, so a rehome landing
+            // between the two must deny inside the claim transaction.
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
           })
           if (result.status === 'pending_approval') {
             const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
@@ -331,6 +335,9 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
           return NextResponse.json(order)
         } catch (error) {
+          if (error instanceof ScopeNotFoundError) {
+            return NextResponse.json({ error: 'not found' }, { status: 404 })
+          }
           if (error instanceof DocumentVoidError) {
             return NextResponse.json({ error: error.message }, { status: error.status })
           }
@@ -351,16 +358,22 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         const locked = (await db.execute<{
           status: string
           party_id: string | null
+          subsidiaryId: string | null
           total: string
           updated_at: string
         }>(sql`
-          select status, party_id, total, ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
+          select status, party_id, subsidiary_id as "subsidiaryId", total, ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
             from documents
            where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
            for update
         `))
         const current = locked.rows[0]
         if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
+        // The aggregate lock is held: recheck scope against the locked row —
+        // the route pre-check ran unlocked, so a rehome landing between the
+        // two must deny here rather than issue into the new subsidiary.
+        const issuanceDenied = guardSubsidiaryScope(gate, current.subsidiaryId)
+        if (issuanceDenied) return issuanceDenied
 
         // The aggregate lock is held: an exact token mismatch here is a stale
         // caller, refused before the issuance side effects.
@@ -559,16 +572,21 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       }
       return false;
     };
-    let mutation: 'not_found' | 'stale' | 'not_editable' | 'saved';
+    let mutation: 'not_found' | 'stale' | 'not_editable' | 'saved' | NextResponse;
     try {
       mutation = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<{ status: string; updated_at: string }>(sql`
-        select status, ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
+      const locked = (await tx.execute<{ status: string; subsidiaryId: string | null; updated_at: string }>(sql`
+        select status, subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
       `))
       if (!locked.rows[0]) return 'not_found' as const
+      // The aggregate lock is held: recheck scope against the locked row —
+      // the pre-check above ran unlocked, so a rehome landing between the
+      // two must deny here rather than save into the new subsidiary.
+      const lockedDenied = guardSubsidiaryScope(gate, locked.rows[0].subsidiaryId)
+      if (lockedDenied) return lockedDenied
       if (staleRevision(body.expectedUpdatedAt, locked.rows[0].updated_at)) return 'stale' as const
       if (locked.rows[0].status !== 'draft') return 'not_editable' as const
 
@@ -642,6 +660,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       throw error
     }
 
+    if (mutation instanceof NextResponse) return mutation
     if (mutation === 'not_found') {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
