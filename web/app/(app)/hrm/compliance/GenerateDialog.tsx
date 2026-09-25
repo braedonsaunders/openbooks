@@ -17,6 +17,8 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 export function GenerateDialog({
   projects,
   formats,
+  formatsEmpty,
+  emptyMessage,
   title,
   projectLabel,
   weekLabel,
@@ -27,6 +29,8 @@ export function GenerateDialog({
 }: {
   projects: Array<{ value: string; label: string }>
   formats: Array<{ value: string; label: string }>
+  formatsEmpty: boolean
+  emptyMessage: string
   title: string
   projectLabel: string
   weekLabel: string
@@ -72,6 +76,7 @@ export function GenerateDialog({
   return (
     <UrlDrawer open closeHref={closeHref} title={title} size="md">
         <div className="flex flex-col gap-4">
+          {formatsEmpty && <p role="status" className="text-sm text-muted-foreground">{emptyMessage}</p>}
           <div className="flex flex-col gap-1.5">
             <Label id={`${fieldId}-project-label`}>{projectLabel}</Label>
             <Select id={`${fieldId}-project`} aria-labelledby={`${fieldId}-project-label`} aria-label={projectLabel} value={projectId} onChange={(e) => setProjectId(e.target.value)}>

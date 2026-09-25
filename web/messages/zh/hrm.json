@@ -1631,7 +1631,9 @@
       "week": "截至周",
       "format": "格式",
       "generate": "生成",
-      "cancel": "取消"
+      "cancel": "取消",
+      "payrollPack": "此工资包",
+      "emptyFormats": "{pack}未声明任何格式。请先向该工资包添加报告格式，再进行生成。"
     }
   },
   "compensation": {

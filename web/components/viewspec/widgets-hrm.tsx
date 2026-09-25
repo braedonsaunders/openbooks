@@ -398,6 +398,8 @@ export const HRM_WIDGETS = {
     <GenerateDialog
       projects={(props.projects as ComponentProps<typeof GenerateDialog>['projects']) ?? []}
       formats={(props.formats as ComponentProps<typeof GenerateDialog>['formats']) ?? []}
+      formatsEmpty={props.formatsEmpty === true}
+      emptyMessage={str(props, 'emptyMessage') ?? ''}
       title={str(props, 'title') ?? ''}
       projectLabel={str(props, 'projectLabel') ?? ''}
       weekLabel={str(props, 'weekLabel') ?? ''}

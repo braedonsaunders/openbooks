@@ -1631,7 +1631,9 @@
       "week": "Woche bis",
       "format": "Format",
       "generate": "Erstellen",
-      "cancel": "Abbrechen"
+      "cancel": "Abbrechen",
+      "payrollPack": "dieses Lohnabrechnungspaket",
+      "emptyFormats": "Für {pack} sind keine Formate festgelegt. Fügen Sie dem Lohnabrechnungspaket ein Berichtsformat hinzu, bevor Sie es erstellen."
     }
   },
   "compensation": {

@@ -80,6 +80,7 @@ export interface ComplianceData {
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
   canManage: boolean
+  canGenerate: boolean
   refusal: { title: string; message: string } | null
   hasContent: boolean
   section: ComplianceSection
@@ -117,6 +118,7 @@ export interface ComplianceData {
     cancelLabel: string
     projects: Array<{ value: string; label: string }>
     formats: Array<{ value: string; label: string }>
+    emptyMessage: string
   }
   currentParams: Record<string, string | string[] | undefined>
   labels: {
@@ -171,6 +173,7 @@ export async function loadCompliancePage(
     description: t('compliance.description'),
     tabs,
     canManage,
+    canGenerate: false,
     refusal: null,
     hasContent: false,
     section,
@@ -210,6 +213,7 @@ export async function loadCompliancePage(
       cancelLabel: t('compliance.generateDialog.cancel'),
       projects: [],
       formats: [],
+      emptyMessage: t('compliance.generateDialog.emptyFormats', { pack: t('compliance.generateDialog.payrollPack') }),
     },
     currentParams,
     labels: {
@@ -247,6 +251,12 @@ export async function loadCompliancePage(
   if (!can(authz, 'hrm.construction.read')) return { ...empty, refusal: { title: t('compliance.refused'), message: t('compliance.needRead') } }
   const orgId = authz.user.orgId
   const actorId = authz.user.id
+  // Generation needs the certified-payroll child feature: without it the
+  // generate affordance hides and the formats read below reports empty.
+  // Named distinctly from the section flags in loadCompliancePage so this
+  // commit merges cleanly whether or not the section-isolation change has
+  // landed; both read the same flag.
+  const certifiedGenerationOn = await isFeatureEnabled(orgId, 'hrmCertifiedPayroll')
   try {
     const [ratesOn, certifiedOn, classesOn, perdiemOn] = await Promise.all([
       isFeatureEnabled(orgId, 'hrmPrevailingWage'),
@@ -354,6 +364,7 @@ export async function loadCompliancePage(
     return {
       ...empty,
       hasContent: true,
+      canGenerate: canManage && certifiedGenerationOn,
       kinds,
       findings: findingRows,
       schedules: scheduleRows,
@@ -367,6 +378,7 @@ export async function loadCompliancePage(
         ...empty.generateDialog,
         projects: projects.map((project) => ({ value: project.id, label: project.name })),
         formats: formatOptions,
+        emptyMessage: t('compliance.generateDialog.emptyFormats', { pack: packName ?? t('compliance.generateDialog.payrollPack') }),
       },
       stats: [
         { label: t('compliance.stats.openFindings'), value: String(openCount), sub: t('compliance.stats.openFindingsSub') },

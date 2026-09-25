@@ -1631,7 +1631,9 @@
       "week": "Semaine au",
       "format": "Format",
       "generate": "Générer",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "payrollPack": "ce pack de paie",
+      "emptyFormats": "Aucun format n’est déclaré pour {pack}. Ajoutez un format de rapport au pack avant de le générer."
     }
   },
   "compensation": {

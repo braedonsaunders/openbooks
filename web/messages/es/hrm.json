@@ -1631,7 +1631,9 @@
       "week": "Semana hasta",
       "format": "Formato",
       "generate": "Generar",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "payrollPack": "este paquete de nómina",
+      "emptyFormats": "No hay formatos declarados para {pack}. Añada un formato de informe al paquete antes de generarlo."
     }
   },
   "compensation": {
