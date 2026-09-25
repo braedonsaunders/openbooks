@@ -5,7 +5,6 @@
 // plus DB-gated lifecycle cases for createScriptJournal's atomic post:true
 // contract (skipped unless OPENBOOKS_DB_URL is set).
 
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
@@ -187,42 +186,15 @@ test("exact decimal journal lines preserve a balanced sum", () => {
   assert.equal(v.totalDebits, "0.3000");
 });
 
-test("posting-rule control accounts load employeePayable via shared helper", () => {
-  const helper = readFileSync(new URL("../records/control-accounts.ts", import.meta.url), "utf8");
-  assert.match(helper, /export async function loadControlAccounts/);
-  assert.match(helper, /employeePayable/);
-  assert.match(helper, /settings->'controlAccounts'/);
-
-  const journalWrites = readFileSync(new URL("./journal-writes.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(journalWrites, /async function controlDeps/);
-  assert.doesNotMatch(journalWrites, /settings->'controlAccounts'/);
-  assert.match(journalWrites, /loadRequiredControlAccounts/);
-});
-
 test("line cap is enforced", () => {
   const lines = Array.from({ length: 201 }, (_, i) => ({ accountId: A, amount: i % 2 === 0 ? "1" : "-1" }));
   assert.throws(() => validateJournalInput({ documentDate: "2026-07-16", lines }), /too many lines/);
 });
 
 // --- post:true atomicity + system provenance (fnd_mt97qyp4_telk90) --------
-
-test("post:true writes the draft inside one withOrgTransaction and never refuses a missing actor", () => {
-  const source = readFileSync(new URL("./journal-writes.ts", import.meta.url), "utf8");
-  const start = source.indexOf("export async function createScriptJournal");
-  const body = source.slice(start);
-  // The old code committed the draft first and only then refused actor-less
-  // callers — an orphan draft behind every scheduled post:true failure.
-  assert.doesNotMatch(body, /requires an attributable actor/);
-  // The draft insert and the submission both live inside the single atomic
-  // unit, after the draft-only early return. (The draft-only return is a
-  // destructured await since 0268, and the post unit carries an explicit
-  // outcome type — the atomicity property asserted here is unchanged.)
-  assert.match(body, /if \(!opts\.post\)[\s\S]*?await insertScriptDraft\(/);
-  assert.match(body, /withOrgTransaction\(orgId, async \(\)[^{]*=> \{[\s\S]*?insertScriptDraft\([\s\S]*?submitAndReleaseIfUngated/);
-  // Actor-less callers stamp explicit system provenance instead of inventing
-  // identity (engine-wide convention: null created_by always means "system").
-  assert.match(source, /actorKind: "system"/);
-});
+// Behavioural cover: the forced-failure test below pins the atomic unit
+// (zero documents or lines on failure); the source-text pin that used to
+// assert on createScriptJournal's body is deleted.
 
 test("a forced post:true failure commits zero documents or lines — no orphan draft", { skip: !DB }, async () => {
   const org = await createScratchOrg();

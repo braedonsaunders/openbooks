@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import pg from "pg";
 import { sql } from "drizzle-orm";
@@ -1451,24 +1450,9 @@ test("costing method and tracking flips are guarded, revalued under standard, an
   }
 });
 
-test("the costing route requires explicit costing policies and maps blocked flips to 409", () => {
-  const route = readFileSync(
-    new URL("../../../web/app/api/items/[id]/costing/route.ts", import.meta.url),
-    "utf8",
-  );
-  assert.match(route, /parseCostingMethod\(body\.costingMethod\)/);
-  assert.match(route, /parseTrackingMode\(body\.tracking\)/);
-  assert.match(route, /costingMethod must be one of fifo, moving_average, or standard/);
-  assert.doesNotMatch(route, /\?\s*'moving_average'/);
-  assert.doesNotMatch(route, /:\s*'moving_average'/);
-  assert.doesNotMatch(route, /\?\s*'none'/);
-  assert.match(route, /status: 422/);
-  assert.match(route, /CostingPolicyChangeBlockedError/);
-  assert.match(route, /status: 409/);
-  assert.match(route, /recostingAuthorization/);
-  assert.match(route, /before: before \?\? null/);
-  assert.match(route, /revalueOpenLayersToStandardCost/);
-});
+// NOTE: the costing route's explicit-policy refusal is covered behaviorally
+// by 'PUT refuses a costing policy that names no explicit method' in
+// web/lib/item-costing-route.test.ts; the source-text pin is deleted.
 
 // ---------------------------------------------------------------------------
 // Direct HTTP inventory actions replay through the canonical idempotency

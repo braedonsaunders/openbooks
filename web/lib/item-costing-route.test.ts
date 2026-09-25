@@ -432,6 +432,16 @@ test('an optimistic-concurrency conflict returns 409 and writes nothing', async 
   assert.equal(routeState.committedAudits.length, 0, 'no audit evidence for a refused write')
 })
 
+test('PUT refuses a costing policy that names no explicit method', async () => {
+  reset()
+  const response = await put(validBody({ costingMethod: 'lifo' }))
+
+  assert.equal(response.status, 422)
+  assert.match(((await response.json()) as { error: string }).error, /costingMethod must be one of fifo, moving_average, or standard/)
+  assert.deepEqual(routeState.committedProfiles.get(ITEM_ID), BASE_PROFILE, 'the stored profile is untouched')
+  assert.equal(routeState.committedAudits.length, 0, 'no audit evidence for a refused write')
+})
+
 test('a fenced save under an exactly matching revision succeeds atomically', async () => {
   reset()
   routeState.nextProfileAfterUpsert = NEXT_PROFILE
