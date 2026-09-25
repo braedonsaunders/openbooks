@@ -467,7 +467,7 @@ test("segment value imports inherit storage scope enforcement and audit valid wr
     ], "insert", { orgId: f.orgId, actorId: f.actorId, dryRun: false });
     assert.equal(invalid.failed, 1);
     assert.equal(invalid.created, 0);
-    assert.match(invalid.errors[0]?.message ?? "", /segment value parent is invalid/);
+    assert.match(invalid.errors[0]?.message ?? "", /Choose a parent value from the same segment/);
     assert.equal(await segmentAuditCount(f.orgId), beforeAudits, "rejected import has no orphan audit");
 
     const valid = await resource.write([

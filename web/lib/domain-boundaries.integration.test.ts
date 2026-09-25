@@ -793,8 +793,8 @@ for (const boundary of [
               ),
             )
             const home = await customersHome(org.orgId, [])
-            assert.equal(home.arOutstanding, 0)
-            assert.equal(home.pipeline.closed, 0)
+            assert.equal(home.arOutstanding, '0.0000')
+            assert.equal(home.pipeline.closed, '0.0000')
             await restrict(org.orgId, null)
             const all = await (
               await forecast(
