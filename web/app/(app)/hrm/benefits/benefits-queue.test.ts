@@ -27,7 +27,7 @@ registerHooks({
     const owned =
       parent.endsWith("/web/lib/hrm/benefits.ts") ||
       parent.endsWith("/web/lib/hrm/workspace-tabs.ts") ||
-      parent.endsWith("/web/lib/hrm/change-requests.ts");
+      parent.endsWith("/web/lib/hrm/change-requests.ts") || parent.endsWith("/web/lib/scoped-options.ts");
     if (owned && specifier === "next-intl/server") {
       return {
         shortCircuit: true,
@@ -129,7 +129,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) };",
+        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) }; export async function withBypassContext(_opts, work) { return work() } export function ambientTenantOrgId() { return null }",
       };
     }
     return nextResolve(specifier, context);
