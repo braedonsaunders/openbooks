@@ -131,6 +131,7 @@ test("FP/FS zero below the minimum wage and above the age bar", () => {
     payDate: "2026-06-15",
     periodsPerYear: 12,
     rokUrodzenia: 1990,
+    wymiarEtatu: "1",
   });
   assert.equal(low.fpNalezne, false);
   assert.equal(low.fpZwolnioneWiek, false);

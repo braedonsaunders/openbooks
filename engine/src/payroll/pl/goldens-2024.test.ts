@@ -157,6 +157,7 @@ test("the 1 July minimum-wage step moves FP/FS eligibility mid-year", () => {
     payDate: "2024-07-15",
     periodsPerYear: 12,
     rokUrodzenia: 1990,
+    wymiarEtatu: "1",
   });
   // 4 250 < 4 300: the same pay prices no FP/FS from July — FGŚP stays.
   assert.equal(july.fpNalezne, false);
@@ -204,6 +205,7 @@ test("the January threshold is exact to the grosz", () => {
     payDate: "2024-01-15",
     periodsPerYear: 12,
     rokUrodzenia: 1990,
+    wymiarEtatu: "1",
   });
   assert.equal(under.fpNalezne, false);
   assert.equal(under.fp, "0.0000");
