@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from 'react'
 import { cn } from '@openbooks/ui'
+import { cmp as compareExactMoney } from '@openbooks/engine/src/money/money.ts'
 
 /**
  * Tiny sortable-table helper shared by analytics tables. `useSort` keeps the
  * active column + direction and returns the sorted rows plus a `SortTh` header
  * cell that toggles direction on click (numeric or string compare, nulls last).
  */
-export function useSort<T>(rows: T[], initial: { key: keyof T; dir: 'asc' | 'desc' }) {
+export function useSort<T>(rows: T[], initial: { key: keyof T; dir: 'asc' | 'desc' }, decimalKeys: readonly (keyof T)[] = []) {
   const [key, setKey] = useState<keyof T>(initial.key)
   const [dir, setDir] = useState<'asc' | 'desc'>(initial.dir)
 
@@ -20,11 +21,13 @@ export function useSort<T>(rows: T[], initial: { key: keyof T; dir: 'asc' | 'des
       if (av == null && bv == null) return 0
       if (av == null) return 1
       if (bv == null) return -1
-      const cmp = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : Number(av) - Number(bv)
-      return dir === 'asc' ? cmp : -cmp
+      const comparison = decimalKeys.includes(key) && typeof av === 'string' && typeof bv === 'string'
+        ? compareExactMoney(av, bv)
+        : typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : Number(av) - Number(bv)
+      return dir === 'asc' ? comparison : -comparison
     })
     return copy
-  }, [rows, key, dir])
+  }, [rows, key, dir, decimalKeys])
 
   const onSort = (col: keyof T, defaultDir: 'asc' | 'desc' = 'desc') => {
     if (col === key) setDir((d) => (d === 'asc' ? 'desc' : 'asc'))
