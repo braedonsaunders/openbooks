@@ -234,6 +234,11 @@
       "label": "Bezeichnung",
       "labelPlaceholder": "Zielbezeichnung",
       "portion": "Anteil",
+      "portionKinds": {
+        "remainder": "Rest",
+        "percent": "Prozent",
+        "weight": "Gewicht"
+      },
       "save": "Ziele speichern",
       "saved": "Ziele gespeichert."
     },

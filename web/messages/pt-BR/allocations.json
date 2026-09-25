@@ -234,6 +234,11 @@
       "label": "Rótulo",
       "labelPlaceholder": "Rótulo do destino",
       "portion": "Parcela",
+      "portionKinds": {
+        "remainder": "Restante",
+        "percent": "Percentual",
+        "weight": "Peso"
+      },
       "save": "Salvar destinos",
       "saved": "Destinos salvos."
     },

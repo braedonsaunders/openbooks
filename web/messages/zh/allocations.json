@@ -234,6 +234,11 @@
       "label": "标签",
       "labelPlaceholder": "对象标签",
       "portion": "份额",
+      "portionKinds": {
+        "remainder": "剩余",
+        "percent": "百分比",
+        "weight": "权重"
+      },
       "save": "保存对象",
       "saved": "对象已保存。"
     },

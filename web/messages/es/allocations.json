@@ -234,6 +234,11 @@
       "label": "Etiqueta",
       "labelPlaceholder": "Etiqueta del destino",
       "portion": "Porción",
+      "portionKinds": {
+        "remainder": "Resto",
+        "percent": "Porcentaje",
+        "weight": "Peso"
+      },
       "save": "Guardar destinos",
       "saved": "Destinos guardados."
     },

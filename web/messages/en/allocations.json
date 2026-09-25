@@ -234,6 +234,11 @@
       "label": "Label",
       "labelPlaceholder": "Target label",
       "portion": "Share",
+      "portionKinds": {
+        "remainder": "Remainder",
+        "percent": "Percent",
+        "weight": "Weight"
+      },
       "save": "Save targets",
       "saved": "Targets saved."
     },
