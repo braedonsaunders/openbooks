@@ -120,6 +120,9 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("LA_TAXABLE", taxable);
 
   const periodTax = mulRateCents(taxable, rates.rate);
+  // L-4 line 7 is a SIGNED adjustment: positive increases, negative
+  // decreases, and the decrease cannot take withholding below zero — hence
+  // the max0 floor on the final result, per Form R-1300 (L-4) (1/26).
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   const total = max0(periodTax + extra);
   trace("LA_WITHHELD", total);
@@ -204,14 +207,14 @@ export const LA_CERTIFICATE: PayrollCertificate = {
     },
     {
       key: "additional_per_period",
-      label: "L-4 adjustments — Additional amount to withhold each pay period",
+      label: "L-4 line 7 — Withholding adjustment each pay period",
       kind: "amount",
       decimals: 4,
-      min: "0",
       help:
-        "An increase in the amount of tax to be withheld, entered on Form L-4. "
-        + "Added AFTER the R-1306 computer formula. A decrease is not modeled "
-        + "here because R-1306 pins only the formula result.",
+        "Form L-4 line 7 adjustment, added AFTER the R-1306 computer formula. "
+        + "A positive amount increases withholding; a negative amount decreases "
+        + "it. The decrease cannot take withholding below zero each pay period — "
+        + "the formula result floors at zero.",
     },
   ],
 };
