@@ -35,6 +35,21 @@ import {
 
 // --- shapes (mirror the API responses) ---------------------------------------
 
+/**
+ * Config keys owned by the OAuth Connect callbacks (QBO realmId, Xero
+ * tenantId, Dynamics companyId/companyName). Mirrors
+ * CALLBACK_OWNED_CONFIG_KEYS in
+ * web/app/api/platform/connections/_connector-guard.ts — the PATCH route
+ * refuses these with 400 OAUTH_IDENTITY_REFUSED, so the edit drawer strips
+ * them on prefill and on save instead of round-tripping them.
+ */
+const CALLBACK_OWNED_CONFIG_KEYS = new Set([
+  "realmId",
+  "tenantId",
+  "companyId",
+  "companyName",
+]);
+
 interface FieldSpec {
   key: string;
   label: string;
@@ -1138,10 +1153,12 @@ function ConnectionDrawer({
       setDisplayName(editing.displayName);
       setConfig(
         Object.fromEntries(
-          Object.entries(editing.config ?? {}).map(([k, v]) => [
-            k,
-            String(v ?? ""),
-          ]),
+          Object.entries(editing.config ?? {})
+            // Callback-owned OAuth identity (realmId, tenantId, companyId,
+            // companyName) is written by the Connect flow and refused on
+            // PATCH (OAUTH_IDENTITY_REFUSED) — it never enters the form.
+            .filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k))
+            .map(([k, v]) => [k, String(v ?? "")]),
         ),
       );
       setSecrets({});
@@ -1175,13 +1192,19 @@ function ConnectionDrawer({
       const provided = Object.fromEntries(
         Object.entries(secrets).filter(([, v]) => v !== ""),
       );
+      // Defense in depth beside the prefill filter: callback-owned OAuth
+      // identity never leaves this drawer, so an edit of a connected OAuth
+      // connection cannot trip OAUTH_IDENTITY_REFUSED.
+      const editableConfig = Object.fromEntries(
+        Object.entries(config).filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k)),
+      );
       const res = editing
         ? await fetch(`/api/platform/connections/${editing.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               displayName,
-              config,
+              config: editableConfig,
               secrets: provided,
               postedChangePolicy,
             }),
