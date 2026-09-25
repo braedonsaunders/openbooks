@@ -12,9 +12,13 @@ const hooks = registerHooks({
     }
     if (specifier.startsWith('@openbooks/')) {
       const [packageName, ...packagePath] = specifier.slice('@openbooks/'.length).split('/')
-      const packageRoot = packageName === 'engine' || packageName === 'schema'
-        ? `../../${packageName}`
-        : `../../packages/${packageName}`
+      if (packageName !== 'engine' && packageName !== 'schema') {
+        // Workspace packages declare their own subpath exports (networking's
+        // ./ssrf maps to ./src/ssrf.ts); resolve those for real instead of
+        // guessing a source path the package never had.
+        return nextResolve(specifier, context)
+      }
+      const packageRoot = `../../${packageName}`
       const localPath = packagePath.length ? packagePath.join('/') : 'src/index.ts'
       return { shortCircuit: true, url: new URL(`${packageRoot}/${localPath}`, import.meta.url).href }
     }

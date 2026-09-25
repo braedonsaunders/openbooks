@@ -75,6 +75,11 @@ const routeHooks = registerHooks({
             if (!state.authz) return new Response(null, { status: 403 })
             return state.authz
           }
+          export function guardUnrestrictedScope(authz) {
+            if (!authz) return new Response(null, { status: 403 })
+            return null
+          }
+          export function subsidiariesInScope() { return true }
         `,
         shortCircuit: true,
       };
@@ -152,6 +157,7 @@ test(
         seedFlowActors,
       } from "./engine/src/testing/fixtures.ts";
       import { publishOverheadRates } from "./web/lib/overhead-publish.ts";
+      import { ScopeNotFoundError } from "./engine/src/organization/subsidiary-scope.ts";
 
       installTrustedTestDatabaseBypass();
       const org = await createScratchOrg();
@@ -177,18 +183,14 @@ test(
             (\${randomUUID()}, \${org.orgId}, \${deptB}, 'Baseline', 'standard', 'per_hour', '20.0000', '2026-02-01')
         \`);
 
-        // Department A publishes cleanly; department B then fails on its insert
-        // (nonexistent department id violates the FK) AFTER A's statements ran.
-        // Drizzle wraps the driver error, so match through the cause chain.
+        // Department A locks cleanly; the unknown department id is refused by
+        // the scope lock before any write, so nothing may stick.
         await assert.rejects(
           publishOverheadRates(org.orgId, actorId, '2026-09-01', [
             { departmentId: deptA, ratePerHour: '42.00' },
             { departmentId: randomUUID(), ratePerHour: '50.00' },
           ]),
-          (error) => {
-            const message = String(error?.cause?.message ?? error);
-            return /overhead_rates_department_id_fkey/.test(message);
-          },
+          (error) => error instanceof ScopeNotFoundError,
         );
 
         // Nothing may stick: no closed rows, no deleted future row, no new
@@ -235,6 +237,7 @@ test(
         seedFlowActors,
       } from "./engine/src/testing/fixtures.ts";
       import { publishOverheadRates } from "./web/lib/overhead-publish.ts";
+      import { ScopeNotFoundError } from "./engine/src/organization/subsidiary-scope.ts";
 
       installTrustedTestDatabaseBypass();
       const org = await createScratchOrg();
