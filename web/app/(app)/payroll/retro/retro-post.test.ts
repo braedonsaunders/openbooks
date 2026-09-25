@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { postRetroAction } from './RetroWorkspace'
+import { postRetroAction, retroProposalMatchesScope } from './RetroWorkspace'
 
-// F3-2: the retro propose/create call parsed the response body BEFORE
-// checking the status, so a non-JSON error body threw a SyntaxError and the
-// operator read a parse error instead of the failure. The status is now
-// checked first through the canonical client helper.
 function stubFetch(responder: () => Response | Promise<Response>): () => void {
   const prior = globalThis.fetch
   globalThis.fetch = (async () => responder()) as typeof fetch
@@ -57,6 +53,7 @@ test('a named 422 refusal surfaces the server message', async () => {
 test('a successful propose returns the proposal body', async () => {
   const restore = stubFetch(() => Response.json({ taxYear: 2026, periods: [] }))
   try {
+    assert.equal(retroProposalMatchesScope({ scheduleId: 'schedule-1', payDate: '2026-09-30' }, { scheduleId: 'schedule-2', payDate: '2026-09-30' }), false)
     assert.deepEqual(
       await postRetroAction('propose', { payScheduleId: 'schedule-1', payDate: '2026-09-30' }),
       { taxYear: 2026, periods: [] },

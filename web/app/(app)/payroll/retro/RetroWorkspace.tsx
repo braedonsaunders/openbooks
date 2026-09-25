@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -71,6 +71,15 @@ export type RetroSchedule = {
   name: string
 };
 
+export function retroProposalMatchesScope(
+  proposalScope: { scheduleId: string; payDate: string } | null,
+  currentScope: { scheduleId: string; payDate: string },
+): boolean {
+  return proposalScope !== null
+    && proposalScope.scheduleId === currentScope.scheduleId
+    && proposalScope.payDate === currentScope.payDate
+}
+
 /**
  * One retro call. The status is checked before the body is parsed: a
  * non-JSON error body (a proxy page, an empty 502) must surface the
@@ -123,39 +132,65 @@ export function RetroWorkspace({
   const [payDate, setPayDate] = useState(today)
   const [busy, setBusy] = useState(false)
   const [proposal, setProposal] = useState<RetroProposal | null>(null)
+  const [proposalScope, setProposalScope] = useState<{ scheduleId: string; payDate: string } | null>(null)
   const [excluded, setExcluded] = useState<string[]>([])
   const [open, setOpen] = useState<RetroPeriod | null>(null)
+  const proposalRequest = useRef(0)
 
-  async function call(action: 'propose' | 'create'): Promise<Record<string, unknown>> {
+  async function call(
+    action: 'propose' | 'create',
+    scope: { scheduleId: string; payDate: string },
+    excludedIds: string[],
+  ): Promise<Record<string, unknown>> {
     return postRetroAction(action, {
-      payScheduleId: scheduleId,
-      payDate,
-      excludeSourcePayRunDocumentIds: excluded,
+      payScheduleId: scope.scheduleId,
+      payDate: scope.payDate,
+      excludeSourcePayRunDocumentIds: excludedIds,
     })
   }
 
   async function find() {
     if (!scheduleId) return
+    const scope = { scheduleId, payDate }
+    const request = ++proposalRequest.current
     setBusy(true)
     try {
-      setProposal((await call('propose')) as unknown as RetroProposal)
-      setExcluded([])
+      const result = (await call('propose', scope, [])) as unknown as RetroProposal
+      if (request === proposalRequest.current) {
+        setProposal(result)
+        setProposalScope(scope)
+        setExcluded([])
+      }
     } catch (error) {
-      toast.error((error as Error).message)
+      if (request === proposalRequest.current) toast.error((error as Error).message)
     } finally {
-      setBusy(false)
+      if (request === proposalRequest.current) setBusy(false)
     }
   }
 
   async function create() {
+    const scope = { scheduleId, payDate }
+    if (!retroProposalMatchesScope(proposalScope, scope)) return
+    const excludedIds = [...excluded]
     setBusy(true)
     try {
-      const result = await call('create')
+      const result = await call('create', scope, excludedIds)
       router.push(`/payroll/runs/${String(result.documentId)}` as never)
     } catch (error) {
       toast.error((error as Error).message)
       setBusy(false)
     }
+  }
+
+  function changeScope(scope: { scheduleId: string; payDate: string }) {
+    proposalRequest.current += 1
+    setBusy(false)
+    setProposal(null)
+    setProposalScope(null)
+    setExcluded([])
+    setOpen(null)
+    setScheduleId(scope.scheduleId)
+    setPayDate(scope.payDate)
   }
 
   const payable = proposal?.periods.filter((period) => period.outcome === 'payable') ?? []
@@ -291,7 +326,11 @@ export function RetroWorkspace({
           >
             {text('columns.schedule', 'Pay schedule')}
           </Label>
-          <Select id="retro-schedule" value={scheduleId} onChange={(e) => setScheduleId(e.target.value)}>
+          <Select
+            id="retro-schedule"
+            value={scheduleId}
+            onChange={(e) => changeScope({ scheduleId: e.target.value, payDate })}
+          >
             {schedules.map((schedule) => (
               <option key={schedule.id} value={schedule.id}>{schedule.name}</option>
             ))}
@@ -311,7 +350,7 @@ export function RetroWorkspace({
             id="retro-paydate"
             type="date"
             value={payDate}
-            onChange={(e) => setPayDate(e.target.value)}
+            onChange={(e) => changeScope({ scheduleId, payDate: e.target.value })}
             className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
           />
         </div>
@@ -407,7 +446,10 @@ export function RetroWorkspace({
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 {text('retro.createHint', 'Creates a draft retroactive pay run you still calculate, approve and commit.')}
               </p>
-              <Button onClick={create} disabled={busy}>
+              <Button
+                onClick={create}
+                disabled={busy || !retroProposalMatchesScope(proposalScope, { scheduleId, payDate })}
+              >
                 <History size={14} aria-hidden />
                 {text('retro.create', 'Create retro pay run')}
               </Button>
