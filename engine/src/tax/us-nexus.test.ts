@@ -9,9 +9,11 @@ test('default states use $100k OR 200 transactions', () => {
   assert.equal(t.measure, 'sales_or_txn')
 })
 
-test('overrides win (CA sales-only $500k, NY sales AND 100 txns)', () => {
+test('overrides win (CA sales-only $500k, NY sales AND 100 txns, AL/MS sales-only $250k)', () => {
   assert.deepEqual(thresholdForState('CA'), { state: 'CA', salesUsd: '500000', txnCount: null, measure: 'sales_only' })
   assert.deepEqual(thresholdForState('NY'), { state: 'NY', salesUsd: '500000', txnCount: 100, measure: 'sales_and_txn' })
+  assert.deepEqual(thresholdForState('AL'), { state: 'AL', salesUsd: '250000', txnCount: null, measure: 'sales_only' })
+  assert.deepEqual(thresholdForState('MS'), { state: 'MS', salesUsd: '250000', txnCount: null, measure: 'sales_only' })
 })
 
 test('states without a statewide sales tax never create nexus obligations', () => {
@@ -26,10 +28,8 @@ test('states without a statewide sales tax never create nexus obligations', () =
 })
 
 test('OR states are met by hitting either the dollar or the transaction trigger', () => {
-  const byTxn = evaluateUsNexus([{ state: 'FL', salesUsd: '40000', txnCount: 250 }])[0]!
-  assert.equal(byTxn.status, 'met') // 250 > 200 transactions
-  const bySales = evaluateUsNexus([{ state: 'FL', salesUsd: '120000', txnCount: 5 }])[0]!
-  assert.equal(bySales.status, 'met') // $120k > $100k
+  assert.equal(evaluateUsNexus([{ state: 'FL', salesUsd: '40000', txnCount: 250 }])[0]!.status, 'met') // 250 > 200 transactions
+  assert.equal(evaluateUsNexus([{ state: 'FL', salesUsd: '120000', txnCount: 5 }])[0]!.status, 'met') // $120k > $100k
 })
 
 test('sales-only states ignore transaction count', () => {
