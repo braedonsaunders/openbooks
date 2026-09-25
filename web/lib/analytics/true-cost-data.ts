@@ -962,7 +962,7 @@ export async function trueCostData(
   for (const c of timeCategories) categoryTotals[c.id] = { expenseOverall: c.totalAmount };
   const customCategories: BurdenCategory[] = [];
   for (const cc of profile.customCategories) {
-    let calc: { expense: Record<string, number>; totalExpense: number };
+    let calc: { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number };
     if (cc.type === "manual") calc = calculateManualCategoryData(cc.manualConfig ?? {}, cc.allocationBase, deptIds, bases);
     else if (cc.type === "derived") calc = calculateDerivedCategoryData(cc.derivedConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases);
     else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, strings);
@@ -972,7 +972,7 @@ export async function trueCostData(
     // Synthetic expenses cross from float-land through exact shortest-repr
     // quantization (a no-op for ordinary config decimals like 100.50).
     const customExpenseExact: Record<string, string> = {};
-    for (const d of departmentsBase) customExpenseExact[d.id] = quantizeOverheadMoney(calc.expense[d.id] ?? 0);
+    for (const d of departmentsBase) customExpenseExact[d.id] = calc.expenseExact?.[d.id] ?? quantizeOverheadMoney(calc.expense[d.id] ?? 0);
     const built = buildCategory(cc.id, cc.id, cc.name, cc.color, cc.type, {}, calc.expense, calc.totalExpense, [], customExpenseExact);
     if (Math.abs(built.totalAmount) > 0) customCategories.push(built);
   }

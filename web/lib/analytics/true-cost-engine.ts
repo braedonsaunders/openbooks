@@ -11,6 +11,7 @@
  */
 
 import { englishTrueCostStrings, type TrueCostStrings } from "./true-cost-strings";
+import { fromUnits, toUnits } from "@openbooks/engine/src/money/money.ts";
 
 /* ─────────────────────────────────────────────── constants ── */
 
@@ -320,19 +321,52 @@ export function calculateManualCategoryData(
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
-): { expense: Record<string, number>; totalExpense: number } {
+): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number } {
   const entryMode = manualConfig.entryMode || "fixed_total";
   const expense: Record<string, number> = {};
   for (const id of deptIds) expense[id] = 0;
   let totalExpense = 0;
+  let expenseExact: Record<string, string> | undefined;
 
   if (entryMode === "fixed_total") {
-    totalExpense = Number(manualConfig.fixedTotal) || 0;
-    const totalBase = getAllocationBaseValue(allocationBase, bases, "Overall");
-    for (const id of deptIds) {
-      const deptBase = getAllocationBaseValue(allocationBase, bases, id);
-      const pct = totalBase > 0 ? deptBase / totalBase : 0;
-      expense[id] = totalExpense * pct;
+    const fixedTotalUnits = toUnits(String(manualConfig.fixedTotal ?? 0));
+    totalExpense = Number(fromUnits(fixedTotalUnits));
+    const weightUnits = (value: number): bigint => {
+      if (!Number.isFinite(value) || value < 0) throw new Error("Fixed-total allocation requires finite, non-negative department bases.");
+      let raw = String(value);
+      const negative = raw.startsWith("-");
+      if (negative) raw = raw.slice(1);
+      const [coefficient, exponentText] = raw.toLowerCase().split("e");
+      const exponent = Number(exponentText ?? 0);
+      const [whole = "0", fraction = ""] = coefficient!.split(".");
+      const digits = BigInt(`${whole}${fraction}` || "0");
+      const decimalPlaces = fraction.length - exponent;
+      if (decimalPlaces > 18) throw new Error("Fixed-total allocation base exceeds supported decimal precision.");
+      const scaled = digits * 10n ** BigInt(18 - decimalPlaces);
+      return negative ? -scaled : scaled;
+    };
+    const weights = deptIds.map((id) => ({ id, weight: weightUnits(getAllocationBaseValue(allocationBase, bases, id)) }));
+    const weightTotal = weights.reduce((sum, item) => sum + item.weight, 0n);
+    expenseExact = Object.fromEntries(deptIds.map((id) => [id, "0.0000"]));
+    if (weightTotal > 0n) {
+      const sign = fixedTotalUnits < 0n ? -1n : 1n;
+      const magnitude = fixedTotalUnits < 0n ? -fixedTotalUnits : fixedTotalUnits;
+      const shares = weights.map(({ id, weight }) => {
+        const numerator = magnitude * weight;
+        return { id, units: numerator / weightTotal, remainder: numerator % weightTotal };
+      });
+      let unassigned = magnitude - shares.reduce((sum, share) => sum + share.units, 0n);
+      const residualOrder = [...shares].sort((a, b) =>
+        a.remainder === b.remainder ? a.id.localeCompare(b.id) : a.remainder > b.remainder ? -1 : 1,
+      );
+      for (let index = 0; unassigned > 0n; index += 1, unassigned -= 1n) {
+        residualOrder[index % residualOrder.length]!.units += 1n;
+      }
+      for (const share of shares) {
+        const exact = fromUnits(share.units * sign);
+        expenseExact[share.id] = exact;
+        expense[share.id] = Number(exact);
+      }
     }
   } else if (entryMode === "by_dept") {
     const byDept = manualConfig.byDeptAmounts || {};
@@ -354,7 +388,7 @@ export function calculateManualCategoryData(
   }
 
   expense["Overall"] = totalExpense;
-  return { expense, totalExpense };
+  return { expense, ...(expenseExact ? { expenseExact } : {}), totalExpense };
 }
 
 /** Calculate a category as a percentage of another category. */
