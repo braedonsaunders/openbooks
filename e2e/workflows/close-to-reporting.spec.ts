@@ -108,11 +108,11 @@ test.describe.serial("close to reporting", () => {
       );
       expect(wizard.ok).toBe(true);
 
-      // 2. Features the workflow needs: a second legal entity and the
-      //    advanced close controls (publish/binder/independent approval).
+      // 2. Features the workflow needs: a second legal entity, advanced close
+      //    controls, and the Projects parent gate the profitability report requires.
       ok(
         await api(req, origin, "PUT", "/api/admin/setup/features", {
-          features: { multiSubsidiary: true, advancedClose: true },
+          features: { multiSubsidiary: true, advancedClose: true, projects: true },
         }),
         "features",
       );
