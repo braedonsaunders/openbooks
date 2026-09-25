@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
+import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 
 /**
@@ -130,6 +131,17 @@ export function QualificationDrawer({
       clearTimeout(timer)
     }
   }, [evidenceQuery, selectedType?.requiresEvidence, t])
+
+  // A half-typed record form is unsaved work: drawer-level dismiss asks
+  // before abandoning it. Detail mode edits nothing in place (verify,
+  // renew, revoke act immediately), so only the record form guards — its
+  // fields plus a picked-but-unsaved evidence file.
+  const recordClose = useDirtyClose({
+    dirty: recordOpen && (Object.values(form).some((value) => value.trim().length > 0) || evidenceFileId !== ''),
+    onClose,
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   const loadTypes = useCallback(async (): Promise<void> => {
     const requestId = ++typeRequestId.current
@@ -306,7 +318,7 @@ export function QualificationDrawer({
   const isRevoked = q?.storedStatus === 'revoked'
 
   return (
-    <Drawer open onClose={onClose} size="md" title={q ? t('qualifications.drawerTitle') : t('qualifications.recordTitle')}>
+    <Drawer open onClose={() => void recordClose.close()} size="md" title={q ? t('qualifications.drawerTitle') : t('qualifications.recordTitle')}>
       {loading ? <p className="text-sm text-slate-500">{tCommon('feedback.loading')}</p> : null}
       {status ? <p className="mb-3 text-sm text-red-700 dark:text-red-300">{status}</p> : null}
       {q ? (
