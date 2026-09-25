@@ -29,7 +29,7 @@ import "../../packs.ts";
 import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
 import { RATES_2026 } from "../rates.ts";
 import {
-  DC_CERTIFICATE, DC_REGION, DC_RATES_2026, DC_WITHHOLDING, dcAllowancePerPeriod,
+  DC_CERTIFICATE, DC_NONRESIDENT_CERTIFICATE, DC_RATES_2026, DC_WITHHOLDING, dcAllowancePerPeriod,
   dcDivisorForPeriod, dcScaledBrackets, type DcYearRates,
 } from "./dc.ts";
 import { pctToRate } from "./transcription.ts";
@@ -39,10 +39,10 @@ import { money, resolvedCertificate } from "./conformance-support.ts";
 const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
   resolvedCertificate(DC_CERTIFICATE, answers);
 
-test("DC certificate and region declarations are well formed", () => {
+test("DC D-4A declaration withholds no tax for a verified nonresident", () => {
   assert.equal(certificateDeclarationProblem(DC_CERTIFICATE), null);
-  assert.equal(DC_REGION.implemented, true);
-  assert.equal(DC_REGION.certificateKey, "us_dc_d4");
+  const d4a = resolvedCertificate(DC_NONRESIDENT_CERTIFICATE, { permanent_residence_region: "MD", days_in_dc: "42" });
+  assert.equal(DC_WITHHOLDING.compute({ payDate: "2026-03-15", periodsPerYear: 26, wages: "2300.00", basis: "nonresident", certificate: cert(), residenceRegion: "MD", certificateFor: () => d4a }).tax, money("0"));
 });
 
 test("DC has left unimplementedUsStates() — the engine resolves by name", () => {

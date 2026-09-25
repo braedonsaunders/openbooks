@@ -389,6 +389,7 @@ export async function computeUsStatutory(
       federalWithholdingExempt: bool(empFact("US", emp, "tax_exempt")),
       taxQualifiedDeductions,
       certificateFor,
+      residenceRegion,
       regionTax,
       // State engines annualize against the year's earlier supplemental pay
       // (Massachusetts' surtax threshold is the live case); without this

@@ -386,6 +386,8 @@ export interface UsWithholdingInput {
    * when they have filed none of that certificate.
    */
   certificateFor: (key: string) => ResolvedCertificate | null;
+  /** Employee's residence region for pack-declared subject-scope checks. */
+  residenceRegion?: string;
   /** The REGION's withholding this period — the Yonkers surcharge's base. */
   regionTax?: string;
   /** Employee-side FICA, for the Massachusetts subtraction. */
@@ -646,6 +648,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         certificate,
         supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
         basis: levy.reach,
+        residenceRegion: input.residenceRegion,
+        certificateFor: input.certificateFor,
         wageAllocations: input.wageAllocations,
         residentWithholdingFacts,
         regionTax: input.regionTax,
@@ -767,6 +771,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       certificate,
       supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
       basis: levy.reach,
+      residenceRegion: input.residenceRegion,
+      certificateFor: input.certificateFor,
       wageAllocations: input.wageAllocations,
       residentWithholdingFacts,
       regionTax: input.regionTax,
@@ -903,6 +909,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       certificate,
       supportingCertificates: supportingCertificates(engine.supportingCertificateKeys),
       basis: levy.reach,
+      residenceRegion: input.residenceRegion,
+      certificateFor: input.certificateFor,
       wageAllocations: input.wageAllocations,
       residentWithholdingFacts,
       regionTax: input.regionTax,
