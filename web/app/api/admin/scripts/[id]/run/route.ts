@@ -14,6 +14,7 @@ import {
   bulkScriptQueueJobId,
   claimBulkRunKey,
   completeBulkRunKey,
+  releaseAbandonedBulkRunKey,
 } from '@openbooks/engine/src/scripting/bulk-run-claim.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
@@ -82,13 +83,54 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           { status: 400 },
         )
       }
+      const queueJobId = bulkScriptQueueJobId(id, runKey)
       const claim = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
       if (claim.status === 'completed') {
         return NextResponse.json({ ...(claim.response as Record<string, unknown>), deduped: true })
       }
       if (claim.status === 'inflight') {
+        // Recovery from worker loss: attempts=1 leaves a failed job retained,
+        // and the claim would otherwise answer 409 forever. Release it only
+        // on proof the script never started (failed without processing); a
+        // job that may have executed keeps its claim because a retry would
+        // double-post, and that refusal names the remedy.
+        let failedBeforeStart = false
+        let failedAfterStart = false
+        try {
+          const { getScriptsQueue } = await import('@openbooks/jobs')
+          const job = await getScriptsQueue().getJob(queueJobId)
+          if (job && (await job.getState()) === 'failed') {
+            if (job.processedOn == null) failedBeforeStart = true
+            else failedAfterStart = true
+          }
+        } catch {
+          failedBeforeStart = false
+        }
+        if (failedBeforeStart) {
+          const released = await releaseAbandonedBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
+          if (released) {
+            const fresh = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
+            if (fresh.status === 'claimed') {
+              try {
+                const { getScriptsQueue } = await import('@openbooks/jobs')
+                await getScriptsQueue().getJob(queueJobId).then((job) => job?.retry())
+                return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
+              } catch {
+                // The job left the failed state (a rival recovered first) or
+                // Redis failed: the fresh claim stays live and a later POST
+                // retries recovery. Never run inline here — the script may
+                // already be running under the rival's recovery.
+              }
+            }
+          }
+        }
         return NextResponse.json(
-          { error: 'A run with this key is already in progress.', code: 'SCRIPT_RUN_IN_PROGRESS' },
+          {
+            error: failedAfterStart
+              ? 'A run with this key failed after starting; verify whether it posted, then retry with a new idempotency key.'
+              : 'A run with this key is already in progress.',
+            code: 'SCRIPT_RUN_IN_PROGRESS',
+          },
           { status: 409 },
         )
       }
@@ -98,7 +140,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           { status: 409 },
         )
       }
-      const queueJobId = bulkScriptQueueJobId(id, runKey)
       const payload = { orgId: user.orgId, scriptId: id, kind: 'bulk' as const, actorId: user.id, idempotencyKey: runKey }
       try {
         const { enqueueScriptRun } = await import('@openbooks/jobs')
