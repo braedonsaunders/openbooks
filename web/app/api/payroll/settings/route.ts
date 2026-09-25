@@ -412,7 +412,12 @@ export async function PUT(req: Request) {
     settings.eftFallbackToCheque = body.eftFallbackToCheque
   }
   if ('wagesTo' in body) {
-    settings.wagesTo = body.wagesTo === 'labor_clearing' ? 'labor_clearing' : 'expense'
+    if (body.wagesTo !== 'expense' && body.wagesTo !== 'labor_clearing') {
+      return NextResponse.json({
+        error: `invalid wagesTo: must be "expense" or "labor_clearing" — got "${suppliedValue(body.wagesTo)}"; pass one of those values or omit wagesTo to leave the setting unchanged`,
+      }, { status: 422 })
+    }
+    settings.wagesTo = body.wagesTo
   }
   if ('t4Transmitter' in body) {
     const cfg = body.t4Transmitter
