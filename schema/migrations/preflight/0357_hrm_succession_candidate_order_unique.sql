@@ -1,5 +1,5 @@
 SELECT
-  'hrm_succession_candidate_order_tie'::text AS code,
+  '0357.hrm_succession_candidate_order_tie'::text AS code,
   'refuse'::text AS severity,
   format('plan %s, rank %s', ties.plan_id, ties.candidate_order) AS subject,
   format(

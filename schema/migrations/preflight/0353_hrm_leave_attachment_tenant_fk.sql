@@ -1,5 +1,5 @@
 SELECT
-  'hrm_leave_attachment_missing_file'::text AS code,
+  '0353.hrm_leave_attachment_missing_file'::text AS code,
   'refuse'::text AS severity,
   r.id::text AS subject,
   format('Leave request %s names attachment %s, but that file does not exist in organization %s.', r.id, r.attachment_id, r.org_id) AS detail,

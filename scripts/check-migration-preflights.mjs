@@ -25,6 +25,10 @@
  *   preflight-statements     a .sql file that is not exactly one statement
  *   preflight-not-select     a .sql file that is not SELECT / WITH ... SELECT
  *   preflight-write-keyword  a .sql file containing a write keyword or call
+ *   preflight-code-format    a code literal that is not '<this ordinal>.<snake_reason>'
+ *                            (bootstrap's evaluator rejects the row, so the
+ *                            upgrade check crashes instead of refusing by name;
+ *                            13 preflights had it, found by the perf-1m rehearsal)
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -298,6 +302,14 @@ export function scanPreflightSql(filename, content) {
       value: "a preflight is exactly one SELECT or WITH ... SELECT statement",
     });
     return findings;
+  }
+  // Codes are only ever literals; check each against bootstrap's own pattern
+  // (scripts/migration-preflight.ts PREFLIGHT_CODE_PATTERN plus the ordinal).
+  const ordinal = String(filename).match(/^(\d{4})_/)?.[1];
+  for (const match of statement.matchAll(/'([^']*)'(?:::text)?\s+as\s+code\b/gi)) {
+    if (!/^\d{4}\.[a-z][a-z0-9_]*$/.test(match[1]) || (ordinal && !match[1].startsWith(`${ordinal}.`))) {
+      findings.push({ file: filename, kind: "preflight-code-format", value: `code '${match[1]}' must be '${ordinal ?? "<ordinal>"}.<snake_reason>'` });
+    }
   }
   const code = blankQuotedSpans(stripSqlComments(statement));
   for (const keyword of FORBIDDEN_KEYWORDS) {

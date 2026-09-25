@@ -19,7 +19,7 @@ WITH period_collisions AS (
     AND right_run.run_status <> 'voided'
 )
 SELECT
-  'pay_runs_regular_schedule_overlap'::text AS code,
+  '0348.pay_runs_regular_schedule_overlap'::text AS code,
   'refuse'::text AS severity,
   concat(org_id::text, '/', pay_schedule_id::text) AS subject,
   'Live regular payroll periods overlap for one organization and schedule.'::text AS detail,

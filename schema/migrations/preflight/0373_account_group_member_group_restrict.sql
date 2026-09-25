@@ -1,5 +1,5 @@
 SELECT
-  'account_group_member_orphan' AS code,
+  '0373.account_group_member_orphan' AS code,
   'notice' AS severity,
   m.id::text AS subject,
   'This historical account-group pin has no parent group; the migration preserves it and the new constraint will reject future orphans.' AS detail,

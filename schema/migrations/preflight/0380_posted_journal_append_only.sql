@@ -1,5 +1,5 @@
 SELECT
-  'posted_journal_out_of_balance'::text AS code,
+  '0380.posted_journal_out_of_balance'::text AS code,
   'refuse'::text AS severity,
   format('journal entry %s (%s)', bad.entry_number, bad.id) AS subject,
   format(
@@ -19,7 +19,7 @@ FROM (
 ) AS bad
 UNION ALL
 SELECT
-  'posted_journal_without_lines'::text AS code,
+  '0380.posted_journal_without_lines'::text AS code,
   'refuse'::text AS severity,
   format('journal entry %s (%s)', e.entry_number, e.id) AS subject,
   format(

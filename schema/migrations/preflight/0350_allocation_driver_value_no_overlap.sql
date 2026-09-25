@@ -1,5 +1,5 @@
 SELECT
-  'allocation_driver_value_overlap'::text AS code,
+  '0350.allocation_driver_value_overlap'::text AS code,
   'refuse'::text AS severity,
   a.id::text AS subject,
   format('Driver value %s overlaps driver value %s for the same organization, driver, and dimension value.', a.id, b.id) AS detail,

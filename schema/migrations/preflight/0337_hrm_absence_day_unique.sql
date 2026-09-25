@@ -16,7 +16,7 @@ WITH live AS (
    GROUP BY a.org_id, a.employment_id, a.on_date
   HAVING COUNT(*) > 1
 )
-SELECT 'hrm_double_recorded_day' AS code,
+SELECT '0337.hrm_double_recorded_day' AS code,
        'notice' AS severity,
        format('employment %s', live.employment_id) AS subject,
        format('%s live absence rows cover %s; 0337 grandfathers the day as legacy and the calendar keeps netting the combined hours',
