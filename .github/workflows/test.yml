@@ -865,7 +865,16 @@ jobs:
           for pair in $SUITES; do
             spec="${pair%%:*}"
             echo "::group::playwright workflows ${spec}"
+            # The runtime and bypass pools must stay on the SAME database.
+            # Since the ARCH-RLS-ROLE split, cross-tenant reads (for example
+            # subscription bill-now resolving the owning org) go through the
+            # bypass pool while the suite's writes go through the runtime pool;
+            # overriding only OPENBOOKS_DB_URL left bypass on the shared
+            # template source, so bypass reads missed every row the suite had
+            # just written (422 "subscription not found"). Keep the bypass
+            # credential, swap only the dbname to this suite's clone.
             OPENBOOKS_DB_URL="postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD}@localhost:5433/openbooks_e2e_${pair##*:}" \
+            OPENBOOKS_BYPASS_DB_URL="${OPENBOOKS_BYPASS_DB_URL%/*}/openbooks_e2e_${pair##*:}" \
               npx playwright test --project workflows --workers=1 "e2e/workflows/${spec}.spec.ts" || status=1
             echo "::endgroup::"
           done
