@@ -351,6 +351,7 @@ test("restricted allocations managers cannot mutate org-wide drivers", async () 
     const beforeAudits = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`)).rows[0]!.n;
     authenticate(org.orgId, actorId, [...READ, ...MANAGE], new Set([org.subsidiaryId]));
+    assert.equal((await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", { driverId: driver.id, date: "2026-07-31" }))).status, 403);
 
     const createdDenied = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
       key: "restricted-driver",

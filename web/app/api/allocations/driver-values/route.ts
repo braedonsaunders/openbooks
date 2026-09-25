@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../lib/api/json";
 import { guardAllocations } from "../../../../lib/allocations-gate";
+import { guardUnrestrictedScope } from "../../../../lib/authz";
 import {
   DriverAdminError,
   createDriverValue,
@@ -34,6 +35,8 @@ async function toResponse(error: unknown): Promise<NextResponse> {
 export async function GET(req: Request) {
   const gate = await guardAllocations("allocations.read");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const params = new URL(req.url).searchParams;
   const driverId = params.get("driverId") ?? "";
   const onDate = params.get("onDate") ?? undefined;
@@ -48,6 +51,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardAllocations("allocations.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, valueBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const data = parsedBody.data;
