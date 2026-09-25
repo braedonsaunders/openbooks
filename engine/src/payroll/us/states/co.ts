@@ -31,10 +31,11 @@
  *
  * All arithmetic is exact bigint. No floats.
  */
-import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, divIntCents, max0, mulInt, mulRateCents, rate6, U } from "../../canada/decimal.ts";
 import {
-  certificateAmount, type PayrollCertificate,
+  certificateAmount, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";
+import { PayrollError } from "../../error.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
@@ -131,6 +132,44 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       factors: { CO_MILITARY_SPOUSE_EXEMPT: "1" },
     };
   }
+  // 49 U.S.C. §40116(f), Colorado Wage Withholding Tax Guide (Jan. 2026)
+  // Part 2 "Exempt Wages for Nonresident Employees," air carrier row: an
+  // air-carrier employee's compensation is exempt from Colorado income tax
+  // when no more than 50% is earned in Colorado. The carrier status and the
+  // nonresidence are attested on the supporting certificate; the share is
+  // the verified work allocation — a missing allocation refuses by name,
+  // never prices as zero, and a share above half falls through to the
+  // ordinary formula below.
+  const airCarrierCertificate = input.supportingCertificates?.us_co_air_carrier;
+  if (airCarrierCertificate?.onFile) {
+    for (const [key, description] of [
+      ["is_air_carrier_employee", "the employee performs regularly assigned duties on aircraft in more than one state for an air carrier"],
+      ["is_nonresident", "the employee is not a Colorado resident"],
+    ] as const) {
+      if (!certificateFlag(airCarrierCertificate, key)) {
+        throw new PayrollError(
+          "Colorado air-carrier withholding exemption requires proof that " + description,
+        );
+      }
+    }
+    if (input.basis !== "nonresident") {
+      throw new PayrollError(
+        "Colorado air-carrier withholding exemption contradicts this run's resident basis — "
+        + "the 49 U.S.C. §40116(f) exemption never applies to the residence state. Correct the "
+        + "basis or remove the air-carrier certificate",
+      );
+    }
+    const allocation = requireUsWageAllocation(input.wageAllocations, "CO", null);
+    if (rate6(allocation.workShare) <= 500_000n) {
+      return {
+        state: "CO",
+        year: rates.year,
+        tax: D(0n),
+        taxSupplemental: D(0n),
+        factors: { CO_AIR_CARRIER_EXEMPT: "1" },
+      };
+    }
+  }
   // DR 1098 says to skip its calculation and withhold zero when the employee
   // filed only an exempt W-4. With a separate DR 0004 on file, use that state
   // certificate's instructions instead of treating the W-4 as the only form.
@@ -206,6 +245,7 @@ export const CO_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CO_MILITARY_SPOUSE_EXEMPT: "Colorado qualifying military-spouse wages exempt from withholding",
   CO_FAMLI_EMPLOYEE: "Colorado FAMLI employee premium",
   CO_FAMLI_EMPLOYER: "Colorado FAMLI employer contribution",
+  CO_AIR_CARRIER_EXEMPT: "Colorado air-carrier wages exempt under 49 U.S.C. §40116(f) (≤50% earned in Colorado)",
   CO_NONRESIDENT_WAGES: "Colorado apportioned nonresident wages",
   CO_ANNUAL_WAGES: "Colorado annualized wages",
   CO_ANNUAL_ALLOWANCE: "Colorado annual allowance",
@@ -218,7 +258,7 @@ export const CO_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CO",
   label: "Colorado income tax",
   certificateKey: "us_co_dr0004",
-  supportingCertificateKeys: ["us_co_dr1059"],
+  supportingCertificateKeys: ["us_co_dr1059", "us_co_air_carrier"],
   ratesModule: RATES_MODULE,
   editions: CO_TAX_YEAR_EDITIONS,
   printedPeriods: null,
@@ -288,6 +328,32 @@ export const CO_DR1059_CERTIFICATE: PayrollCertificate = {
     { key: "spouse_present_to_accompany", label: "Spouse is in Colorado solely to be with the servicemember", kind: "flag", help: "Required DR 1059 attestation 4." },
     { key: "servicemember_serving_under_orders", label: "Servicemember is serving in compliance with military orders", kind: "flag", help: "Required DR 1059 attestation 4." },
     { key: "notify_if_residency_changes", label: "Employee will notify employer immediately if they become a Colorado resident", kind: "flag", help: "Required DR 1059 attestation 5." },
+  ],
+};
+
+/**
+ * Air-carrier exemption record: no Colorado form claims the 49 U.S.C.
+ * §40116(f) exemption, so the form names the employer's own record — the
+ * carrier status and nonresidence attestations plus the verified
+ * Colorado-earned share from the work allocation. On file, a ≤50% share
+ * withholds zero; above half the ordinary formula prices.
+ */
+export const CO_AIR_CARRIER_CERTIFICATE: PayrollCertificate = {
+  key: "us_co_air_carrier",
+  form: "Air-carrier exemption record (employer-held)",
+  label: "Colorado air-carrier exemption (49 U.S.C. §40116(f))",
+  scope: { level: "region", region: "CO" },
+  purpose: "withholding",
+  citation:
+    "49 U.S.C. §40116(f); Colorado Department of Revenue, 2026 Wage Withholding Tax Guide "
+    + "(Jan. 2026), Part 2 “Exempt Wages for Nonresident Employees,” air carrier row",
+  summary:
+    "An air-carrier employee performing duties in more than one state is exempt from Colorado "
+    + "income tax when no more than 50% of compensation is earned in Colorado.",
+  storage: "certificate_rows",
+  fields: [
+    { key: "is_air_carrier_employee", label: "Employee performs regularly assigned duties on aircraft in more than one state for an air carrier", kind: "flag", help: "Required §40116(f) attestation 1." },
+    { key: "is_nonresident", label: "Employee is not a Colorado resident", kind: "flag", help: "Required attestation 2: the exemption never applies to the residence state." },
   ],
 };
 
