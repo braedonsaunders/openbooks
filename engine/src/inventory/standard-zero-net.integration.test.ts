@@ -84,10 +84,16 @@ for (const provenance of ["known", "legacy unknown"] as const) {
       const denied = await withSimClock(org.date, () => PUT(deniedRequest, {
         params: Promise.resolve({ id: org.items.fifo }),
       }));
-      assert.equal(denied.status, 422);
-      assert.match((await denied.json()).error, /requires access to every subsidiary/);
+      // The costing profile is org-wide policy, so a restricted caller is
+      // refused at the route's unrestricted-scope boundary (403) before the
+      // revaluation's subsidiary check can fire — 1cb07bf7b3e3 hardened the
+      // route after this proof was written. Nothing may be written either way.
+      assert.equal(denied.status, 403);
+      assert.match((await denied.json()).error, /requires unrestricted subsidiary access/);
       assert.deepEqual(await financialEvidence(org), deniedBefore);
-      state.gate.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
+      // The success path runs unrestricted: the hardened route admits no
+      // scoped caller to this org-wide write.
+      state.gate.allowedSubsidiaryIds = null;
       const response = await withSimClock(org.date, () => PUT(request, {
         params: Promise.resolve({ id: org.items.fifo }),
       }));
