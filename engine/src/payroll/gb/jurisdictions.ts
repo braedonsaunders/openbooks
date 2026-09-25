@@ -192,7 +192,7 @@ const GB_NIC_CATEGORY_RECORD: PayrollCertificate = {
   citation:
     "HMRC National Insurance rates and categories (https://www.gov.uk/national-insurance-rates-letters/category-letters)",
   summary:
-    "Employer-recorded category letter used to select the employee and employer Class 1 NIC rules. "
+    "Employer-recorded category letter and director status used to select Class 1 NIC rules. "
     + "The employer must establish the correct letter from HMRC guidance.",
   storage: "certificate_rows",
   fields: [
@@ -206,6 +206,23 @@ const GB_NIC_CATEGORY_RECORD: PayrollCertificate = {
       help:
         "Use the letter determined by the employee's circumstances and workplace. Payroll currently "
         + "calculates category A only and refuses every other category by name.",
+    },
+    {
+      key: "director_status",
+      label: "Company director during this employment period",
+      kind: "choice",
+      required: true,
+      choices: [
+        { value: "director", label: "Company director" },
+        { value: "not_director", label: "Not a company director" },
+      ],
+      help: "Record the effective-dated status for NIC; directors use a cumulative annual or pro-rata earnings period.",
+    },
+    {
+      key: "directorship_start_date",
+      label: "Directorship start date",
+      kind: "code",
+      help: "For a director, record the appointment date as YYYY-MM-DD; NIC is not calculated until the annual/pro-rata method is supported.",
     },
   ],
 };

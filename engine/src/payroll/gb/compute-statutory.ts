@@ -22,8 +22,9 @@
  *   assessment. Enrolled or opted-in workers and eligible jobholders without
  *   a valid opt-out refuse by name: this pack does not calculate the scheme's
  *   pay-reference-period qualifying earnings or employee/employer amounts.
- * - Directors are priced by the per-period (alternative) method. The annual
- *   method for directors (CA44) is not modeled.
+ * - Directors require an effective-dated status and appointment date, then
+ *   refuse by name until cumulative annual/pro-rata NIC, prior employee and
+ *   employer shares, and the FPS method are calculated together.
  * - Two payments in the same Income Tax week are priced as one period's pay
  *   each, not aggregated ("Add to each payment any payments made earlier in
  *   the same Income Tax week", CWG2) — same-week aggregation is not modeled.
@@ -198,6 +199,28 @@ export async function computeGbStatutory(
       `GB payroll cannot calculate National Insurance category ${nicCategory}: this pack currently `
       + "implements category A only, and must not apply its employee or employer rates to another "
       + "category. Use payroll software that supports this HMRC category until this pack adds its rules.",
+    );
+  }
+  const directorStatus = nicCategoryCertificate?.answers.director_status;
+  if (directorStatus !== "director" && directorStatus !== "not_director") {
+    throw new PayrollPackError(
+      "GB National Insurance needs an effective-dated director status in gb_nic_category; "
+      + "record whether the employee is a company director before calculating NIC.",
+    );
+  }
+  if (directorStatus === "director") {
+    const startDate = nicCategoryCertificate?.answers.directorship_start_date;
+    if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      throw new PayrollPackError(
+        "GB director National Insurance needs the directorship start date (YYYY-MM-DD) "
+        + "in gb_nic_category to determine the annual or pro-rata earnings period.",
+      );
+    }
+    throw new PayrollPackError(
+      "GB director National Insurance is not calculated: CA44 requires cumulative annual or "
+      + "pro-rata earnings-period employee and employer NIC less both shares already paid, "
+      + "and this pack cannot report the FPS director calculation method. Use payroll software "
+      + "that supports CA44 and FPS director reporting; do not finalise this run.",
     );
   }
 
