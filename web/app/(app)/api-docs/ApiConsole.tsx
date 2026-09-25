@@ -109,13 +109,21 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
   const [busy, setBusy] = useState(false)
   const [response, setResponse] = useState<ResponseState | null>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
+  // Generation fence for in-flight requests: every request-defining change
+  // (selected type, method, id, body) retires the generation, and a
+  // completion applies only to the generation it was sent from — so type A's
+  // late response can never land under type B (I4-webui-230).
+  const requestGeneration = useRef(0)
 
   const selected = useMemo(() => schema.find((s) => s.key === selectedKey) ?? null, [schema, selectedKey])
   const methods = useMemo(() => (selected ? methodsFor(selected, t('console.getList')) : []), [selected, t])
 
   // When the selected type or method changes, reseed the body template.
   const resetBody = useCallback(() => {
-    if (selected) setBody(bodyTemplate(selected))
+    if (selected) {
+      requestGeneration.current += 1
+      setBody(bodyTemplate(selected))
+    }
   }, [selected])
 
   // Reseed the console when the selected type changes, during render (same
@@ -153,6 +161,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
 
     setBusy(true)
     setResponse(null)
+    const generation = requestGeneration.current
     const start = performance.now()
     try {
       const res = await fetch(url, {
@@ -170,11 +179,15 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
       } catch {
         /* leave raw */
       }
+      // A type/method/id/body change since send retires this response: the
+      // console shows the current request's state, never a prior one's.
+      if (requestGeneration.current !== generation) return
       setResponse({ status: res.status, ms: Math.round(performance.now() - start), ok: res.ok, body: pretty })
     } catch (e) {
+      if (requestGeneration.current !== generation) return
       setResponse({ status: 0, ms: Math.round(performance.now() - start), ok: false, body: (e as Error).message })
     } finally {
-      setBusy(false)
+      if (requestGeneration.current === generation) setBusy(false)
     }
   }, [selected, token, method, id, body, hasBody])
 
@@ -234,7 +247,12 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
               <li key={rt.key}>
                 <button
                   type="button"
-                  onClick={() => setSelectedKey(rt.key)}
+                  onClick={() => {
+                    // Retire any in-flight request: its response belongs to
+                    // the old type and must not land under the new one.
+                    if (rt.key !== selectedKey) requestGeneration.current += 1
+                    setSelectedKey(rt.key)
+                  }}
                   className={cn(
                     'w-full rounded-md px-2.5 py-2 text-left hover:bg-white hover:shadow-sm dark:hover:bg-slate-800/70',
                     rt.key === selectedKey && 'bg-white shadow-sm dark:bg-slate-800/70',
@@ -294,7 +312,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
                 <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
                   <Select
                     value={method}
-                    onChange={(e) => setMethod(e.target.value as Method)}
+                    onChange={(e) => { requestGeneration.current += 1; setMethod(e.target.value as Method) }}
                     aria-label={t('console.method')}
                     className="h-8 w-40"
                   >
@@ -306,7 +324,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
                     <Input
                       aria-label={t('console.idPlaceholder')}
                       value={id}
-                      onChange={(e) => setId(e.target.value)}
+                      onChange={(e) => { requestGeneration.current += 1; setId(e.target.value) }}
                       placeholder={t('console.idPlaceholder')}
                       className="h-8 flex-1 font-mono text-xs"
                       spellCheck={false}
@@ -329,7 +347,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
                       ref={bodyRef}
                       aria-label={t('console.requestBody')}
                       value={body}
-                      onChange={(e) => setBody(e.target.value)}
+                      onChange={(e) => { requestGeneration.current += 1; setBody(e.target.value) }}
                       spellCheck={false}
                       className="min-h-0 flex-1 resize-none border-0 bg-slate-50 p-3 font-mono text-[12px] leading-relaxed text-slate-800 outline-none dark:bg-slate-950 dark:text-slate-100"
                     />
