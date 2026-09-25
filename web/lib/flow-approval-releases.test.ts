@@ -9,14 +9,16 @@ registerHooks({
   },
 })
 
-const { hasFlowApprovalReleaseHandler, webHookReleasedSubjectKinds } = await import(
+const { hasFlowApprovalReleaseHandler, handlerReleasedSubjectKinds } = await import(
   '@openbooks/engine/src/flows/index.ts'
 )
 const { registerFlowApprovalReleaseHandlers } = await import('./flow-approval-releases')
+const { installEngineSeams } = await import('@openbooks/engine/src/composition/install.ts')
 
 test('every hook-delegated subject kind has a boot-registered release handler', async () => {
+  installEngineSeams()
   await registerFlowApprovalReleaseHandlers()
-  const kinds = webHookReleasedSubjectKinds()
+  const kinds = handlerReleasedSubjectKinds()
   // Anti-vacuity: the defect was a missing crew_time_batch handler, so the
   // derived set must contain it — an empty set would pass the loop below
   // while proving nothing.

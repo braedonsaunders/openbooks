@@ -3,6 +3,7 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db } from "../platform/db.ts";
 import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import { releaseFlowApproval } from "./approval-release-hook.ts";
 
 export const CLOSE_RUN_SUBJECT_KIND = "close_run";
 
@@ -86,6 +87,8 @@ function periodType(row: CloseRunRow): "month" | "quarter" | "year" | "adjustmen
 export const closeRunsFlowAdapter: FlowSubjectAdapter = {
   subjectKind: CLOSE_RUN_SUBJECT_KIND,
   profile: closeRunSubjectProfile,
+  // releaseApproval below delegates to the registered engine handler.
+  releaseViaHandler: true,
   writableFields: new Set<string>(),
   selfApprovalPolicy: "forbidden",
 
@@ -132,12 +135,11 @@ export const closeRunsFlowAdapter: FlowSubjectAdapter = {
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
   ): Promise<void> {
-    const { finalizeCloseFlowApproval } = await import("../close/approvals.ts");
-    await finalizeCloseFlowApproval({
-      orgId: ctx.orgId,
-      runId: subjectId,
-      actorId: ctx.userId ?? null,
+    await releaseFlowApproval({
+      subjectKind: CLOSE_RUN_SUBJECT_KIND,
+      subjectId,
       outcome,
+      ctx,
     });
   },
 

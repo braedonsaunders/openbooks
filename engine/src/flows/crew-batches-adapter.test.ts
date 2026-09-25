@@ -55,3 +55,18 @@ test("crew batch release without a registered handler throws instead of strandin
     /is not registered/,
   );
 });
+
+test("unregistered release names the install remedy", async () => {
+  await assert.rejects(
+    releaseFlowApproval({
+      subjectKind: "crew_time_batch_probe_remedy_without_handler",
+      subjectId: "00000000-0000-4000-8000-000000000001",
+      outcome: "approved",
+      ctx: {
+        orgId: "00000000-0000-4000-8000-000000000002",
+        userId: "00000000-0000-4000-8000-000000000003",
+      },
+    }),
+    /installEngineSeams/,
+  );
+});

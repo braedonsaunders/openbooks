@@ -14,7 +14,7 @@ const REQUIRED_COVERAGE = [
   "engine/src/ledger/posting-replay.ts",
   "engine/src/ledger/posting-effects.ts",
   "engine/src/sync/applications.ts",
-  "engine/src/payments/payment-documents.ts",
+  "engine/src/payments-core/payment-document-lock.ts",
   "engine/src/payments/payment-queries.ts",
   "engine/src/payments/settlement-policy.ts",
   "engine/src/payroll/run-calculation.ts",

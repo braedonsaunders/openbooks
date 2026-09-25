@@ -12,7 +12,7 @@ import { registerFlowApprovalReleaseHandler } from '@openbooks/engine/src/flows/
  * import web, so the node server registers those handlers here at boot,
  * exactly like the flow PDF renderer.
  *
- * The set of kinds registered here must cover webHookReleasedSubjectKinds()
+ * The set of kinds registered here must cover handlerReleasedSubjectKinds()
  * from the engine subject registry — flow-approval-releases.test.ts enforces
  * that, so a new hook-delegated subject without a handler fails the suite
  * instead of stranding its approval gates pending forever.
