@@ -116,6 +116,8 @@ async function frPayrollOrg(): Promise<Fixture> {
     // RGDU adjusts the SMIC to contractual hours: a 35-hour week per
     // employee, or the run refuses by name (CSS D.241-7 IV).
     await seedFullTimeWorkScheduleFixture(org.orgId, actorId, id);
+    // APEC cadre classification: the run refuses by name without the attestation.
+    await db.execute(sql`insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key, answers, effective_from) values (${org.orgId}, ${id}, 'FR', 'fr_apec_status', '{"apec_eligibility": "covered"}'::jsonb, '2026-01-01')`);
     return id;
   };
   const camille = await employee("Camille Martin", "24000");
@@ -124,10 +126,7 @@ async function frPayrollOrg(): Promise<Fixture> {
 }
 
 async function runAndCommit(fx: Fixture, periodStart: string, periodEnd: string): Promise<string> {
-  const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart, periodEnd,
-  });
+  const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart, periodEnd });
   assert.deepEqual((await calculatePayRun({
     orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
   })).errors, []);
