@@ -1725,6 +1725,9 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // HR-21: the AI capability registry mirror. Same gate as the ledger.
   // Config rows, not events — no period field (null opts out of the
   // fiscal window rather than acquiring one from an unrelated date).
+  // Effective availability belongs to Company Settings → Features; omit
+  // the legacy ai_capabilities.enabled column so reports cannot expose it
+  // as a second source of truth.
   {
     key: 'ai_capabilities',
     label: 'AI capabilities',
@@ -1746,7 +1749,6 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'autonomy', label: 'Autonomy', kind: 'enum', expr: 'c.autonomy', options: ['read_only', 'draft', 'propose', 'act_with_confirmation'] },
       { key: 'reviewer', label: 'Reviewer', kind: 'text', expr: 'c.reviewer_role' },
       { key: 'notice_required', label: 'Notice required', kind: 'boolean', expr: 'c.notice_required' },
-      { key: 'enabled', label: 'Enabled', kind: 'boolean', expr: 'c.enabled' },
       { key: 'last_reviewed_at', label: 'Last reviewed', kind: 'timestamp', expr: 'c.last_reviewed_at' },
       { key: 'reviewed_by', label: 'Reviewed by', kind: 'text', expr: 'c.reviewed_by' },
     ],
