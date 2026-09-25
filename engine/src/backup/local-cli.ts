@@ -5,15 +5,16 @@
  * backups, but writes to an explicit local path for operator-controlled
  * maintenance windows where object storage is unavailable.
  *
- * Usage:
- *   npx tsx src/backup-local-cli.ts --org=<uuid> --out=/safe/path/backup.json.gz
+ * Usage (from the engine directory):
+ *   npx tsx src/backup/local-cli.ts --org=<uuid> --out=/safe/path/backup.json.gz
  */
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { Transform, type Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { fileURLToPath } from "node:url";
 import { createGzip } from "node:zlib";
 import { streamOrgBackup, type BackupExportStats } from "./backup.ts";
 import { BACKUP_FORMAT_VERSION } from "./format.ts";
@@ -136,7 +137,11 @@ export async function runLocalBackup({
   }
 }
 
-if (/backup-local-cli\.(?:[cm]?[jt]s)$/.test(process.argv[1] ?? "")) {
+// Run only when invoked as the CLI entry point — never on import (unit
+// tests import runLocalBackup). A filename regex went stale when the module
+// move renamed this file and the CLI silently exited 0 with no archive; the
+// import.meta identity cannot drift from the file it guards.
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = parseArgs(process.argv);
   runLocalBackup({ orgId: args.get("org"), out: args.get("out") }).catch((error) => {
     console.error(error);
