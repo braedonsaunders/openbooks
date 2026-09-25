@@ -21,7 +21,8 @@
     "empty": "Pick what to export.",
     "noColumns": "This record type has no exportable columns.",
     "loadFailed": "Could not load exportable record types.",
-    "columnsLoadFailed": "Could not load columns for this record type."
+    "columnsLoadFailed": "Could not load columns for this record type.",
+    "failed": "The export could not be completed."
   },
   "import": {
     "title": "Import data",
@@ -35,6 +36,7 @@
     },
     "resource": "Import into",
     "parseFailed": "Could not read the import file.",
+    "noColumns": "The file has no column headers. Add a header row and try again.",
     "previewFailed": "Could not preview this import.",
     "loadFailed": "Could not load importable record types.",
     "resourcePlaceholder": "Choose an import target…",

@@ -21,7 +21,8 @@
     "empty": "Wählen Sie aus, was exportiert werden soll.",
     "noColumns": "Dieser Datensatztyp hat keine exportierbaren Spalten.",
     "loadFailed": "Exportierbare Datensatztypen konnten nicht geladen werden.",
-    "columnsLoadFailed": "Spalten für diesen Datensatztyp konnten nicht geladen werden."
+    "columnsLoadFailed": "Spalten für diesen Datensatztyp konnten nicht geladen werden.",
+    "failed": "Der Export konnte nicht abgeschlossen werden."
   },
   "import": {
     "title": "Daten importieren",
@@ -35,6 +36,7 @@
     },
     "resource": "Importieren in",
     "parseFailed": "Die Importdatei konnte nicht gelesen werden.",
+    "noColumns": "Die Datei enthält keine Spaltenüberschriften. Fügen Sie eine Kopfzeile hinzu und versuchen Sie es erneut.",
     "previewFailed": "Für diesen Import konnte keine Vorschau erstellt werden.",
     "format": "Dateiformat",
     "file": "Datei",
