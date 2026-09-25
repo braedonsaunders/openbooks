@@ -98,7 +98,12 @@ const bypassPool = bypassDatabaseUrl ? new pg.Pool({
 }) : null;
 const bypassLongPool = bypassDatabaseUrl ? new pg.Pool({
   connectionString: bypassDatabaseUrl,
-  max: 2,
+  // A clone holds its slot for the whole run, so one clone plus one
+  // refresh/promote/bypass-replay leaves a third maintenance unit waiting
+  // the 30s connection timeout and then failing. The default stays 2;
+  // raise it with OPENBOOKS_BYPASS_LONG_POOL_MAX where overlapping
+  // maintenance is routine (bounded 1..200 like the request pools).
+  max: poolMax(env.OPENBOOKS_BYPASS_LONG_POOL_MAX, 2),
   keepAlive: true,
   connectionTimeoutMillis: 30_000,
   query_timeout: 0,
