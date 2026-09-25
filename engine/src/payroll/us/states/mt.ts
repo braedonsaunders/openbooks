@@ -237,6 +237,13 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "MT", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
+  const specifiedWithholding = certificateAmount(input.certificate, "specified_withholding_per_period");
+  if (specifiedWithholding != null) {
+    const tax = U(specifiedWithholding);
+    trace("MT_SPECIFIED_WITHHOLDING", tax);
+    return { state: "MT", year: rates.year, tax: D(tax), taxSupplemental: D(0n), factors };
+  }
+
   // No MW-4: single filing status on line 1a.
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single_or_both") as MtFilingStatus;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -265,6 +272,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  */
 export const MT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MT_EXEMPT: "Exempt from Montana withholding",
+  MT_SPECIFIED_WITHHOLDING: "Montana specified withholding (MW-4 line 4)",
   MT_GROSS: "Montana gross wages this period",
   MT_UNROUNDED: "Montana tax before rounding",
   MT_WITHHELD: "Montana tax withheld this period",
@@ -301,7 +309,8 @@ export const MT_CERTIFICATE: PayrollCertificate = {
   purpose: "withholding",
   citation:
     "Montana Department of Revenue, Employer and Information Agent Guide "
-    + "with Montana Withholding Tax Tables – 2026; Form MW-4 (2026)",
+    + "with Montana Withholding Tax Tables – 2026; Form MW-4 (2026): "
+    + "https://revenuefiles.mt.gov/files/Forms/Montana_Employee_Withholding_Allowance_and_Exemption_Certificate_Form_MW-4.pdf",
   summary:
     "Sets the Montana withholding schedule from MW-4 lines 1a, 1b, 1c, or 2. "
     + "If the employee does not complete an MW-4, the form requires "
@@ -338,6 +347,16 @@ export const MT_CERTIFICATE: PayrollCertificate = {
       help:
         "A flat dollar amount requested on Form MW-4 line 3. Added AFTER the "
         + "formula is rounded to the nearest whole dollar.",
+    },
+    {
+      key: "specified_withholding_per_period",
+      label: "Line 4 — Specified withholding per pay period",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      help:
+        "For wage income, Form MW-4 line 4 replaces the standard calculation. "
+        + "Do not combine it with filing status or extra withholding lines.",
     },
     {
       key: "exempt",

@@ -31,14 +31,14 @@ test("MT printed percents and the guide's $704 remainder", () => {
   assert.equal(mtPeriodTax(U("1375"), "semimonthly", "single_or_both", MT_RATES_2026), U("33.09"));
 });
 
-test("MT Example 1a — $1,375 semi-monthly, line 1a: $33", () => {
-  // $0 + (0.047 × ($1,375 − $671)) = $33.09, nearest dollar $33.
+test("MT MW-4 line 4 specified withholding replaces the wage table", () => {
+  // 2026 Form MW-4 line 4 directs the employer to withhold only the specified amount.
   const result = MT_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 24, wages: "1375.00",
-    basis: "resident", certificate: cert({ filing_status: "single_or_both" }),
+    basis: "resident", certificate: cert({ specified_withholding_per_period: "12.00" }),
   });
-  assert.equal(result.factors.MT_UNROUNDED, money("33.09"));
-  assert.equal(result.tax, money("33"));
+  assert.equal(result.factors.MT_SPECIFIED_WITHHOLDING, money("12.00"));
+  assert.equal(result.tax, money("12.00"));
 });
 
 test("MT Example line 2 — $2,950 bi-weekly: $114", () => {
