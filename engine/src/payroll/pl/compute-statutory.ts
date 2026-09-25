@@ -798,7 +798,28 @@ export async function computePlStatutory(
     );
   }
 
-  const base = D(U(income) + U(nonPeriodic === "" ? "0" : nonPeriodic));
+  // Uneven pay breaks the level-pay annualisation below: a bonus folded into
+  // this month's base is multiplied into every prior month, collapsing the
+  // 282 600 zł ZUS room and pushing PIT to 32 % on fabricated YTD
+  // (I6-payroll-25). January has no priors, so it prices exactly; any later
+  // month with a non-periodic component refuses by name — committed
+  // same-payer YTD (updof art. 32 ust. 2; ZUS art. 19) rides no pack channel
+  // (see PL_REFUSALS_2026).
+  // https://eli.gov.pl/api/acts/DU/2025/163/text.html
+  // https://monitorpolski.gov.pl/MP/2025/1206
+  const bonusUnits = U(nonPeriodic === "" ? "0" : nonPeriodic);
+  if (monthOf(payDate) > 1 && bonusUnits !== 0n) {
+    throw new PayrollPackError(
+      `PL refuses a bonus/uneven versement in ${payDate.slice(0, 7)}: the 120 000 zł PIT threshold tests `
+      + "year-to-date income from this payer (updof art. 32 ust. 2) and the 282 600 zł emerytalne/rentowe "
+      + "room tests YTD contributions (ZUS art. 19), but no pack channel carries YTD — the engine prices "
+      + "prior months as (month − 1) × this month, exact for level pay only. A bonus implies every prior "
+      + "month paid the same inflated figure. Pay January bonuses normally (no priors exist); for later "
+      + "months have a qualified Polish payroll provider price the month from committed same-payer YTD "
+      + "before posting (see PL_REFUSALS_2026).",
+    );
+  }
+  const base = D(U(income) + bonusUnits);
   const zus = calculatePlZusWithTables({
     brut: base,
     payDate,
