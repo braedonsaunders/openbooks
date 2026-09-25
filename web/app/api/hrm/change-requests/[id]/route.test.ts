@@ -37,7 +37,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.hrm-changerequest-id-test')]
       export async function guardPermission(permission) {
-        if (!['hrm.employment.read', 'hrm.employment.manage'].includes(permission)) {
+        if (!['hrm.employment.read', 'hrm.employment.manage', 'hrm.self.request'].includes(permission)) {
           throw new Error('unexpected permission ' + permission)
         }
         if (state.gate && 'status' in state.gate) {
