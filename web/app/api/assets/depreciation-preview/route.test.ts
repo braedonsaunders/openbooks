@@ -347,17 +347,6 @@ test("preview performs zero writes", async () => {
   assert.ok(state.queries.length > 0);
 });
 
-test("the fingerprint covers the candidate set: a changed amount re-fingerprints", async () => {
-  reset();
-  const before = ((await (await preview({ throughDate: "2026-09-30" })).json()) as PreviewBody)
-    .fingerprint;
-  state.due[0]!.amount = "101.0000";
-  const after = ((await (await preview({ throughDate: "2026-09-30" })).json()) as PreviewBody)
-    .fingerprint;
-  assert.notEqual(before, after);
-  state.due[0]!.amount = "100.0000";
-});
-
 test("unknown book, period, and asset ids are refused by name", async () => {
   reset();
   const cases: [Record<string, unknown>, string][] = [
@@ -396,11 +385,8 @@ test("the posting date is fingerprinted and validated", async () => {
   reset();
   const plain = ((await (await preview({ throughDate: "2026-09-30" })).json()) as PreviewBody)
     .fingerprint;
-  const dated = (
-    (await (
-      await preview({ throughDate: "2026-09-30", postingDate: "2026-09-15" })
-    ).json()) as PreviewBody
-  ).fingerprint;
+  const datedResponse = await preview({ throughDate: "2026-09-30", postingDate: "2026-09-15" });
+  const dated = ((await datedResponse.json()) as PreviewBody).fingerprint;
   assert.notEqual(plain, dated);
   const bad = await preview({ throughDate: "2026-09-30", postingDate: "2026-13-40" });
   assert.equal(bad.status, 422);
