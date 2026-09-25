@@ -109,7 +109,14 @@ test("ID refuses a pre-sunset 2026 pay date and an untranscribed year", () => {
       payDate: "2026-04-15", periodsPerYear: 26, wages: "1212",
       basis: "resident", certificate: cert({ filing_status: "single" }),
     }),
-    /pay dates before 2026-07-23 is not loaded.*Never apply the July 23 2026/s,
+    /pay dates before 2026-07-31 is not loaded.*no operative date before that is established/s,
+  );
+  assert.throws(
+    () => ID_WITHHOLDING.compute({
+      payDate: "2026-07-25", periodsPerYear: 26, wages: "1212",
+      basis: "resident", certificate: cert({ filing_status: "single" }),
+    }),
+    /pay dates before 2026-07-31 is not loaded/,
   );
   assert.throws(
     () => ID_WITHHOLDING.compute({
