@@ -33,7 +33,8 @@ import {
   voidDocument,
 } from "./documents";
 import { createPayment, postPayment, updatePayment } from "./payments";
-import { uploadCabinetFile } from "./files";
+import { assertCabinetUploadAccess, uploadCabinetFile } from "./files";
+import { withContentDigest } from "./idempotency-core";
 import {
   createApplicationRecord,
   deleteApplicationRecord,
@@ -293,8 +294,9 @@ const documentActor = anyPermission("gl.post", "ap.create", "ap.post", "ar.creat
 function definition<T extends ZodTypeAny>(args: Omit<ApplicationToolDefinition, "execute" | "inputSchema" | "mutationProtection"> & {
   inputSchema: T;
   execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
+  authorizeReplay?: (context: ApplicationContext, input: z.infer<T>) => Promise<void>;
 }): ApplicationToolDefinition {
-  const { execute, inputSchema, ...metadata } = args;
+  const { execute, inputSchema, authorizeReplay, ...metadata } = args;
   return {
     ...metadata,
     inputSchema,
@@ -312,6 +314,7 @@ function definition<T extends ZodTypeAny>(args: Omit<ApplicationToolDefinition, 
         operation: `mcp.${metadata.name}`,
         idempotencyKey,
         request: parsed,
+        authorizeReplay: authorizeReplay ? () => authorizeReplay(context, parsed) : undefined,
         // The outer catalog claim owns API-key execution evidence. Nested
         // domain idempotency still runs in this same transaction, but must not
         // attempt to write a second transport event for the same command.
@@ -948,6 +951,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("documents.manage", "documents.read"),
+    authorizeReplay: (context, input) => assertCabinetUploadAccess(context.authz, input.folderId),
     execute: async (context, input) => {
       // documents.read does not imply from documents.manage (no wildcard),
       // so either suffices here — the folder grant is the true gate below.
@@ -956,7 +960,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       }
       const outcome = await executeIdempotent({
         context, operation: "file.upload", idempotencyKey: input.idempotencyKey,
-        request: { folderId: input.folderId, filename: input.filename, contentType: input.contentType },
+        request: withContentDigest(
+          { folderId: input.folderId, filename: input.filename, contentType: input.contentType },
+          input.contentBase64.replace(/\s+/g, ""),
+        ),
+        authorizeReplay: () => assertCabinetUploadAccess(context.authz, input.folderId),
         execute: async () => uploadCabinetFile(context.authz, {
           folderId: input.folderId, filename: input.filename,
           contentType: input.contentType, contentBase64: input.contentBase64,

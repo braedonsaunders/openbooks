@@ -88,9 +88,7 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
       assert.ok(folders.folders.some((folder) => folder.id === folderId && folder.name === "Probe Cabinet"));
 
       const replay = await executeApplicationTool(definition, manager, input);
-      assert.equal(replay.ok, true, JSON.stringify(replay));
-      assert.equal(replay.replayed, true);
-      assert.equal(replay.id, first.id);
+      assert.deepEqual([replay.ok, replay.replayed, replay.id], [true, true, first.id]);
       const count = await db.execute<{ n: string }>(sql`
         select count(*) as n from files where folder_id = ${folderId} and org_id = ${org.orgId}`);
       assert.equal(Number(count.rows[0]!.n), 1, "idempotent replay must not store a second file");
@@ -104,6 +102,7 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
       const grantId = randomUUID();
       await db.execute(sql`insert into resource_grants(id, org_id, resource_type, resource_id, principal_type, principal_id, access, created_by)
         values (${grantId}, ${org.orgId}, 'folder', ${folderId}, 'user', ${viewerId}, 'editor', ${userId})`);
+      await executeApplicationTool(definition, viewer, input);
       const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
       await client.connect();
       const lockKey = `file-cabinet-auth:${org.orgId}`;
@@ -127,6 +126,7 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
         assert.equal(revoked, false);
         await client.query("commit");
         assert.equal(await pendingRevoke, true);
+        await assert.rejects(() => executeApplicationTool(definition, viewer, input), /forbidden/);
       } finally {
         await client.query("rollback").catch(() => undefined);
         await client.end();
