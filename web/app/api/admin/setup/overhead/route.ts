@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     }
     const rates: { departmentId: string; ratePerHour: string }[] = []
     if (Array.isArray(body.rates)) {
-      for (const r of body.rates as { departmentId: string; ratePerHour: string | number }[]) {
+      for (const r of body.rates as { departmentId: string; ratePerHour: string }[]) {
         // Department identity belongs to the publisher (which fails closed
         // on unknown ids through its foreign key): the route only requires
         // a present reference and exact money, so validation shapes the
