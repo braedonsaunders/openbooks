@@ -155,6 +155,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     return revision
   }
 
+  function clearDerivedStatementValues() {
+    setStatementDate('')
+    setOpeningBalance('')
+    setClosingBalance('')
+  }
+
   function reset() {
     fileReadVersion.current += 1
     reviseInputs()
@@ -164,9 +170,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     setHeader(null)
     setMapping(EMPTY_MAPPING)
     setPreview(null)
-    setStatementDate('')
-    setOpeningBalance('')
-    setClosingBalance('')
+    clearDerivedStatementValues()
   }
 
   function onTextChanged(next: string) {
@@ -177,6 +181,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     setUploadEvidence(null)
     setHeader(null)
     setPreview(null)
+    clearDerivedStatementValues()
   }
 
   async function readFile(file: File) {
@@ -186,6 +191,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     setUploadEvidence(null)
     setHeader(null)
     setPreview(null)
+    clearDerivedStatementValues()
 
     try {
       const upload = await prepareBrowserStatementUpload(file, source)
@@ -432,6 +438,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   setSource(e.target.value as StatementTextSource)
                   setHeader(null)
                   setPreview(null)
+                  clearDerivedStatementValues()
                 }}
               >
                 <option value="ofx">{t('formatOfx')}</option>
