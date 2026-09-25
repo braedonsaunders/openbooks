@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardSubsidiaryScope, type Authz } from '../../../../../../lib/authz'
+import { lockScheduleAccount } from '../_lib'
 
 export const runtime = 'nodejs'
 const requestId = (req: Request) => req.headers.get('x-request-id')?.trim() || randomUUID()
@@ -160,6 +161,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       `)).rows[0]
       if (!account || guardSubsidiaryScope(gate, account.subsidiary_id)) return { scope: true as const }
       if (before.run_claim_token) return { busy: true as const }
+      // Rebinding changes which physical account's files the schedule
+      // accepts: recheck the bound account's subsidiary under the account
+      // row lock (the lock the account rehome writer holds), so a rehome
+      // racing this write cannot move the account out from under the
+      // pre-transaction scope check above.
+      const boundAccount = await lockScheduleAccount(tx, user.orgId, String(before.account_id))
+      const boundScopeDenied = guardSubsidiaryScope(gate, boundAccount?.subsidiary_id ?? null)
+      if (boundScopeDenied) return boundScopeDenied
       const after = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
         update sftp_import_schedules set expected_external_account_id = ${canonical}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId} and run_claim_token is null
@@ -207,6 +216,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // must never trigger (or observe) a run filing B's lines.
     const runScoped = await requireScheduleScope(gate, id)
     if (runScoped) return runScoped
+    // Recheck the bound account's subsidiary under the account row lock
+    // immediately before triggering the scan, so a rehome racing the
+    // trigger cannot move the account out from under the check above.
+    const runScopeDenied = await db.transaction(async (tx) => {
+      const target = (await tx.execute<{ account_id: string }>(sql`
+        select account_id from sftp_import_schedules
+         where id = ${id} and org_id = ${user.orgId}
+         for update
+      `)).rows[0]
+      if (!target) return null
+      const runAccount = await lockScheduleAccount(tx, user.orgId, target.account_id)
+      return guardSubsidiaryScope(gate, runAccount?.subsidiary_id ?? null)
+    })
+    if (runScopeDenied) return runScopeDenied
     // The scan itself is engine-initiated (system-actor provenance); triggering
     // it does not turn this operator into the statements' importer.
     const runs = await runDueSftpImports(user.orgId, id, {
