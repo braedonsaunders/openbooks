@@ -22,8 +22,9 @@ function passesGate(authz: Authz, gate: PermissionRule): boolean {
  *  feature state is supplied the feature check is skipped — callers that own
  *  a turn resolve the state once and pass it. */
 export function toolFeatureEnabled(tool: AssistantToolDef, features: FeatureState | null | undefined): boolean {
-  if (!tool.feature || !features) return true;
-  return featureEnabled(features, tool.feature);
+  const keys = [tool.feature, ...(tool.featureAnyOf ?? [])].filter((k): k is string => !!k);
+  if (keys.length === 0 || !features) return true;
+  return keys.some((key) => featureEnabled(features, key));
 }
 
 /** A tool is runnable iff the user holds assistant.use, plus assistant.write

@@ -45,6 +45,11 @@ export type AssistantToolDef = {
    *  appears in the catalog nor executes — so the assistant cannot search for
    *  data a disabled module does not have. */
   feature?: string;
+  /** Additional feature keys that also expose the tool. The tool is visible
+   *  when the primary feature OR any listed key is on — for tools whose
+   *  actions are gated per-call by more than one feature (execute() must
+   *  still refuse the actions whose own feature is off). */
+  featureAnyOf?: string[];
   /** Chat-payload tier; absent means "module" (only sent when activated). */
   tier?: ToolTier;
   /** Write tools set this; the loop NEVER auto-commits a tool that requires it. */
