@@ -456,8 +456,9 @@ test('sftp schedules hide and refuse out-of-scope bindings', { skip: !enabled },
       new Request(`${base}/${fx.scheduleB}`, { method: 'DELETE' }), params(fx.scheduleB),
     ))
     assert.equal(removed.status, 404)
-    // In-scope schedules still manage.
-    const own = await sftpSchedules.POST(postJson(base, { sftpServerId: fx.server, accountId: fx.bankA }))
+    // In-scope schedules still manage (on a non-overlapping folder: same-server
+    // overlapping watch folders refuse since the folder-fencing change).
+    const own = await sftpSchedules.POST(postJson(base, { sftpServerId: fx.server, accountId: fx.bankA, folder: 'inbound-scope-a' }))
     assert.equal(own.status, 200, JSON.stringify(await own.clone().json()))
   } finally { state.gate = null; await dropScratchOrg(fx.orgId) }
 })
