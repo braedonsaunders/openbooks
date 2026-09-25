@@ -192,53 +192,21 @@ async function errorOf(body: unknown): Promise<{ status: number; error: string }
 // holidayEligibility: five causes, one collapsed 'invalid holidayEligibility'
 // ---------------------------------------------------------------------------
 
-test('holidayEligibility refuses a non-map naming the field and value', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ holidayEligibility: null }))
-  assert.equal(status, 422)
-  assert.match(error, /holidayEligibility must be a map of employee ids/)
-  assert.match(error, /got "a null"/)
-  assert.match(error, /or omit it/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('holidayEligibility refuses a non-uuid key naming the key', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ holidayEligibility: { nope: {} } }))
-  assert.equal(status, 422)
-  assert.match(error, /holidayEligibility key "nope" is not an employee id/)
-  assert.match(error, /fix that key/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('holidayEligibility refuses non-object facts naming the employee', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ holidayEligibility: { [uuid(1)]: 'yes' } }))
-  assert.equal(status, 422)
-  assert.match(error, new RegExp(`holidayEligibility\\["${uuid(1)}"\\] must be a map of attestation facts`))
-  assert.match(error, /got "yes"/)
-  assert.match(error, /paidOnCommission and absentWithoutConsent/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('holidayEligibility refuses an unknown fact naming it and the two that exist', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ holidayEligibility: { [uuid(1)]: { onLeave: true } } }))
-  assert.equal(status, 422)
-  assert.match(error, /has unknown fact "onLeave"/)
-  assert.match(error, /only paidOnCommission and absentWithoutConsent exist/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('holidayEligibility refuses a non-boolean fact naming the field and value', async () => {
-  reset()
-  const { status, error } = await errorOf(
-    validAdd({ holidayEligibility: { [uuid(1)]: { paidOnCommission: 'yes' } } }),
-  )
-  assert.equal(status, 422)
-  assert.match(error, /paidOnCommission must be true or false/)
-  assert.match(error, /got "yes"/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
+test('holidayEligibility refusals name the cause, value, and remedy', async () => {
+  const cases: Array<{ name: string; value: unknown; patterns: RegExp[] }> = [
+    { name: 'non-map', value: null, patterns: [/holidayEligibility must be a map of employee ids/, /got "a null"/, /or omit it/] },
+    { name: 'non-uuid key', value: { nope: {} }, patterns: [/holidayEligibility key "nope" is not an employee id/, /fix that key/] },
+    { name: 'non-object facts', value: { [uuid(1)]: 'yes' }, patterns: [new RegExp(`holidayEligibility\\["${uuid(1)}"\\] must be a map of attestation facts`), /got "yes"/, /paidOnCommission and absentWithoutConsent/] },
+    { name: 'unknown fact', value: { [uuid(1)]: { onLeave: true } }, patterns: [/has unknown fact "onLeave"/, /only paidOnCommission and absentWithoutConsent exist/] },
+    { name: 'non-boolean fact', value: { [uuid(1)]: { paidOnCommission: 'yes' } }, patterns: [/paidOnCommission must be true or false/, /got "yes"/] },
+  ]
+  for (const { name, value, patterns } of cases) {
+    reset()
+    const { status, error } = await errorOf(validAdd({ holidayEligibility: value }))
+    assert.equal(status, 422, `${name} should refuse`)
+    for (const pattern of patterns) assert.match(error, pattern, name)
+    assert.equal(routeState.adjustmentCalls.length, 0, `${name} should write nothing`)
+  }
 })
 
 test('holidayEligibility accepts absence, an empty map, and a full attestation', async () => {
@@ -259,45 +227,21 @@ test('holidayEligibility accepts absence, an empty map, and a full attestation',
 // add-adjustment hours: a scale-2 amount into numeric(12,2)
 // ---------------------------------------------------------------------------
 
-test('hours refuses an unreadable value through the shared decimal classifier', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ hours: 'abc' }))
-  assert.equal(status, 422)
-  assert.match(error, /hours must be a number of hours — "abc" is not a number/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('hours refuses a third decimal place naming the scale', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ hours: '1.234' }))
-  assert.equal(status, 422)
-  assert.match(error, /hours allows at most 2 decimal places — got 3/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('hours reads a decimal comma as a decimal point, never grouping', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ hours: '12,34' }))
-  assert.equal(status, 422)
-  assert.match(error, /hours must use "\." as the decimal point — write "12,34" as "12\.34"/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('hours refuses a thousands separator, not a number error', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ hours: '1,234.56' }))
-  assert.equal(status, 422)
-  assert.match(error, /hours must not contain a thousands separator/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('hours refuses a negative value naming the value', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ hours: '-3' }))
-  assert.equal(status, 422)
-  assert.match(error, /hours must not be negative — got "-3"/)
-  assert.match(error, /pass zero or more hours, or omit hours/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
+test('hours refusals name the cause and write nothing', async () => {
+  const cases: Array<{ name: string; hours: unknown; patterns: RegExp[] }> = [
+    { name: 'unreadable', hours: 'abc', patterns: [/hours must be a number of hours — "abc" is not a number/] },
+    { name: 'third decimal', hours: '1.234', patterns: [/hours allows at most 2 decimal places — got 3/] },
+    { name: 'decimal comma', hours: '12,34', patterns: [/hours must use "\." as the decimal point — write "12,34" as "12\.34"/] },
+    { name: 'thousands separator', hours: '1,234.56', patterns: [/hours must not contain a thousands separator/] },
+    { name: 'negative', hours: '-3', patterns: [/hours must not be negative — got "-3"/, /pass zero or more hours, or omit hours/] },
+  ]
+  for (const { name, hours, patterns } of cases) {
+    reset()
+    const { status, error } = await errorOf(validAdd({ hours }))
+    assert.equal(status, 422, `${name} should refuse`)
+    for (const pattern of patterns) assert.match(error, pattern, name)
+    assert.equal(routeState.adjustmentCalls.length, 0, `${name} should write nothing`)
+  }
 })
 
 test('hours refuses eleven whole digits naming the limit, accepts ten', async () => {
@@ -336,65 +280,24 @@ test('add-adjustment passes canonical hours to the engine', async () => {
 // add-adjustment: the collapsed guard over employee, component, amount, note
 // ---------------------------------------------------------------------------
 
-test('add-adjustment refuses a non-string employeePartyId naming the type', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ employeePartyId: 42 }))
-  assert.equal(status, 422)
-  assert.match(error, /employeePartyId must be an employee id — got "42"/)
-  assert.match(error, /pass the employee as an employee id/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('add-adjustment refuses a malformed employeePartyId naming the value', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ employeePartyId: 'nope' }))
-  assert.equal(status, 422)
-  assert.match(error, /employeePartyId "nope" is not an employee id/)
-  assert.match(error, /fix the id and try again/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('add-adjustment refuses a non-string componentId naming the adjustable list', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ componentId: 42 }))
-  assert.equal(status, 422)
-  assert.match(error, /componentId must be a pay component id — got "42"/)
-  assert.match(error, /adjustableComponents/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('add-adjustment refuses a malformed componentId naming the value', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ componentId: 'nope' }))
-  assert.equal(status, 422)
-  assert.match(error, /componentId "nope" is not a pay component id/)
-  assert.match(error, /adjustableComponents/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('add-adjustment refuses an unreadable amount naming the value', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ amount: 'abc' }))
-  assert.equal(status, 422)
-  assert.match(error, /amount must be an amount — "abc" is not a number/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('add-adjustment refuses a five-decimal amount naming the scale', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ amount: '1.23456' }))
-  assert.equal(status, 422)
-  assert.match(error, /amount allows at most 4 decimal places — got 5/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('add-adjustment refuses a non-text note naming the type', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ note: 42 }))
-  assert.equal(status, 422)
-  assert.match(error, /note must be text — got "42"/)
-  assert.match(error, /pass the note as text or omit it/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
+test('add-adjustment id, amount, note, and flag refusals name the value', async () => {
+  const cases: Array<{ name: string; overrides: Record<string, unknown>; patterns: RegExp[] }> = [
+    { name: 'non-string employeePartyId', overrides: { employeePartyId: 42 }, patterns: [/employeePartyId must be an employee id — got "42"/, /pass the employee as an employee id/] },
+    { name: 'malformed employeePartyId', overrides: { employeePartyId: 'nope' }, patterns: [/employeePartyId "nope" is not an employee id/, /fix the id and try again/] },
+    { name: 'non-string componentId', overrides: { componentId: 42 }, patterns: [/componentId must be a pay component id — got "42"/, /adjustableComponents/] },
+    { name: 'malformed componentId', overrides: { componentId: 'nope' }, patterns: [/componentId "nope" is not a pay component id/, /adjustableComponents/] },
+    { name: 'unreadable amount', overrides: { amount: 'abc' }, patterns: [/amount must be an amount — "abc" is not a number/] },
+    { name: 'five-decimal amount', overrides: { amount: '1.23456' }, patterns: [/amount allows at most 4 decimal places — got 5/] },
+    { name: 'non-text note', overrides: { note: 42 }, patterns: [/note must be text — got "42"/, /pass the note as text or omit it/] },
+    { name: 'non-boolean replaceComponent', overrides: { replaceComponent: 'yes' }, patterns: [/replaceComponent must be true or false — got "yes"/, /pass a boolean or omit it/] },
+  ]
+  for (const { name, overrides, patterns } of cases) {
+    reset()
+    const { status, error } = await errorOf(validAdd(overrides))
+    assert.equal(status, 422, `${name} should refuse`)
+    for (const pattern of patterns) assert.match(error, pattern, name)
+    assert.equal(routeState.adjustmentCalls.length, 0, `${name} should write nothing`)
+  }
 })
 
 test('add-adjustment refuses a 501-character note naming the limit, accepts 500', async () => {
@@ -410,35 +313,22 @@ test('add-adjustment refuses a 501-character note naming the limit, accepts 500'
   assert.equal(routeState.adjustmentCalls.length, 1)
 })
 
-test('add-adjustment refuses a non-boolean replaceComponent', async () => {
-  reset()
-  const { status, error } = await errorOf(validAdd({ replaceComponent: 'yes' }))
-  assert.equal(status, 422)
-  assert.match(error, /replaceComponent must be true or false — got "yes"/)
-  assert.match(error, /pass a boolean or omit it/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
 // ---------------------------------------------------------------------------
 // delete-adjustment: type vs shape, not one 'invalid adjustment'
 // ---------------------------------------------------------------------------
 
-test('delete-adjustment refuses a missing adjustmentId naming the type', async () => {
-  reset()
-  const { status, error } = await errorOf({ action: 'delete-adjustment' })
-  assert.equal(status, 422)
-  assert.match(error, /adjustmentId must be a pay adjustment id — got "a undefined"/)
-  assert.match(error, /pass the adjustment to delete as an id/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('delete-adjustment refuses a malformed adjustmentId naming the value', async () => {
-  reset()
-  const { status, error } = await errorOf({ action: 'delete-adjustment', adjustmentId: 'nope' })
-  assert.equal(status, 422)
-  assert.match(error, /adjustmentId "nope" is not a pay adjustment id/)
-  assert.match(error, /fix the id and try again/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
+test('delete-adjustment id refusals name the value', async () => {
+  const cases: Array<{ name: string; body: Record<string, unknown>; patterns: RegExp[] }> = [
+    { name: 'missing adjustmentId', body: { action: 'delete-adjustment' }, patterns: [/adjustmentId must be a pay adjustment id — got "a undefined"/, /pass the adjustment to delete as an id/] },
+    { name: 'malformed adjustmentId', body: { action: 'delete-adjustment', adjustmentId: 'nope' }, patterns: [/adjustmentId "nope" is not a pay adjustment id/, /fix the id and try again/] },
+  ]
+  for (const { name, body, patterns } of cases) {
+    reset()
+    const { status, error } = await errorOf(body)
+    assert.equal(status, 422, `${name} should refuse`)
+    for (const pattern of patterns) assert.match(error, pattern, name)
+    assert.equal(routeState.adjustmentCalls.length, 0, `${name} should write nothing`)
+  }
 })
 
 test('delete-adjustment accepts a well-formed id', async () => {
@@ -461,22 +351,18 @@ function validScope(overrides: Record<string, unknown> = {}): Record<string, unk
   }
 }
 
-test('set-scope refuses a non-list employeePartyIds naming the value', async () => {
-  reset()
-  const { status, error } = await errorOf(validScope({ employeePartyIds: 'nope' }))
-  assert.equal(status, 422)
-  assert.match(error, /employeePartyIds must be a list of employee ids — got "nope"/)
-  assert.match(error, /pass the employees to include as a list/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('set-scope refuses a non-list rosterPartyIds naming the value', async () => {
-  reset()
-  const { status, error } = await errorOf(validScope({ rosterPartyIds: null }))
-  assert.equal(status, 422)
-  assert.match(error, /rosterPartyIds must be a list of employee ids — got "a null"/)
-  assert.match(error, /pass the run roster as a list/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
+test('set-scope list refusals name the value', async () => {
+  const cases: Array<{ name: string; overrides: Record<string, unknown>; patterns: RegExp[] }> = [
+    { name: 'non-list employeePartyIds', overrides: { employeePartyIds: 'nope' }, patterns: [/employeePartyIds must be a list of employee ids — got "nope"/, /pass the employees to include as a list/] },
+    { name: 'non-list rosterPartyIds', overrides: { rosterPartyIds: null }, patterns: [/rosterPartyIds must be a list of employee ids — got "a null"/, /pass the run roster as a list/] },
+  ]
+  for (const { name, overrides, patterns } of cases) {
+    reset()
+    const { status, error } = await errorOf(validScope(overrides))
+    assert.equal(status, 422, `${name} should refuse`)
+    for (const pattern of patterns) assert.match(error, pattern, name)
+    assert.equal(routeState.adjustmentCalls.length, 0, `${name} should write nothing`)
+  }
 })
 
 test('set-scope refuses 2001 roster employees naming the limit, accepts 2000', async () => {
@@ -496,22 +382,18 @@ test('set-scope refuses 2001 roster employees naming the limit, accepts 2000', a
   assert.equal(routeState.adjustmentCalls.length, 1999)
 })
 
-test('set-scope names a bad included id AND its index', async () => {
-  reset()
-  const { status, error } = await errorOf(validScope({ employeePartyIds: [uuid(1), 'nope'] }))
-  assert.equal(status, 422)
-  assert.match(error, /employeePartyIds\[1\] "nope" is not an employee id/)
-  assert.match(error, /fix that entry and try again/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('set-scope names a bad roster id AND its index', async () => {
-  reset()
-  const { status, error } = await errorOf(validScope({ rosterPartyIds: [uuid(1), 'nope'] }))
-  assert.equal(status, 422)
-  assert.match(error, /rosterPartyIds\[1\] "nope" is not an employee id/)
-  assert.match(error, /fix that entry and try again/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
+test('set-scope names a bad id AND its index', async () => {
+  const cases: Array<{ name: string; overrides: Record<string, unknown>; patterns: RegExp[] }> = [
+    { name: 'bad included id', overrides: { employeePartyIds: [uuid(1), 'nope'] }, patterns: [/employeePartyIds\[1\] "nope" is not an employee id/, /fix that entry and try again/] },
+    { name: 'bad roster id', overrides: { rosterPartyIds: [uuid(1), 'nope'] }, patterns: [/rosterPartyIds\[1\] "nope" is not an employee id/, /fix that entry and try again/] },
+  ]
+  for (const { name, overrides, patterns } of cases) {
+    reset()
+    const { status, error } = await errorOf(validScope(overrides))
+    assert.equal(status, 422, `${name} should refuse`)
+    for (const pattern of patterns) assert.match(error, pattern, name)
+    assert.equal(routeState.adjustmentCalls.length, 0, `${name} should write nothing`)
+  }
 })
 
 test('set-scope accepts an empty included list and an empty roster', async () => {
@@ -554,21 +436,18 @@ test('set-scope mutates only what changes: one removal and one re-add', async ()
 // exclude/include-employee: this file's 'invalid employee'
 // ---------------------------------------------------------------------------
 
-test('exclude-employee refuses a non-string employeePartyId naming the type', async () => {
-  reset()
-  const { status, error } = await errorOf({ action: 'exclude-employee', employeePartyId: 42 })
-  assert.equal(status, 422)
-  assert.match(error, /employeePartyId must be an employee id — got "42"/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
-})
-
-test('include-employee refuses a malformed employeePartyId naming the value', async () => {
-  reset()
-  const { status, error } = await errorOf({ action: 'include-employee', employeePartyId: 'nope' })
-  assert.equal(status, 422)
-  assert.match(error, /employeePartyId "nope" is not an employee id/)
-  assert.match(error, /fix the id and try again/)
-  assert.equal(routeState.adjustmentCalls.length, 0)
+test('exclude/include-employee id refusals name the value', async () => {
+  const cases: Array<{ name: string; body: Record<string, unknown>; patterns: RegExp[] }> = [
+    { name: 'non-string exclude id', body: { action: 'exclude-employee', employeePartyId: 42 }, patterns: [/employeePartyId must be an employee id — got "42"/] },
+    { name: 'malformed include id', body: { action: 'include-employee', employeePartyId: 'nope' }, patterns: [/employeePartyId "nope" is not an employee id/, /fix the id and try again/] },
+  ]
+  for (const { name, body, patterns } of cases) {
+    reset()
+    const { status, error } = await errorOf(body)
+    assert.equal(status, 422, `${name} should refuse`)
+    for (const pattern of patterns) assert.match(error, pattern, name)
+    assert.equal(routeState.adjustmentCalls.length, 0, `${name} should write nothing`)
+  }
 })
 
 test('exclude-employee and include-employee accept a well-formed id', async () => {
