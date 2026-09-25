@@ -212,13 +212,17 @@ export { longPool };
 // ---------------------------------------------------------------------------
 // Tenant isolation via Postgres RLS.
 //
-// Policies key off the tenant GUC and deny by default. Cross-tenant work uses
-// a separate BYPASSRLS database credential, never an application-settable GUC —
+// Policies key off the tenant GUC and deny by default; the bypass arm calls
+// public.app_bypass_rls_active(), which requires the GUC *and* a privileged
+// login (BYPASSRLS/superuser attribute, or the migration/installer owner), so
+// a raw SET on the runtime role grants nothing. Cross-tenant work uses a
+// separate BYPASSRLS database credential, never an application-settable GUC —
 // with one exception: the one-shot installer (OPENBOOKS_BOOTSTRAP=1), which has
 // no BYPASSRLS credential by contract and runs no tenant traffic, sets
 // app.bypass_rls explicitly on its own installer-pool checkout (see
-// rawBypassConnect) and restores deny-by-default on release. Request traffic
-// can never reach that fallback, so no user input can set the bypass GUC.
+// rawBypassConnect, whose owner login satisfies the predicate) and restores
+// deny-by-default on release. Request traffic can never reach that fallback,
+// so no user input can set the bypass GUC.
 //
 
 // Tenant scope is applied per checked-out runtime connection from an
@@ -313,10 +317,11 @@ const rawBypassConnect = async (long = false): Promise<pg.PoolClient> => {
   // No dedicated bypass credential. Outside the one-shot installer this stays
   // a hard refusal naming the remedy. Inside the installer the base pools ARE
   // the trusted installer (migration-owner) connection: this process runs no
-  // tenant traffic, the owner holds every application object, and the RLS
-  // policies still honor app.bypass_rls — so the installation-wide unit sets
-  // it explicitly on its own checked-out client and restores deny-by-default
-  // on release, the same convention as the migration client
+  // tenant traffic, the owner holds every application object, and the owner
+  // login satisfies public.app_bypass_rls_active() (it owns the predicate) —
+  // so the installation-wide unit sets the GUC explicitly on its own
+  // checked-out client and restores deny-by-default on release, the same
+  // convention as the migration client
   // (scripts/bootstrap-migration-client.ts). Runtime servers never run with
   // OPENBOOKS_BOOTSTRAP=1, so this fallback is unreachable from request
   // traffic; the bypass GUC is never set from user input.
