@@ -762,7 +762,11 @@
           "local_income_tax": "地方所得税未払金",
           "transit_payroll_tax": "公共交通給与税未払金",
           "or_statewide_transit_tax": "オレゴン州全域交通税",
-          "pa_uc_employee": "ペンシルベニア州失業保険（従業員分）未払金"
+          "pa_uc_employee": "ペンシルベニア州失業保険（従業員分）未払金",
+          "dc_opfl_employer": "コロンビア特別区有給家族休暇（事業主分）未払金",
+          "co_famli_employee": "コロラド州FAMLI（従業員分）未払金",
+          "co_famli_employer": "コロラド州FAMLI（事業主分）未払金",
+          "ca_ett": "カリフォルニア州雇用訓練税（事業主分）未払金"
         }
       },
       "NL": {

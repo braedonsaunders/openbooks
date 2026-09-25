@@ -762,7 +762,11 @@
           "local_income_tax": "Impôt local sur le revenu à payer",
           "transit_payroll_tax": "Taxe sur la masse salariale transport en commun à payer",
           "or_statewide_transit_tax": "Taxe étatique de transport en commun de l’Oregon",
-          "pa_uc_employee": "Assurance chômage de Pennsylvanie (employé) à payer"
+          "pa_uc_employee": "Assurance chômage de Pennsylvanie (employé) à payer",
+          "dc_opfl_employer": "Congé familial payé du district de Columbia (employeur) à payer",
+          "co_famli_employee": "FAMLI du Colorado (employé) à payer",
+          "co_famli_employer": "FAMLI du Colorado (employeur) à payer",
+          "ca_ett": "Taxe de formation professionnelle de Californie (employeur) à payer"
         }
       },
       "NL": {

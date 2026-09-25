@@ -762,7 +762,11 @@
           "local_income_tax": "Imposto de renda local a recolher",
           "transit_payroll_tax": "Imposto sobre a folha para transporte público a recolher",
           "or_statewide_transit_tax": "Imposto estadual de transporte do Oregon",
-          "pa_uc_employee": "Seguro-desemprego da Pensilvânia (empregado) a recolher"
+          "pa_uc_employee": "Seguro-desemprego da Pensilvânia (empregado) a recolher",
+          "dc_opfl_employer": "Licença familiar remunerada do Distrito de Colúmbia (empregador) a recolher",
+          "co_famli_employee": "FAMLI do Colorado (empregado) a recolher",
+          "co_famli_employer": "FAMLI do Colorado (empregador) a recolher",
+          "ca_ett": "Imposto de Treinamento de Emprego da Califórnia (empregador) a recolher"
         }
       },
       "NL": {

@@ -762,7 +762,11 @@
           "local_income_tax": "Local income tax payable",
           "transit_payroll_tax": "Transit payroll tax payable",
           "or_statewide_transit_tax": "Oregon statewide transit tax",
-          "pa_uc_employee": "Pennsylvania UC (employee) payable"
+          "pa_uc_employee": "Pennsylvania UC (employee) payable",
+          "dc_opfl_employer": "DC paid family leave (employer) payable",
+          "co_famli_employee": "Colorado FAMLI (employee) payable",
+          "co_famli_employer": "Colorado FAMLI (employer) payable",
+          "ca_ett": "California Employment Training Tax (employer) payable"
         }
       },
       "NL": {

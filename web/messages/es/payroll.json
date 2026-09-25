@@ -762,7 +762,11 @@
           "local_income_tax": "Impuesto local sobre la renta por pagar",
           "transit_payroll_tax": "Impuesto de nómina de transporte público por pagar",
           "or_statewide_transit_tax": "Impuesto estatal de transporte de Oregón",
-          "pa_uc_employee": "Seguro de desempleo de Pensilvania (empleado) por pagar"
+          "pa_uc_employee": "Seguro de desempleo de Pensilvania (empleado) por pagar",
+          "dc_opfl_employer": "Licencia familiar pagada del Distrito de Columbia (empleador) por pagar",
+          "co_famli_employee": "FAMLI de Colorado (empleado) por pagar",
+          "co_famli_employer": "FAMLI de Colorado (empleador) por pagar",
+          "ca_ett": "Impuesto de formación para el empleo de California (empleador) por pagar"
         }
       },
       "NL": {

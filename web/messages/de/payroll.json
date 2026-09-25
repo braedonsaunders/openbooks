@@ -762,7 +762,11 @@
           "local_income_tax": "Verbindlichkeiten aus kommunaler Einkommensteuer",
           "transit_payroll_tax": "Verbindlichkeiten aus Nahverkehrs-Lohnsteuer",
           "or_statewide_transit_tax": "Landesweite Nahverkehrssteuer von Oregon",
-          "pa_uc_employee": "Verbindlichkeiten aus Arbeitslosenversicherung Pennsylvania (Arbeitnehmer)"
+          "pa_uc_employee": "Verbindlichkeiten aus Arbeitslosenversicherung Pennsylvania (Arbeitnehmer)",
+          "dc_opfl_employer": "Verbindlichkeiten aus bezahltem Familienurlaub District of Columbia (Arbeitgeber)",
+          "co_famli_employee": "Verbindlichkeiten aus FAMLI Colorado (Arbeitnehmer)",
+          "co_famli_employer": "Verbindlichkeiten aus FAMLI Colorado (Arbeitgeber)",
+          "ca_ett": "Verbindlichkeiten aus Beschäftigungsbildungssteuer Kalifornien (Arbeitgeber)"
         }
       },
       "NL": {

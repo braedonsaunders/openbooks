@@ -762,7 +762,11 @@
           "local_income_tax": "地方所得税应付",
           "transit_payroll_tax": "公共交通工资税应付",
           "or_statewide_transit_tax": "俄勒冈州全州交通税",
-          "pa_uc_employee": "宾夕法尼亚州失业税（雇员部分）应付"
+          "pa_uc_employee": "宾夕法尼亚州失业税（雇员部分）应付",
+          "dc_opfl_employer": "哥伦比亚特区带薪家庭假（雇主部分）应付",
+          "co_famli_employee": "科罗拉多州FAMLI（雇员部分）应付",
+          "co_famli_employer": "科罗拉多州FAMLI（雇主部分）应付",
+          "ca_ett": "加利福尼亚州就业培训税（雇主部分）应付"
         }
       },
       "NL": {
