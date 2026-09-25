@@ -5,7 +5,8 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { laborCostingSettings, type LaborCostingSettings } from '@openbooks/engine/src/projects/labor-costing.ts'
-import { requirePermission } from '../../../../../lib/authz'
+import { guardRootSubsidiaryScope, requirePermission } from '../../../../../lib/authz'
+import { notFound } from 'next/navigation'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
@@ -83,6 +84,7 @@ export async function loadLaborCosting(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<LaborCostingData> {
   const authz = await requirePermission('admin.setup.manage')
+  if (await guardRootSubsidiaryScope(authz)) notFound()
   const orgId = authz.user.orgId
   const today = await businessToday(orgId)
   await requireProjectsFeature(orgId)
