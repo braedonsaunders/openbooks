@@ -47,7 +47,9 @@ import { featureEnabled, type FeatureState } from './features'
  * re-billing is idempotent — the same rows can never be billed twice.
  */
 
-export class BillingError extends Error {}
+export class BillingError extends Error {
+  readonly status = 422
+}
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 

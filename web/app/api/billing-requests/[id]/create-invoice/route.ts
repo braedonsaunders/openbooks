@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -52,7 +53,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (e instanceof BillingError && e.message === 'Equipment is disabled') {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
-    const status = e instanceof BillingError ? 422 : 500
-    return NextResponse.json({ error: (e as Error).message }, { status })
+    return apiErrorResponse(e)
   }
 }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
@@ -75,6 +76,6 @@ export async function POST(req: Request) {
     if ((e as Error).message === "Project not found") {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
-    return NextResponse.json({ error: (e as Error).message }, { status: 422 });
+    return apiErrorResponse(e);
   }
 }

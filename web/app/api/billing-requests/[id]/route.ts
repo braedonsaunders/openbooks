@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
@@ -23,7 +24,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ ok: true })
     } catch (e) {
       if ((e as Error).message === 'Billing request not found') return NextResponse.json({ error: 'not found' }, { status: 404 })
-      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+      return apiErrorResponse(e)
     }
   }
   return NextResponse.json({ error: 'unsupported action' }, { status: 400 })
