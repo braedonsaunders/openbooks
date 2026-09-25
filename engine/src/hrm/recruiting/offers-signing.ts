@@ -21,6 +21,7 @@ import {
   enqueueRecruitingEmailJob,
   escapeHtml,
   requireDepthFeature,
+  type RecruitingEmailData,
   type RecruitingEmailEnqueuer,
 } from "./depth.ts";
 import {
@@ -560,7 +561,9 @@ export async function sendOfferLink(query: {
   // Bind narrowed locals before the transaction closure (parameter
   // narrowing does not survive into the closure).
   const candidateEmail: string = query.candidateEmail;
-  return withOrgTransaction(orgId, async () => {
+  const enqueue = query.enqueueEmail ?? enqueueRecruitingEmailJob;
+  const candidateName = typeof query.candidateName === "string" ? query.candidateName : "candidate";
+  const staged = await withOrgTransaction(orgId, async () => {
     await requireDepthFeature(db, orgId, "hrmOfferSigning");
     const offer = await loadOffer(db, orgId, offerId);
     if (!offer) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
@@ -597,20 +600,26 @@ export async function sendOfferLink(query: {
         "this offer's signature is closed (signed, declined, or voided) — re-render a fresh version to reopen signing",
       );
     }
-    const enqueue = query.enqueueEmail ?? enqueueRecruitingEmailJob;
-    const name = typeof query.candidateName === "string" ? query.candidateName : "candidate";
-    await enqueue(
-      {
+    // The send is staged, not sent: the enqueue below runs only after this
+    // transaction commits, so a rolled-back send never emails a dead link.
+    // The deterministic job id keeps a caller retry idempotent at the queue.
+    const email: { readonly data: RecruitingEmailData; readonly jobId: string } = {
+      data: {
         orgId,
         to: candidateEmail,
         subject: `Your offer for ${offer.jobTitle}`,
-        html: `<p>Dear ${escapeHtml(name)},</p><p>Your offer for ${escapeHtml(offer.jobTitle)} is ready to review and sign: <a href="/offer/${token}">review and sign your offer</a>.</p>`,
-        text: `Dear ${name}, your offer for ${offer.jobTitle} is ready to review and sign: /offer/${token}`,
+        html: `<p>Dear ${escapeHtml(candidateName)},</p><p>Your offer for ${escapeHtml(offer.jobTitle)} is ready to review and sign: <a href="/offer/${token}">review and sign your offer</a>.</p>`,
+        text: `Dear ${candidateName}, your offer for ${offer.jobTitle} is ready to review and sign: /offer/${token}`,
       },
-      { jobId: `offer-sent|${orgId}|${offerId}` },
-    );
-    return { offerId, signingToken: token, signingUrlPath: `/offer/${token}` };
+      jobId: `offer-sent|${orgId}|${offerId}`,
+    };
+    return {
+      link: { offerId, signingToken: token, signingUrlPath: `/offer/${token}` },
+      email,
+    };
   });
+  await enqueue(staged.email.data, { jobId: staged.email.jobId });
+  return staged.link;
 }
 
 async function offerScopeForToken(signingToken: string): Promise<{ orgId: string; offerId: string }> {
