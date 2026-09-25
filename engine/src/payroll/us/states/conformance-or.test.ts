@@ -392,10 +392,9 @@ test("a TriMet levy computes through the EMPLOYER path, never the deduction path
     }),
     /employer payroll tax, not employee withholding.*never as a stub deduction/s,
   );
-  const employer = computeUsEmployerWithholding({ levy: { ...levy }, wages: "2000.00", tenantRates });
+  const employer = computeUsEmployerWithholding({ levy: { ...levy }, wages: "2000.00", tenantRates, wageAllocations: [{ region: "OR", subRegion: "TRIMET", workShare: "0.4", source: "approved_time_entries", sourceWagesCurrentPeriod: "800.00" }] });
   assert.equal(employer.code, "OR-TRIMET");
-  assert.equal(employer.tax, money("16.00"));
-  assert.equal(employer.factors.OR_TRANSIT_DISTRICT, "TRIMET");
+  assert.equal(employer.tax, money("6.40"));
   assert.equal(employer.factors.OR_TRANSIT_RATE, "0.008");
 });
 

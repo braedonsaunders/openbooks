@@ -69,6 +69,7 @@ import { inCounty, inCountyWithholding } from "./states/in.ts";
 import { orTransitWithholding } from "./states/or.ts";
 import {
   requireUsResidentWithholdingFacts,
+  requireUsSourceWages,
   requireUsWageAllocation,
   type UsResidentWithholdingFacts,
   type UsWageAllocation,
@@ -965,8 +966,11 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       }
       // A municipality. `ohMunicipalWithholding` throws, naming the
       // municipality and the `us_oh_municipal` slot, when no rate is entered.
+      const municipalWages = levy.reach === "nonresident"
+        ? requireUsSourceWages(input.wageAllocations, levy.region, subRegion)
+        : addAmounts(compensation, input.supplemental);
       const tax = ohMunicipalWithholding({
-        wages: addAmounts(compensation, input.supplemental),
+        wages: municipalWages,
         rate: rates?.rate,
         municipality: subRegion,
       });
@@ -1094,6 +1098,8 @@ export function computeUsEmployerWithholding(input: {
   levy: ResolvedWithholdingLevy;
   /** Total state-taxable compensation this period (periodic plus supplemental). */
   wages: string;
+  /** Verified district-source work wages for location-specific employer levies. */
+  wageAllocations?: readonly UsWageAllocation[];
   /**
    * The employer-entered rate values for the levy's `tenant`-sourced slot,
    * from `payroll_statutory_rates` at `sub_region` scope. Undefined means
@@ -1115,7 +1121,8 @@ export function computeUsEmployerWithholding(input: {
     const rate = rateKey ? input.tenantRates(rateKey, subRegion)?.rate : undefined;
     let tax: string;
     try {
-      tax = orTransitWithholding({ wages: input.wages, rate, district: declared.label });
+      const districtWages = requireUsSourceWages(input.wageAllocations, levy.region, subRegion);
+      tax = orTransitWithholding({ wages: districtWages, rate, district: declared.label });
     } catch (error) {
       throw new UsWithholdingError(error instanceof Error ? error.message : String(error));
     }

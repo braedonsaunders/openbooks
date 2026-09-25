@@ -327,14 +327,14 @@ export async function computeUsStatutory(
   for (const levy of resolution.levies) {
     if (levy.level === "sub_region"
       && subRegionLevy(country, levy.region, levy.subRegion!)?.pocket === "employer") {
-      // Employer-pocket levies (Oregon transit) accrue at the employer's
-      // cost — never out of the cheque. The base is the period's total
-      // state-taxable compensation, the same convention the deduction loop
-      // prices its levies on; the rate is the district's employer-entered
-      // figure, refused by name when absent.
+      // Employer-pocket levies accrue at employer cost — never out of the
+      // cheque. Oregon transit's declared base is district-sourced wages from
+      // verified work records; its rate is employer-entered and refused by
+      // name when absent.
       const employerTax = computeUsEmployerWithholding({
         levy,
         wages: sum([income, nonPeriodic]),
+        wageAllocations: ctx.workAllocations,
         tenantRates: (rateKey, subRegion) =>
           config.subRegionRates(rateKey, levy.region, subRegion),
       });
