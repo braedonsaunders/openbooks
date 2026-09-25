@@ -93,6 +93,7 @@ export async function SetupEntitySection({
   allowedSubsidiaryIds = null,
   hideHeader = false,
   rowParam = 'row',
+  visibleRowIds,
 }: {
   entity: SetupEntity
   orgId: string
@@ -103,6 +104,12 @@ export async function SetupEntitySection({
   // subsidiary stays org-wide visible) — without this the remittance-vendor
   // listbox cannot scope its options (F-t08-015).
   allowedSubsidiaryIds?: ReadonlySet<string> | null
+  // Rehomed sections whose rows carry caller-dependent visibility (rate
+  // schedules anchored to another subsidiary's projects): the host slot
+  // resolves the visible ids through the owning engine service and the
+  // section reads only those rows. Undefined keeps every other entity on
+  // the plain org-wide read.
+  visibleRowIds?: ReadonlySet<string>
   /** Re-homed module tabs own their single page header and create action. */
   hideHeader?: boolean
   /** URL key this section's New/edit drawer reads and writes. A host page
@@ -144,9 +151,11 @@ export async function SetupEntitySection({
       ? sql`and (${sql.raw(toSnake(filter.key))} = ${value} or ${sql.raw(toSnake(filter.key))} is null)`
       : sql`and ${sql.raw(toSnake(filter.key))} = ${value}`,
   )
+  const idColumn = entity.idColumn ?? 'id'
   const rowFilter = sql`where 1 = 1
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
+    ${visibleRowIds !== undefined ? sql`and ${sql.raw(idColumn)} = any (${`{${[...visibleRowIds].join(',')}}`}::uuid[])` : sql``}
     ${filterClauses.length ? sql.join(filterClauses, sql` `) : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
 
@@ -166,7 +175,6 @@ export async function SetupEntitySection({
     refLabels[source] = new Map(opts.map((o) => [o.value, o.label]))
   }
 
-  const idColumn = entity.idColumn ?? 'id'
   const open = openRow
     ? openRow === 'new'
       ? { creating: true, row: (null) }
@@ -175,6 +183,7 @@ export async function SetupEntitySection({
             select ${setupReadProjection(entity)} from ${setupReadSource(entity)}
              where ${sql.raw(idColumn)} = ${openRow}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+             ${visibleRowIds !== undefined ? sql`and ${sql.raw(idColumn)} = any (${`{${[...visibleRowIds].join(',')}}`}::uuid[])` : sql``}
              limit 1`)))
           return { creating: false, row: selected.rows[0] ?? null }
         })()

@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { listSchedules } from '@openbooks/engine/src/hrm/construction/rates.ts'
 import { can, getAuthz } from '../../lib/authz'
 import { SETUP_ENTITY_BY_KEY } from '../../lib/setup/registry'
 import { SetupEntitySection } from '../../app/(app)/admin/setup/[entity]/SetupEntitySection'
@@ -32,6 +34,14 @@ export async function SetupSectionSlot({
   if (!authz) return null
   const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
   if (!entity) return null
+  // Rate schedules carry caller-dependent visibility (a B-anchored schedule
+  // never reaches an A-scoped reader): resolve the visible ids through the
+  // owning engine service so the generic section reads exactly those rows
+  // instead of the whole org table. Every other entity keeps the plain
+  // org-wide read.
+  const visibleRowIds = entityKey === 'construction-rate-schedules'
+    ? new Set((await listSchedules(db, authz.user.orgId, authz.user.id)).map((schedule) => schedule.id))
+    : undefined
   return (
     <SetupEntitySection
       entity={entity}
@@ -41,6 +51,7 @@ export async function SetupSectionSlot({
       canManage={can(authz, 'admin.setup.manage')}
       allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
       rowParam={rowParam}
+      visibleRowIds={visibleRowIds}
     />
   )
 }
