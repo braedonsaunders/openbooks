@@ -11,6 +11,7 @@ import {
   TrendingDown, TrendingUp, UserRound, Wand2, Gauge as GaugeIcon, Download,
 } from 'lucide-react'
 import { cn, Select, Drawer } from '@openbooks/ui'
+import { add, cmp as compareMoney, div, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import type { CustomCategory, TrueCostData, TrueCostProfile } from '../../../../lib/analytics/true-cost-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
@@ -148,7 +149,7 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
   const whole = useWholeNumber()
   const percent = usePercent()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
   const t = useTranslations('analytics.trueCost')
   const router = useRouter()
   const tabs = MODE_TABS[mode]
@@ -213,8 +214,8 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
   const rate = useRate()
   const { currency } = useMoney()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
-  const money0 = (n: number) => fmtMoney(n)
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
+  const money0 = (n: string | number) => fmtMoney(n)
   const router = useRouter()
   const cat = data.categories.find((c) => c.id === catId)
   const [busy, setBusy] = useState(false)
@@ -400,7 +401,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
   const whole = useWholeNumber()
   const percent = usePercent()
   const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
+  const money0 = (n: string | number) => fmtMoney(n)
   const cat = data.categories.find((c) => c.id === cell.catId)
   const dept = data.departments.find((d) => d.id === cell.deptId)
   if (!cat || !dept) return null
@@ -408,14 +409,14 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
   const cellData = cat.byDept[dept.id] ?? { amount: 0, rate: 0 }
   const rows = cat.accounts
     .map((a) => {
-      const tagged = a.deptAmounts[dept.id] ?? 0
-      const allocated = a.untaggedAmount * deptShare
-      return { a, tagged, allocated, total: tagged + allocated }
+      const tagged = a.deptAmounts[dept.id] ?? '0.0000'
+      const allocated = mulDecimal(a.untaggedAmount, deptShare)
+      return { a, tagged, allocated, total: add(tagged, allocated) }
     })
-    .filter((x) => Math.abs(x.total) > 0)
-    .sort((x, y) => y.total - x.total)
-  const taggedSum = rows.reduce((s, x) => s + x.tagged, 0)
-  const allocatedSum = rows.reduce((s, x) => s + x.allocated, 0)
+    .filter((x) => compareMoney(x.total, '0') !== 0)
+    .sort((x, y) => compareMoney(y.total, x.total))
+  const taggedSum = rows.reduce((s, x) => add(s, x.tagged), '0.0000')
+  const allocatedSum = rows.reduce((s, x) => add(s, x.allocated), '0.0000')
 
   return (
     <Drawer open onClose={onClose} size="lg" title={`${cat.name} — ${dept.name}`} description={t('cellFlyout.description')} bodyClassName="p-0 overflow-y-auto">
@@ -451,10 +452,10 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
               {rows.map(({ a, tagged, allocated, total }) => (
                 <tr key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                   <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{tagged ? money0(tagged) : '—'}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-400">{allocated ? money0(allocated) : '—'}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{compareMoney(tagged, '0') !== 0 ? money0(tagged) : '—'}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-400">{compareMoney(allocated, '0') !== 0 ? money0(allocated) : '—'}</td>
                   <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{money0(total)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(dept.billedHours > 0 ? total / dept.billedHours : 0)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(dept.billedHours > 0 ? Number(div(total, String(dept.billedHours))) : 0)}</td>
                 </tr>
               ))}
             </tbody>
@@ -478,7 +479,7 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
   const rate = useRate()
   const whole = useWholeNumber()
   const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
+  const money0 = (n: string | number) => fmtMoney(n)
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const categoryTypeLabel = (type: TrueCostData['categories'][number]['categoryType']) => {
@@ -576,7 +577,7 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
               ))}
               <tr className="bg-amber-50/60 font-semibold dark:bg-amber-950/20">
                 <td className="px-4 py-2 text-amber-800 dark:text-amber-300">{t('categories.notInComposite')}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-amber-800 dark:text-amber-300">{money0(data.unassigned.reduce((s, a) => s + a.amount, 0))}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-amber-800 dark:text-amber-300">{money0(data.unassigned.reduce((s, a) => add(s, a.amount), '0.0000'))}</td>
                 <td />
               </tr>
             </tbody>
@@ -702,7 +703,7 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
   const whole = useWholeNumber()
   const percent = usePercent()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
   const k = data.kpis
   const gap = Math.abs(Math.min(0, k.gap)) // the shortfall to recover
   const [rateAdj, setRateAdj] = useState(0)
@@ -871,7 +872,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
   const format = useFormatter()
   const { currency } = useMoney()
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
   const k = data.kpis
   const emp = data.labor
 

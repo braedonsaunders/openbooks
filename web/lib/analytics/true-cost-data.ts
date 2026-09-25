@@ -5,7 +5,7 @@ import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { add, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
   deriveOverheadCategoryDeptRates,
   deriveOverheadDeptComposite,
@@ -75,12 +75,13 @@ export interface BurdenAccount {
   id: string;
   number: string | null;
   name: string;
-  amount: number;
+  /** Exact account total (decimal string). */
+  amount: string;
   /** Classification source: explicitly pinned vs matched by the group's rule. */
   pinned: boolean;
-  /** Department-TAGGED amounts (untagged remainder allocates by hours share). */
-  deptAmounts: Record<string, number>;
-  untaggedAmount: number;
+  /** Department-TAGGED exact amounts (untagged remainder allocates by hours share). */
+  deptAmounts: Record<string, string>;
+  untaggedAmount: string;
 }
 
 export interface BurdenCategory {
@@ -153,7 +154,8 @@ export interface TrueCostConfig {
 export interface MonthPoint {
   month: string;
   label: string;
-  burden: number;
+  /** Exact monthly burden (decimal string); byCategory/byDept/rate stay numeric ratios. */
+  burden: string;
   billedHours: number;
   rate: number;
   byCategory: Record<string, number>; // category key → rate
@@ -648,11 +650,11 @@ export async function trueCostData(
   const deptHours = new Map<string, { billed: number; total: number }>();
   const monthHours = new Map<string, { billed: number; total: number }>();
   const deptMonthBilled = new Map<string, number>(); // `${dept}|${month}`
-  // Non-billable labour cost (the time category) by department and by month.
-  const nonbillCostByDept = new Map<string, number>();
+  // Non-billable labour cost by month (monthly rate ratios only; exact money
+  // resolves in the twin loop below).
   const nonbillCostByMonth = new Map<string, number>();
   const nonbillCostByDeptMonth = new Map<string, number>(); // `${dept}|${month}`
-  let billedHours = 0, totalHours = 0, nonbillCostTotal = 0;
+  let billedHours = 0, totalHours = 0;
   // Exact twins of the billed/total hour aggregates: the rate engine's
   // allocation denominators, never a float.
   const deptBilledExact = new Map<string, string>();
@@ -677,10 +679,9 @@ export async function trueCostData(
     mh.billed += billed; mh.total += total;
     monthHours.set(r.month, mh);
     deptMonthBilled.set(`${dept}|${r.month}`, (deptMonthBilled.get(`${dept}|${r.month}`) ?? 0) + billed);
-    nonbillCostByDept.set(dept, (nonbillCostByDept.get(dept) ?? 0) + nonbill);
     nonbillCostByMonth.set(r.month, (nonbillCostByMonth.get(r.month) ?? 0) + nonbill);
     nonbillCostByDeptMonth.set(`${dept}|${r.month}`, (nonbillCostByDeptMonth.get(`${dept}|${r.month}`) ?? 0) + nonbill);
-    billedHours += billed; totalHours += total; nonbillCostTotal += nonbill;
+    billedHours += billed; totalHours += total;
   }
 
   // Burden centres = departments with BILLED hours (a dept that bills nothing
@@ -721,9 +722,9 @@ export async function trueCostData(
 
   interface CatAgg {
     id: string; key: string; name: string; color: string | null;
-    total: number;
+    /** Exact category total (decimal string). */
+    total: string;
     accounts: Map<string, BurdenAccount>;
-    byDept: Map<string, number>;
     /** Tagged-department exact amounts; untagged accumulates separately. */
     byDeptTaggedExact: Map<string, string>;
     untaggedExact: string;
@@ -731,10 +732,10 @@ export async function trueCostData(
   }
   const cats = new Map<string, CatAgg>();
   for (const g of burdenGroups.groups) {
-    cats.set(g.id, { id: g.id, key: g.key, name: g.name, color: g.color, total: 0, accounts: new Map(), byDept: new Map(), byDeptTaggedExact: new Map(), untaggedExact: "0.0000", byMonth: new Map() });
+    cats.set(g.id, { id: g.id, key: g.key, name: g.name, color: g.color, total: "0.0000", accounts: new Map(), byDeptTaggedExact: new Map(), untaggedExact: "0.0000", byMonth: new Map() });
   }
   const unassignedMap = new Map<string, BurdenAccount>();
-  const monthBurden = new Map<string, number>();
+  const monthBurden = new Map<string, string>();
   const monthCatRate = new Map<string, Map<string, number>>(); // month → cat key → amount
   const monthDeptBurden = new Map<string, Map<string, number>>(); // month → dept → amount
 
@@ -749,40 +750,41 @@ export async function trueCostData(
 
     if (!group) {
       const u = unassignedMap.get(r.account_id) ?? {
-        id: r.account_id, number: r.number, name: r.name, amount: 0,
-        pinned: false, deptAmounts: {} as Record<string, number>, untaggedAmount: 0,
+        id: r.account_id, number: r.number, name: r.name, amount: "0.0000",
+        pinned: false, deptAmounts: {} as Record<string, string>, untaggedAmount: "0.0000",
       };
-      u.amount += amount;
+      u.amount = add(u.amount, amountExact);
       if (r.department_id && billedShare.has(r.department_id)) {
-        u.deptAmounts[r.department_id] = (u.deptAmounts[r.department_id] ?? 0) + amount;
+        u.deptAmounts[r.department_id] = add(u.deptAmounts[r.department_id] ?? "0.0000", amountExact);
       } else {
-        u.untaggedAmount += amount;
+        u.untaggedAmount = add(u.untaggedAmount, amountExact);
       }
       unassignedMap.set(r.account_id, u);
       continue;
     }
     const cat = cats.get(group.groupId);
     if (!cat) continue;
-    cat.total += amount;
+    cat.total = add(cat.total, amountExact);
     const acct = cat.accounts.get(r.account_id) ?? {
-      id: r.account_id, number: r.number, name: r.name, amount: 0,
-      pinned: burdenGroups.pinned.has(r.account_id), deptAmounts: {} as Record<string, number>, untaggedAmount: 0,
+      id: r.account_id, number: r.number, name: r.name, amount: "0.0000",
+      pinned: burdenGroups.pinned.has(r.account_id), deptAmounts: {} as Record<string, string>, untaggedAmount: "0.0000",
     };
-    acct.amount += amount;
+    acct.amount = add(acct.amount, amountExact);
     if (r.department_id && billedShare.has(r.department_id)) {
-      acct.deptAmounts[r.department_id] = (acct.deptAmounts[r.department_id] ?? 0) + amount;
+      acct.deptAmounts[r.department_id] = add(acct.deptAmounts[r.department_id] ?? "0.0000", amountExact);
     } else {
-      acct.untaggedAmount += amount;
+      acct.untaggedAmount = add(acct.untaggedAmount, amountExact);
     }
     cat.accounts.set(r.account_id, acct);
     cat.byMonth.set(r.month, (cat.byMonth.get(r.month) ?? 0) + amount);
-    monthBurden.set(r.month, (monthBurden.get(r.month) ?? 0) + amount);
+    monthBurden.set(r.month, add(monthBurden.get(r.month) ?? "0.0000", amountExact));
     if (!monthCatRate.has(r.month)) monthCatRate.set(r.month, new Map());
     monthCatRate.get(r.month)!.set(cat.key, (monthCatRate.get(r.month)!.get(cat.key) ?? 0) + amount);
 
     // Department attribution: tagged stays; untagged allocated by billed-hours share.
+    // Exact per-department amounts resolve once below (splitUntaggedExact); the
+    // float spread here feeds only monthly rate ratios, never money totals.
     const spread = (deptId: string, amt: number) => {
-      cat.byDept.set(deptId, (cat.byDept.get(deptId) ?? 0) + amt);
       if (!monthDeptBurden.has(r.month)) monthDeptBurden.set(r.month, new Map());
       const md = monthDeptBurden.get(r.month)!;
       md.set(deptId, (md.get(deptId) ?? 0) + amt);
@@ -823,21 +825,16 @@ export async function trueCostData(
   // the monthly burden series so trends, forecast and absorption all include it.
   const TIME_ID = "__nonbillable_time__";
   const TIME_KEY = "nonbillable_time";
-  const timeExpenseByDept: Record<string, number> = {};
-  for (const d of departmentsBase) timeExpenseByDept[d.id] = 0;
-  for (const [dept, cost] of nonbillCostByDept) {
-    if (cost === 0) continue;
-    if (dept !== "none" && billedShare.has(dept)) timeExpenseByDept[dept]! += cost;
-    else for (const d of departmentsBase) timeExpenseByDept[d.id]! += cost * (billedShare.get(d.id) ?? 0);
-  }
   // Exact twin of the loop above, partitioned identically: non-billable legs
   // already merge in money strings, so the engine input never sees a float.
   const timeTaggedExact = new Map<string, string>();
   let timeUntaggedExact = "0.0000";
+  const timeExactByMonth = new Map<string, string>();
   for (const r of hourTranslated) {
     const costExact = normalizeMoney(String(r.nonbill_cost ?? 0));
     if (costExact === "0.0000") continue;
     const dept = r.department_id ?? "none";
+    timeExactByMonth.set(r.month, add(timeExactByMonth.get(r.month) ?? "0.0000", costExact));
     if (dept !== "none" && billedShare.has(dept)) {
       timeTaggedExact.set(dept, add(timeTaggedExact.get(dept) ?? "0.0000", costExact));
     } else {
@@ -845,9 +842,13 @@ export async function trueCostData(
     }
   }
   const timeExpenseExactByDept = splitUntaggedExact(timeTaggedExact, timeUntaggedExact);
+  let timeTotalExact = timeUntaggedExact;
+  for (const v of timeTaggedExact.values()) timeTotalExact = add(timeTotalExact, v);
+  for (const [month, costExact] of timeExactByMonth) {
+    monthBurden.set(month, add(monthBurden.get(month) ?? "0.0000", costExact));
+  }
   for (const [month, cost] of nonbillCostByMonth) {
     if (cost === 0) continue;
-    monthBurden.set(month, (monthBurden.get(month) ?? 0) + cost);
     if (!monthCatRate.has(month)) monthCatRate.set(month, new Map());
     monthCatRate.get(month)!.set(TIME_KEY, (monthCatRate.get(month)!.get(TIME_KEY) ?? 0) + cost);
   }
@@ -862,7 +863,7 @@ export async function trueCostData(
     else for (const d of departmentsBase) md.set(d.id, (md.get(d.id) ?? 0) + cost * (billedShare.get(d.id) ?? 0));
   }
 
-  const totalOverhead = [...cats.values()].reduce((s, c) => s + c.total, 0) + nonbillCostTotal;
+  const totalOverhead = [...cats.values()].reduce((s, c) => s + Number(c.total), 0) + Number(timeTotalExact);
   const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
 
   /**
@@ -942,17 +943,20 @@ export async function trueCostData(
 
   const expenseCategories: BurdenCategory[] = burdenGroups.groups.map((g) => {
     const c = cats.get(g.id)!;
-    const expenseByDept: Record<string, number> = {};
-    for (const d of departmentsBase) expenseByDept[d.id] = c.byDept.get(d.id) ?? 0;
-    return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept, c.total, [...c.accounts.values()].sort((a, b) => b.amount - a.amount), Object.fromEntries(splitUntaggedExact(c.byDeptTaggedExact, c.untaggedExact)));
-  }).filter((c) => Math.abs(c.totalAmount) > 0);
+    const exactByDept = Object.fromEntries(splitUntaggedExact(c.byDeptTaggedExact, c.untaggedExact));
+    // Display numerics cross from exact through Number at this boundary; the
+    // exact maps flow separately for accumulation and the per-hour contract.
+    const expenseByDept = Object.fromEntries(Object.entries(exactByDept).map(([k, v]): [string, number] => [k, Number(v)]));
+    return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept, Number(c.total), [...c.accounts.values()].sort((a, b) => cmp(b.amount, a.amount)), exactByDept);
+  }).filter((c) => c.totalAmount !== 0);
 
   // ---- native non-billable time category ---------------------------------------
   // A first-class burden category (not a hand-built custom one): the labour cost
   // of non-billable hours, spread over billed hours like every other rate.
   const timeCategories: BurdenCategory[] = [];
-  if (nonbillCostTotal > 0) {
-    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, nonbillCostTotal, [], Object.fromEntries(timeExpenseExactByDept)));
+  if (cmp(timeTotalExact, "0") > 0) {
+    const timeExpenseByDept = Object.fromEntries([...timeExpenseExactByDept].map(([k, v]): [string, number] => [k, Number(v)]));
+    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, Number(timeTotalExact), [], Object.fromEntries(timeExpenseExactByDept)));
   }
 
   // ---- custom categories (manual / derived / formula) --------------------------
@@ -1058,7 +1062,7 @@ export async function trueCostData(
   // ---- monthly history + linear forecast ---------------------------------------------
   const months = [...new Set([...monthBurden.keys(), ...monthHours.keys()])].sort();
   const monthly: MonthPoint[] = months.map((m) => {
-    const burden = monthBurden.get(m) ?? 0;
+    const burden = monthBurden.get(m) ?? "0.0000";
     const billed = monthHours.get(m)?.billed ?? 0;
     const catAmounts = monthCatRate.get(m);
     const byCategory: Record<string, number> = {};
@@ -1071,7 +1075,7 @@ export async function trueCostData(
         byDept[deptId] = db_ > 0 ? amt / db_ : 0;
       }
     }
-    return { month: m, label: strings.monthLabel(m), burden, billedHours: billed, rate: billed > 0 ? burden / billed : 0, byCategory, byDept };
+    return { month: m, label: strings.monthLabel(m), burden, billedHours: billed, rate: billed > 0 ? Number(burden) / billed : 0, byCategory, byDept };
   });
 
   // Linear regression over monthly composite → next 3 months. Outlier months
@@ -1133,7 +1137,7 @@ export async function trueCostData(
       employeeCount: employees.length,
     },
     categories,
-    unassigned: [...unassignedMap.values()].filter((u) => Math.abs(u.amount) > 0).sort((a, b) => b.amount - a.amount),
+    unassigned: [...unassignedMap.values()].filter((u) => cmp(u.amount, "0") !== 0).sort((a, b) => cmp(b.amount, a.amount)),
     totals: { byDept: totalsByDept, overall: compositeRate },
     labor: {
       employees: employees.sort((a, b) => b.hours - a.hours),
