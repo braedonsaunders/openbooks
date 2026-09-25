@@ -1200,6 +1200,42 @@ export const payrollEmployerLevyOpening = pgTable(
 );
 
 /**
+ * IT addizionali assessed-saldo carry-in (0393, I6-payroll-50): the prior-year
+ * regional/municipal assessment per (org, employee, tax year) that the year's
+ * saldo installments withhold. Row presence IS the declaration — an explicit
+ * zero records a worker with no prior-year Italian employment — so this lives
+ * in its own table rather than on payroll_opening_balances, whose save
+ * deletes all-zero rows ("zero is no carry-in, not a row") and would make
+ * that remedy unrecordable. Written by the carry-in save under the employee
+ * tax-year fence; read with the December settlement factors.
+ */
+export const itAddizionaliOpeningBalances = pgTable(
+  "it_addizionali_opening_balances",
+  {
+    id: id(),
+    orgId: orgRef(),
+    employeePartyId: uuid("employee_party_id").notNull(),
+    /** The tax year whose installments withhold this assessment (year N for a year N-1 assessment). */
+    taxYear: integer("tax_year").notNull(),
+    /** Prior-year addizionale regionale assessment (D.Lgs. 446/1997 art. 50). Never negative. */
+    regionaleSaldo: money("regionale_saldo").notNull().default("0"),
+    /** Prior-year addizionale comunale assessment (D.Lgs. 360/1998 art. 1). Never negative. */
+    comunaleSaldo: money("comunale_saldo").notNull().default("0"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("it_addizionali_opening_balances_employee_year").on(
+      t.orgId, t.employeePartyId, t.taxYear,
+    ),
+    check(
+      "it_addizionali_opening_balances_nonnegative",
+      sql`${t.regionaleSaldo} >= 0 AND ${t.comunaleSaldo} >= 0`,
+    ),
+    index("it_addizionali_opening_balances_org_year").on(t.orgId, t.taxYear),
+  ],
+);
+
+/**
  * Union construction layer.
  *
  * A collective agreement names the union/local and its remittance party; its

@@ -302,6 +302,7 @@ export const TENANT_TABLE_POLICIES = {
   "insight_dashboard_pins": "clone:catalog-uuid-rebase",
   "insight_dashboards": "clone:catalog-uuid-rebase",
   "intercompany_pairs": "skip:no-copy",
+  "it_addizionali_opening_balances": "clone:catalog-uuid-rebase",
   "inventory_movements": "clone:catalog-uuid-rebase",
   "inventory_provisional_costs": "clone:catalog-uuid-rebase",
   "inventory_provisional_settlements": "clone:catalog-uuid-rebase",
