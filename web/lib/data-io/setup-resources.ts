@@ -12,6 +12,7 @@ import { buildRow, coerceBoolean, idColumn, type Coerced } from '../setup/coerce
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { validateEntityIntegrity } from '../setup/write'
+import { payPeriodsPerYearProblem } from '@openbooks/engine/src/payroll/run-calendar.ts'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
 import { setupReadProjection, setupReadSource } from '../setup/read-shape'
@@ -35,6 +36,41 @@ import {
 // Drizzle treats bare JS arrays in SQL templates as row constructors. Keep
 // array-valued setup fields as a single driver parameter for PostgreSQL.
 const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(value) : value
+/**
+ * Pay-schedule calendar integrity on the import path (I5-platform-158). The
+ * interactive editor refuses a frequency/periods-per-year mismatch because
+ * statutory annualization uses periods-per-year as factor P, but the import
+ * writer applied only generic coercion — so a monthly schedule with 24
+ * periods imported cleanly and mis-withheld every pay. Run the same merged
+ * validator the editor uses, on both preview and commit, before anything is
+ * persisted: built columns win, the stored row fills gaps on update (exactly
+ * the editor's body-over-current merge), and an unknowable pair is skipped
+ * the way the editor skips it rather than refused.
+ */
+async function payScheduleImportProblem(
+  entityKey: string,
+  built: Coerced[],
+  current: { frequency: unknown; periods_per_year: unknown } | null,
+): Promise<string | null> {
+  if (entityKey !== 'pay-schedules') return null
+  const col = (name: string) => built.find((c) => c.column === name)?.value
+  const frequency = String(col('frequency') ?? (current?.frequency as string | null) ?? '')
+  const periodsPerYear = Number(col('periods_per_year') ?? current?.periods_per_year)
+  if (!Number.isFinite(periodsPerYear)) return null
+  return payPeriodsPerYearProblem(frequency, periodsPerYear)
+}
+
+async function loadPayScheduleCurrent(
+  orgId: string,
+  existingId: string,
+): Promise<{ frequency: unknown; periods_per_year: unknown } | null> {
+  const current = (await db.execute(sql`
+    select frequency, periods_per_year from pay_schedules
+     where id = ${existingId} and org_id = ${orgId}
+     limit 1`)) as { rows: { frequency: unknown; periods_per_year: unknown }[] }
+  return current.rows[0] ?? null
+}
+
 // --- Setup-registry resources -------------------------------------------------
 
 const SETUP_KIND_MAP: Record<SetupField['kind'], ResourceField['kind']> = {
@@ -425,6 +461,16 @@ async function writeSetup(
             continue
           }
         }
+        const scheduleProblem = await payScheduleImportProblem(
+          entity.key,
+          built.cols,
+          entity.key === 'pay-schedules' ? await loadPayScheduleCurrent(ctx.orgId, existingId) : null,
+        )
+        if (scheduleProblem) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: scheduleProblem })
+          continue
+        }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
         const storageCols = entity.key === 'pay-components'
           ? built.cols.filter((column) => column.column !== 'supplemental_wage_category')
@@ -507,6 +553,12 @@ async function writeSetup(
             outcome.errors.push({ row: rowNo, message: classProblem })
             continue
           }
+        }
+        const scheduleProblem = await payScheduleImportProblem(entity.key, built.cols, null)
+        if (scheduleProblem) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: scheduleProblem })
+          continue
         }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
         const storageCols = entity.key === 'pay-components'
