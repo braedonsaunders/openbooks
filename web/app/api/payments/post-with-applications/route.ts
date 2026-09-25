@@ -86,8 +86,11 @@ export async function POST(req: Request) {
 
   try {
     const outcome = await withOrgTransaction(authz.user.orgId, async () => {
-      // Draft save already locks allocation books; take the shared setup fence
-      // before that save and before the document row, not only in the kernel.
+      // Draft save already locks allocation books; take the organization fence
+      // before that save and before the document row, not only in the kernel,
+      // then the shared setup fence. FOR NO KEY UPDATE waits on a setup
+      // reassignment's FOR SHARE instead of deadlocking its book fence.
+      await db.execute(sql`select id from orgs where id = ${authz.user.orgId} for no key update`)
       await lockLedgerSetupFence(db, authz.user.orgId, "shared")
 
       const locked = (await db.execute<{ kind: PaymentKind; status: string; subsidiaryId: string | null }>(sql`
