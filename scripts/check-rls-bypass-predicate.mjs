@@ -1,18 +1,23 @@
 #!/usr/bin/env node
 /**
- * RLS bypass-predicate gate (RELEASE BLOCKER RLS-GUC-ESCALATION): tenant
- * policies must call public.app_bypass_rls_active() instead of trusting the
- * raw app.bypass_rls GUC inline. Any SET on the runtime pool used to escalate
+ * RLS bypass-predicate gate (RELEASE BLOCKER RLS-GUC-ESCALATION, extended by
+ * RLS-GUC-TRIGGERS/0402): tenant policies AND function/trigger bodies must
+ * call public.app_bypass_rls_active() instead of trusting the raw
+ * app.bypass_rls GUC inline. Any SET on the runtime pool used to escalate
  * across tenants; the predicate additionally requires a privileged login, so
  * the raw read is the hole.
  *
- * Migration 0399 rewrote every existing policy at apply time, so generated
- * migrations at or below its ordinal are frozen history and out of scope
- * here. This gate is forward-looking: every NEWER generated migration, plus
- * the environments.sql backstop (which re-applies the org_isolation template
+ * Migration 0399 rewrote every existing policy at apply time and 0402
+ * rewrote every existing function/trigger body, so generated migrations at
+ * or below the 0402 ordinal are frozen history and out of scope here. This
+ * gate is forward-looking: every NEWER generated migration, plus the
+ * environments.sql backstop (which re-applies the org_isolation template
  * on every bootstrap), must not introduce an executable
- * current_setting('app.bypass_rls', ...) read. SQL comments are stripped
- * before matching, so prose naming the GUC does not count.
+ * current_setting('app.bypass_rls', ...) read — in a policy expression or
+ * in a function/trigger body. SQL comments are stripped before matching, so
+ * prose naming the GUC does not count. Bodies wrap lines where policy
+ * expressions did not, so matching runs over both individual lines (for
+ * precise locations) and the whole file (for reads split across lines).
  *
  * Frozen history and shard-owned legacies above the cutoff are allowlisted
  * by basename with the reason each may keep its read; the list may only
@@ -28,8 +33,12 @@ import { stripSqlComments } from './check-migration-headers.mjs'
 
 const root = '.'
 
-/** Ordinal of the predicate migration: generated files at or below are pre-predicate history. */
-export const BYPASS_PREDICATE_CUTOFF_ORDINAL = 399
+/**
+ * Ordinal of the last rewriter migration (0402 bodies; 0399 policies):
+ * generated files at or below are remediated at apply time by the chain, so
+ * their inline reads are frozen history, not new trust.
+ */
+export const BYPASS_PREDICATE_CUTOFF_ORDINAL = 402
 
 export function migrationOrdinal(basename) {
   const match = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(basename)
@@ -64,6 +73,15 @@ export function findInlineBypassTrust(content) {
   return hits
 }
 
+/**
+ * Whole-content match for reads split across lines — function bodies wrap
+ * where policy expressions did not. True when the comment-stripped content
+ * holds an executable read anywhere, even if no single line does.
+ */
+export function hasInlineBypassTrust(content) {
+  return INLINE_BYPASS_GUC.test(stripSqlComments(content))
+}
+
 /** Whether a scan file is post-predicate and therefore gated. */
 export function isGatedFile(file) {
   const basename = file.split('/').pop()
@@ -81,13 +99,14 @@ export function auditBypassPredicate(files = SCAN_FILES) {
     if (!isGatedFile(file)) continue
     gated += 1
     const basename = file.split('/').pop()
-    const hits = findInlineBypassTrust(readFileSync(file, 'utf8'))
-    if (hits.length === 0) continue
+    const content = readFileSync(file, 'utf8')
+    const hits = findInlineBypassTrust(content)
+    if (hits.length === 0 && !hasInlineBypassTrust(content)) continue
     if (INLINE_BYPASS_GUC_ALLOWLIST.has(basename)) {
       seenAllowlisted.add(basename)
       continue
     }
-    violations.push(`${file}:${hits.join(',')}`)
+    violations.push(hits.length > 0 ? `${file}:${hits.join(',')}` : `${file}:multiline`)
   }
   for (const basename of INLINE_BYPASS_GUC_ALLOWLIST.keys()) {
     if (!seenAllowlisted.has(basename)) stale.push(basename)
