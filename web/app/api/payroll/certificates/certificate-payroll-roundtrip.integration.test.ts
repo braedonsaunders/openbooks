@@ -116,21 +116,21 @@ async function gbPayrollOrg() {
       values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'GB', 'ENG', 'salary', true,
               ${state.actorId}, ${state.actorId})`)
     // The pension assessment is a second prerequisite gate ahead of the tax
-    // code check: an entitled worker with no enrolment passes it, keeping
-    // the tax code the only missing input by design.
+    // code check: an entitled worker with no enrolment passes it, and the
+    // scheme-terms record attests non-eligibility, keeping the tax code the
+    // only missing input by design.
     const pension = await fileCertificate(
       employeeId, 'gb_workplace_pension',
       { age_band: '22_to_state_pension_age', worker_status: 'entitled_worker', enrolment_status: 'not_enrolled' },
       '2026-04-01',
     )
     assert.equal(pension.status, 200, await pension.clone().text())
+    const assessment = await fileCertificate(employeeId, 'gb_workplace_pension_assessment',
+      { age_band: '22_to_state_pension_age', membership_status: 'not_eligible', scheme_basis: 'not_applicable', deduction_method: 'not_applicable' }, '2026-04-06')
+    assert.equal(assessment.status, 200, await assessment.clone().text())
     // The NIC letter is a third prerequisite gate ahead of the tax code
     // check: category A, not a director.
-    const nic = await fileCertificate(
-      employeeId, 'gb_nic_category',
-      { category_letter: 'A', director_status: 'not_director' },
-      '2026-04-01',
-    )
+    const nic = await fileCertificate(employeeId, 'gb_nic_category', { category_letter: 'A', director_status: 'not_director' }, '2026-04-01')
     assert.equal(nic.status, 200, await nic.clone().text())
     // The student-loan plan rides the starter checklist; the tax-code notice
     // stays the only missing input. (The test files the same checklist
