@@ -2,7 +2,8 @@ import { assertPayrollCountryKnown } from "../../country.ts";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { pool, type SqlExecutor } from "../../../platform/db.ts";
-import { add, cmp, normalizeMoney } from "../../../money/money.ts";
+import { add, cmp, mulPercent, neg, normalizeMoney } from "../../../money/money.ts";
+import { resolveEmployerFact } from "../../employer-facts.ts";
 import { RATES_2026_JAN } from "../rates.ts";
 import { PayrollError } from "../../error.ts";
 import type { PayrollFilingData } from "../../filing-registry.ts";
@@ -412,13 +413,20 @@ export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[
  * total (per-stub HSF accrues at the tenant-entered QC rate, but the RLZ-1.S
  * annual reconciliation is not produced), the CNT labour-standards levy
  * annual reconciliation (per-stub CNT accrues at the statutory 2026 rate,
- * but the RLZ-1.S annual reconciliation is not produced), the WSDRF
- * training levy, and the year's remittances made to Revenu
+ * but the RLZ-1.S annual reconciliation is not produced), and the year's
+ * remittances made to Revenu
  * Québec. The last is a reporting boundary, not a tracking gap: RQ
  * remittance bills are dated and tracked per destination from the RQ schedule
  * (see Payroll → Remittances), but this summary does not reconcile
  * remittances-made totals against them.
  */
+export type WsdrfStatus =
+  | "below_threshold"
+  | "exempt_certificate"
+  | "computed"
+  | "missing_training_expenditures"
+  | "ambiguous_facts";
+
 export interface Rl1SummaryTotals {
   slips: number;
   boxA: string;
@@ -432,6 +440,17 @@ export interface Rl1SummaryTotals {
   boxI: string;
   employerQpp: string;
   employerQpip: string;
+  /** Eligible Québec payroll: committed QC stub gross, the employer as a whole. */
+  wsdrfEligiblePayroll: string;
+  /** Declared eligible training expenditures, or null when undeclared. */
+  wsdrfTrainingExpenditures: string | null;
+  /** A valid certificat de qualité is on file. */
+  wsdrfQualityCertificate: boolean;
+  /** The 1% shortfall owed, or null when the inputs do not determine it. */
+  wsdrfShortfall: string | null;
+  /** Last day of next February, when a shortfall is owed. */
+  wsdrfDueDate: string | null;
+  wsdrfStatus: WsdrfStatus;
   gaps: string[];
 }
 
@@ -440,10 +459,25 @@ export const RLZ1S_GAPS = [
   + "at the tenant-entered QC rate (TP-1015.F-V s. 5)",
   "labour standards (CNT) annual total is not reconciled on this summary — per-stub CNT accrues "
   + "at the statutory 2026 rate (0.06% to $103,000 per employee)",
-  "WSDRF training contributions are not computed",
   "remittances made to Revenu Québec during the year are not reconciled on this summary — " +
     "Payroll → Remittances dates and tracks each RQ bill from the RQ schedule",
 ];
+
+/**
+ * The WSDRF payroll threshold: employers with $2M or more of Québec payroll
+ * owe 1% of payroll less eligible training expenditures (holders of a valid
+ * quality certificate are exempt). Revenu Québec, Contribution to the
+ * Workforce Skills Development and Recognition Fund.
+ */
+export const WSDRF_PAYROLL_THRESHOLD = "2000000";
+export const WSDRF_RATE_PERCENT = "1";
+
+/** Last day of February following the tax year: the WSDRF payment due date. */
+export function wsdrfDueDate(taxYear: number): string {
+  const year = taxYear + 1;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return `${year}-02-${leap ? "29" : "28"}`;
+}
 
 async function rl1SummaryInSnapshot(
   runner: SqlExecutor,
@@ -466,6 +500,21 @@ async function rl1SummaryInSnapshot(
   `));
   const total = (pick: (slip: Rl1Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
+  const wsdrf = await wsdrfForSummary(runner, orgId, taxYear);
+  const gaps = [...RLZ1S_GAPS];
+  if (wsdrf.status === "missing_training_expenditures") {
+    gaps.push(
+      "WSDRF training contribution is not determined — record the year's eligible training "
+      + "expenditures (or a valid quality certificate) in Payroll Setup → Employer facts before "
+      + "filing; the 1% shortfall is never assumed to be zero",
+    );
+  } else if (wsdrf.status === "ambiguous_facts") {
+    gaps.push(
+      "WSDRF training contribution is not determined — the legal employers hold conflicting "
+      + "training-expenditure or quality-certificate values for this year; reconcile them in "
+      + "Payroll Setup → Employer facts before filing",
+    );
+  }
   return {
     slips: slips.length,
     boxA: total((s) => s.boxA),
@@ -479,7 +528,92 @@ async function rl1SummaryInSnapshot(
     boxI: total((s) => s.boxI),
     employerQpp: num(employer.rows[0]?.employer_qpp),
     employerQpip: num(employer.rows[0]?.employer_qpip),
-    gaps: [...RLZ1S_GAPS],
+    wsdrfEligiblePayroll: wsdrf.eligiblePayroll,
+    wsdrfTrainingExpenditures: wsdrf.trainingExpenditures,
+    wsdrfQualityCertificate: wsdrf.qualityCertificate,
+    wsdrfShortfall: wsdrf.shortfall,
+    wsdrfDueDate: wsdrf.dueDate,
+    wsdrfStatus: wsdrf.status,
+    gaps,
+  };
+}
+
+/**
+ * The WSDRF training-levy position for the RL-1 summary: 1% of the
+ * employer's eligible Québec payroll less declared eligible training
+ * expenditures, due the last day of next February — or the named reason it
+ * cannot be determined. Eligible payroll is the committed QC stub gross,
+ * the employer as a whole, from the same subledger the boxes reconcile to
+ * (pre-adoption payroll before OpenBooks is not in that subledger and is
+ * not estimated). Facts resolve org-wide across legal employers: one value
+ * wins, conflicting values refuse as ambiguous rather than picking one.
+ */
+async function wsdrfForSummary(
+  runner: SqlExecutor,
+  orgId: string,
+  taxYear: number,
+): Promise<{
+  eligiblePayroll: string;
+  trainingExpenditures: string | null;
+  qualityCertificate: boolean;
+  shortfall: string | null;
+  dueDate: string | null;
+  status: WsdrfStatus;
+}> {
+  const payroll = (await runner.execute<{ payroll: string }>(sql`
+    select coalesce(sum(s.gross), 0)::text as payroll
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'QC'
+  `)).rows[0]?.payroll ?? "0";
+  const asOf = `${taxYear}-12-31`;
+  const stored = (await runner.execute<{ fact_key: string; fact_value: string }>(sql`
+    select distinct fact_key, fact_value
+      from payroll_employer_facts
+     where org_id = ${orgId} and country = 'CA'
+       and fact_key in ('qc_wsdrf_training_expenditures', 'qc_wsdrf_quality_certificate')
+       and effective_from <= ${asOf}::date
+       and (superseded_on is null or superseded_on > ${asOf}::date)
+  `)).rows;
+  const values = (key: string): string[] =>
+    stored.filter((row) => row.fact_key === key).map((row) => row.fact_value);
+  const expendituresRaw = values("qc_wsdrf_training_expenditures");
+  const certificateRaw = values("qc_wsdrf_quality_certificate");
+  if (expendituresRaw.length > 1 || certificateRaw.length > 1) {
+    return {
+      eligiblePayroll: num(payroll), trainingExpenditures: null, qualityCertificate: false,
+      shortfall: null, dueDate: null, status: "ambiguous_facts",
+    };
+  }
+  const trainingExpenditures = expendituresRaw.length === 0
+    ? null
+    : resolveEmployerFact("CA", "qc_wsdrf_training_expenditures", expendituresRaw[0]);
+  const qualityCertificate = certificateRaw.length !== 0
+    && resolveEmployerFact("CA", "qc_wsdrf_quality_certificate", certificateRaw[0]) === "true";
+  if (cmp(num(payroll), WSDRF_PAYROLL_THRESHOLD) < 0) {
+    return {
+      eligiblePayroll: num(payroll), trainingExpenditures, qualityCertificate,
+      shortfall: "0", dueDate: null, status: "below_threshold",
+    };
+  }
+  if (qualityCertificate) {
+    return {
+      eligiblePayroll: num(payroll), trainingExpenditures, qualityCertificate,
+      shortfall: "0", dueDate: null, status: "exempt_certificate",
+    };
+  }
+  if (trainingExpenditures === null) {
+    return {
+      eligiblePayroll: num(payroll), trainingExpenditures, qualityCertificate,
+      shortfall: null, dueDate: null, status: "missing_training_expenditures",
+    };
+  }
+  const owing = add(mulPercent(num(payroll), WSDRF_RATE_PERCENT, 2), neg(trainingExpenditures));
+  return {
+    eligiblePayroll: num(payroll), trainingExpenditures, qualityCertificate,
+    shortfall: cmp(owing, "0") > 0 ? owing : "0",
+    dueDate: wsdrfDueDate(taxYear),
+    status: "computed",
   };
 }
 
@@ -570,6 +704,18 @@ export async function rl1Population(orgId: string, taxYear: number): Promise<Pay
             money: true,
           },
           { label: "Québec income tax", value: summary.boxE, money: true },
+          // The annual WSDRF position rides the filing face: the shortfall
+          // with its due date when owed, or the named reason it cannot be
+          // determined — never a silent zero.
+          ...(summary.wsdrfStatus === "computed" && summary.wsdrfShortfall !== null
+            ? [{
+              label: `WSDRF training levy shortfall (due ${summary.wsdrfDueDate})`,
+              value: summary.wsdrfShortfall,
+              money: true,
+            }]
+            : summary.wsdrfStatus === "missing_training_expenditures" || summary.wsdrfStatus === "ambiguous_facts"
+              ? [{ label: "WSDRF training levy", value: "not determined — see RL-1 summary gaps" }]
+              : []),
         ],
       };
     },

@@ -23,6 +23,33 @@ export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     ],
   },
   {
+    key: "qc_wsdrf_training_expenditures",
+    kind: "decimal",
+    scale: 2,
+    min: "0",
+    label: "WSDRF eligible training expenditures for the year",
+    refusalReason:
+      "an employer with $2M or more of Québec payroll owes 1% of payroll less its eligible training "
+      + "expenditures, so the shortfall cannot be determined without them",
+    legalBasis:
+      "Revenu Québec, Contribution to the Workforce Skills Development and Recognition Fund (WSDRF); "
+      + "Act to promote workforce skills development and recognition",
+    required: false,
+    effectivePeriod: "calendar_year",
+  },
+  {
+    key: "qc_wsdrf_quality_certificate",
+    kind: "boolean",
+    label: "WSDRF holds a valid quality certificate (certificat de qualité)",
+    refusalReason:
+      "a valid quality certificate exempts the employer from the WSDRF contribution, so the summary "
+      + "cannot state the exemption without it",
+    legalBasis:
+      "Revenu Québec, Contribution to the Workforce Skills Development and Recognition Fund (WSDRF)",
+    required: false,
+    effectivePeriod: "calendar_year",
+  },
+  {
     key: "work_week_start",
     kind: "choice",
     label: "Employer work-week start day",
