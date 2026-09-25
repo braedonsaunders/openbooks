@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { resolvePdfPageSetup } from '@openbooks/pdf'
@@ -68,7 +69,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       bookId = selection.selectedBook.id
       bookName = `${selection.selectedBook.code} · ${selection.selectedBook.name}`
     } catch (error) {
-      return NextResponse.json({ error: error instanceof Error ? error.message : 'Accounting book unavailable' }, { status: 422 })
+      return apiErrorResponse(error)
     }
   }
   const requestedFormat = query.get('format')
