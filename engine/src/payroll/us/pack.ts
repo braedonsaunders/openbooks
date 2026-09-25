@@ -403,6 +403,18 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
         { code: "LIT", name: "Local income tax", systemKey: "local_income_tax", kind: "deduction", sequence: 145, assessedOn: "taxable_income", remittance: "external" },
       ],
     },
+    {
+      key: "pa_uc_employee",
+      regions: ["PA"],
+      components: [
+        // Pennsylvania UC employee withholding (2026: 0.07% of all gross
+        // wages, no cap): an EMPLOYEE deduction, not state income tax, so
+        // its own slot rather than the SIT line — folding it into SIT would
+        // overstate income-tax withholding and misroute the remittance.
+        // Assessed on earnings (gross, no pre-tax reduction), like transit.
+        { code: "PA-UC", name: "Pennsylvania UC (employee)", systemKey: "pa_uc_employee", kind: "deduction", sequence: 147, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
   ],
   computeStatutory: computeUsStatutory,
   statutoryEngineLabel: "Pub 15-T",
