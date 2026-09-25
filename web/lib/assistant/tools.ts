@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { abs as absMoney, add as addMoney, cmp as compareMoney } from "@openbooks/engine/src/money/money.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { can, type Authz } from "../authz";
+import { can, subsidiaryScopeAllows, type Authz } from "../authz";
 import { accountsWithBalances, entryDetail } from "../data";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
@@ -21,7 +21,7 @@ import { normalizeMoneyValue } from "../cash/core";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
 import { dateInput, num, orgToday, rangeInputFields, resolveToolRange, uuidInput, type RangeArgs } from "./tools-shared";
 import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/agents/continuous-close-config.ts";
-import { readableContinuousCloseAgents } from "../continuous-close";
+import { loadWorkItemAccess, readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
 import { documentRevisionCounterSql } from "../../../engine/src/records/revision.ts";
@@ -1229,6 +1229,14 @@ const getContinuousCloseFinding: AssistantToolDef = {
     if (!row) return { ok: false, error: "finding_not_found" };
     if (typeof row.agent_key !== "string" || !(readableContinuousCloseAgents(authz) as readonly string[]).includes(row.agent_key)) {
       return { ok: false, error: "forbidden" };
+    }
+    // Subject-subsidiary scope, mirroring the workbench item route: a
+    // restricted caller shares the uniform not-found for findings whose
+    // subject sits outside their allowlist, instead of reading another
+    // subsidiary's evidence packet through the pack grant alone.
+    const access = await loadWorkItemAccess(authz.user.orgId, findingId);
+    if (!access || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
+      return { ok: false, error: "finding_not_found" };
     }
     const evidence = (await db.execute<Record<string, unknown>>(sql`
       select id, kind, source_type, source_id, data, created_at
