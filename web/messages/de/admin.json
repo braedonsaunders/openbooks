@@ -3714,6 +3714,12 @@
       "copied": "Kopiert",
       "testConnection": "Verbindung testen",
       "testing": "Teste…",
+      "errors": {
+        "loadFailed": "Die Zahlungspartner-Einstellungen konnten nicht geladen werden.",
+        "saveFailed": "Die Zahlungspartner-Einstellungen konnten nicht gespeichert werden.",
+        "testFailed": "Die Verbindung zum Anbieter konnte nicht getestet werden.",
+        "unrestrictedScope": "Unbeschränkter Zugriff auf Tochtergesellschaften ist erforderlich. Bitte eine Administration um Zugriff oder Durchführung dieser Änderung bitten."
+      },
       "navTitle": "Zahlungsanbieter"
     },
     "agents": {

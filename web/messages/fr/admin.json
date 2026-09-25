@@ -3988,6 +3988,12 @@
       "copied": "Copié",
       "testConnection": "Tester la connexion",
       "testing": "Test…",
+      "errors": {
+        "loadFailed": "Impossible de charger les paramètres des prestataires de paiement.",
+        "saveFailed": "Impossible d’enregistrer les paramètres des prestataires de paiement.",
+        "testFailed": "Impossible de tester la connexion du prestataire.",
+        "unrestrictedScope": "Un accès sans restriction aux filiales est requis. Demandez cet accès à un administrateur ou demandez-lui d’effectuer cette modification."
+      },
       "navTitle": "Fournisseurs de paiement"
     },
     "readiness": {

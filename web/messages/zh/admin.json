@@ -4042,7 +4042,13 @@
       "copy": "复制",
       "copied": "已复制",
       "testConnection": "测试连接",
-      "testing": "测试中…"
+      "testing": "测试中…",
+      "errors": {
+        "loadFailed": "无法加载支付服务商设置。",
+        "saveFailed": "无法保存支付服务商设置。",
+        "testFailed": "无法测试服务商连接。",
+        "unrestrictedScope": "需要不受限制的子公司访问权限。请联系管理员授予权限或代为进行此更改。"
+      }
     },
     "wizard": {
       "skip": "暂跳过",

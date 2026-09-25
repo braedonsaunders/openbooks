@@ -56,16 +56,25 @@ export function PaymentProvidersClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const localizedFailure = useCallback(async (res: Response, fallback: string) => {
+    const body = (await res.json().catch(() => ({}))) as { code?: unknown; error?: unknown };
+    if (
+      body.code === "unrestricted_scope_required" ||
+      body.error === "requires unrestricted subsidiary access"
+    ) {
+      return t("errors.unrestrictedScope");
+    }
+    return fallback;
+  }, [t]);
+
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
   const load = useCallback(() => {
     return fetch("/api/admin/setup/payment-providers").then((res) => {
       if (res.ok) return res.json().then((body) => setData(body as Data));
-      return res.json().catch(() => ({})).then((body) => {
-        setError((body as { error?: string })?.error ?? res.statusText);
-      });
+      return localizedFailure(res, t("errors.loadFailed")).then(setError);
     });
-  }, []);
+  }, [localizedFailure, t]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -78,9 +87,8 @@ export function PaymentProvidersClient() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    const json = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) {
-      setError(json.error ?? res.statusText);
+      setError(await localizedFailure(res, t("errors.saveFailed")));
       return false;
     }
     setNotice(t("saved"));
@@ -107,6 +115,7 @@ export function PaymentProvidersClient() {
           bankAccounts={data.bankAccounts}
           rules={data.surchargeRules.filter((r) => r.isActive)}
           onSave={post}
+          failureMessage={localizedFailure}
           t={t}
         />
       ))}
@@ -127,6 +136,7 @@ function ProviderCard({
   bankAccounts,
   rules,
   onSave,
+  failureMessage,
   t,
 }: {
   provider: { key: ProviderKey; label: string; merchantAccount?: boolean };
@@ -134,6 +144,7 @@ function ProviderCard({
   bankAccounts: Account[];
   rules: Rule[];
   onSave: (body: Record<string, unknown>) => Promise<boolean>;
+  failureMessage: (res: Response, fallback: string) => Promise<string>;
   t: ReturnType<typeof useTranslations>;
 }) {
   const [enabled, setEnabled] = useState(config?.acceptanceEnabled ?? false);
@@ -153,13 +164,22 @@ function ProviderCard({
   async function test() {
     setTesting(true);
     setTestResult(null);
-    const res = await fetch("/api/admin/setup/payment-providers", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "test", provider: provider.key }),
-    });
-    setTestResult((await res.json().catch(() => ({ ok: false, detail: res.statusText }))) as { ok: boolean; detail: string });
-    setTesting(false);
+    try {
+      const res = await fetch("/api/admin/setup/payment-providers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "test", provider: provider.key }),
+      });
+      if (!res.ok) {
+        setTestResult({ ok: false, detail: await failureMessage(res, t("errors.testFailed")) });
+        return;
+      }
+      setTestResult((await res.json()) as { ok: boolean; detail: string });
+    } catch {
+      setTestResult({ ok: false, detail: t("errors.testFailed") });
+    } finally {
+      setTesting(false);
+    }
   }
 
   return (
