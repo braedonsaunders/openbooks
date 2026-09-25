@@ -21,7 +21,8 @@
     "empty": "Choisissez une table à exporter.",
     "noColumns": "Cette table n'a aucune colonne exportable.",
     "loadFailed": "Impossible de charger les types d'enregistrement exportables.",
-    "columnsLoadFailed": "Impossible de charger les colonnes de ce type d'enregistrement."
+    "columnsLoadFailed": "Impossible de charger les colonnes de ce type d'enregistrement.",
+    "failed": "L’exportation n’a pas pu aboutir."
   },
   "import": {
     "title": "Importer des données",
@@ -35,6 +36,7 @@
     },
     "resource": "Importer dans",
     "parseFailed": "Impossible de lire le fichier d’importation.",
+    "noColumns": "Le fichier ne contient aucun en-tête de colonne. Ajoutez une ligne d’en-tête, puis réessayez.",
     "previewFailed": "Impossible de prévisualiser cette importation.",
     "format": "Format du fichier",
     "file": "Fichier",

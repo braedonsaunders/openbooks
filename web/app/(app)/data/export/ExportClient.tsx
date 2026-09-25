@@ -114,7 +114,7 @@ export function ExportClient() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ resource, format, columns: chosen }),
         },
-        { fallbackFilename: `${resource}.${format}`, failedMessage: 'export failed' },
+        { fallbackFilename: `${resource}.${format}`, failedMessage: t('export.failed') },
       )
       setDone({ filename, columns: chosen.length })
     } catch (e) {

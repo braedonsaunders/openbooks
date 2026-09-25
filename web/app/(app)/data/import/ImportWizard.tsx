@@ -259,7 +259,7 @@ export function ImportWizard() {
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t('import.parseFailed')))
       const d = await res.json()
       if (inputRevisionRef.current !== revision) return
-      if (!d.headers?.length) throw new Error('No columns found in the file')
+      if (!d.headers?.length) throw new Error(t('import.noColumns'))
       setHeaders(d.headers)
       setRows(d.rows ?? [])
       setTruncatedMax(d.truncated ? (typeof d.maxRows === 'number' ? d.maxRows : 20000) : null)

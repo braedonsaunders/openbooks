@@ -21,7 +21,8 @@
     "empty": "Elige una tabla para exportar.",
     "noColumns": "Esta tabla no tiene columnas exportables.",
     "loadFailed": "No se pudieron cargar los tipos de registro exportables.",
-    "columnsLoadFailed": "No se pudieron cargar las columnas de este tipo de registro."
+    "columnsLoadFailed": "No se pudieron cargar las columnas de este tipo de registro.",
+    "failed": "No se pudo completar la exportación."
   },
   "import": {
     "title": "Importar datos",
@@ -35,6 +36,7 @@
     },
     "resource": "Importar en",
     "parseFailed": "No se pudo leer el archivo de importación.",
+    "noColumns": "El archivo no contiene encabezados de columna. Añada una fila de encabezado e inténtelo de nuevo.",
     "previewFailed": "No se pudo previsualizar esta importación.",
     "format": "Formato de archivo",
     "file": "Archivo",
