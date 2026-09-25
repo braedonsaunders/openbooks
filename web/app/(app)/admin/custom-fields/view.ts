@@ -25,6 +25,7 @@ import {
 import { requirePermission } from '../../../../lib/authz'
 import { buildListDrawerHref, parseListParams, pickString, isUuid } from '../../../../lib/list-params'
 import { disabledCustomFieldTargets } from '../../../../lib/customization/gates'
+import { BUILT_IN_ROLE_KEYS } from '../../../../lib/permissions'
 
 /**
  * Custom field definitions, split into a loader and a spec.
@@ -90,6 +91,7 @@ export interface CustomFieldsData {
   drawerDef: Record<string, unknown> | null
   hiddenKinds: string[]
   hiddenTables: string[]
+  roleOptions: { value: string; label: string }[]
 }
 
 export async function loadCustomFields(
@@ -120,7 +122,7 @@ export async function loadCustomFields(
     ${target ? sql` and target_table = ${target}` : sql``}
     ${params.q ? sql` and (label ilike ${'%' + params.q + '%'} or key ilike ${'%' + params.q + '%'})` : sql``}`
 
-  const [defs, counts, totalRow, open] = await Promise.all([
+  const [defs, counts, totalRow, open, roleRows] = await Promise.all([
     db.execute(sql`
       select id, target_table, target_kind, key, label, field_type, config, is_required, is_active, sort_order
         from custom_field_defs where ${where}
@@ -135,6 +137,8 @@ export async function loadCustomFields(
           select custom_field_defs.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
             from custom_field_defs where id = ${fieldId} and org_id = ${orgId}`)
       : null,
+    db.execute<{ key: string; name: string }>(sql`
+      select key, name from app_roles where org_id = ${orgId} order by name, key`),
   ])
 
   const openRow = (open?.rows[0] as Record<string, unknown> | undefined) ?? null
@@ -188,6 +192,15 @@ export async function loadCustomFields(
     drawerDef: openRow,
     hiddenKinds: hidden.kinds,
     hiddenTables: hidden.tables,
+    roleOptions: roleRows.rows.map((role) => {
+      const builtInLabel = `drawer.role${role.key.split('_').map((part) => part[0]!.toUpperCase() + part.slice(1)).join('')}`
+      return {
+        value: role.key,
+        label: BUILT_IN_ROLE_KEYS.includes(role.key) && t.has(builtInLabel)
+          ? t(builtInLabel)
+          : role.name,
+      }
+    }),
   }
 }
 
@@ -247,7 +260,7 @@ export function customFieldsSpec(data: CustomFieldsData): PageSpec {
       }),
       widgetBlock(
         'custom-field-drawer',
-        { def: data.drawerDef, hiddenKinds: data.hiddenKinds, hiddenTables: data.hiddenTables },
+        { def: data.drawerDef, hiddenKinds: data.hiddenKinds, hiddenTables: data.hiddenTables, roleOptions: data.roleOptions },
         f('drawerOpen'),
       ),
     ],
