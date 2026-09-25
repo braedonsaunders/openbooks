@@ -96,7 +96,7 @@ export interface PerformanceAnswer {
 export interface PerformanceGoalRow {
   id: string
   title: string
-  status: string
+  statusLabel: string
   progress: number
 }
 
@@ -586,7 +586,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
         goals: goals.map((g) => ({
           id: g.id,
           title: g.title,
-          status: g.status,
+          statusLabel: goalStatusLabel(t, g.status),
           progress: g.progressPercent,
         })),
         goalsTitle: t('performance.goalsTitle'),
@@ -785,4 +785,9 @@ function reviewStatusLabel(t: (key: string) => string, status: string): string {
         : status === 'shared'
           ? t('performance.reviewShared')
           : t('performance.reviewAcknowledged')
+}
+
+function goalStatusLabel(t: (key: string) => string, status: string): string {
+  const known = new Set(['active', 'achieved', 'missed', 'cancelled'])
+  return t(known.has(status) ? `performance.goalStatus.${status}` : 'performance.goalStatus.unknown')
 }
