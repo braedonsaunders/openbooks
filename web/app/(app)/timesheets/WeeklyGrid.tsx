@@ -662,7 +662,10 @@ export function WeeklyGrid({
                   r={r}
                   i={i}
                   total={total}
-                  readOnly={readOnly || r.immutable}
+                  // A save in flight replaces the rows on return: freezing
+                  // the inputs while busy means hours typed mid-save cannot
+                  // vanish under the applied payload.
+                  readOnly={readOnly || busy || r.immutable}
                   pickers={pickers}
                   cellInput={cellInput}
                   onProject={(v) => setRow(i, { projectId: v })}
