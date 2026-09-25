@@ -11,6 +11,7 @@ import { pgErrorCode, pgErrorConstraint } from '../setup/coerce'
 import {
   enforceExportRowLimit,
   MAX_EXPORT_ROWS,
+  orgFeatureEnabled,
   RefResolver,
   subsidiaryReadFilter,
   type DataResource,
@@ -550,6 +551,24 @@ export function fixedAssetsResource(orgId: string): DataResource {
     },
     async write(rows, mode, ctx: WriteCtx) {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+      // The import route resolves the resource (and its feature gate) before
+      // preview/commit work, but resolution and the write are not atomic: a
+      // disable in between — or any caller that reaches the writer without
+      // going through getResource — would otherwise commit assets while the
+      // feature is off. Recheck at the write boundary and refuse every row by
+      // name, in both modes, so a preview can never promise what a commit
+      // would refuse.
+      if (!(await orgFeatureEnabled(ctx.orgId, 'fixedAssets'))) {
+        for (let index = 0; index < rows.length; index++) {
+          outcome.failed++
+          outcome.errors.push({
+            row: index + 1,
+            message:
+              'fixed assets feature is disabled — re-enable Fixed assets under Company Settings → Features, then import again',
+          })
+        }
+        return outcome
+      }
       const resolver = new RefResolver(orgId)
       const allowedSubsidiaries = ctx.allowedSubsidiaryIds == null
         ? ctx.allowedSubsidiaryIds
