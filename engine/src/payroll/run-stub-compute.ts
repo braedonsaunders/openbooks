@@ -238,7 +238,7 @@ export async function calculateStub(
   const rosterEmploymentId = emp.employment_id ?? null;
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
     select a.value as override, a.effective_from, a.effective_to, c.*,
-           ec.supplemental_wage_category, ec.statutory_reporting_category
+           ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from employee_pay_components a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
       join pay_component_earning_classifications ec

@@ -581,6 +581,17 @@ const PAY_SUPPLEMENTAL_WAGE_CATEGORIES = [
   { value: 'other', label: 'Other supplemental wage' },
 ]
 
+// Federally exempt compensation classes (migration 0407). Static labels like
+// the supplemental categories above: the values are federal statute classes,
+// not locale strings.
+const PAY_STATUTORY_EXEMPTION_CATEGORIES = [
+  { value: 'military_pay', label: 'Military pay (nonresident exclusion)' },
+  { value: 'rail_carrier', label: 'Rail carrier pay (49 USC 11502)' },
+  { value: 'motor_carrier', label: 'Motor carrier pay (49 USC 14503)' },
+  { value: 'air_carrier', label: 'Air carrier pay (49 USC 40116(f))' },
+  { value: 'seafarer', label: 'Seafarer wages (46 USC 11108(a))' },
+]
+
 // STATIC FALLBACK ONLY for the pay-component treatment picker — server
 // surfaces replace these with the component's pack-declared treatments
 // (`optionsSource: 'payroll-deduction-treatments'`, resolved by
@@ -2073,6 +2084,11 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       {
         key: 'supplementalWageCategory', kind: 'select',
         options: PAY_SUPPLEMENTAL_WAGE_CATEGORIES,
+        showWhen: { field: 'kind', in: ['earning'] },
+      },
+      {
+        key: 'statutoryExemptionCategory', kind: 'select',
+        options: PAY_STATUTORY_EXEMPTION_CATEGORIES,
         showWhen: { field: 'kind', in: ['earning'] },
       },
       {

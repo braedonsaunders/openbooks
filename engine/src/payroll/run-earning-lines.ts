@@ -191,6 +191,7 @@ export async function appendRetroSettlementLines(
         nonPeriodic: line.nonPeriodic,
         supplementalWageCategory: line.supplementalWageCategory,
         statutoryReportingCategory: line.statutoryReportingCategory,
+        statutoryExemptionCategory: line.statutoryExemptionCategory,
       });
     }
   }
@@ -270,6 +271,7 @@ export async function appendDerivedEarningLines(
           nonPeriodic: line.nonPeriodic,
       supplementalWageCategory: line.supplementalWageCategory,
       statutoryReportingCategory: line.statutoryReportingCategory,
+      statutoryExemptionCategory: line.statutoryExemptionCategory,
         });
       }
     }
@@ -447,6 +449,7 @@ export async function applyAssignedComponentLines(
       nonPeriodic: c.non_periodic as boolean, taxTreatment: c.tax_treatment as string,
       supplementalWageCategory: c.supplemental_wage_category as Line["supplementalWageCategory"],
       statutoryReportingCategory: c.statutory_reporting_category as string | null,
+      statutoryExemptionCategory: c.statutory_exemption_category as Line["statutoryExemptionCategory"],
       protectionBase: c.protection_base as string,
       protectionMaxPercent: c.protection_max_percent as string | null,
       protectionPriority: Number(c.protection_priority ?? 100),
@@ -473,7 +476,7 @@ export async function applyRunLineAdjustments(
   const { orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines } = args;
   const adjustments = (await tx.execute<Record<string, unknown>>(sql`
     select a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*,
-           ec.supplemental_wage_category, ec.statutory_reporting_category
+           ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_run_adjustments a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
       join pay_component_earning_classifications ec
@@ -513,6 +516,7 @@ export async function applyRunLineAdjustments(
           : (adj.non_periodic as boolean),
       supplementalWageCategory: adj.supplemental_wage_category as Line["supplementalWageCategory"],
       statutoryReportingCategory: adj.statutory_reporting_category as string | null,
+      statutoryExemptionCategory: adj.statutory_exemption_category as Line["statutoryExemptionCategory"],
       taxTreatment: adj.tax_treatment as string,
       // A one-off garnishment entered for a single run is still a protected
       // deduction, and still belongs to (or outside) the protected base.

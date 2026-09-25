@@ -248,6 +248,10 @@ export const payComponentEarningClassifications = pgTable(
     }),
     /** Pack-declared semantic category used to resolve effective-dated tax-form reporting codes. */
     statutoryReportingCategory: text("statutory_reporting_category"),
+    /** Federally exempt U.S. compensation class (0407); NULL is unclassified ordinary pay. */
+    statutoryExemptionCategory: text("statutory_exemption_category", {
+      enum: ["military_pay", "rail_carrier", "motor_carrier", "air_carrier", "seafarer"],
+    }),
   },
   (t) => [
     primaryKey({ name: "pay_component_earning_classifications_pkey", columns: [t.orgId, t.payComponentId] }),
@@ -260,6 +264,8 @@ export const payComponentEarningClassifications = pgTable(
       sql`${t.supplementalWageCategory} is null or ${t.supplementalWageCategory} in ('bonus_or_stock_option', 'other')`),
     check("pay_component_earning_classifications_reporting_category",
       sql`${t.statutoryReportingCategory} is null or ${t.statutoryReportingCategory} ~ '^[a-z][a-z0-9_]{0,63}$'`),
+    check("pay_component_earning_classifications_exemption_category",
+      sql`${t.statutoryExemptionCategory} is null or ${t.statutoryExemptionCategory} in ('military_pay', 'rail_carrier', 'motor_carrier', 'air_carrier', 'seafarer')`),
   ],
 );
 
