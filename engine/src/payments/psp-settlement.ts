@@ -70,6 +70,8 @@ const PSP_ACCOUNT_UUID_RE =
 async function validateSettlementPostingAccounts(
   orgId: string,
   accounts: { label: string; id: string | null | undefined }[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+  batchSubsidiaryId: string | null = null,
 ): Promise<void> {
   const ids = [
     ...new Set(
@@ -85,18 +87,30 @@ async function validateSettlementPostingAccounts(
       `settlement account ${malformed} is not a valid account reference`,
     );
   }
-  const rows = (await db.execute<{ id: string }>(sql`
-    select id from accounts
+  const rows = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    select id, subsidiary_id from accounts
      where org_id = ${orgId} and is_active and not is_summary
        and id = any(${`{${ids.join(",")}}`}::uuid[])
   `));
-  const found = new Set(rows.rows.map((r) => r.id.toLowerCase()));
+  const found = new Map(rows.rows.map((r) => [r.id.toLowerCase(), r.subsidiary_id]));
   const missing = ids.find((id) => !found.has(id.toLowerCase()));
   if (missing) {
     const label = accounts.find((a) => a.id === missing)?.label ?? "settlement";
     throw new PspSettlementError(
       `settlement ${label} account is not a postable account in this organization`,
     );
+  }
+  for (const id of ids) {
+    const subsidiaryId = found.get(id.toLowerCase()) ?? null;
+    if (
+      !subsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId, { orgWideNull: true }) ||
+      (batchSubsidiaryId !== null && subsidiaryId !== null && subsidiaryId !== batchSubsidiaryId)
+    ) {
+      const label = accounts.find((a) => a.id === id)?.label ?? "settlement";
+      throw new PspSettlementError(
+        `settlement ${label} account is outside the authorized subsidiary scope`,
+      );
+    }
   }
 }
 
@@ -983,15 +997,6 @@ export async function importSettlementBatch(
       );
     }
   }
-  // Resolve posting accounts before any write: import is the first place a
-  // foreign or unpostable account reference can enter the batch lifecycle.
-  await validateSettlementPostingAccounts(orgId, [
-    { label: "bank", id: accounts.bankAccountId },
-    { label: "fee", id: accounts.feeAccountId },
-    { label: "dispute", id: accounts.disputeAccountId },
-    { label: "fx", id: accounts.fxAccountId },
-    { label: "clearing", id: accounts.clearingAccountId },
-  ]);
   // The subsidiary reference enters the lifecycle here too: a malformed id
   // would otherwise die in Postgres as a raw uuid-cast 500, and a foreign
   // or inactive id would persist to strand the draft at posting (F-t06-004).
@@ -1025,6 +1030,20 @@ export async function importSettlementBatch(
   if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId)) {
     throw new ScopeNotFoundError();
   }
+  // Resolve and authorize posting accounts before any write: direct API
+  // callers must satisfy the same subsidiary boundary as the import picker.
+  await validateSettlementPostingAccounts(
+    orgId,
+    [
+      { label: "bank", id: accounts.bankAccountId },
+      { label: "fee", id: accounts.feeAccountId },
+      { label: "dispute", id: accounts.disputeAccountId },
+      { label: "fx", id: accounts.fxAccountId },
+      { label: "clearing", id: accounts.clearingAccountId },
+    ],
+    allowedSubsidiaryIds,
+    subsidiaryId,
+  );
   const totals = summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();

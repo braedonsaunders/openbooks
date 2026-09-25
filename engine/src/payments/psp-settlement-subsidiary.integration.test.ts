@@ -17,18 +17,7 @@ import {
 } from "../testing/fixtures.ts";
 
 /**
- * F-t06-004: a PSP settlement draft could never post. The UI import form
- * collected the three account UUIDs but never asked for a subsidiary, so the
- * batch stored `subsidiary_id null`; posting then refused with a combined
- * message that blamed the accounts the batch already carried, and the row
- * offered no repair path. These tests pin the repaired lifecycle:
- *  - posting names exactly what is missing (never present accounts);
- *  - an absent subsidiary resolves to the org root exactly like every other
- *    document (posting.ts: docSubId ?? root);
- *  - re-importing a reference with changed evidence refuses instead of
- *    rewriting its saved draft or moving it between subsidiaries;
- *  - import itself refuses malformed, foreign, and inactive subsidiaries
- *    instead of persisting them to detonate at posting.
+ * PSP subsidiary lifecycle and reference-scope behavior.
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -211,6 +200,13 @@ test(
         insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, tax_ids, is_elimination, is_active, custom)
         values (${subsidiaryB}, ${org.orgId}, 'Second Co', 'CAD', 'CA', ${org.subsidiaryId}, '{}'::jsonb, false, true, '{}'::jsonb)
       `);
+      await db.execute(sql`update accounts set subsidiary_id = ${subsidiaryB} where id = ${org.accounts.bank} and org_id = ${org.orgId}`);
+      await assert.rejects(
+        importSettlementBatch(org.orgId, actor, stripeParsed(`payout-hidden-account-${org.orgId}`, org.date), {
+          bankAccountId: org.accounts.bank,
+        }, new Set([org.subsidiaryId])),
+        /outside the authorized subsidiary scope/,
+      );
       const externalRef = `payout-cross-subsidiary-${org.orgId}`;
       const original = stripeParsed(externalRef, org.date);
       const accounts = {
