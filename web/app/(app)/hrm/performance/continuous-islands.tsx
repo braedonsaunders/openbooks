@@ -42,6 +42,7 @@ export function SessionActions({
         setBusy(false)
         return
       }
+      setBusy(false)
       router.refresh()
     } catch {
       setError(failed)
@@ -105,6 +106,7 @@ export function SessionCreateForm({
         return
       }
       const j = await res.json()
+      setBusy(false)
       router.push(`/hrm/performance?tab=calibration&session=${j.session.id}`)
       router.refresh()
     } catch {
@@ -194,6 +196,7 @@ export function CalibrationEntryEditor({
         return
       }
       setReverting(false)
+      setBusy(false)
       router.refresh()
     } catch {
       setError(failed)
@@ -350,6 +353,7 @@ export function OneOnOneAgenda({
       setBody('')
       setSkipReason('')
       setSkipping(false)
+      setBusy(false)
       done?.()
       router.refresh()
     } catch {
@@ -558,6 +562,7 @@ export function FeedbackDialog({
         return
       }
       setOpen(false)
+      setBusy(false)
       router.push(closeHref)
       router.refresh()
     } catch {
@@ -713,6 +718,7 @@ export function TalentDialog({
         return
       }
       setOpen(false)
+      setBusy(false)
       router.push(closeHref)
       router.refresh()
     } catch {
@@ -867,6 +873,7 @@ export function FeedbackSettingsForm({
         setBusy(false)
         return
       }
+      setBusy(false)
       router.refresh()
     } catch {
       setError(failed)
