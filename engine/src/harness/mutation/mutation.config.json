@@ -50,11 +50,11 @@
       ]
     },
     {
-      "path": "engine/src/payments/payment-documents.ts",
+      "path": "engine/src/payments-core/payment-document-lock.ts",
       "lineRanges": [
         {
-          "start": 48,
-          "end": 73
+          "start": 44,
+          "end": 66
         }
       ],
       "tests": [

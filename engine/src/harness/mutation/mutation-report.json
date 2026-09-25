@@ -139,7 +139,7 @@
       ]
     },
     {
-      "target": "engine/src/payments/payment-documents.ts",
+      "target": "engine/src/payments-core/payment-document-lock.ts",
       "needsDb": true,
       "status": "measured",
       "killed": 3,
