@@ -103,14 +103,24 @@ export async function publishOverheadRates(
   return { published: toPublish.length }
 }
 
-/** Current published per-hour rate per department (open row covering today). */
-export async function currentPublishedRates(orgId: string): Promise<Map<string, number>> {
+/**
+ * Current published per-hour rate per department (open row covering today),
+ * as canonical decimal strings. The PostgreSQL decimal crosses this boundary
+ * as text and must stay text: routing it through Number would round rates
+ * past IEEE-754 precision before the drift view ever sees them. Rows without
+ * an exact rate carry no entry, so the drift view renders "no published
+ * rate" instead of a fabricated zero.
+ */
+export async function currentPublishedRates(orgId: string): Promise<Map<string, string>> {
   const today = await businessToday(orgId)
   const r = (await db.execute<{ department_id: string | null; rate_percent: string }>(sql`
     select department_id, rate_percent from overhead_rates
      where org_id = ${orgId} and rate_kind = 'per_hour' and effective_from <= ${today}
        and (effective_to is null or effective_to >= ${today})`))
-  const out = new Map<string, number>()
-  for (const row of r.rows) if (row.department_id) out.set(row.department_id, Number(row.rate_percent))
+  const out = new Map<string, string>()
+  for (const row of r.rows) {
+    if (!row.department_id || row.rate_percent === null || String(row.rate_percent).trim() === '') continue
+    out.set(row.department_id, String(row.rate_percent))
+  }
   return out
 }

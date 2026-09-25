@@ -7,12 +7,22 @@ import { toast } from 'sonner'
 import { Button, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
 import { useMoney } from '@/components/money-provider'
+import {
+  abs as absMoney,
+  add as addMoney,
+  cmp as cmpMoney,
+  div as divMoney,
+  mul as mulMoney,
+  neg as negMoney,
+  roundMoney,
+} from '@openbooks/engine/src/money/money.ts'
 
 export interface DriftRow {
   id: string
   name: string
   live: number
-  published: number | null
+  /** Exact published $/hr decimal string (PostgreSQL numeric text) — never a double. */
+  published: string | null
 }
 
 const modeBtn = (active: boolean) =>
@@ -62,8 +72,21 @@ export function OverheadLifecycle(props: {
     }
   }
 
-  const driftPct = (r: DriftRow) =>
-    r.published && r.published > 0 ? ((r.live - r.published) / r.published) * 100 : null
+  // Drift percentage as an exact decimal string (4dp), or null when there is
+  // no positive published rate to compare against. The published leg stays a
+  // decimal string end to end — the percentage is display-only, derived with
+  // the shared bigint decimal helpers, never through a double.
+  const driftPct = (r: DriftRow): string | null => {
+    if (r.published == null || cmpMoney(r.published, '0') <= 0) return null
+    return mulMoney(divMoney(addMoney(String(r.live), negMoney(r.published)), r.published), '100')
+  }
+
+  // One decimal place for display, exact (halves away from zero).
+  const driftDisplay = (pct: string): string => {
+    const rounded = roundMoney(pct, 1)
+    const trimmed = rounded.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+    return `${cmpMoney(pct, '0') > 0 ? '+' : ''}${trimmed}%`
+  }
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -108,8 +131,8 @@ export function OverheadLifecycle(props: {
                 cell: (r) => {
                   const pct = driftPct(r)
                   return (
-                    <span className={cn('tabular-nums', pct != null && Math.abs(pct) >= 10 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>
-                      {pct != null ? `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%` : '—'}
+                    <span className={cn('tabular-nums', pct != null && cmpMoney(absMoney(pct), '10') >= 0 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>
+                      {pct != null ? driftDisplay(pct) : '—'}
                     </span>
                   )
                 },
