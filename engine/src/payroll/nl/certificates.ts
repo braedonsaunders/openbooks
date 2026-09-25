@@ -282,9 +282,65 @@ const BELASTING_PREMIEPLICHT: PayrollCertificate = {
   ],
 };
 
+/**
+ * Arbeidsovereenkomst (the employer's own per-employee record, not a
+ * Belastingdienst form): the dated contract facts behind the low AWf
+ * rate. The low rate applies to permanent contracts (Handboek
+ * Loonheffingen 2026 §4.7.1), but Rekenvoorschriften chapter 12 revises
+ * it to high retroactively when the employee leaves within two months of
+ * starting, or at year-end when paid hours exceed contracted hours by
+ * more than 30% (unless the contract exceeds 30 hours a week). The
+ * engine polices the two-month rule on every low-rate run and records
+ * the contract hours for the year-end test; the retroactive delta has no
+ * loonaangifte correction path, so a triggered revision refuses by name
+ * instead of keeping the low rate.
+ */
+const ARBEIDSOVEREENKOMST: PayrollCertificate = {
+  key: "nl_contract",
+  form: "Arbeidsovereenkomst (werkgeversadministratie)",
+  label: "Employment contract facts",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "Handboek Loonheffingen 2026 §4.7.1 (lage premie); Rekenvoorschriften "
+    + "2026 chapter 12 (herziening lage premie: uitdiensttreding binnen twee "
+    + "maanden; >30% meer verloonde uren, tenzij >30 uur per week)",
+  summary:
+    "The employer's per-employee contract record for the low-AWf revision "
+    + "rules: dated start, weekly contract hours, and termination date when "
+    + "terminated.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "contract_start",
+      label: "Contract start date (ISO)",
+      kind: "code",
+      help: "First day of the permanent contract (YYYY-MM-DD). Required whenever the low "
+        + "AWf rate is claimed: without a dated start the two-month revision rule cannot "
+        + "be policed.",
+    },
+    {
+      key: "contract_hours_per_week",
+      label: "Contract hours per week",
+      kind: "code",
+      help: "Agreed weekly hours as a decimal (\"40\", \"32\"). Recorded for the year-end "
+        + ">30% hours test and its >30-hour exception; the annual paid-hours history the "
+        + "test also needs has no reliable channel yet.",
+    },
+    {
+      key: "terminated_on",
+      label: "Termination date (ISO)",
+      kind: "code",
+      help: "Last day of employment (YYYY-MM-DD) when the contract ended. Leaving within "
+        + "two months of the contract start revises the low rate to high retroactively — "
+        + "the engine refuses the low rate instead, until a correction path exists.",
+    },
+  ],
+};
+
 const NL_CERTIFICATES: PayrollPackCertificates = {
   country: "NL",
-  certificates: [OPGAAF_LOONHEFFINGEN, PREMIES_WERKNEMERSVERZEKERINGEN, BELASTING_PREMIEPLICHT],
+  certificates: [OPGAAF_LOONHEFFINGEN, PREMIES_WERKNEMERSVERZEKERINGEN, BELASTING_PREMIEPLICHT, ARBEIDSOVEREENKOMST],
 };
 
 export { NL_CERTIFICATES };

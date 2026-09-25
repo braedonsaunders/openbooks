@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { toCents } from "../../money/money.ts";
+import { daysInCivilMonth, isIsoCalendarDate } from "../../platform/business-date.ts";
 import { PayrollError } from "../error.ts";
 import {
   certificateAmount,
@@ -611,6 +612,33 @@ async function nlCommittedSvBase(args: Pick<
   return rows.rows[0]?.sv ?? "0";
 }
 
+/** A real ISO calendar date, or a named refusal — contract facts date the revision rules. */
+function nlIsoDate(raw: string, what: string): string {
+  const text = raw.trim();
+  // Validity through the repo's civil-date primitive (ISO-string parsing is
+  // exact for years 0001-9999) — never Date.UTC with a variable year, which
+  // remaps years 0-99 onto 1900-1999 (see scripts/check-civil-date-arithmetic.mjs).
+  if (!isIsoCalendarDate(text)) {
+    throw new PayrollError(
+      `the NL ${what} must be a real ISO date (YYYY-MM-DD), got "${raw}". Correct it on the `
+      + "nl_contract certificate before running payroll",
+    );
+  }
+  return text;
+}
+
+/** ISO date plus whole calendar months, clamping the day to the target month's length. */
+function addCalendarMonths(iso: string, months: number): string {
+  const year = Number(iso.slice(0, 4));
+  const monthIndex = Number(iso.slice(5, 7)) - 1 + months;
+  const day = Number(iso.slice(8, 10));
+  const targetYear = year + Math.floor(monthIndex / 12);
+  const targetMonth = monthIndex % 12;
+  const lastDay = daysInCivilMonth(targetYear, targetMonth + 1);
+  const clamped = Math.min(day, lastDay);
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-${String(clamped).padStart(2, "0")}`;
+}
+
 export async function computeNlStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
@@ -683,6 +711,55 @@ export async function computeNlStatutory(
     const { tx, orgId, employeePartyId, documentId } = ctx;
     const committed = await nlCommittedSvBase({ tx, orgId, employeePartyId, taxYear, documentId });
     effectiveYtd = d4(parseCents(opening, "SV opening balance") + parseCents(committed, "committed SV base"));
+  }
+  // Low-AWf revision policing (Rekenvoorschriften chapter 12): the low
+  // rate revises to high retroactively when the employee leaves within
+  // two months of the contract start. The delta has no loonaangifte
+  // correction path, so a triggered revision refuses by name instead of
+  // keeping the low rate — and an undated contract refuses up front,
+  // because without a start the rule cannot be policed. The year-end
+  // >30%-hours test is undecidable per run (no reliable paid-hours
+  // history); the contract hours are recorded for it.
+  if (svLegCents > 0n && premies?.answers["awf_laag"] === "true") {
+    const contract = certificateFor("nl_contract");
+    const startRaw = contract?.answers["contract_start"] ?? null;
+    if (startRaw === null || startRaw === "") {
+      throw new PayrollError(
+        "the NL payroll pack cannot price the low AWf rate without a dated contract — the two-month "
+        + "revision rule (Rekenvoorschriften chapter 12) cannot be policed without a start date. Record "
+        + "the contract start on the nl_contract certificate (arbeidsovereenkomst) before running payroll",
+      );
+    }
+    const start = nlIsoDate(startRaw, "contract start");
+    const hoursRaw = contract?.answers["contract_hours_per_week"] ?? null;
+    if (hoursRaw !== null && hoursRaw !== "") {
+      const hours = Number(hoursRaw.trim());
+      if (!/^\d+(\.\d{1,4})?$/.test(hoursRaw.trim()) || !Number.isFinite(hours) || hours <= 0) {
+        throw new PayrollError(
+          `the NL contract hours per week must be a positive decimal ("40", "32"), got "${hoursRaw}". `
+          + "Correct the contract hours on the nl_contract certificate before running payroll",
+        );
+      }
+    }
+    const termRaw = contract?.answers["terminated_on"] ?? null;
+    if (termRaw !== null && termRaw !== "") {
+      const terminated = nlIsoDate(termRaw, "termination date");
+      if (terminated < start) {
+        throw new PayrollError(
+          `the NL termination date ${terminated} is before the contract start ${start}. Correct the `
+          + "dates on the nl_contract certificate before running payroll",
+        );
+      }
+      if (terminated < addCalendarMonths(start, 2)) {
+        throw new PayrollError(
+          `the NL low AWf rate revises to high retroactively: employment ended ${terminated}, within two `
+          + `months of the contract start ${start} (Rekenvoorschriften chapter 12). The pack has no `
+          + "loonaangifte correction path, so it refuses the low rate instead of keeping it. Reprice "
+          + "this run at the high AWf rate and correct the earlier filings in payroll software that "
+          + "implements the revision",
+        );
+      }
+    }
   }
 
   const result = calculateNlStatutory({
