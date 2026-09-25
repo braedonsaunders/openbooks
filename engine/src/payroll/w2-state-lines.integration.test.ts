@@ -254,14 +254,12 @@ test(
 );
 
 test(
-  "a mid-year mover's second state refuses until its SUI transfer treatment is configured",
+  "a mid-year mover's two states appear as two groups, never one smashed row",
   { skip: !DB },
   async () => {
-    // Pinned on the named refusal until SUI-TRANSFER-CREDIT-IMPL lands:
-    // cross-state SUI history has no completion mechanism yet (I6-payroll-38
-    // refuses by design), so the California run cannot calculate and the two
-    // state groups never reach the slip. That lane restores the two-groups
-    // assertions — AZ/CA split, never one smashed row — with its surface.
+    // SUI-TRANSFER-CREDIT-IMPL: the California run prices the Arizona stub
+    // under CA's same-year transfer rule (CUIC 930.1), so both states reach
+    // the slip as two groups.
     const fx = await usPayrollOrg();
     try {
       await suiAccount(fx, "AZ", "AZ-0011223");
@@ -274,24 +272,25 @@ test(
       await db.execute(sql`
         update employee_payroll_profiles set province = 'CA', updated_by = ${fx.actorId}
          where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
+      await runAndCommit(fx, "2026-07-19", "2026-08-01");
 
       const azTax = await committedDeductions(fx, "state_income_tax", "AZ");
+      const caTax = await committedDeductions(fx, "state_income_tax", "CA");
       assert.equal(azTax.length, 1, "Arizona withheld on the first stub");
+      assert.equal(caTax.length, 1, "California withheld on the second stub");
 
-      const second = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-07-19", periodEnd: "2026-08-01",
-      });
-      const outcome = await calculatePayRun({
-        orgId: fx.orgId, documentId: second.documentId, actorId: fx.actorId,
-      });
-      assert.equal(outcome.employees, 0, "no stub is calculated for the second state");
-      assert.equal(outcome.errors.length, 1);
-      assert.equal(outcome.errors[0]!.kind, "refusal");
-      assert.match(
-        outcome.errors[0]!.message,
-        /US SUI cannot be calculated for CA: prior insurable wages are recorded in AZ/,
-        "the second state names the transfer history it needs",
+      const slip = await w2SlipFor(fx, "Mover Max");
+      assert.match(String(slip.headerFields.find((field) => field.label === "State(s) of employment")!.value), /AZ \/ CA/);
+      const byCode = (code: string) => slip.boxes.filter((box) => box.code === code);
+      assert.deepEqual(byCode("15").map((box) => box.value), ["AZ-0011223", "Unassigned"]);
+      assert.deepEqual(byCode("17").map((box) => box.value), [azTax[0]!.amount, caTax[0]!.amount]);
+      // The two states' wages add up to the one federal wage set — split, not smashed.
+      const box1 = slip.boxes.find((box) => box.code === "1")!.value;
+      const box16s = byCode("16");
+      assert.equal(box16s.length, 2);
+      assert.ok(
+        Number(box16s[0]!.value) + Number(box16s[1]!.value) === Number(box1),
+        "state wages partition box 1",
       );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
