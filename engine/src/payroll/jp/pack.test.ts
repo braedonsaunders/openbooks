@@ -392,10 +392,10 @@ test("adapter refusals name the missing channel", async () => {
   // Base at the formula rows refuses.
   await assert.rejects(
     computeJpStatutoryWithRates(
-      fakeCtx({ income: "900000.0000", emp: { jp_hyojun_hoshu: "650000", jp_kaigo_dainigou: "false" } }).ctx,
+      fakeCtx({ income: "9007199254740993.0000", emp: { jp_hyojun_hoshu: "650000", jp_kaigo_dainigou: "false" } }).ctx,
       TOKYO_RATE,
     ),
-    /740,000/,
+    /9007199254649506/,
   );
   // Sub-yen gross refuses (JPY has no minor unit).
   await assert.rejects(
