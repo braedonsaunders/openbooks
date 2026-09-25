@@ -1,6 +1,8 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { correctEmploymentChange } from "@openbooks/engine/src/automations/event-verbs.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { hrmAuthorizationResponse } from "../../../../../../lib/api/record-not-found";
 import { guardPermission } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
@@ -39,6 +41,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     });
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
+    // I3-people-21: employer-scope denials stay uniform not-visible, missing
+    // grants stay named 403s — never the automations 500.
+    if (e instanceof HrmAuthorizationError) return hrmAuthorizationResponse(e);
     return automationErrorResponse(e);
   }
 }
