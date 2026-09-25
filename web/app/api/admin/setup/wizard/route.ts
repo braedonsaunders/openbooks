@@ -578,12 +578,9 @@ export async function PUT(req: Request) {
     }
     if (error instanceof WizardFoundationBlocked) {
       // The machine-readable lock key is the designed wire contract (the
-      // settings path answers the same shape): apiErrorResponse would drop
-      // it and leave only the human message.
-      return NextResponse.json(
-        { error: error.key, message: error.message },
-        { status: 409 },
-      )
+      // settings path answers the same shape): carry it in details so the
+      // sanitizer keeps the contract instead of only the human message.
+      return apiErrorResponse(error, { safeStatus: 409, details: { key: error.key } })
     }
     throw error
   }

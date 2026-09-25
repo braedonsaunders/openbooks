@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -47,7 +48,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     }))
   } catch (error) {
-    if (error instanceof CaptureMaterializationError) return NextResponse.json({ error: error.message }, { status: error.status })
+    if (error instanceof CaptureMaterializationError) return apiErrorResponse(error)
     throw error
   }
 }

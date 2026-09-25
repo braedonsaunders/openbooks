@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { exactMoney, jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -62,12 +63,24 @@ function optionalText(value: unknown, max = 500): string | null {
   return text ? text.slice(0, max) : null
 }
 
+/**
+ * Machine-code input refusals for capture patch parsing: the code is the
+ * client contract (form validation matches on it), so it travels as the
+ * refusal message through the sanitizer instead of a raw caught message.
+ */
+class CapturePatchRefusal extends Error {
+  constructor(readonly code: string, readonly status = 422) {
+    super(code)
+    this.name = 'CapturePatchRefusal'
+  }
+}
+
 function optionalUuid(value: unknown): string | null {
   if (value == null || value === '') return null
-  if (typeof value !== 'string') throw new Error('invalid_capture_reference')
+  if (typeof value !== 'string') throw new CapturePatchRefusal('invalid_capture_reference')
   const text = value.trim()
   if (!text) return null
-  if (!UUID.test(text)) throw new Error('invalid_capture_reference')
+  if (!UUID.test(text)) throw new CapturePatchRefusal('invalid_capture_reference')
   return text
 }
 
@@ -78,18 +91,18 @@ const reviewMoney = exactMoney('invalid_capture_amount')
 function money(value: unknown, fallback: string | null = null): string | null {
   if (value == null || value === '') return fallback
   const parsed = reviewMoney.safeParse(value)
-  if (!parsed.success) throw new Error('invalid_capture_amount')
+  if (!parsed.success) throw new CapturePatchRefusal('invalid_capture_amount')
   return parsed.data
 }
 
 function parseNormalized(raw: unknown): NormalizedCapture {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('invalid_capture')
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new CapturePatchRefusal('invalid_capture')
   const row = raw as Record<string, unknown>
-  if (!Array.isArray(row.lines)) throw new Error('invalid_lines')
+  if (!Array.isArray(row.lines)) throw new CapturePatchRefusal('invalid_lines')
   const sourceLines = row.lines
-  if (sourceLines.length > 500) throw new Error('too_many_lines')
+  if (sourceLines.length > 500) throw new CapturePatchRefusal('too_many_lines')
   const lines: CaptureLine[] = sourceLines.map((value) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid_line')
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CapturePatchRefusal('invalid_line')
     const line = value as Record<string, unknown>
     const amount = money(line.amount, '0.0000')!
     return {
@@ -176,12 +189,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     normalized = parseNormalized(body.normalized)
     if (body.documentKind !== undefined && body.documentKind !== 'vendor_bill' && body.documentKind !== 'vendor_credit') {
-      throw new Error('invalid_document_kind')
+      throw new CapturePatchRefusal('invalid_document_kind')
     }
     nextVendorId = body.vendorId === undefined ? undefined : optionalUuid(body.vendorId)
     nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid_capture' }, { status: 422 })
+    return apiErrorResponse(error)
   }
   const current = (await db.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
     select ci.normalized, ci.status, ci.document_kind, ci.vendor_candidate_id, ci.purchase_order_id
@@ -259,7 +272,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // loudly instead of reverting that save's corrections.
       if (live.revision !== expectedRevision) throw new Error('capture_revision_conflict')
       const kind = body.documentKind === undefined ? live.document_kind : body.documentKind
-      if (kind !== 'vendor_bill' && kind !== 'vendor_credit') throw new Error('invalid_document_kind')
+      if (kind !== 'vendor_bill' && kind !== 'vendor_credit') throw new CapturePatchRefusal('invalid_document_kind')
       // Resolve against the kind being saved, using the same locked snapshot as
       // the correction audit. Omission preserves a selected vendor credit.
       const resolved = await resolveAndValidateCapture({
@@ -357,7 +370,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     })
   } catch (error) {
     if (error instanceof Error && error.message === 'invalid_document_kind') {
-      return NextResponse.json({ error: error.message }, { status: 422 })
+      return apiErrorResponse(error, { safeStatus: 422 })
     }
     if (error instanceof Error && error.message === 'capture_not_found') {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })

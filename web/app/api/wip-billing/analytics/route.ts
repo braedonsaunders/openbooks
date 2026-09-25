@@ -1,6 +1,7 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
-import { wipAnalytics, WipBillingError } from '../../../../lib/wip-billing'
+import { wipAnalytics } from '../../../../lib/wip-billing'
 import { guardWipBillingFeature } from '../../../../lib/wip-billing-gate'
 
 export const runtime = 'nodejs'
@@ -13,7 +14,6 @@ export async function GET(req: Request) {
   try {
     return NextResponse.json({ analytics: await wipAnalytics(gate.user.orgId, new URL(req.url).searchParams.get('asOf') ?? undefined, gate.allowedSubsidiaryIds) })
   } catch (error) {
-    const status = error instanceof WipBillingError ? error.status : 500
-    return NextResponse.json({ error: (error as Error).message }, { status })
+    return apiErrorResponse(error)
   }
 }
