@@ -1631,7 +1631,9 @@
       "week": "週末日",
       "format": "形式",
       "generate": "生成",
-      "cancel": "キャンセル"
+      "cancel": "キャンセル",
+      "payrollPack": "この給与パック",
+      "emptyFormats": "{pack}に形式が定義されていません。生成する前に、給与パックへレポート形式を追加してください。"
     }
   },
   "compensation": {

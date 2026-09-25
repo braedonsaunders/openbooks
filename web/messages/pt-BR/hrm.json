@@ -1631,7 +1631,9 @@
       "week": "Semana até",
       "format": "Formato",
       "generate": "Gerar",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "payrollPack": "este pacote de folha de pagamento",
+      "emptyFormats": "Nenhum formato foi declarado para {pack}. Adicione um formato de relatório ao pacote antes de gerar."
     }
   },
   "compensation": {

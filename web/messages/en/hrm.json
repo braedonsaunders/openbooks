@@ -1687,7 +1687,9 @@
       "week": "Week ending",
       "format": "Format",
       "generate": "Generate",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "payrollPack": "this payroll pack",
+      "emptyFormats": "No formats are declared for {pack}. Add a report format to that payroll pack before generating."
     }
   },
   "compensation": {

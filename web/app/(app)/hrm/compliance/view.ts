@@ -50,7 +50,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
           widget(
             'link-button',
             { href: data.generateHref, label: data.generateLabel, iconKey: 'plus' },
-            f('canManage'),
+            f('canGenerate'),
           ),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
@@ -265,6 +265,8 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
       widgetBlock('hrm-compliance-generate', {
         projects: f('generateDialog.projects'),
         formats: f('generateDialog.formats'),
+        formatsEmpty: f('formatsEmpty'),
+        emptyMessage: f('generateDialog.emptyMessage'),
         title: f('generateDialog.title'),
         projectLabel: f('generateDialog.projectLabel'),
         weekLabel: f('generateDialog.weekLabel'),
@@ -272,7 +274,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
         generateLabel: f('generateDialog.generateLabel'),
         cancelLabel: f('generateDialog.cancelLabel'),
         closeHref: f('generateCloseHref'),
-      }),
+      }, f('canGenerate')),
     ],
   })
 }
