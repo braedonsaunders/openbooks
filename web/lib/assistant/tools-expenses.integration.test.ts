@@ -118,9 +118,9 @@ test('expense assistant reads: list, detail, overview, approvals', { skip: !proc
       };
       assert.equal(listData.total, 3);
       assert.deepEqual(listData.byStatus, [
-        { status: 'draft', currency: 'CAD', count: 1, total: 100, openBalance: 100 },
-        { status: 'pending_approval', currency: 'CAD', count: 1, total: 200, openBalance: 200 },
-        { status: 'posted', currency: 'CAD', count: 1, total: 300, openBalance: 0 },
+        { status: 'draft', currency: 'CAD', count: 1, total: '100', openBalance: '100' },
+        { status: 'pending_approval', currency: 'CAD', count: 1, total: '200', openBalance: '200' },
+        { status: 'posted', currency: 'CAD', count: 1, total: '300', openBalance: '0' },
       ]);
 
       const hidden = await executeAssistantTool(restricted, 'get_expense_report', { reportId: seed.hiddenReport });
@@ -129,10 +129,10 @@ test('expense assistant reads: list, detail, overview, approvals', { skip: !proc
       const detail = await executeAssistantTool(restricted, 'get_expense_report', { reportId: seed.postedReport });
       assert.equal(detail.ok, true, JSON.stringify(detail));
       assert.ok(detail.ok);
-      const report = (detail.data as { report: { documentNumber: string; reimbursed: boolean; openBalance: number } }).report;
+      const report = (detail.data as { report: { documentNumber: string; reimbursed: boolean; openBalance: string | null } }).report;
       assert.equal(report.documentNumber, 'EXP-1003');
       assert.equal(report.reimbursed, true);
-      assert.equal(report.openBalance, 0);
+      assert.equal(report.openBalance, null);
 
       const pending = await executeAssistantTool(restricted, 'get_expense_report', { reportId: seed.pendingReport });
       assert.equal(pending.ok, true, JSON.stringify(pending));

@@ -123,8 +123,8 @@ test('CRM assistant reads: happy path, aggregates, and subsidiary scoping', { sk
       };
       assert.equal(data.total, 1);
       assert.equal(data.opportunities[0]!.opportunityNumber, 'OPP-1001');
-      assert.deepEqual(data.totalsByCurrency, [{ currency: 'CAD', count: 1, projectedAmount: 10000, weightedAmount: 6000 }]);
-      assert.deepEqual(data.byStage, [{ statusName: 'Negotiation', isClosed: false, isWon: false, currency: 'CAD', count: 1, projectedAmount: 10000, weightedAmount: 6000 }]);
+      assert.deepEqual(data.totalsByCurrency, [{ currency: 'CAD', count: 1, projectedAmount: '10000', weightedAmount: '6000' }]);
+      assert.deepEqual(data.byStage, [{ statusName: 'Negotiation', isClosed: false, isWon: false, currency: 'CAD', count: 1, projectedAmount: '10000', weightedAmount: '6000' }]);
 
       const fullSearch = await executeAssistantTool(full, 'search_opportunities', {});
       assert.equal(fullSearch.ok, true, JSON.stringify(fullSearch));
@@ -168,8 +168,8 @@ test('CRM assistant reads: happy path, aggregates, and subsidiary scoping', { sk
       assert.ok(forecast.ok);
       const rows = (forecast.data as { forecast: { currency: string; pipelineAmount: number; weightedAmount: number }[] }).forecast;
       assert.deepEqual(rows, [{
-        currency: 'CAD', pipelineAmount: 10000, weightedAmount: 6000,
-        worstCaseAmount: 0, mostLikelyAmount: 10000, upsideAmount: 0, closedAmount: 0,
+        currency: 'CAD', pipelineAmount: '10000', weightedAmount: '6000',
+        worstCaseAmount: '0', mostLikelyAmount: '10000', upsideAmount: '0', closedAmount: '0',
       }]);
 
       const badPeriod = await executeAssistantTool(restricted, 'crm_forecast', {
