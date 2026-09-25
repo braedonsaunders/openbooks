@@ -505,11 +505,6 @@ export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingG
 export async function postProjectLaborCost(orgId: string, actorId: string, timeEntryIds: string[]): Promise<string[]> {
   if (timeEntryIds.length === 0) return [];
   return inDbTransaction(async (tx) => {
-    // Aggregate first: postEntry serializes postings on the org row FOR
-    // UPDATE, so claim it before the settings SHARE and the time-entry claim
-    // below — SHARE-then-UPDATE across two concurrent posters deadlocks on
-    // the upgrade (journal-before-members, like the release paths).
-    await tx.execute(sql`select id from orgs where id = ${orgId} for update`);
     // Hold the settings row through commit so an account remap cannot split
     // one approval batch across two control-account policies.
     const accts = await recognitionAccountsFrom(tx, orgId, true);
