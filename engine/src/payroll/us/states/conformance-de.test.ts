@@ -14,7 +14,7 @@ import {
 import "../../packs.ts";
 import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  DE_CERTIFICATE, DE_REGION, DE_RATES_2026, DE_WITHHOLDING, deAnnualPeriods, deAnnualTax,
+  DE_CERTIFICATE, DE_REGION, DE_RATES_2026, DE_W4NR_CERTIFICATE, DE_WITHHOLDING, deAnnualPeriods, deAnnualTax,
   deStandardDeduction,
 } from "./de.ts";
 import { pctToRate } from "./transcription.ts";
@@ -157,6 +157,22 @@ test("DE refuses nonresident payroll until Form W-4NR source allocation is captu
     }),
     /Delaware nonresident withholding requires Form W-4NR source-allocation facts.*refused by name/,
   );
+});
+
+test("DE nonresident W-4NR day share prorates the total-wage tax", () => {
+  // Section 16: $1,000 weekly single/0 prices $44.60 on total wages; 2 of 5
+  // Delaware days apportions it to $17.84.
+  const result = DE_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1000.00",
+    basis: "nonresident", certificate: cert({ filing_status: "single", allowances: "0" }),
+    supportingCertificates: {
+      [DE_W4NR_CERTIFICATE.key]: resolvedCertificate(DE_W4NR_CERTIFICATE, {
+        delaware_work_days: "2",
+        total_work_days: "5",
+      }),
+    },
+  });
+  assert.equal(result.tax, money("17.84"));
 });
 
 test("DE refuses a year it has not transcribed", () => {
