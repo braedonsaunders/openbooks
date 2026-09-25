@@ -14,13 +14,7 @@ const { resolveRateAdjustments } = await import('./rate-adjustments')
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 
-/**
- * A version scoped to one department must not price another department's
- * work. The surcharge resolver already enforces version scopes, and its own
- * contract demands the card and its surcharges never disagree about which
- * agreement is in force — the rate resolvers must apply the same rule, or a
- * job is billed one card's rates with another card's surcharges.
- */
+/** Rate cards honor work dimensions and preserve one agreement across pricing and surcharges. */
 test('version scopes gate rate resolution, not just surcharges', enabled, async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg()
@@ -53,13 +47,14 @@ test('version scopes gate rate resolution, not just surcharges', enabled, async 
         values (${entry}, ${org.orgId}, ${employee}, ${org.date}, '2.0000', ${org.items.service}, ${project},
                 ${deptB}, 'approved', true, 'unbilled', '{}'::jsonb, ${org.orgId}, ${org.orgId})`)
 
-      // The scoped card prices its own department…
       const scoped = await resolveItemRate({ orgId: org.orgId, projectId: project, itemId: org.items.service, departmentId: deptA, baseQuantity: '1', rateUnitCode: 'hour', onDate: org.date })
       assert.equal(scoped?.bill.amount, '200.0000')
-      // …but must not price the other department's work.
       assert.equal(await resolveItemRate({ orgId: org.orgId, projectId: project, itemId: org.items.service, departmentId: deptB, baseQuantity: '1', rateUnitCode: 'hour', onDate: org.date }), null)
-      // The snapshot path must agree: the other department falls back to the item default.
       assert.equal((await snapshotTimeBillRates(org.orgId, [entry], { dryRun: true })).get(entry), '50.0000')
+      const subsidiaryB = randomUUID(), unit = randomUUID()
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${subsidiaryB},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`)
+      await db.execute(sql`insert into equipment_units(id,org_id,subsidiary_id,unit_number,name,status,purchase_price) values (${unit},${org.orgId},${subsidiaryB},'B-UNIT','B unit','draft','100.0000')`)
+      await assert.rejects(resolveItemRate({ orgId: org.orgId, projectId: project, itemId: org.items.service, equipmentUnitId: unit, allowedSubsidiaryIds: new Set([org.subsidiaryId, subsidiaryB]), baseQuantity: '1', rateUnitCode: 'hour', onDate: org.date }), /not found/)
     } finally {
       await dropScratchOrg(org.orgId)
     }
