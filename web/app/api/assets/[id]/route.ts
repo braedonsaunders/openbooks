@@ -41,6 +41,7 @@ export const runtime = 'nodejs'
 
 interface ExistingAsset extends Record<string, unknown> {
   id: string
+  subsidiary_id: string
   status: string
   custom: Record<string, unknown> | null
   acquisition_cost: string
@@ -86,6 +87,7 @@ function patchFieldBad(error: FieldRefusal) {
     case 'opening_pair_required': return bad('Opening accumulated depreciation and its as-of date must be set together')
     case 'opening_exceeds_basis': return bad('Opening accumulated depreciation cannot exceed cost minus salvage')
     case 'opening_before_in_service': return bad('Opening as-of date cannot precede the in-service month')
+    case 'invalid_subsidiary': return bad('Invalid subsidiary')
     case 'invalid_asset_account': return bad('Invalid asset account')
     case 'invalid_accumulated_account': return bad('Invalid accumulated depreciation account')
     case 'invalid_expense_account': return bad('Invalid depreciation expense account')
@@ -169,7 +171,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const existRes = (await db.execute<ExistingAsset>(sql`
-    select id, status, custom, acquisition_cost, salvage_value, in_service_on,
+    select id, subsidiary_id, status, custom, acquisition_cost, salvage_value, in_service_on,
            depreciation_method, depreciation_method_id, useful_life_months,
            depreciation_rate_percent, depreciation_units_total, depreciation_convention,
            opening_accumulated_depreciation, opening_accumulated_as_of
@@ -256,9 +258,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let openingAccumulated: string | null | undefined
   let openingAsOf: string | null | undefined
   try {
-    assetAccountId = await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.assetAccountId, 'invalid_asset_account')
-    accumulatedAccountId = await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.accumulatedDepreciationAccountId, 'invalid_accumulated_account')
-    expenseAccountId = await parseAccountOverride(db, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, body.depreciationExpenseAccountId, 'invalid_expense_account')
+    const targetSubsidiaryId = subsidiaryId ?? existing.subsidiary_id
+    assetAccountId = await parseAccountOverride(db, user.orgId, targetSubsidiaryId, body.assetAccountId, 'invalid_asset_account')
+    accumulatedAccountId = await parseAccountOverride(db, user.orgId, targetSubsidiaryId, body.accumulatedDepreciationAccountId, 'invalid_accumulated_account')
+    expenseAccountId = await parseAccountOverride(db, user.orgId, targetSubsidiaryId, body.depreciationExpenseAccountId, 'invalid_expense_account')
 
     if (body.custom !== undefined) {
       const defs = await customFieldDefinitions()
@@ -412,11 +415,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     const payload = await db.transaction(async (tx) => {
-      await lockAccountOverridesForAssetWrite(tx, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, [
-        { id: assetAccountId, code: 'invalid_asset_account' },
-        { id: accumulatedAccountId, code: 'invalid_accumulated_account' },
-        { id: expenseAccountId, code: 'invalid_expense_account' },
-      ])
       // The reads above are only an early refusal. Lock and reload the
       // authoritative asset inside the save transaction so a depreciation
       // posting that commits while this request is preparing cannot be
@@ -432,6 +430,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (lockedExisting.updated_at !== body.expectedUpdatedAt) {
         throw new PostedBasisEditConflict('The asset has changed. Reload it before saving.')
       }
+      await lockAccountOverridesForAssetWrite(tx, user.orgId, subsidiaryId ?? lockedExisting.subsidiary_id, [
+        { id: assetAccountId, code: 'invalid_asset_account' },
+        { id: accumulatedAccountId, code: 'invalid_accumulated_account' },
+        { id: expenseAccountId, code: 'invalid_expense_account' },
+      ])
 
       const lockedPostedRes = (await tx.execute(sql`
         select 1 from depreciation_schedules s

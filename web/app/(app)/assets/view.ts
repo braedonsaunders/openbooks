@@ -271,17 +271,19 @@ export async function loadAssets(
     }
   }
   if (assetId && assetId !== 'new' && isUuid(assetId)) {
-    const [openAsset, pickers, fieldDefs] = await Promise.all([
-      loadAsset(assetId, orgId, {
-        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-        bookId: pickString(sp.deprbook),
-        query: pickString(sp.deprq) ?? '',
-        page: Math.max(1, Number.parseInt(pickString(sp.deprpage) ?? '1', 10) || 1),
-        perPage: 25,
-      }),
+    const openAsset = await loadAsset(assetId, orgId, {
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      bookId: pickString(sp.deprbook),
+      query: pickString(sp.deprq) ?? '',
+      page: Math.max(1, Number.parseInt(pickString(sp.deprpage) ?? '1', 10) || 1),
+      perPage: 25,
+    })
+    if (openAsset) {
+      const targetAccountScope = [String(openAsset.asset.subsidiary_id)]
+      const [pickers, fieldDefs] = await Promise.all([
       Promise.all([
         db.execute<AssetCategoryRow>(sql`select id, name from asset_categories where org_id = ${orgId} and is_active order by name`),
-        db.execute<AssetAccountRow>(sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null)} order by a.number nulls last`),
+        db.execute<AssetAccountRow>(sql`select a.id, a.number, a.name from accounts a where a.org_id = ${orgId} and a.is_active and not a.is_summary ${assetAccountScopeSql(orgId, targetAccountScope)} order by a.number nulls last`),
         db.execute<AssetTaxRegimeRow>(sql`
           select r.code, r.name, r.class_attribute,
                  coalesce(jsonb_agg(jsonb_build_object('code', c.class_code, 'name', c.name) order by c.class_code)
@@ -293,8 +295,7 @@ export async function loadAssets(
         db.execute<AssetMethodRow>(sql`select id, code, name from depreciation_methods where org_id=${orgId} and is_active order by name`),
       ]),
       loadFieldDefs('fixed_assets'),
-    ])
-    if (openAsset) {
+      ])
       const resolvedForm = await resolveFormLayout({
         orgId,
         userId: authz.user.id,
