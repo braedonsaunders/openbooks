@@ -5,7 +5,8 @@
  *   Withholding Tax Formula Method, Effective 01/01/2026,
  *     https://www.dfa.arkansas.gov/wp-content/uploads/whformula_2026.pdf
  *     — Steps 1–6; $2,470 standard deduction; $50 midrange lookup below
- *       $97,801; printed brackets and $100 phase-down adjustments;
+ *       $100,001 (Step 2; $100,001 and over uses the exact dollar figure);
+ *       printed brackets and $100 phase-down adjustments;
  *       $29.00 per AR4EC exemption; official Gary $2,127 monthly /
  *       2-exemption example ($36.50).
  *   Act 2 of the First Extraordinary Session, 2026, §1 — 3.7% rates and
@@ -53,7 +54,7 @@ export const AR_RATES_2026: ArYearRates = {
   status: "published",
   standardDeduction: "2470",
   exemptionCredit: "29",
-  midrangeBelow: "97801",
+  midrangeBelow: "100001",
   supplementalRate: pctToRate("3.7"),
 };
 
@@ -88,9 +89,11 @@ export function arRoundToDollar(units: bigint): bigint {
 }
 
 /**
- * Step 2: below $97,801, look the income up at the $50 midrange of each $100
- * range. The worked example maps $23,054 onto $23,050 (midrange of $23,000
- * and $23,100). $97,801 and over uses the exact dollar figure.
+ * Step 2: below $100,001, look the income up at the $50 midrange of each $100
+ * range (DFA Step 2; NFC PP15 2026 concurs). The worked example maps $23,054
+ * onto $23,050 (midrange of $23,000 and $23,100). $100,001 and over uses the
+ * exact dollar figure. The old $97,801 cutoff was the top-bracket boundary
+ * copied onto the lookup; the two cutoffs are distinct.
  */
 export function arMidrangeLookup(netTaxable: bigint, rates: ArYearRates): bigint {
   if (netTaxable >= U(rates.midrangeBelow)) return netTaxable;
