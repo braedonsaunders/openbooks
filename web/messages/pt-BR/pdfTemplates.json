@@ -1,6 +1,26 @@
 {
   "title": "Modelos de PDF",
   "description": "Crie belos documentos imprimíveis e atribua-os a faturas, lançamentos e todas as demais transações",
+  "recordTypes":   {
+    "customer_invoice": "Fatura de cliente",
+    "customer_credit": "Crédito de cliente",
+    "quote": "Cotação",
+    "sales_order": "Pedido de venda",
+    "purchase_order": "Pedido de compra",
+    "vendor_bill": "Fatura de fornecedor",
+    "vendor_credit": "Crédito de fornecedor",
+    "vendor_payment": "Pagamento a fornecedor",
+    "customer_payment": "Pagamento de cliente",
+    "expense_report": "Relatório de despesas",
+    "check": "Cheque",
+    "card_charge": "Cobrança no cartão",
+    "card_refund": "Estorno de cartão",
+    "journal": "Diário",
+    "field_ticket": "Ordem de serviço",
+    "journal_entry": "Lançamento contábil",
+    "pay_stub": "Demonstrativo de pagamento",
+    "payroll_cheque": "Cheque de pagamento"
+  },
   "newTemplate": "Novo modelo",
   "list": {
     "name": "Nome",

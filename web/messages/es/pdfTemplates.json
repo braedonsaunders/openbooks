@@ -1,6 +1,26 @@
 {
   "title": "Plantillas PDF",
   "description": "Cree documentos imprimibles y asígnelos a facturas, asientos y todas las demás transacciones",
+  "recordTypes":   {
+    "customer_invoice": "Factura de cliente",
+    "customer_credit": "Crédito de cliente",
+    "quote": "Cotización",
+    "sales_order": "Pedido de venta",
+    "purchase_order": "Pedido de compra",
+    "vendor_bill": "Factura de proveedor",
+    "vendor_credit": "Crédito de proveedor",
+    "vendor_payment": "Pago a proveedor",
+    "customer_payment": "Pago de cliente",
+    "expense_report": "Informe de gastos",
+    "check": "Cheque",
+    "card_charge": "Cargo de tarjeta",
+    "card_refund": "Reembolso de tarjeta",
+    "journal": "Diario",
+    "field_ticket": "Parte de trabajo",
+    "journal_entry": "Asiento contable",
+    "pay_stub": "Recibo de nómina",
+    "payroll_cheque": "Cheque de nómina"
+  },
   "newTemplate": "Nueva plantilla",
   "list": {
     "name": "Nombre",

@@ -48,7 +48,6 @@ const PAPER_PX: Record<string, [number, number]> = {
   a4: [794, 1123],
   legal: [816, 1344],
 }
-const PAPER_LABEL: Record<string, string> = { letter: 'Letter', a4: 'A4', legal: 'Legal' }
 const MM_TO_PX = 3.7795
 
 export default function PdfTemplateEditor({
@@ -62,6 +61,11 @@ export default function PdfTemplateEditor({
 }) {
   const t = useTranslations('pdfTemplates')
   const tCommon = useTranslations('common')
+  const paperLabel = {
+    letter: t('list.paperLetter'),
+    a4: t('list.paperA4'),
+    legal: t('list.paperLegal'),
+  }
   const router = useRouter()
 
   const [tab, setTab] = useState<'design' | 'code' | 'preview'>('design')
@@ -240,7 +244,7 @@ export default function PdfTemplateEditor({
           onChange={(e) => setPaperSize(e.target.value as EditorTemplate['paperSize'])}
           className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-900"
         >
-          {Object.entries(PAPER_LABEL).map(([k, label]) => (
+          {Object.entries(paperLabel).map(([k, label]) => (
             <option key={k} value={k}>
               {label}
             </option>
@@ -313,7 +317,7 @@ export default function PdfTemplateEditor({
             pageWidthPx={pageWidthPx}
             pageHeightPx={pageHeightPx}
             marginPx={marginPx}
-            paperLabel={`${PAPER_LABEL[paperSize]} · ${orientation === 'landscape' ? t('editor.landscape') : t('editor.portrait')}`}
+            paperLabel={`${paperLabel[paperSize]} · ${orientation === 'landscape' ? t('editor.landscape') : t('editor.portrait')}`}
             onReady={() => {}}
             onChange={setSourceHtml}
             mergeFields={mergeFields}

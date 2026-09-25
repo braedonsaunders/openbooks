@@ -21,7 +21,8 @@ export type PdfCollection = {
 }
 export type PdfRecordTypeMeta = {
   key: string
-  label: string
+  /** Stable message key resolved by the localized template management UI. */
+  labelKey: string
   /** documents.kind for supertype records; null for journal_entry. */
   docKind: string | null
   /** Title printed by the starter template ("Invoice", "Quote"…). */
@@ -85,7 +86,6 @@ const LINES_COLLECTION: PdfCollection = { key: 'lines', label: 'Line items', fie
 
 function docType(meta: {
   key: string
-  label: string
   docTitle: string
   partyHeading: string | null
   readPermission: string
@@ -95,7 +95,7 @@ function docType(meta: {
 }): PdfRecordTypeMeta {
   return {
     key: meta.key,
-    label: meta.label,
+    labelKey: meta.key,
     docKind: meta.key,
     docTitle: meta.docTitle,
     partyHeading: meta.partyHeading,
@@ -113,7 +113,7 @@ function docType(meta: {
 
 const JOURNAL_ENTRY: PdfRecordTypeMeta = {
   key: 'journal_entry',
-  label: 'Journal entry',
+  labelKey: 'journal_entry',
   docKind: null,
   docTitle: 'Journal Entry',
   partyHeading: null,
@@ -157,7 +157,7 @@ const CREW_DAY_FIELDS: PdfMergeField[] = Array.from({ length: 7 }, (_, i) => [
 
 const FIELD_TICKET: PdfRecordTypeMeta = {
   key: 'field_ticket',
-  label: 'Field ticket',
+  labelKey: 'field_ticket',
   docKind: 'field_ticket',
   docTitle: 'Field Ticket',
   partyHeading: 'Customer',
@@ -221,7 +221,7 @@ const FIELD_TICKET: PdfRecordTypeMeta = {
 
 const PAY_STUB: PdfRecordTypeMeta = {
   key: 'pay_stub',
-  label: 'Pay stub',
+  labelKey: 'pay_stub',
   docKind: null,
   docTitle: 'Pay Stub',
   partyHeading: 'Employee',
@@ -280,7 +280,7 @@ const PAY_STUB: PdfRecordTypeMeta = {
  */
 const PAYROLL_CHEQUE: PdfRecordTypeMeta = {
   key: 'payroll_cheque',
-  label: 'Pay cheque',
+  labelKey: 'payroll_cheque',
   docKind: null,
   docTitle: 'Pay Cheque',
   partyHeading: 'Pay to the order of',
@@ -326,20 +326,20 @@ const PAYROLL_CHEQUE: PdfRecordTypeMeta = {
 
 /** Every record type a PDF template can target, in nav order. */
 export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
-  docType({ key: 'customer_invoice', label: 'Customer invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
-  docType({ key: 'customer_credit', label: 'Customer credit', docTitle: 'Credit Memo', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
-  docType({ key: 'quote', label: 'Quote', docTitle: 'Quote', partyHeading: 'Prepared for', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'sales_order', label: 'Sales order', docTitle: 'Sales Order', partyHeading: 'Sold to', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'purchase_order', label: 'Purchase order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'vendor_bill', label: 'Vendor bill', docTitle: 'Bill', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
-  docType({ key: 'vendor_credit', label: 'Vendor credit', docTitle: 'Vendor Credit', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
-  docType({ key: 'vendor_payment', label: 'Vendor payment', docTitle: 'Payment Remittance', partyHeading: 'Paid to', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'customer_payment', label: 'Customer payment', docTitle: 'Payment Receipt', partyHeading: 'Received from', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'expense_report', label: 'Expense report', docTitle: 'Expense Report', partyHeading: 'Employee', readPermission: 'expenses.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'check', label: 'Check', docTitle: 'Check', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: true }),
-  docType({ key: 'card_charge', label: 'Card charge', docTitle: 'Card Charge', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
-  docType({ key: 'card_refund', label: 'Card refund', docTitle: 'Card Refund', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
-  docType({ key: 'journal', label: 'Journal (document)', docTitle: 'Journal Entry', partyHeading: null, readPermission: 'gl.read', hasParty: false, hasDue: false, hasReference: false }),
+  docType({ key: 'customer_invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
+  docType({ key: 'customer_credit', docTitle: 'Credit Memo', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
+  docType({ key: 'quote', docTitle: 'Quote', partyHeading: 'Prepared for', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'sales_order', docTitle: 'Sales Order', partyHeading: 'Sold to', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'purchase_order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'vendor_bill', docTitle: 'Bill', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
+  docType({ key: 'vendor_credit', docTitle: 'Vendor Credit', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
+  docType({ key: 'vendor_payment', docTitle: 'Payment Remittance', partyHeading: 'Paid to', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'customer_payment', docTitle: 'Payment Receipt', partyHeading: 'Received from', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'expense_report', docTitle: 'Expense Report', partyHeading: 'Employee', readPermission: 'expenses.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'check', docTitle: 'Check', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: true }),
+  docType({ key: 'card_charge', docTitle: 'Card Charge', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
+  docType({ key: 'card_refund', docTitle: 'Card Refund', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
+  docType({ key: 'journal', docTitle: 'Journal Entry', partyHeading: null, readPermission: 'gl.read', hasParty: false, hasDue: false, hasReference: false }),
   FIELD_TICKET,
   JOURNAL_ENTRY,
   PAY_STUB,

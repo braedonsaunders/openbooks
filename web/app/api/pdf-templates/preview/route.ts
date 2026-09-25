@@ -95,7 +95,9 @@ export async function POST(req: Request) {
       },
       values,
     );
-    return pdfResponse(pdf, `${meta.label} preview`);
+    // Download filename uses the stable record key, never a localized label:
+    // Content-Disposition filenames must stay ASCII and stable across locales.
+    return pdfResponse(pdf, `${meta.key} preview`);
   } catch (e) {
     const rendererRefusal = rendererUnavailableResponse(e);
     if (rendererRefusal) return rendererRefusal;

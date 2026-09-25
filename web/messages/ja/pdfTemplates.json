@@ -1,6 +1,26 @@
 {
   "title": "PDF テンプレート",
   "description": "美しい印刷用書類を作成し、請求書、仕訳、その他すべての取引に割り当てます",
+  "recordTypes":   {
+    "customer_invoice": "顧客請求書",
+    "customer_credit": "顧客クレジット",
+    "quote": "見積書",
+    "sales_order": "販売注文",
+    "purchase_order": "発注書",
+    "vendor_bill": "仕入先請求書",
+    "vendor_credit": "仕入先クレジット",
+    "vendor_payment": "仕入先支払い",
+    "customer_payment": "顧客支払い",
+    "expense_report": "経費精算書",
+    "check": "小切手",
+    "card_charge": "カード利用",
+    "card_refund": "カード返金",
+    "journal": "仕訳",
+    "field_ticket": "作業票",
+    "journal_entry": "仕訳帳",
+    "pay_stub": "給与明細",
+    "payroll_cheque": "給与小切手"
+  },
   "newTemplate": "新規テンプレート",
   "list": {
     "name": "名称",
