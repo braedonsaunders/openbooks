@@ -182,6 +182,19 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
       },
     ],
   } as const,
+  ID: {
+    kind: "flat",
+    // Idaho State Tax Commission, Computing Withholding, "Supplemental
+    // wages": a separately issued supplemental payment is withheld by
+    // multiplying it by 5.3%. Idaho rounds withholding to the nearest whole
+    // dollar. Dated to the transcribed July 23 2026 percentage-table
+    // edition (EPB00744), matching the ID engine's own edition floor.
+    rates: [{
+      effectiveFrom: "2026-07-23", rate: "0.053",
+      source: "https://tax.idaho.gov/taxes/income-tax/withholding/computing/",
+    }],
+    rounding: "whole_dollar",
+  } as const,
   MI: {
     kind: "flat",
     // Michigan Form 446 (2026), "Bonuses and Other Payments": separately
