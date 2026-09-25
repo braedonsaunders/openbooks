@@ -45,13 +45,25 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
+  evaluateUsNonresidentThreshold,
+  requireUsWageAllocation,
+  requireUsSourceWages,
   refuseUntranscribedYear,
+  type UsNonresidentThresholdRule,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
 const RATES_MODULE = "engine/src/payroll/us/states/az.ts";
+
+const AZ_NONRESIDENT_SERVICE_DAY_RULE: UsNonresidentThresholdRule = {
+  measure: "service_days",
+  threshold: 60,
+  crossing: ">=",
+  catchUpPriorWages: true,
+  label: "Arizona nonresident under-60-day withholding exclusion",
+};
 
 /** Line 1 percents, exactly as Form A-4 2026 prints them. */
 export const AZ_PRINTED_PERCENTS = [
@@ -140,11 +152,29 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // Form A-4: "a percentage of your gross taxable wages from every paycheck."
   // Supplemental wages are compensation under A.R.S. § 43-401(A) ("wages,
   // salary, bonus or other emolument") and take the same percent.
-  const wages = U(input.wages) + U(input.supplemental ?? "0");
+  const reportedWages = U(input.wages) + U(input.supplemental ?? "0");
+  let wages = reportedWages;
+  let catchUpWages = 0n;
+  if (input.basis === "nonresident") {
+    const allocation = requireUsWageAllocation(input.wageAllocations, "AZ", null);
+    const threshold = evaluateUsNonresidentThreshold(
+      allocation, AZ_NONRESIDENT_SERVICE_DAY_RULE, input.periodsPerYear ?? 0,
+    );
+    if (!threshold.crossed && !input.certificate.onFile) {
+      factors.AZ_NONRESIDENT_UNDER_60_DAYS = "1";
+      return { state: "AZ", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    }
+    wages = U(requireUsSourceWages(input.wageAllocations, "AZ", null));
+    catchUpWages = U(threshold.catchUpSourceWages);
+    factors.AZ_NONRESIDENT_SERVICE_DAYS_YTD = String(allocation.serviceDaysYearToDate);
+    factors.AZ_NONRESIDENT_SOURCE_WAGES = D(wages);
+    factors.AZ_CATCHUP_SOURCE_WAGES = D(catchUpWages);
+  }
   factors.AZ_WAGES = D(wages);
 
-  const tax = mulRateCents(wages, rate);
+  const tax = mulRateCents(wages, rate) + mulRateCents(catchUpWages, rate);
   factors.AZ_TAX = D(tax);
+  if (catchUpWages > 0n) factors.AZ_CATCHUP_TAX = D(mulRateCents(catchUpWages, rate));
 
   // Line 1 extra amount — a flat dollar amount after the percent, not taxed by it.
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
@@ -170,6 +200,11 @@ export const AZ_FACTOR_LABELS: Readonly<Record<string, string>> = {
   AZ_WAGES: "Arizona gross taxable wages this period",
   AZ_TAX: "Arizona tax this period",
   AZ_EXTRA: "Arizona additional amount (Form A-4 line 1)",
+  AZ_NONRESIDENT_UNDER_60_DAYS: "Arizona nonresident under-60-day withholding exclusion",
+  AZ_NONRESIDENT_SERVICE_DAYS_YTD: "Arizona nonresident calendar-year service days",
+  AZ_NONRESIDENT_SOURCE_WAGES: "Arizona nonresident current sourced wages",
+  AZ_CATCHUP_SOURCE_WAGES: "Arizona nonresident prior sourced wages subject to catch-up",
+  AZ_CATCHUP_TAX: "Arizona nonresident prior-period catch-up tax",
 };
 
 export const AZ_WITHHOLDING: UsStateWithholdingEngine = {
