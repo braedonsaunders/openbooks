@@ -12,6 +12,9 @@
  *
  * Supplemental wages (bonuses, retro) use the Pub 15 §7 optional flat rate,
  * with the mandatory 37% rate on YTD supplemental wages past $1,000,000.
+ * When the caller establishes that no FIT was withheld from regular wages in
+ * the current or preceding year, the flat rate is unavailable and method 1b
+ * applies (or the run refuses until the 1b basis exists).
  *
  * Out of scope in this wave (documented, not forgotten): state income tax
  * withholding (v1 covers the nine no-withholding states), nonresident-alien
@@ -44,6 +47,25 @@ export interface Pub15TInput {
   wages: string;
   /** Supplemental wages this period (bonus, retro) — flat-rate method. */
   supplemental?: string;
+  /**
+   * Caller-established Pub. 15 §7 history: no FIT was withheld from the
+   * employee's regular wages in the current or the preceding calendar year.
+   * When true the optional flat rate is UNAVAILABLE and method 1b applies
+   * (or the run refuses until the 1b basis below exists). Absent means the
+   * caller has not established the history — the flat method still prices
+   * the payment, and establishing this history is the caller's follow-up.
+   */
+  noRegularFitWithheld?: boolean;
+  /**
+   * Pub. 15 §7 method-1b basis, required when `noRegularFitWithheld` is
+   * true: the most recent regular wage this supplement aggregates with,
+   * and the FIT already withheld from that regular wage (excluding any
+   * per-period additional amount, which is added separately every period).
+   */
+  supplementalRegularBasis?: {
+    recentRegularWages: string;
+    regularFitWithheld: string;
+  };
   /** Social Security / Medicare wages this period. Defaults to wages + supplemental. */
   ficaWages?: string;
   /** FUTA (and SUI) wages this period. Defaults to wages + supplemental. */
@@ -243,15 +265,54 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   trace("TWP", tentativePerPeriod);
 
   // ---- FIT: flat-rate method over the supplemental payment -----------------
+  // Pub. 15 §7 method 1b: when no FIT was withheld from regular wages in
+  // the current or preceding year, the optional flat rate is unavailable.
+  // 1b combines the supplement with the most recent regular wage, withholds
+  // on the total through the same worksheet, and subtracts the FIT already
+  // withheld. The recursion reuses the worksheet (no extra: the additional
+  // per-period amount is added once below, never inside the 1b difference).
+  // A mandatory-37% excess beside a 1b payment is refused — the $1M corner
+  // needs its own transcription, not a guessed blend of the two methods.
   let supplementalFit = ZERO;
   if (supplemental > ZERO) {
     const priorSupplemental = opt(ytd.supplemental);
     const threshold = U(rates.supplemental.mandatoryThreshold);
     const atFlat = cappedSlice(supplemental, threshold, priorSupplemental);
-    // Pub. 15 §7 makes the 37% slice mandatory regardless of the employee's
-    // W-4 exemption election; only the optional lower flat slice is waived.
-    supplementalFit = (input.fitExempt ? ZERO : mulRateCents(atFlat, rates.supplemental.flatRate))
-      + mulRateCents(supplemental - atFlat, rates.supplemental.mandatoryHighRate);
+    const mandatory = mulRateCents(supplemental - atFlat, rates.supplemental.mandatoryHighRate);
+    if (input.noRegularFitWithheld === true && !input.fitExempt) {
+      const basis = input.supplementalRegularBasis;
+      if (!basis) {
+        throw new PayrollError(
+          "federal supplemental wages cannot use the optional flat rate: no FIT was withheld "
+          + "from regular wages in the current or preceding year, so Pub. 15 §7 requires method 1b. "
+          + "Provide the most recent regular wage and the FIT already withheld from it "
+          + "(supplementalRegularBasis) before calculating — refused by name",
+        );
+      }
+      if (supplemental - atFlat > ZERO) {
+        throw new PayrollError(
+          "federal supplemental wages exceed the $1,000,000 mandatory-37% threshold inside a "
+          + "method-1b payment; the 1b aggregate beside a mandatory excess is not transcribed — refused by name",
+        );
+      }
+      const combined = calculatePub15T({
+        ...input,
+        wages: D(U(basis.recentRegularWages) + supplemental),
+        supplemental: "0",
+        extraPerPeriod: undefined,
+        noRegularFitWithheld: undefined,
+        supplementalRegularBasis: undefined,
+      });
+      // combined.fit carries no extra and no supplemental share: the pure
+      // worksheet on the aggregate. The 1b share is the aggregate withholding
+      // less what regular withholding already took.
+      supplementalFit = max0(U(combined.fit) - U(basis.regularFitWithheld)) + mandatory;
+    } else {
+      // Pub. 15 §7 makes the 37% slice mandatory regardless of the employee's
+      // W-4 exemption election; only the optional lower flat slice is waived.
+      supplementalFit = (input.fitExempt ? ZERO : mulRateCents(atFlat, rates.supplemental.flatRate))
+        + mandatory;
+    }
   }
   const fit = periodicFit + supplementalFit + (input.fitExempt ? ZERO : extra);
   trace("FIT", fit);

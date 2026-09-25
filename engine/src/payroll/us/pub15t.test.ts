@@ -261,6 +261,18 @@ test("supplemental wages: 22% flat rate, 37% past $1,000,000 YTD", () => {
   assert.equal(high.fitSupplemental, money("3400.00"));
 });
 
+test("supplemental wages without regular FIT history refuse until the method-1b basis exists", () => {
+  // Pub. 15 §7: https://www.irs.gov/publications/p15
+  assert.throws(
+    () => calculateWithConfiguredFuta({
+      payDate: "2026-06-15", periodsPerYear: 12, wages: "0.00",
+      supplemental: "1000.00", filingStatus: "single",
+      noRegularFitWithheld: true,
+    }),
+    /cannot use the optional flat rate.*Pub\. 15 §7 requires method 1b.*supplementalRegularBasis.*refused by name/,
+  );
+});
+
 // FUTA's federal exclusions do not decide state UI coverage; California
 // distinguishes FUTA-exempt public employers from tax-rated UI employers:
 // https://www.irs.gov/publications/p15 and https://edd.ca.gov/tax-rated-employers/.
