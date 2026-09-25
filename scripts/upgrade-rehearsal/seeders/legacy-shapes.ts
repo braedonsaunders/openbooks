@@ -276,8 +276,15 @@ async function seedLegacy(client: pg.Client, orgId: string, subsidiaryId: string
      values ($1, 'EDGE bank', 'edge', 'local', $2) returning id`,
     [orgId, `sftp/${orgId}/edge-inbound`],
   )).rows[0]!.id;
+  // The unbound fixture tests the missing EXTERNAL binding (0291 legacy: the
+  // schedule predates the binding column), so its native account must be
+  // tick-eligible on the candidate: the I5-platform-23 claim refuses a tick
+  // whose native account is not a live reconcilable account before the run
+  // ever reaches the identity gate, and schedule creation refuses such
+  // accounts the same way. The binding stays NULL.
   const acct = (await client.query<{ id: string }>(
-    `insert into public.accounts (org_id, name, type) values ($1, 'EDGE checking', 'asset') returning id`,
+    `insert into public.accounts (org_id, name, type, reconcilable, currency_restriction)
+     values ($1, 'EDGE checking', 'asset', true, 'USD') returning id`,
     [orgId],
   )).rows[0]!.id;
   await client.query(
