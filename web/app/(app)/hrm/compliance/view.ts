@@ -163,7 +163,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
                   columns: [
                     column(f('labels.columns.project'), text(item('projectLabel'))),
                     column(f('labels.columns.week'), text(item('weekLabel'))),
-                    column(f('labels.columns.format'), text(item('formatKey'))),
+                    column(f('labels.columns.format'), text(item('formatLabel'))),
                     column(f('labels.columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
                     column(
                       f('labels.columns.actions'),

@@ -1532,6 +1532,7 @@
     "certifiedTitle": "Certified payroll",
     "classesTitle": "Comp classes",
     "perdiemTitle": "Per-diem entries",
+    "unknownFormat": "Unknown format",
     "empty": "Nothing here yet.",
     "emptyAction": "Configure it in Setup below.",
     "active": "Active",

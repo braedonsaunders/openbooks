@@ -49,7 +49,7 @@ export interface ComplianceRunRow {
   id: string
   projectLabel: string
   weekLabel: string
-  formatKey: string
+  formatLabel: string
   status: string
   statusLabel: string
   statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
@@ -282,11 +282,23 @@ export async function loadCompliancePage(
       }
     })
     const runs = await listRuns(db, orgId, actorId, null)
+    let packName: string | null = null
+    let formatsEmpty = false
+    let formatOptions: Array<{ value: string; label: string }> = []
+    try {
+      const declared = await listFormats(db, orgId, actorId)
+      packName = declared.packName
+      formatsEmpty = declared.formats.length === 0
+      formatOptions = declared.formats.map((format) => ({ value: format.key, label: format.label }))
+    } catch {
+      packName = null
+    }
+    const formatLabels = new Map(formatOptions.map((format) => [format.value, format.label]))
     const runRows: ComplianceRunRow[] = runs.slice(0, 200).map((run) => ({
       id: run.id,
       projectLabel: run.projectId ? (projectName.get(run.projectId) ?? run.projectId) : '—',
       weekLabel: run.weekEnding,
-      formatKey: run.formatKey,
+      formatLabel: formatLabels.get(run.formatKey) ?? t('compliance.unknownFormat'),
       status: run.status,
       statusLabel: t(`compliance.runStatus.${run.status}`),
       statusVariant: statusVariant(run.status),
@@ -311,17 +323,6 @@ export async function loadCompliancePage(
       entryKind: 'per_diem',
     }))
     const policies = await listPolicies(db, orgId, actorId)
-    let packName: string | null = null
-    let formatsEmpty = false
-    let formatOptions: Array<{ value: string; label: string }> = []
-    try {
-      const declared = await listFormats(db, orgId, actorId)
-      packName = declared.packName
-      formatsEmpty = declared.formats.length === 0
-      formatOptions = declared.formats.map((format) => ({ value: format.key, label: format.label }))
-    } catch {
-      packName = null
-    }
     // Certified due: scoped projects whose current week has no generated run.
     // "Current" is the org's business day, never the UTC day.
     const today = await businessToday(orgId)
