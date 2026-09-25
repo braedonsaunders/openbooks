@@ -139,6 +139,11 @@ export function ChangeRequestDetailDrawer({
   const [detail, setDetail] = useState<DetailRequest | null>(null)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<string | undefined>(undefined)
+  // Bumped after the embedded lifecycle actions transition the request
+  // (submit/withdraw/rescind/correct): the drawer holds its own fetch,
+  // so router.refresh() alone would leave it showing the pre-transition
+  // status. The effect below re-reads on every bump.
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     // No synchronous reset here: the dialog keys this drawer by request
@@ -175,7 +180,7 @@ export function ChangeRequestDetailDrawer({
     return () => {
       live = false
     }
-  }, [requestId, t])
+  }, [requestId, t, reloadToken])
 
   const payload = detail?.payload ?? {}
   const kind = asText(payload.kind) ?? ''
@@ -427,7 +432,10 @@ export function ChangeRequestDetailDrawer({
               appliedChangeId={detail.appliedEmploymentChangeId}
               departmentOptions={departmentOptions}
               canManage={canManage}
-              onChanged={() => router.refresh()}
+              onChanged={() => {
+                setReloadToken((current) => current + 1)
+                router.refresh()
+              }}
             />
           </>
         ) : null}
