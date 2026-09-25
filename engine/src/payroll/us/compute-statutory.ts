@@ -27,6 +27,7 @@ import { paUcEmployeeWithholding } from "./states/pa.ts";
 import { caEttWithholding } from "./states/ca.ts";
 import { coFamliWithholding } from "./states/co.ts";
 import { dcOpflWithholding } from "./states/dc.ts";
+import { ctPaidLeaveWithholding } from "./states/ct.ts";
 
 export type UsYtdRow = {
   fica: string;
@@ -224,6 +225,14 @@ export async function computeUsStatutory(
     factors[key] = key in factors
       ? sum([factors[key]!, allocation.sourceWagesCurrentPeriod])
       : allocation.sourceWagesCurrentPeriod;
+  }
+  // Connecticut Paid Leave (2026: 0.5% of FICA-taxable wages to the SS
+  // base) withholds beside income tax, never inside it — on the FICA leg
+  // (pensionable), capped by FICA YTD, beside the federal lines above.
+  if (region === "CT") {
+    const ctpl = ctPaidLeaveWithholding(run.pay_date!, pensionable, ytd.fica);
+    pushStatutory("ct_pl_employee", "deduction", "Connecticut Paid Leave (employee)", ctpl, 150);
+    factors = { ...factors, CTPL_EMPLOYEE: ctpl };
   }
 
   const certificateKeysOnFile = (): string[] =>

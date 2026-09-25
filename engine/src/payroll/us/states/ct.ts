@@ -37,7 +37,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { PayrollError } from "../../error.ts";
-import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
+import { bmin, D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
   certificateAmount, certificateChoice, type PayrollCertificate,
 } from "../../certificates.ts";
@@ -60,12 +60,23 @@ export interface CtYearRates {
   status: "published" | "draft";
   /** Circular CT: no completed CT-W4 withholds this flat rate, no exemption. */
   noCertificateRate: string;
+  /**
+   * Paid Leave employee contribution rate and the FICA wage base that caps
+   * it (2026: 0.5% up to the Social Security taxable maximum, $184,500).
+   * Private-plan exemptions ride a later employer-fact channel.
+   */
+  ctplRate: string;
+  ctplWageBase: string;
 }
 
 export const CT_RATES_2026: CtYearRates = {
   year: 2026,
   status: "published",
   noCertificateRate: pctToRate("6.99"),
+  // Connecticut Paid Leave 2026: 0.5% of FICA-taxable wages to the SSA
+  // taxable maximum ($184,500).
+  ctplRate: "0.005",
+  ctplWageBase: "184500",
 };
 
 const CT_EDITIONS_BY_YEAR: Record<number, CtYearRates> = {
@@ -578,8 +589,24 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * keys above. Terms are the TPG-211 calculation rules' own — see the
  * module header.
  */
+/**
+ * Connecticut Paid Leave employee contribution — 0.5% of FICA-taxable
+ * wages up to the Social Security wage base, withheld beside income tax,
+ * never folded into it.
+ */
+export function ctPaidLeaveWithholding(
+  payDate: string, ficaWages: string, ytdFicaWages: string,
+): string {
+  const rates = ctRatesForPayDate(payDate);
+  return D(mulRateCents(
+    max0(bmin(U(ficaWages), U(rates.ctplWageBase) - U(ytdFicaWages))),
+    rates.ctplRate,
+  ));
+}
+
 export const CT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CT_EXEMPT: "Exempt from Connecticut withholding (code E)",
+  CTPL_EMPLOYEE: "Connecticut Paid Leave employee contribution",
   CT_NO_CERTIFICATE: "No CT-W4 on file (flat-rate method)",
   CT_TAX: "Connecticut tax this period (flat method)",
   CT_ANNUAL_WAGES: "Connecticut annualized wages",
