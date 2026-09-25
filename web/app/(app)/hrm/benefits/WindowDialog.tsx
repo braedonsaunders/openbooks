@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useDirtyClose } from '../../../../lib/use-dirty-close'
 
 /**
  * New-window dialog, opened from the page header through the `window=new`
@@ -23,6 +24,7 @@ export function WindowDialog({
   departmentOptions: { value: string; label: string }[]
 }) {
   const t = useTranslations('hrm')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
@@ -37,6 +39,25 @@ export function WindowDialog({
     router.push(closeHref as never)
     router.refresh()
   }
+
+  // A half-typed window never closes silently: Cancel, the X button,
+  // Escape, and the backdrop all route through onClose, which asks first —
+  // the same shared guard the lease and change-request forms use.
+  const dirty =
+    name.trim() !== '' ||
+    kind !== 'open_enrollment' ||
+    opensOn !== '' ||
+    closesOn !== '' ||
+    planYearStartOn !== '' ||
+    subsidiary !== '' ||
+    department !== ''
+  const closeGuard = useDirtyClose({
+    dirty,
+    busy: saving,
+    onClose: close,
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
 
   async function save() {
     if (!name.trim() || !opensOn || !closesOn || !planYearStartOn) {
@@ -66,7 +87,7 @@ export function WindowDialog({
   }
 
   return (
-    <Drawer open onClose={close} title={t('benefits.newWindowTitle')} size="md">
+    <Drawer open onClose={() => void closeGuard.close()} title={t('benefits.newWindowTitle')} size="md">
       <div className="flex flex-col gap-4 p-4">
         <div>
           <Label htmlFor="benefits-window-name">{t('benefits.windowName')}</Label>
@@ -122,7 +143,7 @@ export function WindowDialog({
           </Select>
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={close}>
+          <Button variant="outline" onClick={() => void closeGuard.close()}>
             {t('benefits.cancel')}
           </Button>
           <Button disabled={saving} onClick={save}>
