@@ -58,7 +58,7 @@ export async function GET() {
              reversed_at as "reversedAt", reversed_by as "reversedBy",
              memo, line_count as "lineCount"
         from psp_settlement_batches where org_id = ${orgId}${subsidiaryFilter}
-       order by settlement_date desc, created_at desc limit 50
+       order by settlement_date desc, created_at desc
     `),
     // Provider configuration is organization-wide and has no subsidiary_id.
     // Do not expose it to a restricted caller when its account defaults may
