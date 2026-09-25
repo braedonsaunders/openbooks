@@ -15,7 +15,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toUnits } from "../../money/money.ts";
+import { add, toUnits } from "../../money/money.ts";
 import {
   calculateGbLoanDeductions,
   calculateGbNic,
@@ -161,8 +161,8 @@ test("hand-worked: full 2026/27 on £27,000 sums to £2,884.00", () => {
     });
     if (index === 0) assert.equal(result.tax, "240.2000");
     total += BigInt(result.tax.replace(".", ""));
-    priorTaxable = `${(Number(priorTaxable) + 2250).toFixed(4)}`;
-    priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
+    priorTaxable = add(priorTaxable, "2250");
+    priorPaid = add(priorPaid, result.tax);
   });
   assert.equal(total, 288_400_00n);
 });
@@ -384,8 +384,8 @@ test("hand-worked: full 2026/27 on £60,000 telescopes to £11,428.00", () => {
     });
     if (index === 0) assert.equal(result.tax, "952.0600");
     total += BigInt(result.tax.replace(".", ""));
-    priorTaxable = `${(Number(priorTaxable) + 5000).toFixed(4)}`;
-    priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
+    priorTaxable = add(priorTaxable, "5000");
+    priorPaid = add(priorPaid, result.tax);
   });
   assert.equal(total, 1_142_800_00n);
 });

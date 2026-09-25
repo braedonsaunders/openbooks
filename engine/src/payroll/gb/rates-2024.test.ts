@@ -19,6 +19,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { add } from "../../money/money.ts";
 import {
   calculateGbNic,
   calculateGbPaye,
@@ -130,11 +131,10 @@ test("2024/25 Scottish bands are their own six-band table", () => {
   // Gross-space cross-check (scottish-income-tax, 2024 to 2025 table):
   // "£12,571 to £14,876 19%", "£14,877 to £26,561 20%", "£26,562 to £43,662
   // 21%", "£43,663 to £75,000 42%" — each top exactly £12,570 above the
-  // taxable-space top (14,876 = 12,570 + 2,306; 26,561 = 12,570 + 13,991;
-  // 43,662 = 12,570 + 31,092; 75,000 = 12,570 + 62,430).
-  const grossTops = [14876, 26561, 43662, 75000];
+  // taxable-space top (14,876 = 12,570 + 2,306; 43,662 = 12,570 + 31,092; 75,000 = 12,570 + 62,430).
+  const grossTops = ["14876", "26561", "43662", "75000"];
   GB_2024_SCT_BANDS.slice(0, 4).forEach((band, index) => {
-    assert.equal(Number(band.upTo) + 12570, grossTops[index], `SCT band ${index}`);
+    assert.equal(add(band.upTo ?? "0", "12570"), grossTops[index], `SCT band ${index}`);
   });
 });
 
