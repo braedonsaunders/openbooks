@@ -1,0 +1,1 @@
+No preflight needed: 0412 adds one NOT NULL DEFAULT 0 column to payroll_opening_balances and widens the reporting view to match. Existing rows read back as zero, which is exactly what "nothing carried in" has always meant here, so there is no data shape an operator must remedy before this migration can run.
