@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
-import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
+import { db, withBypass, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { encryptAccountNumber, decryptAccountNumber } from "../payments/rail-settings.ts";
 import { startSftpServer, generateHostKey, type SessionLiveness, type SftpResolver, type SftpServerHandle } from "./server.ts";
@@ -253,6 +253,44 @@ export const dbResolver: SftpResolver = {
       return { alive: false, reason: `sftp login '${config.username}' credentials changed — reconnect with the current password or key` };
     }
     return { alive: true };
+  },
+  /**
+   * Keep the daemon, login, and feature authority locked through a storage
+   * mutation. Disabling the daemon, login, or Bank Feeds therefore waits for
+   * an already-authorized write to publish, or wins first and refuses it.
+   */
+  async withMutationGuard(config, operation) {
+    await withBypass(async () => {
+      const daemon = (await db.execute<{ enabled: boolean }>(sql`
+        select enabled from sftp_daemon where id = 'default' for share
+      `)).rows[0];
+      if (!daemon?.enabled) {
+        await operation({ alive: false, reason: "the SFTP daemon is disabled — ask a platform administrator to enable it, then reconnect" });
+        return;
+      }
+
+      const row = (await db.execute<SessionRow>(sql`
+        select id, org_id as "orgId", username, is_active, updated_at, password_encrypted, authorized_keys
+          from sftp_servers where id = ${config.id} and org_id = ${config.orgId} for share
+      `)).rows[0];
+      if (!row) {
+        await operation({ alive: false, reason: `sftp login '${config.username}' no longer exists — ask your administrator to recreate it, then reconnect` });
+        return;
+      }
+      if (!row.is_active) {
+        await operation({ alive: false, reason: `sftp login '${config.username}' is disabled — ask your administrator to re-enable it, then reconnect` });
+        return;
+      }
+      if (!(await lockAndCheckOrgFeature(db, config.orgId, "bankFeeds"))) {
+        await operation({ alive: false, reason: `sftp login '${config.username}' is unavailable: bank feeds is turned off for this organization — turn Bank Feeds back on under Company Settings → Features, then reconnect` });
+        return;
+      }
+      if (sessionRevFor(row) !== config.sessionRev) {
+        await operation({ alive: false, reason: `sftp login '${config.username}' credentials changed — reconnect with the current password or key` });
+        return;
+      }
+      await operation({ alive: true });
+    });
   },
 };
 

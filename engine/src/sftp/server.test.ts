@@ -96,9 +96,8 @@ function livelyResolver() {
     async password(username: string, _password: string): Promise<SftpServerConfig | null> {
       return username === config.username ? { ...config } : null;
     },
-    async checkSession(_config: SftpServerConfig): Promise<SessionLiveness> {
-      return live;
-    },
+    async checkSession(_config: SftpServerConfig): Promise<SessionLiveness> { return live; },
+    async withMutationGuard(_config, operation) { return operation(live); },
   };
   return {
     resolver,
