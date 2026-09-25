@@ -30,6 +30,16 @@ if (typeof window.requestAnimationFrame !== 'function') {
   window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
   window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
 }
+// jsdom ships no native <dialog> imperative API: WizardShell opens its modal
+// through showModal/close (I4-webui-433). Mirror the open-attribute contract
+// so the shell mounts exactly as in a browser.
+const dialogProto = window.HTMLDialogElement?.prototype
+if (dialogProto && typeof dialogProto.showModal !== 'function') {
+  dialogProto.showModal = function (this: HTMLDialogElement) { this.setAttribute('open', '') }
+}
+if (dialogProto && typeof dialogProto.close !== 'function') {
+  dialogProto.close = function (this: HTMLDialogElement) { this.removeAttribute('open') }
+}
 
 const { registerHooks } = await import('node:module')
 registerHooks({
