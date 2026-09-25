@@ -3,37 +3,44 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { DSAR_MODULES } from "./dsar.ts";
-import {
-  DSAR_EXCLUDED_TABLES,
-  DSAR_GATHERED_TABLES,
-  DSAR_PERSON_LINK_COLUMNS,
-  DSAR_REMIT_EXTRA_TABLES,
-} from "./dsar-coverage.ts";
+import { DSAR_EXCLUDED_TABLES, DSAR_GATHERED_TABLES } from "./dsar-coverage.ts";
 
 // C-79 structural coverage. The person-linked surface is derived from the
-// live catalog — the same information_schema the database itself enforces —
-// never from a hand-kept list, so a new personal-data table fails here
-// until dsar-coverage.ts decides: gather it, or exclude it with a reviewed
-// reason. No skip guard: like the PII inventory test, a DB-owned test that
-// self-skips turns CI red, so this fails loud without a database.
+// live catalog — foreign keys the database itself enforces, plus a name
+// safety net for links the catalog does not constrain — never from a
+// hand-kept list, so a new personal-data table fails here until
+// dsar-coverage.ts decides: gather it, or exclude it with a reviewed
+// reason. This discovery is deliberately self-contained: it must not
+// import the registry's own filters, or the check would pass against
+// itself. No skip guard: like the PII inventory test, a DB-owned test
+// that self-skips turns CI red, so this fails loud without a database.
 
-async function remitPersonLinkedTables(): Promise<string[]> {
-  const rows = (await db.execute<{ table_name: string }>(sql`
-    select distinct c.table_name
-      from information_schema.columns c
-     where c.table_schema = 'public'
-       and c.column_name in (${sql.join(
-         DSAR_PERSON_LINK_COLUMNS.map((column) => sql`${column}`),
-         sql`, `,
-       )})
-       and (c.table_name like 'hrm\\_%' escape '\\'
-            or c.table_name in (${sql.join(
-              DSAR_REMIT_EXTRA_TABLES.map((table) => sql`${table}`),
-              sql`, `,
-            )}))
-     order by 1
-  `)).rows;
-  return rows.map((row) => row.table_name);
+async function catalogPersonLinkedTables(): Promise<string[]> {
+  // Catalog-proven links: a foreign key to a person table on any column
+  // but the tenancy link (orgs are party rows, so org_id references
+  // parties without the row being about a person).
+  const fk = (await db.execute<{ table_name: string }>(sql`
+    select distinct rel.relname as table_name
+      from pg_constraint k
+      join pg_class rel on rel.oid = k.conrelid
+      join pg_namespace ns on ns.oid = rel.relnamespace
+      join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any (k.conkey)
+     where ns.nspname = 'public'
+       and k.contype = 'f'
+       and k.confrelid in ('public.parties'::regclass, 'public.worker_employments'::regclass, 'public.hrm_candidates'::regclass)
+       and a.attname <> 'org_id'
+  `)).rows.map((row) => row.table_name);
+  // Name safety net for person links the catalog does not constrain
+  // (incumbent/manager/report/subject employments, unlinked employment ids).
+  const named = (await db.execute<{ table_name: string }>(sql`
+    select distinct table_name
+      from information_schema.columns
+     where table_schema = 'public'
+       and (column_name like '%\\_party\\_id' escape '\\'
+            or column_name like '%\\_employment\\_id' escape '\\'
+            or column_name in ('employment_id', 'candidate_id'))
+  `)).rows.map((row) => row.table_name);
+  return [...new Set([...fk, ...named])].sort();
 }
 
 async function catalogTables(): Promise<Set<string>> {
@@ -45,7 +52,7 @@ async function catalogTables(): Promise<Set<string>> {
 }
 
 test("every person-linked remit table has a gatherer or a reviewed exclusion", async () => {
-  const discovered = await remitPersonLinkedTables();
+  const discovered = await catalogPersonLinkedTables();
   assert.ok(discovered.length > 0, "the discovery query must see the HR surface");
   const covered = new Set([
     ...DSAR_GATHERED_TABLES.map((entry) => entry.table),
