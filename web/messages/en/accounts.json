@@ -9,8 +9,8 @@
     },
     "newAccount": "New account",
     "viewRegister": "View register",
-    "expand": "Expand account",
-    "collapse": "Collapse account",
+    "expandAccount": "Expand {number} {name}",
+    "collapseAccount": "Collapse {number} {name}",
     "badges": {
       "inactive": "inactive",
       "summary": "summary"

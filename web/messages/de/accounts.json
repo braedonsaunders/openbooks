@@ -13,8 +13,8 @@
     },
     "newAccount": "Neues Konto",
     "viewRegister": "Kontoblatt anzeigen",
-    "expand": "Konto aufklappen",
-    "collapse": "Konto zuklappen"
+    "expandAccount": "Konto {number} {name} aufklappen",
+    "collapseAccount": "Konto {number} {name} zuklappen"
   },
   "types": {
     "assetBank": "Bank",

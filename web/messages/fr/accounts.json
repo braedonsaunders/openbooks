@@ -9,8 +9,8 @@
     },
     "newAccount": "Nouveau compte",
     "viewRegister": "Voir le registre",
-    "expand": "Développer le compte",
-    "collapse": "Réduire le compte",
+    "expandAccount": "Développer le compte {number} {name}",
+    "collapseAccount": "Réduire le compte {number} {name}",
     "badges": {
       "inactive": "inactif",
       "summary": "sommaire"

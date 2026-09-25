@@ -13,8 +13,8 @@
     },
     "newAccount": "Nova conta",
     "viewRegister": "Ver razão",
-    "expand": "Expandir conta",
-    "collapse": "Recolher conta"
+    "expandAccount": "Expandir conta {number} {name}",
+    "collapseAccount": "Recolher conta {number} {name}"
   },
   "types": {
     "assetBank": "Banco",

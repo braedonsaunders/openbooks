@@ -9,8 +9,8 @@
     },
     "newAccount": "新規勘定",
     "viewRegister": "元帳を表示",
-    "expand": "勘定を展開",
-    "collapse": "勘定を折りたたむ",
+    "expandAccount": "勘定 {number} {name} を展開",
+    "collapseAccount": "勘定 {number} {name} を折りたたむ",
     "badges": {
       "inactive": "無効",
       "summary": "集計"

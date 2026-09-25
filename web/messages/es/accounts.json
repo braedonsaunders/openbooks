@@ -9,8 +9,8 @@
     },
     "newAccount": "Nueva cuenta",
     "viewRegister": "Ver registro",
-    "expand": "Expandir cuenta",
-    "collapse": "Contraer cuenta",
+    "expandAccount": "Expandir cuenta {number} {name}",
+    "collapseAccount": "Contraer cuenta {number} {name}",
     "badges": {
       "inactive": "inactiva",
       "summary": "resumen"
