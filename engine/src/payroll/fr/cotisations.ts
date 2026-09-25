@@ -114,9 +114,14 @@ function rCent(u: bigint): bigint {
   return roundDiv(u, CENT_UNITS) * CENT_UNITS;
 }
 
-/** rate (1e6 fraction scale) × base units, half-up to the centime. */
+/**
+ * rate (1e6 fraction scale) × base units, half-up to the centime in a
+ * single step. The exact product is rescaled straight to centimes — never
+ * rounded to the 4dp unit first, which double-rounds values sitting just
+ * below a half-centime (e.g. 1.0863 € × 6.90 % priced 0.08 instead of 0.07).
+ */
 function lineOf(baseUnits: bigint, rate: bigint): bigint {
-  return rCent(roundDiv(baseUnits * rate, RATE6));
+  return roundDiv(baseUnits * rate, RATE6 * CENT_UNITS) * CENT_UNITS;
 }
 
 /**
@@ -516,8 +521,8 @@ export function calculateFrNetImposable2026(
   const plafPer = cappedPerPeriod(brut, periods, passAnnual, "plafond");
   const largePer = cappedPerPeriod(brut, periods, quatrePassAnnual, "4 PASS");
 
-  const vieillesse = rCent(roundDiv(plafPer * rate6(FR_VIEILLESSE_SAL_2026.plafonnee.rate), RATE6))
-    + rCent(roundDiv(brut * rate6(FR_VIEILLESSE_SAL_2026.deplafonnee.rate), RATE6));
+  const vieillesse = lineOf(plafPer, rate6(FR_VIEILLESSE_SAL_2026.plafonnee.rate))
+    + lineOf(brut, rate6(FR_VIEILLESSE_SAL_2026.deplafonnee.rate));
   const csgBase = rCent(roundDiv(largePer * BigInt(9825), BigInt(10000)));
   const csgDed = lineOf(csgBase, rate6(FR_CSG_SAL_2026.nonImposable.rate));
   const csgNonDed = lineOf(csgBase, rate6(FR_CSG_SAL_2026.imposable.rate));
