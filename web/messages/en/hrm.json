@@ -1540,6 +1540,7 @@
     "title": "Compliance",
     "description": "Prevailing wage, certified payroll, workers' comp classes, apprentice ratios, and per-diem — construction compliance from the same time, project, and payroll records.",
     "refused": "Compliance is unavailable",
+    "loadFailed": "The compliance workspace could not load. Retry, and contact your administrator if the problem continues.",
     "needRead": "You need the construction read permission to open this workspace.",
     "generate": "Generate report",
     "actionFailed": "This action could not be completed.",

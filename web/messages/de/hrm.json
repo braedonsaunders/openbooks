@@ -1484,6 +1484,7 @@
     "title": "Compliance",
     "description": "Lohntafeln, zertifizierte Abrechnungen, Berufsgenossenschaftsklassen, Azubi-Quoten und Tagegelder — Bau-Compliance aus denselben Zeit-, Projekt- und Lohndaten.",
     "refused": "Compliance ist nicht verfügbar",
+    "loadFailed": "Der Compliance-Arbeitsbereich konnte nicht geladen werden. Versuchen Sie es erneut und wenden Sie sich an die Administration, wenn das Problem weiterhin besteht.",
     "needRead": "Sie benötigen die Leseberechtigung für Bau-Compliance, um diesen Bereich zu öffnen.",
     "generate": "Bericht erstellen",
     "actionFailed": "Diese Aktion konnte nicht abgeschlossen werden.",

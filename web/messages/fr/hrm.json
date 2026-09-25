@@ -1484,6 +1484,7 @@
     "title": "Conformité",
     "description": "Salaires en vigueur, paies certifiées, classes d'indemnisation, ratios d'apprentis et indemnités journalières — la conformité construction issue des mêmes relevés de temps, projets et paies.",
     "refused": "Conformité indisponible",
+    "loadFailed": "L’espace de conformité n’a pas pu être chargé. Réessayez et contactez votre administrateur si le problème persiste.",
     "needRead": "La permission de lecture construction est requise pour ouvrir cet espace.",
     "generate": "Générer le rapport",
     "actionFailed": "Cette action n’a pas pu être effectuée.",
