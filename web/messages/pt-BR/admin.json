@@ -4382,6 +4382,9 @@
       "providersBody": "Provedores de pagamento precisam do recurso Pagamentos on-line — ative-o aqui para continuar.",
       "entityBody": "Esta página de configuração mudou para o seu módulo — atualize seu favorito."
     },
+    "constructionRateEditor": {
+      "tab": "Escopo e tarifas"
+    },
     "guide": {
       "hero": {
         "kicker": "Guia de entrada em produção",

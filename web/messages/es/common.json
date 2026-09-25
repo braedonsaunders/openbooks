@@ -160,7 +160,8 @@
     "openBalance": "Saldo pendiente",
     "defaultForm": "Formulario predeterminado",
     "asOf": "Al",
-    "unknownValue": "Valor desconocido"
+    "unknownValue": "Valor desconocido",
+    "loading": "Cargando…"
   },
   "status": {
     "draft": "Borrador",

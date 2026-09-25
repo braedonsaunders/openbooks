@@ -160,7 +160,8 @@
     "openBalance": "Offener Saldo",
     "defaultForm": "Standardformular",
     "asOf": "Zum",
-    "unknownValue": "Unbekannter Wert"
+    "unknownValue": "Unbekannter Wert",
+    "loading": "Wird geladen…"
   },
   "status": {
     "draft": "Entwurf",

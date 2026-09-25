@@ -160,7 +160,8 @@
     "openBalance": "Open balance",
     "defaultForm": "Default form",
     "asOf": "As of",
-    "unknownValue": "Unknown value"
+    "unknownValue": "Unknown value",
+    "loading": "Loading…"
   },
   "status": {
     "draft": "Draft",
