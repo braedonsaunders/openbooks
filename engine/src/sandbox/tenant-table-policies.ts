@@ -394,6 +394,7 @@ export const TENANT_TABLE_POLICIES = {
   "payroll_opening_balance_components": "clone:catalog-uuid-rebase",
   "payroll_opening_balances": "clone:catalog-uuid-rebase",
   "payroll_opening_program_bases": "clone:catalog-uuid-rebase",
+  "payroll_opening_sui_wages": "clone:catalog-uuid-rebase",
   "payroll_parallel_comparisons": "clone:catalog-uuid-rebase",
   "payroll_parallel_findings": "clone:catalog-uuid-rebase",
   "payroll_parallel_tolerances": "clone:catalog-uuid-rebase",

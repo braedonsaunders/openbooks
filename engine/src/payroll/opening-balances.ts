@@ -14,6 +14,7 @@ import {
 import type { PayrollSubsidiaryScope } from "./scope.ts";
 import { PACK_OPENING_BALANCE_FIELDS } from "./opening-ytd-registry.ts";
 import { requirePayrollFeature } from "./feature-gate.ts";
+import { US_STATES } from "./us/rates.ts";
 
 function openingSubsidiaryScopeFilter(
   column: SQL,
@@ -270,6 +271,53 @@ export interface OpeningComponentField {
 /** Component openings for one carry-in: componentId → amount. */
 export type OpeningComponentAmounts = Record<string, string>;
 
+/** Per-state SUI openings for one carry-in: US state code → insurable wages. */
+export type OpeningSuiStateAmounts = Record<string, string>;
+
+const US_STATE_CODES: ReadonlySet<string> = new Set(US_STATES);
+
+/**
+ * Canonicalize one employee's per-state SUI openings, keyed by US state code.
+ *
+ * Each key must be a US state (or DC) code — a carry-in for a state the US
+ * pack does not recognise would be stored but never read, so it is refused
+ * by name. Amounts are exact money, never negative, like every other
+ * carry-in; zero is "no carry-in", not a row. Entering a state row asserts
+ * the transfer determination for those wages: enter only wages the gaining
+ * state's rule lets transfer (see engine/src/payroll/us/sui-transfer.ts).
+ */
+export function normalizeOpeningSuiStates(
+  input: Record<string, unknown>,
+): OpeningSuiStateAmounts {
+  const amounts: OpeningSuiStateAmounts = {};
+  for (const [rawKey, raw] of Object.entries(input)) {
+    const key = String(rawKey).trim().toUpperCase();
+    if (!US_STATE_CODES.has(key)) {
+      throw new PayrollError(
+        `"${String(rawKey).trim()}" is not a US state code for a SUI carry-in — use a two-letter state code (e.g. CA, OR)`,
+      );
+    }
+    if (raw === undefined || raw === null || String(raw).trim() === "") continue;
+    // Same no-strip rule as normalizeOpeningBalance above: feed the raw
+    // trimmed text to canonicalDecimal so a decimal comma is refused, not
+    // silently re-valued.
+    const exact = canonicalDecimal(String(raw).trim(), 4);
+    if (exact === null) {
+      throw new PayrollError(decimalNullRefusal(`SUI wages for ${key}`, "an amount", raw, 4));
+    }
+    let value: string;
+    try {
+      value = normalizeMoney(exact);
+    } catch {
+      throw new PayrollError(decimalNullRefusal(`SUI wages for ${key}`, "an amount", raw, 4));
+    }
+    if (cmp(value, "0") < 0) throw new PayrollError(`SUI wages for ${key} cannot be negative`);
+    if (cmp(value, "0") === 0) continue; // zero is "no carry-in", not a row
+    amounts[key] = value;
+  }
+  return amounts;
+}
+
 export interface OpeningBalanceRow {
   employeePartyId: string;
   employeeName: string;
@@ -284,6 +332,8 @@ export interface OpeningBalanceRow {
   componentAmounts: OpeningComponentAmounts;
   /** programKey → insurable-earnings carry-in; empty when none was entered. */
   programAmounts: OpeningProgramAmounts;
+  /** US state code → SUI-insurable carry-in; empty when none was entered. */
+  suiStateAmounts: OpeningSuiStateAmounts;
   /**
    * A run has committed for this employee in this tax year, so the carry-in is
    * already inside withholding that has been paid out. Read-only from here.
@@ -462,9 +512,11 @@ export function isEmptyOpeningBalance(
   amounts: OpeningBalanceAmounts,
   components: OpeningComponentAmounts = {},
   programs: OpeningProgramAmounts = {},
+  suiStates: OpeningSuiStateAmounts = {},
 ): boolean {
   if (Object.values(components).some((amount) => cmp(amount ?? "0", "0") !== 0)) return false;
   if (Object.values(programs).some((amount) => cmp(amount ?? "0", "0") !== 0)) return false;
+  if (Object.values(suiStates).some((amount) => cmp(amount ?? "0", "0") !== 0)) return false;
   return OPENING_BALANCE_FIELDS.every((f) => cmp(amounts[f.key] ?? "0", "0") === 0);
 }
 
@@ -666,6 +718,23 @@ export async function openingBalancesForYear(
     programsByEmployee.set(row.employee_party_id, amounts);
   }
 
+  // State SUI carry-ins for the whole year in one pass, keyed by parent row
+  // like the component openings above.
+  const suiRows = (await db.execute<{ opening_balance_id: string; state: string; insurable_ytd: string }>(sql`
+    select sw.opening_balance_id, sw.state, sw.insurable_ytd
+      from payroll_opening_sui_wages sw
+      join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
+      left join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
+     where sw.org_id = ${orgId} and b.tax_year = ${year}
+       ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+  `));
+  const suiStatesByRow = new Map<string, OpeningSuiStateAmounts>();
+  for (const row of suiRows.rows) {
+    const amounts = suiStatesByRow.get(row.opening_balance_id) ?? {};
+    amounts[row.state] = normalizeMoney(String(row.insurable_ytd));
+    suiStatesByRow.set(row.opening_balance_id, amounts);
+  }
+
   const locks = await openingBalanceLocks(orgId, year, db, allowedSubsidiaryIds);
   const toRow = (raw: Record<string, unknown>): OpeningBalanceRow => {
     const employeePartyId = String(raw.employee_party_id);
@@ -680,6 +749,7 @@ export async function openingBalancesForYear(
       employeePartyId,
       componentAmounts: (rowId && componentsByRow.get(rowId)) || {},
       programAmounts: programsByEmployee.get(employeePartyId) ?? {},
+      suiStateAmounts: (rowId && suiStatesByRow.get(rowId)) || {},
       employeeName: String(raw.employee_name ?? ""),
       employeeNumber: raw.employee_number == null ? null : String(raw.employee_number),
       country: raw.country == null ? null : String(raw.country),
@@ -727,6 +797,12 @@ export interface OpeningBalanceWrite {
    * silence is not an instruction to delete an employee's QPIP base.
    */
   programs?: Record<string, unknown>;
+  /**
+   * Per-state SUI carry-in, keyed by US state code. Same
+   * `undefined`-keeps-stored / `{}`-clears contract: silence is not an
+   * instruction to delete an employee's transfer determination.
+   */
+  suiStates?: Record<string, unknown>;
 }
 
 export interface OpeningBalanceSaveResult {
@@ -806,8 +882,8 @@ export async function saveOpeningBalances(input: {
     const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
     const subsidiaryById = new Map(names.rows.map((r) => [r.id, r.subsidiary_id]));
 
-    const existing = (await tx.execute<{ employee_party_id: string; updated_at: string | null }>(sql`
-      select employee_party_id, updated_at::text as updated_at from payroll_opening_balances
+    const existing = (await tx.execute<{ id: string; employee_party_id: string; updated_at: string | null }>(sql`
+      select id, employee_party_id, updated_at::text as updated_at from payroll_opening_balances
        where org_id = ${input.orgId} and tax_year = ${year}
     `));
     const hasRow = new Set(existing.rows.map((r) => r.employee_party_id));
@@ -847,12 +923,28 @@ export async function saveOpeningBalances(input: {
       storedProgramsByEmployee.set(row.employee_party_id, amounts);
     }
 
+    // Stored per-state SUI carry-ins ride the same keep-on-silence contract:
+    // keyed by parent row, like the components above.
+    const storedSui = (await tx.execute<{ opening_balance_id: string; state: string; insurable_ytd: string }>(sql`
+      select sw.opening_balance_id, sw.state, sw.insurable_ytd
+        from payroll_opening_sui_wages sw
+        join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
+       where sw.org_id = ${input.orgId} and b.tax_year = ${year}
+    `));
+    const storedSuiByRow = new Map<string, OpeningSuiStateAmounts>();
+    for (const row of storedSui.rows) {
+      const amounts = storedSuiByRow.get(row.opening_balance_id) ?? {};
+      amounts[row.state] = normalizeMoney(String(row.insurable_ytd));
+      storedSuiByRow.set(row.opening_balance_id, amounts);
+    }
+
     const seen = new Set<string>();
     const planned: {
       employeePartyId: string;
       amounts: OpeningBalanceAmounts | null;
       components: OpeningComponentAmounts;
       programs: OpeningProgramAmounts;
+      suiStates: OpeningSuiStateAmounts;
     }[] = [];
     for (const row of input.rows) {
       const employeeName = nameById.get(row.employeePartyId);
@@ -929,11 +1021,17 @@ export async function saveOpeningBalances(input: {
         const programs = row.programs === undefined
           ? storedPrograms
           : normalizeOpeningProgramBases(row.programs, declaredPrograms);
+        const storedRowId = existing.rows.find((r) => r.employee_party_id === row.employeePartyId)?.id;
+        const storedSuiStates = (storedRowId === undefined ? undefined : storedSuiByRow.get(storedRowId)) ?? {};
+        const suiStates = row.suiStates === undefined
+          ? storedSuiStates
+          : normalizeOpeningSuiStates(row.suiStates);
         planned.push({
           employeePartyId: row.employeePartyId,
-          amounts: isEmptyOpeningBalance(amounts, components, programs) ? null : amounts,
+          amounts: isEmptyOpeningBalance(amounts, components, programs, suiStates) ? null : amounts,
           components,
           programs,
+          suiStates,
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "invalid amounts");
@@ -968,6 +1066,7 @@ export async function saveOpeningBalances(input: {
               employeePartyId: row.employeePartyId, taxYear: year,
               beforeComponents: storedByEmployee.get(row.employeePartyId) ?? {},
               beforePrograms: storedProgramsByEmployee.get(row.employeePartyId) ?? {},
+              beforeSuiStates: storedSuiByRow.get(deleted.rows[0]!.id) ?? {},
             },
           });
         }
@@ -1051,6 +1150,33 @@ export async function saveOpeningBalances(input: {
         }
       }
 
+      // State SUI carry-ins are REPLACED as a set, like the components and
+      // program bases above: a re-load of the provider's report is the whole
+      // truth about that employee's year.
+      const keepSuiStates = Object.keys(row.suiStates);
+      if (keepSuiStates.length === 0) {
+        await tx.execute(sql`
+          delete from payroll_opening_sui_wages
+           where org_id = ${input.orgId} and opening_balance_id = ${rowId}`);
+      } else {
+        await tx.execute(sql`
+          delete from payroll_opening_sui_wages
+           where org_id = ${input.orgId} and opening_balance_id = ${rowId}
+             and state <> all(${`{${keepSuiStates.join(",")}}`}::text[])`);
+        for (const [state, amount] of Object.entries(row.suiStates)) {
+          await tx.execute(sql`
+            insert into payroll_opening_sui_wages
+              (org_id, opening_balance_id, state, insurable_ytd, created_by, updated_by)
+            values (${input.orgId}, ${rowId}, ${state}, ${amount},
+                    ${input.actorId}, ${input.actorId})
+            on conflict (opening_balance_id, state) do update
+               set insurable_ytd = excluded.insurable_ytd,
+                   updated_by = ${input.actorId},
+                   updated_at = now()
+             where payroll_opening_sui_wages.org_id = ${input.orgId}`);
+        }
+      }
+
       const wasThere = hasRow.has(row.employeePartyId);
       if (wasThere) result.updated++;
       else result.created++;
@@ -1060,7 +1186,7 @@ export async function saveOpeningBalances(input: {
         changes: {
           employeePartyId: row.employeePartyId, taxYear: year,
           after: row.amounts, afterComponents: row.components,
-          afterPrograms: row.programs,
+          afterPrograms: row.programs, afterSuiStates: row.suiStates,
         },
       });
     }

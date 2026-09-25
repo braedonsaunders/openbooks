@@ -392,13 +392,17 @@ test(
       }, "OR");
       assert.equal(stateHistory.suiOtherRegions, "TX", "SUI history is state-dimensioned independently of FUTA");
 
-      assert.throws(() => resolveUsSuiYtdForCoverage("OR", stateHistory, false), /prior insurable wages are recorded in TX/);
-      assert.equal(resolveUsSuiYtdForCoverage("OR", stateHistory, true), "0");
+      // SUI-TRANSFER-CREDIT-IMPL: Oregon prices the Texas stub under its
+      // aggregate transfer rule instead of refusing — the same-employer
+      // wages are in the system, so the base follows them to the new state.
+      assert.equal(resolveUsSuiYtdForCoverage("OR", 2026, stateHistory, false), PERIOD_WAGES,
+        "Oregon credits prior-state same-employer wages toward its base");
+      assert.equal(resolveUsSuiYtdForCoverage("OR", 2026, stateHistory, true), "0");
       const sameStateHistory = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
         documentId: randomUUID(),
       }, "TX");
-      assert.equal(resolveUsSuiYtd("TX", sameStateHistory), PERIOD_WAGES,
+      assert.equal(resolveUsSuiYtd("TX", 2026, sameStateHistory), PERIOD_WAGES,
         "same-state SUI history remains usable; FUTA retains its independent aggregate");
     } finally {
       await dropScratchOrgReporting(fx.orgId);

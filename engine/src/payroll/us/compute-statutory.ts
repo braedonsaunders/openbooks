@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../error.ts";
 import { U } from "../canada/decimal.ts";
-import { sum } from "../../money/money.ts";
+import { add, sum } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers US_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
@@ -20,6 +20,7 @@ import {
 } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
 import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
+import { applySuiTransferCredits, suiTransferRuleFor, type SuiPriorStateWages } from "./sui-transfer.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
@@ -35,6 +36,12 @@ export type UsYtdRow = {
   suiCurrentRegion: string;
   suiOtherRegions: string;
   suiOpeningUnscoped: boolean;
+  /** Other-state committed stub wages by state (exact money), for the gaining state's transfer rule. */
+  suiOtherStateWages: Record<string, string>;
+  /** Entered per-state SUI carry-in (exact money by state); empty when none was entered. */
+  suiOpeningStates: Record<string, string>;
+  /** Entered SUI carry-in for the run's own region (exact money, "0" when none). */
+  suiOpeningCurrentRegion: string;
   /** Covered Minnesota Paid Leave base priced on committed stubs this year. */
   mnPaidLeaveWages: string;
   supplemental: string;
@@ -45,34 +52,72 @@ export type UsYtdRow = {
   lstWithheldYtd: Record<string, string>;
 };
 
-/** Resolve the SUI wage-base history only when every prior wage has known
- * state provenance. Transfer credits differ by state: Oregon permits prior
- * taxable wages from other states to limit its base (UI PUB 217,
- * https://www.oregon.gov/employ/Businesses/Documents/Tax/uipub217.pdf), and
- * California has a same-year out-of-state wage credit on employee transfer
- * (EDD Employer's Guide, https://edd.ca.gov/siteassets/files/pdf_pub_ctr/de44.pdf).
- * The shared FUTA base cannot determine either state's SUI credit. */
+/** Resolve the SUI wage-base year-to-date for one region.
+ *
+ * Same-employer wages already in the system — committed stubs in other
+ * states, plus the entered per-state carry-in — price automatically under
+ * the gaining state's declared transfer rule (see ./sui-transfer.ts): most
+ * states credit other-state wages toward the new state's taxable wage base
+ * instead of restarting it at zero. Entering a state carry-in row asserts
+ * the transfer determination for those wages, so the engine never guesses
+ * it. Once any state row exists for the employee-year, SUI reads ONLY the
+ * scoped sources; the unscoped opening amount keeps feeding FUTA, which is
+ * nationwide and needs no state split.
+ *
+ * Refusals are input-driven, never permanent: an unscoped opening with no
+ * state rows names the carry-in screen as the remedy, and wages a rule does
+ * not credit name the state, the rule and its citation. */
 export function resolveUsSuiYtd(
   region: string,
-  ytd: Pick<UsYtdRow, "suiCurrentRegion" | "suiOtherRegions" | "suiOpeningUnscoped">,
+  taxYear: number,
+  ytd: Pick<
+    UsYtdRow,
+    "suiCurrentRegion" | "suiOpeningCurrentRegion" | "suiOpeningUnscoped" | "suiOtherStateWages" | "suiOpeningStates"
+  >,
 ): string {
-  if (ytd.suiOtherRegions || ytd.suiOpeningUnscoped) {
-    const priorStates = ytd.suiOtherRegions || "an opening balance without state allocation";
+  const openingStates = ytd.suiOpeningStates ?? {};
+  const hasOpeningStates = Object.keys(openingStates).length > 0;
+  if (ytd.suiOpeningUnscoped && !hasOpeningStates) {
     throw new PayrollError(
-      `US SUI cannot be calculated for ${region}: prior insurable wages are recorded in ${priorStates}, ` +
-      "and state transfer credits require state-account wage history and eligibility. Complete the state-scoped SUI wage history before calculating this run; FUTA wages are not an SUI substitute.",
+      `US SUI cannot be calculated for ${region}: prior insurable wages sit in an opening balance without state allocation. ` +
+      `Enter the per-state SUI carry-in in Payroll → Opening balances (one row per state) before calculating this run; FUTA wages are not an SUI substitute.`,
     );
   }
-  return ytd.suiCurrentRegion;
+  // Current-region base: committed stubs plus the entered carry-in for this state.
+  let base = add(ytd.suiCurrentRegion ?? "0", ytd.suiOpeningCurrentRegion ?? "0");
+  // Prior-state wages, stub and carried, price under the gaining state's rule.
+  const priors: SuiPriorStateWages[] = [];
+  for (const [state, wages] of Object.entries(ytd.suiOtherStateWages ?? {})) {
+    if (state === region) continue; // defensive: the map is other-states by construction
+    priors.push({ state, wages, year: taxYear });
+  }
+  for (const [state, wages] of Object.entries(openingStates)) {
+    if (state === region) continue; // already in the base above
+    priors.push({ state, wages, year: taxYear });
+  }
+  const { credited, uncreditedStates } = applySuiTransferCredits(region, taxYear, priors);
+  base = add(base, credited);
+  if (uncreditedStates.length > 0) {
+    const rule = suiTransferRuleFor(region);
+    throw new PayrollError(
+      `US SUI cannot be calculated for ${region}: ${rule.citation} does not credit prior wages paid in ${uncreditedStates.join(", ")}. ` +
+      `Record the transfer determination for those wages before calculating this run.`,
+    );
+  }
+  return base;
 }
 
 /** Exempt employees owe no SUI, so cross-state history must not refuse their run. */
 export function resolveUsSuiYtdForCoverage(
   region: string,
-  ytd: Pick<UsYtdRow, "suiCurrentRegion" | "suiOtherRegions" | "suiOpeningUnscoped">,
+  taxYear: number,
+  ytd: Pick<
+    UsYtdRow,
+    "suiCurrentRegion" | "suiOpeningCurrentRegion" | "suiOpeningUnscoped" | "suiOtherStateWages" | "suiOpeningStates"
+  >,
   suiExempt: boolean,
 ): string {
-  return suiExempt ? "0" : resolveUsSuiYtd(region, ytd);
+  return suiExempt ? "0" : resolveUsSuiYtd(region, taxYear, ytd);
 }
 
 /**
@@ -120,6 +165,34 @@ export async function usEmployeeYtd(
       coalesce(sum(s.insurable_earnings) filter (where s.province = ${region}), 0)::text as "suiCurrentRegion",
       coalesce(string_agg(distinct s.province, ', ' order by s.province)
         filter (where s.province <> ${region} and s.insurable_earnings > 0), '') as "suiOtherRegions",
+      coalesce((
+        select jsonb_object_agg(prior.province, prior.total)
+          from (
+            select s2.province as province, sum(s2.insurable_earnings)::text as total
+              from pay_stubs s2
+              join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
+              join documents d2 on d2.id = r2.document_id and d2.org_id = r2.org_id
+             where s2.org_id = ${orgId} and s2.employee_party_id = ${employeePartyId}
+               and s2.tax_year = ${taxYear} and s2.pay_run_document_id <> ${documentId}
+               and r2.run_status = 'committed'
+               and d2.status <> 'voided'
+               and s2.province <> ${region} and s2.insurable_earnings > 0
+             group by s2.province
+          ) prior
+      ), '{}'::jsonb) as "suiOtherStateWages",
+      coalesce((
+        select jsonb_object_agg(sw.state, sw.insurable_ytd::text)
+          from payroll_opening_sui_wages sw
+          join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
+         where b.org_id = ${orgId} and b.employee_party_id = ${employeePartyId} and b.tax_year = ${taxYear}
+      ), '{}'::jsonb) as "suiOpeningStates",
+      coalesce((
+        select sum(sw.insurable_ytd)::text
+          from payroll_opening_sui_wages sw
+          join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
+         where b.org_id = ${orgId} and b.employee_party_id = ${employeePartyId} and b.tax_year = ${taxYear}
+           and sw.state = ${region}
+      ), '0') as "suiOpeningCurrentRegion",
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
@@ -209,7 +282,7 @@ export async function computeUsStatutory(
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region);
   const sui = config.sui(region, filingAccountId);
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
-  const suiWagesYtd = sui ? resolveUsSuiYtdForCoverage(region, ytd, suiExempt) : "0";
+  const suiWagesYtd = sui ? resolveUsSuiYtdForCoverage(region, taxYear, ytd, suiExempt) : "0";
   const filingStatus = (empFact("US", emp, "filing_status") ?? "single") as "single" | "married_joint" | "head_household";
   const federalAlienStatus = certificateFor("us_w4_tax_residency")?.answers.alien_status;
   const nonresidentAlien = requireUsFederalAlienStatus(federalAlienStatus);

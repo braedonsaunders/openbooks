@@ -12,6 +12,7 @@ import {
   saveOpeningBalances,
   type OpeningBalanceWrite,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
+import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -84,6 +85,15 @@ export async function GET(req: Request) {
       key: program.programKey, label: program.label, help: program.help,
       packs: [program.country],
     })),
+    // Per-state SUI carry-in codes the grid offers for US employees. Once
+    // any state row exists for an employee-year, SUI reads only the state
+    // rows; the unscoped insurable amount keeps feeding FUTA.
+    suiStates: {
+      codes: [...US_STATES],
+      help: 'Pre-adoption wages insurable for unemployment insurance in this state. '
+        + 'Enter only wages the gaining state\u2019s transfer rule lets transfer '
+        + '(most states credit same-employer wages reported to another state toward the new state\u2019s base).',
+    },
   })
 }
 
@@ -148,6 +158,7 @@ export async function POST(req: Request) {
       amounts?: unknown
       components?: unknown
       programs?: unknown
+      suiStates?: unknown
       updatedAt?: unknown
     }
     if (typeof row?.employeePartyId !== 'string' || !isUuid(row.employeePartyId)) {
@@ -210,6 +221,17 @@ export async function POST(req: Request) {
         comunaleSaldo: saldoRaw.comunaleSaldo,
       })
     }
+    if (row.suiStates != null && (typeof row.suiStates !== 'object' || Array.isArray(row.suiStates))) {
+      return NextResponse.json({ error: 'suiStates must be an object' }, { status: 422 })
+    }
+    let suiStates: Record<string, unknown> | undefined
+    if (row.suiStates !== undefined) {
+      const persisted = persistMoneyMap(row.suiStates as Record<string, unknown>)
+      if (!persisted.ok) {
+        return NextResponse.json({ error: moneyRefusal(`SUI carry-in for "${persisted.key}"`, persisted.value) }, { status: 422 })
+      }
+      suiStates = persisted.map
+    }
     rows.push({
       employeePartyId: row.employeePartyId,
       amounts: amounts.map,
@@ -219,6 +241,9 @@ export async function POST(req: Request) {
       // Same contract for program carry-ins: absent keeps what is stored,
       // {} clears them.
       programs,
+      // Same contract for state SUI carry-ins: absent keeps what is stored,
+      // {} clears them.
+      suiStates,
       updatedAt,
     })
   }
