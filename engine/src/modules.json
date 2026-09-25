@@ -283,8 +283,10 @@
       "description": "Double-entry journal kernel: postEntry/markEntryReversed, posting contracts and kernel balance invariants. No document orchestration.",
       "dependsOn": [
         "money",
+        "organization",
         "periods",
-        "platform"
+        "platform",
+        "records"
       ]
     },
     "money": {
@@ -373,7 +375,6 @@
         "journal",
         "money",
         "organization",
-        "periods",
         "platform",
         "records",
         "revenue"
