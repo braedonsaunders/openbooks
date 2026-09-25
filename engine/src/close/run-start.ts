@@ -1,4 +1,4 @@
-import { CloseError } from "./period-policy.ts";
+import { CloseError } from "../periods/period-policy.ts";
 import { defaultCloseFeatureContext, defaultCloseStepEnabled } from "./features.ts";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
@@ -8,7 +8,7 @@ import { isoDate, utcDate, addDays } from "./calendar.ts";
 import { ensureCloseDefaults } from "./defaults.ts";
 import { periodFingerprint } from "./readiness.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
-import { assertCloseScope } from "./period-locks.ts";
+import { assertCloseScope } from "../periods/period-locks.ts";
 /** One close_blueprint_steps row materialized into run tasks at run start. */
 interface CloseBlueprintStepRow extends Record<string, unknown> {
   id: string;

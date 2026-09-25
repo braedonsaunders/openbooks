@@ -13,9 +13,9 @@ import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRe
 import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { postEntry } from "../ledger/post-entry.ts";
-import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 
 export class PropertyManagementError extends Error {

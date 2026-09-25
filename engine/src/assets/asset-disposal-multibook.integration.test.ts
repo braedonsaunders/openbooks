@@ -12,7 +12,7 @@ import {
 } from "./asset-changes.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
-import { setPeriodLockState } from "../close/period-locks.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

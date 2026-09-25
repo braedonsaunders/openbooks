@@ -1,7 +1,7 @@
-import { CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type CloseModule } from "./period-policy.ts";
+import { CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type CloseModule } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
-import { assertCloseScope, upsertLock, periodScopeAdvisoryLock } from "./period-locks.ts";
+import { assertCloseScope, upsertLock, periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 /** One row of close_reopen_requests as read by the approve/re-close paths. */
 interface CloseReopenRequestRow extends Record<string, unknown> {
   id: string;

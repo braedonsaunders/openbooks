@@ -1,4 +1,4 @@
-import { CloseError } from "./period-policy.ts";
+import { CloseError } from "../periods/period-policy.ts";
 import { defaultCloseFeatureContext } from "./features.ts";
 import { sql } from "drizzle-orm";
 import { inDbTransaction } from "../platform/db.ts";

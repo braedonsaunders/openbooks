@@ -21,10 +21,10 @@
     "allocations": {
       "description": "The allocation kernel: rules, drivers, apportionment, period runs and the posting seam.",
       "dependsOn": [
-        "close",
         "flows",
         "money",
         "organization",
+        "periods",
         "platform",
         "projects",
         "records",
@@ -40,10 +40,10 @@
     "assets": {
       "description": "Fixed-asset lifecycle and book depreciation.",
       "dependsOn": [
-        "close",
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform"
       ]
     },
@@ -77,12 +77,12 @@
       "description": "Generated billing: recurring templates, subscription billing and advanced subscriptions.",
       "dependsOn": [
         "banking",
-        "close",
         "flows",
         "inventory",
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "records",
         "scripting",
@@ -98,6 +98,7 @@
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "records"
       ]
@@ -144,6 +145,7 @@
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "records"
       ]
@@ -192,6 +194,7 @@
         "ledger",
         "organization",
         "payments",
+        "periods",
         "platform",
         "records",
         "scheduling",
@@ -241,10 +244,10 @@
       "description": "Inventory movements, costing, NRV write-downs, transfers and builds.",
       "dependsOn": [
         "banking",
-        "close",
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "records"
       ]
@@ -253,7 +256,6 @@
       "description": "The posting kernel and its orchestration: postDocument, posting effects, script journal writes, document void, delete and correction, billing provenance release.",
       "dependsOn": [
         "allocations",
-        "close",
         "compliance",
         "flows",
         "fx",
@@ -263,6 +265,7 @@
         "payables",
         "payments",
         "payroll",
+        "periods",
         "platform",
         "projects",
         "receivables",
@@ -303,7 +306,6 @@
     "payments": {
       "description": "Customer and vendor payments, payment runs and formats, payment acceptance, PSP settlement, direct debit.",
       "dependsOn": [
-        "close",
         "compliance",
         "delivery",
         "flows",
@@ -311,6 +313,7 @@
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "projects",
         "records",
@@ -320,15 +323,21 @@
     "payroll": {
       "description": "Payroll: runs, readiness, remittances, filings, entitlements, year-end, bank files, statutory country packs.",
       "dependsOn": [
-        "close",
         "flows",
         "ledger",
         "money",
         "organization",
         "payments",
+        "periods",
         "platform",
         "projects",
         "records"
+      ]
+    },
+    "periods": {
+      "description": "Accounting periods: covering-period resolution, per-module period fences (open/closed), period-scope advisory locks. No close orchestration.",
+      "dependsOn": [
+        "platform"
       ]
     },
     "platform": {
@@ -339,11 +348,11 @@
       "description": "Project accounting: financials and profiles, recognition, project revenue, labor costing, overhead, construction billing, subcontracts, field-ticket labor evidence, billing source integrity.",
       "dependsOn": [
         "allocations",
-        "close",
         "fx",
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "records",
         "revenue"
@@ -353,11 +362,11 @@
       "description": "Property management: leases, CAM billing, deposits, rebilling.",
       "dependsOn": [
         "billing",
-        "close",
         "inventory",
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "records",
         "revenue"
@@ -407,10 +416,10 @@
     "revenue": {
       "description": "Revenue recognition obligations and schedules; lease accounting.",
       "dependsOn": [
-        "close",
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform"
       ]
     },
@@ -494,6 +503,7 @@
         "ledger",
         "money",
         "payments",
+        "periods",
         "platform",
         "projects",
         "provisioning",
@@ -516,6 +526,7 @@
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "projects",
         "qbd",
@@ -537,11 +548,11 @@
       "description": "Returns and provisions: income tax provision, return packs and filing, the US nexus ledger, tax depreciation pools and pool runs.",
       "dependsOn": [
         "assets",
-        "close",
         "country-tax-packs",
         "ledger",
         "money",
         "organization",
+        "periods",
         "platform",
         "tax"
       ]

@@ -24,9 +24,9 @@ import {
 } from "./recognition-limits.ts";
 
 export { MAX_RECOGNITION_TERM_MONTHS };
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { markEntryReversed, postEntry } from "../ledger/post-entry.ts";
-import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 
 /**
  * Revenue recognition (ASC 606 / IFRS 15), source platform ARM-shaped.

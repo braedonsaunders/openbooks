@@ -8,8 +8,8 @@ import {
   DOCUMENT_KINDS,
   assertPeriodModulesOpen,
   closeModuleForDocument,
-} from "./period-policy.ts";
-import { setPeriodLockState } from "./period-locks.ts";
+} from "../periods/period-policy.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { PostingError } from "../ledger/posting-contracts.ts";
 import {

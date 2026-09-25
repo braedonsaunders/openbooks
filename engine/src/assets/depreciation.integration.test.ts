@@ -14,7 +14,7 @@ import {
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 import { remeasureAsset } from "./asset-lifecycle.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
-import { setPeriodLockState } from "../close/period-locks.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import { requestPeriodReopen, decidePeriodReopen } from "../close/reopening.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

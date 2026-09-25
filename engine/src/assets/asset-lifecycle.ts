@@ -2,7 +2,7 @@ import { assetBasisDelta } from "./asset-basis.ts";import { randomUUID } from "n
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { buildScheduleWithRunner, reconcileAssetDepreciationStatusWithRunner, resolveAssetAccounts, unimpairedAssetCarryingValue } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";

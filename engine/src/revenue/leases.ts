@@ -1,7 +1,7 @@
 import { assertFinancialChangeAccess } from "../organization/financial-change-access.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import {
   db,
   withOrg,

@@ -6,7 +6,7 @@ import { db } from "../platform/db.ts";
 import { ensureCloseDefaults } from "./defaults.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
 import { assignCloseTaskTx } from "./tasks.ts";
-import { CloseError } from "./period-policy.ts";
+import { CloseError } from "../periods/period-policy.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

@@ -13,7 +13,7 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
-import { encryptRespondentLink } from "../../hrm/surveys/responses.ts";
+import { encryptRespondentLink } from "../surveys/responses.ts";
 import { storeCabinetFile } from "./cabinet.ts";
 import { buildExport, downloadExport, listExports, requestExport } from "./dsar.ts";
 

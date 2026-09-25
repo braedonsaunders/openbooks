@@ -1,5 +1,5 @@
 import { consolidateAssetTransfers } from "./asset-transfers.ts";import { sql } from "drizzle-orm";
-import { periodLockBlocksPosting } from "../close/period-policy.ts";
+import { periodLockBlocksPosting } from "../periods/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { averageSpotRate, lookupSpotRate } from "../fx/spot-rate.ts";
 import { db, orgContext, withOrgContext } from "../platform/db.ts";

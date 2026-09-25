@@ -1,11 +1,11 @@
-import { CloseError, CLOSE_MODULES } from "./period-policy.ts";
+import { CloseError, CLOSE_MODULES } from "../periods/period-policy.ts";
 import { advancedCloseEnabled } from "./features.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { db } from "../platform/db.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
-import { upsertLock, periodScopeAdvisoryLock } from "./period-locks.ts";
+import { upsertLock, periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 export async function closeApprovedRun(
   orgId: string,
   runId: string,
