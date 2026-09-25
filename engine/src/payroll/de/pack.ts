@@ -7,7 +7,7 @@ import type {
   PayrollCountryPack,
   PayrollJurisdiction,
   PayrollRegionCoverage,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import type {
   PayrollPackWithholding,
   PayrollRegionWithholding,

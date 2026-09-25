@@ -28,7 +28,7 @@
  * PLACEHOLDER average-day lookback would COMPUTE a number nobody sourced.
  * Null refuses until a sourced formula lands — same posture as IT and ES.
  */
-import type { PayrollJurisdiction } from "../packs.ts";
+import type { PayrollJurisdiction } from "../pack-types.ts";
 import { JP_PREFECTURES } from "./regions.ts";
 
 /** The 14 national holidays every prefecture observes. Copied per entry below. */

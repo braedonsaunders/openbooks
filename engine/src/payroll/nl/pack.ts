@@ -24,7 +24,7 @@
 import type {
   PayrollCountryPack,
   PayrollRemittanceSchedule,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { NL_CERTIFICATES } from "./certificates.ts";
 import { isValidBsn } from "./bsn.ts";

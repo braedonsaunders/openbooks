@@ -36,7 +36,7 @@ import {
   type PayrollCountryPack,
   type PayrollJurisdiction,
   type PayrollStatutorySlot,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculateIeStatutory, ieWeekNumber } from "./compute.ts";
 import { iePayeReconciliationFiling } from "./filings.ts";

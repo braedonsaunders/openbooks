@@ -1,4 +1,4 @@
-import type { PayrollOpeningYtdField } from "../packs.ts";
+import type { PayrollOpeningYtdField } from "../pack-types.ts";
 
 /**
  * The US pack's second-order opening year-to-date: history a mid-year

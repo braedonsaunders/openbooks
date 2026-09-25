@@ -29,7 +29,7 @@
  * PLACEHOLDER average-day lookback would COMPUTE a number nobody sourced.
  * Null refuses until a sourced formula lands — same posture as IT.
  */
-import type { PayrollJurisdiction } from "../packs.ts";
+import type { PayrollJurisdiction } from "../pack-types.ts";
 
 /**
  * The 19 autonomous communities and cities, code plus the community's own

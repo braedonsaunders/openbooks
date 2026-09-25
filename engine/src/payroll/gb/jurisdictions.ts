@@ -19,7 +19,7 @@ import type {
   PayrollPackWithholding,
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
-import type { PayrollRegionCoverage } from "../packs.ts";
+import type { PayrollRegionCoverage } from "../pack-types.ts";
 import { GB_NATIONS } from "./rates.ts";
 
 export const GB_NATION_NAMES: Readonly<Record<string, string>> = {

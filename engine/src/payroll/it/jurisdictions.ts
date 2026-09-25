@@ -25,7 +25,7 @@
  * pay, CCNL supplements differ), and declaring one formula would state the
  * wrong pay for everyone on a different contract.
  */
-import type { PayrollJurisdiction } from "../packs.ts";
+import type { PayrollJurisdiction } from "../pack-types.ts";
 import { IT_REGIONS } from "./regions.ts";
 
 /** The 11 national festività every region observes. Copied per entry below. */

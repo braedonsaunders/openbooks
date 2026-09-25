@@ -20,7 +20,7 @@
 import type {
   PayrollCountryPack,
   PayrollRegionCoverage,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import { ES_CERTIFICATES } from "./certificates.ts";
 import { computeEsStatutory, ES_FACTOR_LABELS } from "./compute-statutory.ts";
 import { esPackFilings } from "./filings.ts";

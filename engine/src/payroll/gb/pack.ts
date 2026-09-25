@@ -41,7 +41,7 @@
 import type {
   PayrollCountryPack,
   PayrollStatutorySlot,
-} from "../packs.ts";
+} from "../pack-types.ts";
 import { computeGbStatutory, GB_FACTOR_LABELS } from "./compute-statutory.ts";
 import { GB_EMPLOYER_FACTS } from "./employer-facts.ts";
 import { gbEmployerAggregateLevies } from "./employer-levies.ts";

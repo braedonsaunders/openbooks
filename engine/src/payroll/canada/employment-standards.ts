@@ -6,7 +6,7 @@ import type {
   PayrollHolidayRule,
   PayrollJurisdiction,
   PayrollWorkTriggeredHoliday,
-} from "../packs.ts";
+} from "../pack-types.ts";
 
 /**
  * Canada's employment-standards jurisdictions: which statutory holidays each
