@@ -198,6 +198,45 @@ const ES_ZONA_IRPF: PayrollCertificate = {
   ],
 };
 
+/**
+ * Contract category for the IRPF minimum rate. No single agency form carries
+ * it, so the form names the declaration itself instead of inventing a code —
+ * the operator copies the category off the signed contrato (or alta en
+ * Seguridad Social). Values are the calculator's contract categories
+ * verbatim, so a validated answer maps without translation.
+ */
+const ES_CONTRATO: PayrollCertificate = {
+  key: "es_contrato",
+  form: "Categoría contractual del perceptor",
+  label: "Contract category for the IRPF minimum withholding rate",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "AEAT ALGORITMO de cálculo del tipo de retención 2026, TIPO mínimo "
+    + "(contratos de duración inferior al año; relaciones laborales especiales)",
+  summary:
+    "The worker's contract category, which selects the statutory minimum "
+    + "withholding rate. An unidentified category never falls through to the "
+    + "general rate.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "categoria_contrato",
+      label: "Categoría contractual",
+      kind: "choice",
+      choices: [
+        { value: "general", label: "General" },
+        { value: "inferiorAno", label: "Duración inferior al año" },
+        { value: "especial", label: "Relación laboral especial" },
+      ],
+      required: true,
+      help: "Copy the category off the signed contrato: sub-one-year duration prices "
+        + "the 2% minimum, a special employment relationship the 15% minimum. "
+        + "An undeclared category refuses calculation instead of pricing general.",
+    },
+  ],
+};
+
 const ES_RETRIBUCION_ANUAL: PayrollCertificate = {
   key: "es_retribucion_anual",
   form: "Previsión anual de retribuciones",
@@ -235,5 +274,5 @@ const ES_RETRIBUCION_ANUAL: PayrollCertificate = {
 
 export const ES_CERTIFICATES: PayrollPackCertificates = {
   country: "ES",
-  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF, ES_RETRIBUCION_ANUAL],
+  certificates: [MODELO_145, ES_DATOS_PERCEPTOR, ES_ZONA_IRPF, ES_RETRIBUCION_ANUAL, ES_CONTRATO],
 };

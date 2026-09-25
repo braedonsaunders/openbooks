@@ -37,6 +37,7 @@ function esAdapterContext(
   incomeInZone = false,
   expectedAnnual = "24000.00",
   expectedPeriods = "12",
+  categoria = "general",
 ): RunLines {
   const lines: StubLine[] = [];
   const pushStatutory = createPushStatutory({
@@ -73,6 +74,10 @@ function esAdapterContext(
       certificate: ES_CERTIFICATES.certificates.find((item) => item.key === key)!,
       onFile: true, effectiveFrom: null, missing: [],
       answers: { importe_anual_previsto: expectedAnnual, periodos_recurrentes_esperados: expectedPeriods },
+    } : key === "es_contrato" ? {
+      certificate: ES_CERTIFICATES.certificates.find((item) => item.key === key)!,
+      onFile: true, effectiveFrom: null, missing: [],
+      answers: { categoria_contrato: categoria },
     } : { answers: { zona_residencia: zone, rendimientos_en_zona: String(incomeInZone) } },
     assertRegionSupported: () => {},
   } as unknown as PayrollStatutoryComputeContext;
@@ -138,6 +143,14 @@ test("adapter counts a pensionable one-off contribution once in annual COTIZACIO
   // TABLA-1 exento for sit.3 (cell 15.876) — so the annual WITHHOLDING is
   // zero, not the 3.000 gross the I6-payroll-117 golden asserted.
   assert.equal((await computeEsStatutory(december.ctx)).ES_IMPORTE_ANUAL, "0.0000");
+});
+
+test("adapter floors a sub-one-year contract at the 2% minimum", async () => {
+  const { ctx } = esAdapterContext("2026-05-01", false, "ninguna", false, "16000.00", "12", "inferiorAno");
+  const result = await computeEsStatutory(ctx);
+  // RETRIB 16.000 prices at most 0,33 general (hand-worked golden at zero
+  // cotizaciones, lower still with them); inferiorAno floors at 2,00.
+  assert.equal(result["ES_TIPO_IRPF"], "2.00");
 });
 
 test("adapter refuses when committed same-year ordinary pay changed without Article 87 inputs", async () => {
