@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { enqueueBackupRun } from "@openbooks/jobs";
+import { enqueueBackupRun, getBackupQueue, type BackupJobData } from "@openbooks/jobs";
 import {
   auditBackupEvent,
   backupObjectKey,
@@ -53,6 +53,45 @@ type DuePolicy = {
   day_of_week: number;
   day_of_month: number;
 };
+
+type FailedBackupJob = {
+  getState(): Promise<string>;
+  retry(state?: "failed"): Promise<void>;
+};
+
+type BackupQueueRecovery = {
+  getJob(jobId: string): Promise<FailedBackupJob | undefined>;
+  enqueue(data: BackupJobData, options: { jobId: string }): Promise<unknown>;
+};
+
+/**
+ * Recover one stale queued ledger row without colliding with BullMQ's retained
+ * failed job record. A failed job is safe to revive: executeBackupRun's
+ * queued→running UPDATE is the single-fire claim, so even a concurrent
+ * delivery can have only one effect. Waiting/active/delayed jobs already have
+ * a live queue owner and must not be duplicated.
+ */
+export async function recoverStaleQueuedBackupRun(
+  run: { id: string; org_id: string },
+  queue: BackupQueueRecovery = {
+    getJob: async (id) => await getBackupQueue().getJob(id) as FailedBackupJob | undefined,
+    enqueue: enqueueBackupRun,
+  },
+): Promise<"enqueued" | "revived" | "already-present"> {
+  const existing = await queue.getJob(run.id);
+  if (!existing) {
+    await queue.enqueue(
+      { op: "run", runId: run.id, orgId: run.org_id },
+      { jobId: run.id },
+    );
+    return "enqueued";
+  }
+  if (await existing.getState() === "failed") {
+    await existing.retry("failed");
+    return "revived";
+  }
+  return "already-present";
+}
 
 export async function tick(): Promise<void> {
   if (running) return;
@@ -278,7 +317,7 @@ export async function tick(): Promise<void> {
        where status = 'queued' and created_at < now() - interval '10 minutes'
        limit 25`));
     for (const run of staleQueued.rows) {
-      await enqueueBackupRun({ op: "run", runId: run.id, orgId: run.org_id }, { jobId: run.id });
+      await recoverStaleQueuedBackupRun(run);
     }
   } catch (e) {
     console.error("[backup-scheduler] tick failed:", (e as Error).message);
