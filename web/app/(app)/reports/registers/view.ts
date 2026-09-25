@@ -185,7 +185,10 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     dimensionOptions(undefined, undefined, optionScope),
     orgInfo(),
   ])
-  const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
+  // Figures present in the VIEW's currency (the context node's functional
+  // currency), not the org base — a foreign-functional subsidiary view
+  // states its own money. Mirrors the P&L and balance sheet.
+  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency })
   const keepParams = toSearchParams(q)
   keepParams.set('book', selectedBook.id)
   const keep = keepParams.toString()
