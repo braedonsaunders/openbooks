@@ -8,6 +8,7 @@ import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer 
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import type { AccountPayload } from '../../api/accounts/_lib'
 import { ReadOnlyValue } from '../../../components/read-only-value'
+import { useDirtyClose } from '../../../lib/use-dirty-close'
 
 type Option = { value: string; label: string; type?: string }
 
@@ -158,7 +159,7 @@ export function AccountDrawer({
   // failure also persists as a form-level alert, cleared on the next edit.
   const [fieldError, setFieldError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const editable = canManage && mode === 'edit'
+  const editable = canManage && mode === 'edit' && !busy
   const compatibleParents = parents.filter((option) => option.type === form.type)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setFieldError(null)
@@ -181,6 +182,21 @@ export function AccountDrawer({
     return t(`drawer.errors.${known.has(key) ? key : 'save_failed'}`)
   }
 
+  function closeAfterGuard() {
+    if (createMode) {
+      router.push(closeHref as never)
+      return
+    }
+    setFieldError(null)
+    setForm(initial)
+    setMode('view')
+  }
+  const closeGuard = useDirtyClose({
+    dirty: JSON.stringify(form) !== JSON.stringify(initial),
+    busy, onClose: closeAfterGuard,
+    message: tc('feedback.unsavedChanges'), confirmLabel: tc('confirm.discardChanges'),
+  })
+
   async function save() {
     if (!form.name.trim()) {
       toast.error(t('drawer.errors.name_required'))
@@ -196,32 +212,32 @@ export function AccountDrawer({
     setBusy(true)
     if (createMode && !requestIdRef.current) requestIdRef.current = crypto.randomUUID()
     const { currencyRestriction, eliminate, ...formRest } = form
-    const response = await fetch(createMode ? '/api/accounts' : `/api/accounts/${account.id}`, {
-      method: createMode ? 'POST' : 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(createMode ? { 'Idempotency-Key': requestIdRef.current! } : {}),
-      },
-      body: JSON.stringify({
-        ...formRest,
-        number: form.number || null,
-        description: form.description || null,
-        parentId: form.parentId || null,
-        subsidiaryId: form.subsidiaryId || null,
-        monetary: form.monetary === '' ? null : form.monetary === 'true',
-        ...(multiCurrency || form.reconcilable ? { currencyRestriction: currencyRestriction || null } : {}),
-        ...(multiSubsidiary ? { eliminate } : {}),
-      }),
-    })
-    const data = await response.json().catch(() => ({}))
-    setBusy(false)
-    if (!response.ok) {
-      const message = errorMessage(data.error)
-      setFieldError(message)
-      toast.error(message)
-      return
-    }
-    toast.success(t(createMode ? 'drawer.created' : 'drawer.saved'))
+    try {
+      const response = await fetch(createMode ? '/api/accounts' : `/api/accounts/${account.id}`, {
+        method: createMode ? 'POST' : 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(createMode ? { 'Idempotency-Key': requestIdRef.current! } : {}),
+        },
+        body: JSON.stringify({
+          ...formRest,
+          number: form.number || null,
+          description: form.description || null,
+          parentId: form.parentId || null,
+          subsidiaryId: form.subsidiaryId || null,
+          monetary: form.monetary === '' ? null : form.monetary === 'true',
+          ...(multiCurrency || form.reconcilable ? { currencyRestriction: currencyRestriction || null } : {}),
+          ...(multiSubsidiary ? { eliminate } : {}),
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const message = errorMessage(data.error)
+        setFieldError(message)
+        toast.error(message)
+        return
+      }
+      toast.success(t(createMode ? 'drawer.created' : 'drawer.saved'))
     // Typing hygiene is advisory: the save stands, and the server's warning
     // (e.g. a bank-typed account with no bank corroboration) surfaces as its
     // own toast so it cannot be mistaken for a failure.
@@ -229,25 +245,26 @@ export function AccountDrawer({
       ? (data as { warnings: unknown[] }).warnings.filter((w): w is string => typeof w === 'string')
       : []
     if (warnings.length > 0) toast.warning(warnings[0])
-    if (createMode) {
-      const createdId = data?.account?.id
-      const separator = closeHref.includes('?') ? '&' : '?'
-      router.replace((createdId ? `${closeHref}${separator}account=${createdId}` : closeHref) as never)
+      if (createMode) {
+        const createdId = data?.account?.id
+        const separator = closeHref.includes('?') ? '&' : '?'
+        router.replace((createdId ? `${closeHref}${separator}account=${createdId}` : closeHref) as never)
+        router.refresh()
+        return
+      }
+      setMode('view')
       router.refresh()
-      return
+    } catch {
+      const message = errorMessage('save_failed')
+      setFieldError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
     }
-    setMode('view')
-    router.refresh()
   }
 
   function cancel() {
-    if (createMode) {
-      router.push(closeHref as never)
-      return
-    }
-    setFieldError(null)
-    setForm(initial)
-    setMode('view')
+    void closeGuard.close()
   }
 
   function toggleDimension(dimension: string, checked: boolean) {
@@ -264,6 +281,7 @@ export function AccountDrawer({
       open
       closeHref={closeHref}
       syncUrlOnClose
+      beforeClose={closeGuard.beforeClose}
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
