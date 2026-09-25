@@ -42,6 +42,29 @@ export const hrmBenefitEnrollmentWindowAdapter: InboxAdapter = {
        where w.org_id = ${ctx.orgId}
          and w.status = 'open'
          and w.closes_on >= current_date
+         and exists (
+           select 1
+             from worker_employments emp
+            where emp.org_id = w.org_id
+              and emp.id in (
+                select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) as _e(value))
+              and (w.applies_to ->> 'employer_subsidiary_id' is null
+                   or emp.employer_subsidiary_id::text = w.applies_to ->> 'employer_subsidiary_id')
+              and (w.applies_to ->> 'department_id' is null or exists (
+                select 1
+                  from employment_assignment_versions av
+                  join employment_assignments aa
+                    on aa.org_id = av.org_id and aa.id = av.assignment_id
+                  join departments d on d.org_id = av.org_id and d.id = av.department_id
+                 where av.org_id = emp.org_id and aa.employment_id = emp.id
+                   and av.recorded_until is null
+                   and av.department_id::text = w.applies_to ->> 'department_id'
+                   and (d.subsidiary_id is null or d.subsidiary_id = emp.employer_subsidiary_id)
+                   and (w.applies_to ->> 'employer_subsidiary_id' is null
+                        or d.subsidiary_id is null
+                        or d.subsidiary_id::text = w.applies_to ->> 'employer_subsidiary_id')
+              ))
+         )
          and not exists (
            select 1 from hrm_benefit_enrollments e
             where e.org_id = w.org_id
