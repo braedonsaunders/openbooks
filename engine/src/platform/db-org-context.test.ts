@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { orgContext, withBypassContext, withOrgContext } from "./db.ts";
+import { orgContext, withBypassContext, withOrgContext, withOrgTransaction } from "./db.ts";
 
 /**
  * Regression guard for the worst failure mode this database layer has:
@@ -98,4 +98,21 @@ test("the scope is released after the callback settles, including on failure", a
     /boom/,
   );
   assert.equal(orgContext.getStore(), undefined);
+});
+
+test("a nested isolation request inside an ambient bypass transaction refuses by name instead of dropping", async () => {
+  // The pinned bypass transaction is already running: SET TRANSACTION
+  // cannot apply, so the request must fail loudly. Needs no database —
+  // the refusal fires before any connection is touched.
+  await assert.rejects(
+    () =>
+      orgContext.run({ orgId: null, bypass: true, txDb: {} as never }, () =>
+        withOrgTransaction(
+          "11111111-1111-1111-1111-111111111111",
+          () => Promise.resolve("unreached"),
+          { isolationLevel: "REPEATABLE READ" },
+        ),
+      ),
+    /cannot change isolation inside an active bypass transaction/,
+  );
 });
