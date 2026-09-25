@@ -316,6 +316,10 @@ export class RefResolver {
 /** Format one stored value for export, resolving references to natural keys. */
 export async function exportCell(field: ResourceField, v: unknown, resolver: RefResolver): Promise<CellValue> {
   if (v === null || v === undefined) return null
+  if (field.kind === 'currency') {
+    if (typeof v !== 'string') throw new Error(`${field.label}: stored currency is not an exact decimal string and cannot be exported without changing its value`)
+    return v
+  }
   if (field.kind === 'reference' && field.ref) return resolver.resolveLabel(field.ref, v)
   if (field.kind === 'boolean') return coerceBoolean(v)
   if (field.kind === 'multiselect') return Array.isArray(v) ? v.join(', ') : String(v)
