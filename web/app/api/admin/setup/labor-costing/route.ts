@@ -13,6 +13,7 @@ import {
   guardUnrestrictedScope,
   subsidiaryScopeAllows,
   subsidiariesInScope,
+  type Authz,
 } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import {
@@ -118,6 +119,61 @@ type WageScope = {
 function isOrgWideWageScope(scope: Pick<WageScope, 'employeePartyId' | 'jobTitle' | 'tradeId' | 'departmentId' | 'subsidiaryId'>): boolean {
   return scope.jobTitle !== null || scope.tradeId !== null ||
     (scope.employeePartyId === null && scope.departmentId === null && scope.subsidiaryId === null)
+}
+
+/**
+ * Locked anchor resolution for end/delete with the save-rate scope policy.
+ * The locate-then-check below runs unlocked, so a rehome landing between
+ * the locate and the mutation must deny rather than end/delete into the
+ * new subsidiary. Anchor rows are locked FOR SHARE (before the scope
+ * advisory lock, the same order save uses) and a missing anchor fails
+ * closed. The policy mirrors save-rate exactly: org-wide scopes and
+ * null-subsidiary employees need the unrestricted actor; department and
+ * subsidiary anchors must sit in scope.
+ */
+async function lockedRateScope(
+  orgId: string,
+  gate: Authz,
+  id: string,
+): Promise<{ row: WageScope & { id: string } } | { response: NextResponse }> {
+  const notFound = { response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+  const located = await db.execute<WageScope & { id: string }>(sql`
+    select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
+           r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId"
+      from labor_cost_rates r
+     where r.org_id = ${orgId} and r.id = ${id}`)
+  const row = located.rows[0]
+  if (!row) return notFound
+  if (isOrgWideWageScope(row)) {
+    const denied = guardUnrestrictedScope(gate)
+    if (denied) return { response: denied }
+    return { row }
+  }
+  let employeeSubsidiary: string | null = null
+  if (row.employeePartyId) {
+    const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from parties
+       where org_id = ${orgId} and id = ${row.employeePartyId} for share`)).rows[0]
+    if (!locked) return notFound
+    employeeSubsidiary = locked.subsidiaryId
+  }
+  let departmentSubsidiary: string | null = null
+  if (row.departmentId) {
+    const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from departments
+       where org_id = ${orgId} and id = ${row.departmentId} for share`)).rows[0]
+    if (!locked) return notFound
+    departmentSubsidiary = locked.subsidiaryId
+  }
+  if (row.employeePartyId !== null && employeeSubsidiary == null) {
+    // A null-subsidiary employee is org-wide on save-rate; end/delete match it.
+    const denied = guardUnrestrictedScope(gate)
+    if (denied) return { response: denied }
+    return { row }
+  }
+  if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary ?? null)) return notFound
+  if (row.subsidiaryId && !subsidiariesInScope(gate, [row.subsidiaryId])) return notFound
+  return { row }
 }
 
 /** Exact serialized state of one labor_cost_rates row — numeric read back as
@@ -502,6 +558,27 @@ export async function POST(req: Request) {
         if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
           return { ok: false, response: projectsDisabledResponse() }
         }
+        // The anchor scope decision above ran on unlocked reads. Relock the
+        // anchor rows here — a rehome landing between the check and this
+        // write must deny rather than save into the new subsidiary.
+        // Missing anchors fail closed. Row locks precede the scope advisory
+        // lock below, the same order end/delete uses.
+        if (employeePartyId) {
+          const lockedEmployee = (await db.execute<{ subsidiaryId: string | null }>(sql`
+            select p.subsidiary_id as "subsidiaryId" from parties p
+             where p.org_id = ${orgId} and p.id = ${employeePartyId} for share`)).rows[0]
+          if (!lockedEmployee || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedEmployee.subsidiaryId, { orgWideNull: true })) {
+            return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+          }
+        }
+        if (departmentId) {
+          const lockedDepartment = (await db.execute<{ subsidiaryId: string | null }>(sql`
+            select subsidiary_id as "subsidiaryId" from departments
+             where org_id = ${orgId} and id = ${departmentId} for share`)).rows[0]
+          if (!lockedDepartment || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedDepartment.subsidiaryId)) {
+            return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+          }
+        }
         // The canonical writer (engine/src/projects/labor-cost-rates.ts):
         // same-scope lock, close, upsert-or-correct, and audit evidence in
         // one unit — the compensation push calls the same service, so the
@@ -531,7 +608,11 @@ export async function POST(req: Request) {
   }
 
   if (body.action === 'end-rate') {
-    if (typeof body.id !== 'string' || !isUuid(body.id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
+    // body comes from the loose jsonObject schema, so body.id is unknown and
+    // property narrowing does not survive into the transaction closure below.
+    // Capture the narrowed id in a const so the locked statements keep a string.
+    const id = body.id
+    if (typeof id !== 'string' || !isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     const to = body.effectiveTo
     if (to !== null && (typeof to !== 'string' || !DATE_RE.test(to) || !isCalendarDate(to))) {
       return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
@@ -542,39 +623,31 @@ export async function POST(req: Request) {
         if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
           return { ok: false, response: projectsDisabledResponse() }
         }
-        // Scope columns are immutable on this path: locate first for the
-        // scope decision and lock key, then re-read authoritatively under it.
-        // The department anchor carries its own subsidiary, exactly as
-        // save-rate resolves it; without it a department rate is 404 to the
-        // restricted actors save-rate admits.
-        const located = await db.execute<WageScope & { id: string; employeeSubsidiaryId: string | null; departmentSubsidiaryId: string | null }>(sql`
-          select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
-                 r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId",
-                 p.subsidiary_id as "employeeSubsidiaryId", d.subsidiary_id as "departmentSubsidiaryId"
-            from labor_cost_rates r
-            left join parties p on p.org_id = r.org_id and p.id = r.employee_party_id
-            left join departments d on d.org_id = r.org_id and d.id = r.department_id
-           where r.org_id = ${orgId} and r.id = ${body.id}`)
-        const row = located.rows[0]
-        if (!row) return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
-        if (isOrgWideWageScope(row)) {
-          const denied = guardUnrestrictedScope(gate)
-          if (denied) return { ok: false, response: denied }
-        } else if (row.employeePartyId !== null && row.employeeSubsidiaryId == null) {
-          // A null-subsidiary employee is org-wide on save-rate; end matches it.
-          const denied = guardUnrestrictedScope(gate)
-          if (denied) return { ok: false, response: denied }
-        } else {
-          const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? row.departmentSubsidiaryId ?? null)
-          if (denied) return { ok: false, response: denied }
-        }
+        // Scope columns are immutable on this path: resolve the anchors
+        // under lock with the save-rate policy, then re-read
+        // authoritatively under the scope lock.
+        const scoped = await lockedRateScope(orgId, gate, id)
+        if ('response' in scoped) return { ok: false, response: scoped.response }
+        const row = scoped.row
 
         await db.execute(scopeLock(orgId, row))
         const before = (
-          await db.execute<RateRow>(sql`
-            select ${RATE_ROW_COLUMNS} from labor_cost_rates
-             where org_id = ${orgId} and id = ${body.id} for update`)
+          await db.execute<RateRow & { employeePartyId: string | null; departmentId: string | null; subsidiaryId: string | null }>(sql`
+            select ${RATE_ROW_COLUMNS}, employee_party_id as "employeePartyId",
+                   department_id as "departmentId", subsidiary_id as "subsidiaryId"
+              from labor_cost_rates
+              where org_id = ${orgId} and id = ${id} for update`)
         ).rows[0]!
+        // The rate row itself can be re-pointed between the locked locate
+        // and this re-read: a changed scope tuple denies rather than ending
+        // another subsidiary's rate.
+        if (
+          before.employeePartyId !== row.employeePartyId ||
+          before.departmentId !== row.departmentId ||
+          before.subsidiaryId !== row.subsidiaryId
+        ) {
+          return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+        }
         if (to !== null && to < before.effectiveFrom) {
           return {
             ok: false,
@@ -583,11 +656,11 @@ export async function POST(req: Request) {
         }
         await db.execute(sql`
           update labor_cost_rates set effective_to = ${to}, updated_at = now(), updated_by = ${userId}
-           where org_id = ${orgId} and id = ${body.id}`)
+           where org_id = ${orgId} and id = ${id}`)
         const after: RateRow = { ...before, effectiveTo: to }
         await db.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'labor_cost_rates', ${body.id}, 'update',
+          values (${orgId}, 'labor_cost_rates', ${id}, 'update',
                   ${JSON.stringify({ reason, before, after })}, ${userId})`)
         return { ok: true }
       })
@@ -602,52 +675,49 @@ export async function POST(req: Request) {
   }
 
   if (body.action === 'delete-rate') {
-    if (typeof body.id !== 'string' || !isUuid(body.id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
+    // Same loose-schema capture as end-rate: body.id is unknown and property
+    // narrowing does not survive into the transaction closure below.
+    const id = body.id
+    if (typeof id !== 'string' || !isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     const reason = bodyReason(body.reason, 'wage rate deleted')
     try {
       const outcome = await withOrgTransaction(orgId, async (): Promise<RateMutation> => {
         if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
           return { ok: false, response: projectsDisabledResponse() }
         }
-        // Same anchor resolution as end-rate: department subsidiary included,
-        // null-subsidiary employees treated org-wide as on save-rate.
-        const located = await db.execute<WageScope & { id: string; employeeSubsidiaryId: string | null; departmentSubsidiaryId: string | null }>(sql`
-          select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
-                 r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId",
-                 p.subsidiary_id as "employeeSubsidiaryId", d.subsidiary_id as "departmentSubsidiaryId"
-            from labor_cost_rates r
-            left join parties p on p.org_id = r.org_id and p.id = r.employee_party_id
-            left join departments d on d.org_id = r.org_id and d.id = r.department_id
-           where r.org_id = ${orgId} and r.id = ${body.id}`)
-        const row = located.rows[0]
-        if (!row) return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
-        if (isOrgWideWageScope(row)) {
-          const denied = guardUnrestrictedScope(gate)
-          if (denied) return { ok: false, response: denied }
-        } else if (row.employeePartyId !== null && row.employeeSubsidiaryId == null) {
-          const denied = guardUnrestrictedScope(gate)
-          if (denied) return { ok: false, response: denied }
-        } else {
-          const denied = guardSubsidiaryScope(gate, row.subsidiaryId ?? row.employeeSubsidiaryId ?? row.departmentSubsidiaryId ?? null)
-          if (denied) return { ok: false, response: denied }
-        }
+        // Same locked anchor resolution as end-rate.
+        const scoped = await lockedRateScope(orgId, gate, id)
+        if ('response' in scoped) return { ok: false, response: scoped.response }
+        const row = scoped.row
 
         await db.execute(scopeLock(orgId, row))
         const before = (
-          await db.execute<RateRow>(sql`
-            select ${RATE_ROW_COLUMNS} from labor_cost_rates
-             where org_id = ${orgId} and id = ${body.id} for update`)
+          await db.execute<RateRow & { employeePartyId: string | null; departmentId: string | null; subsidiaryId: string | null }>(sql`
+            select ${RATE_ROW_COLUMNS}, employee_party_id as "employeePartyId",
+                   department_id as "departmentId", subsidiary_id as "subsidiaryId"
+              from labor_cost_rates
+              where org_id = ${orgId} and id = ${id} for update`)
         ).rows[0]!
+        // The rate row itself can be re-pointed between the locked locate
+        // and this re-read: a changed scope tuple denies rather than
+        // deleting another subsidiary's rate.
+        if (
+          before.employeePartyId !== row.employeePartyId ||
+          before.departmentId !== row.departmentId ||
+          before.subsidiaryId !== row.subsidiaryId
+        ) {
+          return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+        }
         // Keep the resolved-rate provenance on approved time entries intact:
         // deactivation, never a physical delete.
         await db.execute(sql`
           update labor_cost_rates
              set is_active = false, updated_at = now(), updated_by = ${userId}
-           where org_id = ${orgId} and id = ${body.id}`)
+           where org_id = ${orgId} and id = ${id}`)
         const after: RateRow = { ...before, isActive: false }
         await db.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'labor_cost_rates', ${body.id}, 'delete',
+          values (${orgId}, 'labor_cost_rates', ${id}, 'delete',
                   ${JSON.stringify({ reason, before, after })}, ${userId})`)
         return { ok: true }
       })
