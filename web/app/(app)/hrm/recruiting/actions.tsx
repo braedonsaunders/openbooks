@@ -253,14 +253,23 @@ export function RequisitionLifecycleIsland({
   )
 }
 
-/** Move, reject, or withdraw one application. */
+/**
+ * Move, reject, or withdraw one application. Move rides the manage grant
+ * or the hiring manager's own requisition; reject and withdraw need the
+ * grant in full — the same split the application endpoint enforces, so a
+ * reader who holds neither sees no actions at all.
+ */
 export function ApplicationActionsIsland({
   applicationId,
   stages,
+  canMove,
+  canDecide,
   labels,
 }: {
   applicationId: string
   stages: Option[]
+  canMove: boolean
+  canDecide: boolean
   labels: { move: string; reject: string; reason: string; withdraw: string; failed: string }
 }) {
   const refresh = useRefresh()
@@ -287,34 +296,39 @@ export function ApplicationActionsIsland({
     }
   }
 
+  if (!canMove && !canDecide) return null
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Select aria-label={labels.move} value={stage} onChange={(event) => setStage(event.target.value)}>
-          {stages.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-        <Button size="sm" disabled={busy || stage === ''} onClick={() => void act({ action: 'move', toStageId: stage })}>
-          {labels.move}
-        </Button>
-      </div>
-      <div className="flex items-center gap-2">
-        <Input
-          aria-label={labels.reason}
-          placeholder={labels.reason}
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-        />
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void act({ action: 'reject', reason: reason.trim() })}>
-          {labels.reject}
-        </Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act({ action: 'withdraw' })}>
-          {labels.withdraw}
-        </Button>
-      </div>
+      {canMove ? (
+        <div className="flex items-center gap-2">
+          <Select aria-label={labels.move} value={stage} onChange={(event) => setStage(event.target.value)}>
+            {stages.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+          <Button size="sm" disabled={busy || stage === ''} onClick={() => void act({ action: 'move', toStageId: stage })}>
+            {labels.move}
+          </Button>
+        </div>
+      ) : null}
+      {canDecide ? (
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label={labels.reason}
+            placeholder={labels.reason}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void act({ action: 'reject', reason: reason.trim() })}>
+            {labels.reject}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act({ action: 'withdraw' })}>
+            {labels.withdraw}
+          </Button>
+        </div>
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
