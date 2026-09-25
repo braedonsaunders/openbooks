@@ -148,8 +148,8 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.platformSftpDaemonSqlText
       export const db = {
         execute(query) {
-          state.inserts.push({ text: sqlText(query) })
-          return Promise.resolve({ rows: [{ id: 'server-1' }] })
+          const text = sqlText(query); state.inserts.push({ text })
+          return Promise.resolve({ rows: text.includes('from users') ? [{ id: 'user-platform', orgId: 'org-platform', isActive: true, isSuperAdmin: true }] : [{ id: 'server-1' }] })
         },
         transaction(fn) {
           return fn(db)
@@ -160,7 +160,7 @@ const mockSources = new Map<string, string>([
       export const currentRequestOrgResolver = () => null
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (_options, work) => work()
-      export const withBypassContext = (_options, work) => work()
+      export const withBypassContext = (work) => work()
     `,
   ],
 ])

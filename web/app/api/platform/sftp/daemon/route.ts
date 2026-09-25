@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import {
   ensureSftpServer,
   loadDaemonConfig,
@@ -9,7 +9,7 @@ import {
   updateDaemonConfig,
 } from "@openbooks/engine/src/sftp/manager.ts";
 import { auditSetupChange } from "../../../../../lib/setup/audit";
-import { guardSuperAdmin } from "../../../../../lib/super-admin";
+import { guardSuperAdmin, lockSuperAdminActor } from "../../../../../lib/super-admin";
 
 export const runtime = "nodejs";
 
@@ -46,7 +46,8 @@ export async function PATCH(req: Request) {
   if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535)) {
     return NextResponse.json({ error: "port must be between 1 and 65535" }, { status: 400 });
   }
-  const cfg = await db.transaction(async (tx) => {
+  const cfg = await withBypassContext(() => db.transaction(async (tx) => {
+    const actor = await lockSuperAdminActor(tx, gate.user.id);
     const before = sftpDaemonConfigAuditSnapshot(await loadDaemonConfig(tx));
     const after = await updateDaemonConfig(
       {
@@ -54,7 +55,7 @@ export async function PATCH(req: Request) {
         port: body.port,
         advertisedHost: body.advertisedHost !== undefined ? (body.advertisedHost?.trim() || null) : undefined,
       },
-      gate.user.id,
+      actor.id,
       tx,
     );
     await auditSetupChange({
@@ -63,10 +64,10 @@ export async function PATCH(req: Request) {
       rowId: daemonAuditRowId(),
       action: "update",
       changes: { before, after: sftpDaemonConfigAuditSnapshot(after) },
-      actorId: gate.user.id,
+      actorId: actor.id,
     }, tx);
     return after;
-  });
+  }));
   try {
     await ensureSftpServer();
   } catch (e) {
