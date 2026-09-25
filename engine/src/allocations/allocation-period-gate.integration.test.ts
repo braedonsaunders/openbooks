@@ -15,6 +15,7 @@ import {
   postAllocationRun,
   previewAllocationRun,
 } from "./period-run.ts";
+import { enableAllocations, negate, seedDepartment } from "./integration-seeds.ts";
 
 /**
  * One period gate for allocations (fleet 8, P7): the period-run posting
@@ -62,31 +63,10 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
   }
 }
 
-async function seedDepartment(orgId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into departments (id, org_id, name, is_active, custom)
-    values (${id}, ${orgId}, ${name}, true, '{}'::jsonb)`);
-  return id;
-}
-
 // The engine fences posting behind the org's `allocations` switch: these
 // tests drive the engine directly (no route gate), so every scratch org opts
 // in — including the refusal tests, which must reach the period gate rather
 // than the feature fence.
-async function enableAllocations(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      settings, '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
-    where id = ${orgId}
-  `);
-}
-
-function negate(amount: string): string {
-  return amount.startsWith("-") ? amount.slice(1) : `-${amount}`;
-}
-
 async function seedSweepRule(org: ScratchOrg, tag: string): Promise<string> {
   const deptA = await seedDepartment(org.orgId, `Gate A ${tag}`);
   const deptB = await seedDepartment(org.orgId, `Gate B ${tag}`);

@@ -19,6 +19,7 @@ import {
   rerunAllocationRun,
   reverseAllocationRun,
 } from "./period-run.ts";
+import { seedDepartment } from "./integration-seeds.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -37,14 +38,6 @@ async function setAllocations(orgId: string, on: boolean): Promise<void> {
       coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ allocations: on })}::jsonb, true)
     where id = ${orgId}
   `);
-}
-
-async function seedDepartment(orgId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into departments (id, org_id, name, is_active, custom)
-    values (${id}, ${orgId}, ${name}, true, '{}'::jsonb)`);
-  return id;
 }
 
 async function seedPeriodRule(opts: {

@@ -13,6 +13,7 @@ import {
 } from "../testing/fixtures.ts";
 import { decideGate } from "../flows/gates.ts";
 import { postAllocationRun, previewAllocationRun, rerunAllocationRun } from "./period-run.ts";
+import { enableAllocations, seedDepartment } from "./integration-seeds.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -22,15 +23,6 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 // posts the replacement atomically; rejection leaves the old run posted and
 // untouched. Non-approval reruns keep the immediate reverse+post.
 // ---------------------------------------------------------------------------
-
-async function enableAllocations(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      settings, '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
-    where id = ${orgId}
-  `);
-}
 
 /**
  * The approval-time swap reverses as of today (real clock): the scratch org
@@ -55,14 +47,6 @@ async function seedTodayPeriod(org: ScratchOrg): Promise<void> {
     values (${randomUUID()}, ${org.orgId}, ${cal}, ${y}, ${m}, ${name},
             ${`${name}-01`}, ${`${name}-${pad(lastDay)}`}, false)
     on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing`);
-}
-
-async function seedDepartment(orgId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into departments (id, org_id, name, is_active, custom)
-    values (${id}, ${orgId}, ${name}, true, '{}'::jsonb)`);
-  return id;
 }
 
 async function seedPeriodRule(opts: {

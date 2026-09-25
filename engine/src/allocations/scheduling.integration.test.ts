@@ -19,17 +19,9 @@ import {
   runAllocationCloseAction,
 } from "./scheduling.ts";
 import { reverseAllocationRun } from "./period-run.ts";
+import { enableAllocations } from "./integration-seeds.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-
-async function enableAllocations(orgId: string, on = true): Promise<void> {
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      settings, '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ allocations: on })}::jsonb, true)
-    where id = ${orgId}
-  `);
-}
 
 async function seedPeriodRule(
   org: ScratchOrg,

@@ -17,6 +17,7 @@ import {
   publishVersion,
 } from "./rules.ts";
 import { postAllocationRun, previewAllocationRun } from "./period-run.ts";
+import { enableAllocations, seedDepartment } from "./integration-seeds.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const AUDIT = { actorId: null, reason: "boundary test" };
@@ -28,15 +29,6 @@ const AUDIT = { actorId: null, reason: "boundary test" };
 // known calendar; runs refuse any period crossed by a version edge (legacy
 // windows included), naming the versions and the crossing date.
 // ---------------------------------------------------------------------------
-
-async function enableAllocations(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      settings, '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
-    where id = ${orgId}
-  `);
-}
 
 /** Scratch orgs open July 2026 only: add regular January + February 2026. */
 async function seedJanFeb(org: ScratchOrg): Promise<{ janId: string; febId: string }> {
@@ -51,14 +43,6 @@ async function seedJanFeb(org: ScratchOrg): Promise<{ janId: string; febId: stri
     values (${janId}, ${org.orgId}, ${cal}, 2026, 1, '2026-01', '2026-01-01', '2026-01-31', false),
            (${febId}, ${org.orgId}, ${cal}, 2026, 2, '2026-02', '2026-02-01', '2026-02-28', false)`);
   return { janId, febId };
-}
-
-async function seedDepartment(orgId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into departments (id, org_id, name, is_active, custom)
-    values (${id}, ${orgId}, ${name}, true, '{}'::jsonb)`);
-  return id;
 }
 
 interface SeedVersion {
