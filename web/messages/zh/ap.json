@@ -224,6 +224,30 @@
       "link": "打开现金流预测"
     },
     "configure": "配置",
+    "config": {
+      "weeklyCapLabel": "每周应付付款上限 ({currency})",
+      "weeklyCapHelp": "0 = 无限制。设置上限后，每周按到期先后选择应付款项直至该金额，其余顺延。",
+      "restrictLabel": "限制在安全余量内 (0/1)",
+      "restrictHelp": "1 = 绝不建议支付超过当周可用现金的金额（预计流入 − 流出）。超出部分顺延。",
+      "scheduleTitle": "账单排期方式",
+      "orderLabel": "选择顺序",
+      "orderValue": "到期最早优先",
+      "orderNote": "账单按到期日从早到晚、再按金额从大到小选择，直至达到每周额度 — 其余顺延",
+      "predictionLabel": "付款日期预测",
+      "predictionValue": "统计 → 到期日 → 全局平均",
+      "predictionNote": "各供应商平均付款天数（+½σ缓冲），不早于到期日",
+      "overdueLabel": "逾期前移",
+      "overdueValue": "+7 / +14 / +28天",
+      "overdueNote": "逾期账单按逾期时长前移（≤30 / ≤60 / >60天）",
+      "snapLabel": "工作日对齐",
+      "snapValue": "开",
+      "snapNote": "落在周末的预测日期顺延至下一个工作日",
+      "dpoLabel": "平均付款天数 (DPO)",
+      "dpoValue": "{dpo}天",
+      "dpoNote": "供应商无付款历史时的备用值",
+      "footerPre": "经常性现金流（工资、租金、贷款）影响安全余量 — 请在",
+      "footerLink": "现金管理中配置"
+    },
     "configTitle": "应付付款选择规则",
     "configDescription": "本周付款批次的确定方式 — 每周上限、安全余量以及推荐背后的排程模型。"
   }

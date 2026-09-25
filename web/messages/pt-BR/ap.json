@@ -224,6 +224,30 @@
       "link": "Abrir a previsão de fluxo de caixa"
     },
     "configure": "Configurar",
+    "config": {
+      "weeklyCapLabel": "Teto semanal de pagamentos ({currency})",
+      "weeklyCapHelp": "0 = ilimitado. Com teto, os pagáveis são escolhidos do vencimento mais antigo até este valor por semana e o restante é diferido.",
+      "restrictLabel": "Restringir à capacidade segura (0/1)",
+      "restrictHelp": "1 = nunca recomendar pagar além do caixa disponível na semana (entradas projetadas − saídas). O excedente é diferido.",
+      "scheduleTitle": "Como as faturas são programadas",
+      "orderLabel": "Ordem de seleção",
+      "orderValue": "Vencimento mais antigo primeiro",
+      "orderNote": "As faturas são escolhidas pelo vencimento mais antigo e depois pelo maior valor, até a capacidade semanal — o restante é diferido",
+      "predictionLabel": "Previsão de data de pagamento",
+      "predictionValue": "Estatística → Vencimento → Média global",
+      "predictionNote": "Média de dias de pagamento por fornecedor (margem de +½σ), com piso na data de vencimento",
+      "overdueLabel": "Antecipação de atrasados",
+      "overdueValue": "+7 / +14 / +28 dias",
+      "overdueNote": "Faturas vencidas são antecipadas conforme a antiguidade (≤30 / ≤60 / >60 dias)",
+      "snapLabel": "Ajuste para dia útil",
+      "snapValue": "Ativado",
+      "snapNote": "Datas previstas no fim de semana passam para o próximo dia útil",
+      "dpoLabel": "Dias médios de pagamento (DPO)",
+      "dpoValue": "{dpo}d",
+      "dpoNote": "Valor alternativo quando um fornecedor não tem histórico de pagamentos",
+      "footerPre": "Fluxos recorrentes (folha, aluguel, empréstimos) moldam a capacidade segura — configure-os no",
+      "footerLink": "Painel de caixa"
+    },
     "configTitle": "Regra de seleção de pagamentos",
     "configDescription": "Como o lote de pagamento da semana é escolhido — o teto semanal, a trava de capacidade segura e o modelo de agendamento por trás da recomendação."
   }

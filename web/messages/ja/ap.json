@@ -224,6 +224,30 @@
       "link": "キャッシュフロー予測を開く"
     },
     "configure": "設定",
+    "config": {
+      "weeklyCapLabel": "週次買掛金支払上限 ({currency})",
+      "weeklyCapHelp": "0 = 無制限。上限ありの場合、買掛金は毎週この金額まで期日の古い順に選択され、残りは繰り延べられます。",
+      "restrictLabel": "安全余力に制限 (0/1)",
+      "restrictHelp": "1 = その週の利用可能な現金（予測流入 − 流出）を超える支払いを推奨しません。超過分は繰り延べられます。",
+      "scheduleTitle": "請求書のスケジュール方法",
+      "orderLabel": "選択順",
+      "orderValue": "期日の古い順",
+      "orderNote": "請求書は期日の古い順、次に金額の大きい順に、週の上限まで選択されます — 残りは繰り延べられます",
+      "predictionLabel": "支払日予測",
+      "predictionValue": "統計 → 期日 → 全体平均",
+      "predictionNote": "ベンダー別の平均支払日数（+½σバッファ）、期日を下限とします",
+      "overdueLabel": "延滞分の前倒し",
+      "overdueValue": "+7 / +14 / +28日",
+      "overdueNote": "延滞請求書は延滞期間に応じて前倒しされます（≤30 / ≤60 / >60日）",
+      "snapLabel": "営業日調整",
+      "snapValue": "オン",
+      "snapNote": "週末の予測日は翌営業日に移動します",
+      "dpoLabel": "平均支払日数 (DPO)",
+      "dpoValue": "{dpo}日",
+      "dpoNote": "ベンダーに支払履歴がない場合の代替値",
+      "footerPre": "定常フロー（給与・家賃・借入）は安全余力に影響します。設定は",
+      "footerLink": "キャッシュ管理で行ってください"
+    },
     "configTitle": "買掛金の支払選択ルール",
     "configDescription": "今週の支払バッチの選定方法 — 週次上限、安全余力、および推奨の背景にあるスケジュールモデル。"
   }

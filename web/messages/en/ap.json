@@ -225,6 +225,30 @@
       "link": "Open the cash-flow forecast"
     },
     "configure": "Configure",
+    "config": {
+      "weeklyCapLabel": "Weekly AP pay cap ({currency})",
+      "weeklyCapHelp": "0 = unlimited. With a cap, payables are chosen oldest-due-first up to this amount each week and the rest defers.",
+      "restrictLabel": "Restrict to safe capacity (0/1)",
+      "restrictHelp": "1 = never recommend paying beyond the cash available that week (projected inflows − outflows). Overflow defers forward.",
+      "scheduleTitle": "How bills are scheduled",
+      "orderLabel": "Selection order",
+      "orderValue": "Oldest due first",
+      "orderNote": "Bills are chosen oldest due date first, then largest amount, up to the week’s capacity — the rest defers forward",
+      "predictionLabel": "Payment-date prediction",
+      "predictionValue": "Statistical → Due date → Global avg",
+      "predictionNote": "Per-vendor average pay days (+½σ buffer), floored at the due date",
+      "overdueLabel": "Overdue push",
+      "overdueValue": "+7 / +14 / +28 days",
+      "overdueNote": "Overdue bills pushed forward by how overdue they are (≤30 / ≤60 / >60 days)",
+      "snapLabel": "Business-day snap",
+      "snapValue": "On",
+      "snapNote": "Predicted dates on a weekend move to the next business day",
+      "dpoLabel": "Avg days to pay (DPO)",
+      "dpoValue": "{dpo}d",
+      "dpoNote": "Fallback used when a vendor has no payment history",
+      "footerPre": "Recurring flows (payroll, rent, loans) shape safe capacity — configure them on the",
+      "footerLink": "Cash cockpit"
+    },
     "configTitle": "AP pay-selection rule",
     "configDescription": "How this week’s pay run is chosen — the weekly cap, the safe-capacity guard, and the scheduling model behind the recommendation."
   }
