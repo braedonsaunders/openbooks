@@ -20,6 +20,7 @@ import { sameCurrencyAllocation, type AllocationInput } from "./settlement-polic
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { assertUnrestrictedScope, ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 /**
@@ -1707,9 +1708,9 @@ export async function handleProviderWebhook(
           },
           () => withOrg(candidate.orgId, async () => {
             // Settlement reads and retains the primary book before posting a
-            // receipt. Fence the outer event first, matching org -> book order
-            // through draft preparation, approval, and the posting kernel.
-            await db.execute(sql`select id from orgs where id = ${candidate.orgId} for update`);
+            // receipt. Hold the shared setup fence across the event so its
+            // book/config reads agree with the posting kernel's transaction.
+            await lockLedgerSetupFence(db, candidate.orgId, "shared");
             return processWebhookEvent(candidate.orgId, provider, event);
           }),
         );

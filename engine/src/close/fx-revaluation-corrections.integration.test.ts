@@ -296,7 +296,7 @@ for (const policy of ["missing rate", "missing reversal period", "closed period"
   });
 }
 
-test("FX reads its basis after waiting for the ordinary posting organization lock", { skip: !DB }, async () => {
+test("FX reads its basis after waiting for the exclusive ledger-setup fence", { skip: !DB }, async () => {
   const f = await fixture();
   let release!: () => void;
   let locked!: () => void;
@@ -307,7 +307,7 @@ test("FX reads its basis after waiting for the ordinary posting organization loc
     await f.seed("136", "100");
     await f.run();
     writer = withOrgTransaction(f.orgId, async () => {
-      await db.execute(sql`select id from orgs where id=${f.orgId} for update`);
+      await (await import("../organization/ledger-setup-fence.ts")).lockLedgerSetupFence(db, f.orgId, "exclusive");
       await f.seed("136", "100");
       locked();
       await held;
@@ -318,7 +318,7 @@ test("FX reads its basis after waiting for the ordinary posting organization loc
     for (let attempt = 0; attempt < 100; attempt++) {
       observedWait = (await db.execute<{ waiting: boolean }>(sql`select exists (
         select 1 from pg_stat_activity where datname=current_database()
-          and wait_event_type='Lock' and query like '%from orgs%for update%'
+          and wait_event_type='Lock' and query like '%pg_advisory_xact_lock%'
       ) as waiting`)).rows[0]!.waiting;
       if (observedWait) break;
       await new Promise((resolve) => setTimeout(resolve, 10));

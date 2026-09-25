@@ -20,6 +20,7 @@ import {
 } from "./clone.ts";
 import { deleteS3Blobs } from "../platform/file-storage.ts";
 import { neuterSandbox } from "../organization/sandbox-guard.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
 import { verifyCloneRls } from "./verify-rls.ts";
 import { assertProductionSandboxSource } from "./source-validation.ts";
@@ -327,6 +328,7 @@ export async function rebaseSandboxControlAccounts(args: {
 
   const requestId = randomUUID();
   await db.transaction(async (tx) => {
+    await lockLedgerSetupFence(tx, args.sandboxOrgId, "exclusive");
     await tx.execute(sql`
       update orgs
          set settings = jsonb_set(

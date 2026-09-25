@@ -7,6 +7,7 @@ import type { FinancialProfile } from '@openbooks/schema'
 import { backfillOverhead } from '@openbooks/engine/src/projects/overhead-apply.ts'
 import { syncOverheadSystemRule } from '@openbooks/engine/src/allocations/overhead-sync.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/src/projects/financial-profile-versions.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission, guardUnrestrictedScope, subsidiariesInScope } from '../../../../../lib/authz'
@@ -249,6 +250,7 @@ export async function POST(req: Request) {
     // failure past the write rolls the policy back, never an unevidenced
     // change.
     const lifecycleDenied = await withOrgTransaction(orgId, async () => {
+      await lockLedgerSetupFence(db, orgId, "exclusive")
       await acquireFeatureGateLock(orgId)
       if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
         return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
@@ -293,6 +295,7 @@ export async function POST(req: Request) {
     // surcharge rule save). The locked before/after evidence commits with the
     // settings or not at all.
     const applicationDenied = await withOrgTransaction(orgId, async () => {
+      await lockLedgerSetupFence(db, orgId, "exclusive")
       await acquireFeatureGateLock(orgId)
       if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
         return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
