@@ -66,7 +66,7 @@ for (const operation of ['read', 'stale', 'current', 'missing', 'null-existing',
       } else {
         const saved=await put();
         const result=await saved.json();
-        assert.equal(saved.status,['current','scope-visible','scope-all'].includes(operation)?200:operation.startsWith('invalid')||operation==='scope-empty'?422:409,JSON.stringify(result));
+        if(operation==='scope-empty'||operation==='scope-visible') assert.deepEqual([saved.status,result],[403,{error:'requires unrestricted subsidiary access'}]); else assert.equal(saved.status,['current','scope-all'].includes(operation)?200:operation.startsWith('invalid')?422:409,JSON.stringify(result));
         if(operation==='current') {
           assert.match(result.updatedAt,/\.\d{6}Z$/);
           assert.ok(result.updatedAt>profile.updated_at,'revision must advance even if transaction time precedes stored revision');
@@ -74,8 +74,8 @@ for (const operation of ['read', 'stale', 'current', 'missing', 'null-existing',
         }
       }
       const audits=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and table_name='item_inventory_profiles' and row_id=${id}`)).rows[0]!.n;
-      assert.equal(audits,['current','create-race','scope-visible','scope-all'].includes(operation)?1:0);
-      if(scoped) assert.deepEqual((await db.execute(sql`select unit_cost from cost_layers where item_id=${id}`)).rows.map(row=>row.unit_cost),[operation==='scope-empty'?'2.0000':'3.0000']);
+      assert.equal(audits,['current','create-race','scope-all'].includes(operation)?1:0);
+      if(scoped) assert.deepEqual((await db.execute(sql`select unit_cost from cost_layers where item_id=${id}`)).rows.map(row=>row.unit_cost),[operation==='scope-all'?'3.0000':'2.0000']);
       if(operation==='stale') assert.equal((await db.execute(sql`select base_unit from item_inventory_profiles where item_id=${id}`)).rows[0]?.base_unit,'case');
     } finally { session.user=null; await dropScratchOrg(org.orgId); }
   });
