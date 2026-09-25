@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { inDbTransaction, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
+  lockEquipmentProjectScope,
   lockProjectForScope,
   ScopeNotFoundError,
 } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -253,6 +254,14 @@ export async function createProjectCharge(
         // off must stop new unit links without touching posted charges.
         if (!equipmentOn) {
           throw new ChargeError('Equipment feature is disabled')
+        }
+        // Lock the unit against the locked project anchor: the unlocked
+        // read below races a unit rehome otherwise.
+        try {
+          await lockEquipmentProjectScope(tx, orgId, input.projectId, [line.equipmentUnitId], opts.allowedSubsidiaryIds, 'update')
+        } catch (error) {
+          if (error instanceof ScopeNotFoundError) throw new ChargeNotFoundError('not found')
+          throw error
         }
         const unit = (await tx.execute<{ charge_item_id: string; status: string; subsidiary_id: string }>(sql`
           select charge_item_id, status, subsidiary_id from equipment_units

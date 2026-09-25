@@ -21,7 +21,7 @@ import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
 import { getS3Blob } from './file-storage'
 import { can, resolveAuthzByUserId, subsidiaryScopeAllows } from './authz'
 import { postPermission } from './document-kinds'
-import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { lockEquipmentProjectScope, resolveDraftSubsidiary, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
  * Field tickets — the signed crew timesheet for T&M work (the industry's
@@ -627,7 +627,7 @@ export async function addTicketLine(
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, locked.subsidiaryId)) {
         throw new FieldTicketNotFoundError('Ticket not found')
       }
-      await addTicketLineUnlocked(orgId, userId, ticketId, input, tx)
+      await addTicketLineUnlocked(orgId, userId, ticketId, input, tx, allowedSubsidiaryIds)
     },
   }))
 }
@@ -642,6 +642,7 @@ async function addTicketLineUnlocked(
     description?: string | null
   },
   tx: TicketTransaction,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<void> {
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
@@ -675,6 +676,17 @@ async function addTicketLineUnlocked(
     // equipment_unit_id. Lines that already carry a unit stay as they are.
     if (!(await isFeatureEnabled(orgId, 'equipment'))) {
       throw new FieldTicketError('Equipment is disabled')
+    }
+    // Lock the unit against the PROJECT anchor, not just the ticket's
+    // subsidiary: a unit rehomed between the unlocked read below and the
+    // insert would otherwise attach B equipment to A project work.
+    if (doc.project_id) {
+      try {
+        await lockEquipmentProjectScope(tx, orgId, doc.project_id, [input.equipmentUnitId], allowedSubsidiaryIds, 'update')
+      } catch (error) {
+        if (error instanceof ScopeNotFoundError) throw new FieldTicketNotFoundError('Ticket not found')
+        throw error
+      }
     }
     const equipment = (await db.execute<{ charge_item_id: string | null; status: string; subsidiary_id: string | null }>(sql`
       select charge_item_id, status, subsidiary_id from equipment_units
