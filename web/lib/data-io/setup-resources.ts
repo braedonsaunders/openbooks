@@ -11,7 +11,7 @@ import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEnt
 import { buildRow, coerceBoolean, idColumn, type Coerced } from '../setup/coerce'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
-import { validateEntityIntegrity } from '../setup/write'
+import { savePayComponentEarningClassification, validateEntityIntegrity } from '../setup/write'
 import { payPeriodsPerYearProblem } from '@openbooks/engine/src/payroll/run-calendar.ts'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
@@ -473,8 +473,10 @@ async function writeSetup(
           continue
         }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
+        const statutoryReportingCategory = built.cols.find((column) => column.column === 'statutory_reporting_category')?.value
         const storageCols = entity.key === 'pay-components'
-          ? built.cols.filter((column) => column.column !== 'supplemental_wage_category')
+          ? built.cols.filter((column) => column.column !== 'supplemental_wage_category'
+            && column.column !== 'statutory_reporting_category')
           : built.cols
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
@@ -499,13 +501,11 @@ async function writeSetup(
                    where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}
                   returning *`)) as { rows: Record<string, unknown>[] }
                 if (!updated.rows[0]) throw new Error('row no longer exists')
-                if (entity.key === 'pay-components' && src.supplementalWageCategory !== undefined) {
-                  const classification = await tx.execute(sql`
-                    update pay_component_earning_classifications
-                       set supplemental_wage_category = ${supplementalWageCategory == null ? null : String(supplementalWageCategory)}
-                     where org_id = ${ctx.orgId} and pay_component_id = ${existingId}
-                    returning pay_component_id`)
-                  if (!classification.rows.length) throw new Error('pay component classification is missing')
+                if (entity.key === 'pay-components' && (src.supplementalWageCategory !== undefined || src.statutoryReportingCategory !== undefined)) {
+                  await savePayComponentEarningClassification(tx, ctx.orgId, existingId, {
+                    supplementalWageCategory,
+                    statutoryReportingCategory,
+                  })
                 }
                 await audit(
                   {
@@ -562,8 +562,10 @@ async function writeSetup(
           continue
         }
         const supplementalWageCategory = built.cols.find((column) => column.column === 'supplemental_wage_category')?.value
+        const statutoryReportingCategory = built.cols.find((column) => column.column === 'statutory_reporting_category')?.value
         const storageCols = entity.key === 'pay-components'
-          ? built.cols.filter((column) => column.column !== 'supplemental_wage_category')
+          ? built.cols.filter((column) => column.column !== 'supplemental_wage_category'
+            && column.column !== 'statutory_reporting_category')
           : built.cols
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
@@ -588,13 +590,11 @@ async function writeSetup(
               const inserted = ins.rows[0]
               const rowId = String(inserted?.[idColumn(entity)] ?? '')
               if (!inserted || !rowId) throw new Error('insert did not return a row')
-              if (entity.key === 'pay-components' && supplementalWageCategory !== undefined) {
-                const classification = await tx.execute(sql`
-                  update pay_component_earning_classifications
-                     set supplemental_wage_category = ${supplementalWageCategory == null ? null : String(supplementalWageCategory)}
-                   where org_id = ${ctx.orgId} and pay_component_id = ${rowId}
-                  returning pay_component_id`)
-                if (!classification.rows.length) throw new Error('pay component classification is missing')
+              if (entity.key === 'pay-components' && (supplementalWageCategory !== undefined || statutoryReportingCategory !== undefined)) {
+                await savePayComponentEarningClassification(tx, ctx.orgId, rowId, {
+                  supplementalWageCategory,
+                  statutoryReportingCategory,
+                })
               }
               await audit(
                 {
