@@ -160,32 +160,19 @@ test("a raw wipe GUC cannot rewrite posted ledger state, while an authorized san
       (error: unknown) => pgMessage(error).includes("posted and immutable"),
     );
 
-    const before = await db.execute<{ month: string; debit_total: string; credit_total: string }>(sql`
-      select month::text, debit_total::text, credit_total::text
-        from gl_month_activity
-       where org_id = ${org.orgId} and account_id = ${org.accounts.ar}
-       order by month`);
-    assert.deepEqual(before.rows.map((row) => row.month), ["2026-07-01"]);
-
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
-      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-      await tx.execute(sql`
-        update journal_entries set posting_date = '2026-08-01'
-         where id = ${entryId} and org_id = ${org.orgId}`);
-    });
-    const cascaded = await db.execute<{ posting_date: string }>(sql`
-      select posting_date::text from journal_lines where id = ${lineDebitId}`);
-    assert.equal(cascaded.rows[0]!.posting_date, "2026-08-01");
-    const after = await db.execute<{ month: string; debit_total: string; line_count: string }>(sql`
-      select month::text, debit_total::text, line_count::text
-        from gl_month_activity
-       where org_id = ${org.orgId} and account_id = ${org.accounts.ar}
-       order by month`);
-    assert.deepEqual(after.rows.map((row) => row.month), ["2026-07-01", "2026-08-01"]);
-    assert.equal(Number(after.rows[0]!.debit_total), 0);
-    assert.equal(Number(after.rows[0]!.line_count), 0);
-    assert.equal(after.rows[1]!.debit_total, before.rows[0]!.debit_total);
+    // ARCH-APPEND-ONLY (0380): the amend escape is gone — even the
+    // wipe+amend combination cannot move a posted entry's date. Corrections
+    // reverse and repost; history is never edited in place.
+    await assert.rejects(
+      db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
+        await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+        await tx.execute(sql`
+          update journal_entries set posting_date = '2026-08-01'
+           where id = ${entryId} and org_id = ${org.orgId}`);
+      }),
+      (error: unknown) => pgMessage(error).includes("posted and immutable"),
+    );
 
     await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId}`);
     await db.transaction(async (tx) => {
