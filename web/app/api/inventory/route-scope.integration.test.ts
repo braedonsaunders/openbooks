@@ -72,7 +72,9 @@ test("count writes refuse an out-of-scope count and leave it untouched", async (
     const countA = await seedCount(org.orgId, actor, org.subsidiaryId, org.locationId);
     const countB = await seedCount(org.orgId, actor, hidden, org.locationId);
     const refused = await countsCall({ action: "cancel", countId: countB, idempotencyKey: randomUUID() });
-    assert.equal(refused.status, 403, JSON.stringify(await refused.clone().json()));
+    // Out-of-scope records read as not found (hide-details contract): the
+    // row exists but the caller must not distinguish it from absent.
+    assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
     assert.equal(await countStatus(org.orgId, countB), "draft", "a refused cancel leaves the count untouched");
     const accepted = await countsCall({ action: "cancel", countId: countA, idempotencyKey: randomUUID() });
     assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
@@ -104,7 +106,8 @@ test("count cancel waits on a count reassignment in flight instead of racing it"
     assert.ok(blocked, "the cancel waits on the locked count instead of mutating the pre-reassignment row");
     await writer.query("commit");
     const response = await pending;
-    assert.equal(response.status, 403, JSON.stringify(await response.clone().json()));
+    // Same uniform 404 after the reassignment lands: hidden, not forbidden.
+    assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
     assert.equal(await countStatus(org.orgId, moving), "draft", "the cancel refused after the reassignment leaves the count draft");
   } finally {
     await writer.query("rollback").catch(() => {});
@@ -136,7 +139,8 @@ test("transfer ship refuses an out-of-scope order and leaves it draft", async ()
     const orderB = await seedOrder(hidden);
     state.scope = new Set([org.subsidiaryId]);
     const refused = await advancedCall({ action: "shipTransfer", id: orderB, date: org.date, idempotencyKey: randomUUID() });
-    assert.equal(refused.status, 403, JSON.stringify(await refused.clone().json()));
+    // Out-of-scope order hides as not found, same as counts above.
+    assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
     assert.equal(
       (await db.execute<{ status: string }>(sql`select status from transfer_orders where id=${orderB}`)).rows[0]!.status,
       "draft",
