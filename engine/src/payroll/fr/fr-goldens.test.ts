@@ -219,7 +219,9 @@ test("eligible French payroll refuses missing contractual hours by name", async 
   const ctx = {
     tx: { execute: async () => ++query === 1
       ? ({ rows: [{ fact_value: "12.00" }] })
-      : ({ rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }] }) },
+      : query === 2
+      ? ({ rows: [{ fact_value: "ordinary" }] })
+      : ({ rows: [{ fact_value: "droit_commun", remuneration: "0", smic: "0", reduction: "0" }] }) },
     orgId: "org",
     subsidiaryId: "legal-employer",
     resolveStatutoryRates: async () => ({
@@ -248,7 +250,7 @@ test("an eligible filing account prices the reduced 3.45% family rate through th
   // eligibility, so an eligible employer over-accrued at 5.25%. 2 000 € × 3.45% = 69.00.
   let query = 0;
   const ctx = {
-    tx: { execute: async () => (++query === 1 ? { rows: [{ fact_value: "10.00" }] } : { rows: [{ fact_value: "ordinary" }] }) },
+    tx: { execute: async () => (++query === 1 ? { rows: [{ fact_value: "10.00" }] } : query === 2 ? { rows: [{ fact_value: "ordinary" }] } : { rows: [{ fact_value: "droit_commun" }] }) },
     orgId: "org", subsidiaryId: "legal-employer", filingAccountId: "siret-eligible",
     resolveStatutoryRates: async () => ({
       values: (slotKey: string) => slotKey === "fr_atmp" ? { taux: "1.1000" } : slotKey === "fr_allocfam" ? { reduced_rate_eligible: "true" } : null,
