@@ -18,7 +18,7 @@
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { sql } from "drizzle-orm";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
-import { certificateAmount, certificateCount } from "../certificates.ts";
+import { certificateAmount, certificateChoice, certificateCount } from "../certificates.ts";
 // Side effect: registers ES_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
@@ -371,6 +371,18 @@ export async function computeEsStatutory(
   // RIRPF art. 83.2.1ª prices the calendar-year amount normally expected,
   // not twelve copies of a check whose employee may have started midyear.
   const retribAnual = D(retribucionAnualUnits);
+  // The calculator prices sub-one-year (2%) and special-relationship (15%)
+  // minimum rates from its contrato input; the adapter never leaves it at the
+  // general default. The category is copied off the signed contrato onto
+  // es_contrato, and an unidentifiable category refuses by name.
+  const contratoCert = certificateFor("es_contrato");
+  if (!contratoCert) {
+    fail("es_contrato is missing; declare the contract category copied off the signed contrato so the IRPF minimum rate can be identified");
+  }
+  const categoria = certificateChoice(contratoCert, "categoria_contrato");
+  if (categoria !== "general" && categoria !== "inferiorAno" && categoria !== "especial") {
+    fail("es_contrato categoria_contrato cannot be identified; declare general, inferiorAno (duration under one year), or especial (special employment relationship) copied off the signed contrato");
+  }
   const irpf = calculateEsIrpf2026({
     payDate,
     retribuciones: retribAnual,
@@ -381,6 +393,7 @@ export async function computeEsStatutory(
     desempleado: situacionLaboral === "desempleado",
     zona,
     rendimientosZona: rendimientosEnZona,
+    contrato: categoria,
   });
 
   // The annual tipo hits the month's pay, rounded half-up to the cent.

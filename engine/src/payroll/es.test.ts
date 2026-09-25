@@ -169,7 +169,7 @@ test("ES certificates keep Modelo 145 distinct from payer-held facts", () => {
   // situación familiar is distinct from SITUPER.
   assert.deepEqual(
     ES_CERTIFICATES.certificates.map((entry) => [entry.key, entry.storage]),
-    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"]],
+    [["es_145", "certificate_rows"], ["es_datos_perceptor", "profile_columns"], ["es_zona_irpf", "certificate_rows"], ["es_retribucion_anual", "certificate_rows"], ["es_contrato", "certificate_rows"]],
   );
   const certificate = ES_CERTIFICATES.certificates[0]!;
   assert.equal(certificate.form, "145");
