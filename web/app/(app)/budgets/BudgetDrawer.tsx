@@ -523,7 +523,7 @@ export function BudgetDrawer({
   // the first Save commits the row they would act on.
   const headerActions = unsaved ? <>
     <Button size="sm" disabled={busy} onClick={() => void saveNew()}>{t('create.save')}</Button>
-    <Button variant="outline" size="sm" asChild><Link href={closeHref}>{tc('actions.cancel')}</Link></Button>
+    <Button variant="outline" size="sm" disabled={busy} onClick={() => router.push(closeHref)}>{tc('actions.cancel')}</Button>
   </> : <>
     {editable ? <Button variant="outline" size="sm" asChild><Link href={(importHref)}><FileUp size={15} />{t('import.button')}</Link></Button> : null}
     <Button variant="outline" size="sm" asChild><Link href={`/reports/budget?scenario=${scenario.id}`}>{t('actions.openReport')}</Link></Button>
@@ -539,6 +539,7 @@ export function BudgetDrawer({
   <UrlDrawer
     open
     closeHref={closeHref}
+    beforeClose={unsaved && busy ? () => false : undefined}
     size="2xl"
     initialFullscreen
     title={<span className="flex items-center gap-2.5"><span>{newlyCreated ? t('create.title') : name || scenario.name}</span><Badge variant={badgeVariant}>{t(`status.${scenario.status}`)}</Badge></span>}
