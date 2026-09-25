@@ -1,6 +1,6 @@
 /**
  * The JP pack's pure 2026 calculators: NTA 月額表 lookup, pension grade
- * pricing, and health half-share arithmetic. Proven by goldens; the adapter
+ * pricing, and social-insurance contribution arithmetic. Proven by goldens; the adapter
  * (./compute-statutory.ts) maps the generic run context onto them.
  *
  * Method (agency-stated where the agency speaks):
@@ -8,9 +8,9 @@
  *   inclusive, 未満 exclusive), the 扶養親族等の数 selects the column —
  *   NTA No.2511: 「税額表に当てはめる給与等の金額は、その月（日）分の給与
  *   等の金額から厚生年金保険料、健康保険料及び雇用保険料などの社会保険料
- *   等を控除した後の金額によります」. The engine's base deducts the two
- *   premiums it computes (厚生年金 + 健康保険); 雇用保険 is untranscribed,
- *   so the base is stated gross-minus-two, not true gross-minus-three
+ *   等を控除した後の金額によります」. The engine's base deducts its computed
+ *   premiums (厚生年金 + 健康保険 + effective child support); 雇用保険 is
+ *   untranscribed, so the base is gross-minus-computed-premiums, not gross-minus-all
  *   (see JP_REFUSED_2026 — a named gap, never a guessed deduction).
  * - 105,000円未満: every 甲 column is 0 (the table's first row).
  * - 乙欄 below 105,000円: 「その月の社会保険料等控除後の給与等の金額の
@@ -32,7 +32,7 @@
  *   (payroll deducts, so arm ① governs).
  *
  * Money: integer yen in, integer yen out. No floats anywhere — the health
- * half-share runs on exact BigInt rationals.
+ * half-shares and the employer levy run on exact BigInt rationals.
  */
 import { PayrollPackError } from "../payroll-error.ts";
 import { JP_PENSION_GRADES_2026 } from "./pension-2026.ts";
@@ -153,6 +153,17 @@ export function healthHalfShare(standardYen: bigint, ratePercent: string): bigin
   return rem <= halfUnit ? yen : yen + 1n;
 }
 
+/** 2026 child-rearing support premium, half-share, on standard remuneration. */
+export function childSupportHalfShare(standardYen: bigint): bigint {
+  return healthHalfShare(standardYen, "0.23");
+}
+
+/** 2026 employer-only child-rearing levy at 0.36%, rounded to whole yen. */
+export function childCareEmployerLevy(standardYen: bigint): bigint {
+  needIntYen(standardYen, "標準報酬月額");
+  return (standardYen * 36n + 5000n) / 10000n;
+}
+
 export interface Jp2026Input {
   /** Monthly gross pay (income), integer yen. */
   grossMonthly: bigint;
@@ -162,6 +173,8 @@ export interface Jp2026Input {
   dependents: number | null;
   /** Tenant-declared health rate in force, percent number ("9.85"). */
   healthRate: string;
+  /** Whether the run's applicable insurance month is on/after 2026-04-01. */
+  childContributionsEffective: boolean;
 }
 
 export interface Jp2026Result {
@@ -169,7 +182,10 @@ export interface Jp2026Result {
   pensionEmployer: bigint;
   health: bigint;
   healthEmployer: bigint;
-  /** gross − pension − health: the 月額表 input (雇用保険 gap stated above). */
+  childSupport: bigint;
+  childSupportEmployer: bigint;
+  childCareEmployer: bigint;
+  /** gross less employee social premiums: the 月額表 input. */
   gensenBase: bigint;
   gensen: bigint;
 }
@@ -179,15 +195,29 @@ export function calculateJp2026(input: Jp2026Input): Jp2026Result {
   const grade = pensionGradeForStandard(input.standard);
   const pension = grade.half;
   const health = healthHalfShare(input.standard, input.healthRate);
-  const gensenBase = input.grossMonthly - pension - health;
+  const childSupport = input.childContributionsEffective ? childSupportHalfShare(input.standard) : 0n;
+  const childSupportEmployer = childSupport;
+  const childCareEmployer = input.childContributionsEffective ? childCareEmployerLevy(input.standard) : 0n;
+  const gensenBase = input.grossMonthly - pension - health - childSupport;
   if (gensenBase < 0n) {
     fail(
-      `gensen base is negative (gross ${input.grossMonthly} − pension ${pension} − health ${health}): `
+      `gensen base is negative (gross ${input.grossMonthly} − pension ${pension} − health ${health} `
+      + `− child support ${childSupport}): `
       + "premiums exceed pay — refusing rather than looking up a negative amount",
     );
   }
   const gensen = input.dependents === null
     ? lookupGensenOtsu(gensenBase)
     : lookupGensenKo(gensenBase, input.dependents);
-  return { pension, pensionEmployer: pension, health, healthEmployer: health, gensenBase, gensen };
+  return {
+    pension,
+    pensionEmployer: pension,
+    health,
+    healthEmployer: health,
+    childSupport,
+    childSupportEmployer,
+    childCareEmployer,
+    gensenBase,
+    gensen,
+  };
 }

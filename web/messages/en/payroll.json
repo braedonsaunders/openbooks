@@ -854,7 +854,8 @@
         "slots": {
           "gensen": "Withholding income tax payable (NTA monthly table)",
           "kosei_nenkin": "Employees' pension payable (employee + employer half-shares)",
-          "kenko_hoken": "Health insurance payable (employee + employer half-shares)"
+          "kenko_hoken": "Health insurance payable (employee + employer half-shares)",
+          "child_rearing_contributions": "Child-rearing social contributions payable (employee support + employer levy)"
         }
       },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab.",

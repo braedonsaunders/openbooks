@@ -53,7 +53,7 @@ test("statutory slots name gensen, pension, and health with both shares", () => 
   assert.deepEqual(slots.map((slot) => slot.key), [
     "gensen",
     "kosei_nenkin",
-    "kenko_hoken",
+    "kenko_hoken", "child_rearing_contributions",
   ]);
   const byKey = new Map(slots.map((slot) => [slot.key, slot]));
   assert.equal(byKey.get("gensen")?.components[0]?.systemKey, "income_tax");
@@ -133,7 +133,7 @@ test("2026 is published; the ledger names every refusal", () => {
   assert.deepEqual(JP_TAX_YEARS.regionsWithOwnTables, []);
   assert.equal(JP_PAYROLL_PACK.taxYears, JP_TAX_YEARS);
   const refused = JP_REFUSED_2026.join("\n");
-  for (const name of ["住民税", "年末調整", "日額表", "賞与", "雇用保険", "介護保険", "子ども・子育て拠出金"]) {
+  for (const name of ["住民税", "年末調整", "日額表", "賞与", "雇用保険", "介護保険"]) {
     assert.ok(refused.includes(name), `ledger names ${name}`);
   }
 });
@@ -179,6 +179,7 @@ function fakeCtx(overrides: {
   emp?: Record<string, string | null>;
   answers?: Record<string, string | null> | null;
   employmentInsurance?: string | null;
+  payDate?: string;
 }): { ctx: PayrollStatutoryComputeContext; pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] } {
   const pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] = [];
   const answers = overrides.answers === undefined
@@ -214,7 +215,7 @@ function fakeCtx(overrides: {
     documentId: "doc",
     employeePartyId: "emp",
     employeeName: "Emp",
-    run: {},
+    run: { pay_date: overrides.payDate ?? "2026-03-31" },
     emp: overrides.emp ?? { jp_hyojun_hoshu: "300000", jp_kaigo_dainigou: "false" },
     filingAccountId: null,
     deduction: () => "0",
@@ -277,25 +278,23 @@ test("mechanism 3: the year resolver throws on BOTH sides of 2026", async () => 
   }
 });
 
-test("adapter: a monthly 甲 payslip computes end to end and pushes five lines", async () => {
-  // Gross 300,000, grade 300,000, 0人, Tokyo 9.85%: pension 27,450, health
-  // 14,775, base 257,775 → gensen 6,430 (row 71). Both employer shares push
-  // under the same systemKey as the employee share, never employer-side
-  // pension/health keys — the push path proves the declaration covers them.
-  const { ctx, pushed } = fakeCtx({});
+test("adapter: a monthly 甲 payslip includes effective child contributions", async () => {
+  // Gross 300,000, grade 300,000, 0人, Tokyo 9.85%: contributions leave a
+  // 257,430 gensen base → 6,430; both child-related levies post separately.
+  const { ctx, pushed } = fakeCtx({ payDate: "2026-04-01" });
   const factors = await computeJpStatutoryWithRates(ctx, TOKYO_RATE);
-  assert.equal(factors["JP_GENSEN_BASE"], "257775");
+  assert.equal(factors["JP_GENSEN_BASE"], "257430");
   assert.equal(factors["JP_GENSEN"], "6430");
-  assert.equal(factors["JP_PENSION_W"], "27450");
-  assert.equal(factors["JP_PENSION_ER"], "27450");
-  assert.equal(factors["JP_HEALTH_W"], "14775");
-  assert.equal(factors["JP_HEALTH_ER"], "14775");
+  assert.deepEqual([factors["JP_CHILD_SUPPORT_W"], factors["JP_CHILD_SUPPORT_ER"], factors["JP_CHILD_CARE_ER"]], ["345", "345", "1080"]);
   assert.deepEqual(pushed.map((p) => [p.systemKey, p.kind, p.amount, p.sequence]), [
     ["income_tax", "deduction", "6430", 110],
     ["pension", "deduction", "27450", 120],
     ["health", "deduction", "14775", 130],
+    ["child_support", "deduction", "345", 140],
     ["pension", "employer_contribution", "27450", 220],
     ["health", "employer_contribution", "14775", 230],
+    ["child_support", "employer_contribution", "345", 240],
+    ["child_care_employer", "employer_contribution", "1080", 250],
   ]);
 });
 
