@@ -407,15 +407,16 @@ test(
       await issue(org.orgId, so1, actorId);
       const converted = await convertOrder(org.orgId, actorId, so1, "customer_invoice");
 
-      // Legacy simulation: rows relabelled through the pre-fix unguarded path
-      // bypass the edit guard, so raw SQL stands in for those inconsistent
-      // rows. The credit math must still fail closed on them.
+      // Simulate a pre-limit legacy posting, then restore the USD limit for exposure checks.
       await withBypassContext(async () => {
-        await db.execute(sql`
-          update documents set currency = 'EUR', updated_at = now(), updated_by = ${actorId}
-           where id = ${converted.id} and org_id = ${org.orgId}`);
+        await db.execute(sql`update documents set currency = 'EUR', updated_at = now(), updated_by = ${actorId}
+          where id = ${converted.id} and org_id = ${org.orgId}`);
+        await db.execute(sql`update customer_roles set credit_limit = null, updated_by = ${actorId}
+          where org_id = ${org.orgId} and party_id = ${org.customerId}`);
       });
       await approveAndPost(org, actorId, converted.id);
+      await withBypassContext(() => db.execute(sql`update customer_roles set credit_limit = '10000', updated_by = ${actorId}
+        where org_id = ${org.orgId} and party_id = ${org.customerId}`));
       await payInFull(org, actorId, converted.id, "EUR", "10000");
 
       // No role-currency billing ever relieved SO-FX-LEG-1, so the second
@@ -432,4 +433,3 @@ test(
     }
   },
 );
-
