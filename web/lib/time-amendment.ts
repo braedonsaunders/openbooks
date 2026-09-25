@@ -32,12 +32,14 @@ export async function amendTimeEntry(
 ): Promise<{ id: string; amendsEntryId: string; amended: number }> {
   return withOrgTransaction(orgId, async () => {
     // Probe only the employee identity first, then take the authoritative
-    // party scope lock before locking the entry or its week.
-    const identity = (await db.execute<{ employee_party_id: string }>(sql`
-      select employee_party_id from time_entries where id = ${entryId} and org_id = ${orgId}
+    // party scope lock before locking the week header or entry.
+    const identity = (await db.execute<{ employee_party_id: string; worked_on: string }>(sql`
+      select employee_party_id, worked_on::text from time_entries where id = ${entryId} and org_id = ${orgId}
     `)).rows[0]
     if (!identity) throw new Error('time entry not found')
     await lockScopeRow(db, orgId, 'party', identity.employee_party_id, allowedSubsidiaryIds, 'share')
+    const entryWeek = weekStart(identity.worked_on)
+    await lockTimesheetWeek(orgId, identity.employee_party_id, entryWeek)
     const src = (await db.execute<AmendableRow>(sql`
       select ${AMENDABLE_COLUMNS}
         from time_entries
@@ -47,6 +49,7 @@ export async function amendTimeEntry(
     const row = src.rows[0]
     if (!row) throw new Error('time entry not found')
     if (row.employee_party_id !== identity.employee_party_id) throw new ScopeNotFoundError()
+    if (weekStart(row.worked_on) !== entryWeek) throw new Error('time entry week changed; retry the amendment')
     if (row.amends_entry_id) throw new Error('an amendment cannot itself be amended — amend the original')
     // Only approved history is amended. An entry that is still draft,
     // submitted, or rejected remains editable, so a contra against it would
@@ -124,6 +127,19 @@ const AMENDABLE_COLUMNS = sql`
   cost_rate_currency, cost_rate_subsidiary_id,
   bill_rate, bill_rate_source_rate, bill_rate_source_currency, bill_rate_fx_rate,
   bill_rate_currency, bill_rate_book_id, bill_rate_version_id, bill_rate_line_id`
+
+/** Lock and re-read the lifecycle header before touching any entries in the week. */
+async function lockTimesheetWeek(orgId: string, employeeId: string, week: string): Promise<void> {
+  const header = (await db.execute<{ id: string; status: string }>(sql`
+    select id, status from timesheet_weeks
+     where org_id = ${orgId} and employee_party_id = ${employeeId} and week_start = ${week}::date
+     for update
+  `)).rows[0]
+  if (!header) throw new Error('timesheet week not found')
+  // Reading status under the lock deliberately rechecks any approval or
+  // submission that completed while this amendment waited for the header.
+  if (header.status === 'empty') throw new Error('no locked entries to amend')
+}
 
 async function insertAmendment(
   orgId: string,
@@ -209,6 +225,7 @@ export async function amendLockedWeek(
     const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId, allowedSubsidiaryIds)
     if (!ownedEmployee) throw new Error('employee not found')
     const week = weekStart(sundayIso)
+    await lockTimesheetWeek(orgId, ownedEmployee, week)
     const days = weekWindow(week)
 
     const src = (await db.execute<AmendableRow>(sql`
