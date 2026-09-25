@@ -492,18 +492,22 @@ export function BillingSection({
               cell: (r) => (
                 <div className="flex flex-col items-end gap-1">
                   <div className="flex items-center justify-end gap-2">
-                    {r.status === 'open' && canManage ? (
+                    {r.status === 'open' && (applicationPermissions.canCreate || canManage) ? (
                       <>
-                        <Button size="sm" onClick={() => createInvoice(r.id)} disabled={busy}>{t('createInvoice')}</Button>
-                        <Button size="sm" variant="ghost" onClick={() => cancelRequest(r.id)} disabled={busy}>{tCommon('actions.cancel')}</Button>
+                        {applicationPermissions.canCreate ? (
+                          <Button size="sm" onClick={() => createInvoice(r.id)} disabled={busy}>{t('createInvoice')}</Button>
+                        ) : null}
+                        {canManage ? (
+                          <Button size="sm" variant="ghost" onClick={() => cancelRequest(r.id)} disabled={busy}>{tCommon('actions.cancel')}</Button>
+                        ) : null}
                       </>
                     ) : null}
-                    {r.status === 'invoiced' && r.backupRequired && r.hasBackup ? (
+                    {r.status === 'invoiced' && r.backupRequired && r.hasBackup && applicationPermissions.canRead ? (
                       <a href={`/api/billing-requests/${r.id}/backup`} target="_blank" rel="noreferrer">
                         <Button size="sm" variant="outline">{t('downloadBackup')}</Button>
                       </a>
                     ) : null}
-                    {r.status === 'invoiced' && r.backupRequired && !r.hasBackup && canManage ? (
+                    {r.status === 'invoiced' && r.backupRequired && !r.hasBackup && applicationPermissions.canCreate ? (
                       <Button size="sm" variant="outline" onClick={() => generateBackup(r.id)} disabled={busy}>{t('generateBackup')}</Button>
                     ) : null}
                   </div>
