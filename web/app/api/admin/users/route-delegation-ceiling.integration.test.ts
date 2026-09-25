@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
@@ -43,6 +44,7 @@ const hooks = registerHooks({
     const parent = String(context.parentURL ?? "");
     if (specifier === "../../../../lib/authz" && parent.includes("/api/admin/users/route.ts")) {
       return virtual(`
+        export { subsidiaryScopeAllows } from '${pathToFileURL(process.cwd() + "/").href}engine/src/organization/subsidiary-scope.ts';
         const state = globalThis[Symbol.for('openbooks.admin-users-delegation-ceiling')];
         export async function guardPermission() {
           if (!state.authz) return Response.json({ error: 'unauthorized' }, { status: 401 });

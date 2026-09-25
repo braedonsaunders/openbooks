@@ -23,7 +23,7 @@ registerHooks({
         url:
           "data:text/javascript," +
           encodeURIComponent(
-            "export async function guardPermission(){return {user:globalThis.__projectTypePatchUser.user,permissions:new Set(['*']),allowedSubsidiaryIds:null}}",
+            `export { guardUnrestrictedScope } from '${root}web/lib/authz.ts';export async function guardPermission(){return {user:globalThis.__projectTypePatchUser.user,permissions:new Set(['*']),allowedSubsidiaryIds:null}}`,
           ),
       };
     }

@@ -1,4 +1,3 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
@@ -578,7 +577,13 @@ export async function PUT(req: Request) {
       )
     }
     if (error instanceof WizardFoundationBlocked) {
-      return apiErrorResponse(error, { safeStatus: 409 })
+      // The machine-readable lock key is the designed wire contract (the
+      // settings path answers the same shape): apiErrorResponse would drop
+      // it and leave only the human message.
+      return NextResponse.json(
+        { error: error.key, message: error.message },
+        { status: 409 },
+      )
     }
     throw error
   }
