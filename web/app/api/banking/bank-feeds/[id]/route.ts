@@ -1,7 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import {
   resolveFeedSyncOverlapDays,
   sealCredentials,
@@ -10,7 +11,7 @@ import {
 } from "@openbooks/engine/src/banking/bank-feed-providers.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
-import { guardSubsidiaryScope, type Authz } from "../../../../../lib/authz";
+import type { Authz } from "../../../../../lib/authz";
 
 export const runtime = "nodejs";
 
@@ -22,29 +23,27 @@ function withoutCredentials(row: Record<string, unknown>): Record<string, unknow
   return { ...rest, hasCredentials: credentials != null };
 }
 
-async function loadRow(orgId: string, id: string): Promise<Record<string, unknown> | null> {
-  const r = (await db.execute<Record<string, unknown>>(sql`
-    select * from bank_feed_connections where id = ${id} and org_id = ${orgId}
-  `));
-  return r.rows[0] ?? null;
-}
-
-/**
- * Scope-gate a connection by its bound bank account's owning subsidiary.
- * Returns null when access may proceed, or the uniform not-found response
- * when the bound account sits outside the caller's subsidiary scope (a
- * deleted account fails closed the same way). Missing connections stay the
- * caller's own 404 — callers check existence first.
- */
-async function requireConnectionScope(
+/** Account first, then connection: account rehomes and feed operations share a fence. */
+async function lockScopedConnection(
+  tx: SqlExecutor,
   authz: Authz,
-  connection: Record<string, unknown>,
-): Promise<NextResponse | null> {
-  const acct = (await db.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from accounts
-     where id = ${connection.account_id as string} and org_id = ${authz.user.orgId}
-  `));
-  return guardSubsidiaryScope(authz, acct.rows[0]?.subsidiary_id ?? null);
+  id: string,
+): Promise<Record<string, unknown> | NextResponse> {
+  const reference = (await tx.execute<{ account_id: string }>(sql`
+    select account_id from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
+  `)).rows[0];
+  if (!reference) return NextResponse.json({ error: "not found" }, { status: 404 });
+  try {
+    await lockScopeRow(tx, authz.user.orgId, "account", reference.account_id, authz.allowedSubsidiaryIds, "share");
+  } catch (error) {
+    if (!(error instanceof ScopeNotFoundError)) throw error;
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const connection = (await tx.execute<Record<string, unknown>>(sql`
+    select * from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId} and account_id = ${reference.account_id}
+     for update
+  `)).rows[0];
+  return connection ?? NextResponse.json({ error: "not found" }, { status: 404 });
 }
 
 async function audit(
@@ -74,12 +73,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const before = await loadRow(authz.user.orgId, id);
-  if (!before) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
-  const scoped = await requireConnectionScope(authz, before);
-  if (scoped) return scoped;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
@@ -119,7 +112,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sets.push(sql`status = 'pending'`);
   }
   if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-  await db.transaction(async (tx) => {
+  const denied = await db.transaction(async (tx) => {
+    const before = await lockScopedConnection(tx, authz, id);
+    if (before instanceof NextResponse) return before;
     const updated = (await tx.execute<Record<string, unknown>>(sql`
       /* updated_at is the scheduler's configuration revision: any route edit
        * invalidates a scan-time bank-feed snapshot before it can be claimed. */
@@ -133,7 +128,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       after: withoutCredentials(updated.rows[0]),
       ...(rotating ? { credentialsRotated: true } : {}),
     }, authz.user.id, req.headers.get("X-Request-Id"));
+    return null;
   });
+  if (denied) return denied;
   return NextResponse.json({ ok: true });
 }
 
@@ -144,28 +141,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!isUuid(id)) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const target = await loadRow(authz.user.orgId, id);
-  if (!target) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
-  const deleteScoped = await requireConnectionScope(authz, target);
-  if (deleteScoped) return deleteScoped;
   const missing = await db.transaction(async (tx) => {
-    const before = (await tx.execute<Record<string, unknown>>(sql`
-      select * from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
-       for update
-    `));
+    const before = await lockScopedConnection(tx, authz, id);
+    if (before instanceof NextResponse) return before;
     const deleted = (await tx.execute<{ id: string }>(sql`
       delete from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
        returning id
     `));
-    if (!before.rows[0] || !deleted.rows[0]) return true;
+    if (!deleted.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
     await audit(tx, authz.user.orgId, id, "delete", {
-      before: withoutCredentials(before.rows[0]),
+      before: withoutCredentials(before),
     }, authz.user.id, req.headers.get("X-Request-Id"));
-    return false;
+    return null;
   });
-  if (missing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (missing) return missing;
   return NextResponse.json({ ok: true });
 }
 
@@ -177,28 +166,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const existing = await loadRow(authz.user.orgId, id);
-  if (!existing) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
-  // Probing the connection (test) and pulling its statements (sync) both
-  // touch another entity's account when out of scope: uniform not-found.
-  const actionScoped = await requireConnectionScope(authz, existing);
-  if (actionScoped) return actionScoped;
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as { action?: string };
   if (body.action === "test") {
-    // The route's credential snapshot is the probe's revision. Probe exactly
-    // those credentials, then only publish health if they are still current.
-    const credentialRevision = existing.credentials as string | null;
-    const result = await testBankFeedConnection(id, { orgId: authz.user.orgId }, credentialRevision);
-    // Reflect the probe result on the row so the list shows connection health,
-    // and record the flip in the append-only audit trail.
-    const nextStatus = result.ok ? "connected" : "error";
-    const nextError = result.ok ? null : result.detail ?? "test failed";
-    let testConflict: "deleted" | "stale" | null = null;
-    await db.transaction(async (tx) => {
+    const resultOrDenied = await db.transaction(async (tx) => {
+      const existing = await lockScopedConnection(tx, authz, id);
+      if (existing instanceof NextResponse) return existing;
+      // Keep both scope locks from credential snapshot through probe and
+      // status publication, so a rehome cannot leak connection health.
+      const credentialRevision = existing.credentials as string | null;
+      const result = await testBankFeedConnection(id, { orgId: authz.user.orgId }, credentialRevision);
+      const nextStatus = result.ok ? "connected" : "error";
+      const nextError = result.ok ? null : result.detail ?? "test failed";
       const updated = (await tx.execute<{ id: string }>(sql`
         update bank_feed_connections set status = ${nextStatus},
                last_error = ${nextError}, updated_at = now()
@@ -207,11 +187,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
          returning id
       `)).rows[0];
       if (!updated) {
-        const current = (await tx.execute<{ id: string }>(sql`
-          select id from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
-        `)).rows[0];
-        testConflict = current ? "stale" : "deleted";
-        return;
+        return NextResponse.json({ error: "stale probe" }, { status: 409 });
       }
       await audit(tx, authz.user.orgId, id, "update", {
         field: "status",
@@ -227,12 +203,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         },
         source: "connection_test",
       }, authz.user.id, req.headers.get("X-Request-Id"));
+      return result;
     });
-    if (testConflict === "deleted") {
-      return NextResponse.json({ error: "deleted while testing" }, { status: 409 });
-    }
-    if (testConflict === "stale") return NextResponse.json({ error: "stale probe" }, { status: 409 });
-    return NextResponse.json(result);
+    return resultOrDenied instanceof NextResponse ? resultOrDenied : NextResponse.json(resultOrDenied);
   }
   if (body.action === "sync") {
     // The interactive operator is the audit actor for everything this sync
