@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
  * Recall eligibility for an expense report (F-user-003): a pending_approval
@@ -42,7 +43,14 @@ export function canRecallExpenseReport(
  * exact revision. A later token lookup could bless stale content with a
  * concurrent writer's revision and defeat optimistic concurrency.
  */
-export async function loadExpenseReport(id: string, orgId: string) {
+export async function loadExpenseReport(
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+) {
+  const scope = allowedSubsidiaryIds === undefined
+    ? sql``
+    : subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)
   const result = await db.execute<Record<string, unknown> & { __lines: Record<string, unknown>[] }>(sql`
     select d.*, ${documentRevisionCounterSql(sql`d.revision_seq`)} as updated_at,
            p.display_name as employee_name, e.id as entry_id,
@@ -62,7 +70,7 @@ export async function loadExpenseReport(id: string, orgId: string) {
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
-     where d.id = ${id} and d.org_id = ${orgId} and d.kind = 'expense_report'
+     where d.id = ${id} and d.org_id = ${orgId} and d.kind = 'expense_report' ${scope}
   `)
   if (!result.rows[0]) return null
   const { __lines: lines, ...doc } = result.rows[0]

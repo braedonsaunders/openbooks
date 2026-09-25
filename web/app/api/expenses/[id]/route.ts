@@ -33,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const malformed = malformedId(id)
   if (malformed) return malformed
-  const report = await loadExpenseReport(id, gate.user.orgId)
+  const report = await loadExpenseReport(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // Authorize the subsidiary from the same snapshot as the returned content.
   const denied = guardSubsidiaryScope(gate, report.doc.subsidiary_id as string | null)
@@ -173,7 +173,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     throw e
   }
 
-  const report = await loadExpenseReport(id, user.orgId)
+  const report = await loadExpenseReport(id, user.orgId, gate.allowedSubsidiaryIds)
   if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const responseDenied = guardSubsidiaryScope(gate, report.doc.subsidiary_id as string | null)
   if (responseDenied) return responseDenied
