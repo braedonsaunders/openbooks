@@ -161,6 +161,7 @@ export type ProfileRow = {
   es_ano_nacimiento: number | null
   es_grupo_cotizacion: number | null
   es_situacion_laboral: string | null
+  es_contrato_temporal: string | null
   jp_hyojun_hoshu: number | null
   jp_kaigo_dainigou: string | null
   br_dependentes: number | null

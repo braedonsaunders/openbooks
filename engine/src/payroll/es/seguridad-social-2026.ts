@@ -58,8 +58,8 @@ export interface EsSeguridadSocialInput {
    * (art. 38.2 Tercera: the general grupo maxima).
    */
   readonly horasTiempoParcial?: string;
-  /** Temporal contract → 8,30% desempleo; default indefinido 7,05%. */
-  readonly contratoTemporal?: boolean;
+  /** Temporal contract → 8,30% desempleo; indefinido → 7,05%. Always explicit — never defaulted. */
+  readonly contratoTemporal: boolean;
   /** Monthly gross for the solidaridad tranches (defaults to the base). */
   readonly retribucionMensual?: string;
   readonly horasExtraFuerzaMayor?: string;
@@ -151,7 +151,7 @@ export function calculateEsSeguridadSocial2026(
 
   const T = ES_TIPOS_2026;
   const cc = split(ccBase, T.contingenciasComunes);
-  const des = split(baseProf, input.contratoTemporal === true ? T.desempleoTemporal : T.desempleoIndefinido);
+  const des = split(baseProf, input.contratoTemporal ? T.desempleoTemporal : T.desempleoIndefinido);
   const fogasa = cuota(baseProf, T.fogasa.empresa);
   const form = split(baseProf, T.formacion);
   const mei = split(ccBase, T.mei);

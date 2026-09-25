@@ -12,16 +12,17 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 
 // Required employee facts. The compute path reads twelve `emp[...]` keys;
-  // the three blocking ones (situación, grupo, año) are served since 0191
-  // by the profile columns the `es_datos_perceptor` certificate fields map
-  // — kept apart from the Modelo 145, whose situación familiar (art. 81
-  // RIRPF) is a FAMILY status, not the labour status SITUPER prices. The
-  // fourth (contrato temporal) accepts absence and stays unbuilt, as do the
-  // fifth and sixth (the classified overtime pay split, per-period) and the
-  // tenth and eleventh (tiempo parcial contract type and its monthly hours):
-  // no profile column or certificate field collects any of them yet. The
-  // twelfth (residencia fiscal) resolves through the stored-certificate
-  // channel, like the US federal alien-status fact.
+  // the four blocking ones (situación, grupo, año, contrato temporal) are
+  // served by the profile columns the `es_datos_perceptor` certificate
+  // fields map (situación, grupo and año since 0191; contrato temporal
+  // since 0406) — kept apart from the Modelo 145, whose situación familiar
+  // (art. 81 RIRPF) is a FAMILY status, not the labour status SITUPER
+  // prices. The fifth and sixth (the classified overtime pay split,
+  // per-period) and the tenth and eleventh (tiempo parcial contract type
+  // and its monthly hours) stay unbuilt: no profile column or certificate
+  // field collects any of them yet. The twelfth (residencia fiscal)
+  // resolves through the stored-certificate channel, like the US federal
+  // alien-status fact.
   //
   // OPEN, still: which AEAT/TGSS artefact the operator copies each value
   // off (contrato, alta en Seguridad Social, otro) — and, shared with PL,
@@ -67,15 +68,10 @@ import { PayrollPackError } from "../payroll-error.ts";
       kind: "flag",
       label: "Contrato temporal",
       refusalReason:
-        "Only a present-but-foreign value refuses; absent is accepted as an indefinite contract.",
-      required: false,
-      producer: {
-        kind: "none",
-        notes:
-          "No channel exists, and none is needed for the common case: absent is accepted, so this fact "
-          + "does not block `payable`. When the temporal/indefinido input is built (same form as the "
-          + "trio above), declare the certificate or profile-column producer here.",
-      },
+        "The contract type selects the desempleo rate split (7,05% indefinite vs 8,30% temporary, "
+        + "Orden PJC/297/2026 art. 33.2.a); an undeclared contract must not fall through to indefinite pricing.",
+      required: true,
+      producer: { kind: "profile_column", column: "es_contrato_temporal" },
     },
     {
       key: "es_contrato_duracion_dias",

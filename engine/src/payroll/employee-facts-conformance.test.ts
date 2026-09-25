@@ -218,7 +218,11 @@ test("payable is derived: all fourteen packs payable once every required fact ha
 });
 
 test("missingEmployeeFacts lists required-but-absent facts, never optional ones", () => {
-  // PL blocks on an absent birth year; ES accepts an absent contrato flag.
+  // PL blocks on an absent birth year, and ES on an absent contrato type:
+  // the temporal/indefinido split selects the desempleo rate, so absence
+  // is missing rather than priced as indefinite. Acceptance of a declared
+  // "false" is pinned by every ES compute fixture (foral, facts, adapter
+  // March payslip at the indefinite 31.00/110.00 desempleo amounts).
   assert.deepEqual(
     missingEmployeeFacts("PL", {}).map((fact) => fact.key),
     ["pl_rok_urodzenia"],
@@ -228,13 +232,9 @@ test("missingEmployeeFacts lists required-but-absent facts, never optional ones"
     "pl_rok_urodzenia",
   ]);
   assert.deepEqual(
-    missingEmployeeFacts("ES", {
-      es_situacion_laboral: "activo",
-      es_grupo_cotizacion: "3",
-      es_ano_nacimiento: "1990",
-    }).map((fact) => fact.key),
-    [],
-    "an absent optional contrato temporal is never missing",
+    missingEmployeeFacts("ES", { es_situacion_laboral: "activo", es_grupo_cotizacion: "3", es_ano_nacimiento: "1990" }).map((fact) => fact.key),
+    ["es_contrato_temporal"],
+    "an absent contrato temporal is missing: the desempleo split is never defaulted",
   );
 });
 

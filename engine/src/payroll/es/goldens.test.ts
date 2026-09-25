@@ -151,6 +151,7 @@ test("hand-worked: SS grupo 7 base 2.000 → EE 130,00 / ER 613,00", () => {
     payDate: "2026-04-10",
     grupo: 7,
     base: "2000",
+    contratoTemporal: false,
   });
   assert.equal(r.baseContingenciasComunes, "2000.0000");
   assert.equal(r.ccTrabajador, "94.0000");
@@ -177,10 +178,11 @@ test("hand-worked: SS solidaridad on 6.000 → EE 1,79 / ER 8,94", () => {
     grupo: 1,
     base: "5101.20",
     retribucionMensual: "6000",
+    contratoTemporal: false,
   });
   assert.equal(r.solidaridadTrabajador, "1.7900");
   assert.equal(r.solidaridadEmpresa, "8.9400");
-  assert.equal(calculateEsSeguridadSocial2026({ payDate: "2026-06-10", grupo: 9, base: "170.04", dias: 31, retribucionMensual: "5200" }).solidaridadTrabajador, "0.0000");
+  assert.equal(calculateEsSeguridadSocial2026({ payDate: "2026-06-10", grupo: 9, base: "170.04", dias: 31, retribucionMensual: "5200", contratoTemporal: false }).solidaridadTrabajador, "0.0000");
 });
 
 // SS clamp: grupo 1 base 1.500 rises to the 1.989,30 mínima.
@@ -190,6 +192,7 @@ test("hand-worked: SS grupo 1 base 1.500 clamps to 1.989,30", () => {
     payDate: "2026-01-15",
     grupo: 1,
     base: "1500",
+    contratoTemporal: false,
   });
   assert.equal(r.baseContingenciasComunes, "1989.3000");
   assert.equal(r.ccTrabajador, "93.5000");
@@ -227,11 +230,11 @@ test("engine refuses pay dates outside 2026 on both sides", () => {
     /rates for 2027 aren't available in this pack version; update the pack/,
   );
   assert.throws(
-    () => calculateEsSeguridadSocial2026({ payDate: "2025-12-31", grupo: 7, base: "2000" }),
+    () => calculateEsSeguridadSocial2026({ payDate: "2025-12-31", grupo: 7, base: "2000", contratoTemporal: false }),
     /2026 only/,
   );
   assert.throws(
-    () => calculateEsSeguridadSocial2026({ payDate: "2027-01-01", grupo: 7, base: "2000" }),
+    () => calculateEsSeguridadSocial2026({ payDate: "2027-01-01", grupo: 7, base: "2000", contratoTemporal: false }),
     /2026 only/,
   );
 });
@@ -296,11 +299,11 @@ test("TABLA 1 cliffs flip exención at the cell", () => {
 });
 
 test("SS clamp edges: minima floor and tope máximo cap", () => {
-  const floor = calculateEsSeguridadSocial2026({ payDate: "2026-03-15", grupo: 4, base: "1000" });
+  const floor = calculateEsSeguridadSocial2026({ payDate: "2026-03-15", grupo: 4, base: "1000", contratoTemporal: false });
   assert.equal(floor.baseContingenciasComunes, "1424.4000");
-  const atMin = calculateEsSeguridadSocial2026({ payDate: "2026-03-15", grupo: 4, base: "1424.40" });
+  const atMin = calculateEsSeguridadSocial2026({ payDate: "2026-03-15", grupo: 4, base: "1424.40", contratoTemporal: false });
   assert.equal(atMin.baseContingenciasComunes, "1424.4000");
-  const cap = calculateEsSeguridadSocial2026({ payDate: "2026-03-15", grupo: 1, base: "9000" });
+  const cap = calculateEsSeguridadSocial2026({ payDate: "2026-03-15", grupo: 1, base: "9000", contratoTemporal: false });
   assert.equal(cap.baseContingenciasComunes, "5101.2000");
   assert.ok(Number(cap.trabajadorTotal) < Number("9000") * 0.09);
 });
