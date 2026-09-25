@@ -22,7 +22,7 @@ import {
  * engine/src/payroll/opening-balance-versions.integration.test.ts.
  */
 
-const stateKey = Symbol.for('openbooks.opening-balances-version-test')
+const stateKey = Symbol.for('openbooks.opening-balances-version-test'); const realAuthzUrl = new URL('../../../../lib/authz.ts', import.meta.url).href
 interface RouteState {
   saveCalls: { rows: { employeePartyId: string; updatedAt?: string | null; components?: Record<string, unknown> }[]; allowedSubsidiaryIds?: Set<string> | null }[]
   allowedSubsidiaryIds: Set<string> | null
@@ -104,9 +104,10 @@ const hooks = registerHooks({
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll/opening-balances.ts') {
+    if (specifier === '@openbooks/engine/src/payroll/opening-balances.ts' && context.parentURL?.includes('/app/api/payroll/opening-balances/route.ts')) {
       return { url: 'mock:opening-balances', shortCircuit: true }
     }
+    if (specifier.endsWith('/lib/authz')) return { url: realAuthzUrl, shortCircuit: true }
     if (specifier === '../subsidiary-scope') return { url: 'mock:payroll-subsidiary-scope', shortCircuit: true }
     if (specifier.endsWith('/lib/payroll-scoped-views')) return { url: 'mock:payroll-scoped-views', shortCircuit: true }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }
@@ -119,8 +120,7 @@ const hooks = registerHooks({
   },
 })
 
-const routeUrl = './route.ts?opening-balances-version-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = './route.ts?opening-balances-version-test'; const { POST } = (await import(routeUrl)) as typeof import('./route.ts'); const { POST: postEmployerLevyOpening } = await import('./employer-levies/route.ts')
 // The genuine refusal class, shared with the stub above.
 const OpeningBalanceSaveError = RealOpeningBalanceSaveError
 hooks.deregister()
@@ -161,9 +161,9 @@ test('POST passes the restricted subsidiary scope into the opening-balance write
   const allowedSubsidiaryIds = new Set(['sub-a'])
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds
   const res = await post({ taxYear: 2026, rows: [{ employeePartyId: uuid(1), amounts: {} }] })
-  assert.equal(res.status, 200)
-  assert.equal(routeState.saveCalls.length, 1)
-  assert.equal(routeState.saveCalls[0]!.allowedSubsidiaryIds, allowedSubsidiaryIds)
+  assert.deepEqual([res.status, routeState.saveCalls.length, routeState.saveCalls[0]!.allowedSubsidiaryIds], [200, 1, allowedSubsidiaryIds])
+  const employer = await postEmployerLevyOpening(new Request('http://openbooks.test/api/payroll/opening-balances/employer-levies', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taxYear: 2026, rows: [] }) }))
+  assert.deepEqual([employer.status, routeState.saveCalls.length], [403, 1])
 })
 
 test('a row with no version arrives unguarded for callers that do not speak versions', async () => {

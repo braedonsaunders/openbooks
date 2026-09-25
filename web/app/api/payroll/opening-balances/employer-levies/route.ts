@@ -11,6 +11,7 @@ import {
   type EmployerLevyOpeningWrite,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardUnrestrictedScope } from '../../../../../lib/authz'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -38,14 +39,16 @@ async function parseYear(orgId: string, raw: string | null): Promise<number> {
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   let year: number
   try {
     year = assertTaxYear(await parseYear(gate.user.orgId, new URL(req.url).searchParams.get('year')))
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid request' }, { status: 422 })
   }
-  // Subsidiary scoping is an employee question; employer carry-ins are read
-  // whole like the engine stores them.
+  // Employer carry-ins are organization-wide facts, so only unrestricted
+  // callers reach the unscoped reader.
   return NextResponse.json({
     year,
     levies: await declaredEmployerLevyFields(year),
@@ -61,6 +64,8 @@ interface SaveBody {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
 
   let body: SaveBody
   try {
