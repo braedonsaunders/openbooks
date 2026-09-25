@@ -17,7 +17,8 @@
 // directly); scripts/ tooling and schema/ migrations are outside the engine
 // module boundary this check guards.
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -64,19 +65,27 @@ function setColumns(statement, keywordIndex) {
     .filter(Boolean);
 }
 
-function* sourceFiles(dir) {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
-      yield* sourceFiles(full);
-    } else if (/\.[cm]?[jt]sx?$/.test(name) && !TEST.test(relative(ROOT, full).replace(/\\/g, "/"))) {
-      yield full;
-    }
+function* sourceFiles() {
+  // Tracked files only (git ls-files --cached): ignored (.gitignore,
+  // .git/info/exclude) and untracked files are out of scope, so private
+  // local tooling in a checkout can never fail the boundary. Same
+  // enumeration as check-engine-boundaries.mjs, minus its --others.
+  const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--", "engine/src"], {
+    cwd: ROOT,
+    maxBuffer: 1 << 27,
+    stdio: ["ignore", "pipe", "ignore"],
+  })
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean);
+  for (const rel of listed) {
+    const posix = rel.replace(/\\/g, "/");
+    if (/\.[cm]?[jt]sx?$/.test(posix) && !TEST.test(posix)) yield join(ROOT, posix);
   }
 }
 
 const violations = [];
-for (const file of sourceFiles(ENGINE_SRC)) {
+for (const file of sourceFiles()) {
   const rel = relative(ROOT, file).replace(/\\/g, "/");
   if (file.startsWith(LEDGER_DIR)) continue;
   const text = stripNoise(readFileSync(file, "utf8"));
