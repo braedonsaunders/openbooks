@@ -37,7 +37,7 @@ import "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
-import { calculateJp2026 } from "./withholding-2026.ts";
+import { calculateBonusWithholding, calculateJp2026 } from "./withholding-2026.ts";
 import { JP_PACK_RATES } from "./rates.ts";
 import { JP_PREFECTURE_CODES } from "./regions.ts";
 
@@ -135,12 +135,11 @@ export async function computeJpStatutoryWithRates(
     }
     return units! / 10000n;
   };
-  if (yenOf(nonPeriodic, "non-periodic amount") !== 0n) {
-    fail(
-      `non-periodic amount ${nonPeriodic} is refused: bonus withholding uses the 賞与に対する源泉徴収税額の`
-      + "算出率の表, which is not transcribed — see JP_REFUSED_2026",
-    );
-  }
+  // Bonus money prices through the transcribed bonus table below (JP-BONUS-IMPL).
+  // The leg is the post-social-insurance bonus (table note: 賞与の金額から控除される
+  // 社会保険料等控除後) — bonus-attributable social insurance is not priced by this
+  // pack and must already be out of the leg.
+  const bonusYen = yenOf(nonPeriodic, "non-periodic amount");
   const gross = yenOf(income, "monthly gross");
 
   // Resolved through the pack's employeeFacts declaration (see the PL
@@ -205,7 +204,11 @@ export async function computeJpStatutoryWithRates(
     );
   }
 
-  const result = calculateJp2026({
+  // A bonus-only run carries no monthly pay, so the monthly computation (which
+  // prices premiums off the 標準報酬 grade) is skipped — pricing it on zero pay
+  // would refuse on premiums-exceed-pay. True-zero runs still refuse there.
+  const bonusOnly = bonusYen !== 0n && gross === 0n;
+  const result = bonusOnly ? null : calculateJp2026({
     grossMonthly: gross,
     standard,
     dependents,
@@ -214,24 +217,58 @@ export async function computeJpStatutoryWithRates(
     taxResidence: taxResidence as "resident" | "nonresident_japan_source" | "nonresident_foreign_source",
   });
 
-  pushStatutory("income_tax", "deduction", "源泉徴収 (gensen withholding)", String(result.gensen), 110);
-  pushStatutory("pension", "deduction", "厚生年金保険 (employee)", String(result.pension), 120);
-  pushStatutory("health", "deduction", "健康保険 (employee)", String(result.health), 130);
-  pushStatutory("child_support", "deduction", "子ども・子育て支援金 (employee)", String(result.childSupport), 140);
-  pushStatutory("pension", "employer_contribution", "厚生年金保険 (employer)", String(result.pensionEmployer), 220);
-  pushStatutory("health", "employer_contribution", "健康保険 (employer)", String(result.healthEmployer), 230);
-  pushStatutory("child_support", "employer_contribution", "子ども・子育て支援金 (employer)", String(result.childSupportEmployer), 240);
-  pushStatutory("child_care_employer", "employer_contribution", "子ども・子育て拠出金 (employer)", String(result.childCareEmployer), 250);
+  if (result !== null) {
+    pushStatutory("income_tax", "deduction", "源泉徴収 (gensen withholding)", String(result.gensen), 110);
+    pushStatutory("pension", "deduction", "厚生年金保険 (employee)", String(result.pension), 120);
+    pushStatutory("health", "deduction", "健康保険 (employee)", String(result.health), 130);
+    pushStatutory("child_support", "deduction", "子ども・子育て支援金 (employee)", String(result.childSupport), 140);
+    pushStatutory("pension", "employer_contribution", "厚生年金保険 (employer)", String(result.pensionEmployer), 220);
+    pushStatutory("health", "employer_contribution", "健康保険 (employer)", String(result.healthEmployer), 230);
+    pushStatutory("child_support", "employer_contribution", "子ども・子育て支援金 (employer)", String(result.childSupportEmployer), 240);
+    pushStatutory("child_care_employer", "employer_contribution", "子ども・子育て拠出金 (employer)", String(result.childCareEmployer), 250);
+  }
+
+  // Bonus withholding (JP-BONUS-IMPL): the transcribed rate table, the 10×
+  // monthly-table path, and the no-prior-pay monthly-table path (NTA Tax
+  // Answer No.2523). Only an absent prior-month net refuses.
+  let bonusGensen = 0n;
+  if (bonusYen !== 0n) {
+    const priorRaw = empFact("JP", ctx.emp, "jp_bonus_prior_month_net");
+    const priorGensenRaw = empFact("JP", ctx.emp, "jp_bonus_prior_month_gensen");
+    const periodRaw = empFact("JP", ctx.emp, "jp_bonus_period_months");
+    let periodMonths: 6 | 12 = 6;
+    if (periodRaw != null && periodRaw !== "") {
+      if (periodRaw !== "6" && periodRaw !== "12") {
+        fail(
+          `employee jp_bonus_period_months "${periodRaw}" is not "6" or "12": semiannual bonuses use 6; `
+          + "use 12 only when the bonus computation period exceeds 6 months — see NTA Tax Answer No.2523",
+        );
+      }
+      periodMonths = periodRaw === "12" ? 12 : 6;
+    }
+    bonusGensen = calculateBonusWithholding({
+      bonusNet: bonusYen,
+      priorMonthNet: priorRaw == null || priorRaw === "" ? null : yenOf(priorRaw, "prior-month net pay"),
+      dependents,
+      periodMonths,
+      priorMonthWithholding:
+        priorGensenRaw == null || priorGensenRaw === "" ? null : yenOf(priorGensenRaw, "prior-month withholding"),
+      taxResidence: taxResidence as "resident" | "nonresident_japan_source" | "nonresident_foreign_source",
+    });
+    pushStatutory("income_tax", "deduction", "源泉徴収 (bonus)", String(bonusGensen), 111);
+  }
+  const zero = "0";
   return {
-    JP_GENSEN_BASE: String(result.gensenBase),
-    JP_GENSEN: String(result.gensen),
-    JP_PENSION_W: String(result.pension),
-    JP_PENSION_ER: String(result.pensionEmployer),
-    JP_HEALTH_W: String(result.health),
-    JP_HEALTH_ER: String(result.healthEmployer),
-    JP_CHILD_SUPPORT_W: String(result.childSupport),
-    JP_CHILD_SUPPORT_ER: String(result.childSupportEmployer),
-    JP_CHILD_CARE_ER: String(result.childCareEmployer),
+    JP_GENSEN_BASE: result === null ? zero : String(result.gensenBase),
+    JP_GENSEN: result === null ? zero : String(result.gensen),
+    JP_PENSION_W: result === null ? zero : String(result.pension),
+    JP_PENSION_ER: result === null ? zero : String(result.pensionEmployer),
+    JP_HEALTH_W: result === null ? zero : String(result.health),
+    JP_HEALTH_ER: result === null ? zero : String(result.healthEmployer),
+    JP_CHILD_SUPPORT_W: result === null ? zero : String(result.childSupport),
+    JP_CHILD_SUPPORT_ER: result === null ? zero : String(result.childSupportEmployer),
+    JP_CHILD_CARE_ER: result === null ? zero : String(result.childCareEmployer),
+    JP_GENSEN_BONUS: String(bonusGensen),
   };
 }
 

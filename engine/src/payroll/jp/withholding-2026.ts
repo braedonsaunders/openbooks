@@ -36,7 +36,13 @@
  */
 import { PayrollPackError } from "../payroll-error.ts";
 import { JP_PENSION_GRADES_2026 } from "./pension-2026.ts";
-import { JP_GENSEN_MONTHLY_2026 } from "./tables-2026.ts";
+import {
+  JP_BONUS_KO_2026,
+  JP_BONUS_OTSU_2026,
+  JP_BONUS_RATE_DENOMINATOR,
+  JP_GENSEN_MONTHLY_2026,
+  type JpBonusRateBand,
+} from "./tables-2026.ts";
 
 /** The lowest 社会保険料等控除後 amount the numbered rows cover. */
 export const JP_GENSEN_LOOKUP_FLOOR = 105000n;
@@ -98,6 +104,111 @@ export function lookupGensenOtsu(amountYen: bigint): bigint {
     return (amountYen * OTSU_LOW_RATE_NUM) / OTSU_LOW_RATE_DEN;
   }
   return row.otsu;
+}
+
+/**
+ * 2026 bonus withholding rate (賞与に対する源泉徴収税額の算出率の表, 令和8年分):
+ * 甲 by prior-month 社会保険料等控除後 pay plus dependent count, 乙 by
+ * prior-month pay alone (no declaration on file). Returns thousandths of a
+ * percent — multiply the post-deduction bonus by it over
+ * JP_BONUS_RATE_DENOMINATOR, fractions below one yen discarded (NTA Tax
+ * Answer No.2523 worked example: 389,558円 × 2.042% = 7,954円).
+ */
+export function lookupBonusRate(priorMonthNetYen: bigint, dependents: number | null): bigint {
+  needIntYen(priorMonthNetYen, "前月の社会保険料等控除後の給与等の金額");
+  let bands: readonly JpBonusRateBand[];
+  if (dependents === null) {
+    bands = JP_BONUS_OTSU_2026;
+  } else {
+    if (!Number.isInteger(dependents) || dependents < 0 || dependents > 7) {
+      fail(
+        `扶養親族等の数 ${dependents} is outside 0–7: the bonus table's 7-columns stop at 7人以上 — `
+        + "see JP_REFUSED_2026",
+      );
+    }
+    bands = JP_BONUS_KO_2026[dependents]!;
+  }
+  const band = bands.find(
+    (candidate) =>
+      (candidate.fromYen === null || priorMonthNetYen >= candidate.fromYen)
+      && (candidate.toYen === null || priorMonthNetYen < candidate.toYen),
+  );
+  if (!band) fail(`no bonus rate band covers ${priorMonthNetYen}円 — internal error, not a table gap`);
+  return band.numerator;
+}
+
+export interface JpBonusWithholdingInput {
+  /** Post-social-insurance bonus (賞与の金額から控除される社会保険料等控除後). */
+  bonusNet: bigint;
+  /**
+   * Post-social-insurance prior-month regular pay (前月の社会保険料等控除後の
+   * 給与等の金額, 賞与を除く). Null refuses: the rate table cannot start
+   * without it (NTA Tax Answer No.2523; JP-BONUS-IMPL).
+   */
+  priorMonthNet: bigint | null;
+  /** 甲欄 dependents 0–7, or null for 乙欄 (no declaration on file). */
+  dependents: number | null;
+  /** Bonus computation period in months: 6, or 12 when it exceeds 6 months. */
+  periodMonths: 6 | 12;
+  /**
+   * Actual prior-month withholding (前月の給与に対する源泉徴収税額) — required
+   * only when the bonus exceeds 10× prior-month net, where the monthly-table
+   * computation subtracts it.
+   */
+  priorMonthWithholding: bigint | null;
+  taxResidence: "resident" | "nonresident_japan_source" | "nonresident_foreign_source";
+}
+
+/**
+ * 2026 bonus withholding (NTA Tax Answer No.2523): the rate-table path, the
+ * 10×-prior-pay monthly-table path, and the no-prior-pay monthly-table path.
+ * Every division truncates below one yen (the Answer's worked examples).
+ */
+export function calculateBonusWithholding(input: JpBonusWithholdingInput): bigint {
+  needIntYen(input.bonusNet, "賞与の金額（社会保険料等控除後）");
+  if (input.periodMonths !== 6 && input.periodMonths !== 12) {
+    fail(`bonus computation period ${input.periodMonths} is not 6 or 12 months — see NTA Tax Answer No.2523`);
+  }
+  if (input.taxResidence === "nonresident_foreign_source") return 0n;
+  if (input.taxResidence === "nonresident_japan_source") {
+    return nonresidentJapanSourceWithholding(input.bonusNet);
+  }
+  if (input.priorMonthNet === null) {
+    fail(
+      "bonus withholding needs the prior month's social-insurance-deducted pay (前月の社会保険料等控除後の"
+      + "給与等の金額, 賞与を除く): the 賞与に対する源泉徴収税額の算出率の表 starts from it — carry "
+      + "jp_bonus_prior_month_net or price the bonus outside ordinary payroll",
+    );
+  }
+  needIntYen(input.priorMonthNet, "前月の社会保険料等控除後の給与等の金額");
+  const period = BigInt(input.periodMonths);
+  const monthlyFor = (amount: bigint): bigint =>
+    input.dependents === null ? lookupGensenOtsu(amount) : lookupGensenKo(amount, input.dependents);
+  if (input.priorMonthNet <= 0n) {
+    // No prior-month pay, or prior pay at/below its social insurance: the
+    // monthly-table path (table note 備考4) — no rate row to start from.
+    return monthlyFor(input.bonusNet / period) * period;
+  }
+  if (input.bonusNet > 10n * input.priorMonthNet) {
+    if (input.priorMonthWithholding === null) {
+      fail(
+        "a bonus over 10× prior-month net computes through the monthly table minus actual prior-month "
+        + "withholding: carry jp_bonus_prior_month_gensen (前月の給与に対する源泉徴収税額) — see NTA Tax "
+        + "Answer No.2523",
+      );
+    }
+    needIntYen(input.priorMonthWithholding, "前月の給与に対する源泉徴収税額");
+    const step = monthlyFor(input.bonusNet / period + input.priorMonthNet) - input.priorMonthWithholding;
+    if (step < 0n) {
+      fail(
+        "the 10× monthly-table step went negative (computed tax below actual prior-month withholding): "
+        + "inconsistent bonus inputs — refusing rather than crediting through withholding",
+      );
+    }
+    return step * period;
+  }
+  const rate = lookupBonusRate(input.priorMonthNet, input.dependents);
+  return (input.bonusNet * rate) / JP_BONUS_RATE_DENOMINATOR;
 }
 
 /** The pension grade row for an operator-entered 標準報酬月額. Refuses unknown values. */

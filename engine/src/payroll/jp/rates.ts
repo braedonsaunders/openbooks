@@ -34,7 +34,7 @@ export const JP_REFUSED_2026: readonly string[] = [
   "扶養親族等の数 above 7 (the table's 7人超 1,610円-per-person subtraction is not transcribed)",
   "社会保険料等控除後の給与等の金額 of 740,000円 or more (the table's 20.42%/23.483%/33.693%/40.84%/45.945% formula rows are not transcribed)",
   "日額表 daily payrolls (the 日額表, 甲/乙/丙, is not transcribed — monthly payroll only)",
-  "賞与 bonus withholding (the 賞与に対する源泉徴収税額の算出率の表 is not transcribed; any non-periodic amount refuses)",
+  "賞与 bonus withholding without its required facts (the transcribed 算出率の表 needs prior-month social-insurance-deducted pay; the 10× path additionally needs actual prior-month withholding; dependents above 7 and periods other than 6/12 months refuse)",
   "雇用保険 premiums (料率 untranscribed; the gensen base deducts the computed 厚生年金, 健康保険, and effective child support only — stated, not hidden)",
   "介護保険 for 40-to-64-year-olds (no age channel; 介護保険第2号被保険者 refuses unless explicitly declared otherwise)",
   "住民税 special collection (the municipality assigns the amount; no engine channel — 特別徴収 is collected, never computed)",

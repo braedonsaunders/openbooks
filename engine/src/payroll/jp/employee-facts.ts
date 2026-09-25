@@ -57,6 +57,46 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
         field: "coverage_status",
       },
     },
+    {
+      key: "jp_bonus_prior_month_net",
+      kind: "amount",
+      label: "前月の社会保険料等控除後の給与等の金額 (bonus runs only)",
+      refusalReason:
+        "The bonus rate table starts from prior-month social-insurance-deducted pay; without it no "
+        + "rate row can be found and the bonus must not be priced.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes: "Supplied per bonus run by the operator from the prior payroll; no profile channel carries it.",
+      },
+    },
+    {
+      key: "jp_bonus_prior_month_gensen",
+      kind: "amount",
+      label: "前月の給与に対する源泉徴収税額 (10× bonuses only)",
+      refusalReason:
+        "A bonus over 10× prior-month net computes through the monthly table minus actual prior-month "
+        + "withholding; without it the 10× path cannot run.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes: "Supplied per bonus run by the operator from the prior payroll stub; no profile channel carries it.",
+      },
+    },
+    {
+      key: "jp_bonus_period_months",
+      kind: "choice",
+      choices: ["6", "12"],
+      label: "Bonus computation period in months",
+      refusalReason:
+        "The monthly-table fallback paths divide by the bonus computation period (6, or 12 when it "
+        + "exceeds 6 months); anything else is not a defined computation.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes: "Semiannual (6) unless the operator declares the 12-month path; no profile channel carries it.",
+      },
+    },
 ];
 
 registerEmployeeFacts("JP", JP_EMPLOYEE_FACTS);
