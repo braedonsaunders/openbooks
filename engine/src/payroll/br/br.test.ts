@@ -206,6 +206,26 @@ test("BR 20 November is a national holiday from 2024 (Lei 14.759/2023)", () => {
   assert.ok(!observed2023.some((holiday) => holiday.key === "consciencia_negra"));
 });
 
+test("BR Good Friday is optional until a municipality elects it (Lei 9.093/1995)", () => {
+  // Federal law delegates religious holidays to municipal law, so the
+  // countrywide calendar must not observe Paixão de Cristo by default —
+  // a municipality that declares it elects the declared day via override.
+  const plain = resolveObservedHolidays({ jurisdiction: "BR-BR", from: "2026-04-01", to: "2026-04-30" });
+  assert.ok(!plain.some((holiday) => holiday.key === "paixao"));
+  const elected = resolveObservedHolidays({
+    jurisdiction: "BR-BR",
+    from: "2026-04-01",
+    to: "2026-04-30",
+    overrides: [{
+      id: "o1", jurisdiction: "BR-BR", packKey: "paixao", name: null, ruleKind: null,
+      ruleMonth: null, ruleDay: null, ruleWeekday: null, ruleNth: null, ruleOffset: null,
+      observedOn: null, observance: "none", isObserved: true, isPaid: true,
+      effectiveFrom: "2026-01-01", effectiveTo: null,
+    }],
+  });
+  assert.ok(elected.some((holiday) => holiday.key === "paixao" && holiday.date === "2026-04-03" && holiday.elected));
+});
+
 test("BR rate lookup carries the region, or no saved rate resolves", () => {
   // Every br_* row carries a region (the schema forbids an account-scoped
   // row without one), so the scope the pack hands the resolution must carry

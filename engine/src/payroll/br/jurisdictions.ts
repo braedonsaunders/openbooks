@@ -9,8 +9,15 @@
  * declaring it would pay a day nobody owes. Lei nº 14.759/2023 art. 1º
  * adds 20 November (Dia Nacional de Zumbi e da Consciência Negra) as a
  * national holiday, effective on publication (21 December 2023), so the
- * entry carries `from: 2024`. State/municipal feriados (city
- * anniversaries, Carnaval) are untranscribed — see the ledger.
+ * entry carries `from: 2024`.
+ *
+ * Good Friday ("Sexta-Feira da Paixão", movable) is NOT a national
+ * feriado: Lei nº 9.093/1995 art. 2º leaves religious holidays to
+ * municipal law (at most four days, Good Friday included). It stays
+ * declared but `optional`, so the default calendar is the statutory
+ * minimum and a municipality that adopts it elects it via override.
+ * State/municipal feriados (city anniversaries, Carnaval) are
+ * untranscribed — see the ledger.
  *
  * `observance: "none"`: a feriado falling on a weekend does not move.
  * `holidayPay` is null: the CLT holiday-pay formula for monthly employees
@@ -35,7 +42,7 @@ export const BR_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       "Lei nº 662, de 6/4/1949, art. 1º (redação Lei nº 6.802/1980); Lei nº 14.759/2023 art. 1º (20 de novembro); CLT art. 70",
     holidays: [
       { key: "confraternizacao", name: "Confraternização Universal", rule: { kind: "fixed", month: 1, day: 1 }, observance: "none" },
-      { key: "paixao", name: "Paixão de Cristo", rule: { kind: "easter_offset", days: -2 }, observance: "none" },
+      { key: "paixao", name: "Paixão de Cristo", rule: { kind: "easter_offset", days: -2 }, observance: "none", optional: true },
       { key: "tiradentes", name: "Tiradentes", rule: { kind: "fixed", month: 4, day: 21 }, observance: "none" },
       { key: "trabalho", name: "Dia do Trabalho", rule: { kind: "fixed", month: 5, day: 1 }, observance: "none" },
       { key: "independencia", name: "Independência do Brasil", rule: { kind: "fixed", month: 9, day: 7 }, observance: "none" },
