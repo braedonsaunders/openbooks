@@ -135,6 +135,13 @@ export interface NlStatutoryInput {
   svWageYtd?: string | null;
   /** AWf contract-type declaration: true prices the lage premie. Required when SV base > 0. */
   awfLow?: boolean | null;
+  /**
+   * Ufo-covered government employee (Wet privatisering ABP scope): prices
+   * the 0,68% Ufo premie instead of AWf on the WW leg. Leave awfLow unset —
+   * a Ufo employee with an AWf declaration is a contradictory
+   * classification and refuses.
+   */
+  ufo?: boolean | null;
   /** Aof employer-size declaration: true prices the hoge premie. Required when SV base > 0. */
   aofHigh?: boolean | null;
   /** Whk beschikking percentage. Required when SV base > 0 — never a constant. */
@@ -430,7 +437,20 @@ function finishCalculation(args: {
   let wkoCents = 0n;
   let whkCents = 0n;
   if (svBase > 0n) {
-    if (input.awfLow === null || input.awfLow === undefined) {
+    // Covered government employees (Wet privatisering ABP scope) owe no
+    // AWf: the WW leg prices the 0,68% Ufo premie instead (Handboek
+    // Loonheffingen 2026, §7.4). An AWf declaration next to the Ufo
+    // classification contradicts it and refuses — the employee is either
+    // Ufo-covered or AWf-classified, never both.
+    const ufoCovered = input.ufo === true;
+    if (ufoCovered && input.awfLow !== null && input.awfLow !== undefined) {
+      throw new PayrollError(
+        "the NL payroll pack cannot price a Ufo-covered government employee with an AWf contract-type "
+        + "declaration — Ufo replaces AWf (Handboek Loonheffingen 2026, §7.4). Leave awfLow unset for "
+        + "Ufo-covered employees",
+      );
+    }
+    if (!ufoCovered && (input.awfLow === null || input.awfLow === undefined)) {
       throw new PayrollError(
         "the NL payroll pack cannot price the WW (AWf) premium without the contract-type declaration — "
         + "declare awfLow (lage premie 2,74% for a qualifying vast contract, else hoge premie 7,74%)",
@@ -448,7 +468,9 @@ function finishCalculation(args: {
         + "the Belastingdienst sets it per employer (\"Zie mededeling of beschikking\"), so declare whkPercent",
       );
     }
-    const awfRate = parseRate2(input.awfLow ? NL_EMPLOYER_PREMIUMS_2026.awfLow : NL_EMPLOYER_PREMIUMS_2026.awfHigh, "AWf");
+    const awfRate = ufoCovered
+      ? parseRate2(NL_EMPLOYER_PREMIUMS_2026.ufo, "Ufo")
+      : parseRate2(input.awfLow ? NL_EMPLOYER_PREMIUMS_2026.awfLow : NL_EMPLOYER_PREMIUMS_2026.awfHigh, "AWf");
     const aofRate = parseRate2(input.aofHigh ? NL_EMPLOYER_PREMIUMS_2026.aofHigh : NL_EMPLOYER_PREMIUMS_2026.aofLow, "Aof");
     const whkRate = parseRate2(input.whkPercent, "Whk beschikking");
     if (whkRate > 10000n) {
@@ -591,6 +613,7 @@ export async function computeNlStatutory(
       ? null
       : premies === null ? null : certificateAmount(premies, "sv_loon_ytd"),
     awfLow: flagOrNull(premies, "awf_laag"),
+    ufo: premies === null ? false : certificateFlag(premies, "ufo"),
     aofHigh: flagOrNull(premies, "aof_hoog"),
     whkPercent: whkRaw === null || whkRaw === ""
       ? null
@@ -603,7 +626,12 @@ export async function computeNlStatutory(
   });
 
   pushStatutory("loonheffing", "deduction", "Loonbelasting/premie volksverzekeringen", d4(result.withholdingCents), 110);
-  pushStatutory("ww", "employer_contribution", "Werkloosheidswet (AWf)", d4(result.wwCents), 210);
+  // Ufo-covered government employees owe no AWf: the WW leg carries the
+  // Ufo premie instead, and the line is named for it.
+  const wwLineName = (premies === null ? false : certificateFlag(premies, "ufo"))
+    ? "Uitvoeringsfonds voor de overheid (Ufo)"
+    : "Werkloosheidswet (AWf)";
+  pushStatutory("ww", "employer_contribution", wwLineName, d4(result.wwCents), 210);
   // Aof and the differentiated Whk beschikking share the WIA line; Opslag
   // Wko is identifiable separately, assessed against the same capped base.
   pushStatutory("wia", "employer_contribution", "Arbeidsongeschiktheid (Aof + Whk)", d4(result.aofCents + result.whkCents), 211);

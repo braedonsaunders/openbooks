@@ -201,6 +201,12 @@ export const NL_EMPLOYER_PREMIUMS_2026 = {
   aofHigh: "7.63",
   /** "Gedifferentieerde premie Whk — Zie mededeling of beschikking": no rate. */
   whk: null,
+  /**
+   * Ufo-premie 0,68% (Handboek Loonheffingen 2026, §7.4): government
+   * employers (overheidswerkgevers) pay Ufo for covered government
+   * employees instead of AWf.
+   */
+  ufo: "0.68",
 } as const;
 
 /** Employer-size bounds for Aof/Whk (Tabel 9): gemiddeld premieloon "€ 43.300". */

@@ -141,9 +141,10 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
 
 /**
  * The employer's own SV administration per employee: the contract-type fact
- * pricing the AWf premium, the employer-size fact pricing the Aof premium,
- * the Whk beschikking percentage from the Belastingdienst notice, and the
- * declared cumulative SV wage for the annual maximumpremieloon.
+ * pricing the AWf premium (or the Ufo classification for covered government
+ * employees, who owe Ufo instead of AWf), the employer-size fact pricing
+ * the Aof premium, the Whk beschikking percentage from the Belastingdienst
+ * notice, and the declared cumulative SV wage for the annual maximumpremieloon.
  *
  * No agency form carries these — they live in the loonstaat and on the
  * "mededeling of beschikking" the Belastingdienst issues per employer — so
@@ -157,7 +158,7 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
 const PREMIES_WERKNEMERSVERZEKERINGEN: PayrollCertificate = {
   key: "nl_premies",
   form: "Premies werknemersverzekeringen (werkgeversadministratie)",
-  label: "SV premium facts (AWf, Aof, Whk)",
+  label: "SV premium facts (AWf/Ufo, Aof, Whk)",
   scope: { level: "country" },
   purpose: "withholding",
   citation:
@@ -166,7 +167,8 @@ const PREMIES_WERKNEMERSVERZEKERINGEN: PayrollCertificate = {
     + "(AWf/Aof percentages); Whk: \"Zie mededeling of beschikking\"",
   summary:
     "The employer's per-employee SV facts for the loonaangifte: which AWf premium the contract "
-    + "attracts, which Aof premium the employer's size attracts, the Whk beschikking percentage, "
+    + "attracts (or the Ufo classification for covered government employees, who owe no AWf), "
+    + "which Aof premium the employer's size attracts, the Whk beschikking percentage, "
     + "and the declared SV wage year-to-date for the € 79.409 annual maximum.",
   storage: "certificate_rows",
   fields: [
@@ -176,7 +178,18 @@ const PREMIES_WERKNEMERSVERZEKERINGEN: PayrollCertificate = {
       kind: "flag",
       help: "Whether the employee's contract attracts the lage AWf premie (2,74% in 2026): a "
         + "qualifying vast (permanent) contract. Unset prices the hoge premie (7,74%). Required "
-        + "whenever SV premiums price — the engine refuses to guess the contract type.",
+        + "whenever SV premiums price — the engine refuses to guess the contract type. Leave unset "
+        + "for Ufo-covered government employees (see ufo): AWf plus Ufo refuses as contradictory.",
+    },
+    {
+      key: "ufo",
+      label: "Ufo-covered government employee (overheid)",
+      kind: "flag",
+      default: "false",
+      help: "Whether the employee is a covered government employee (Wet privatisering ABP scope): "
+        + "government employers owe no AWf for them and instead owe the Ufo premie (0,68% in 2026, "
+        + "Handboek Loonheffingen §7.4), priced on the WW leg. Leave awf_laag unset for them. "
+        + "Defaults to false (private-sector AWf treatment).",
     },
     {
       key: "aof_hoog",
