@@ -82,6 +82,57 @@ interface Data {
 
 type BillingTab = "applications" | "schedule" | "changes" | "retainage";
 
+// Amount-field prefixes whose server refusals carry the seven-cause decimal
+// remedy: only the server's shared classifier can name the cause, so those
+// messages pass through untouched rather than forked.
+const DECIMAL_REFUSAL_FIELDS = [
+  "Scheduled value",
+  "Retainage percent",
+  "Change-order amount",
+  "Release amount",
+  "Completed this period",
+  "Materials stored",
+];
+
+// The construction API answers stable English refusal strings: resolve the
+// known ones through the applications catalog instead of toasting raw prose,
+// and keep the localized fallback for anything unrecognized.
+function constructionRefusal(
+  t: ReturnType<typeof useTranslations>,
+  error: unknown,
+  fallback: string,
+): string {
+  if (typeof error !== "string" || error === "") return fallback;
+  switch (error) {
+    case "not found": return t("errors.notFound");
+    case "This project's billing profile does not use applications for payment": return t("errors.notApplicationsBilling");
+    case "Projects feature is disabled": return t("errors.featureOff");
+    case "Income account not found": return t("errors.incomeAccountNotFound");
+    case "Description and a positive scheduled value are required": return t("errors.sovDescriptionValueRequired");
+    case "Retainage percent must be between 0 and 100": return t("errors.retainageRange");
+    case "Sort order must be a whole number the schedule can store": return t("errors.sortOrderWhole");
+    case "After billing begins, contract value must change through an approved change order": return t("errors.lockedAfterBilling");
+    case "Schedule line not found": return t("errors.sovLineNotFound");
+    case "A controlled schedule line cannot be deleted; use a reversing change order": return t("errors.controlledLineDelete");
+    case "A schedule line used by an application is immutable; use a change order":
+    case "A controlled schedule line is immutable; use a change order": return t("errors.immutableLine");
+    case "Change-order number and a non-zero amount are required": return t("errors.changeOrderNumberAmountRequired");
+    case "A deductive change order must identify the schedule line it reduces": return t("errors.deductiveNeedsLine");
+    case "A change order with this number already exists for this project": return t("errors.duplicateChangeOrderNumber");
+    case "The target schedule line does not belong to this project": return t("errors.targetLineOutsideProject");
+    case "Change order not found or no longer draft": return t("errors.changeOrderNotFound");
+    case "The preparer cannot approve the same change order": return t("errors.selfApproval");
+    case "Change-order amount is out of range for the ledger": return t("errors.changeOrderOutOfRange");
+    case "Approving this change order would drive the contract value below zero": return t("errors.contractBelowZero");
+    case "Complete or void the current application before approving a change order": return t("errors.applicationInProgress");
+    case "The target schedule line no longer exists": return t("errors.targetLineGone");
+    case "An unallocated change order must be additive": return t("errors.unallocatedAdditive");
+    case "Only a draft change order can be voided": return t("errors.onlyDraftVoid");
+    default:
+      return DECIMAL_REFUSAL_FIELDS.some((field) => error.startsWith(field)) ? error : fallback;
+  }
+}
+
 export function ApplicationsBillingWorkspace({
   projectId,
   incomeAccounts,
@@ -114,13 +165,18 @@ export function ApplicationsBillingWorkspace({
     return fetch(`/api/construction?projectId=${encodeURIComponent(projectId)}`, {
       cache: "no-store",
     })
-      .then((response) => response.json().catch(() => ({})).then((body) => {
-        if (!response.ok) throw new Error(body.error ?? t("errors.load"));
-        setData(body);
-      }))
-      .catch((cause: unknown) => {
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { error?: unknown };
+          setData(null);
+          setError(constructionRefusal(t, body.error, t("errors.load")));
+          return;
+        }
+        setData(await response.json());
+      })
+      .catch(() => {
         setData(null);
-        setError(cause instanceof Error ? cause.message : t("errors.load"));
+        setError(t("errors.load"));
       })
       .finally(() => {
         setLoading(false);
@@ -151,8 +207,11 @@ export function ApplicationsBillingWorkspace({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!response.ok) {
+        const failure = (await response.json().catch(() => ({}))) as { error?: unknown };
+        throw new Error(constructionRefusal(t, failure.error, t("errors.action")));
+      }
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? t("errors.action"));
       setLoading(true);
       setError(null);
       await load();
@@ -161,7 +220,7 @@ export function ApplicationsBillingWorkspace({
       // A billing refusal pins here (role=alert) until the next action — the
       // workspace-top text alone never survived attention (F-t04-002: the
       // retainage-control 422 read as a silent no-op at the row).
-      const message = cause instanceof Error ? cause.message : t("errors.action");
+      const message = cause instanceof TypeError ? t("errors.action") : cause instanceof Error ? cause.message : t("errors.action");
       setError(message);
       toast.error(message);
       return null;
