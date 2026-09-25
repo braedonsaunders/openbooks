@@ -164,6 +164,7 @@ export async function loadPayRunWizard(
              d.subsidiary_id, d.posted_entry_id, s.name as schedule_name,
              r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.tax_year, r.run_status, r.run_type, r.pay_schedule_id,
+             r.paid_at::text as paid_at, r.paid_entry_id::text as paid_entry_id,
              r.gross_total, r.net_total, r.employer_cost_total, r.employee_count,
              r.paid_at::text as paid_at, r.paid_entry_id,
              r.calculation_errors, r.refusal_acknowledgement
