@@ -187,6 +187,12 @@ interface Payload {
   runs: Run[];
   sourceTypes: SourceTypeDef[];
   currencies: Currency[];
+  /**
+   * Whether the caller holds admin.setup.manage. Run-only callers (sync.run)
+   * see the console and its run controls, but never the Add/Edit/Delete and
+   * mirror-schedule controls — their edits would only fail at the API.
+   */
+  canManage?: boolean;
 }
 
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "destructive"> =
@@ -208,6 +214,11 @@ export function PlatformClient() {
   const [drawer, setDrawer] = useState<{ editing: Connection | null } | null>(
     null,
   );
+  // The GET payload says whether the caller may reconfigure connections
+  // (admin.setup.manage). A missing flag — a stale cached payload — reads
+  // as manageable; the API still refuses run-only callers, so the worst
+  // case is a failed edit, never a hidden control for a manager.
+  const canManage = data?.canManage !== false;
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
@@ -675,9 +686,11 @@ export function PlatformClient() {
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
           {t("connections.heading")}
         </h2>
-        <Button onClick={() => setDrawer({ editing: null })}>
-          <Plus size={15} /> {t("connections.add")}
-        </Button>
+        {canManage ? (
+          <Button onClick={() => setDrawer({ editing: null })}>
+            <Plus size={15} /> {t("connections.add")}
+          </Button>
+        ) : null}
       </div>
 
       {loading ? (
@@ -808,65 +821,69 @@ export function PlatformClient() {
                   >
                     <Play size={14} /> {t("actions.runMigration")}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => toggleMirror(c)}
-                  >
-                    {c.mirrorEnabled
-                      ? t("actions.pauseMirror")
-                      : t("actions.enableMirror")}
-                  </Button>
-                  <Select
-                    aria-label={t("connections.schedule")}
-                    className="h-8 w-auto text-xs"
-                    value={c.mirrorSchedule}
-                    disabled={busy === `${c.id}:schedule`}
-                    onChange={(event) =>
-                      void setMirrorSchedule(c, event.target.value)
-                    }
-                  >
-                    {!["hourly", "every_6_hours", "daily", "weekly"].includes(
-                      c.mirrorSchedule,
-                    ) ? (
-                      <option value={c.mirrorSchedule}>
-                        {c.mirrorSchedule}
-                      </option>
-                    ) : null}
-                    <option value="hourly">
-                      {t("connections.schedules.hourly")}
-                    </option>
-                    <option value="every_6_hours">
-                      {t("connections.schedules.every_6_hours")}
-                    </option>
-                    <option value="daily">
-                      {t("connections.schedules.daily")}
-                    </option>
-                    <option value="weekly">
-                      {t("connections.schedules.weekly")}
-                    </option>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDrawer({ editing: c })}
-                  >
-                    <Pencil size={14} /> {t("actions.edit")}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy === `${c.id}:del`}
-                    aria-busy={busy === `${c.id}:del`}
-                    aria-label={
-                      busy === `${c.id}:del`
-                        ? t("actions.removing", { name: c.displayName })
-                        : t("actions.remove", { name: c.displayName })
-                    }
-                    onClick={() => remove(c)}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
+                  {canManage ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleMirror(c)}
+                      >
+                        {c.mirrorEnabled
+                          ? t("actions.pauseMirror")
+                          : t("actions.enableMirror")}
+                      </Button>
+                      <Select
+                        aria-label={t("connections.schedule")}
+                        className="h-8 w-auto text-xs"
+                        value={c.mirrorSchedule}
+                        disabled={busy === `${c.id}:schedule`}
+                        onChange={(event) =>
+                          void setMirrorSchedule(c, event.target.value)
+                        }
+                      >
+                        {!["hourly", "every_6_hours", "daily", "weekly"].includes(
+                          c.mirrorSchedule,
+                        ) ? (
+                          <option value={c.mirrorSchedule}>
+                            {c.mirrorSchedule}
+                          </option>
+                        ) : null}
+                        <option value="hourly">
+                          {t("connections.schedules.hourly")}
+                        </option>
+                        <option value="every_6_hours">
+                          {t("connections.schedules.every_6_hours")}
+                        </option>
+                        <option value="daily">
+                          {t("connections.schedules.daily")}
+                        </option>
+                        <option value="weekly">
+                          {t("connections.schedules.weekly")}
+                        </option>
+                      </Select>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDrawer({ editing: c })}
+                      >
+                        <Pencil size={14} /> {t("actions.edit")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy === `${c.id}:del`}
+                        aria-busy={busy === `${c.id}:del`}
+                        aria-label={
+                          busy === `${c.id}:del`
+                            ? t("actions.removing", { name: c.displayName })
+                            : t("actions.remove", { name: c.displayName })
+                        }
+                        onClick={() => remove(c)}
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               </div>
               <div className="mt-2 text-xs text-slate-500">

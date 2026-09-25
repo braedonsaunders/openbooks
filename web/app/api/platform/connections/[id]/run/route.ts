@@ -39,7 +39,10 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const gate = await guardPermission("admin.setup.manage");
+  // Running a sync is the `sync.run` grant, not connection configuration:
+  // a caller who may run but not reconfigure still passes here, while the
+  // config routes keep requiring `admin.setup.manage`.
+  const gate = await guardPermission("sync.run");
   if (gate instanceof NextResponse) return gate;
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;

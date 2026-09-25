@@ -41,10 +41,28 @@ function toClient(c: Awaited<ReturnType<typeof listConnections>>[number]) {
   };
 }
 
-/** List this tenant's connections + the catalogue of source types you can add. */
+/**
+ * List this tenant's connections + the catalogue of source types you can add.
+ *
+ * Reading the console is the `sync.run` grant (running a sync starts with
+ * seeing it); configuring connections stays `admin.setup.manage`. The
+ * payload carries `canManage` so the console hides its Add/Edit/Delete
+ * controls from run-only callers instead of letting every edit fail.
+ */
 export async function GET() {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
+  // Either grant reads the console: a configure caller passes the first
+  // check, a run-only caller falls through to the second. Which check
+  // passed is the `canManage` flag below — no wider permission helper is
+  // needed, and neither refusal is dropped (a caller with neither sees the
+  // sync.run 403).
+  let gate = await guardPermission("admin.setup.manage");
+  let canManage = true;
+  if (gate instanceof NextResponse) {
+    const runGate = await guardPermission("sync.run");
+    if (runGate instanceof NextResponse) return runGate;
+    gate = runGate;
+    canManage = false;
+  }
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;
   const orgId = gate.user.orgId;
@@ -120,6 +138,7 @@ export async function GET() {
     })),
     runs: runs.rows,
     currencies: currencies.rows,
+    canManage,
     sourceTypes: SOURCE_TYPES.map((s) => ({
       source: s.source,
       displayName: s.displayName,
