@@ -38,6 +38,7 @@ export function AppDefinitions({
   onPendingChange: (pending: boolean) => void
 }) {
   const t = useTranslations('apps.definitions')
+  const labels = useTranslations('apps.management.labels')
   function setEdit(value: { index: number; source: string } | null) {
     updateEdit(value)
     onPendingChange(value !== null)
@@ -96,7 +97,7 @@ export function AppDefinitions({
                 {
                   id: 'details',
                   fields: [
-                    { id: 'name', type: 'text', label: 'Name', required: true },
+                    { id: 'name', type: 'text', label: labels('name'), required: true },
                   ],
                 },
               ],
