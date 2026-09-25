@@ -636,11 +636,26 @@ test("Philadelphia's resident and nonresident rates are different taxes", () => 
     PHILADELPHIA_WITHHOLDING.compute({
       payDate, periodsPerYear: 26, wages: "2000.00", basis,
       certificate: cert("us_pa_clgs32_6"),
+      ...(basis === "nonresident" ? {
+        wageAllocations: [{ region: "PA", subRegion: "PHILADELPHIA", workShare: "1", source: "adequate_records" }],
+      } : {}),
     }).tax;
   assert.equal(at("resident", "2026-08-14"), money("74.70")); // 2,000 × 3.735%
   assert.equal(at("nonresident", "2026-08-14"), money("68.50")); // 2,000 × 3.425%
   assert.equal(at("resident", "2026-03-06"), money("74.80")); // 2,000 × 3.74%
   assert.equal(at("nonresident", "2026-03-06"), money("68.60")); // 2,000 × 3.43%
+});
+
+test("Philadelphia taxes only verified city-source wages for a nonresident", () => {
+  // Nonresidents owe only on work performed in the City: 40% of $2,000 at 3.425% is $27.40.
+  const result = PHILADELPHIA_WITHHOLDING.compute({
+    payDate: "2026-08-14", periodsPerYear: 26, wages: "2000.00", basis: "nonresident",
+    certificate: cert("us_pa_clgs32_6"),
+    wageAllocations: [{
+      region: "PA", subRegion: "PHILADELPHIA", workShare: "0.4", source: "adequate_records",
+    }],
+  });
+  assert.equal(result.tax, money("27.40"));
 });
 
 test("PA Act 32 local EIT applies the rate the higher-of rule already picked", () => {
