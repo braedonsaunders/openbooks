@@ -353,6 +353,8 @@ export function BudgetDrawer({
     if (actionName === 'submit' && !window.confirm(t('confirm.submit'))) return
     if (actionName === 'approve' && !window.confirm(t('confirm.approve'))) return
     if (actionName === 'reject' && !window.confirm(t('confirm.reject'))) return
+    setMenuTarget(null)
+    cellMenu.close()
     setBusy(true)
     setActionError(null)
     try {
@@ -396,6 +398,8 @@ export function BudgetDrawer({
   async function deleteDraft() {
     if (unsaved) return
     if (!window.confirm(t('confirm.delete'))) return
+    setMenuTarget(null)
+    cellMenu.close()
     setBusy(true)
     try {
       const response = await fetch(`/api/budgets/${scenario.id}`, { method: 'DELETE' })
@@ -547,7 +551,7 @@ export function BudgetDrawer({
     headerActions={headerActions}
     footer={<div className="flex w-full items-center justify-between text-xs text-slate-500 dark:text-slate-400"><span>{unsaved ? (saveState === 'dirty' ? t('workspace.unsaved') : t('create.unsavedHint')) : saveState === 'saving' ? t('workspace.saving') : saveState === 'dirty' ? t('workspace.unsaved') : saveState === 'error' ? t('workspace.saveFailed') : t('workspace.saved')}</span>{unsaved ? null : <span>{t('workspace.autosaveHint')}</span>}</div>}
   >
-    <div className="space-y-4">
+    <div className="space-y-4" inert={busy}>
       {!editable ? <Alert variant="info" className="flex items-center gap-2"><LockKeyhole size={16} /><span>{t('workspace.locked')}</span></Alert> : null}
       {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
       {createError ? <Alert variant="destructive">{createError}</Alert> : null}
