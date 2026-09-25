@@ -28,6 +28,7 @@ import { ES_COMUNIDADES, ES_JURISDICTIONS } from "./jurisdictions.ts";
 import { ES_PACK_RATES, ES_TAX_YEARS } from "./rates.ts";
 import { ES_WITHHOLDING } from "./withholding.ts";
 import { ES_EMPLOYEE_FACTS } from "./employee-facts.ts";
+import { ES_EMPLOYER_FACTS } from "./employer-facts.ts";
 
 /** Structural conformance without the closed union (see module doc). */
 export type EsPayrollPack = Omit<PayrollCountryPack, "country"> & {
@@ -164,6 +165,10 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
         { code: "SS-FOR-ER", name: "Formación profesional (employer)", systemKey: "ss_for_er", kind: "employer_contribution", sequence: 213, assessedOn: "earnings", remittance: "external" },
         // Art. 16: 0,75 % empresa.
         { code: "SS-MEI-ER", name: "MEI (employer)", systemKey: "ss_mei_er", kind: "employer_contribution", sequence: 214, assessedOn: "earnings", remittance: "external" },
+        // Art. 4.b: AT/EP exclusively employer, rated by the establishment's
+        // DA 61ª activity tariff (es_atep_rate employer fact) on the
+        // professional base. Emitted only when the tariff is on file.
+        { code: "SS-ATEP-ER", name: "AT/EP (employer)", systemKey: "ss_atep_er", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "external" },
       ],
     },
   ],
@@ -171,5 +176,5 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
   statutoryEngineLabel: "AEAT",
   factorLabels: { ...ES_FACTOR_LABELS },
   employeeFacts: ES_EMPLOYEE_FACTS,
-  employerFacts: [],
+  employerFacts: ES_EMPLOYER_FACTS,
 };
