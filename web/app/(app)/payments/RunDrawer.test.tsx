@@ -54,11 +54,11 @@ test('posting confirmation sums live instruction amounts with exact decimal prec
       // eslint-disable-next-line react/no-children-prop
       React.createElement(BusinessDateProvider, { today: '2026-09-24', children:
         React.createElement(RunDrawer, {
-          run: { id: 'run-1', run_number: 'RUN-1', status: 'generated', scheduled_for: null, bank_number: null, bank_name: null },
+          run: { id: 'run-1', run_number: 'RUN-1', status: 'generated', scheduled_for: null, bank_number: null, bank_name: null, currency: 'USD' },
           instructions: [
-            { id: 'i1', status: 'pending', payee: 'Adobe', document_number: 'PAY-1', amount: '9007199254740992.0000', payment_document_id: null, settlement_effective_on: null, bank_reference: null, return_code: null, return_reason: null },
-            { id: 'i2', status: 'pending', payee: 'Regional Telecom', document_number: 'PAY-2', amount: '1.0001', payment_document_id: null, settlement_effective_on: null, bank_reference: null, return_code: null, return_reason: null },
-            { id: 'i3', status: 'cancelled', payee: 'Cancelled', document_number: 'PAY-3', amount: '500.00', payment_document_id: null, settlement_effective_on: null, bank_reference: null, return_code: null, return_reason: null },
+            { id: 'i1', status: 'pending', payee: 'Adobe', document_number: 'PAY-1', amount: '9007199254740992.0000', currency: 'USD', payment_document_id: null, settlement_effective_on: null, bank_reference: null, return_code: null, return_reason: null },
+            { id: 'i2', status: 'pending', payee: 'Regional Telecom', document_number: 'PAY-2', amount: '1.0001', currency: 'USD', payment_document_id: null, settlement_effective_on: null, bank_reference: null, return_code: null, return_reason: null },
+            { id: 'i3', status: 'cancelled', payee: 'Cancelled', document_number: 'PAY-3', amount: '500.00', currency: 'USD', payment_document_id: null, settlement_effective_on: null, bank_reference: null, return_code: null, return_reason: null },
           ],
           eftConfigured: true,
           eftMissing: [],
