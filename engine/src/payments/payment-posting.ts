@@ -15,7 +15,7 @@ import { paymentControlDeps, paymentBookId } from "./payment-accounts.ts";
 import { openItemsForParty } from "./payment-queries.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind } from "./payment-documents.ts";
-import { expireStalePaymentLinkSessions } from "./acceptance.ts";
+import { expireStalePaymentLinkSessions } from "./payment-link-session-expiry.ts";
 // ---------------------------------------------------------------------------
 // Post + apply
 // ---------------------------------------------------------------------------
