@@ -13,7 +13,7 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
-import { createScratchOrg, seedFlowActors } from "../../testing/fixtures.ts";
+import { createScratchOrg, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 import "../../testing/database-bypass.ts";
 
 /**
@@ -99,13 +99,17 @@ async function makeEmployee(
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values (${id}, ${orgId}, 'person', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`);
+  // pay_stubs.employment_id is NOT NULL and the run refuses stubs without
+  // an HRM employment: every stub employee carries one, and the profile
+  // points at it (the run reads emp.employment_id).
+  const employmentId = await seedWorkerEmployment(orgId, id, subsidiaryId);
   await db.execute(sql`
     insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
   await db.execute(sql`
     insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, is_active,
+      (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, pay_basis, is_active,
        created_by, updated_by)
-    values (${orgId}, ${id}, ${scheduleId}, 'IT', ${REGION}, 'salary', true,
+    values (${orgId}, ${id}, ${employmentId}, ${scheduleId}, 'IT', ${REGION}, 'salary', true,
             ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into labor_cost_rates
@@ -224,9 +228,13 @@ test(
       select id from subsidiaries where org_id = ${orgId} and parent_id is null`)).rows[0]!.id;
     const empA = await makeEmployee(orgId, sub, actorId, scheduleId, "Alba Indeterminata", "36000", {
       domicilio_comune: COMUNE,
+      // The engine refuses an unknown contract term before pricing: both
+      // personas are indeterminate, so the CU tie-out can proceed past it.
+      tempo_determinato: "false",
     });
     const empB = await makeEmployee(orgId, sub, actorId, scheduleId, "Bruno Indeterminato", "24000", {
       domicilio_comune: COMUNE,
+      tempo_determinato: "false",
     });
     await payAndCommit(orgId, actorId, scheduleId, "2025-01-01", "2025-01-31", "2025-02-03");
     await payAndCommit(orgId, actorId, scheduleId, "2025-02-01", "2025-02-28", "2025-03-03");
@@ -307,8 +315,10 @@ test(
     assert.equal(boxesA.get("INPS-6"), String(byId.get(empA)!.inpsWorker));
     const slipB = await filing.slip.build(orgId, TAX_YEAR, empB);
     const boxesB = new Map(slipB.boxes.map((box) => [box.code, box.value]));
-    assert.equal(boxesB.get("2"), String(byId.get(empB)!.redditi));
-    assert.ok(!boxesB.has("1"));
+    // B is indeterminato since I6-payroll-297 (fixed-term box selection
+    // stays covered by the pure cuSlipBoxes test): punto 1, never punto 2.
+    assert.equal(boxesB.get("1"), String(byId.get(empB)!.redditi));
+    assert.ok(!boxesB.has("2"));
     // The slip states the conguaglio boundary on its face: punto 21 is the
     // withheld sum, and the art. 23 year-end conguaglio is the employer's
     // operation, not a computed figure — no silent filing.
