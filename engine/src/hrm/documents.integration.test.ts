@@ -281,7 +281,6 @@ test("decline, void, acknowledge, and legal hold follow their rules", { skip: !D
   const sent = await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
   const declined = await declineTokenDocument({ token: sent.deliveries[0]!.token, reason: "Wrong start date" });
   assert.equal(declined.status, "declined");
-  // A signed-completed document cannot be voided; re-issue instead.
   const ackTpl = await saveTemplate({
     orgId: h.org.orgId,
     actorId: h.hrId,
@@ -302,6 +301,7 @@ test("decline, void, acknowledge, and legal hold follow their rules", { skip: !D
     title: "Handbook",
     today: "2026-09-21",
   });
+  await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: ack.document.id });
   const acked = await acknowledgeDocument({ orgId: h.org.orgId, actorId: h.employeeId, documentId: ack.document.id });
   assert.equal(acked.status, "acknowledged");
   await assert.rejects(
