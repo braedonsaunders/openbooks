@@ -310,6 +310,12 @@ export const US_LOCAL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   OR_TRANSIT_TAX: "Oregon transit payroll tax (employer)",
 };
 
+export const US_SUPPLEMENTAL_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  US_SUPPLEMENTAL_METHOD: "US supplemental withholding method",
+  US_SUPPLEMENTAL_RATE: "US supplemental withholding rate",
+  US_SUPPLEMENTAL_TAX: "US supplemental tax withheld",
+};
+
 /**
  * A sub-region levy whose code differs from the engine's own state code.
  *

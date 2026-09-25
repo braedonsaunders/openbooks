@@ -303,7 +303,7 @@ function collectStatic(dir: string): TracedSet {
 }
 
 /**
- * Fixture-free pure engines, driven over representative 2026 inputs. This
+ * Fixture-free pure engines, driven over representative inputs. This
  * catches keys no literal names: T4127's annualTax parts (K1..T2, whose
  * provincial half differs by province — ON for the full set, QC for the
  * abatement, ZZ for the outside-Canada surtax) and the bonus path (F5B,
@@ -319,7 +319,7 @@ function collectDynamic(country: string): Map<string, string> {
   if (country === "US") {
     add(
       calculatePub15T({
-        payDate: "2026-06-15",
+        payDate: "2025-06-15", futaRegion: "CA",
         periodsPerYear: 26,
         wages: "2000",
         supplemental: "500",

@@ -394,6 +394,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
  * module header.
  */
 export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "West Virginia qualifying military-spouse wages exempt from withholding",
   WV_EXEMPT: "Exempt from West Virginia withholding",
   WV_SCHEDULE: "West Virginia schedule",
   WV_PERIOD: "West Virginia payroll period",
