@@ -152,6 +152,8 @@ export interface PerformancePageData {
     reviewsEmpty: string
     cols: { kind: string; status: string; rating: string }
     calibration: {
+      canOpen: boolean
+      openLabel: string
       canMove: boolean
       canForce: boolean
       canClose: boolean
@@ -439,7 +441,9 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
   await requireFeatureEnabled(authz.user.orgId, 'hrmPerformance')
   const t = await getTranslations('hrm')
-  const retryLabel = (await getTranslations('common'))('actions.retry')
+  const commonT = await getTranslations('common')
+  const retryLabel = commonT('actions.retry')
+  const openLabel = commonT('actions.open')
   const tabs = await hrmGroupTabs(authz, '/hrm/performance')
 
   // The `mine` pseudo-status is the self-service segment: cycles the actor
@@ -551,6 +555,8 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
           rating: t('performance.colRating'),
         },
         calibration: {
+          canOpen: canManage && full.status === 'draft',
+          openLabel,
           canMove: canManage && full.status === 'open',
           canForce: canManage && full.status === 'open',
           canClose: canManage && (full.status === 'open' || full.status === 'calibrating'),
