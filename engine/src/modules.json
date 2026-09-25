@@ -443,7 +443,6 @@
       "description": "Revenue recognition obligations and schedules; lease accounting.",
       "dependsOn": [
         "journal",
-        "ledger",
         "money",
         "organization",
         "periods",
@@ -630,7 +629,6 @@
       "payments",
       "payroll",
       "projects",
-      "revenue",
       "scripting"
     ],
     [

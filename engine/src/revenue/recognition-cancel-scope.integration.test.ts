@@ -4,10 +4,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import {
-  cancelRevenueRecognitionForInvoice,
-  runRevenueRecognition,
-} from "./recognition.ts";
+import { cancelRevenueRecognitionForInvoice } from "../ledger/revenue-recognition-cancellation.ts";
+import { runRevenueRecognition } from "./recognition.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import {
   createScratchOrg,

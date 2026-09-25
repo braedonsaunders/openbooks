@@ -116,7 +116,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', mockUrl('authz')],
   ['../../../../lib/features', mockUrl('features')],
   ['../../../../lib/documents.ts', mockUrl('documents')],
-  ['@openbooks/engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
+  ['@openbooks/engine/src/ledger/revenue-recognition-cancellation.ts', mockUrl('revenue-recognition')],
   ['@openbooks/engine/src/ledger/document-void.ts', mockUrl('document-void')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
 ])

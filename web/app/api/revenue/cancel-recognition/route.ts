@@ -3,7 +3,7 @@ import { z } from 'zod'
 import {
   cancelRevenueRecognitionForInvoice,
   RevenueRecognitionCancellationError,
-} from '@openbooks/engine/src/revenue/recognition.ts'
+} from '@openbooks/engine/src/ledger/revenue-recognition-cancellation.ts'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { DocumentVoidError } from '@openbooks/engine/src/ledger/document-void.ts'

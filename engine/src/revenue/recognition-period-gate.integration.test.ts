@@ -5,9 +5,9 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { cancelRevenueRecognitionForInvoice } from "../ledger/revenue-recognition-cancellation.ts";
 import {
   buildRecognitionSchedule,
-  cancelRevenueRecognitionForInvoice,
   runRevenueRecognition,
 } from "./recognition.ts";
 import {
