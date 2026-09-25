@@ -201,7 +201,15 @@ export function ImportWizard() {
       setSampleBusy(false)
       return
     }
-    await enterOrg(orgId)
+    // Entering resolves access and navigates: a refusal must release the
+    // button instead of leaving it on "Preparing" forever.
+    try {
+      await enterOrg(orgId)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('import.sample.error'))
+    } finally {
+      setSampleBusy(false)
+    }
   }
 
   const grouped = useMemo(() => {
