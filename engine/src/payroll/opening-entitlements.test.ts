@@ -79,6 +79,7 @@ async function seedBanks(): Promise<BankFixture> {
         taxPayableAccountId: craPayable,
         vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
+        ca: { eht: { enabled: true, rate: "1.95", annualExemption: "1000" } },
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
