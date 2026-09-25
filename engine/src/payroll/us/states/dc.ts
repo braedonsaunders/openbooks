@@ -273,6 +273,28 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "DC", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
+  if (input.basis === "nonresident") {
+    const d4a = input.certificateFor?.(DC_NONRESIDENT_CERTIFICATE.key);
+    if (d4a?.onFile) {
+      const statedResidence = d4a.answers.permanent_residence_region;
+      if (!input.residenceRegion || input.residenceRegion === "DC"
+        || statedResidence !== input.residenceRegion) {
+        throw new PayrollError(
+          "DC Form D-4A does not match the employee's current residence region. Reconcile the signed form with the employee's residence profile before calculating; refused by name",
+        );
+      }
+      const daysInDc = certificateCount(d4a, "days_in_dc");
+      if (daysInDc == null || (daysInDc >= 183
+        && !certificateFlag(d4a, "military_spouse"))) {
+        throw new PayrollError(
+          "DC Form D-4A requires a current-year certification of fewer than 183 DC residence days, unless the employee qualifies as a servicemember's spouse. Update the signed D-4A or withhold under the applicable DC rules; refused by name",
+        );
+      }
+      factors.DC_D4A_NONRESIDENT = "1";
+      return { state: "DC", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    }
+  }
+
   // FR-230 p. 2: wages cover "salaries, fees, bonuses and commissions" —
   // supplemental pay is ordinary wages here. The booklet prints no
   // supplemental-wage rule, so there is no separate supplemental computation
@@ -396,6 +418,45 @@ export const DC_CERTIFICATE: PayrollCertificate = {
         "FR-230 p. 5: a servicemember spouse whose wages are exempt from District income tax "
         + "under federal law may file a D-4 claiming exemption from withholding. The only D-4 "
         + "exemption the booklet names.",
+    },
+  ],
+};
+
+/** Form D-4A, Certificate of Nonresidence in the District of Columbia. */
+export const DC_NONRESIDENT_CERTIFICATE: PayrollCertificate = {
+  key: "us_dc_d4a",
+  form: "D-4A",
+  label: "Certificate of Nonresidence in the District of Columbia",
+  scope: { level: "region", region: "DC" },
+  purpose: "non_residence",
+  validity: { kind: "calendar_year_end" },
+  citation:
+    "DC OTR Form D-4A (Rev. 12/2016), Certificate of Nonresidence in the District of Columbia, "
+    + "and instructions; https://otr.cfo.dc.gov/sites/default/files/dc/sites/otr/publication/attachments/2016%20D-4A.pdf",
+  summary:
+    "A nonresident's signed D-4A stops DC withholding for the tax year when permanent residence "
+    + "is outside DC and the employee will not reside in DC for 183 days or more. The form is not reciprocity.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "permanent_residence_region",
+      label: "Permanent residence region on Form D-4A",
+      kind: "code",
+      required: true,
+      help: "Record the employee's permanent residence region exactly as it appears in the employee profile.",
+    },
+    {
+      key: "days_in_dc",
+      label: "Days the employee expects to reside in DC this tax year",
+      kind: "count",
+      min: "0", max: "366", required: true,
+      help: "The signed D-4A certifies fewer than 183 days of DC residence, unless the employee is a servicemember's spouse.",
+    },
+    {
+      key: "military_spouse",
+      label: "Qualifying servicemember's spouse",
+      kind: "flag",
+      help: "Check only when the employee qualifies for the D-4A servicemember's spouse nonresident treatment.",
     },
   ],
 };
