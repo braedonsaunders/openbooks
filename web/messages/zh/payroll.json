@@ -788,7 +788,8 @@
         "slots": {
           "paye": "PAYE应付（所得税）",
           "nic": "National Insurance应付（雇员和雇主第一类）",
-          "student-loans": "学生贷款和研究生贷款扣款应付"
+          "student-loans": "学生贷款和研究生贷款扣款应付",
+          "apprenticeship-levy": "学徒税应付（雇主部分）"
         }
       },
       "IE": {

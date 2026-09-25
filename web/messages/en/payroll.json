@@ -788,7 +788,8 @@
         "slots": {
           "paye": "PAYE payable (income tax)",
           "nic": "National Insurance payable (employee + employer Class 1)",
-          "student-loans": "Student loan and postgraduate loan deductions payable"
+          "student-loans": "Student loan and postgraduate loan deductions payable",
+          "apprenticeship-levy": "Apprenticeship Levy payable (employer)"
         }
       },
       "IE": {
