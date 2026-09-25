@@ -220,6 +220,15 @@ async function assertConstrainedSchemaOwnerMigrationRole(
     process.env.NODE_ENV,
   );
   if (refusal) throw new Error(refusal);
+  // The predicate refuses an absent posture above, so reaching here proves
+  // the row exists; re-assert it by name for the log line instead of
+  // asserting non-null.
+  if (!posture) {
+    throw new Error(
+      "constrained schema-owner migration requires a readable current-user role row and found none — " +
+        "ask the database host to repair the provisioning in docs/operations/communal-postgres.md, then retry bootstrap",
+    );
+  }
   console.log(
     `[bootstrap] constrained schema owner ${posture.current_user} verified for migration-only mode`,
   );
