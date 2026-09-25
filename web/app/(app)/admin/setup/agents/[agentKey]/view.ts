@@ -5,7 +5,7 @@ import { getTranslations } from 'next-intl/server'
 import { grid, heading, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { detectorSpecsForAgent } from '@openbooks/engine/src/agents/continuous-close-config.ts'
 import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
-import { requirePermission } from '../../../../../../lib/authz'
+import { guardRootSubsidiaryScope, requirePermission } from '../../../../../../lib/authz'
 import { dateTime } from '../../../../../../lib/format'
 import { getMoneyFormatter } from '../../../../../../lib/money-server'
 import {
@@ -67,6 +67,7 @@ export interface AgentPolicyData {
 export async function loadAgentPolicy(agentKey: string): Promise<AgentPolicyData> {
   if (!isContinuousCloseAgentKey(agentKey)) notFound()
   const authz = await requirePermission('admin.setup.manage')
+  if (await guardRootSubsidiaryScope(authz)) notFound()
   const t = await getTranslations('admin')
   const [rows, notification, targets, { currency }] = await Promise.all([
     getAgentsOverview(authz.user.orgId),

@@ -2,16 +2,13 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Loader regression for /admin/setup/agents/[agentKey]: one pack's schedule,
-// detector controls, analysis tier and finding routing — setup managers only,
-// unknown keys 404. Auth and navigation are scripted; the read model and
-// Postgres are live.
 const stateKey = Symbol.for("openbooks.agent-policy-loader-test");
 interface LoaderState {
   user: { orgId: string; id: string } | null;
   permissions: Set<string>;
+  allowed: ReadonlySet<string> | null;
 }
-const loaderState: LoaderState = { user: null, permissions: new Set() };
+const loaderState: LoaderState = { user: null, permissions: new Set(), allowed: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = loaderState;
 
 const mockAuthz = `
@@ -20,8 +17,9 @@ const mockAuthz = `
   export async function requirePermission(permission) {
     if (!state.user) throw new Error('NEXT_REDIRECT:/login');
     if (!permissionSetCovers(state.permissions, permission)) throw new Error('NEXT_REDIRECT:/');
-    return { user: state.user, permissions: state.permissions, allowedSubsidiaryIds: null };
+    return { user: state.user, permissions: state.permissions, allowedSubsidiaryIds: state.allowed };
   }
+  export async function guardRootSubsidiaryScope(authz) { return authz.allowedSubsidiaryIds === null ? null : new Error('restricted scope'); }
 `;
 
 const mockNavigation = `
@@ -111,6 +109,8 @@ test("a setup manager gets the pack policy, specs and routing targets", { skip: 
     }
     assert.equal(data.notification, null);
     assert.equal(data.featureEnabled, true);
+    loaderState.allowed = new Set(["00000000-0000-0000-0000-000000000001"]);
+    await assert.rejects(withBypassContext(() => loadAgentPolicy("accounting")), /NEXT_NOT_FOUND/);
     assert.ok(data.roles.some((role) => role.name.toLowerCase().includes("admin")), "must list org roles");
     assert.ok(data.users.some((user) => user.id === userId), "must list org people");
   } finally {
