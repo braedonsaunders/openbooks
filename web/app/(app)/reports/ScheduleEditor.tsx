@@ -76,13 +76,18 @@ export function ScheduleEditor({
   }
 
   async function toggleActive(s: ScheduleRow) {
-    const res = await fetch(`/api/reports/schedules/${s.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: !s.active }),
-    })
-    if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? t('updateFailed'))
-    else toast.success(s.active ? t('paused') : t('resumed'))
+    try {
+      const res = await fetch(`/api/reports/schedules/${s.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !s.active }),
+      })
+      if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? t('updateFailed'))
+      else toast.success(s.active ? t('paused') : t('resumed'))
+    } catch {
+      // A network failure must toast, never reject unhandled past the button.
+      toast.error(t('updateFailed'))
+    }
     onChanged?.()
     router.refresh()
   }
@@ -90,11 +95,15 @@ export function ScheduleEditor({
   async function remove(s: ScheduleRow) {
     const ok = await confirmDialog({ message: t('deleteConfirm'), tone: 'danger' })
     if (!ok) return
-    const res = await fetch(`/api/reports/schedules/${s.id}`, { method: 'DELETE' })
-    // The error body may not be JSON (proxy 5xx pages): never let the read
-    // itself throw, or the failure goes silent with an unhandled rejection.
-    if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? tc('feedback.deleteFailed'))
-    else toast.success(t('deleted'))
+    try {
+      const res = await fetch(`/api/reports/schedules/${s.id}`, { method: 'DELETE' })
+      // The error body may not be JSON (proxy 5xx pages): never let the read
+      // itself throw, or the failure goes silent with an unhandled rejection.
+      if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? tc('feedback.deleteFailed'))
+      else toast.success(t('deleted'))
+    } catch {
+      toast.error(tc('feedback.deleteFailed'))
+    }
     onChanged?.()
     router.refresh()
   }
@@ -201,33 +210,39 @@ function ScheduleForm({
   }, [busy, dirty, onDraftStateChange])
 
   async function save() {
+    // busy resets in finally: a network failure must release inert={busy}
+    // and the dirty-close guard, or the drawer sticks shut on a dead save.
     setBusy(true)
-    const res = await fetch('/api/reports/schedules', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        definitionId,
-        ...(statementParams && Object.keys(statementParams).length ? { statementParams } : {}),
-        cadence,
-        dayOfWeek,
-        dayOfMonth,
-        hour,
-        minute,
-        timezone,
-        recipientEmails: recipients
-          .split(/[,\n]/)
-          .map((s) => s.trim())
-          .filter(Boolean),
-      }),
-    })
-    if (!res.ok) {
-      toast.error((await res.json().catch(() => ({}))).error ?? t('saveFailed'))
+    try {
+      const res = await fetch('/api/reports/schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          definitionId,
+          ...(statementParams && Object.keys(statementParams).length ? { statementParams } : {}),
+          cadence,
+          dayOfWeek,
+          dayOfMonth,
+          hour,
+          minute,
+          timezone,
+          recipientEmails: recipients
+            .split(/[,\n]/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+        }),
+      })
+      if (!res.ok) {
+        toast.error((await res.json().catch(() => ({}))).error ?? t('saveFailed'))
+        return
+      }
+      toast.success(t('saved'))
+      onDone()
+    } catch {
+      toast.error(t('saveFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    toast.success(t('saved'))
-    setBusy(false)
-    onDone()
   }
 
   const field = 'space-y-1.5'

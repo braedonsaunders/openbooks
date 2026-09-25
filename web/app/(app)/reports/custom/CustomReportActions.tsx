@@ -27,40 +27,45 @@ export function CustomReportActions({
   const router = useRouter()
 
   async function clone() {
+    // busy resets in finally: a network failure must release the disabled
+    // buttons, or the row sticks busy on a dead request.
     setBusy(true)
-    const res = await fetch(`/api/reports/definitions/${id}`)
-    if (!res.ok) {
-      const failure = (await res.json().catch(() => ({}))) as { error?: string }
-      toast.error(failure.error ?? t('loadFailed'))
+    try {
+      const res = await fetch(`/api/reports/definitions/${id}`)
+      if (!res.ok) {
+        const failure = (await res.json().catch(() => ({}))) as { error?: string }
+        toast.error(failure.error ?? t('loadFailed'))
+        return
+      }
+      const data = await res.json()
+      const def = data.definition
+      const created = await fetch('/api/reports/definitions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          name: t('copyName', { name: def.name }),
+          description: def.description,
+          query: def.query,
+          layout: def.layout,
+        }),
+      })
+      if (!created.ok) {
+        const failure = (await created.json().catch(() => ({}))) as { error?: string }
+        toast.error(failure.error ?? t('cloneFailed'))
+        return
+      }
+      const createdData = await created.json()
+      toast.success(t('cloned'))
+      router.push(`/reports/custom/builder/${createdData.definition.id}`)
+      router.refresh()
+    } catch {
+      toast.error(t('cloneFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    const data = await res.json()
-    const def = data.definition
-    const created = await fetch('/api/reports/definitions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': crypto.randomUUID(),
-      },
-      body: JSON.stringify({
-        name: t('copyName', { name: def.name }),
-        description: def.description,
-        query: def.query,
-        layout: def.layout,
-      }),
-    })
-    if (!created.ok) {
-      const failure = (await created.json().catch(() => ({}))) as { error?: string }
-      toast.error(failure.error ?? t('cloneFailed'))
-      setBusy(false)
-      return
-    }
-    const createdData = await created.json()
-    toast.success(t('cloned'))
-    router.push(`/reports/custom/builder/${createdData.definition.id}`)
-    router.refresh()
-    setBusy(false)
   }
 
   async function remove() {
@@ -70,11 +75,19 @@ export function CustomReportActions({
     })
     if (!ok) return
     setBusy(true)
-    const res = await fetch(`/api/reports/definitions/${id}`, { method: 'DELETE' })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(data.error ?? t('deleteFailed'))
-    else toast.success(t('deleted'))
-    setBusy(false)
+    try {
+      const res = await fetch(`/api/reports/definitions/${id}`, { method: 'DELETE' })
+      // The error body may not be JSON (proxy 5xx pages): check ok BEFORE
+      // parsing, so the refusal survives instead of becoming a parse error.
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        toast.error(data.error ?? t('deleteFailed'))
+      } else toast.success(t('deleted'))
+    } catch {
+      toast.error(t('deleteFailed'))
+    } finally {
+      setBusy(false)
+    }
     router.refresh()
   }
 
