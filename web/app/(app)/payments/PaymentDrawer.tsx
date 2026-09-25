@@ -15,6 +15,7 @@ import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { currencyMinorUnits } from '../../../lib/iso-currencies'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
@@ -698,7 +699,10 @@ export function PaymentDrawer({
   async function autoApply() {
     if (!partyId) return
     const sameCurrencyItems = openItems.filter((item) => item.currency === doc.currency)
-    const amount = receivedAmount.trim() || formatMoney(sum(sameCurrencyItems.map((item) => item.transactionOpen)), 2)
+    // The suggestion seed is an exact decimal in the document currency, not
+    // hard-coded 2dp: 3-decimal currencies (KWD, BHD) would otherwise
+    // under-apply by the rounded tail.
+    const amount = receivedAmount.trim() || formatMoney(sum(sameCurrencyItems.map((item) => item.transactionOpen)), currencyMinorUnits(doc.currency))
     await execute(
       () =>
         fetchAction('/api/payments/suggest', {
