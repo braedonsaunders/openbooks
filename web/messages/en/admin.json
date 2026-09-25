@@ -4382,6 +4382,9 @@
       "providersBody": "Payment providers need the Online payments feature — turn it on here to continue.",
       "entityBody": "This setup page has moved to its module — update your bookmark."
     },
+    "constructionRateEditor": {
+      "tab": "Scope & rates"
+    },
     "guide": {
       "hero": {
         "kicker": "Go-live guide",

@@ -4363,6 +4363,9 @@
       "providersBody": "Los proveedores de pago necesitan la función Pagos en línea — actívela aquí para continuar.",
       "entityBody": "Esta página de configuración se ha trasladado a su módulo — actualice su marcador."
     },
+    "constructionRateEditor": {
+      "tab": "Ámbito y tarifas"
+    },
     "guide": {
       "hero": {
         "kicker": "Guía de puesta en marcha",

@@ -160,7 +160,8 @@
     "openBalance": "Solde impayé",
     "defaultForm": "Formulaire par défaut",
     "asOf": "Au",
-    "unknownValue": "Valeur inconnue"
+    "unknownValue": "Valeur inconnue",
+    "loading": "Chargement…"
   },
   "status": {
     "draft": "Brouillon",

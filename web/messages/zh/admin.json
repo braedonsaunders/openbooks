@@ -4382,6 +4382,9 @@
       "providersBody": "支付服务商需要“在线支付”功能——请在此处启用以继续。",
       "entityBody": "此设置页面已移至其模块 — 请更新您的书签。"
     },
+    "constructionRateEditor": {
+      "tab": "适用范围和工资率"
+    },
     "guide": {
       "hero": {
         "kicker": "上线指南",

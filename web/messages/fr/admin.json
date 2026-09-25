@@ -4363,6 +4363,9 @@
       "providersBody": "Les prestataires de paiement nécessitent la fonction Paiements en ligne — activez-la ici pour continuer.",
       "entityBody": "Cette page de configuration a déménagé vers son module — mettez à jour votre signet."
     },
+    "constructionRateEditor": {
+      "tab": "Portée et taux"
+    },
     "guide": {
       "hero": {
         "kicker": "Guide de mise en service",

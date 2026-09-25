@@ -4057,6 +4057,9 @@
       "providersBody": "Zahlungsanbieter benötigen die Funktion Online-Zahlungen — aktivieren Sie sie hier, um fortzufahren.",
       "entityBody": "Diese Einrichtungsseite ist in ihr Modul umgezogen — aktualisieren Sie Ihr Lesezeichen."
     },
+    "constructionRateEditor": {
+      "tab": "Geltungsbereich & Sätze"
+    },
     "guide": {
       "activity": {
         "high": "mehr als 1.000 monatliche Vorgänge",

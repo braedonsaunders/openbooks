@@ -160,7 +160,8 @@
     "openBalance": "未结余额",
     "defaultForm": "默认表单",
     "asOf": "截至",
-    "unknownValue": "未知值"
+    "unknownValue": "未知值",
+    "loading": "加载中…"
   },
   "status": {
     "draft": "草稿",
