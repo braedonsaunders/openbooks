@@ -315,28 +315,12 @@ test("no assignment versions is a legitimate empty list, not a refusal", async (
   assert.deepEqual(dto.assignments, []);
 });
 
-test("regression: assignment recorded after knownAt is absent, not a failure", async () => {
+test("known-view semantics: a late-recorded assignment is absent before, present after", async () => {
   // Employment active recorded Jan1; assignment effective Jan1 but first
   // recorded Feb1. At Jan20 the assignment was unknown: the employment read
-  // for Jan15 as known Jan20 must succeed with zero assignments.
-  const state = emptyState();
-  const exec = fakeExec(state);
-  const record = seedEmployment(state);
-  const actor = seedUser(state, ["hrm.employment.read"]);
-  seedEmploymentVersions(state, record.id, [employmentVersion()]);
-  seedAssignmentVersions(state, record.id, [
-    assignmentVersion({ effectiveFrom: "2026-01-01", recordedAt: "2026-02-01T00:00:00.000001Z", recordedUntil: null, isPrimary: true }),
-  ]);
-
-  const dto = await loadEmploymentAsOf(
-    exec,
-    queryFor(actor, record.id, "2026-01-15", "2026-01-20T00:00:00.000001Z"),
-  );
-  assert.equal(dto.version.status, "active");
-  assert.deepEqual(dto.assignments, []);
-});
-
-test("known-view semantics: the same read after recording includes the assignment", async () => {
+  // for Jan15 as known Jan20 must succeed with zero assignments — and the
+  // same read as known Feb15 must include it. One fixture, both halves of
+  // the known-view invariant.
   const state = emptyState();
   const exec = fakeExec(state);
   const record = seedEmployment(state);
@@ -345,12 +329,19 @@ test("known-view semantics: the same read after recording includes the assignmen
   const late = assignmentVersion({ effectiveFrom: "2026-01-01", recordedAt: "2026-02-01T00:00:00.000001Z", recordedUntil: null, isPrimary: true });
   seedAssignmentVersions(state, record.id, [late]);
 
-  const dto = await loadEmploymentAsOf(
+  const before = await loadEmploymentAsOf(
+    exec,
+    queryFor(actor, record.id, "2026-01-15", "2026-01-20T00:00:00.000001Z"),
+  );
+  assert.equal(before.version.status, "active");
+  assert.deepEqual(before.assignments, []);
+
+  const after = await loadEmploymentAsOf(
     exec,
     queryFor(actor, record.id, "2026-01-15", "2026-02-15T00:00:00.000001Z"),
   );
-  assert.equal(dto.assignments.length, 1);
-  assert.equal(dto.assignments[0]?.versionId, late.id);
+  assert.equal(after.assignments.length, 1);
+  assert.equal(after.assignments[0]?.versionId, late.id);
 });
 
 test("regression: a superseded January assignment does not fail February reads", async () => {
@@ -384,19 +375,31 @@ test("regression: a superseded January assignment does not fail February reads",
   assert.deepEqual(dto.assignments, []);
 });
 
-test("two live applicable assignment revisions are still refused", async () => {
-  const state = emptyState();
-  const exec = fakeExec(state);
-  const record = seedEmployment(state);
-  const actor = seedUser(state, ["hrm.employment.read"]);
-  seedEmploymentVersions(state, record.id, [employmentVersion()]);
-  const slotId = randomUUID();
-  seedAssignmentVersions(state, record.id, [
-    assignmentVersion({ assignmentId: slotId, assignmentKey: "a", versionNo: 1, recordedAt: "2026-01-01T00:00:00.000001Z", recordedUntil: null }),
-    assignmentVersion({ assignmentId: slotId, assignmentKey: "a", versionNo: 2, recordedAt: "2026-01-02T00:00:00.000001Z", recordedUntil: null }),
-  ]);
-
-  await assert.rejects(loadEmploymentAsOf(exec, queryFor(actor, record.id)), AmbiguousRevisionError);
+test("ambiguous assignment sets are refused: two live revisions, two primaries", async () => {
+  // One slot with two live revisions and two primary slots are different
+  // shapes of the same failure — the read must refuse, never pick one.
+  const failingSets = [
+    () => {
+      const slotId = randomUUID();
+      return [
+        assignmentVersion({ assignmentId: slotId, assignmentKey: "a", versionNo: 1, recordedAt: "2026-01-01T00:00:00.000001Z", recordedUntil: null }),
+        assignmentVersion({ assignmentId: slotId, assignmentKey: "a", versionNo: 2, recordedAt: "2026-01-02T00:00:00.000001Z", recordedUntil: null }),
+      ];
+    },
+    () => [
+      assignmentVersion({ assignmentKey: "a", isPrimary: true }),
+      assignmentVersion({ assignmentKey: "b", isPrimary: true }),
+    ],
+  ];
+  for (const [index, build] of failingSets.entries()) {
+    const state = emptyState();
+    const exec = fakeExec(state);
+    const record = seedEmployment(state);
+    const actor = seedUser(state, ["hrm.employment.read"]);
+    seedEmploymentVersions(state, record.id, [employmentVersion()]);
+    seedAssignmentVersions(state, record.id, build());
+    await assert.rejects(loadEmploymentAsOf(exec, queryFor(actor, record.id)), AmbiguousRevisionError, `set ${index} refuses`);
+  }
 });
 
 test("no employment version covering the as-of point is refused, never null", async () => {
@@ -410,20 +413,6 @@ test("no employment version covering the as-of point is refused, never null", as
     loadEmploymentAsOf(exec, queryFor(actor, record.id)),
     (error: unknown) => error instanceof NoRevisionError,
   );
-});
-
-test("two primary assignments at one as-of point are refused", async () => {
-  const state = emptyState();
-  const exec = fakeExec(state);
-  const record = seedEmployment(state);
-  const actor = seedUser(state, ["hrm.employment.read"]);
-  seedEmploymentVersions(state, record.id, [employmentVersion()]);
-  seedAssignmentVersions(state, record.id, [
-    assignmentVersion({ assignmentKey: "a", isPrimary: true }),
-    assignmentVersion({ assignmentKey: "b", isPrimary: true }),
-  ]);
-
-  await assert.rejects(loadEmploymentAsOf(exec, queryFor(actor, record.id)), AmbiguousRevisionError);
 });
 
 test("authorization denial surfaces unchanged through the real gate", async () => {
