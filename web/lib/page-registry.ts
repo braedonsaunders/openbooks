@@ -1936,6 +1936,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/payroll/work-locations': {
+    route: '/payroll/work-locations',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/payroll/work-locations/view')
+      return {
+        load: () => m.loadWorkLocations(),
+        spec: (data) => m.workLocationsSpec(data as never),
+      }
+    },
+  },
   '/payroll/year-end': {
     route: '/payroll/year-end',
     segments: [],
