@@ -282,7 +282,7 @@ test("document generation keeps the named API refusal in the dialog", async () =
             generate={{
               closeHref: "/hrm/documents",
               templates: [{ value: "tpl-1", label: "Offer", category: "Employment", mergeFields: [] }],
-              people: [{ value: "party-1", label: "Ari Worker" }],
+              people: [{ value: "party-1", label: "Ari Worker" }], categories: [],
               labels: allMessages.hrm.documents.generate,
             }}
           />
