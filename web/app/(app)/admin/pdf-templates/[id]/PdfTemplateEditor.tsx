@@ -190,12 +190,17 @@ export default function PdfTemplateEditor({
   async function remove() {
     if (!(await confirmDialog({ title: tCommon('actions.delete'), message: t('editor.deleteConfirm'), tone: 'danger' }))) return
     setBusy(true)
-    const res = await fetch(`/api/pdf-templates/${template.id}`, { method: 'DELETE' })
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/pdf-templates/${template.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('editor.saveFailed')))
+        return
+      }
       router.push(`/admin/pdf-templates?recordType=${template.recordType}`)
-    } else {
-      setBusy(false)
+    } catch {
       toast.error(t('editor.saveFailed'))
+    } finally {
+      setBusy(false)
     }
   }
 

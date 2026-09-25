@@ -20,16 +20,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/admin/email/EmailSettingsForm.tsx",
-    "fn": "save",
-    "reason": "server always returns JSON; guard adoption pending. PUT /api/admin/email (web/app/api/admin/email/route.ts): the only fallible domain call (saveOrgEmailConfig) sits inside try/catch-all answering NextResponse.json (422/409); no rethrow; guards and validation return JSON. Verified by reading the handler."
-  },
-  {
-    "path": "web/app/(app)/admin/email/EmailSettingsForm.tsx",
-    "fn": "sendTest",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/admin/flows/FlowsClient.tsx",
     "fn": "create",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

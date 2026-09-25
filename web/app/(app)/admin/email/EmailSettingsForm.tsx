@@ -49,15 +49,18 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      if (!res.ok) {
+        toast.error(t('email.saveFailed'))
+        return
+      }
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? t('email.saveFailed'))
       setV(data)
       setSecret('')
       setReplaceSecret(!data.hasSecret)
       toast.success(t('email.saved'))
       router.refresh()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('email.saveFailed'))
+    } catch {
+      toast.error(t('email.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -71,13 +74,16 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: testTo.trim() }),
       })
+      if (!res.ok) {
+        toast.error(t('email.testFailed'))
+        return
+      }
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? t('email.testFailed'))
       toast.success(
         t('email.testSent', { provider: String(data.provider ?? ''), messageId: String(data.messageId ?? '') }),
       )
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('email.testFailed'))
+    } catch {
+      toast.error(t('email.testFailed'))
     } finally {
       setTesting(false)
     }
