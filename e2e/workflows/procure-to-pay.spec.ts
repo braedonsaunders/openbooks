@@ -513,7 +513,7 @@ test.describe("procure-to-pay workflows", () => {
         data: { email: APPROVER_EMAIL, password: APPROVER_PASSWORD },
         headers: { Origin: origin },
       });
-      if (!res.ok) throw new Error(`approver login failed: ${res.status()} ${await res.text()}`);
+      if (!res.ok()) throw new Error(`approver login failed: ${res.status()} ${await res.text()}`);
       return await browser.newContext({ baseURL, storageState: await apiCtx.storageState(), ignoreHTTPSErrors });
     } finally {
       await apiCtx.dispose();
