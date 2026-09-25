@@ -747,7 +747,8 @@
           "vacation": "Vacaciones por pagar",
           "wcb": "Compensación laboral por pagar (WCB/WSIB)",
           "eht": "Impuesto de salud del empleador por pagar",
-          "hsf": "Fondo de servicios de salud por pagar (Quebec)"
+          "hsf": "Fondo de servicios de salud por pagar (Quebec)",
+          "cnt": "CNT por pagar (contribución de Quebec sobre normas laborales)"
         }
       },
       "US": {
@@ -766,7 +767,10 @@
           "dc_opfl_employer": "Licencia familiar pagada del Distrito de Columbia (empleador) por pagar",
           "co_famli_employee": "FAMLI de Colorado (empleado) por pagar",
           "co_famli_employer": "FAMLI de Colorado (empleador) por pagar",
-          "ca_ett": "Impuesto de formación para el empleo de California (empleador) por pagar"
+          "ca_ett": "Impuesto de formación para el empleo de California (empleador) por pagar",
+          "ct_pl_employee": "Licencia pagada de Connecticut (empleado) por pagar",
+          "vt_child_care_contribution": "Contribución de Vermont para el cuidado infantil por pagar",
+          "mn_paid_leave": "Licencia pagada de Minnesota por pagar"
         }
       },
       "NL": {
@@ -803,7 +807,8 @@
           "irpef": "IRPEF por pagar (impuesto nacional sobre la renta)",
           "addizionale_regionale": "Addizionale regionale por pagar (recargo regional del IRPEF)",
           "addizionale_comunale": "Addizionale comunale por pagar (recargo municipal del IRPEF)",
-          "inps": "INPS por pagar (cotizaciones IVS de empleado y empleador)"
+          "inps": "INPS por pagar (cotizaciones IVS de empleado y empleador)",
+          "sostitutive": "Impuestos sustitutivos por pagar (imposte sostitutive)"
         }
       },
       "AU": {

@@ -747,7 +747,8 @@
           "vacation": "Vacances à payer",
           "wcb": "Indemnisation des accidents du travail à payer (CAT/CSST)",
           "eht": "Impôt-santé des employeurs à payer",
-          "hsf": "Fonds des services de santé à payer (Québec)"
+          "hsf": "Fonds des services de santé à payer (Québec)",
+          "cnt": "CNT à payer (contribution du Québec aux normes du travail)"
         }
       },
       "US": {
@@ -766,7 +767,10 @@
           "dc_opfl_employer": "Congé familial payé du district de Columbia (employeur) à payer",
           "co_famli_employee": "FAMLI du Colorado (employé) à payer",
           "co_famli_employer": "FAMLI du Colorado (employeur) à payer",
-          "ca_ett": "Taxe de formation professionnelle de Californie (employeur) à payer"
+          "ca_ett": "Taxe de formation professionnelle de Californie (employeur) à payer",
+          "ct_pl_employee": "Congé payé du Connecticut (employé) à payer",
+          "vt_child_care_contribution": "Contribution du Vermont pour la garde d'enfants à payer",
+          "mn_paid_leave": "Congé payé du Minnesota à payer"
         }
       },
       "NL": {
@@ -803,7 +807,8 @@
           "irpef": "IRPEF à payer (impôt national sur le revenu)",
           "addizionale_regionale": "Addizionale regionale à payer (surtaxe régionale de l’IRPEF)",
           "addizionale_comunale": "Addizionale comunale à payer (surtaxe communale de l’IRPEF)",
-          "inps": "INPS à payer (cotisations IVS employé et employeur)"
+          "inps": "INPS à payer (cotisations IVS employé et employeur)",
+          "sostitutive": "Impôts de substitution à payer (imposte sostitutive)"
         }
       },
       "AU": {

@@ -299,6 +299,12 @@ const COGNATES = new Set<string>([
   'fr:ar.collections.recurring.cronLabel|Cron',
   'fr:ar.collections.recurring.table.cadence|Cadence',
   'fr:ar.collections.recurring.templateDocPlaceholder|INV-000123',
+  // Version is the French noun and the German term for a version.
+  'fr:ar.collections.subscriptions.advanced.colVersion|Version',
+  'de:ar.collections.subscriptions.advanced.colVersion|Version',
+  // Name is the German noun; Add-on the German tech loanword (ja katakana-izes it).
+  'de:ar.collections.subscriptions.advanced.name|Name',
+  'de:ar.collections.subscriptions.advanced.addonName|Add-on',
   'fr:banking.cash.cols.net|Net',
   'fr:banking.cash.stats.netSub|{amount} net',
   'fr:banking.cash.vitals.cashCycleHint|DSO / DPO',
@@ -843,6 +849,7 @@ const COGNATES = new Set<string>([
   'de:apps.management.fields.namespace|Namespace',
   'de:apps.management.fields.status|Status',
   'de:apps.management.fields.version|Version',
+  'de:apps.management.labels.name|Name',
   'de:apps.management.status|Status',
   'de:apps.management.version|Version',
   'de:apps.title|Apps',
@@ -2735,6 +2742,9 @@ const COGNATES = new Set<string>([
   'fr:docs.home.articleCount|{count, plural, one {# article} other {# articles}}',
   'fr:docs.home.title|Documentation',
   'fr:docs.title|Documentation',
+  // Administration is the French and German noun for the admin section, spelled identically to English.
+  'fr:docs.categories.administration.title|Administration',
+  'de:docs.categories.administration.title|Administration',
   'de:documents.columns.name|Name',
   'de:documents.file.drawer.name|Name',
   'de:documents.file.drawer.version|Version {number}',
@@ -2958,6 +2968,9 @@ const COGNATES = new Set<string>([
   'fr:pdfTemplates.editor.portrait|Portrait',
   'fr:pdfTemplates.list.paperA4|A4',
   'fr:pdfTemplates.pdfButton.label|PDF',
+  // Journal is the French and German accounting term for a journal, spelled identically to English.
+  'fr:pdfTemplates.recordTypes.journal|Journal',
+  'de:pdfTemplates.recordTypes.journal|Journal',
   'ja:pdfTemplates.editor.code|HTML',
   'ja:pdfTemplates.list.paperA4|A4',
   'ja:pdfTemplates.pdfButton.label|PDF',
@@ -3114,6 +3127,31 @@ for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
   for (const [provider, term] of [['plaid', 'Plaid'], ['gocardless', 'GoCardless'], ['truelayer', 'TrueLayer'], ['sftp', 'SFTP']] as const) {
     COGNATES.add(`${locale}:banking.bankFeeds.operational.providers.${provider}|${term}`)
   }
+}
+// Email provider brand names and API key prefixes keep their shared spelling
+// across locales: brands are proper nouns and the hints are key-prefix symbols.
+for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+  for (const [provider, term] of [['resend', 'Resend'], ['sendgrid', 'SendGrid'], ['mailgun', 'Mailgun'], ['postmark', 'Postmark']] as const) {
+    COGNATES.add(`${locale}:admin.email.providers.${provider}.label|${term}`)
+  }
+  for (const [prefix, term] of [['resend', 're_…'], ['sendgrid', 'SG.…']] as const) {
+    COGNATES.add(`${locale}:admin.email.providers.${prefix}.keyHint|${term}`)
+  }
+}
+// Port is the French and German noun for a network port.
+for (const locale of ['de', 'fr']) {
+  COGNATES.add(`${locale}:admin.email.providers.fields.smtpPort.label|Port`)
+}
+// Region is the German noun for a region.
+COGNATES.add('de:admin.email.providers.fields.mailgunRegion.label|Region')
+// Host is the reviewed technical term in es/de/pt-BR (as for the SFTP host
+// fields); fr/zh/ja translate it.
+for (const locale of ['de', 'es', 'pt-BR']) {
+  COGNATES.add(`${locale}:admin.email.providers.fields.smtpHost.label|Host`)
+}
+// The number-sign column header is language-neutral (es renders N.º).
+for (const locale of ['de', 'fr', 'ja', 'pt-BR', 'zh']) {
+  COGNATES.add(`${locale}:ar.collections.subscriptions.advanced.colNumber|#`)
 }
 function cognateScope(entry: string): string {
   return entry.slice(0, entry.indexOf('|'))
