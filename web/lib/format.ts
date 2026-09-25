@@ -109,6 +109,30 @@ export function formatPercent01(fraction: number, locale: string, maximumFractio
 }
 
 /**
+ * Crew hours exactly as stored, never through binary floating point: the
+ * decimal spelling is rounded half-away-from-zero at the ticket storage
+ * precision (4dp, matching numeric(19,4)) and normalized, so 1.04 prints
+ * "1.04" where Number.prototype.toFixed(1) printed "1.0", and float-dust
+ * sums such as 0.30000000000000004 print "0.3". Non-numeric input passes
+ * through unchanged, exactly as toFixed spelled it.
+ */
+export function formatTicketHours(value: number | string): string {
+  const spelling = typeof value === "string" ? value.trim() : String(value);
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(spelling);
+  if (!match) return typeof value === "string" ? value : String(value);
+  const sign = match[1] === "-" ? "-" : "";
+  const fraction = match[3] ?? "";
+  const kept = (fraction + "0000").slice(0, 4);
+  let units = BigInt(match[2]! + kept);
+  if ((fraction[4] ?? "0") >= "5") units += 1n;
+  const digits = units.toString().padStart(5, "0");
+  const whole = digits.slice(0, -4).replace(/^0+(?=\d)/, "");
+  const frac = digits.slice(-4).replace(/0+$/, "");
+  if (frac === "") return units === 0n ? "0" : `${sign}${whole}`;
+  return `${sign}${whole}.${frac}`;
+}
+
+/**
  * Shared viewer-facing formatting primitives. Locale and time zone are
  * required so UI call sites cannot inherit the host machine's settings.
  */
