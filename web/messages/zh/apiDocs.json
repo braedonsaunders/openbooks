@@ -37,6 +37,7 @@
     "status": "状态",
     "time": "耗时",
     "idPlaceholder": "记录 id (uuid)",
-    "selectType": "选择一个记录类型以构建请求。"
+    "selectType": "选择一个记录类型以构建请求。",
+    "getList": "GET（列表）"
   }
 }

@@ -37,6 +37,7 @@
     "status": "Statut",
     "time": "Temps",
     "idPlaceholder": "id de l'enregistrement (uuid)",
-    "selectType": "Sélectionnez un type d'enregistrement pour construire une requête."
+    "selectType": "Sélectionnez un type d'enregistrement pour construire une requête.",
+    "getList": "GET (liste)"
   }
 }
