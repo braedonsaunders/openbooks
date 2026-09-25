@@ -19,6 +19,12 @@ export interface ScopedPartyOption extends Record<string, unknown> {
   subsidiary_id: string | null
 }
 
+export interface ScopedDimensionOption extends Record<string, unknown> {
+  id: string
+  name: string
+  subsidiary_id: string | null
+}
+
 
 /** Account references visible to one reader, using the same scope as direct account reads. */
 export async function listScopedAccountOptions(
@@ -102,4 +108,37 @@ export async function listScopedCardOptions(
     network: card.network,
     liability_account_id: card.liability_account_id,
   }))
+}
+
+export async function listScopedDepartmentOptions(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  activeOnly = true,
+): Promise<ScopedDimensionOption[]> {
+  const result = await db.execute<ScopedDimensionOption>(sql`
+    select d.id, d.name, d.subsidiary_id
+      from departments d
+     where d.org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       ${activeOnly ? sql`and d.is_active` : sql``}
+     order by d.name, d.id
+  `)
+  return result.rows
+}
+
+export async function listScopedProjectOptions(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  activeOnly = true,
+): Promise<ScopedDimensionOption[]> {
+  const result = await db.execute<ScopedDimensionOption>(sql`
+    select p.id, p.name, p.subsidiary_id
+      from projects p
+     where p.org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       ${activeOnly ? sql`and p.is_active` : sql``}
+     order by p.name, p.id
+     limit 2000
+  `)
+  return result.rows
 }

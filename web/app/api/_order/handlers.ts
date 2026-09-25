@@ -28,6 +28,7 @@ import {
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { assignWarehouseBody, jsonObject, parseJsonBody } from '@/lib/api/json'
 import { unexpectedServerError } from '../../../lib/api/unexpected'
+import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from '../../../lib/scoped-options'
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -218,6 +219,45 @@ export function makePATCH(cfg: OrderHandlerConfig) {
             return NextResponse.json({ error: `Order line ${index + 1} has an invalid ${label}` }, { status: 422 })
           }
         }
+      }
+    }
+
+    const suppliedLineRefs = body.lines ?? []
+    const [partyOptions, departmentOptions, projectOptions, accountOptions] = await Promise.all([
+      body.partyId ? listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true }) : Promise.resolve([]),
+      body.departmentId || suppliedLineRefs.some((line) => line.departmentId)
+        ? listScopedDepartmentOptions(user.orgId, gate.allowedSubsidiaryIds)
+        : Promise.resolve([]),
+      body.projectId || suppliedLineRefs.some((line) => line.projectId)
+        ? listScopedProjectOptions(user.orgId, gate.allowedSubsidiaryIds)
+        : Promise.resolve([]),
+      suppliedLineRefs.some((line) => line.accountId)
+        ? listScopedAccountOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true })
+        : Promise.resolve([]),
+    ])
+    const visibleParties = new Set(partyOptions.map((row) => row.id))
+    const visibleDepartments = new Set(departmentOptions.map((row) => row.id))
+    const visibleProjects = new Set(projectOptions.map((row) => row.id))
+    const visibleAccounts = new Set(accountOptions.map((row) => row.id))
+    if (body.partyId && !visibleParties.has(body.partyId)) {
+      return NextResponse.json({ error: `order party "${body.partyId}" is not visible in your subsidiary scope` }, { status: 422 })
+    }
+    if (body.departmentId && !visibleDepartments.has(body.departmentId)) {
+      return NextResponse.json({ error: `order department "${body.departmentId}" is not visible in your subsidiary scope` }, { status: 422 })
+    }
+    if (body.projectId && !visibleProjects.has(body.projectId)) {
+      return NextResponse.json({ error: `order project "${body.projectId}" is not visible in your subsidiary scope` }, { status: 422 })
+    }
+    for (let index = 0; index < suppliedLineRefs.length; index++) {
+      const line = suppliedLineRefs[index]!
+      if (line.accountId && !visibleAccounts.has(line.accountId)) {
+        return NextResponse.json({ error: `Order line ${index + 1}: account is not visible in your subsidiary scope` }, { status: 422 })
+      }
+      if (line.departmentId && !visibleDepartments.has(line.departmentId)) {
+        return NextResponse.json({ error: `Order line ${index + 1}: department is not visible in your subsidiary scope` }, { status: 422 })
+      }
+      if (line.projectId && !visibleProjects.has(line.projectId)) {
+        return NextResponse.json({ error: `Order line ${index + 1}: project is not visible in your subsidiary scope` }, { status: 422 })
       }
     }
 

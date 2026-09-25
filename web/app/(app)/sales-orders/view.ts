@@ -14,6 +14,7 @@ import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
 import { taxCodeOptions, taxGroupOptions } from "../../../lib/documents.ts";
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
+import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from '../../../lib/scoped-options'
 import type { OrderDrawer } from '../_order/OrderDrawer'
 
 /**
@@ -112,15 +113,8 @@ export async function loadSalesOrders(
     openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
     opening
       ? Promise.all([
-          db.execute<ElementOf<OrderDrawerProps['parties']>>(sql`
-            select p.id, p.display_name from parties p
-             where p.org_id = ${authz.user.orgId} and p.is_active
-               and exists (
-                 select 1 from customer_roles cr
-                  where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active
-               )
-             order by p.display_name limit 2000`),
-          db.execute<ElementOf<OrderDrawerProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('income','income_other') and is_active and not is_summary order by number nulls last`),
+          listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: 'customer', activeOnly: true }).then((rows) => ({ rows })),
+          listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['income', 'income_other'], activeOnly: true, postingOnly: true }).then((rows) => ({ rows: rows.map(({ number, ...account }) => ({ ...account, number: number ?? undefined })) })),
           db.execute<ElementOf<OrderDrawerProps['items']>>(sql`
             select it.id, it.code, it.name, it.default_rate, it.income_account_id, it.expense_account_id, it.tax_code_id, it.unit,
                    exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
@@ -138,9 +132,9 @@ export async function loadSalesOrders(
              order by it.name limit 2000`),
           taxCodeOptions(authz.user.orgId),
           taxGroupOptions(authz.user.orgId),
-          db.execute<ElementOf<OrderDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`),
-          db.execute<ElementOf<OrderDrawerProps['projects']>>(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`),
-          customSegmentOptions(authz.user.orgId),
+          listScopedDepartmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds).then((rows) => ({ rows })),
+          listScopedProjectOptions(authz.user.orgId, authz.allowedSubsidiaryIds).then((rows) => ({ rows })),
+          customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
           subsidiaryUiOptions(authz.user.orgId),
           inventoryEnabled
             ? db.execute<ElementOf<OrderDrawerProps['stockLocations']>>(sql`
