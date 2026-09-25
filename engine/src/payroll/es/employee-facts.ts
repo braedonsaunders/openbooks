@@ -10,13 +10,15 @@
 import { registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
-// Required employee facts. The compute path reads six `emp[...]` keys;
+// Required employee facts. The compute path reads eleven `emp[...]` keys;
   // the three blocking ones (situación, grupo, año) are served since 0191
   // by the profile columns the `es_datos_perceptor` certificate fields map
   // — kept apart from the Modelo 145, whose situación familiar (art. 81
   // RIRPF) is a FAMILY status, not the labour status SITUPER prices. The
   // fourth (contrato temporal) accepts absence and stays unbuilt, as do the
-  // fifth and sixth (the classified overtime pay split, per-period).
+  // fifth and sixth (the classified overtime pay split, per-period) and the
+  // tenth and eleventh (tiempo parcial contract type and its monthly hours):
+  // no profile column or certificate field collects any of them yet.
   //
   // OPEN, still: which AEAT/TGSS artefact the operator copies each value
   // off (contrato, alta en Seguridad Social, otro) — and, shared with PL,
@@ -152,6 +154,42 @@ import type { PayrollEmployeeFact } from "../employee-facts.ts";
           + "alongside the overtime earning lines, which this change does not ship. Until then absent "
           + "is accepted as no overtime of this class — and a run whose overtime lines carry hours "
           + "but no classified pay is refused rather than priced without the additional contribution.",
+      },
+    },
+    {
+      key: "es_tiempo_parcial",
+      kind: "flag",
+      label: "Contrato a tiempo parcial",
+      refusalReason:
+        "A part-time contract prices the art. 39 hourly floor instead of the full-period grupo "
+        + "minimum; only a present-but-foreign value refuses, while absent is accepted as full-time.",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "No profile column or certificate field collects the contract type yet; absent is accepted "
+          + "as full-time, so this fact does not block `payable`. A part-time \"true\" without monthly "
+          + "hours refuses in compute-statutory.ts. When the contract-type input is built (same form "
+          + "as the trio above), declare the certificate or profile-column producer here.",
+      },
+    },
+    {
+      key: "es_horas_tiempo_parcial",
+      kind: "amount",
+      label: "Horas trabajadas en el mes (tiempo parcial)",
+      refusalReason:
+        "The art. 39.2 monthly minimum is hours actually worked times the grupo hourly minimum; "
+        + "without the month's hours a declared part-time contract cannot price. Only a "
+        + "present-but-unusable value refuses; absent is accepted (full-time, or part-time "
+        + "refused downstream for missing hours).",
+      required: false,
+      producer: {
+        kind: "none",
+        notes:
+          "Decimal hour count, not money — \"amount\" is the declaration's only decimal-string kind. "
+          + "No profile column or certificate field collects it yet. compute-statutory.ts validates "
+          + "it as the calculator does (decimal, 0–744). When the hours input is built, declare the "
+          + "certificate or profile-column producer here.",
       },
     },
 ];

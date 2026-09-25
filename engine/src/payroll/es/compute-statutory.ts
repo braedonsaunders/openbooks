@@ -281,6 +281,34 @@ export async function computeEsStatutory(
     );
   }
 
+  // Part-time art. 38–39 basis. Absent status is accepted as full-time (the
+  // common case, and today's behavior); a declared part-time contract
+  // without the month's hours refuses by name instead of falling through to
+  // the full-period grupo minimum. Hours without a part-time declaration
+  // refuse too — they would otherwise sit ignored while the full-time floor
+  // prices, hiding a misfiled fact.
+  const tiempoParcial = empFact("ES", emp, "es_tiempo_parcial");
+  if (tiempoParcial !== undefined && tiempoParcial !== null && tiempoParcial !== "true" && tiempoParcial !== "false") {
+    fail(`employee es_tiempo_parcial "${tiempoParcial}" is not "true"/"false"`);
+  }
+  const horasParcialRaw = empFact("ES", emp, "es_horas_tiempo_parcial");
+  const horasParcial = horasParcialRaw === undefined || horasParcialRaw === null || horasParcialRaw === ""
+    ? undefined
+    : horasParcialRaw;
+  if (tiempoParcial === "true" && horasParcial === undefined) {
+    fail(
+      "employee es_tiempo_parcial is \"true\" but es_horas_tiempo_parcial was never supplied: "
+      + "the art. 39.2 monthly minimum is the hours actually worked times the grupo hourly minimum, "
+      + "so a part-time contract cannot price without the month's hours",
+    );
+  }
+  if (tiempoParcial !== "true" && horasParcial !== undefined) {
+    fail(
+      `employee es_horas_tiempo_parcial "${horasParcial}" was supplied but es_tiempo_parcial is not `
+      + "\"true\": declare the part-time contract or clear the hours",
+    );
+  }
+
   const periodPay = dec(income, "income") + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   if (periodPay < 0n) fail("period pay must be non-negative");
 
@@ -345,6 +373,7 @@ export async function computeEsStatutory(
     base: D(pensionableUnits),
     retribucionMensual: D(insurableUnits),
     contratoTemporal: temporal === "true",
+    horasTiempoParcial: horasParcial,
     atEpRate,
     cortaDuracionAplicable,
     horasExtraResto: hexResto === null ? undefined : D(hexResto),
@@ -358,6 +387,7 @@ export async function computeEsStatutory(
       base: D(pensionableUnits - pensionableNonPeriodicUnits),
       retribucionMensual: D(insurableUnits - pensionableNonPeriodicUnits),
       contratoTemporal: temporal === "true",
+      horasTiempoParcial: horasParcial,
       atEpRate,
       cortaDuracionAplicable,
       horasExtraResto: hexResto === null ? undefined : D(hexResto),
