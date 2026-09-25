@@ -12,7 +12,7 @@ import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { SETUP_ENTITY_BY_KEY, setupFieldOptions, setupFieldVisible, toSnake, type SetupEntity, type SetupField } from './registry'
 import { coveredSlotFields } from './hrm-rule-slots'
 import { normalizeCountryCode } from '../countries'
-import { canonicalDecimal } from '../exact-decimal'
+import { canonicalDecimal, compareDecimal } from '../exact-decimal'
 
 /** Setup decimals include FX rates (numeric(19,10)) as well as ledger money. */
 export const SETUP_DECIMAL_SCALE = 10
@@ -117,9 +117,13 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       const exact = canonicalDecimal(raw, SETUP_DECIMAL_SCALE)
       if (exact === null) return { error: `${field.key} must be a number` }
       if (field.kind === 'percent') {
-        const n = Number(exact)
-        if (field.min !== undefined && n < field.min) return { error: `${field.key} must be at least ${field.min}` }
-        if (field.max !== undefined && n > field.max) return { error: `${field.key} must be at most ${field.max}` }
+        const min = field.min === undefined ? null : canonicalDecimal(String(field.min), SETUP_DECIMAL_SCALE)
+        const max = field.max === undefined ? null : canonicalDecimal(String(field.max), SETUP_DECIMAL_SCALE)
+        if ((field.min !== undefined && min === null) || (field.max !== undefined && max === null)) {
+          return { error: `${field.key} has an invalid decimal bound` }
+        }
+        if (min !== null && compareDecimal(exact, min) < 0) return { error: `${field.key} must be at least ${field.min}` }
+        if (max !== null && compareDecimal(exact, max) > 0) return { error: `${field.key} must be at most ${field.max}` }
       }
       try {
         return { column, value: normalizeDecimal(exact, SETUP_DECIMAL_SCALE) }
