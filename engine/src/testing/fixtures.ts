@@ -1525,7 +1525,23 @@ export async function probeScratchOrgTouchedTables(
  * below would otherwise trip the constraint while the test row still stands
  * (the delete passes run only after this restore).
  */
-async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly string[], columns: OrgTableColumns): Promise<void> {
+/**
+ * Lifecycle columns the history guards police while test rows still exist.
+ * Restoring them in the pre-delete pass would refuse by name (the primary-
+ * book history guard with journals present), so the pre-delete restore
+ * skips them and the post-delete restore repairs them once the test rows
+ * are gone. Column-exact: nothing else is deferred.
+ */
+const DEFERRED_RESTORE_COLUMNS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["accounting_books", new Set(["is_primary"])],
+]);
+
+async function restoreScratchOrgBaseline(
+  org: ScratchOrg,
+  tables: readonly string[],
+  columns: OrgTableColumns,
+  options?: { deferLifecycleColumns?: boolean },
+): Promise<void> {
   const schema = org.snapshotSchema;
   if (!schema) throw new Error(`scratch fixture ${org.orgId} has no committed baseline snapshot`);
   let restoreRemaining = tables.filter((table) => (columns.get(table) ?? []).includes("id"));
@@ -1566,7 +1582,10 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
       const failures: { table: string; error: string }[] = [];
       for (const [index, table] of restoreRemaining.entries()) {
         const tableColumns = columns.get(table) ?? [];
-        const mutable = tableColumns.filter((column) => column !== "id");
+        const deferred = options?.deferLifecycleColumns === true
+          ? DEFERRED_RESTORE_COLUMNS.get(table)
+          : undefined;
+        const mutable = tableColumns.filter((column) => column !== "id" && !deferred?.has(column));
         const target = `public.${quoteIdentifier(table)}`;
         const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
         const assignments = mutable.map((column) => `${quoteIdentifier(column)} = baseline.${quoteIdentifier(column)}`).join(", ");
@@ -1679,7 +1698,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
   // first is safe for the deletes below — it touches only baseline rows (by
   // id) and reinserts deleted baseline rows, never test rows — and the
   // post-delete restore still runs after to repair cascade damage.
-  await restoreScratchOrgBaseline(org, resetTables, columns);
+  await restoreScratchOrgBaseline(org, resetTables, columns, { deferLifecycleColumns: true });
   let remaining = [...resetTables].filter((table) => table !== "orgs");
   const errors = new Map<string, string>();
   const coreSet = new Set<string>(CORE_A);
