@@ -679,6 +679,13 @@ export function PartyDrawer({
     if (skipDirty) setSkipDirty(false)
     else if (editable) setDirty(true)
   }
+  // Identity mirror of the draft snapshot for in-flight edit detection (see
+  // save/saveNew): a response may only mark clean the exact payload it
+  // persisted, never edits typed while the request was in flight.
+  const latestSavePayload = useRef(savePayload)
+  useEffect(() => {
+    latestSavePayload.current = savePayload
+  })
 
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
@@ -849,6 +856,9 @@ export function PartyDrawer({
     }
     if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
     setSaveState('saving')
+    // Snapshot the exact submitted draft: edits typed while the POST is in
+    // flight must not be marked clean by this response (see onOk).
+    const submitted = savePayload
     // The create body is picked field-by-field: expectedUpdatedAt belongs to
     // the PATCH concurrency token (no row to version against here), and
     // isActive rides along explicitly — creates default to active.
@@ -881,6 +891,14 @@ export function PartyDrawer({
         successMessage: tc('feedback.saved'),
         onOk: (data) => {
           const createdId = (data as { party?: { id?: unknown } } | null)?.party?.id
+          if (latestSavePayload.current !== submitted) {
+            // Edited mid-flight: stay with the draft dirty, and retire the
+            // idempotency key — a retry sends a changed payload, which must
+            // never reuse the submitted key.
+            requestIdRef.current = null
+            setSaveState('dirty')
+            return
+          }
           setSaveState('saved')
           setDirty(false)
           if (typeof createdId === 'string' && createdId) {
@@ -932,18 +950,27 @@ export function PartyDrawer({
       changeReason = reason
     }
     setSaveState('saving')
+    // Snapshot the exact submitted draft: edits typed while the PATCH is in
+    // flight must not be marked clean by this response (see onOk).
+    const submitted = savePayload
     const ok = await execute(
       () =>
         fetchAction(`/api/parties/${p.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...savePayload, changeReason }),
+          body: JSON.stringify({ ...submitted, changeReason }),
         }),
       {
         fallbackMessage: t('autosaveFailed'),
         onOk: (data) => {
           const party = (data as { party?: { is_active?: unknown } } | null)?.party
           setIsActive(party?.is_active === true)
+          if (latestSavePayload.current !== submitted) {
+            // Edited mid-flight: the response persisted the earlier draft,
+            // so the form stays dirty in edit mode instead of reading clean.
+            setSaveState('dirty')
+            return
+          }
           setSaveState('saved')
           setDirty(false)
           setMode('view')
