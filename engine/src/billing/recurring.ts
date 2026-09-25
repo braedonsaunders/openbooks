@@ -4,6 +4,8 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { DOCUMENT_KINDS } from "../close/period-policy.ts";
+import { DOC_KIND_FEATURE } from "../records/document-kind-features.ts";
 import { addCalendarDays, parseIsoDate, businessToday } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
@@ -82,27 +84,16 @@ export function recurringTemplateScopeFilter(
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
-/**
- * Optional-module kinds the runner must not mint when the Features switch is
- * off. Mirrors web/lib/document-kinds.ts DOC_KIND_FEATURE + registry defaults.
- * Core invoices/bills/journals are not listed — recurring works without a gate.
- */
-const OPTIONAL_KIND_FEATURE: Record<string, { key: string; defaultEnabled: boolean }> = {
-  quote: { key: "orders", defaultEnabled: true },
-  sales_order: { key: "orders", defaultEnabled: true },
-  purchase_order: { key: "orders", defaultEnabled: true },
-  expense_report: { key: "expenses", defaultEnabled: true },
-  pay_run: { key: "payroll", defaultEnabled: false },
-  project_charge: { key: "projects", defaultEnabled: true },
-};
-
 export async function isRecurringKindEnabled(orgId: string, kind: string): Promise<boolean> {
-  const feature = OPTIONAL_KIND_FEATURE[kind];
+  // Field tickets have a separate subtype row which recurring generation does
+  // not clone. Refuse such templates by name until that subtype is copied too.
+  if (kind === "field_ticket") return false;
+  if (!DOCUMENT_KINDS.includes(kind)) return false;
+  const feature = DOC_KIND_FEATURE[kind];
   if (!feature) return true;
-  // Canonical switchboard read: the previous inline ::boolean cast threw
-  // 22P02 on a non-boolean stored value, and the local default table is
-  // pinned to the registry defaults above.
-  return orgFeatureEnabled(orgId, feature.key);
+  // Resolve the canonical switchboard registry instead of maintaining a
+  // scheduler-specific kind-to-feature mapping.
+  return orgFeatureEnabled(orgId, feature);
 }
 
 function toIso(d: Date): string {
@@ -262,6 +253,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         id: string;
         orgId: string;
         templateId: string;
+        kind: string;
         cadence: Cadence;
         cron: string | null;
         nextRunOn: string;
@@ -269,29 +261,18 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         autoPost: boolean;
       }>(sql`
       select rs.id, rs.org_id as "orgId", rs.template_document_id as "templateId",
+             d.kind as "kind",
              rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
              rs.auto_post as "autoPost"
         from recurring_schedules rs
-        join orgs o on o.id = rs.org_id and o.env_kind = 'production'
         join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
        where rs.is_active and rs.next_run_on <= ${scanCutoff}
-         -- Feature reads use the registry's fallback shape (a non-boolean stored
-         -- value falls back to the registry default instead of throwing
-         -- 22P02 like the previous ::boolean casts did on import artifacts).
-         and case d.kind
-           when 'quote' then case (o.settings->'features'->>'orders') when 'true' then true when 'false' then false else true end
-           when 'sales_order' then case (o.settings->'features'->>'orders') when 'true' then true when 'false' then false else true end
-           when 'purchase_order' then case (o.settings->'features'->>'orders') when 'true' then true when 'false' then false else true end
-           when 'expense_report' then case (o.settings->'features'->>'expenses') when 'true' then true when 'false' then false else true end
-           when 'pay_run' then case (o.settings->'features'->>'payroll') when 'true' then true when 'false' then false else false end
-           when 'project_charge' then case (o.settings->'features'->>'projects') when 'true' then true when 'false' then false else true end
-           else true
-         end
        order by rs.next_run_on
     `));
   });
 
   for (const s of due.rows) {
+    if (!(await isRecurringKindEnabled(s.orgId, s.kind))) continue;
     let today = asOf ?? orgBusinessDates.get(s.orgId);
     if (!today) {
       today = await withOrg(s.orgId, () => businessToday(s.orgId));

@@ -177,15 +177,7 @@ export function documentCreateHref(basePath: string, kind: string): string {
 }
 
 /** Optional-module kinds: the generic document APIs must 404 when the feature is off. */
-export const DOC_KIND_FEATURE: Partial<Record<string, string>> = {
-  quote: 'orders',
-  sales_order: 'orders',
-  purchase_order: 'orders',
-  expense_report: 'expenses',
-  field_ticket: 'fieldTickets',
-  pay_run: 'payroll',
-  project_charge: 'projects',
-}
+export { DOC_KIND_FEATURE } from '@openbooks/engine/src/records/document-kind-features.ts'
 
 export function docKindConfig(kind: string): DocKindConfig | undefined {
   return DOC_KINDS[kind]
