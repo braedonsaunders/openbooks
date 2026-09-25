@@ -381,7 +381,7 @@ export async function persistExpenseEdit(
   await tx.execute(sql`
     update documents set
       party_id = coalesce(${args.body.partyId ?? null}, party_id),
-      payment_card_id = coalesce(${args.body.paymentCardId ?? null}, payment_card_id),
+      payment_card_id = ${args.body.paymentCardId !== undefined ? args.body.paymentCardId : sql`payment_card_id`},
       document_date = coalesce(${args.body.documentDate ?? null}, document_date),
       memo = ${args.body.memo !== undefined ? args.body.memo : sql`memo`},
       extra_dims = ${prepared.extraDimsProvided ? JSON.stringify(prepared.extraDimsCleaned) : sql`extra_dims`}::jsonb,
