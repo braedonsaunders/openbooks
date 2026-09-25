@@ -458,6 +458,20 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       ],
     },
     {
+      key: "vt_child_care_contribution",
+      regions: ["VT"],
+      components: [
+        // Vermont Child Care Contribution (Act 76 of 2023): the 0.44%
+        // employer liability and the elected employee share (at most 25%)
+        // post separately — WHT-436 Part III reconciles the employer's and
+        // the employees' contributions as distinct figures, and netting them
+        // would hide an over-withheld employee share inside the employer's
+        // cost. One component each, like SIT's one-component-per-state rule.
+        { code: "VT-CCC", name: "Vermont Child Care Contribution", systemKey: "vt_child_care_contribution", kind: "employer_contribution", sequence: 261, assessedOn: "earnings", remittance: "external" },
+        { code: "VT-CCCE", name: "Vermont Child Care Contribution (employee)", systemKey: "vt_child_care_contribution_employee", kind: "deduction", sequence: 142, assessedOn: "earnings", remittance: "external" },
+      ],
+    },
+    {
       key: "local_income_tax",
       components: [
         // The taxing unit BELOW the state: New York City, Yonkers,

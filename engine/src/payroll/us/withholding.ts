@@ -561,37 +561,91 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     );
   }
   // A declared flat-rate method prices from the declaration when the caller
-  // did not thread the levy's own method through: the published rate is the
-  // same either way, and depending on caller threading leaves declared-but-
-  // implemented levies (Oregon STT) refusing as unwired. Only STT declares
-  // one today, so no other levy's path changes.
+  // did not thread the levy's own method through: depending on caller
+  // threading leaves declared-but-implemented levies (Oregon STT) refusing
+  // as unwired. The tenant-rate body below prices assessed and elected
+  // levies (Vermont CCC, Minnesota Paid Leave) off the same method shape.
   const levyMethod = levy.withholdingMethod
     ?? (levy.level === "sub_region" && levy.subRegion
       ? subRegionLevy("US", levy.region, levy.subRegion)?.withholdingMethod
       : undefined);
   if (levyMethod?.kind === "flat_rate") {
-    const rate = levyMethod.rates
-      .filter((entry) => entry.effectiveFrom <= input.payDate)
-      .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
-      .at(-1);
-    if (!rate) {
+    const method = levyMethod;
+    const declared = levy.level === "sub_region" && levy.subRegion
+      ? subRegionLevy("US", levy.region, levy.subRegion)
+      : undefined;
+    // Wrong-pocket guard for this path: an employer flat-rate levy (Vermont
+    // CCC) routed here would post the employer's tax as a stub deduction —
+    // out of the employee's cheque. Same refusal as the guard below; the
+    // employer path is the only way it posts.
+    if (declared?.pocket === "employer") {
       throw new UsWithholdingError(
-        `${levy.label} has no published flat rate effective on ${input.payDate}; `
-        + "transcribe the official effective rate before calculating — refused by name",
+        `${levy.label} is an employer payroll tax, not employee withholding — `
+        + "it posts as an employer contribution, never as a stub deduction.",
       );
+    }
+    let rate: string;
+    if (declared?.rateSource.kind === "tenant") {
+      // An assessed or elected rate the employer enters (Vermont's CCC
+      // employee share): pack-carried rates cannot hold it, because no
+      // publication a release can carry supplies the employer's own figure.
+      const entered = input.tenantRates(declared.rateSource.rateKey, levy.subRegion!)?.rate;
+      if (entered == null || entered === "") {
+        if (method.absentTenantRate === "skip") return null;
+        throw new UsWithholdingError(
+          `no ${levy.label} rate has been entered for ${input.payDate}; `
+          + "the rate is employer-entered because no publication carries it — "
+          + "enter the assessed figure before calculating; refused by name",
+        );
+      }
+      let enteredRate: bigint;
+      try {
+        enteredRate = rate6(entered);
+      } catch {
+        throw new UsWithholdingError(
+          `${levy.label} has an unreadable entered rate "${entered}"; `
+          + "enter an exact decimal rate before calculating — refused by name",
+        );
+      }
+      if (method.maxRate !== undefined && enteredRate > rate6(method.maxRate)) {
+        throw new UsWithholdingError(
+          `${levy.label} entered rate ${entered} exceeds the published maximum of ${method.maxRate}; `
+          + "enter a rate within the statutory maximum before calculating — refused by name",
+        );
+      }
+      rate = entered;
+    } else {
+      const published = method.rates
+        .filter((entry) => entry.effectiveFrom <= input.payDate)
+        .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+        .at(-1);
+      if (!published) {
+        if (method.rates.length > 0
+          && input.payDate < method.rates.map((entry) => entry.effectiveFrom).sort()[0]!) {
+          // The levy did not exist yet on the pay date (a pre-introduction
+          // run priced directly): nothing is owed, so no line prices — never
+          // a refusal, and never a backdated rate.
+          return null;
+        }
+        throw new UsWithholdingError(
+          `${levy.label} has no published flat rate effective on ${input.payDate}; `
+          + "transcribe the official effective rate before calculating — refused by name",
+        );
+      }
+      rate = published.rate;
     }
     let base = addMoney(input.wages, input.supplemental ?? "0");
     if (levy.basis === "nonresident") {
       const allocation = requireUsWageAllocation(input.wageAllocations, levy.region, null);
       base = mulRatio(base, rate6(allocation.workShare), 1_000_000n);
     }
-    const tax = D(mulRateCents(U(base), rate.rate));
+    const tax = D(mulRateCents(U(base), rate));
     return {
       code: levy.subRegion ?? levy.region,
       label: levy.label,
       tax,
       factors: {
-        STATUTORY_LEVY_RATE: rate.rate,
+        STATUTORY_LEVY_RATE: rate,
         STATUTORY_LEVY_BASE: base,
         STATUTORY_LEVY_TAX: tax,
       },
@@ -1311,6 +1365,12 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
  */
 export function computeUsEmployerWithholding(input: {
   levy: ResolvedWithholdingLevy;
+  /**
+   * Pay date, selecting the effective pack rate. Required by pack-rated
+   * levies, which refuse without it (the periodEnd precedent); tenant-rated
+   * levies price their entered figure datelessly.
+   */
+  payDate?: string;
   /** Total state-taxable compensation this period (periodic plus supplemental). */
   wages: string;
   /** Verified district-source work wages for location-specific employer levies. */
@@ -1347,6 +1407,66 @@ export function computeUsEmployerWithholding(input: {
         OR_TRANSIT_DISTRICT: subRegion,
         OR_TRANSIT_RATE: rate ?? "",
         OR_TRANSIT_TAX: tax,
+      },
+    };
+  }
+  // Assessed flat-rate employer levies (Vermont Child Care Contribution):
+  // pack-published or employer-entered rate on covered work-region wages.
+  // The region share prices multi-state work; with no allocations recorded
+  // the run's own work region is the whole base. An employer levy is always
+  // owed when it resolves, so a missing tenant rate refuses — never skips.
+  const method = declared.withholdingMethod;
+  if (method?.kind === "flat_rate") {
+    let rate: string;
+    if (declared.rateSource.kind === "tenant") {
+      const entered = input.tenantRates(declared.rateSource.rateKey, subRegion)?.rate;
+      if (entered == null || entered === "") {
+        throw new UsWithholdingError(
+          `no ${levy.label} rate has been entered for this period; `
+          + "the rate is employer-entered because no publication carries it — "
+          + "enter the assessed figure before calculating; refused by name",
+        );
+      }
+      try {
+        rate6(entered);
+      } catch {
+        throw new UsWithholdingError(
+          `${levy.label} has an unreadable entered rate "${entered}"; `
+          + "enter an exact decimal rate before calculating — refused by name",
+        );
+      }
+      rate = entered;
+    } else {
+      if (input.payDate == null || input.payDate === "") {
+        throw new UsWithholdingError(
+          `${levy.label} needs the pay date to select its effective published rate; `
+          + "pass the payroll pay date before calculating — refused by name",
+        );
+      }
+      const published = method.rates
+        .filter((entry) => entry.effectiveFrom <= input.payDate)
+        .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+        .at(-1);
+      if (!published) {
+        throw new UsWithholdingError(
+          `${levy.label} has no published flat rate effective on ${input.payDate}; `
+          + "transcribe the official effective rate before calculating — refused by name",
+        );
+      }
+      rate = published.rate;
+    }
+    let base = input.wages;
+    if ((input.wageAllocations ?? []).length > 0) {
+      const allocation = requireUsWageAllocation(input.wageAllocations, levy.region, null);
+      base = mulRatio(base, rate6(allocation.workShare), 1_000_000n);
+    }
+    const tax = D(mulRateCents(U(base), rate));
+    return {
+      code: `${levy.region}-${subRegion}`, label: declared.label, tax,
+      factors: {
+        STATUTORY_LEVY_RATE: rate,
+        STATUTORY_LEVY_BASE: base,
+        STATUTORY_LEVY_TAX: tax,
       },
     };
   }

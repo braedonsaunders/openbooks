@@ -93,6 +93,23 @@ export interface PayrollSubRegionLevy {
   withholdingMethod?: {
     kind: "flat_rate";
     rates: readonly { effectiveFrom: string; rate: string; source: string }[];
+    /**
+     * Statutory ceiling on an employer-entered (`tenant`-sourced) rate, as a
+     * decimal: Vermont caps the elected Child Care Contribution employee
+     * share at 25% of the 0.44% levy (0.0011, WHT-436 instructions). An
+     * entered rate above it refuses by name; pack-sourced rates are the
+     * publication's own and never checked against it.
+     */
+    maxRate?: string;
+    /**
+     * What an absent employer-entered rate means. `refuse` (the default) is
+     * fail-closed: an assessed amount that is always owed must be entered
+     * before anything prices. `skip` is the narrow exception for an elected
+     * share whose statutory default is zero — Vermont's employee share
+     * defaults to employer-pays-all, so no election prices no line rather
+     * than refusing every run that never elected it.
+     */
+    absentTenantRate?: "skip" | "refuse";
   };
   /** The certificate that sets withholding for this levy, when one exists. */
   certificateKey?: string;

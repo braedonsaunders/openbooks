@@ -12,6 +12,7 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { VT_CERTIFICATE, VT_REGION, VT_WITHHOLDING, vtPeriodTax } from "./vt.ts";
+import { computeUsEmployerWithholding } from "../withholding.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
@@ -57,13 +58,12 @@ test("VT missing W-4VT withholds as single with zero allowances", () => {
 
 test("VT extra withholding is added, exempt is zero, and an unpublished period is refused", () => {
   assert.equal(VT_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident",
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00", basis: "resident",
     certificate: cert({ filing_status: "married", allowances: "2", additional_per_period: "5.00" }),
   }).tax, money("50.77"));
   assert.equal(VT_WITHHOLDING.compute({
-    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00",
-    basis: "resident", certificate: cert({ exempt: "true" }),
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "1800.00", basis: "resident",
+    certificate: cert({ exempt: "true" }),
   }).tax, money("0"));
   assert.throws(
     () => VT_WITHHOLDING.compute({
@@ -72,6 +72,14 @@ test("VT extra withholding is added, exempt is zero, and an unpublished period i
     }),
     /publishes withholding tables/,
   );
+});
+
+test("VT Child Care Contribution accrues 0.44% of Vermont wages at the employer's cost", () => {
+  // $100,000 of Vermont work prices $440 of employer liability (WHT-436 Part III); no election entered, so no employee line prices.
+  const levy = { level: "sub_region", region: "VT", subRegion: "CCC", label: "Vermont Child Care Contribution (employer)",
+    basis: "nonresident", side: "work", reach: "nonresident", certificateKey: null } as const;
+  const employer = computeUsEmployerWithholding({ levy: { ...levy }, payDate: "2026-07-21", wages: "100000.00", tenantRates: () => undefined });
+  assert.equal(employer.tax, money("440"));
 });
 
 test("VT refuses a year it has not transcribed", () => {

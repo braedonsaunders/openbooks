@@ -878,13 +878,9 @@ test("a Maryland residence county moves SIT_MD and produces no separate levy", (
 });
 
 test("every implemented sub-region levy posts to the pocket its declaration states", () => {
-  // DERIVED, never restated: the TriMet/LTD employer-pocket case. An employer
-  // levy reaching the deduction path would take the employer's tax out of the
-  // employee's cheque, so computeUsWithholding refuses it by name — and the
-  // employer path computes it. The mirror holds: no employee levy may travel
-  // the employer path. Tenant-sourced levies run with stub rates shaped like
-  // the declaration (the SHAPE is pack-declared; only the figure is
-  // employer-entered, so an arbitrary valid figure proves the routing).
+  // DERIVED, never restated: every implemented levy must travel its declared
+  // pocket (tenant-sourced levies run on stub rates shaped like the declaration —
+  // only the figure is employer-entered, so an arbitrary valid figure proves the routing).
   const stubRates = () => ({
     rate: "0.008", residentRate: "0.008", nonresidentRate: "0.008",
     exemptionPerYear: "600.00",
@@ -920,11 +916,12 @@ test("every implemented sub-region levy posts to the pocket its declaration stat
           `${region.region}:${levy.code} must refuse the deduction path`,
         );
         const employer = computeUsEmployerWithholding({
-          levy: { ...resolution }, wages: "2000.00",
-          tenantRates: (_rateKey, _subRegion) => stubRates(),
+          levy: { ...resolution }, payDate: "2026-07-21", wages: "2000.00",
           wageAllocations: [
-            { region: resolution.region, subRegion: resolution.subRegion ?? null, workShare: "1", source: "adequate_records", sourceWagesCurrentPeriod: "2000.00" },
+            { region: region.region, subRegion: null, workShare: "1", source: "registry pocket probe" },
+            { region: region.region, subRegion: levy.code, workShare: "1", source: "registry pocket probe", sourceWagesCurrentPeriod: "2000.00" },
           ],
+          tenantRates: (_rateKey, _subRegion) => stubRates(),
         });
         assert.ok(employer.tax, `${region.region}:${levy.code} computes on the employer path`);
         continue;
