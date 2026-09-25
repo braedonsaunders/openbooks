@@ -77,6 +77,7 @@ async function loadWindow(
   exec: SqlExecutor,
   orgId: string,
   windowId: string,
+  forUpdate = false,
 ): Promise<EnrollmentWindowDTO> {
   // Zero rows is a failure with the same uniform message the scope check
   // below uses: a missing window is indistinguishable from a hidden one.
@@ -84,6 +85,7 @@ async function loadWindow(
     await exec.execute<Record<string, unknown>>(sql`
       select ${WINDOW_COLUMNS} from hrm_enrollment_windows
        where org_id = ${orgId} and id = ${windowId}
+       ${forUpdate ? sql`for update` : sql``}
     `)
   ).rows[0];
   if (!row) {
@@ -209,7 +211,13 @@ export async function openEnrollmentWindow(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const window = await loadWindow(db, orgId, windowId);
+    const candidate = await loadWindow(db, orgId, windowId);
+    await db.execute(sql`
+      select pg_advisory_xact_lock(
+        hashtextextended(${"hrm-benefit-window-open:" + orgId + ":" + candidate.kind}, 0)
+      )
+    `);
+    const window = await loadWindow(db, orgId, windowId, true);
     // Scope is rechecked inside the write transaction, on the loaded row:
     // a B-targeted window refuses as not-visible, an org-wide one needs
     // unrestricted scope to open.
@@ -278,7 +286,7 @@ export async function closeEnrollmentWindow(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const window = await loadWindow(db, orgId, windowId);
+    const window = await loadWindow(db, orgId, windowId, true);
     // Same write scope as open: B-targeted refuses as not-visible,
     // org-wide needs unrestricted scope to close.
     await assertWindowWriteScope(db, orgId, actorId, window);
