@@ -41,6 +41,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
   const router = useRouter(),
     today = useBusinessToday();
   const tc = useTranslations("common");
+  const t = useTranslations("accounting.lifecycle.lossOfControl");
   const fieldId = useId();
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
@@ -84,8 +85,8 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
         `/api/consolidation/interests/${interestId}/loss-of-control`,
       );
       if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        throw new Error(e.error ?? "Unable to load disposal options");
+        await r.json().catch(() => null);
+        throw new Error(t("loadFailed"));
       }
       const s = (await r.json()) as Setup;
       setSetup(s);
@@ -95,8 +96,8 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
         equityIncomeAccountId: s.interest.equity_income_account_id,
       }));
       setOpen(true);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Unable to open disposal");
+    } catch {
+      toast.error(t("loadFailed"));
     } finally {
       setBusy(false);
     }
@@ -167,14 +168,14 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
         },
       );
       if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        throw new Error(e.error ?? "Unable to prepare disposal");
+        await r.json().catch(() => null);
+        throw new Error(t("prepareFailed"));
       }
       const result = (await r.json()) as { changeId: string };
       closeDrawer();
       router.push(`/accounting/changes?change=${result.changeId}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to prepare disposal");
+    } catch {
+      setError(t("prepareFailed"));
     } finally {
       setBusy(false);
     }
@@ -182,18 +183,18 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
   return (
     <>
       <Button variant="outline" disabled={busy} onClick={show}>
-        Record loss of control
+        {t("recordButton")}
       </Button>
       <Drawer
         stacked
         open={open}
         onClose={closeGuard.close}
-        title="Loss of control"
-        description="Prepare the separate-book disposal and consolidated derecognition for independent approval. Posted history remains intact."
+        title={t("title")}
+        description={t("description")}
         size="2xl"
         footer={
           <Button disabled={busy} onClick={prepare}>
-            Prepare for review
+            {t("prepare")}
           </Button>
         }
       >
@@ -204,19 +205,16 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             </p>
           ) : null}
           <div className="grid grid-cols-2 gap-4">
-            {field("effectiveOn", "Control-loss date", "date")}
-            {field("reason", "Reason")}
+            {field("effectiveOn", t("effectiveOn"), "date")}
+            {field("reason", t("reason"))}
           </div>
-          {memo(
-            "assessment",
-            "Control assessment, transaction evidence and attributed goodwill adjustments",
-          )}
+          {memo("assessment", t("assessment"))}
           <div>
-            <Label htmlFor={`${fieldId}-elimination-entity`}>Consolidation entity and presentation currency</Label>
+            <Label htmlFor={`${fieldId}-elimination-entity`}>{t("eliminationEntity")}</Label>
             <SearchSelect
               id={`${fieldId}-elimination-entity`}
               disabled={busy}
-              ariaLabel="Consolidation entity and presentation currency"
+              ariaLabel={t("eliminationEntity")}
               value={values.eliminationSubsidiaryId ?? ""}
               onChange={(v) => set("eliminationSubsidiaryId", v)}
               options={
@@ -228,38 +226,25 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             />
           </div>
           <section className="space-y-3">
-            <h3 className="font-semibold">Parent’s separate books</h3>
-            <p className="text-sm text-slate-500">
-              Enter proceeds and carrying amounts in the parent’s functional
-              currency. The proposal creates the disposal journal; do not book
-              it separately.
-            </p>
+            <h3 className="font-semibold">{t("parentBooks")}</h3>
+            <p className="text-sm text-slate-500">{t("parentBooksHelp")}</p>
             <div className="grid grid-cols-2 gap-4">
-              {field("proceeds", "Proceeds")}
-              {field(
-                "parentInvestmentCarrying",
-                "Attributed investment carrying amount",
-              )}
-              {field(
-                "parentToGroupRate",
-                "Parent currency to group currency rate",
-              )}
-              {account("proceedsAccountId", "Proceeds account")}
-              {account(
-                "parentGainLossAccountId",
-                "Separate-book gain or loss account",
-              )}
-              {account("gainLossAccountId", "Group gain or loss account")}
+              {field("proceeds", t("proceeds"))}
+              {field("parentInvestmentCarrying", t("carryingAmount"))}
+              {field("parentToGroupRate", t("parentToGroupRate"))}
+              {account("proceedsAccountId", t("proceedsAccount"))}
+              {account("parentGainLossAccountId", t("gainLossAccount"))}
+              {account("gainLossAccountId", t("groupGainLossAccount"))}
               {account(
                 "investmentTranslationAccountId",
-                "Investment translation reserve account",
+                t("translationReserveAccount"),
               )}
             </div>
           </section>
           <section className="space-y-3">
-            <h3 className="font-semibold">Retained interest</h3>
+            <h3 className="font-semibold">{t("retainedInterest")}</h3>
             <Select
-              aria-label="Retained interest method"
+              aria-label={t("retainedMethod")}
               disabled={busy}
               value={values.retainedMethod}
               onChange={(e) => {
@@ -274,9 +259,9 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
               }}
             >
               {[
-                { value: "none", label: "No interest retained" },
-                { value: "equity", label: "Equity method" },
-                { value: "financial_asset", label: "Financial asset" },
+                { value: "none", label: t("methodNone") },
+                { value: "equity", label: t("methodEquity") },
+                { value: "financial_asset", label: t("methodFinancialAsset") },
               ].map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -285,29 +270,20 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             </Select>
             {values.retainedMethod !== "none" ? (
               <div className="grid grid-cols-2 gap-4">
-                {field("retainedPercent", "Retained ownership (%)")}
-                {field(
-                  "parentRetainedCarrying",
-                  "Retained carrying value in parent currency",
-                )}
-                {field(
-                  "retainedFairValue",
-                  "Retained fair value in group currency",
-                )}
-                {account("retainedAccountId", "Retained investment account")}
+                {field("retainedPercent", t("retainedPercent"))}
+                {field("parentRetainedCarrying", t("retainedCarrying"))}
+                {field("retainedFairValue", t("retainedFairValue"))}
+                {account("retainedAccountId", t("retainedAccount"))}
                 {values.retainedMethod === "equity" ? (
                   <>
-                    {account(
-                      "equityIncomeAccountId",
-                      "Equity-method income account",
-                    )}
+                    {account("equityIncomeAccountId", t("equityIncomeAccount"))}
                     {account(
                       "distributionAccountId",
-                      "Distributions account (optional)",
+                      t("distributionsAccount"),
                     )}
                     {account(
                       "distributionIncomeAccountId",
-                      "Distribution income account (if configured)",
+                      t("distributionIncomeAccount"),
                     )}
                   </>
                 ) : null}
@@ -315,11 +291,8 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             ) : null}
           </section>
           <section className="space-y-3">
-            <h3 className="font-semibold">Disposal-date closing rates</h3>
-            <p className="text-sm text-slate-500">
-              One unit of each functional currency expressed in group currency.
-              Enter 1 for matching currencies.
-            </p>
+            <h3 className="font-semibold">{t("ratesTitle")}</h3>
+            <p className="text-sm text-slate-500">{t("ratesHelp")}</p>
             {setup?.subsidiaries.map((s) => (
               <div key={s.id}>
                 <Label htmlFor={`${fieldId}-rate-${s.id}`}>
@@ -338,20 +311,12 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             ))}
           </section>
           <section className="space-y-3">
-            <h3 className="font-semibold">
-              Attributed consolidation adjustments
-            </h3>
-            <p className="text-sm text-slate-500">
-              Ownership and transferred-asset basis are included automatically.
-              Identify other disposal-related amounts, including goodwill
-              impairment and intercompany eliminations. Use the signed portion
-              attributable to this subsidiary, not unrelated lines in the same
-              journal.
-            </p>
+            <h3 className="font-semibold">{t("adjustmentsTitle")}</h3>
+            <p className="text-sm text-slate-500">{t("adjustmentsHelp")}</p>
             {adjustments.map((line, i) => (
               <div key={i} className="space-y-2">
                 <SearchSelect
-                  ariaLabel="Adjustment journal line"
+                  ariaLabel={t("adjustmentLine")}
                   disabled={busy}
                   value={line.lineId}
                   onChange={(id) => {
@@ -377,7 +342,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                   }
                 />
                 <Input
-                  aria-label="Attributed signed amount"
+                  aria-label={t("attributedAmount")}
                   disabled={busy}
                   value={line.amount}
                   onChange={(e) => {
@@ -397,7 +362,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                     changed();
                   }}
                 >
-                  Remove adjustment
+                  {t("removeAdjustment")}
                 </Button>
               </div>
             ))}
@@ -409,20 +374,13 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                 changed();
               }}
             >
-              Add adjustment
+              {t("addAdjustment")}
             </Button>
           </section>
           <section className="space-y-3">
-            <h3 className="font-semibold">Other comprehensive income</h3>
-            {memo(
-              "ociAssessment",
-              "Reserve attribution and recycling assessment, including any nil balances",
-            )}
-            <p className="text-sm text-slate-500">
-              Enter the parent-attributable reserve balance in group currency,
-              with its ledger sign. Non-controlling interests are derecognized
-              separately.
-            </p>
+            <h3 className="font-semibold">{t("ociTitle")}</h3>
+            {memo("ociAssessment", t("ociAssessment"))}
+            <p className="text-sm text-slate-500">{t("ociHelp")}</p>
             {oci.map((line, i) => {
               const update = (patch: Partial<Oci>) => {
                 setOci((rows) =>
@@ -433,27 +391,27 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
               return (
                 <div key={i} className="space-y-2">
                   <SearchSelect
-                    ariaLabel="Reserve account"
+                    ariaLabel={t("reserveAccount")}
                     disabled={busy}
                     value={line.accountId}
                     onChange={(accountId) => update({ accountId })}
                     options={accountOptions}
-                    placeholder="Reserve account"
+                    placeholder={t("reserveAccount")}
                   />
                   <Input
-                    aria-label="Reserve description"
+                    aria-label={t("reserveDescription")}
                     disabled={busy}
                     value={line.description}
                     onChange={(e) => update({ description: e.target.value })}
                   />
                   <Input
-                    aria-label="Signed reserve balance"
+                    aria-label={t("reserveBalance")}
                     disabled={busy}
                     value={line.balance}
                     onChange={(e) => update({ balance: e.target.value })}
                   />
                   <Select
-                    aria-label="Reserve treatment"
+                    aria-label={t("reserveTreatment")}
                     disabled={busy}
                     value={line.treatment}
                     onChange={(e) =>
@@ -463,11 +421,11 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                     {[
                       {
                         value: "profit_loss",
-                        label: "Reclassify to profit or loss",
+                        label: t("treatmentProfitLoss"),
                       },
                       {
                         value: "retained_earnings",
-                        label: "Transfer directly to retained earnings",
+                        label: t("treatmentRetainedEarnings"),
                       },
                     ].map((option) => (
                       <option key={option.value} value={option.value}>
@@ -476,14 +434,14 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                     ))}
                   </Select>
                   <SearchSelect
-                    ariaLabel="Destination account"
+                    ariaLabel={t("destinationAccount")}
                     disabled={busy}
                     value={line.destinationAccountId}
                     onChange={(destinationAccountId) =>
                       update({ destinationAccountId })
                     }
                     options={accountOptions}
-                    placeholder="Destination account"
+                    placeholder={t("destinationAccount")}
                   />
                   <Button
                     variant="ghost"
@@ -493,7 +451,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                       changed();
                     }}
                   >
-                    Remove reserve
+                    {t("removeReserve")}
                   </Button>
                 </div>
               );
@@ -515,7 +473,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                 changed();
               }}
             >
-              Add reserve
+              {t("addReserve")}
             </Button>
           </section>
         </div>
