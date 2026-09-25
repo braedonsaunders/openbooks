@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
 import { guardPermission, subsidiariesInScope } from '../../../lib/authz'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { isFeatureEnabled } from '../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { isUuid } from '../../../lib/list-params'
@@ -203,7 +204,6 @@ export async function POST(request: Request) {
     const taxCodeId = uuidOrNull(customerInput.taxCodeId)
     if (taxCodeId === 'invalid') return bad('Invalid customer tax code', 'roles')
     if (!(await orgRefExists('terms', paymentTermsId, user.orgId))) return bad('Invalid customer payment terms', 'roles')
-    if (!(await orgRefExists('receivable', arAccountId, user.orgId))) return bad('Invalid receivable account', 'roles')
     if (!(await orgRefExists('salesRep', salesRepId, user.orgId))) return bad('Invalid sales representative', 'roles')
     if (!(await orgRefExists('tax', taxCodeId, user.orgId))) return bad('Invalid customer tax code', 'roles')
     const creditLimitRaw = strOrNull(customerInput.creditLimit)
@@ -243,8 +243,6 @@ export async function POST(request: Request) {
     const taxCodeId = uuidOrNull(vendorInput.taxCodeId)
     if (taxCodeId === 'invalid') return bad('Invalid vendor tax code', 'roles')
     if (!(await orgRefExists('terms', paymentTermsId, user.orgId))) return bad('Invalid vendor payment terms', 'roles')
-    if (!(await orgRefExists('payable', apAccountId, user.orgId))) return bad('Invalid payable account', 'roles')
-    if (!(await orgRefExists('expense', defaultExpenseAccountId, user.orgId))) return bad('Invalid default expense account', 'roles')
     if (!(await orgRefExists('tax', taxCodeId, user.orgId))) return bad('Invalid vendor tax code', 'roles')
     const currency = vendorInput.currency !== undefined ? (strOrNull(vendorInput.currency)?.toUpperCase() ?? null) : null
     if (currency && !CURRENCY_RE.test(currency)) return bad('Vendor currency must be a 3-letter code', 'roles')
@@ -416,6 +414,36 @@ export async function POST(request: Request) {
         }
         return false
       }
+      if (customer?.arAccountId) {
+        const account = await tx.execute(sql`
+          select a.id from accounts a
+           where a.id = ${customer.arAccountId as string} and a.org_id = ${user.orgId}
+             and a.is_active and not a.is_summary and a.type = 'asset_receivable'
+             and (a.subsidiary_id is null or a.subsidiary_id = ${subsidiaryId}::uuid)
+             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+           for key share`)
+        if (!account.rows.length) throw new Error('invalid_receivable_account_for_party_subsidiary')
+      }
+      if (vendor?.apAccountId) {
+        const account = await tx.execute(sql`
+          select a.id from accounts a
+           where a.id = ${vendor.apAccountId as string} and a.org_id = ${user.orgId}
+             and a.is_active and not a.is_summary and a.type = 'liability_payable'
+             and (a.subsidiary_id is null or a.subsidiary_id = ${subsidiaryId}::uuid)
+             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+           for key share`)
+        if (!account.rows.length) throw new Error('invalid_payable_account_for_party_subsidiary')
+      }
+      if (vendor?.defaultExpenseAccountId) {
+        const account = await tx.execute(sql`
+          select a.id from accounts a
+           where a.id = ${vendor.defaultExpenseAccountId as string} and a.org_id = ${user.orgId}
+             and a.is_active and not a.is_summary and a.type in ('expense', 'expense_other', 'cogs')
+             and (a.subsidiary_id is null or a.subsidiary_id = ${subsidiaryId}::uuid)
+             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+           for key share`)
+        if (!account.rows.length) throw new Error('invalid_default_expense_account_for_party_subsidiary')
+      }
       if (customer) {
         await tx.execute(sql`
           insert into customer_roles (org_id, party_id, payment_terms_id, credit_limit, currency,
@@ -498,6 +526,9 @@ export async function POST(request: Request) {
       : String(error)
     if (message.includes('parties_org_shortcode')) return bad('That short code is already used by another party', 'shortCode')
     if (message.includes('idempotency_key_conflict')) return bad('invalid_idempotency_key', undefined, 409)
+    if (message.includes('invalid_receivable_account_for_party_subsidiary')) return bad('Invalid receivable account for this party subsidiary', 'roles')
+    if (message.includes('invalid_payable_account_for_party_subsidiary')) return bad('Invalid payable account for this party subsidiary', 'roles')
+    if (message.includes('invalid_default_expense_account_for_party_subsidiary')) return bad('Invalid default expense account for this party subsidiary', 'roles')
     throw error
   }
 

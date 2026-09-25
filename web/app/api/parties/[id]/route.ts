@@ -440,7 +440,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // reserved 'source' sync-identity bridge (unique
       // parties_org_source_identity) is server-owned: a routine party save
       // must not destroy the dedup identity a sync/migration established.
-      const updatedParty = await tx.execute<{ id: string }>(sql`
+      const updatedParty = await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
       update parties set
         kind = coalesce(${body.kind ?? null}, kind),
         invoicing_preference = ${invoicingPref !== undefined ? (invoicingPref === null ? sql`null` : sql`${JSON.stringify(invoicingPref)}::jsonb`) : sql`invoicing_preference`},
@@ -458,7 +458,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}
         and updated_at = ${body.expectedUpdatedAt}::timestamptz
-      returning id
+      returning id, subsidiary_id
       `)
       if (!updatedParty.rows[0]) {
         throw new PartyPatchConflictError()
@@ -533,7 +533,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const taxCodeId = uuidOrNull(c.taxCodeId)
           if (taxCodeId === 'invalid') throwBad('Invalid customer tax code')
           if (!(await orgRefExists('terms', paymentTermsId, user.orgId))) throwBad('Invalid customer payment terms')
-          if (!(await orgRefExists('receivable', arAccountId, user.orgId))) throwBad('Invalid receivable account')
+          if (arAccountId !== null) {
+            const account = await tx.execute(sql`
+              select a.id from accounts a
+               where a.id = ${arAccountId} and a.org_id = ${user.orgId}
+                 and a.is_active and not a.is_summary and a.type = 'asset_receivable'
+                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty.rows[0]!.subsidiary_id}::uuid)
+                 ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+               for key share`)
+            if (!account.rows.length) throwBad('Invalid receivable account for this party subsidiary')
+          }
           if (!(await orgRefExists('salesRep', salesRepId, user.orgId))) throwBad('Invalid sales representative')
           if (!(await orgRefExists('tax', taxCodeId, user.orgId))) throwBad('Invalid customer tax code')
           const creditLimitRaw = strOrNull(c.creditLimit)
@@ -608,8 +617,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const taxCodeId = uuidOrNull(v.taxCodeId)
           if (taxCodeId === 'invalid') throwBad('Invalid vendor tax code')
           if (!(await orgRefExists('terms', paymentTermsId, user.orgId))) throwBad('Invalid vendor payment terms')
-          if (!(await orgRefExists('payable', apAccountId, user.orgId))) throwBad('Invalid payable account')
-          if (!(await orgRefExists('expense', defaultExpenseAccountId, user.orgId))) throwBad('Invalid default expense account')
+          if (apAccountId !== null) {
+            const account = await tx.execute(sql`
+              select a.id from accounts a
+               where a.id = ${apAccountId} and a.org_id = ${user.orgId}
+                 and a.is_active and not a.is_summary and a.type = 'liability_payable'
+                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty.rows[0]!.subsidiary_id}::uuid)
+                 ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+               for key share`)
+            if (!account.rows.length) throwBad('Invalid payable account for this party subsidiary')
+          }
+          if (defaultExpenseAccountId !== null) {
+            const account = await tx.execute(sql`
+              select a.id from accounts a
+               where a.id = ${defaultExpenseAccountId} and a.org_id = ${user.orgId}
+                 and a.is_active and not a.is_summary and a.type in ('expense', 'expense_other', 'cogs')
+                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty.rows[0]!.subsidiary_id}::uuid)
+                 ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+               for key share`)
+            if (!account.rows.length) throwBad('Invalid default expense account for this party subsidiary')
+          }
           if (!(await orgRefExists('tax', taxCodeId, user.orgId))) throwBad('Invalid vendor tax code')
           const currency = v.currency !== undefined ? (strOrNull(v.currency)?.toUpperCase() ?? null) : undefined
           if (currency && !CURRENCY_RE.test(currency)) throwBad('Vendor currency must be a 3-letter code')
