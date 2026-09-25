@@ -1,6 +1,6 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, mulRate, mulRatio, neg, toUnits } from "../money/money.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 
 export type SettlementRateSource = "same_currency" | "provider" | "manual" | "contractual" | "imported";

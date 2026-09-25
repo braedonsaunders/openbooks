@@ -110,7 +110,7 @@ export function inscricaoTipoFor(digits: string): "1" | "2" | null {
 // so inventing one risks a file the bank's parser rejects. The LOTE version
 // is pinned to '045' — the current version in all three BB-flavored
 // transcriptions. The file LAYOUT they populate is transcribed in
-// `buildCnab240BbFile` (engine/src/payments/rail-cnab240-bb.ts) with
+// `buildCnab240BbFile` (engine/src/payments-core/rail-cnab240-bb.ts) with
 // per-field source notes.
 export interface Cnab240BbSettings {
   /** Employer CNPJ, 14 digits (header arquivo/lote 19–32). */

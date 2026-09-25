@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { add, cmp, toUnits } from "../money/money.ts";
-import { encryptAccountNumber } from "../payments/rail-settings.ts";
+import { encryptAccountNumber } from "../payments-core/rail-settings.ts";
 import {
   NACHA_PAYROLL_ENTRY_CLASS,
   NACHA_PAYROLL_ENTRY_DESCRIPTION,

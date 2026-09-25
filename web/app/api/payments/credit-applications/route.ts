@@ -7,7 +7,7 @@ import {
   creditSettlementState,
   unapplyCreditSettlement,
 } from '@openbooks/engine/src/payments/credit-settlement.ts'
-import { CreditApplicationConflictError } from '@openbooks/engine/src/payments/payment-errors.ts'
+import { CreditApplicationConflictError } from '@openbooks/engine/src/payments-core/payment-errors.ts'
 import { exactMoney, isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'

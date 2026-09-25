@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveOutboundPath } from "./delivery-path.ts";
-import { PaymentError } from "../payments/payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 
 test("a safe artifact name joins onto the configured folder verbatim", () => {
   assert.equal(resolveOutboundPath("outbound", "SEPA-42.xml"), "outbound/SEPA-42.xml");

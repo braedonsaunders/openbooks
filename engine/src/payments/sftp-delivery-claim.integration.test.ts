@@ -23,7 +23,7 @@ const {
   rollbackPaymentRun,
   recordPaymentFileSftpDelivery,
 } = await import("./operations.ts");
-const { PaymentError } = await import("./payment-errors.ts");
+const { PaymentError } = await import("../payments-core/payment-errors.ts");
 const { deliverRunToSftp } = await import("../sftp/import-job.ts");
 const { db, pool, withBypass, withOrgContext } = await import("../platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =

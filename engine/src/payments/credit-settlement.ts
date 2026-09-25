@@ -5,7 +5,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
-import { CreditApplicationConflictError, PaymentError } from "./payment-errors.ts";
+import { CreditApplicationConflictError, PaymentError } from "../payments-core/payment-errors.ts";
 import { paymentBookId } from "./payment-accounts.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { type CreditAllocationInput, type OpenItemSide } from "./payment-contracts.ts";

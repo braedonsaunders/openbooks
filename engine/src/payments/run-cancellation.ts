@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 /** The only run statuses a cancellation may consume. */
 const CANCELLABLE_RUN_STATUSES = ["draft", "rejected", "rolled_back"];
 

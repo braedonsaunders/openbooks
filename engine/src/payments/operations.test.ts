@@ -16,7 +16,7 @@ import {
   sepaOriginator,
 } from "./operations.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";

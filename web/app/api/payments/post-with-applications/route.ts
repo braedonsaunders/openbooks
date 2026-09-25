@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
-import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments/payment-errors.ts";
+import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
 import { updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";

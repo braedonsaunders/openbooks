@@ -1,5 +1,5 @@
-import { assertSafePaymentFilename } from "../payments/payment-filenames.ts";
-import { PaymentError } from "../payments/payment-errors.ts";
+import { assertSafePaymentFilename } from "../payments-core/payment-filenames.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { cleanPath } from "./backend.ts";
 
 /**

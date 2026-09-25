@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertSafePaymentFilename, MAX_PAYMENT_FILENAME_BYTES } from "./payment-filenames.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { assertSafePaymentFilename, MAX_PAYMENT_FILENAME_BYTES } from "../payments-core/payment-filenames.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 
 test("built-in rail names and a realistic custom name pass through unchanged", () => {
   for (const name of ["SEPA-42.xml", "NACHA-42.ach", "CPA005-7.txt", "statement.ofx", "payments 2026-09-23.csv"]) {

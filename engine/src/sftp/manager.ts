@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
 import { db, withBypass, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { encryptAccountNumber, decryptAccountNumber } from "../payments/rail-settings.ts";
+import { encryptAccountNumber, decryptAccountNumber } from "../payments-core/rail-settings.ts";
 import { startSftpServer, generateHostKey, type SessionLiveness, type SftpResolver, type SftpServerHandle } from "./server.ts";
 import { assertSftpStorageReady } from "./backend.ts";
 

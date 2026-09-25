@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, orgContext } from "../platform/db.ts";
 import { cmp, fromUnits, sum, toUnits } from "../money/money.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
 import { type PaymentKind, type OpenItemSide, type OpenItem, type SuggestedApplication } from "./payment-contracts.ts";
 import { paymentBookId } from "./payment-accounts.ts";

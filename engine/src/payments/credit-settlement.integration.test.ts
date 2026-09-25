@@ -10,7 +10,7 @@ import {
   unapplyCreditSettlement as unapplyCreditSettlementScoped,
 } from "./credit-settlement.ts";
 import { paymentBookId } from "./payment-accounts.ts";
-import { CreditApplicationConflictError, PaymentError } from "./payment-errors.ts";
+import { CreditApplicationConflictError, PaymentError } from "../payments-core/payment-errors.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 

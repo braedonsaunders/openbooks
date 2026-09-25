@@ -10,7 +10,7 @@ import {
   ScopeNotFoundError,
   subsidiaryScopeAllows,
 } from "../organization/subsidiary-scope.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
 import { type CreditAllocationInput } from "./payment-contracts.ts";
 import { nextNumber, createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";

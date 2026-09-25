@@ -4,7 +4,7 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { documentRevisionCounterSql } from "../records/revision.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, isZero, sum, toUnits } from "../money/money.ts";
-import { PaymentError, PaymentRevisionConflictError } from "./payment-errors.ts";
+import { PaymentError, PaymentRevisionConflictError } from "../payments-core/payment-errors.ts";
 import { lockScopeRow, resolveDraftSubsidiary } from "../organization/subsidiary-scope.ts";
 import { persistPaymentFxRate, persistPaymentMoney, sameCurrencyAllocation, validateAllocationInputs, validateSettlementEvidence, type AllocationInput } from "./settlement-policy.ts";
 import { type PaymentKind, PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";

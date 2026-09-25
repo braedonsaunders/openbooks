@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { probeEmailEnqueueAfterError, type EmailQueuedJobProbe } from "../delivery/email-enqueue-settlement.ts";
-import { PaymentRunPostingClaimFencedError } from "./payment-errors.ts";
+import { PaymentRunPostingClaimFencedError } from "../payments-core/payment-errors.ts";
 import { type PostingClaim, assertPostingClaimLive } from "./run-claim.ts";
 
 /**
