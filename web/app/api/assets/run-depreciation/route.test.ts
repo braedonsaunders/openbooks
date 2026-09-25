@@ -446,55 +446,32 @@ function baseConfirm(): Record<string, unknown> {
 
 test("confirm without a fingerprint or selection is refused by name", async () => {
   reset();
-  const noPrint = await confirm({
-    bookId: BOOK_ID,
-    asOfDate: "2026-09-30",
-    assetIds: [ASSET_A],
-  });
-  assert.equal(noPrint.status, 422);
-  assert.equal(
-    ((await noPrint.json()) as { error: string }).error,
-    "fingerprint_required",
-  );
-  const noSelection = await confirm({
-    bookId: BOOK_ID,
-    asOfDate: "2026-09-30",
-    assetIds: [],
-    fingerprint: "abc",
-  });
-  assert.equal(noSelection.status, 422);
-  assert.equal(
-    ((await noSelection.json()) as { error: string }).error,
-    "nothing_selected",
-  );
+  const refusals: [Record<string, unknown>, string][] = [
+    [{ bookId: BOOK_ID, asOfDate: "2026-09-30", assetIds: [ASSET_A] }, "fingerprint_required"],
+    [
+      { bookId: BOOK_ID, asOfDate: "2026-09-30", assetIds: [], fingerprint: "abc" },
+      "nothing_selected",
+    ],
+  ];
+  for (const [body, code] of refusals) {
+    const res = await confirm(body);
+    assert.equal(res.status, 422, code);
+    assert.equal(((await res.json()) as { error: string }).error, code);
+  }
 });
 
 test("foreign scope ids are refused, never silently narrowed", async () => {
   reset();
-  const unknownAsset = await confirm({
-    ...baseConfirm(),
-    assetIds: ["00000000-0000-4000-8000-00000000a099"],
-  });
-  assert.equal(unknownAsset.status, 422);
-  assert.equal(
-    ((await unknownAsset.json()) as { error: string }).error,
-    "unknown_asset",
-  );
-  const unknownBook = await confirm({ ...baseConfirm(), bookId: "00000000-0000-4000-8000-00000000b099" });
-  assert.equal(unknownBook.status, 422);
-  assert.equal(
-    ((await unknownBook.json()) as { error: string }).error,
-    "book_not_found",
-  );
-  const unknownPeriod = await confirm({
-    ...baseConfirm(),
-    periodId: "00000000-0000-4000-8000-000000000999",
-  });
-  assert.equal(unknownPeriod.status, 422);
-  assert.equal(
-    ((await unknownPeriod.json()) as { error: string }).error,
-    "period_not_found",
-  );
+  const refusals: [Record<string, unknown>, string][] = [
+    [{ assetIds: ["00000000-0000-4000-8000-00000000a099"] }, "unknown_asset"],
+    [{ bookId: "00000000-0000-4000-8000-00000000b099" }, "book_not_found"],
+    [{ periodId: "00000000-0000-4000-8000-000000000999" }, "period_not_found"],
+  ];
+  for (const [overrides, code] of refusals) {
+    const res = await confirm({ ...baseConfirm(), ...overrides });
+    assert.equal(res.status, 422, code);
+    assert.equal(((await res.json()) as { error: string }).error, code);
+  }
 });
 
 test("a changed candidate set fails the stale-input fence", async () => {
