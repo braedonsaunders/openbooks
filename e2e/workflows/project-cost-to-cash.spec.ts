@@ -444,10 +444,10 @@ function sovFinancialProfile(): Json {
       await apiOk(page, 'PUT', '/api/admin/setup/features', { features: { wipBilling: true } });
 
       // Root subsidiary: a fresh journal draft defaults to it (probe deleted).
-      const probeDraft = await apiOk(page, 'POST', '/api/journals/draft', {});
-      const probeFetched = await apiOk(page, 'GET', `/api/journals/${str(probeDraft.id)}`);
-      const rootSub = str((probeFetched.doc as Json).subsidiary_id, 'root subsidiary');
-      await apiOk(page, 'DELETE', `/api/journals/${str(probeDraft.id)}`);
+      const probeDraftId = str((await apiOk(page, 'POST', '/api/journals/draft', {})).id, 'probe draft');
+      const probeDoc = docOf(await apiOk(page, 'GET', `/api/journals/${probeDraftId}`));
+      const rootSub = str(probeDoc.subsidiary_id, 'root subsidiary');
+      await apiOk(page, 'DELETE', `/api/journals/${probeDraftId}`, { expectedUpdatedAt: str(probeDoc.updated_at, 'probe revision') });
 
       // Resolve the template chart by number (the pickers the UI uses).
       const acct: Record<string, string> = {};

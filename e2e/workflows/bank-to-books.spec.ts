@@ -393,11 +393,10 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       S.bankId = str((bank.body.account as Json).id, 'bankId');
 
       // Root subsidiary: what a fresh journal draft defaults to.
-      const probe = await apiOk(page, 'POST', '/api/journals/draft', {});
-      const probeId = str(probe.id, 'probe draft');
-      const probeGet = await apiOk(page, 'GET', `/api/journals/${probeId}`);
-      S.rootSubId = str((probeGet.doc as Json).subsidiary_id, 'root subsidiary');
-      await apiOk(page, 'DELETE', `/api/journals/${probeId}`);
+      const probeId = str((await apiOk(page, 'POST', '/api/journals/draft', {})).id, 'probe draft');
+      const probeDoc = docOf(await apiOk(page, 'GET', `/api/journals/${probeId}`));
+      S.rootSubId = str(probeDoc.subsidiary_id, 'root subsidiary');
+      await apiOk(page, 'DELETE', `/api/journals/${probeId}`, { expectedUpdatedAt: str(probeDoc.updated_at, 'probe revision') });
 
       const pd = await apiOk(page, 'POST', '/api/parties/draft', { role: 'customer' });
       S.customerId = str(pd.id, 'party id');
