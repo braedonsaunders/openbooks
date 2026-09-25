@@ -1566,7 +1566,8 @@
       "missing_rate": "Missing rate",
       "class_unresolved": "Unresolved class",
       "registration_missing": "Missing registration",
-      "fringe_mismatch": "Fringe mismatch"
+      "fringe_mismatch": "Fringe mismatch",
+      "all": "All"
     },
     "findingStatus": {
       "open": "Open",

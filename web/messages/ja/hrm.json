@@ -1510,7 +1510,8 @@
       "missing_rate": "賃金未設定",
       "class_unresolved": "クラス未解決",
       "registration_missing": "登録不足",
-      "fringe_mismatch": "フリンジ不一致"
+      "fringe_mismatch": "フリンジ不一致",
+      "all": "すべて"
     },
     "findingStatus": {
       "open": "未対応",

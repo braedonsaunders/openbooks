@@ -1510,7 +1510,8 @@
       "missing_rate": "Fehlender Satz",
       "class_unresolved": "Ungeklärte Klasse",
       "registration_missing": "Fehlende Meldung",
-      "fringe_mismatch": "Abweichende Zulage"
+      "fringe_mismatch": "Abweichende Zulage",
+      "all": "Alle"
     },
     "findingStatus": {
       "open": "Offen",

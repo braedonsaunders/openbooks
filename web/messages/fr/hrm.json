@@ -1510,7 +1510,8 @@
       "missing_rate": "Taux manquant",
       "class_unresolved": "Classe non résolue",
       "registration_missing": "Immatriculation manquante",
-      "fringe_mismatch": "Écart d'avantages"
+      "fringe_mismatch": "Écart d'avantages",
+      "all": "Tout"
     },
     "findingStatus": {
       "open": "Ouvert",
