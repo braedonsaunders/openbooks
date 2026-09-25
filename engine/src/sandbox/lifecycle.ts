@@ -460,6 +460,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   const tier = input.tier === undefined ? "masked" : validateSandboxTier(input.tier);
   const masked = input.masked ?? tier === "masked";
   const sandboxOrgId = randomUUID();
+  const sandboxId = randomUUID();
   const seed = randomUUID();
   const authority = resolveLifecycleAuthority(input.lifecycleAuthority, input.createdBy);
 
@@ -474,10 +475,17 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   if (input.allowTemplateSource === true) assertTemplateSandboxSource(p, input.productionOrgId);
   else assertProductionSandboxSource(p, input.productionOrgId);
 
-  // Birth the org and lifecycle row together and record the initiating actor
-  // in the same production-owner scope before any clone work begins.
-  const sb = await withOrg(input.productionOrgId, async () => {
-    await db.execute(sql`
+  // Owner claim: hold the sandbox lock from before the shell row exists
+  // until the clone settles (ready/failed). A delete either blocks behind
+  // live clone work or — when the owner died mid-provisioning — finds a
+  // lock-free shell it may compensate; a delete landing before the shell
+  // exists finds no row and reports not-found. The lock must precede the
+  // insert: insert-then-lock would admit a wipe under a live clone.
+  return withSandboxRefreshLock(sandboxId, async () => {
+    // Birth the org and lifecycle row together and record the initiating actor
+    // in the same production-owner scope before any clone work begins.
+    const sb = await withOrg(input.productionOrgId, async () => {
+      await db.execute(sql`
       insert into orgs (
         id, name, legal_name, base_currency, country, tax_ids, settings,
         env_kind, sandbox_of, sandbox_seed, created_by
@@ -489,92 +497,94 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
         'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
       )`);
 
-    const inserted = await db
-      .insert(schema.sandboxes)
-      .values({
-        orgId: sandboxOrgId,
-        productionOrgId: input.productionOrgId,
+      const inserted = await db
+        .insert(schema.sandboxes)
+        .values({
+          id: sandboxId,
+          orgId: sandboxOrgId,
+          productionOrgId: input.productionOrgId,
+          name: input.name,
+          tier,
+          masked,
+          asOfPeriodId: input.asOfPeriodId ?? null,
+          status: "provisioning",
+          createdBy: input.createdBy ?? null,
+        })
+        .returning({ id: schema.sandboxes.id });
+      if (!inserted[0] || inserted[0].id !== sandboxId) throw new Error("sandbox lifecycle row was not created");
+      await auditSandboxLifecycle(input.productionOrgId, inserted[0].id, "create", authority, null, {
+        status: "provisioning",
+        org_id: sandboxOrgId,
         name: input.name,
         tier,
         masked,
-        asOfPeriodId: input.asOfPeriodId ?? null,
-        status: "provisioning",
-        createdBy: input.createdBy ?? null,
-      })
-      .returning({ id: schema.sandboxes.id });
-    if (!inserted[0]) throw new Error("sandbox lifecycle row was not created");
-    await auditSandboxLifecycle(input.productionOrgId, inserted[0].id, "create", authority, null, {
-      status: "provisioning",
-      org_id: sandboxOrgId,
-      name: input.name,
-      tier,
-      masked,
+      });
+      return inserted[0];
     });
-    return inserted[0];
-  });
 
-  try {
-    if (masked) await seedDefaultMaskingPolicies(input.productionOrgId);
-    const result = await runClone({
-      productionOrgId: input.productionOrgId,
-      sandboxOrgId,
-      seed,
-      tier,
-      masked,
-      asOfPeriodId: input.asOfPeriodId ?? null,
-      initializeOrg: true,
-      settingsOverlay: input.settingsOverlay,
-    });
-    // S3-backed attachments live outside the row-copy transaction: copy the
-    // objects onto the rebased keys now that the rows exist. A copy failure
-    // marks the sandbox failed (catch below), never a ready sandbox whose
-    // cabinet 404s. Masked clones are a no-op here by construction — their
-    // rows carry the tombstone kind, never 's3'.
-    await copyClonedFileObjects({
-      productionOrgId: input.productionOrgId,
-      sandboxOrgId,
-      seed,
-    });
-    await rebaseSandboxControlAccounts({
-      productionOrgId: input.productionOrgId,
-      sandboxOrgId,
-      seed,
-      actorId: input.createdBy ?? null,
-      // The clone captured these inside its snapshot: the rebase derives
-      // from the same configuration the sandbox settings came from.
-      productionSettings: result.sourceSettings,
-    });
-    await neuterSandbox(sandboxOrgId);
-    // Prove tenant isolation on the clone before it is marked ready.
-    // withOrg opens its own bypass-off transactions even when the caller
-    // holds withBypassContext (ALS bypass, no pinned connection).
-    await verifyCloneRls({
-      productionOrgId: input.productionOrgId,
-      sandboxOrgId,
-      tier,
-      allowTemplateSource: input.allowTemplateSource,
-    });
-    const ready = await db.execute<{ id: string }>(sql`
+    try {
+      if (masked) await seedDefaultMaskingPolicies(input.productionOrgId);
+      const result = await runClone({
+        productionOrgId: input.productionOrgId,
+        sandboxOrgId,
+        seed,
+        tier,
+        masked,
+        asOfPeriodId: input.asOfPeriodId ?? null,
+        initializeOrg: true,
+        settingsOverlay: input.settingsOverlay,
+      });
+      // S3-backed attachments live outside the row-copy transaction: copy the
+      // objects onto the rebased keys now that the rows exist. A copy failure
+      // marks the sandbox failed (catch below), never a ready sandbox whose
+      // cabinet 404s. Masked clones are a no-op here by construction — their
+      // rows carry the tombstone kind, never 's3'.
+      await copyClonedFileObjects({
+        productionOrgId: input.productionOrgId,
+        sandboxOrgId,
+        seed,
+      });
+      await rebaseSandboxControlAccounts({
+        productionOrgId: input.productionOrgId,
+        sandboxOrgId,
+        seed,
+        actorId: input.createdBy ?? null,
+        // The clone captured these inside its snapshot: the rebase derives
+        // from the same configuration the sandbox settings came from.
+        productionSettings: result.sourceSettings,
+      });
+      await neuterSandbox(sandboxOrgId);
+      // Prove tenant isolation on the clone before it is marked ready.
+      // withOrg opens its own bypass-off transactions even when the caller
+      // holds withBypassContext (ALS bypass, no pinned connection).
+      await verifyCloneRls({
+        productionOrgId: input.productionOrgId,
+        sandboxOrgId,
+        tier,
+        allowTemplateSource: input.allowTemplateSource,
+      });
+      const ready = await db.execute<{ id: string }>(sql`
       update sandboxes
          set status = 'ready', storage_rows = ${result.rowsCopied}, last_refresh_at = now(),
              last_error = null, updated_at = now()
        where id = ${sb.id} and org_id = ${sandboxOrgId} and status = 'provisioning'
        returning id`);
-    if (!ready.rows[0]) throw new Error(`cannot mark sandbox ${sb.id} ready; provisioning state changed before clone completion`);
-  } catch (err) {
-    const failed = await db.execute<{ id: string }>(sql`
+      if (!ready.rows[0]) throw new Error(`cannot mark sandbox ${sb.id} ready; provisioning state changed before clone completion`);
+    } catch (err) {
+      const failed = await db.execute<{ id: string }>(sql`
       update sandboxes
          set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
              updated_at = now()
        where id = ${sb.id} and org_id = ${sandboxOrgId}
        returning id`);
-    if (failed.rows[0]) {
-      await withOrg(input.productionOrgId, () => auditSandboxLifecycle(input.productionOrgId, sb.id, "create_failed", authority,
-        { status: "provisioning" }, { status: "failed", last_error: String(err instanceof Error ? err.message : err) }));
+      if (failed.rows[0]) {
+        await withOrg(input.productionOrgId, () => auditSandboxLifecycle(input.productionOrgId, sb.id, "create_failed", authority,
+          { status: "provisioning" }, { status: "failed", last_error: String(err instanceof Error ? err.message : err) }));
+      }
+      throw err;
     }
-    throw err;
-  }
-  return { sandboxId: sb.id, sandboxOrgId };
+    return { sandboxId: sb.id, sandboxOrgId };
+  });
 }
 
 export interface RefreshOptions {
@@ -880,12 +890,17 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
     select production_org_id from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0]?.production_org_id;
   if (!productionOrgId) throw new Error(`sandbox not found: ${sandboxId}`);
   // A refresh that already marked 'refreshing' owns this sandbox: wiping
-  // under its clone unit corrupts the refresh and strands the status. The
-  // conditional mark makes the race atomic — the loser refuses loudly.
+  // under its clone unit corrupts the refresh and strands the status. A
+  // 'provisioning' shell is deletable instead: createSandbox holds this
+  // same lock from before its shell row exists until the clone settles, so
+  // a lock-held provisioning row has no live writer (its owner died
+  // mid-clone) while a live owner serializes this delete behind its
+  // completion. The conditional mark makes the race atomic — the loser
+  // refuses loudly.
   const marked = await withMaintenanceTransaction(null, async () => {
     const before = (await db.execute<{ status: string; last_error: string | null }>(sql`
       select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${orgId} for update`)).rows[0];
-    if (!before || ["provisioning", "refreshing", "deleting"].includes(before.status)) return null;
+    if (!before || ["refreshing", "deleting"].includes(before.status)) return null;
     const updated = await db.execute<{ id: string }>(sql`
       update sandboxes
          set status = 'deleting', last_error = null, updated_at = now()
@@ -904,7 +919,7 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
     );
     const status = (await db.execute<{ status: string }>(sql`
       select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0]?.status;
-    throw new Error(`cannot delete sandbox ${sandboxId} while it is ${status ?? "unavailable"} — retry once provisioning or refresh has completed`);
+    throw new Error(`cannot delete sandbox ${sandboxId} while it is ${status ?? "unavailable"} — retry once an active refresh has completed`);
   }
   try {
     const { tenantTables } = await loadCatalog();

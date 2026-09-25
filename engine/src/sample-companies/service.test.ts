@@ -71,7 +71,7 @@ test("a lost member lock converges on the first completed preview", () => {
   assert.match(create, /member lock connection was lost/);
   assert.match(create, /await reacquireLockIfNeeded\(\)/);
   assert.match(create, /winnerBeforeFinalize/);
-  assert.match(create, /deleteSandbox\(cloned\.sandboxId\)/);
+  // Compensation is proved by service-resume's interrupted-clone test.
   assert.match(create, /sample company member lock could not be held through registration/);
 });
 

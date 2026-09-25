@@ -49,6 +49,8 @@ interface Fixture {
 async function seedTemplateOrg(): Promise<string> {
   const template = await withBypass(() => createScratchOrg());
   try {
+    // Promoted-template registration the sanctioned-source rule reads.
+    await withBypass(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{sampleTemplate}', ${JSON.stringify({ enabled: true, profileId: "general-business", version: 1 })}::jsonb, true) where id = ${template.orgId}`));
     await withBypass(() =>
       db.execute(sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
