@@ -317,11 +317,10 @@ test.describe("procure-to-pay workflows", () => {
       //     fresh journal draft defaults to root. The probe draft must not
       //     survive (an unposted draft is a close-readiness exception).
       {
-        const probe = await api(page, "POST", "/api/journals/draft", {});
-        const probeId = str(req(probe, "POST journals/draft probe").id, "probe draft id");
-        const fetched = await api(page, "GET", `/api/journals/${probeId}`);
-        shared.rootSub = str((req(fetched, "GET probe draft").doc as Json).subsidiary_id, "root subsidiary id");
-        req(await api(page, "DELETE", `/api/journals/${probeId}`), "DELETE probe draft");
+        const probeId = str(req(await api(page, "POST", "/api/journals/draft", {}), "POST journals/draft probe").id, "probe draft id");
+        const probeDoc = req(await api(page, "GET", `/api/journals/${probeId}`), "GET probe draft").doc as Json;
+        shared.rootSub = str(probeDoc.subsidiary_id, "root subsidiary id");
+        req(await api(page, "DELETE", `/api/journals/${probeId}`, { expectedUpdatedAt: str(probeDoc.updated_at, "probe revision") }), "DELETE probe draft");
       }
 
       // 3. Resolve seeded accounts through the header search (the UI's own API).

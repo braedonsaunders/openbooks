@@ -120,11 +120,11 @@ test.describe.serial("close to reporting", () => {
       // 3. Second subsidiary (child of root) and the adjusting book.
       // The root subsidiary id is what a fresh draft defaults to.
       const rootDraft = ok(await api(req, origin, "POST", "/api/journals/draft", {}), "root draft");
-      const rootFetched = ok(await api(req, origin, "GET", `/api/journals/${rootDraft.id}`), "root draft fetch");
-      SEED.rootSubId = field(rootFetched.doc as Record<string, unknown>, "subsidiary_id", "root draft");
+      const probeDoc = ok(await api(req, origin, "GET", `/api/journals/${rootDraft.id}`), "root draft fetch").doc as Record<string, unknown>;
+      SEED.rootSubId = field(probeDoc, "subsidiary_id", "root draft");
       // The probe draft must not survive: an unposted draft with no period is
       // a critical readiness exception, and this suite asserts a clean gate.
-      ok(await api(req, origin, "DELETE", `/api/journals/${rootDraft.id}`), "drop probe draft");
+      ok(await api(req, origin, "DELETE", `/api/journals/${rootDraft.id}`, { expectedUpdatedAt: field(probeDoc, "updated_at", "probe draft") }), "drop probe draft");
       const subB = ok(
         await api(req, origin, "POST", "/api/admin/setup/subsidiaries", {
           name: "Harbour Subsidiary",
@@ -525,7 +525,8 @@ test.describe.serial("close to reporting", () => {
       expect(JSON.stringify(glRefused.json)).toMatch(/closed/i);
       // Discard the refused draft: a draft with no posting period is a
       // critical readiness exception, and the re-drive below must start clean.
-      ok(await api(page.request, baseURL!, "DELETE", `/api/journals/${id}`), "discard refused journal");
+      const discardToken = await revisionToken(page.request, baseURL!, `/api/journals/${id}`, (d) => field(d.doc as Record<string, unknown>, "updated_at", "refused journal"));
+      ok(await api(page.request, baseURL!, "DELETE", `/api/journals/${id}`, { expectedUpdatedAt: discardToken }), "discard refused journal");
 
       // AR and AP: invoice and bill posts into the same closed scope refuse.
       const arId = await draftSeedDocument(page.request, baseURL!, "customer_invoice", {
