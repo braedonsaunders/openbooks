@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -225,6 +225,7 @@ export function ParallelRunView({
   const [findings, setFindings] = useState<Finding[]>([])
   const [loadingFindings, setLoadingFindings] = useState(false)
   const [findingsLoadFailed, setFindingsLoadFailed] = useState(false)
+  const findingsRequest = useRef(0)
   const [employeeFilter, setEmployeeFilter] = useState<string | null>(null)
   const [showMatches, setShowMatches] = useState(false)
   const [toleranceOpen, setToleranceOpen] = useState(false)
@@ -282,6 +283,7 @@ export function ParallelRunView({
   }
 
   const openDrawer = async (comparison: Comparison, employeePartyId?: string) => {
+    const request = ++findingsRequest.current
     setOpenComparison(comparison)
     setEmployeeFilter(employeePartyId ?? null)
     setLoadingFindings(true)
@@ -294,17 +296,32 @@ export function ParallelRunView({
       )
       // The status is checked before the body is parsed (see compare above).
       if (!response.ok) {
-        toast.error(await readApiErrorMessage(response, 'could not load the comparison'))
-        setFindingsLoadFailed(true)
+        const message = await readApiErrorMessage(response, 'could not load the comparison')
+        if (request === findingsRequest.current) {
+          toast.error(message)
+          setFindingsLoadFailed(true)
+        }
         return
       }
       const body = (await response.json()) as { findings?: Finding[]; error?: string }
-      setFindings(body.findings ?? [])
+      if (request === findingsRequest.current) setFindings(body.findings ?? [])
     } catch {
-      setFindingsLoadFailed(true)
+      if (request === findingsRequest.current) {
+        toast.error('could not load the comparison')
+        setFindingsLoadFailed(true)
+      }
     } finally {
-      setLoadingFindings(false)
+      if (request === findingsRequest.current) setLoadingFindings(false)
     }
+  }
+
+  const closeComparison = () => {
+    findingsRequest.current += 1
+    setOpenComparison(null)
+    setFindings([])
+    setFindingsLoadFailed(false)
+    setEmployeeFilter(null)
+    setLoadingFindings(false)
   }
 
   const discardRegister = async (row: Register) => {
@@ -752,7 +769,7 @@ export function ParallelRunView({
       {/* Detail */}
       <Drawer
         open={openComparison !== null}
-        onClose={() => setOpenComparison(null)}
+        onClose={closeComparison}
         size="2xl"
         title={
           openComparison
